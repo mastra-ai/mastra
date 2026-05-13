@@ -2283,3 +2283,59 @@ describe('prompt alias normalization (GitHub #14154)', () => {
     expect(result.data).toEqual({ prompt: 'from message' });
   });
 });
+
+describe('validateToolInput - Const Field Injection', () => {
+  it('should auto-inject missing const-constrained fields', () => {
+    const schema = z.object({
+      eventSpec: z.object({
+        '@type': z.literal('com.cvent.EventSpec'),
+        title: z.string(),
+        date: z.string(),
+      }),
+    });
+
+    const result = validateToolInput(
+      schema,
+      {
+        eventSpec: { title: 'Hackathon', date: '2026-06-01' }, // @type missing
+      },
+      'create-event',
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      eventSpec: {
+        '@type': 'com.cvent.EventSpec',
+        title: 'Hackathon',
+        date: '2026-06-01',
+      },
+    });
+  });
+
+  it('should overwrite wrong const-constrained field values', () => {
+    const schema = z.object({
+      eventSpec: z.object({
+        '@type': z.literal('com.cvent.EventSpec'),
+        title: z.string(),
+        date: z.string(),
+      }),
+    });
+
+    const result = validateToolInput(
+      schema,
+      {
+        eventSpec: { '@type': 'wrong.type', title: 'Hackathon', date: '2026-06-01' },
+      },
+      'create-event',
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      eventSpec: {
+        '@type': 'com.cvent.EventSpec',
+        title: 'Hackathon',
+        date: '2026-06-01',
+      },
+    });
+  });
+});
