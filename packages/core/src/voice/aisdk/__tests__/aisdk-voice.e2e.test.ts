@@ -3,18 +3,18 @@ import { dirname, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { openai } from '@ai-sdk/openai-v5';
-import { getLLMTestMode, useLLMRecording } from '@internal/llm-recorder';
+import { useLLMRecording, getLLMTestMode } from '@internal/llm-recorder';
 import { setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { AISDKSpeech } from '../speech';
 import { AISDKTranscription } from '../transcription';
 
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
+
 const testDir = dirname(fileURLToPath(import.meta.url));
 const recordingsDir = resolve(testDir, '__recordings__');
 const outputDir = resolve(testDir, 'test-outputs');
-
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 describe('AI SDK Voice Integration Tests', () => {
   useLLMRecording('core-src-voice-aisdk-__tests__-aisdk-voice.e2e', { recordingsDir });

@@ -43,6 +43,25 @@ export {
 };
 export type { LibSQLDomainConfig } from './db';
 
+export type LibSQLStorageDomain = keyof StorageDomains;
+
+const DEFAULT_LOCAL_CACHE_SIZE = -16000;
+const DEFAULT_LOCAL_MMAP_SIZE = 134217728;
+
+export type LibSQLLocalPragmaOptions = {
+  /**
+   * SQLite PRAGMA cache_size value for local databases.
+   * Negative values are interpreted as kibibytes by SQLite.
+   * @default -16000
+   */
+  cacheSize?: number;
+  /**
+   * SQLite PRAGMA mmap_size value in bytes for local databases.
+   * @default 134217728
+   */
+  mmapSize?: number;
+};
+
 /**
  * Base configuration options shared across LibSQL configurations
  */
@@ -59,6 +78,11 @@ export type LibSQLBaseConfig = {
    * @default 100
    */
   initialBackoffMs?: number;
+  /**
+   * Overrides local SQLite PRAGMA values used for startup/read performance.
+   * Only applies to local file and in-memory databases.
+   */
+  localPragmas?: LibSQLLocalPragmaOptions;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -112,6 +136,9 @@ export class LibSQLStore extends MastraCompositeStore {
   private client: Client;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
+  private readonly pragmasReady: Promise<void>;
+  private readonly isLocalDb: boolean;
+  private readonly localPragmas: Required<LibSQLLocalPragmaOptions>;
 
   stores: StorageDomains;
 
@@ -123,10 +150,14 @@ export class LibSQLStore extends MastraCompositeStore {
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
+    this.localPragmas = {
+      cacheSize: config.localPragmas?.cacheSize ?? DEFAULT_LOCAL_CACHE_SIZE,
+      mmapSize: config.localPragmas?.mmapSize ?? DEFAULT_LOCAL_MMAP_SIZE,
+    };
 
     if ('url' in config) {
       // need to re-init every time for in memory dbs or the tables might not exist
-      if (config.url.endsWith(':memory:')) {
+      if (config.url.includes(':memory:')) {
         this.shouldCacheInit = false;
       }
 
@@ -135,19 +166,12 @@ export class LibSQLStore extends MastraCompositeStore {
         ...(config.authToken ? { authToken: config.authToken } : {}),
       });
 
-      // Set PRAGMAs for better concurrency, especially for file-based databases
-      if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
-        this.client
-          .execute('PRAGMA journal_mode=WAL;')
-          .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
-          .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
-        this.client
-          .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
-          .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
-          .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
-      }
+      this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
+      this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;
+      this.isLocalDb = false;
+      this.pragmasReady = Promise.resolve();
     }
 
     const domainConfig = {
@@ -193,6 +217,76 @@ export class LibSQLStore extends MastraCompositeStore {
       backgroundTasks,
       schedules,
     };
+  }
+
+  private async applyLocalPragmas(): Promise<void> {
+    const pragmas = [
+      ['journal_mode=WAL', 'PRAGMA journal_mode=WAL;'],
+      ['busy_timeout=5000', 'PRAGMA busy_timeout=5000;'],
+      ['synchronous=NORMAL', 'PRAGMA synchronous=NORMAL;'],
+      ['temp_store=MEMORY', 'PRAGMA temp_store=MEMORY;'],
+      [`cache_size=${this.localPragmas.cacheSize}`, `PRAGMA cache_size=${this.localPragmas.cacheSize};`],
+      [`mmap_size=${this.localPragmas.mmapSize}`, `PRAGMA mmap_size=${this.localPragmas.mmapSize};`],
+    ] as const;
+
+    for (const [label, sql] of pragmas) {
+      try {
+        await this.client.execute(sql);
+        this.logger.debug(`LibSQLStore: PRAGMA ${label} set.`);
+      } catch (err) {
+        this.logger.warn(`LibSQLStore: Failed to set PRAGMA ${label}.`, err);
+      }
+    }
+  }
+
+  private getStoresToInit() {
+    return Object.values(this.stores).filter(Boolean);
+  }
+
+  private async initDomainsSequentially(): Promise<boolean> {
+    for (const store of this.getStoresToInit()) {
+      await store.init();
+    }
+    return true;
+  }
+
+  private async initDomainsInParallel(): Promise<boolean> {
+    await Promise.all(this.getStoresToInit().map(store => store.init()));
+    return true;
+  }
+
+  override async init(): Promise<void> {
+    await this.pragmasReady;
+
+    if (!this.isLocalDb) {
+      if (this.shouldCacheInit) {
+        if (this.hasInitialized) {
+          await this.hasInitialized;
+          return;
+        }
+
+        this.hasInitialized = this.initDomainsInParallel();
+        await this.hasInitialized;
+        return;
+      }
+
+      await this.initDomainsInParallel();
+      return;
+    }
+
+    // Cache and coalesce local file DB initialization to avoid duplicate DDL.
+    if (this.shouldCacheInit) {
+      if (this.hasInitialized) {
+        await this.hasInitialized;
+        return;
+      }
+
+      this.hasInitialized = this.initDomainsSequentially();
+      await this.hasInitialized;
+      return;
+    }
+
+    await this.initDomainsSequentially();
   }
 }
 

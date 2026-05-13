@@ -1,8 +1,12 @@
 import { openai } from '@ai-sdk/openai';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { createTool } from '@mastra/core/tools';
 import { describe, expect, it, vi } from 'vitest';
 import { createAgentTestRun, createTestMessage, extractToolCalls } from '../../utils';
 import { createToolCallAccuracyScorerLLM } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 describe('createToolCallAccuracyScorerLLM', () => {
   const mockModel = openai('gpt-4o-mini');

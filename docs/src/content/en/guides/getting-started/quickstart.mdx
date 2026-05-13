@@ -22,15 +22,15 @@ If you need more control over the setup, see the [manual installation guide](/do
 
 ## Initialize Mastra
 
-You can run `create mastra` anywhere on your machine.
-
-When prompted, choose a provider (e.g. OpenAI) and enter your key:
+You can run `create mastra` anywhere on your machine. Start the setup wizard:
 
 ```bash npm2yarn
 npm create mastra@latest
 ```
 
-This creates a new directory for your project with a `src/mastra` folder containing an example weather agent and the following files:
+You'll be prompted for various configuration options, including your LLM provider and whether to enable [Observability](/docs/mastra-platform/observability) on the Mastra platform.
+
+The wizard creates a new directory for your project with a `src/mastra` folder containing an example weather agent and the following files:
 
 - `index.ts`: Entry point for all Mastra-related code and configuration
 - `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool

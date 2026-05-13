@@ -8,9 +8,9 @@ packages:
 
 # Signals
 
-:::note Experimental
+:::warning Experimental
 
-Agent signals are experimental. The API may change in a future release.
+Agent signals are experimental. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -157,7 +157,7 @@ await subscription.processDataStream({
 
 ## Related
 
-- [`Agent.sendSignal()`](/reference/agents/agent#sendsignal)
-- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothread)
+- [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
+- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
