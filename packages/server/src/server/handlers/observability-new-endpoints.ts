@@ -415,7 +415,7 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
 });
 
 export const GET_ROOT_SPAN_JSON_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_ROOT_SPAN_JSON_KEYS, {
-  queryParamSchema: wrapSchemaForQueryParams(getRootSpanJsonKeysArgsSchema.partial()),
+  queryParamSchema: wrapSchemaForQueryParams(getRootSpanJsonKeysArgsSchema),
   responseSchema: getRootSpanJsonKeysResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const args = getRootSpanJsonKeysArgsSchema.parse(pickParams(getRootSpanJsonKeysArgsSchema, params));
@@ -432,7 +432,7 @@ export const GET_ROOT_SPAN_JSON_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_ROOT_SP
 });
 
 export const GET_LOG_JSON_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_LOG_JSON_KEYS, {
-  queryParamSchema: wrapSchemaForQueryParams(getLogJsonKeysArgsSchema.partial()),
+  queryParamSchema: wrapSchemaForQueryParams(getLogJsonKeysArgsSchema),
   responseSchema: getLogJsonKeysResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const args = getLogJsonKeysArgsSchema.parse(pickParams(getLogJsonKeysArgsSchema, params));
