@@ -161,13 +161,15 @@ export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
  * Extended configuration for the read_file tool.
  *
  * Controls which mime types are surfaced to the model as media parts (image
- * or file parts the model can natively consume) rather than dumped as text
- * or base64. Files whose mime type doesn't match are read as text/base64 as
- * usual.
+ * or file parts the model can natively consume). Text-like files are still
+ * read as text; non-text binaries that don't match fall back to a
+ * metadata-only result (path, size, mime type) so the agent knows about
+ * the file without dumping useless base64 into context.
  *
  * - **Array of globs** — e.g. `['image/*']`, `['image/*', 'application/pdf']`
  * - **Function** — `(mimeType: string) => boolean`
- * - **`false`** — disable media parts; always return text
+ * - **`false`** — disable media parts; non-text binaries fall back to
+ *   metadata-only output unless an explicit `encoding` is provided
  *
  * Only applies when the caller doesn't pass an explicit `encoding` (since an
  * explicit encoding is a clear request for raw bytes/text).
@@ -190,7 +192,8 @@ export interface ReadFileToolConfig extends WorkspaceToolConfig {
   /**
    * Which mime types to surface to the model as media parts (file/image
    * parts) rather than as text. Defaults to `['image/*', 'application/pdf']`.
-   * Pass `false` to disable media parts entirely.
+   * Pass `false` to disable media detection; non-text binaries then fall
+   * back to metadata-only output unless an explicit `encoding` is provided.
    */
   mediaTypes?: string[] | ((mimeType: string) => boolean) | false;
 }
