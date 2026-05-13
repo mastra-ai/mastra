@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
+import { config } from 'dotenv';
 import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
@@ -67,6 +68,19 @@ export function parseEnvFile(content: string): Record<string, string> {
     if (key) vars[key] = value;
   }
   return vars;
+}
+
+/**
+ * Loads MASTRA_PROJECT_ID and MASTRA_ORG_ID from the project's .env files
+ * into process.env so deploys auto-link to the project that `mastra init --observability`
+ * provisioned. Uses dotenv with override: false (the default), so any
+ * existing process.env value (e.g. from CI) always wins.
+ */
+export function loadDeployEnvFromDotenv(projectDir: string): void {
+  config({
+    path: [join(projectDir, '.env'), join(projectDir, '.env.local'), join(projectDir, '.env.production')],
+    quiet: true,
+  });
 }
 
 async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
@@ -210,6 +224,7 @@ async function resolveProject(
   projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
   flagProject?: string,
   defaultName?: string | null,
+  autoAccept?: boolean,
 ): Promise<{ projectId: string; projectName: string; projectSlug: string }> {
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
@@ -233,16 +248,46 @@ async function resolveProject(
     };
   }
 
-  // Check if a project already exists matching the package name before creating
   const name = defaultName;
   if (!name) {
     throw new Error('Could not determine project name from package.json. Use --project to specify one.');
   }
 
   const existing = await fetchServerProjects(token, orgId);
-  const match = existing.find(proj => proj.name === name || proj.slug === name);
-  if (match) {
-    return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+  const nameMatches = existing.filter(proj => proj.name === name || proj.slug === name);
+
+  if (existing.length > 0) {
+    if (autoAccept) {
+      // Non-interactive: only safe to auto-pick when exactly one project matches by name/slug.
+      if (nameMatches.length === 1) {
+        const m = nameMatches[0]!;
+        return { projectId: m.id, projectName: m.name, projectSlug: m.slug ?? m.name };
+      }
+      throw new Error(
+        `Found ${existing.length} existing project(s) in this organization. Pass --project <id-or-slug> to select one, or re-run without --yes to choose interactively.`,
+      );
+    }
+
+    const CREATE_NEW = '__create_new__';
+    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : existing[0]!.id;
+    const selected = await p.select({
+      message: 'Select a project to deploy to',
+      initialValue,
+      options: [
+        ...existing.map(proj => ({ value: proj.id, label: `${proj.name} (${proj.id})` })),
+        { value: CREATE_NEW, label: `＋ Create new project "${name}"` },
+      ],
+    });
+
+    if (p.isCancel(selected)) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+
+    if (selected !== CREATE_NEW) {
+      const match = existing.find(proj => proj.id === selected)!;
+      return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+    }
   }
 
   const project = await createServerProject(token, orgId, name);
@@ -267,6 +312,9 @@ export async function serverDeployAction(
   },
 ) {
   const targetDir = resolve(dir || process.cwd());
+  // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
+  // auto-link to the project that `mastra init --observability` provisioned.
+  loadDeployEnvFromDotenv(targetDir);
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   const autoAccept = opts.yes ?? isHeadless;
   const skipPreflight = opts.skipPreflight || process.env.MASTRA_SKIP_PREFLIGHT === '1';
@@ -305,6 +353,7 @@ export async function serverDeployAction(
     projectConfig,
     opts.project,
     packageName,
+    autoAccept,
   );
 
   // Step 5: Confirmation

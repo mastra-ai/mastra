@@ -77,10 +77,13 @@ export const AgentBadgeWrapper = ({
     childMessages = resolveToChildMessages(convertedMessages) as AgentMessage[];
   }
 
+  const hasStreamingChildMessages = Object.prototype.hasOwnProperty.call(result, 'childMessages');
+
   return (
     <AgentBadge
       agentId={agentId}
       messages={childMessages ?? []}
+      keepOpenForStreamingChildMessages={hasStreamingChildMessages}
       metadata={metadata}
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}

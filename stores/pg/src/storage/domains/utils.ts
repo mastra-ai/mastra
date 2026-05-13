@@ -51,6 +51,34 @@ export function prepareWhereClause(
 }
 
 /**
+ * Resilient JSON parser for values read from PostgreSQL jsonb columns.
+ *
+ * The `pg` driver auto-deserialises jsonb columns, so:
+ *   - jsonb object → JS object  (already parsed, just return it)
+ *   - jsonb array  → JS array   (already parsed, just return it)
+ *   - jsonb scalar string `"x"` → bare JS string `"x"` (NOT valid JSON to re-parse)
+ *   - jsonb null   → JS null
+ *
+ * Calling `JSON.parse` on a bare scalar like `"google/gemini-3-flash"` throws,
+ * which combined with fail-fast `.map(parseRow)` in list methods crashes the
+ * entire listing endpoint when a single row contains a jsonb scalar. This
+ * helper falls back to returning the raw value so callers get the same scalar
+ * the driver materialised.
+ *
+ * See https://github.com/mastra-ai/mastra/issues/16224.
+ */
+export function parseJsonResilient(value: any, _fieldName?: string): any {
+  if (value == null) return undefined;
+  if (typeof value !== 'string') return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
  * Transform SQL row to record format, handling JSON columns
  */
 export function transformFromSqlRow<T>({
