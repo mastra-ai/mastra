@@ -65,7 +65,6 @@ import type {
   DynamicMapping,
   ExtractSchemaFromStep,
   ExtractSchemaType,
-  RestartExecutionParams,
   PathsToStringProps,
   SerializedStep,
   SerializedStepFlowEntry,
@@ -92,7 +91,7 @@ import type {
   StepMetadata,
   WorkflowRunStartOptions,
 } from './types';
-import { cleanStepResult, createTimeTravelExecutionParams } from './utils';
+import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -4117,7 +4116,8 @@ export class Run<
     tracingOptions?: TracingOptions;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
-    if (this.workflowEngineType !== 'default') {
+    const allowedEngines = ['default', 'evented'];
+    if (!allowedEngines.includes(this.workflowEngineType)) {
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
@@ -4127,50 +4127,12 @@ export class Run<
       runId: this.runId,
     });
 
-    let nestedWorkflowPending = false;
-
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
 
-    if (snapshot.status !== 'running' && snapshot.status !== 'waiting') {
-      if (snapshot.status === 'pending' && !!snapshot.context.input) {
-        //possible the server died just before the nested workflow execution started.
-        //only nested workflows have input data in context when it's still pending
-        nestedWorkflowPending = true;
-      } else {
-        throw new Error('This workflow run was not active');
-      }
-    }
+    const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
 
-    let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
-
-    const firstEntry = this.executionGraph.steps[0]!;
-
-    if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-      nestedWorkflowActiveStepsPath = {
-        [firstEntry.step.id]: [0],
-      };
-    } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
-      nestedWorkflowActiveStepsPath = {
-        [firstEntry.id]: [0],
-      };
-    } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-      nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
-        (acc, step) => {
-          acc[step.step.id] = [0];
-          return acc;
-        },
-        {} as Record<string, number[]>,
-      );
-    }
-    const restartData: RestartExecutionParams = {
-      activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
-      activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
-      stepResults: snapshot.context,
-      state: snapshot.value,
-      stepExecutionPath: snapshot?.stepExecutionPath,
-    };
     const requestContextToUse = requestContext ?? new RequestContext();
     for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
       if (!(requestContextToUse as RequestContext).has(key)) {

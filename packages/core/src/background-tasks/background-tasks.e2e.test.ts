@@ -1,5 +1,4 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { config } from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
@@ -7,8 +6,6 @@ import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import { MockStore } from '../storage';
 import { createTool } from '../tools';
-
-config();
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 

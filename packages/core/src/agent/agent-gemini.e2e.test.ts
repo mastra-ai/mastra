@@ -1,4 +1,5 @@
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '..';
@@ -9,6 +10,8 @@ import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['google']);
 
 const mock = createGatewayMock({
   transformRequest: ({ url, body }) => {
@@ -475,7 +478,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 40000);
+    }, 120_000);
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant in network', async () => {
       const helperAgent = new Agent({
@@ -814,7 +817,7 @@ describe('Gemini Model Compatibility Tests', () => {
     // TODO: gemini-3-pro-preview streaming endpoint hangs (>120s), needs investigation
     it.skip(
       'should preserve thought_signature metadata through tool call round-trip',
-      { retry: 2, timeout: 40000 },
+      { retry: 2, timeout: 120_000 },
       async () => {
         const weatherTool = createTool({
           id: 'get-weather',
@@ -874,7 +877,7 @@ describe('Gemini Model Compatibility Tests', () => {
       },
     );
 
-    it('should handle multi-step tool calls with gemini 3 pro', { retry: 2, timeout: 40000 }, async () => {
+    it('should handle multi-step tool calls with gemini 3 pro', { retry: 2, timeout: 120_000 }, async () => {
       const weatherTool = createTool({
         id: 'get-weather-multi',
         description: 'Gets the current weather for a location',

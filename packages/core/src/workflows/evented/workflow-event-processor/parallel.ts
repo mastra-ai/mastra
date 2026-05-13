@@ -11,9 +11,10 @@ export async function processWorkflowParallel(
     runId,
     executionPath,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     resumeSteps,
     timeTravel,
+    restart,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -30,12 +31,18 @@ export async function processWorkflowParallel(
     step: Extract<StepFlowEntry, { type: 'parallel' }>;
   },
 ) {
+  const pathsToRun: Record<string, boolean> = {};
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
     if (nestedStep?.type === 'step') {
-      activeSteps[nestedStep.step.id] = true;
+      //if restart, only run the step if it's in the active steps path
+      if (restart) {
+        pathsToRun[nestedStep.step.id] = !!restart.activeStepsPath[nestedStep.step.id];
+      } else {
+        pathsToRun[nestedStep.step.id] = true;
+      }
       if (perStep) {
         break;
       }
@@ -44,7 +51,7 @@ export async function processWorkflowParallel(
 
   await Promise.all(
     step.steps
-      ?.filter(step => activeSteps[step.step.id])
+      ?.filter(step => pathsToRun[step.step.id])
       .map(async (_step, idx) => {
         return pubsub.publish('workflows', {
           type: 'workflow.step.run',
@@ -52,14 +59,15 @@ export async function processWorkflowParallel(
           data: {
             workflowId,
             runId,
-            executionPath: executionPath.concat([idx]),
+            executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
             resumeSteps,
             stepResults,
             prevResult,
             resumeData,
             timeTravel,
+            restart: restart ? { ...restart, isParallelOrConditionalRestarted: true } : undefined,
             parentWorkflow,
-            activeSteps,
+            activeStepsPath,
             requestContext,
             perStep,
             state: currentState,
@@ -76,9 +84,10 @@ export async function processWorkflowConditional(
     runId,
     executionPath,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     resumeSteps,
     timeTravel,
+    restart,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -127,8 +136,8 @@ export async function processWorkflowConditional(
   }
 
   if (onlyStepToRun) {
-    activeSteps[onlyStepToRun.step.id] = true;
     const stepIndex = step.steps.findIndex(step => step.step.id === onlyStepToRun.step.id);
+    activeStepsPath[onlyStepToRun.step.id] = executionPath.concat([stepIndex]);
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
       runId,
@@ -139,10 +148,11 @@ export async function processWorkflowConditional(
         resumeSteps,
         stepResults,
         timeTravel,
+        restart,
         prevResult,
         resumeData,
         parentWorkflow,
-        activeSteps,
+        activeStepsPath,
         requestContext,
         perStep,
         state: currentState,
@@ -154,7 +164,7 @@ export async function processWorkflowConditional(
       step.steps.map(async (step, idx) => {
         if (truthyIdxs[idx]) {
           if (step?.type === 'step') {
-            activeSteps[step.step.id] = true;
+            activeStepsPath[step.step.id] = executionPath.concat([idx]);
           }
           return pubsub.publish('workflows', {
             type: 'workflow.step.run',
@@ -166,10 +176,11 @@ export async function processWorkflowConditional(
               resumeSteps,
               stepResults,
               timeTravel,
+              restart: restart ? { ...restart, isParallelOrConditionalRestarted: true } : undefined,
               prevResult,
               resumeData,
               parentWorkflow,
-              activeSteps,
+              activeStepsPath,
               requestContext,
               perStep,
               state: currentState,
@@ -189,7 +200,7 @@ export async function processWorkflowConditional(
               prevResult: { status: 'skipped' },
               resumeData,
               parentWorkflow,
-              activeSteps,
+              activeStepsPath,
               requestContext,
               perStep,
               state: currentState,

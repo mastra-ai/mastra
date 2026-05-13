@@ -15,6 +15,7 @@ vi.mock('./utils', () => ({
   createMastraDir: vi.fn(),
   writeCodeSample: vi.fn(),
   checkDependencies: vi.fn(),
+  writeObservabilityEnv: vi.fn(),
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -195,6 +196,48 @@ describe('CLI', () => {
 
   //   expect(fs.existsSync('/mock')).toBe(false);
   // });
+
+  test('calls writeObservabilityEnv when observability is true', async () => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
+      const dirPath = `${directory}/mastra`;
+      fs.mkdirSync(dirPath, { recursive: true });
+      return { ok: true, dirPath };
+    });
+
+    const mockWriteObservabilityEnv = vi.spyOn(utils, 'writeObservabilityEnv');
+
+    await init({
+      directory: '/mock',
+      components: ['agents'],
+      addExample: false,
+      llmProvider: 'openai',
+      llmApiKey: 'sk-...',
+      observability: true,
+    });
+
+    expect(mockWriteObservabilityEnv).toHaveBeenCalled();
+  });
+
+  test('does not call writeObservabilityEnv when observability is false or undefined', async () => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
+      const dirPath = `${directory}/mastra`;
+      fs.mkdirSync(dirPath, { recursive: true });
+      return { ok: true, dirPath };
+    });
+
+    const mockWriteObservabilityEnv = vi.spyOn(utils, 'writeObservabilityEnv');
+
+    await init({
+      directory: '/mock',
+      components: ['agents'],
+      addExample: false,
+      llmProvider: 'openai',
+      llmApiKey: 'sk-...',
+      observability: false,
+    });
+
+    expect(mockWriteObservabilityEnv).not.toHaveBeenCalled();
+  });
 
   test('stops initialization if mastra is already setup', async () => {
     fs.mkdirSync('/mock/mastra', { recursive: true });
