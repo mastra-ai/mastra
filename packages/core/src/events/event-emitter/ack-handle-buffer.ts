@@ -112,14 +112,9 @@ export class AckHandleBuffer {
           }
         }
 
-        // Invariant: `delivered.length + dropped.length === snapshot.length`
-        // (modulo a throwing `coalesce`, which propagates and never reaches
-        // here). Both sides come out of `prepareBatch(events)` over the same
-        // snapshot, and `policy.size` was incremented once per push that
-        // entered the snapshot. If a future change splits these counts (e.g.
-        // late-delivered events accounted separately), update `onFlushed`
-        // together — the size counter must decrement by everything that left
-        // the queue, or it drifts upward and trips maxSize prematurely.
+        // `policy.size` was incremented once per push; decrement it by
+        // everything that left the queue (delivered + dropped) so it doesn't
+        // drift upward and trip maxSize prematurely.
         this.policy.onFlushed(delivered.length + dropped.length);
       } while (this.reflush && !this.disposed);
     } finally {
