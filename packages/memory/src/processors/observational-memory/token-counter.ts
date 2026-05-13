@@ -1311,9 +1311,11 @@ export class TokenCounter {
   }
 
   private countAttachmentPartSync(part: CacheablePart): number | undefined {
-    const clientEstimate = getClientPartTokenEstimate(part);
-    if (clientEstimate) {
-      return clientEstimate.tokens;
+    if (part.type === 'image' || part.type === 'file') {
+      const clientEstimate = getClientPartTokenEstimate(part);
+      if (clientEstimate) {
+        return clientEstimate.tokens;
+      }
     }
 
     if (part.type === 'image') {
@@ -1392,9 +1394,11 @@ export class TokenCounter {
   }
 
   private async countAttachmentPartAsync(part: CacheablePart): Promise<number | undefined> {
-    const clientEstimate = getClientPartTokenEstimate(part);
-    if (clientEstimate) {
-      return clientEstimate.tokens;
+    if (part.type === 'image' || part.type === 'file') {
+      const clientEstimate = getClientPartTokenEstimate(part);
+      if (clientEstimate) {
+        return clientEstimate.tokens;
+      }
     }
 
     const isImageAttachment = part.type === 'image' || (part.type === 'file' && isImageLikeFilePart(part));

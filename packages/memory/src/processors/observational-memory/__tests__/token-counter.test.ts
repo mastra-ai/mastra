@@ -438,9 +438,7 @@ describe('TokenCounter', () => {
       expect(second).toBe(first);
       const cache = part.providerMetadata.mastra.tokenEstimate;
       const clientEntry =
-        cache?.source === 'client'
-          ? cache
-          : Object.values(cache).find((entry: any) => entry?.source === 'client');
+        cache?.source === 'client' ? cache : Object.values(cache).find((entry: any) => entry?.source === 'client');
       expect(clientEntry).toMatchObject({ source: 'client', tokens: 42_000 });
     });
 
@@ -502,6 +500,38 @@ describe('TokenCounter', () => {
 
       expect(tokens).toBeGreaterThanOrEqual(25_000);
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('ignores client tokenEstimate on non-attachment parts (text/tool-invocation)', async () => {
+      const counter = new TokenCounter();
+      const text = 'hello world';
+      const baselineMessage = createMessage({
+        format: 2,
+        parts: [{ type: 'text', text }],
+      });
+      const baseline = counter.countMessage(baselineMessage);
+
+      const messageWithBogusEstimate = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text,
+            providerMetadata: {
+              mastra: {
+                tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: 999_999 },
+              },
+            },
+          } as any,
+        ],
+      });
+
+      const sync = counter.countMessage(messageWithBogusEstimate);
+      const async_ = await counter.countMessageAsync(messageWithBogusEstimate);
+
+      expect(sync).toBe(baseline);
+      expect(async_).toBe(baseline);
+      expect(sync).toBeLessThan(500);
     });
 
     it('reuses cached image estimates across repeated counts', () => {
