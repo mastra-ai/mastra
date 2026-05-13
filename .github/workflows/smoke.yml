@@ -13,6 +13,7 @@
 #
 # Triggers:
 #   workflow_dispatch – manual run with a tag input (default "alpha").
+#   schedule          – twice-daily cron (1h after the alpha publish cron) on the alpha tag.
 #
 # NOTE: The automatic workflow_run trigger (fires after "Publish to npm") is
 # temporarily disabled — re-enable by restoring the `workflow_run:` block below
@@ -27,6 +28,9 @@ on:
         description: 'npm dist-tag to smoke (alpha, latest, or custom)'
         required: false
         default: 'alpha'
+  schedule:
+    # 1 hour after the alpha publish cron (0 4,16 * * *) to let npm propagate.
+    - cron: '0 5,17 * * *'
 
 concurrency:
   group: smoke-${{ github.event.inputs.tag || 'auto' }}-${{ github.event_name }}
@@ -48,12 +52,17 @@ jobs:
         id: resolve
         env:
           INPUT_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           echo "tag=${INPUT_TAG:-alpha}" >> "$GITHUB_OUTPUT"
           echo "should_run=true" >> "$GITHUB_OUTPUT"
           echo "publish_run_url=" >> "$GITHUB_OUTPUT"
-          echo "trigger=manual" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            echo "trigger=cron" >> "$GITHUB_OUTPUT"
+          else
+            echo "trigger=manual" >> "$GITHUB_OUTPUT"
+          fi
 
   smoke:
     needs: resolve
