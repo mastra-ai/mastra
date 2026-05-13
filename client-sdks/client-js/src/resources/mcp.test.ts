@@ -192,4 +192,35 @@ describe('MCP Server Registry Client Methods', () => {
       expect(mcpTool.constructor.name).toBe('MCPTool');
     });
   });
+
+  describe('MCPTool.execute()', () => {
+    const serverId = 'mcp-server-1';
+    const toolId = 'tool-1';
+
+    it('should POST a JSON body with data when provided', async () => {
+      mockFetchResponse({ ok: true });
+      const tool = client.getMcpServerTool(serverId, toolId);
+      await tool.execute({ data: { foo: 'bar' } });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/mcp/${serverId}/tools/${toolId}/execute`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ data: { foo: 'bar' } }),
+        }),
+      );
+    });
+
+    it('should POST an empty JSON object when no data is provided', async () => {
+      mockFetchResponse({ ok: true });
+      const tool = client.getMcpServerTool(serverId, toolId);
+      await tool.execute({});
+
+      const [, init] = (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe('{}');
+      const headers = new Headers(init.headers);
+      expect(headers.get('content-type')).toContain('application/json');
+    });
+  });
 });

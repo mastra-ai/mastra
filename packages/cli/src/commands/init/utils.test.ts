@@ -12,23 +12,27 @@ vi.mock('node:fs/promises', async () => {
 vi.mock('@clack/prompts', () => ({
   select: vi.fn(),
   isCancel: (v: unknown) => typeof v === 'symbol',
+  log: { info: vi.fn(), warn: vi.fn() },
 }));
 
 vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
+  loadCredentials: vi.fn(),
 }));
 
 const { promptForObservability, writeObservabilityEnv } = await import('./utils');
 const prompts = await import('@clack/prompts');
-const { getToken } = await import('../auth/credentials.js');
+const { getToken, loadCredentials } = await import('../auth/credentials.js');
 
 const selectMock = vi.mocked(prompts.select);
 const getTokenMock = vi.mocked(getToken);
+const loadCredentialsMock = vi.mocked(loadCredentials);
 
 describe('promptForObservability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getTokenMock.mockResolvedValue('platform-token');
+    loadCredentialsMock.mockResolvedValue(null);
   });
 
   test('starts platform auth immediately when observability is enabled', async () => {
@@ -45,6 +49,83 @@ describe('promptForObservability', () => {
     await expect(promptForObservability()).resolves.toEqual({ enabled: false });
 
     expect(getTokenMock).not.toHaveBeenCalled();
+  });
+
+  test('prints logged-in user when creds existed before getToken()', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+    const creds = {
+      token: 'tok',
+      user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    } as never;
+    loadCredentialsMock.mockResolvedValueOnce(creds);
+    loadCredentialsMock.mockResolvedValueOnce(creds);
+
+    await promptForObservability();
+
+    expect(vi.mocked(prompts.log.info)).toHaveBeenCalledWith('Logged in as existing@test.com');
+  });
+
+  test('does not print logged-in user when creds were created by login()', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+    loadCredentialsMock.mockResolvedValueOnce(null);
+
+    await promptForObservability();
+
+    expect(vi.mocked(prompts.log.info)).not.toHaveBeenCalled();
+  });
+
+  test('prints the post-auth user when stale creds force a fresh login as a different account', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+    // Pre-auth: stale creds for an old user
+    loadCredentialsMock.mockResolvedValueOnce({
+      token: 'stale',
+      user: { id: 'u1', email: 'old@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    } as never);
+    // Post-auth: new creds written by login() for a different user
+    loadCredentialsMock.mockResolvedValueOnce({
+      token: 'new',
+      user: { id: 'u2', email: 'new@test.com', firstName: 'C', lastName: 'D' },
+      organizationId: 'org-2',
+    } as never);
+
+    await promptForObservability();
+
+    expect(vi.mocked(prompts.log.info)).toHaveBeenCalledWith('Logged in as new@test.com');
+  });
+
+  test('re-prompts the same question when the browser auth flow fails (e.g. user closed the browser)', async () => {
+    // First attempt: user picks Yes, but auth fails (simulates closing the browser).
+    // Second attempt: user picks No to skip observability.
+    selectMock.mockResolvedValueOnce('yes' as never).mockResolvedValueOnce('no' as never);
+    getTokenMock.mockRejectedValueOnce(new Error('Login timed out (60s)'));
+
+    await expect(promptForObservability()).resolves.toEqual({ enabled: false });
+
+    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(getTokenMock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(prompts.log.warn)).toHaveBeenCalledWith(expect.stringContaining('Could not sign in to Mastra'));
+  });
+
+  test('eventually returns a token when a retried auth flow succeeds', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never).mockResolvedValueOnce('yes' as never);
+    getTokenMock.mockRejectedValueOnce(new Error('Login timed out (60s)')).mockResolvedValueOnce('retry-token');
+
+    await expect(promptForObservability()).resolves.toEqual({ enabled: true, token: 'retry-token' });
+
+    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(getTokenMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('returns {} when the user cancels the re-prompted question', async () => {
+    const cancelSymbol = Symbol('clack:cancel');
+    selectMock.mockResolvedValueOnce('yes' as never).mockResolvedValueOnce(cancelSymbol as never);
+    getTokenMock.mockRejectedValueOnce(new Error('Login timed out (60s)'));
+
+    await expect(promptForObservability()).resolves.toEqual({});
+
+    expect(selectMock).toHaveBeenCalledTimes(2);
   });
 });
 
