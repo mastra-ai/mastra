@@ -9,6 +9,9 @@ on:
       base_ref:
         required: true
         type: string
+      has_code:
+        required: true
+        type: string
     secrets:
       TURBO_TOKEN:
         required: false
@@ -20,6 +23,7 @@ permissions: {}
 jobs:
   unit-test:
     name: UNIT Test (Shard ${{ matrix.shard }})
+    if: inputs.has_code == 'true'
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -78,6 +82,7 @@ jobs:
 
   e2e-test:
     name: E2E Test (${{ matrix.project }})
+    if: inputs.has_code == 'true'
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -150,16 +155,23 @@ jobs:
       contents: read
 
     steps:
+      - name: Skip tests for non-code changes
+        if: inputs.has_code != 'true'
+        run: echo "No code changes detected; skipping unit and E2E tests."
+
       - name: Checkout repo
+        if: inputs.has_code == 'true'
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
+        if: inputs.has_code == 'true'
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download test results
+        if: inputs.has_code == 'true'
         uses: actions/download-artifact@v6
         with:
           pattern: vitest-blob-*
@@ -167,4 +179,5 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
+        if: inputs.has_code == 'true'
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
