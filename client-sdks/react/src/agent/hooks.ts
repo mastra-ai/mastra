@@ -1,15 +1,16 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
+import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import type { ModelSettings } from './types';
-import { toUIMessage } from '@/lib/ai-sdk';
+import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
@@ -20,9 +21,13 @@ type ToolsInput = any;
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
+  threadId?: string;
   initialMessages?: MastraUIMessage[];
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
+  onSignalSent?: (signalId: string, preview: string) => void;
+  onSignalEcho?: (signalId: string) => void;
+  onThreadSignalsUnsupported?: () => void;
 }
 
 interface SharedArgs {
@@ -49,17 +54,32 @@ export type GenerateArgs = SharedArgs & {
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
   clientTools?: ToolsInput;
+  signalId?: string;
 };
 
 export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
+const isThreadSignalUnsupportedError = (error: unknown) => {
+  const candidate = error as { status?: number; message?: string; body?: unknown } | undefined;
+  const status = candidate?.status;
+  if (status === 404 || status === 405 || status === 501) {
+    return true;
+  }
+
+  return status === 400 && candidate?.message?.includes('No active agent run found for signal target');
+};
+
 export const useChat = ({
   agentId,
   resourceId,
+  threadId,
   initialMessages,
   requestContext: propsRequestContext,
+  onSignalSent,
+  onSignalEcho,
+  onThreadSignalsUnsupported,
 }: MastraChatProps) => {
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
@@ -72,6 +92,10 @@ export const useChat = ({
   // concurrent UI consumer, producing duplicate bg-task events and duplicate
   // continuation turns on the server.
   const _streamAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
+  const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
+  const _threadSignalsUnsupportedRef = useRef(false);
   const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
@@ -92,6 +116,150 @@ export const useChat = ({
   useEffect(() => {
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
+
+  type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
+
+  const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
+    if (coreUserMessages.length === 1) {
+      return coreUserMessages[0] as UserMessageSignalContents;
+    }
+
+    return coreUserMessages as UserMessageSignalContents;
+  };
+
+  const markThreadSignalsUnsupported = useCallback(() => {
+    _threadSignalsUnsupportedRef.current = true;
+    onThreadSignalsUnsupported?.();
+  }, [onThreadSignalsUnsupported]);
+
+  const getSignalPreview = (coreUserMessages: CoreUserMessage[]) => {
+    const preview = coreUserMessages
+      .flatMap(message => {
+        if (typeof message.content === 'string') {
+          return [message.content];
+        }
+
+        return message.content.map(part => {
+          if (part.type === 'text') return part.text;
+          if (part.type === 'image') return 'Image';
+          return part.filename ? `File: ${part.filename}` : 'File';
+        });
+      })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return preview || 'Attachment';
+  };
+
+  const closeThreadSubscription = useCallback(() => {
+    _threadSubscriptionAbortRef.current?.abort();
+    _threadSubscriptionAbortRef.current = null;
+    _threadSubscriptionKeyRef.current = undefined;
+    _threadSubscriptionPromiseRef.current = null;
+  }, []);
+
+  const processStreamChunk = useCallback(
+    async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
+      setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+      if (chunk.type === 'data-user-message' && 'data' in chunk && typeof chunk.data?.id === 'string') {
+        onSignalEcho?.(chunk.data.id);
+      }
+
+      if (chunk.type === 'start') {
+        setIsRunning(true);
+        if ('runId' in chunk && typeof chunk.runId === 'string') {
+          _currentRunId.current = chunk.runId;
+        }
+      }
+
+      if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+        setIsRunning(false);
+      }
+
+      void (onChunk ?? _onChunk.current)?.(chunk);
+    },
+    [onSignalEcho],
+  );
+
+  const ensureThreadSubscription = useCallback(
+    async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
+      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
+      if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
+        await _threadSubscriptionPromiseRef.current;
+        return;
+      }
+
+      _threadSubscriptionAbortRef.current?.abort();
+      const subscriptionAbort = new AbortController();
+      _threadSubscriptionAbortRef.current = subscriptionAbort;
+      _threadSubscriptionKeyRef.current = subscriptionKey;
+
+      const clientWithAbort = new MastraClient({
+        ...baseClient!.options,
+        abortSignal: subscriptionAbort.signal,
+      });
+      const subscriptionAgent = clientWithAbort.getAgent(agentId);
+
+      _threadSubscriptionPromiseRef.current = subscriptionAgent
+        .subscribeToThread({ resourceId, threadId })
+        .then(response => {
+          void response
+            .processDataStream({
+              onChunk: chunk => processStreamChunk(chunk),
+            })
+            .catch(error => {
+              if ((error as { name?: string }).name !== 'AbortError') {
+                console.error('[useChat] Thread subscription failed', error);
+                setIsRunning(false);
+              }
+            })
+            .finally(() => {
+              if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+                _threadSubscriptionAbortRef.current = null;
+                _threadSubscriptionKeyRef.current = undefined;
+                _threadSubscriptionPromiseRef.current = null;
+              }
+            });
+        })
+        .catch(error => {
+          if (isThreadSignalUnsupportedError(error)) {
+            markThreadSignalsUnsupported();
+            if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+              _threadSubscriptionAbortRef.current = null;
+              _threadSubscriptionKeyRef.current = undefined;
+              _threadSubscriptionPromiseRef.current = null;
+            }
+            return;
+          }
+
+          if ((error as { name?: string }).name !== 'AbortError') {
+            console.error('[useChat] Thread subscription failed', error);
+            setIsRunning(false);
+          }
+          throw error;
+        });
+
+      await _threadSubscriptionPromiseRef.current;
+    },
+    [agentId, baseClient, markThreadSignalsUnsupported, processStreamChunk],
+  );
+
+  useEffect(() => {
+    _threadSignalsUnsupportedRef.current = false;
+    return closeThreadSubscription;
+  }, [agentId, resourceId, threadId, closeThreadSubscription]);
+
+  useEffect(() => {
+    if (!threadId) return;
+
+    void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
+      if ((error as { name?: string }).name !== 'AbortError') {
+        console.error('[useChat] Thread subscription failed', error);
+      }
+    });
+  }, [agentId, ensureThreadSubscription, resourceId, threadId]);
 
   const generate = async ({
     coreUserMessages,
@@ -206,6 +374,7 @@ export const useChat = ({
     signal,
     tracingOptions,
     clientTools,
+    signalId,
   }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -225,23 +394,15 @@ export const useChat = ({
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
-    // Abort any still-open prior streamUntilIdle so its bg-task pubsub
-    // subscription closes server-side. Otherwise the prior request keeps
-    // listening and duplicates every bg event into both the old and the new
-    // UI consumer.
     _streamAbortRef.current?.abort();
     const internalAbort = new AbortController();
     _streamAbortRef.current = internalAbort;
 
-    // Forward the caller-supplied signal (e.g. from the runtime provider) so
-    // explicit external cancellation still works.
     if (signal) {
       if (signal.aborted) internalAbort.abort();
       else signal.addEventListener('abort', () => internalAbort.abort(), { once: true });
     }
 
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
       abortSignal: internalAbort.signal,
@@ -249,48 +410,102 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = uuid();
+    const streamWithLegacyRoute = async () => {
+      const runId = uuid();
+      const response = await agent.streamUntilIdle(coreUserMessages, {
+        runId,
+        maxSteps,
+        modelSettings: {
+          frequencyPenalty,
+          presencePenalty,
+          maxRetries,
+          maxOutputTokens: maxTokens,
+          temperature,
+          topK,
+          topP,
+        },
+        instructions,
+        requestContext: resolvedRequestContext,
+        ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+        providerOptions: providerOptions as any,
+        requireToolApproval,
+        tracingOptions,
+        clientTools,
+      });
 
-    const response = await agent.streamUntilIdle(coreUserMessages, {
-      runId,
-      maxSteps,
-      modelSettings: {
-        frequencyPenalty,
-        presencePenalty,
-        maxRetries,
-        maxOutputTokens: maxTokens,
-        temperature,
-        topK,
-        topP,
-      },
-      instructions,
-      requestContext: resolvedRequestContext,
-      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
-      providerOptions: providerOptions as any,
-      requireToolApproval,
-      tracingOptions,
-      clientTools,
-    });
+      _onChunk.current = onChunk;
+      _currentRunId.current = runId;
+
+      await response.processDataStream({
+        onChunk: chunk => processStreamChunk(chunk, onChunk),
+      });
+
+      if (_streamAbortRef.current === internalAbort) {
+        _streamAbortRef.current = null;
+      }
+      setIsRunning(false);
+    };
+
+    if (!threadId || _threadSignalsUnsupportedRef.current) {
+      await streamWithLegacyRoute();
+      return;
+    }
 
     _onChunk.current = onChunk;
-    _currentRunId.current = runId;
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
+    await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
 
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+    if (_threadSignalsUnsupportedRef.current) {
+      await streamWithLegacyRoute();
+      return;
+    }
 
-        void onChunk?.(chunk);
-      },
-    });
+    const resolvedSignalId = signalId ?? uuid();
+    onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
 
-    // Only clear the ref if we're still the active stream — a later stream()
-    // call may have already taken over and aborted us.
+    try {
+      await agent.sendSignal({
+        signal: {
+          id: resolvedSignalId,
+          type: 'user-message',
+          contents: getSignalContents(coreUserMessages),
+        },
+        resourceId: resourceId || agentId,
+        threadId,
+        ifIdle: {
+          streamOptions: {
+            maxSteps,
+            modelSettings: {
+              frequencyPenalty,
+              presencePenalty,
+              maxRetries,
+              maxOutputTokens: maxTokens,
+              temperature,
+              topK,
+              topP,
+            },
+            instructions,
+            requestContext: resolvedRequestContext,
+            providerOptions: providerOptions as any,
+            requireToolApproval,
+            tracingOptions,
+          },
+        },
+      });
+    } catch (error) {
+      onSignalEcho?.(resolvedSignalId);
+      if (isThreadSignalUnsupportedError(error)) {
+        markThreadSignalsUnsupported();
+        setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToUIMessage)] as MastraUIMessage[]);
+        await streamWithLegacyRoute();
+        return;
+      }
+      throw error;
+    }
+
     if (_streamAbortRef.current === internalAbort) {
       _streamAbortRef.current = null;
     }
-    setIsRunning(false);
   };
 
   const network = async ({
@@ -353,6 +568,10 @@ export const useChat = ({
   };
 
   const handleCancelRun = () => {
+    _streamAbortRef.current?.abort();
+    _streamAbortRef.current = null;
+    closeThreadSubscription();
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
@@ -378,13 +597,17 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
+    if (_threadSubscriptionKeyRef.current) {
+      return;
+    }
+
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        void onChunk?.(chunk);
+        void (onChunk ?? _onChunk.current)?.(chunk);
       },
     });
     setIsRunning(false);
@@ -406,13 +629,17 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
+    if (_threadSubscriptionKeyRef.current) {
+      return;
+    }
+
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        void onChunk?.(chunk);
+        void (onChunk ?? _onChunk.current)?.(chunk);
       },
     });
     setIsRunning(false);
@@ -557,12 +784,16 @@ export const useChat = ({
     }
 
     const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
-    setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
+    const signalId =
+      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current ? uiMessages[0]?.id : undefined;
+    if (!signalId) {
+      setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
+    }
 
     if (mode === 'generate') {
       await generate({ ...args, coreUserMessages });
     } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages });
+      await stream({ ...args, coreUserMessages, signalId });
     } else if (mode === 'network') {
       await network({ ...args, coreUserMessages });
     }

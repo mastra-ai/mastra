@@ -26,7 +26,7 @@ import type {
 } from '@mastra/core/storage/domains/agents';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 export class AgentsPG extends AgentsStorage {
   #db: PgDB;
@@ -336,34 +336,6 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.clearTable({ tableName: TABLE_AGENTS });
   }
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
-    if (typeof value !== 'string') return value;
-
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
-    }
-  }
-
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
@@ -371,7 +343,7 @@ export class AgentsPG extends AgentsStorage {
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
       visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
-      metadata: this.parseJson(row.metadata, 'metadata'),
+      metadata: parseJsonResilient(row.metadata, 'metadata'),
       starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
@@ -735,7 +707,14 @@ export class AgentsPG extends AgentsStorage {
         [...joinParams, ...queryParams, limitValue, offset],
       );
 
-      const agents = (dataResult || []).map(row => this.parseRow(row));
+      const agents = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map agent row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         agents,
@@ -949,7 +928,14 @@ export class AgentsPG extends AgentsStorage {
         [agentId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map agent version row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         versions,
@@ -1057,23 +1043,23 @@ export class AgentsPG extends AgentsStorage {
       name: row.name as string,
       description: row.description as string | undefined,
       instructions: this.deserializeInstructions(row.instructions as string),
-      model: this.parseJson(row.model, 'model'),
-      tools: this.parseJson(row.tools, 'tools'),
-      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
-      workflows: this.parseJson(row.workflows, 'workflows'),
-      agents: this.parseJson(row.agents, 'agents'),
-      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
-      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
-      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
-      memory: this.parseJson(row.memory, 'memory'),
-      scorers: this.parseJson(row.scorers, 'scorers'),
-      mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
-      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
-      workspace: this.parseJson(row.workspace, 'workspace'),
-      skills: this.parseJson(row.skills, 'skills'),
+      model: parseJsonResilient(row.model, 'model'),
+      tools: parseJsonResilient(row.tools, 'tools'),
+      defaultOptions: parseJsonResilient(row.defaultOptions, 'defaultOptions'),
+      workflows: parseJsonResilient(row.workflows, 'workflows'),
+      agents: parseJsonResilient(row.agents, 'agents'),
+      integrationTools: parseJsonResilient(row.integrationTools, 'integrationTools'),
+      inputProcessors: parseJsonResilient(row.inputProcessors, 'inputProcessors'),
+      outputProcessors: parseJsonResilient(row.outputProcessors, 'outputProcessors'),
+      memory: parseJsonResilient(row.memory, 'memory'),
+      scorers: parseJsonResilient(row.scorers, 'scorers'),
+      mcpClients: parseJsonResilient(row.mcpClients, 'mcpClients'),
+      requestContextSchema: parseJsonResilient(row.requestContextSchema, 'requestContextSchema'),
+      workspace: parseJsonResilient(row.workspace, 'workspace'),
+      skills: parseJsonResilient(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
-      browser: this.parseJson(row.browser, 'browser'),
-      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      browser: parseJsonResilient(row.browser, 'browser'),
+      changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,
     };

@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/workspaces';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
   'name',
@@ -440,7 +440,14 @@ export class WorkspacesPG extends WorkspacesStorage {
         [...queryParams, limitValue, offset],
       );
 
-      const workspaces = (dataResult || []).map(row => this.parseWorkspaceRow(row));
+      const workspaces = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseWorkspaceRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map workspace row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         workspaces,
@@ -656,7 +663,14 @@ export class WorkspacesPG extends WorkspacesStorage {
         [workspaceId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map workspace version row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         versions,
@@ -749,41 +763,13 @@ export class WorkspacesPG extends WorkspacesStorage {
   // Private Helper Methods
   // ==========================================================================
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
-    if (typeof value !== 'string') return value;
-
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
-    }
-  }
-
   private parseWorkspaceRow(row: any): StorageWorkspaceType {
     return {
       id: row.id as string,
       status: row.status as StorageWorkspaceType['status'],
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
-      metadata: this.parseJson(row.metadata, 'metadata'),
+      metadata: parseJsonResilient(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };
@@ -796,15 +782,15 @@ export class WorkspacesPG extends WorkspacesStorage {
       versionNumber: row.versionNumber as number,
       name: row.name as string,
       description: row.description as string | undefined,
-      filesystem: this.parseJson(row.filesystem, 'filesystem'),
-      sandbox: this.parseJson(row.sandbox, 'sandbox'),
-      mounts: this.parseJson(row.mounts, 'mounts'),
-      search: this.parseJson(row.search, 'search'),
-      skills: this.parseJson(row.skills, 'skills'),
-      tools: this.parseJson(row.tools, 'tools'),
+      filesystem: parseJsonResilient(row.filesystem, 'filesystem'),
+      sandbox: parseJsonResilient(row.sandbox, 'sandbox'),
+      mounts: parseJsonResilient(row.mounts, 'mounts'),
+      search: parseJsonResilient(row.search, 'search'),
+      skills: parseJsonResilient(row.skills, 'skills'),
+      tools: parseJsonResilient(row.tools, 'tools'),
       autoSync: Boolean(row.autoSync),
       operationTimeout: row.operationTimeout != null ? Number(row.operationTimeout) : undefined,
-      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),
     };

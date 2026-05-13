@@ -1,7 +1,11 @@
 import { openai } from '@ai-sdk/openai';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createNoiseSensitivityScorerLLM } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mockModel = openai('gpt-4o-mini');
 

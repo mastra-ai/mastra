@@ -25,7 +25,7 @@ import type {
 } from '@mastra/core/storage/domains/skills';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
   'name',
@@ -513,7 +513,14 @@ export class SkillsPG extends SkillsStorage {
         [...joinParams, ...queryParams, limitValue, offset],
       );
 
-      const skills = (dataResult || []).map(row => this.parseSkillRow(row));
+      const skills = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseSkillRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map skill row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         skills,
@@ -730,7 +737,14 @@ export class SkillsPG extends SkillsStorage {
         [skillId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map skill version row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         versions,
@@ -823,34 +837,6 @@ export class SkillsPG extends SkillsStorage {
   // Private Helper Methods
   // ==========================================================================
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
-    if (typeof value !== 'string') return value;
-
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
-    }
-  }
-
   private parseSkillRow(row: any): StorageSkillType {
     return {
       id: row.id as string,
@@ -873,15 +859,15 @@ export class SkillsPG extends SkillsStorage {
       description: row.description as string,
       instructions: row.instructions as string,
       license: row.license as string | undefined,
-      compatibility: this.parseJson(row.compatibility, 'compatibility'),
-      source: this.parseJson(row.source, 'source'),
-      references: this.parseJson(row.references, 'references'),
-      scripts: this.parseJson(row.scripts, 'scripts'),
-      assets: this.parseJson(row.assets, 'assets'),
-      files: this.parseJson(row.files, 'files'),
-      metadata: this.parseJson(row.metadata, 'metadata'),
-      tree: this.parseJson(row.tree, 'tree'),
-      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      compatibility: parseJsonResilient(row.compatibility, 'compatibility'),
+      source: parseJsonResilient(row.source, 'source'),
+      references: parseJsonResilient(row.references, 'references'),
+      scripts: parseJsonResilient(row.scripts, 'scripts'),
+      assets: parseJsonResilient(row.assets, 'assets'),
+      files: parseJsonResilient(row.files, 'files'),
+      metadata: parseJsonResilient(row.metadata, 'metadata'),
+      tree: parseJsonResilient(row.tree, 'tree'),
+      changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),
     };

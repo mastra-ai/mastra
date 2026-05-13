@@ -148,7 +148,7 @@ describe('handleGoalCommand', () => {
       type: 'system-reminder',
       contents: 'finish the task',
       attributes: { type: 'goal' },
-      metadata: { goalMaxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
+      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
     });
   });
 
@@ -201,7 +201,7 @@ describe('handleGoalCommand', () => {
       type: 'system-reminder',
       contents: '# Ship it\n\n1. Build\n2. Test',
       attributes: { type: 'goal' },
-      metadata: { goalMaxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
+      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
     });
   });
 
