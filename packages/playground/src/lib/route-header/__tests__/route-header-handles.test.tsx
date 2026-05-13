@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 
+import { render, screen, waitFor } from '@testing-library/react';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import type { RouteObject } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import type { CrumbDef, RouteHeaderHandle } from '../types';
+import { useRouteHeader } from '../use-route-header';
 import { routes } from '@/App';
 
 function getAppRoutes() {
@@ -100,6 +103,11 @@ function hasRenderableNode(crumb: CrumbDef) {
   return crumb.node !== null && crumb.node !== undefined && crumb.node !== '';
 }
 
+function RouteHeaderProbe() {
+  const { docs } = useRouteHeader();
+  return <div data-testid="route-docs">{docs?.href ?? 'none'}</div>;
+}
+
 describe('route header handles', () => {
   it('gives every main app page breadcrumb data', () => {
     expect(collectRoutesMissingCrumbs(getAppRoutes())).toEqual([]);
@@ -116,5 +124,45 @@ describe('route header handles', () => {
     });
 
     expect(invalidHandles).toEqual([]);
+  });
+
+  it('does not throw when route params contain malformed URI encoding', () => {
+    const scheduleHandle = collectRouteHandles(getAppRoutes()).find(
+      ({ path }) => path === '/workflows/schedules/:scheduleId',
+    )?.handle;
+
+    expect(scheduleHandle?.crumbs).toBeTypeOf('function');
+    expect(() => {
+      if (typeof scheduleHandle?.crumbs !== 'function') return;
+      const crumbs = scheduleHandle.crumbs({
+        params: { scheduleId: '%E0%A4%A' },
+        pathname: '/workflows/schedules/%E0%A4%A',
+      });
+      expect(crumbs.at(-1)?.node).toBe('%E0%A4%A');
+    }).not.toThrow();
+  });
+
+  it('allows deeper route handles to clear inherited docs links', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/',
+          element: <Outlet />,
+          handle: { docs: { href: 'https://example.com/docs' } },
+          children: [
+            {
+              path: 'child',
+              element: <RouteHeaderProbe />,
+              handle: { docs: () => undefined },
+            },
+          ],
+        },
+      ],
+      { initialEntries: ['/child'] },
+    );
+
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(screen.getByTestId('route-docs').textContent).toBe('none'));
   });
 });

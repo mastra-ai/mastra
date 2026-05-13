@@ -159,6 +159,10 @@ html.light {
   box-shadow: var(--shadow-main-frame);
 }
 
+@utility shadow-dialog {
+  box-shadow: var(--shadow-dialog);
+}
+
 @utility rounded-studio-frame {
   border-radius: var(--studio-frame-radius, 1.5rem);
 }

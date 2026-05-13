@@ -9,9 +9,9 @@ export interface AgentLayoutProps {
   browserOverlay?: React.ReactNode;
 }
 
-export const AgentLayout = ({ children, leftSlot, rightSlot, browserOverlay }: AgentLayoutProps) => {
+export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOverlay }: AgentLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-layout-v2`,
+    id: `agent-layout-v2-${agentId}`,
     storage: localStorage,
   });
 

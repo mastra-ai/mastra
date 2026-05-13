@@ -25,9 +25,8 @@ export function useRouteHeader(): RouteHeaderData {
       if (resolved?.length) crumbs.push(...resolved);
     }
 
-    if (handle.docs) {
-      const resolved = typeof handle.docs === 'function' ? handle.docs(ctx) : handle.docs;
-      if (resolved) docs = resolved;
+    if ('docs' in handle) {
+      docs = typeof handle.docs === 'function' ? handle.docs(ctx) : handle.docs;
     }
   }
 

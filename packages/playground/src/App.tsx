@@ -203,7 +203,15 @@ const agentCmsChildRoutes = [
 
 const schedulesCrumb = { node: 'Schedules', icon: CalendarClockIcon, to: '/workflows/schedules' } as const;
 
-const decodeRouteParam = (value: string | undefined) => (value ? decodeURIComponent(value) : '');
+const decodeRouteParam = (value: string | undefined) => {
+  if (!value) return '';
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
 
 // eslint-disable-next-line react-refresh/only-export-components -- route metadata is covered by regression tests.
 export const routes: RouteObject[] = [
@@ -380,7 +388,7 @@ export const routes: RouteObject[] = [
           crumbs: ({ params }) => [
             navCrumb('/workflows'),
             schedulesCrumb,
-            { node: params.scheduleId ? decodeURIComponent(params.scheduleId) : '', icon: CalendarClockIcon },
+            { node: decodeRouteParam(params.scheduleId), icon: CalendarClockIcon },
           ],
         },
       },

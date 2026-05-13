@@ -30,13 +30,13 @@ export function WorkflowHeader({
             Schedules ({scheduleCount})
           </Button>
         )}
-        <Button as={Link} to={`/observability?entity=${workflowName}`} size="sm">
+        <Button as={Link} to={`/observability?entity=${encodeURIComponent(workflowName)}`} size="sm">
           <Icon>
             <EyeIcon />
           </Icon>
           Traces
         </Button>
-        <Button as="a" target="_blank" href="/swagger-ui" variant="ghost" size="sm">
+        <Button as="a" target="_blank" rel="noopener noreferrer" href="/swagger-ui" variant="ghost" size="sm">
           <ApiIcon />
           API endpoints
         </Button>

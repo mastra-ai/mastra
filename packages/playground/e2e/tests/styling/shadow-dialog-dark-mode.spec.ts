@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 /**
  * FEATURE: shadow-dialog token should not have inset gloss in dark mode
@@ -8,13 +9,18 @@ import { test, expect } from '@playwright/test';
  *                      should NOT contain 'inset' in dark mode.
  */
 
+const gotoAgentsInDarkMode = async (page: Page) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('mastra-theme', 'dark');
+  });
+
+  await page.goto('/agents', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('html')).toHaveClass(/dark/);
+};
+
 test.describe('shadow-dialog token - dark mode styling', () => {
   test('dropdown content shadow-dialog has no inset in dark mode', async ({ page }) => {
-    await page.goto('/agents');
-    await page.waitForLoadState('networkidle');
-
-    const htmlClass = await page.locator('html').getAttribute('class');
-    expect(htmlClass, 'expected dark mode (no .light on html)').not.toContain('light');
+    await gotoAgentsInDarkMode(page);
 
     const trigger = page.locator('[data-radix-dropdown-menu-trigger]').first();
     if ((await trigger.count()) === 0) {
@@ -31,8 +37,7 @@ test.describe('shadow-dialog token - dark mode styling', () => {
   });
 
   test('tooltip shadow-dialog has no inset in dark mode', async ({ page }) => {
-    await page.goto('/agents');
-    await page.waitForLoadState('networkidle');
+    await gotoAgentsInDarkMode(page);
 
     const trigger = page.locator('[data-radix-tooltip-trigger], button[aria-describedby]').first();
     if ((await trigger.count()) === 0) {
@@ -49,8 +54,7 @@ test.describe('shadow-dialog token - dark mode styling', () => {
   });
 
   test('any rendered shadow-dialog element has no inset in dark mode', async ({ page }) => {
-    await page.goto('/agents');
-    await page.waitForLoadState('networkidle');
+    await gotoAgentsInDarkMode(page);
 
     // Inject a probe element with the utility class to read the resolved shadow
     // even if no dialog/popover is currently open.
