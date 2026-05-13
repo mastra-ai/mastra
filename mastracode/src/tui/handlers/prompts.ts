@@ -274,9 +274,7 @@ export async function handlePlanApproval(
               contents: 'The user has approved the plan, begin executing.',
             }).accepted;
           } catch (err) {
-            ctx.showError(
-              `Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`,
-            );
+            ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
           }
 
           resolve();
