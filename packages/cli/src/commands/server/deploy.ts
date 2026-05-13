@@ -233,9 +233,16 @@ async function resolveProject(
 
   if (flagProject) {
     const projects = await fetchServerProjects(token, orgId);
-    const match = projects.find(
-      proj => proj.name === flagProject || proj.slug === flagProject || proj.id === flagProject,
-    );
+    const byId = projects.find(proj => proj.id === flagProject);
+    const bySlug = projects.find(proj => proj.slug === flagProject);
+    const byName = projects.filter(proj => proj.name === flagProject);
+    if (!byId && !bySlug && byName.length > 1) {
+      p.cancel(
+        `Multiple projects are named "${flagProject}". Pass --project with the project id or slug to disambiguate.`,
+      );
+      process.exit(1);
+    }
+    const match = byId ?? bySlug ?? (byName.length === 1 ? byName[0] : undefined);
     if (match) {
       return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
