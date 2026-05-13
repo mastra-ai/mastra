@@ -20,7 +20,9 @@ import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import { addGithubPrSubscriptionBadge, removeGithubPrSubscriptionBadge } from './state.js';
 import type { TUIState } from './state.js';
+import { updateStatusLine } from './status-line.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
 // Re-export so existing consumers can still import from here
@@ -310,6 +312,20 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
       title?: string;
       checkCount?: number;
     };
+    if (goalMetadata.prNumber && reminderPart.reminderType === 'github-pr-subscribe') {
+      state.activeGithubPrSubscriptions = addGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions ?? [], {
+        prNumber: goalMetadata.prNumber,
+        ...(goalMetadata.repo ? { repo: goalMetadata.repo } : {}),
+      });
+      updateStatusLine(state);
+    } else if (goalMetadata.prNumber && reminderPart.reminderType === 'github-pr-unsubscribe') {
+      state.activeGithubPrSubscriptions = removeGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions ?? [], {
+        prNumber: goalMetadata.prNumber,
+        ...(goalMetadata.repo ? { repo: goalMetadata.repo } : {}),
+      });
+      updateStatusLine(state);
+    }
+
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,

@@ -21,6 +21,9 @@ const GITHUB_REVIEW_SIGNAL = 'github-review';
 const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const MAX_PROCESSED_SIGNAL_IDS = 200;
+const DEFAULT_AUTHORIZED_PERMISSIONS = ['admin', 'maintain', 'write'] as const;
+
+export type GithubPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 
 type MastraMetadata = Record<string, unknown> & {
   githubSignals?: GithubSignalsThreadMetadata;
@@ -51,10 +54,15 @@ export interface GithubSignalsOptions {
   commandRunner?: GithubCommandRunner;
   now?: () => Date;
   getStreamOptions?: GithubSignalStreamOptionsGetter;
+  authorizedPermissions?: GithubPermission[];
+  authorizedBots?: string[];
 }
 
 type NormalizedGithubSignalsOptions = Required<
-  Pick<GithubSignalsOptions, 'pollIntervalMs' | 'includeTool' | 'commandRunner' | 'now'>
+  Pick<
+    GithubSignalsOptions,
+    'pollIntervalMs' | 'includeTool' | 'commandRunner' | 'now' | 'authorizedPermissions' | 'authorizedBots'
+  >
 > &
   Pick<GithubSignalsOptions, 'repo' | 'getStreamOptions'>;
 
@@ -74,7 +82,7 @@ interface GithubSignalsMemory {
     hasMore?: boolean;
     total?: number;
   }>;
-  getThreadById?(args: { threadId: string; resourceId: string }): Promise<GithubSignalsThread | undefined>;
+  getThreadById?(args: { threadId: string; resourceId: string }): Promise<GithubSignalsThread | null | undefined>;
   updateThread?(args: { id: string; title: string; metadata: Record<string, unknown> }): Promise<unknown>;
 }
 
@@ -289,6 +297,31 @@ function stripAnsi(value: string) {
   return value.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
 }
 
+function parseGithubJson(value: string, fallback: unknown) {
+  const normalized = stripAnsi(value || '').trim();
+  if (!normalized) return fallback;
+  return JSON.parse(normalized) as unknown;
+}
+
+function getArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function parseGithubJsonArray(value: string): unknown[] {
+  const parsed = parseGithubJson(value, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.every(item => Array.isArray(item)) ? parsed.flatMap(item => item as unknown[]) : parsed;
+}
+
+function getStringFromPath(value: unknown, path: string[]): string | undefined {
+  let current = value;
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return typeof current === 'string' ? current : undefined;
+}
+
 function normalizeTimestamp(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined;
   const date = new Date(value);
@@ -322,6 +355,16 @@ function summarizeText(value: string | undefined, fallback: string) {
   return normalized.length > 280 ? `${normalized.slice(0, 277)}...` : normalized;
 }
 
+function isBotLogin(user: string) {
+  return user.toLowerCase().endsWith('[bot]');
+}
+
+function normalizePermission(value: string): GithubPermission | undefined {
+  return ['admin', 'maintain', 'write', 'triage', 'read', 'none'].includes(value)
+    ? (value as GithubPermission)
+    : undefined;
+}
+
 export class GithubSignals {
   readonly processor: GithubSignalsProcessor;
 
@@ -330,6 +373,7 @@ export class GithubSignals {
   #timer?: ReturnType<typeof setInterval>;
   #polling = false;
   #options: NormalizedGithubSignalsOptions;
+  #permissionCache = new Map<string, GithubPermission | undefined>();
 
   constructor(options: GithubSignalsOptions = {}) {
     this.#options = {
@@ -339,6 +383,8 @@ export class GithubSignals {
       commandRunner: options.commandRunner ?? defaultCommandRunner,
       now: options.now ?? (() => new Date()),
       getStreamOptions: options.getStreamOptions,
+      authorizedPermissions: options.authorizedPermissions ?? [...DEFAULT_AUTHORIZED_PERMISSIONS],
+      authorizedBots: options.authorizedBots ?? [],
     };
     this.processor = new GithubSignalsProcessor(this, this.#options);
   }
@@ -377,7 +423,7 @@ export class GithubSignals {
         if (baselinedSubscriptions.length === 0) continue;
 
         metadata.subscriptions = Object.fromEntries(baselinedSubscriptions);
-        const persistence = this.createSubscriptionPersistence(options.memory, thread);
+        const persistence = this.#createSubscriptionPersistence(options.memory, thread);
         for (const subscription of Object.values(metadata.subscriptions)) {
           subscriptions.push(subscription);
           this.addSubscription(subscription, persistence);
@@ -394,7 +440,7 @@ export class GithubSignals {
     return subscriptions;
   }
 
-  createSubscriptionPersistence(
+  #createSubscriptionPersistence(
     memory: GithubSignalsMemory,
     thread: GithubSignalsThread,
   ): GithubSubscriptionPersistence | undefined {
@@ -543,18 +589,31 @@ export class GithubSignals {
   }
 
   async #loadPullRequestSnapshot(subscription: GithubPRSubscriptionMetadata): Promise<GithubPRSnapshot> {
-    const args = ['pr', 'view', String(subscription.prNumber), '--json', 'statusCheckRollup,comments,reviews'];
-    if (subscription.repo) args.push('--repo', subscription.repo);
+    if (!subscription.repo) {
+      throw new Error('GitHub repository is required for PR polling.');
+    }
 
-    const { stdout } = await this.#options.commandRunner(args);
-    const data = JSON.parse(stripAnsi(stdout || '{}')) as Record<string, unknown>;
+    const pr = await this.#loadJson(['api', `repos/${subscription.repo}/pulls/${subscription.prNumber}`]);
+    const headSha = getStringFromPath(pr, ['head', 'sha']);
+    const [comments, reviews, checks] = await Promise.all([
+      this.#loadPaginatedJsonArray([
+        'api',
+        `repos/${subscription.repo}/issues/${subscription.prNumber}/comments`,
+        '--paginate',
+      ]),
+      this.#loadPaginatedJsonArray([
+        'api',
+        `repos/${subscription.repo}/pulls/${subscription.prNumber}/reviews`,
+        '--paginate',
+      ]),
+      headSha
+        ? this.#loadJson(['api', `repos/${subscription.repo}/commits/${headSha}/check-runs`])
+        : Promise.resolve({ check_runs: [] }),
+    ]);
 
-    const checks = Array.isArray(data.statusCheckRollup) ? data.statusCheckRollup : [];
-    const comments = Array.isArray(data.comments) ? data.comments : [];
-    const reviews = Array.isArray(data.reviews) ? data.reviews : [];
-
+    const checkRuns = getArray((checks as Record<string, unknown>).check_runs);
     return {
-      failedChecks: checks
+      failedChecks: checkRuns
         .map(check => normalizeCheck(check))
         .filter(
           (check): check is { name: string; status: string; url?: string } =>
@@ -565,6 +624,16 @@ export class GithubSignals {
         .filter((comment): comment is GithubPRSnapshot['comments'][number] => !!comment),
       reviews: reviews.map(normalizeReview).filter((review): review is GithubPRSnapshot['reviews'][number] => !!review),
     };
+  }
+
+  async #loadJson(args: string[]): Promise<unknown> {
+    const { stdout } = await this.#options.commandRunner(args);
+    return parseGithubJson(stdout, {});
+  }
+
+  async #loadPaginatedJsonArray(args: string[]): Promise<unknown[]> {
+    const { stdout } = await this.#options.commandRunner([...args, '--slurp']);
+    return parseGithubJsonArray(stdout);
   }
 
   async #emitSnapshotNotifications(
@@ -592,6 +661,7 @@ export class GithubSignals {
       isAfterTimestamp(comment.createdAt, subscription.lastCommentTimestamp),
     );
     for (const comment of newComments) {
+      if (!(await this.#isAuthorizedAuthor(subscription, comment.author))) continue;
       await this.#sendNotification(registeredAgent, subscription, {
         kind: 'comment',
         title: `GitHub comment`,
@@ -607,6 +677,7 @@ export class GithubSignals {
       isAfterTimestamp(review.submittedAt, subscription.lastReviewTimestamp),
     );
     for (const review of newReviews) {
+      if (!(await this.#isAuthorizedAuthor(subscription, review.author))) continue;
       await this.#sendNotification(registeredAgent, subscription, {
         kind: 'review',
         title: `GitHub review`,
@@ -638,6 +709,36 @@ export class GithubSignals {
     subscription.updatedAt = this.#options.now().toISOString();
     this.#activeSubscriptions.set(subscription.key, subscription);
     await subscription.persistence?.update(subscription);
+  }
+
+  async #isAuthorizedAuthor(subscription: GithubPRSubscriptionMetadata, user: string | undefined) {
+    if (!user) return false;
+    if (isBotLogin(user)) return this.#options.authorizedBots.some(bot => bot.toLowerCase() === user.toLowerCase());
+
+    const permission = await this.#loadAuthorPermission(subscription, user);
+    return !!permission && this.#options.authorizedPermissions.includes(permission);
+  }
+
+  async #loadAuthorPermission(subscription: GithubPRSubscriptionMetadata, user: string) {
+    if (!subscription.repo) return undefined;
+
+    const cacheKey = `${subscription.repo}:${user.toLowerCase()}`;
+    if (this.#permissionCache.has(cacheKey)) return this.#permissionCache.get(cacheKey);
+
+    try {
+      const result = await this.#options.commandRunner([
+        'api',
+        `repos/${subscription.repo}/collaborators/${user}/permission`,
+        '--jq',
+        '.permission',
+      ]);
+      const permission = normalizePermission(stripAnsi(result.stdout).trim());
+      this.#permissionCache.set(cacheKey, permission);
+      return permission;
+    } catch {
+      this.#permissionCache.set(cacheKey, undefined);
+      return undefined;
+    }
   }
 
   async #sendNotification(
@@ -747,10 +848,22 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
         updatedAt: now,
       });
       githubMetadata.subscriptions[key] = subscription;
-      this.#owner.addSubscription(
-        subscription,
-        this.#owner.createSubscriptionPersistence(memory as GithubSignalsMemory, thread),
-      );
+      this.#owner.addSubscription(subscription, {
+        update: async updated => {
+          const currentThread =
+            (await memory.getThreadById?.({ threadId: updated.threadId, resourceId: updated.resourceId })) ?? thread;
+          const currentMetadata = getGithubSignalsMetadata(currentThread.metadata as ThreadMetadata | undefined);
+          const currentKey = threadSubscriptionKey(updated);
+          if (!currentMetadata.subscriptions[currentKey]) return;
+
+          currentMetadata.subscriptions[currentKey] = { ...updated };
+          await memory.updateThread({
+            id: currentThread.id,
+            title: currentThread.title ?? '',
+            metadata: setGithubSignalsMetadata(currentThread.metadata as ThreadMetadata | undefined, currentMetadata),
+          });
+        },
+      });
     } else {
       const existing = githubMetadata.subscriptions[key];
       delete githubMetadata.subscriptions[key];

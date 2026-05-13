@@ -51,6 +51,9 @@ vi.mock('../theme.js', () => ({
     blue: '#3b82f6',
     specialGray: '#6b7280',
   },
+  extendedColors: {
+    skyBlue: '#38bdf8',
+  },
   tintHex: (_color: string, _amount: number) => '#111111',
   getThemeMode: () => 'dark',
   ensureContrast: (_color: string) => _color,
@@ -90,6 +93,7 @@ function createState() {
       gitBranch: 'feat/mc-queueing-ux',
     },
     pendingQueuedActions: [],
+    activeGithubPrSubscriptions: [],
     ui: { requestRender: vi.fn() },
   } as any;
 }
@@ -206,6 +210,17 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('goal');
     expect(rendered).not.toContain('claude-sonnet-4-20250514');
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
+  });
+
+  it('shows active GitHub PR subscription next to the thread title', () => {
+    const state = createState();
+    state.currentThreadTitle = 'Review thread';
+    state.activeGithubPrSubscriptions = [{ repo: 'mastra-ai/mastra', prNumber: 16515 }];
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('PR#16515 Review thread');
   });
 
   it('shows active goal attempts as 1-indexed', () => {

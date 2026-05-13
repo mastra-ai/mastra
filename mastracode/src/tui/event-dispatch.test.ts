@@ -38,6 +38,7 @@ function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIS
     ui: { requestRender: vi.fn() },
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
+    activeGithubPrSubscriptions: [],
     editor: { escapeEnabled: false },
     goalManager: {
       getGoal: vi.fn(),
@@ -54,6 +55,7 @@ function createMockEctx(): EventHandlerContext {
     showFormattedError: vi.fn(),
     renderExistingMessages: vi.fn().mockResolvedValue(undefined),
     refreshModelAuthStatus: vi.fn().mockResolvedValue(undefined),
+    updateStatusLine: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),
   } as unknown as EventHandlerContext;

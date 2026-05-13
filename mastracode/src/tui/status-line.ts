@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { TUIState } from './state.js';
-import { theme, mastra, tintHex, getTermWidth } from './theme.js';
+import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -146,6 +146,16 @@ export function updateStatusLine(state: TUIState): void {
   const goalAttempt = goalState ? Math.min(goalState.turnsUsed + 1, goalState.maxTurns) : null;
   const goalLabel = goalState?.status === 'active' ? `goal attempt ${goalAttempt}/${goalState.maxTurns}` : null;
   const shortGoalLabel = goalState?.status === 'active' ? `attempt ${goalAttempt}/${goalState.maxTurns}` : null;
+  const activeGithubPr = state.activeGithubPrSubscriptions?.[0];
+  const githubPrLabel = activeGithubPr ? `PR#${activeGithubPr.prNumber}` : null;
+  const formatDirPart = (value: string) => {
+    if (!githubPrLabel) return { plain: value, styled: theme.fg('dim', value) };
+    return {
+      plain: `${githubPrLabel} ${value}`,
+      styled: `${chalk.hex(extendedColors.skyBlue)(githubPrLabel)} ${theme.fg('dim', value)}`,
+    };
+  };
+
   // Build progressively shorter directory strings for layout fallback
   // Only show branch when not showing thread title (thread title takes priority)
   const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
@@ -293,12 +303,14 @@ export function updateStatusLine(state: TUIState): void {
       useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
 
     if (dirText) {
+      const dirPart = formatDirPart(dirText);
       const availableForDir = termWidth - nonDirWidth - SEP.length - 1; // -1 buffer for ambiguous-width chars
-      const dirWidth = visibleWidth(dirText);
+      const dirWidth = visibleWidth(dirPart.plain);
       const MIN_TRUNCATED_DIR = 10; // don't show a tiny sliver
       if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
-        // Truncate to fit the remaining space
-        dirText = dirText.slice(0, availableForDir - 1) + '…';
+        const reservedPrefix = githubPrLabel ? `${githubPrLabel} ` : '';
+        const availableForText = availableForDir - visibleWidth(reservedPrefix);
+        dirText = availableForText > 1 ? dirText.slice(0, availableForText - 1) + '…' : null;
       } else if (dirWidth > availableForDir) {
         // Not enough room even for a truncated version — drop it
         dirText = null;
@@ -306,10 +318,7 @@ export function updateStatusLine(state: TUIState): void {
     }
 
     if (dirText) {
-      parts.push({
-        plain: dirText,
-        styled: theme.fg('dim', dirText),
-      });
+      parts.push(formatDirPart(dirText));
     }
     const totalPlain =
       useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);

@@ -38,6 +38,49 @@ export interface PendingSignalMessage {
   component: Component;
   text: string;
 }
+
+export interface GithubPrSubscriptionBadge {
+  repo?: string;
+  prNumber: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function getGithubPrSubscriptionsFromMetadata(metadata: Record<string, unknown> | undefined): GithubPrSubscriptionBadge[] {
+  const mastra = isRecord(metadata?.mastra) ? metadata.mastra : undefined;
+  const githubSignals = isRecord(mastra?.githubSignals) ? mastra.githubSignals : undefined;
+  const subscriptions = isRecord(githubSignals?.subscriptions) ? githubSignals.subscriptions : undefined;
+  if (!subscriptions) return [];
+
+  return Object.values(subscriptions)
+    .map(subscription => {
+      if (!isRecord(subscription)) return undefined;
+      const prNumber = subscription.prNumber;
+      if (typeof prNumber !== 'number') return undefined;
+      const repo = typeof subscription.repo === 'string' ? subscription.repo : undefined;
+      return { prNumber, ...(repo ? { repo } : {}) };
+    })
+    .filter((subscription): subscription is GithubPrSubscriptionBadge => !!subscription)
+    .sort((a, b) => a.prNumber - b.prNumber);
+}
+
+export function addGithubPrSubscriptionBadge(
+  subscriptions: GithubPrSubscriptionBadge[],
+  subscription: GithubPrSubscriptionBadge,
+): GithubPrSubscriptionBadge[] {
+  const exists = subscriptions.some(item => item.prNumber === subscription.prNumber && item.repo === subscription.repo);
+  if (exists) return subscriptions;
+  return [...subscriptions, subscription].sort((a, b) => a.prNumber - b.prNumber);
+}
+
+export function removeGithubPrSubscriptionBadge(
+  subscriptions: GithubPrSubscriptionBadge[],
+  subscription: GithubPrSubscriptionBadge,
+): GithubPrSubscriptionBadge[] {
+  return subscriptions.filter(item => item.prNumber !== subscription.prNumber || item.repo !== subscription.repo);
+}
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -141,6 +184,8 @@ export interface TUIState {
   pendingNewThread: boolean;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
+  /** Active GitHub PR subscriptions for the current thread */
+  activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */
   threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
   /** Threads whose preview lookup already returned empty during this session */
@@ -269,6 +314,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Thread / conversation
     pendingNewThread: false,
     currentThreadTitle: undefined,
+    activeGithubPrSubscriptions: [],
     threadPreviewCache: new Map(),
     attemptedThreadPreviewIds: new Set(),
 

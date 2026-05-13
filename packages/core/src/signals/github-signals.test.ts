@@ -397,21 +397,27 @@ describe('GithubSignals', () => {
   });
 
   it('persists polling watermarks back to thread metadata', async () => {
-    const commandRunner = vi
-      .fn()
-      .mockResolvedValueOnce(
-        createSnapshot({
-          comments: [{ id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' }],
-        }),
-      )
-      .mockResolvedValueOnce(
-        createSnapshot({
-          comments: [
-            { id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' },
-            { id: 'comment-2', body: 'new comment', createdAt: '2026-01-02T00:02:00.000Z' },
-          ],
-        }),
-      );
+    const snapshots = [
+      createSnapshot({
+        comments: [{ id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' }],
+      }),
+      createSnapshot({
+        comments: [
+          { id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' },
+          {
+            id: 'comment-2',
+            body: 'new comment',
+            createdAt: '2026-01-02T00:02:00.000Z',
+            author: { login: 'reviewer' },
+          },
+        ],
+      }),
+    ];
+    let snapshotIndex = 0;
+    const commandRunner = vi.fn(async args => {
+      if (args[0] === 'api') return { stdout: 'write\n' };
+      return snapshots[snapshotIndex++];
+    });
     const harness = createHarness();
     const github = new GithubSignals({ repo: 'mastra-ai/mastra', commandRunner });
     const sendSignal = createSendSignalMock();
@@ -432,40 +438,41 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
-  it('baselines existing activity on subscribe and only emits future comments and reviews', async () => {
-    const commandRunner = vi
-      .fn()
-      .mockResolvedValueOnce(
-        createSnapshot({
-          comments: [{ id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' }],
-          reviews: [{ id: 'review-1', body: 'old review', submittedAt: '2026-01-02T00:01:00.000Z' }],
-        }),
-      )
-      .mockResolvedValueOnce(
-        createSnapshot({
-          comments: [
-            { id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' },
-            {
-              id: 'comment-2',
-              body: 'Please fix this',
-              createdAt: '2026-01-02T00:02:00.000Z',
-              author: { login: 'reviewer' },
-              url: 'https://example.com/comment',
-            },
-          ],
-          reviews: [
-            { id: 'review-1', body: 'old review', submittedAt: '2026-01-02T00:01:00.000Z' },
-            {
-              id: 'review-2',
-              body: 'Requested changes',
-              submittedAt: '2026-01-02T00:03:00.000Z',
-              author: { login: 'reviewer' },
-              state: 'CHANGES_REQUESTED',
-              url: 'https://example.com/review',
-            },
-          ],
-        }),
-      );
+  it('baselines existing activity on subscribe and only emits future comments and reviews from authorized users', async () => {
+    const snapshots = [
+      createSnapshot({
+        comments: [{ id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' }],
+        reviews: [{ id: 'review-1', body: 'old review', submittedAt: '2026-01-02T00:01:00.000Z' }],
+      }),
+      createSnapshot({
+        comments: [
+          { id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' },
+          {
+            id: 'comment-2',
+            body: 'Please fix this',
+            createdAt: '2026-01-02T00:02:00.000Z',
+            author: { login: 'reviewer' },
+            url: 'https://example.com/comment',
+          },
+        ],
+        reviews: [
+          { id: 'review-1', body: 'old review', submittedAt: '2026-01-02T00:01:00.000Z' },
+          {
+            id: 'review-2',
+            body: 'Requested changes',
+            submittedAt: '2026-01-02T00:03:00.000Z',
+            author: { login: 'reviewer' },
+            state: 'CHANGES_REQUESTED',
+            url: 'https://example.com/review',
+          },
+        ],
+      }),
+    ];
+    let snapshotIndex = 0;
+    const commandRunner = vi.fn(async args => {
+      if (args[0] === 'api') return { stdout: 'write\n' };
+      return snapshots[snapshotIndex++];
+    });
     const harness = createHarness();
     const github = new GithubSignals({ repo: 'mastra-ai/mastra', commandRunner });
     const sendSignal = createSendSignalMock();
@@ -495,6 +502,62 @@ describe('GithubSignals', () => {
       lastCommentTimestamp: '2026-01-02T00:02:00.000Z',
       lastReviewTimestamp: '2026-01-02T00:03:00.000Z',
     });
+    github.destroy();
+  });
+
+  it('filters unauthorized commenters and allows configured bots', async () => {
+    const snapshots = [
+      createSnapshot(),
+      createSnapshot({
+        comments: [
+          {
+            id: 'comment-1',
+            body: 'random comment',
+            createdAt: '2026-01-02T00:00:00.000Z',
+            author: { login: 'random-user' },
+          },
+          {
+            id: 'comment-2',
+            body: 'bot comment',
+            createdAt: '2026-01-02T00:01:00.000Z',
+            author: { login: 'coderabbitai[bot]' },
+          },
+        ],
+      }),
+    ];
+    let snapshotIndex = 0;
+    const commandRunner = vi.fn(async args => {
+      if (args[0] === 'api') return { stdout: 'read\n' };
+      return snapshots[snapshotIndex++];
+    });
+    const harness = createHarness();
+    const github = new GithubSignals({
+      repo: 'mastra-ai/mastra',
+      commandRunner,
+      authorizedBots: ['coderabbitai[bot]'],
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    const signal = ghSignals.prSubscribe({ prNumber: 123 }).toDBMessage({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+
+    await processSignals(github, harness, [signal]);
+    await github.poll();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    const [notification] = sendSignal.mock.calls[0] as any[];
+    expect(notification).toMatchObject({
+      contents: 'bot comment',
+      attributes: { type: 'github-comment', user: 'coderabbitai[bot]', pr: 123 },
+    });
+    expect(commandRunner).toHaveBeenCalledWith([
+      'api',
+      'repos/mastra-ai/mastra/collaborators/random-user/permission',
+      '--jq',
+      '.permission',
+    ]);
     github.destroy();
   });
 

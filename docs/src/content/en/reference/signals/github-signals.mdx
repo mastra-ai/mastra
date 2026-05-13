@@ -85,6 +85,22 @@ Call `init()` during application startup to explicitly rehydrate persisted subsc
         description: 'Clock used for metadata timestamps and tests.',
         isOptional: true,
       },
+      {
+        name: 'authorizedPermissions',
+        type: "Array<'admin' | 'maintain' | 'write' | 'triage' | 'read'>",
+        description:
+          'Repository permissions allowed to trigger comment and review notifications. Other users are ignored.',
+        isOptional: true,
+        defaultValue: "['admin', 'maintain', 'write']",
+      },
+      {
+        name: 'authorizedBots',
+        type: 'string[]',
+        description:
+          'Bot logins allowed to trigger comment and review notifications, such as coderabbitai[bot]. Bots are denied unless explicitly listed.',
+        isOptional: true,
+        defaultValue: '[]',
+      },
     ],
   },
 ]}
@@ -152,6 +168,8 @@ const signal = ghSignals.prNotification({
 Returns: `CreatedAgentSignal`.
 
 Notification signals use compact GitHub-specific reminder types such as `github-ci-failure`, `github-comment`, `github-review`, and `github-command-error`. Metadata like PR number, repo, user, review state, URL, and failed check count is stored on signal attributes/metadata while the message body stays concise for model context.
+
+Comment and review notifications are authorization-gated. By default, only users with `admin`, `maintain`, or `write` repository permissions can trigger those notifications. Bot users must be explicitly included in `authorizedBots`.
 
 ## Methods
 
