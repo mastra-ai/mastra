@@ -199,7 +199,6 @@ const convertOmPartsInMastraMessage = (
     const cycleId = (part as any).data?.cycleId;
     const partType = part.type as string;
 
-    // Only render badges at start marker positions
     if (partType === 'data-om-observation-start' && cycleId) {
       const cycle = globalOmParts.get(cycleId);
       if (!cycle) continue;
