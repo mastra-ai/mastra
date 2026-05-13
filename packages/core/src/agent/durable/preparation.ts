@@ -160,6 +160,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       for (const inst of instructions) {
         messageList.addSystem(inst);
       }
+    } else {
+      // Object form (e.g. providerOptions with Anthropic cacheControl)
+      messageList.addSystem(instructions as any);
     }
   }
 
