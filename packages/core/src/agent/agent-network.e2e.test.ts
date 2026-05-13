@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../error';
@@ -10,6 +11,8 @@ import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
