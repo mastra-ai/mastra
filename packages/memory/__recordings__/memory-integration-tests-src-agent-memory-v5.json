@@ -7093,7 +7093,7 @@
       }
     },
     {
-      "hash": "ef792d26b79fa83f",
+      "hash": "4d2a419911b6d40f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -7106,7 +7106,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: My favorite color is blue.Message from previous conversation at 8:56 PM: Assistant: That's great! Blue is often associated with calmness and serenity. Do you have a specific shade of blue that you like?\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: Assistant: That's great! Blue is often associated with calmness and serenity. Do you have a specific shade of blue that you like?Message from previous conversation at 8:56 PM: User: My favorite color is blue.\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
@@ -9361,7 +9361,7 @@
       }
     },
     {
-      "hash": "7ee1b9371121c5eb",
+      "hash": "4d2a419911b6d40f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -9374,7 +9374,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: My favorite color is blue.Message from previous conversation at 8:56 PM: Assistant: That's great! Blue is often associated with calmness and serenity. Do you have a specific shade of blue that you like?\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: Assistant: That's great! Blue is often associated with calmness and serenity. Do you have a specific shade of blue that you like?Message from previous conversation at 8:56 PM: User: My favorite color is blue.\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
