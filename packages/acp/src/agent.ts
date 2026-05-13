@@ -21,6 +21,7 @@ import { ACPConnection } from './connection';
 import type { CreateACPToolOptions } from './types';
 
 const CHUNK_FROM_AGENT = 'AGENT' as ChunkType['from'];
+type AcpToolResult = Extract<NonNullable<SubAgentStreamResult['toolResults']>, unknown[]>[number];
 
 const model = {
   modelId: 'acp-agent',
@@ -133,6 +134,7 @@ export class AcpAgent<
         const textId = randomUUID();
         const chunks: string[] = [];
         const toolNames = new Map<string, string>();
+        const toolResults: AcpToolResult[] = [];
 
         try {
           controller.enqueue({ type: 'text-start', runId, from: CHUNK_FROM_AGENT, payload: { id: textId } });
@@ -148,6 +150,9 @@ export class AcpAgent<
               });
             } else if (event.type === 'session-update') {
               for (const chunk of getMastraChunksFromACPUpdate(event.update, runId, toolNames)) {
+                if (chunk.type === 'tool-result') {
+                  toolResults.push({ payload: chunk.payload });
+                }
                 controller.enqueue(chunk);
               }
             }
@@ -159,9 +164,12 @@ export class AcpAgent<
           controller.enqueue({ type: 'text-end', runId, from: CHUNK_FROM_AGENT, payload: { id: textId } });
           controller.enqueue(createFinishChunk('step-finish', runId));
           controller.enqueue(createFinishChunk('finish', runId));
+          await options?.onFinish?.(createOnFinishResult({ text, runId, messageList, toolResults }) as any);
           resolveText(text);
           controller.close();
         } catch (error) {
+          const text = chunks.join('');
+          await options?.onFinish?.(createOnFinishResult({ text, runId, messageList, toolResults, error }) as any);
           rejectText(error);
           controller.error(error);
         }
@@ -304,6 +312,37 @@ function toRecord(value: unknown): Record<string, unknown> {
   }
 
   return { input: value };
+}
+
+function createOnFinishResult({
+  text,
+  runId,
+  messageList,
+  toolResults,
+  error,
+}: {
+  text: string;
+  runId: string;
+  messageList: MessageList;
+  toolResults: AcpToolResult[];
+  error?: unknown;
+}) {
+  const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+  return {
+    text,
+    finishReason: 'stop',
+    usage,
+    totalUsage: usage,
+    warnings: [],
+    response: {
+      messages: messageList.get.response.aiV5.model(),
+    },
+    steps: [],
+    toolResults,
+    runId,
+    ...(error === undefined ? {} : { error }),
+  };
 }
 
 function createFinishChunk(type: 'step-finish' | 'finish', runId: string): ChunkType {

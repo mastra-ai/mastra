@@ -356,13 +356,16 @@ describe('AcpAgent', () => {
       persistSession: true,
     });
 
-    const result = await agent.stream('stream it', { runId: 'run-2' });
+    const onFinish = vi.fn();
+    const result = await agent.stream('stream it', { runId: 'run-2', onFinish });
     const chunks = [];
     for await (const chunk of result.fullStream as any) {
       chunks.push(chunk);
     }
 
     await expect(result.text).resolves.toBe('streamed output');
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ text: 'streamed output', runId: 'run-2' }));
     expect(chunks.map(chunk => chunk.type)).toEqual([
       'text-start',
       'text-delta',
