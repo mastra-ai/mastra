@@ -51,6 +51,7 @@ export type RestartExecutionParams = {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   state?: Record<string, any>;
   stepExecutionPath?: string[];
+  isParallelOrConditionalRestarted?: boolean;
 };
 
 export type TimeTravelExecutionParams = {
