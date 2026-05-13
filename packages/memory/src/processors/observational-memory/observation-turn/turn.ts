@@ -4,6 +4,7 @@ import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { withOmDebugSpan } from '../debug-trace';
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
@@ -165,6 +166,10 @@ export class ObservationTurn {
    * Finalize the turn: save any remaining messages and return the latest record state.
    */
   async end(): Promise<TurnResult> {
+    return withOmDebugSpan('om.turn.end', this.observabilityContext, () => this._endImpl());
+  }
+
+  private async _endImpl(): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
     this._ended = true;
 
