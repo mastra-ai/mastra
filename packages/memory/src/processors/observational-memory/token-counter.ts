@@ -781,10 +781,13 @@ function estimateAnthropicImageTokens(
  * the underlying bytes are heavily compressed.
  */
 function estimateFileTokensFromBytes(provider: string | undefined, mimeType: string, sizeBytes: number): number {
-  const isPdf = mimeType === 'application/pdf';
+  // MIME types are case-insensitive (RFC 2045) and may carry parameters like
+  // `application/pdf; charset=binary` — normalize before branching.
+  const normalizedMime = (mimeType ?? '').toLowerCase().split(';', 1)[0]!.trim();
+  const isPdf = normalizedMime === 'application/pdf';
   const isTextish =
-    mimeType.startsWith('text/') ||
-    ['application/json', 'application/xml', 'application/x-yaml', 'application/yaml'].includes(mimeType);
+    normalizedMime.startsWith('text/') ||
+    ['application/json', 'application/xml', 'application/x-yaml', 'application/yaml'].includes(normalizedMime);
 
   if (isPdf) {
     if (provider === 'google') return Math.max(258, Math.ceil(sizeBytes / 20));

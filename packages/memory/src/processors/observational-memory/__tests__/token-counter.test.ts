@@ -426,6 +426,30 @@ describe('TokenCounter', () => {
       expect(googleTokens).toBeLessThan(anthropicTokens);
     });
 
+    it('normalizes mime type casing and parameters when picking the PDF heuristic', () => {
+      const data = `data:application/pdf;base64,${'a'.repeat(200000)}`;
+      const buildMessage = (mimeType: string) =>
+        createMessage({
+          format: 2,
+          parts: [{ type: 'file', data, mimeType, filename: 'doc.pdf' }],
+        });
+
+      const anthropicCounter = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      });
+
+      const canonical = anthropicCounter.countMessage(buildMessage('application/pdf'));
+      const uppercased = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      }).countMessage(buildMessage('Application/PDF'));
+      const parameterized = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      }).countMessage(buildMessage('application/pdf; charset=binary'));
+
+      expect(uppercased).toBe(canonical);
+      expect(parameterized).toBe(canonical);
+    });
+
     it('reuses cached non-image file estimates across fresh TokenCounter instances', () => {
       const part: Record<string, any> = {
         type: 'file',
