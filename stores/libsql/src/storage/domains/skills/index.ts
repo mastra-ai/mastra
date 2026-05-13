@@ -188,7 +188,16 @@ export class SkillsLibSQL extends SkillsStorage {
         });
       }
 
-      const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
+      const { authorId, visibility, activeVersionId, status, ...rawConfigFields } = updates;
+
+      // Filter out undefined keys: callers may spread partial snapshots into
+      // update() and rely on "omit = no change" semantics. Forwarding
+      // undefined would overwrite populated columns with undefined and trip
+      // libsql's "undefined cannot be passed as argument" guard.
+      const configFields: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawConfigFields)) {
+        if (value !== undefined) configFields[key] = value;
+      }
 
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
       const hasConfigUpdate = configFieldNames.some(field => field in configFields);

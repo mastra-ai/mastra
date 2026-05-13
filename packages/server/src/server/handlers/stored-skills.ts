@@ -592,6 +592,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
 
       // Validate skillPath to prevent path traversal
       const path = await import('node:path');
+      const fs = await import('node:fs/promises');
       const resolvedPath = path.default.resolve(skillPath);
       const allowedBase = path.default.resolve(process.env.SKILLS_BASE_DIR || process.cwd());
       if (!resolvedPath.startsWith(allowedBase + path.default.sep) && resolvedPath !== allowedBase) {
@@ -600,17 +601,57 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         });
       }
 
+      // Verify the source directory exists and contains a SKILL.md before attempting
+      // to publish, so callers get a 400 with context instead of a raw 500/ENOENT.
+      try {
+        const stat = await fs.stat(resolvedPath);
+        if (!stat.isDirectory()) {
+          throw new HTTPException(400, { message: `skillPath is not a directory: ${resolvedPath}` });
+        }
+      } catch (err) {
+        if (err instanceof HTTPException) throw err;
+        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          throw new HTTPException(400, {
+            message: `skillPath does not exist on the server filesystem: ${resolvedPath}. Create the skill directory (with a SKILL.md) before publishing, or use a skill that was materialized to disk.`,
+          });
+        }
+        throw err;
+      }
+      try {
+        await fs.stat(path.default.join(resolvedPath, 'SKILL.md'));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          throw new HTTPException(400, {
+            message: `skillPath is missing SKILL.md: ${resolvedPath}`,
+          });
+        }
+        throw err;
+      }
+
       // Use LocalSkillSource to read from the server filesystem
       const source = new LocalSkillSource();
       const { publishSkillFromSource } = await import('@mastra/core/workspace');
 
-      const { snapshot, tree } = await publishSkillFromSource(source, resolvedPath, blobStore);
+      const { snapshot, tree, files } = await publishSkillFromSource(source, resolvedPath, blobStore);
 
-      // Update the skill with new version data + tree
+      // Strip undefined keys from the snapshot before passing to update(). The
+      // storage layer treats "field present" as "field changed"; forwarding
+      // undefined would overwrite populated columns with undefined and trip
+      // NOT NULL / "undefined cannot be passed as argument" errors in
+      // adapters that bind args raw (libsql, pg).
+      const snapshotUpdate: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(snapshot)) {
+        if (value !== undefined) snapshotUpdate[key] = value;
+      }
+
+      // Update the skill with new version data + tree + UI-facing file tree.
+      // `files` is the nested folder/file structure shown in the editor; without
+      // it the column would stay null and the UI would render an empty tree.
       await skillStore.update({
         id: storedSkillId,
-        ...snapshot,
+        ...snapshotUpdate,
         tree,
+        files,
         status: 'published',
       });
 

@@ -230,8 +230,14 @@ export class WorkspacesPG extends WorkspacesStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
+      const { authorId, activeVersionId, metadata, status, ...rawConfigFields } = updates;
       let versionCreated = false;
+
+      // Strip undefined keys so omitted PATCH fields don't overwrite persisted values
+      const configFields: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawConfigFields)) {
+        if (value !== undefined) configFields[key] = value;
+      }
 
       // Check if any snapshot config fields are present
       const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);

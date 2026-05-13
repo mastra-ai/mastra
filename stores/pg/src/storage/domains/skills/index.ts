@@ -237,8 +237,17 @@ export class SkillsPG extends SkillsStorage {
         });
       }
 
-      const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
+      const { authorId, visibility, activeVersionId, status, ...rawConfigFields } = updates;
       let versionCreated = false;
+
+      // Filter out undefined keys: callers may spread partial snapshots into
+      // update() and rely on "omit = no change" semantics. Forwarding
+      // undefined would overwrite populated columns with undefined and trip
+      // pg-promise's "undefined cannot be passed as argument" guard.
+      const configFields: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawConfigFields)) {
+        if (value !== undefined) configFields[key] = value;
+      }
 
       // Check if any snapshot config fields are present
       const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);

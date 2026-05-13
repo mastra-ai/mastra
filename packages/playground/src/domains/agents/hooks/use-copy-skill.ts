@@ -42,8 +42,10 @@ export function useCopySkill() {
         description,
         visibility: 'private',
         instructions: source.instructions,
-        license: source.license,
-        files: source.files,
+        // Optional fields may come back as null from the source; the create
+        // schema only accepts an object/array or omitted, so drop nulls.
+        ...(source.license != null ? { license: source.license } : {}),
+        ...(source.files != null ? { files: source.files } : {}),
         metadata: {
           origin: { ...origin, copiedAt: new Date().toISOString() },
         },

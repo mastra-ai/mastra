@@ -305,6 +305,19 @@ const agentMetadataSchema = z.object({
 });
 
 /**
+ * Snapshot config schema for create where `model` is optional. When omitted, the
+ * builder applies `defaults.model` from `/editor/builder/settings` server-side.
+ */
+const snapshotConfigCreateSchema = snapshotConfigSchema.extend({
+  model: conditionalFieldSchema(modelConfigSchema)
+    .optional()
+    .describe(
+      'Model configuration — static value or array of conditional variants. ' +
+        'When omitted, the builder default model is applied server-side.',
+    ),
+});
+
+/**
  * POST /stored/agents - Create stored agent body
  * Flat union of agent-record fields + config fields
  * The id is optional — if not provided, it will be derived from the agent name via slugify.
@@ -319,7 +332,7 @@ export const createStoredAgentBodySchema = z
       .optional()
       .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
   })
-  .merge(snapshotConfigSchema);
+  .merge(snapshotConfigCreateSchema);
 
 /**
  * Snapshot config schema for updates where nullable fields (like memory) can be set to null to clear them.

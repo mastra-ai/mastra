@@ -32051,90 +32051,93 @@ export type PostStoredAgents_Body = {
               | undefined;
           }
       )[];
-  /** Model configuration — static value or array of conditional variants */
-  model:
-    | {
-        /** Model provider (e.g., openai, anthropic) */
-        provider: string;
-        /** Model name (e.g., gpt-4o, claude-3-opus) */
-        name: string;
-        [x: string]: unknown;
-      }
-    | {
-        value: {
-          /** Model provider (e.g., openai, anthropic) */
-          provider: string;
-          /** Model name (e.g., gpt-4o, claude-3-opus) */
-          name: string;
-          [x: string]: unknown;
-        };
-        rules?:
-          | {
-              operator: 'AND' | 'OR';
-              conditions: (
-                | {
-                    field: string;
-                    operator:
-                      | 'equals'
-                      | 'not_equals'
-                      | 'contains'
-                      | 'not_contains'
-                      | 'greater_than'
-                      | 'less_than'
-                      | 'greater_than_or_equal'
-                      | 'less_than_or_equal'
-                      | 'in'
-                      | 'not_in'
-                      | 'exists'
-                      | 'not_exists';
-                    value?: unknown | undefined;
-                  }
-                | {
-                    operator: 'AND' | 'OR';
-                    conditions: (
-                      | {
-                          field: string;
-                          operator:
-                            | 'equals'
-                            | 'not_equals'
-                            | 'contains'
-                            | 'not_contains'
-                            | 'greater_than'
-                            | 'less_than'
-                            | 'greater_than_or_equal'
-                            | 'less_than_or_equal'
-                            | 'in'
-                            | 'not_in'
-                            | 'exists'
-                            | 'not_exists';
-                          value?: unknown | undefined;
-                        }
-                      | {
-                          operator: 'AND' | 'OR';
-                          conditions: {
-                            field: string;
-                            operator:
-                              | 'equals'
-                              | 'not_equals'
-                              | 'contains'
-                              | 'not_contains'
-                              | 'greater_than'
-                              | 'less_than'
-                              | 'greater_than_or_equal'
-                              | 'less_than_or_equal'
-                              | 'in'
-                              | 'not_in'
-                              | 'exists'
-                              | 'not_exists';
-                            value?: unknown | undefined;
-                          }[];
-                        }
-                    )[];
-                  }
-              )[];
-            }
-          | undefined;
-      }[];
+  /** Model configuration — static value or array of conditional variants. When omitted, the builder default model is applied server-side. */
+  model?:
+    | (
+        | {
+            /** Model provider (e.g., openai, anthropic) */
+            provider: string;
+            /** Model name (e.g., gpt-4o, claude-3-opus) */
+            name: string;
+            [x: string]: unknown;
+          }
+        | {
+            value: {
+              /** Model provider (e.g., openai, anthropic) */
+              provider: string;
+              /** Model name (e.g., gpt-4o, claude-3-opus) */
+              name: string;
+              [x: string]: unknown;
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (

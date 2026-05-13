@@ -3,6 +3,8 @@ import { Star } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useToggleStoredAgentStar } from '../hooks/use-stored-agent-star';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { isAuthenticated } from '@/domains/auth/types';
 
 export interface StarButtonProps {
   agentId: string;
@@ -34,11 +36,15 @@ export const StarButton = ({
 }: StarButtonProps) => {
   const features = useBuilderAgentFeatures();
   const toggle = useToggleStoredAgentStar(agentId);
+  const { data: capabilities } = useAuthCapabilities();
 
   if (!features.stars) return null;
 
+  const signedIn = capabilities ? isAuthenticated(capabilities) : false;
   const label = isStarred ? 'Unstar agent' : 'Star agent';
+  const disabledLabel = 'Sign in to star this agent';
   const starText = starCount === 1 ? 'Star' : 'Stars';
+  const isDisabled = toggle.isPending || !signedIn;
 
   return (
     <Button
@@ -46,15 +52,16 @@ export const StarButton = ({
       variant="default"
       size={size}
       aria-pressed={isStarred}
-      aria-label={label}
-      title={label}
-      disabled={toggle.isPending}
+      aria-label={signedIn ? label : disabledLabel}
+      title={signedIn ? label : disabledLabel}
+      disabled={isDisabled}
       onClick={(event: MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
         event.stopPropagation();
+        if (!signedIn) return;
         toggle.mutate({ starred: !isStarred });
       }}
-      className={cn('shrink-0 cursor-pointer', className)}
+      className={cn('shrink-0', signedIn ? 'cursor-pointer' : 'cursor-not-allowed', className)}
     >
       <Star
         size={iconSizes[size]}
