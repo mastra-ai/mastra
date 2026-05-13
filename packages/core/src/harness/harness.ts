@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
+import type { AgentExecutionOptions } from '../agent/agent.types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
@@ -99,6 +100,15 @@ function getStringValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+function getNumberValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
@@ -167,6 +177,24 @@ function toSystemReminderContent(
           ? metadata.goalMaxTurns
           : undefined,
     judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
+    repo: getStringValue(payload.repo) ?? getStringValue(attributes?.repo) ?? getStringValue(metadata?.repo),
+    prNumber:
+      getNumberValue(payload.prNumber) ??
+      getNumberValue(attributes?.prNumber) ??
+      getNumberValue(attributes?.pr) ??
+      getNumberValue(metadata?.prNumber),
+    user: getStringValue(payload.user) ?? getStringValue(attributes?.user) ?? getStringValue(metadata?.user),
+    reviewState:
+      getStringValue(payload.reviewState) ??
+      getStringValue(attributes?.reviewState) ??
+      getStringValue(metadata?.reviewState),
+    url: getStringValue(payload.url) ?? getStringValue(attributes?.url) ?? getStringValue(metadata?.url),
+    kind: getStringValue(payload.kind) ?? getStringValue(attributes?.kind) ?? getStringValue(metadata?.kind),
+    title: getStringValue(payload.title) ?? getStringValue(attributes?.title) ?? getStringValue(metadata?.title),
+    checkCount:
+      getNumberValue(payload.checkCount) ??
+      getNumberValue(attributes?.checkCount) ??
+      getNumberValue(metadata?.checkCount),
   };
 }
 
@@ -1561,6 +1589,11 @@ export class Harness<TState = {}> {
     void this.processSubscribedThreadStream(subscription);
   }
 
+  async ensureCurrentThreadSubscription(): Promise<void> {
+    if (!this.currentThreadId) return;
+    await this.ensureAgentThreadSubscription(this.getCurrentAgent(), this.currentThreadId);
+  }
+
   private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
     if (this.followUpQueue.length === 0) return;
 
@@ -1676,6 +1709,45 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Build stream options for waking an idle thread from a signal.
+   */
+  async buildSignalStreamOptions({
+    resourceId = this.resourceId,
+    threadId = this.currentThreadId,
+    requestContext: requestContextInput,
+    tracingContext,
+    tracingOptions,
+  }: {
+    resourceId?: string;
+    threadId?: string | null;
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  } = {}): Promise<AgentExecutionOptions<any>> {
+    if (!threadId) {
+      throw new Error('threadId is required to build signal stream options');
+    }
+
+    this.abortRequested = false;
+    this.abortController ??= new AbortController();
+    const requestContext = await this.buildRequestContext(requestContextInput, { resourceId, threadId });
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const streamOptions: Record<string, unknown> = {
+      memory: { thread: threadId, resource: resourceId },
+      abortSignal: this.abortController.signal,
+      requestContext,
+      maxSteps: 1000,
+      savePerStep: false,
+      requireToolApproval: !isYolo,
+      modelSettings: { temperature: 1 },
+      ...(tracingContext && { tracingContext }),
+      ...(tracingOptions && { tracingOptions }),
+    };
+    streamOptions.toolsets = await this.buildToolsets(requestContext);
+    return streamOptions as AgentExecutionOptions<any>;
+  }
+
+  /**
    * Send a signal to the current agent/thread.
    */
   sendSignal(
@@ -1707,27 +1779,18 @@ export class Harness<TState = {}> {
         return { accepted: result.accepted, runId: result.runId };
       }
 
-      this.abortRequested = false;
-      this.abortController ??= new AbortController();
-      const requestContext = await this.buildRequestContext(requestContextInput);
-      const isYolo = (this.state as Record<string, unknown>).yolo === true;
-      const streamOptions: Record<string, unknown> = {
-        memory: { thread: this.currentThreadId, resource: this.resourceId },
-        abortSignal: this.abortController.signal,
-        requestContext,
-        maxSteps: 1000,
-        savePerStep: false,
-        requireToolApproval: !isYolo,
-        modelSettings: { temperature: 1 },
-        ...(tracingContext && { tracingContext }),
-        ...(tracingOptions && { tracingOptions }),
-      };
-      streamOptions.toolsets = await this.buildToolsets(requestContext);
+      const streamOptions = await this.buildSignalStreamOptions({
+        resourceId: this.resourceId,
+        threadId: this.currentThreadId,
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+      });
 
       const result = agent.sendSignal(signal, {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
-        ifIdle: { streamOptions: streamOptions as any },
+        ifIdle: { streamOptions },
       });
       return { accepted: result.accepted, runId: result.runId };
     });
@@ -3624,7 +3687,10 @@ export class Harness<TState = {}> {
    * Build request context for agent execution.
    * Tools can access harness state via requestContext.get('harness').
    */
-  private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
+  private async buildRequestContext(
+    requestContext?: RequestContext,
+    target: { threadId?: string | null; resourceId?: string } = {},
+  ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
     const harnessContext: HarnessRequestContext<Readonly<TState>> = {
       harnessId: this.id,
@@ -3632,8 +3698,8 @@ export class Harness<TState = {}> {
       getState: () => this.getState(),
       setState: updates => this.setState(updates),
       updateState: updater => this.updateState(updater),
-      threadId: this.currentThreadId,
-      resourceId: this.resourceId,
+      threadId: target.threadId ?? this.currentThreadId,
+      resourceId: target.resourceId ?? this.resourceId,
       modeId: this.currentModeId,
       abortSignal: this.abortController?.signal,
       workspace: this.workspace,

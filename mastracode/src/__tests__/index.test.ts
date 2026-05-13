@@ -27,13 +27,18 @@ vi.mock('@mastra/core/agent', () => ({
 
 const agentConstructorMock = vi.fn();
 const githubSignalsAddAgentMock = vi.fn();
+const githubSignalsInitMock = vi.fn();
 
 vi.mock('@mastra/core/signals', () => ({
   GithubSignals: class {
     readonly processor = { id: 'github-signals' };
 
-    addAgent(agent: unknown) {
-      githubSignalsAddAgentMock(agent);
+    addAgent(agent: unknown, options?: unknown) {
+      githubSignalsAddAgentMock(agent, options);
+    }
+
+    init(options: unknown) {
+      return githubSignalsInitMock(options);
     }
   },
 }));
@@ -251,7 +256,11 @@ vi.mock('./utils/project.js', () => ({
   getResourceIdOverride: vi.fn(() => undefined),
 }));
 
-const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
+const memoryStoreMock = { listThreads: vi.fn() };
+const storageGetStoreMock = vi.fn();
+const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({
+  storage: { getStore: storageGetStoreMock },
+}));
 const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('./utils/storage-factory.js', () => ({
@@ -271,8 +280,12 @@ describe('createMastraCode', () => {
     gatewayRegistryGetProviders.mockReset();
     gatewayRegistryGetProviders.mockReturnValue({});
     gatewayRegistryGetInstance.mockClear();
+    memoryStoreMock.listThreads.mockReset();
+    memoryStoreMock.listThreads.mockResolvedValue({ threads: [], total: 0, page: 0, perPage: 100, hasMore: false });
+    storageGetStoreMock.mockReset();
+    storageGetStoreMock.mockResolvedValue(memoryStoreMock);
     createStorageMock.mockReset();
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
+    createStorageMock.mockReturnValue({ storage: { getStore: storageGetStoreMock }, backend: 'memory' });
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
@@ -290,6 +303,8 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     githubSignalsAddAgentMock.mockReset();
+    githubSignalsInitMock.mockReset();
+    githubSignalsInitMock.mockResolvedValue([]);
     harnessConstructorMock.mockReset();
     gatewayRegistryGetInstance.mockImplementation(() => ({
       syncGateways: gatewayRegistrySyncGateways,
@@ -373,16 +388,27 @@ describe('createMastraCode', () => {
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 
-  it('wires GithubSignals into the code agent', async () => {
+  it('wires GithubSignals into the code agent and exposes deferred startup rehydration', async () => {
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode();
+    const result = await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
       | { inputProcessors?: Array<{ id?: string }> }
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
-    expect(githubSignalsAddAgentMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'code-agent' }));
+    expect(githubSignalsAddAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'code-agent' }),
+      expect.objectContaining({ getStreamOptions: expect.any(Function) }),
+    );
+    expect(githubSignalsInitMock).not.toHaveBeenCalled();
+
+    await result.initGithubSignals();
+
+    expect(githubSignalsInitMock).toHaveBeenCalledWith({
+      memory: expect.objectContaining({ listThreads: expect.any(Function) }),
+      resourceId: expect.any(String),
+    });
   });
 });

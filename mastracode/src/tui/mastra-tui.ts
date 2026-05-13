@@ -485,6 +485,9 @@ export class MastraTUI {
     // promptForThreadSelection fired before we subscribed above.
     await syncInitialThreadState(this.state);
 
+    await this.state.harness.ensureCurrentThreadSubscription();
+    await this.state.options.initGithubSignals?.();
+
     // Start the UI
     this.state.ui.start();
     this.state.isInitialized = true;

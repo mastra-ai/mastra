@@ -125,6 +125,8 @@ export interface SendAgentSignalResult {
   signal: CreatedAgentSignal;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
+  /** Resolves or rejects when a `wake` behavior's idle stream startup completes. */
+  started?: Promise<void>;
 }
 
 export interface AgentThreadRun<OUTPUT = unknown> {

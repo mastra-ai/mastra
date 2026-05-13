@@ -55,6 +55,9 @@ export interface MastraTUIOptions {
   /** MCP manager for server status and reload */
   mcpManager?: McpManager;
 
+  /** Start GitHub PR signal polling after the TUI has subscribed to the active thread. */
+  initGithubSignals?: () => Promise<void>;
+
   /**
    * @deprecated Workspace is now obtained from the Harness.
    * Configure workspace via HarnessConfig.workspace instead.

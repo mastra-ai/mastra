@@ -49,6 +49,14 @@ type StreamedSystemReminderPart = {
   gapText?: string;
   goalMaxTurns?: number;
   judgeModelId?: string;
+  repo?: string;
+  prNumber?: number;
+  user?: string;
+  reviewState?: string;
+  url?: string;
+  kind?: string;
+  title?: string;
+  checkCount?: number;
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
@@ -74,6 +82,14 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
     gapText: typeof reminder.gapText === 'string' ? reminder.gapText : undefined,
     goalMaxTurns: typeof reminder.goalMaxTurns === 'number' ? reminder.goalMaxTurns : undefined,
     judgeModelId: typeof reminder.judgeModelId === 'string' ? reminder.judgeModelId : undefined,
+    repo: typeof reminder.repo === 'string' ? reminder.repo : undefined,
+    prNumber: typeof reminder.prNumber === 'number' ? reminder.prNumber : undefined,
+    user: typeof reminder.user === 'string' ? reminder.user : undefined,
+    reviewState: typeof reminder.reviewState === 'string' ? reminder.reviewState : undefined,
+    url: typeof reminder.url === 'string' ? reminder.url : undefined,
+    kind: typeof reminder.kind === 'string' ? reminder.kind : undefined,
+    title: typeof reminder.title === 'string' ? reminder.title : undefined,
+    checkCount: typeof reminder.checkCount === 'number' ? reminder.checkCount : undefined,
   };
 }
 
@@ -91,6 +107,14 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     path: reminder.path,
     goalMaxTurns: reminder.goalMaxTurns,
     judgeModelId: reminder.judgeModelId,
+    repo: reminder.repo,
+    prNumber: reminder.prNumber,
+    user: reminder.user,
+    reviewState: reminder.reviewState,
+    url: reminder.url,
+    kind: reminder.kind,
+    title: reminder.title,
+    checkCount: reminder.checkCount,
   });
 }
 

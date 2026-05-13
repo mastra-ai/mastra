@@ -12,7 +12,6 @@ import type {
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
-import { GithubSignals } from '@mastra/core/signals';
 import {
   AgentsMDInjector,
   PrefillErrorHandler,
@@ -20,6 +19,7 @@ import {
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { GithubSignals } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -380,7 +380,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
-  githubSignals.addAgent(codeAgent);
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
@@ -649,6 +648,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     },
   });
 
+  githubSignals.addAgent(codeAgent, {
+    getStreamOptions: ({ resourceId, threadId }) => harness.buildSignalStreamOptions({ resourceId, threadId }),
+  });
+  const initGithubSignals = async () => {
+    const memoryStore = await storage.getStore('memory');
+    if (memoryStore) {
+      await githubSignals.init({ memory: memoryStore, resourceId: project.resourceId });
+    }
+  };
+
   // Sync hookManager session ID on thread changes
   if (hookManager) {
     harness.subscribe(event => {
@@ -679,5 +688,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,
+    initGithubSignals,
   };
 }

@@ -92,6 +92,31 @@ describe('handleMessageUpdate system reminders', () => {
     expect(state.chatContainer.children).toHaveLength(1);
   });
 
+  it('renders streamed GitHub reminders with compact body and structured metadata', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'system_reminder',
+          reminderType: 'github-review',
+          message: 'test2',
+          repo: 'mastra-ai/mastra',
+          prNumber: 16515,
+          user: 'TylerBarnes',
+          reviewState: 'COMMENTED',
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.allSystemReminderComponents).toHaveLength(1);
+    const rendered = (state.chatContainer.children[0] as SystemReminderComponent).render(100).join('\n');
+    expect(rendered).toContain('GitHub review');
+    expect(rendered).toContain('mastra-ai/mastra #16515');
+    expect(rendered).toContain('user: TylerBarnes');
+    expect(rendered).toContain('test2');
+  });
+
   it('does not render streamed goal-judge continuation signals because the judge result is already shown', () => {
     handleMessageUpdate(
       ctx,

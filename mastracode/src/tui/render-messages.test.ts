@@ -3,6 +3,7 @@ import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
+import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { UserMessageComponent } from './components/user-message.js';
 import { addUserMessage, renderExistingMessages } from './render-messages.js';
@@ -28,6 +29,7 @@ function createState(): TUIState {
     pendingSubagents: new Map(),
     allShellComponents: [],
     messageComponentsById: new Map(),
+    pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
     quietMode: false,
     harness: {
@@ -132,6 +134,36 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children[0]).toBeInstanceOf(UserMessageComponent);
     expect(state.allSystemReminderComponents).toHaveLength(0);
     expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[0]);
+  });
+
+  it('renders persisted GitHub reminders with compact body and structured metadata', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createReminderMessage(
+        {
+          type: 'system_reminder',
+          reminderType: 'github-review',
+          message: 'test2',
+          repo: 'mastra-ai/mastra',
+          prNumber: 16515,
+          user: 'TylerBarnes',
+          reviewState: 'COMMENTED',
+        } as never,
+        'github-1',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(SystemReminderComponent);
+    const rendered = (state.chatContainer.children[0] as SystemReminderComponent).render(100).join('\n');
+    expect(rendered).toContain('GitHub review');
+    expect(rendered).toContain('mastra-ai/mastra #16515');
+    expect(rendered).toContain('user: TylerBarnes');
+    expect(rendered).toContain('state: COMMENTED');
+    expect(rendered).toContain('test2');
+    expect(rendered).not.toContain('System Reminder');
   });
 });
 

@@ -485,20 +485,23 @@ export class AgentThreadStreamRuntime {
     // the idle stream so concurrent callers do not launch duplicate runs.
     this.#activeThreadRunIds.set(key, runId);
     this.#threadKeysByRunId.set(runId, key);
-    void agent
+    const started = agent
       .stream(signal, {
         ...(target.ifIdle?.streamOptions as any),
         runId,
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
-      .catch(() => {
+      .then(() => undefined)
+      .catch(error => {
         this.#threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(runId);
         if (this.#activeThreadRunIds.get(key) === runId) {
           this.#activeThreadRunIds.delete(key);
         }
+        throw error;
       });
+    void started.catch(() => {});
 
-    return { accepted: true, runId, signal };
+    return { accepted: true, runId, signal, started };
   }
 }

@@ -15,8 +15,11 @@ const execFileAsync = promisify(execFile);
 
 const GITHUB_SUBSCRIBE_SIGNAL = 'github-pr-subscribe';
 const GITHUB_UNSUBSCRIBE_SIGNAL = 'github-pr-unsubscribe';
-const GITHUB_NOTIFICATION_SIGNAL = 'github-pr-notification';
-const DEFAULT_POLL_INTERVAL_MS = 60_000;
+const GITHUB_CI_FAILURE_SIGNAL = 'github-ci-failure';
+const GITHUB_COMMENT_SIGNAL = 'github-comment';
+const GITHUB_REVIEW_SIGNAL = 'github-review';
+const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
+const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const MAX_PROCESSED_SIGNAL_IDS = 200;
 
 type MastraMetadata = Record<string, unknown> & {
@@ -27,21 +30,49 @@ type ThreadMetadata = Record<string, unknown> & {
   mastra?: MastraMetadata;
 };
 
+export type GithubSignalStreamOptions = Record<string, unknown>;
+
+export interface GithubSignalStreamOptionsContext {
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+  repo?: string;
+  prNumber: number;
+}
+
+export type GithubSignalStreamOptionsGetter = (
+  context: GithubSignalStreamOptionsContext,
+) => GithubSignalStreamOptions | undefined | Promise<GithubSignalStreamOptions | undefined>;
+
 export interface GithubSignalsOptions {
   repo?: string;
   pollIntervalMs?: number;
   includeTool?: boolean;
   commandRunner?: GithubCommandRunner;
   now?: () => Date;
+  getStreamOptions?: GithubSignalStreamOptionsGetter;
 }
 
 type NormalizedGithubSignalsOptions = Required<
   Pick<GithubSignalsOptions, 'pollIntervalMs' | 'includeTool' | 'commandRunner' | 'now'>
 > &
-  Pick<GithubSignalsOptions, 'repo'>;
+  Pick<GithubSignalsOptions, 'repo' | 'getStreamOptions'>;
 
 export interface GithubSignalsAddAgentOptions {
   id?: string;
+  getStreamOptions?: GithubSignalStreamOptionsGetter;
+}
+
+export interface GithubSignalsInitOptions {
+  memory: {
+    listThreads(args: { perPage?: number | false; page?: number; filter?: { resourceId?: string } }): Promise<{
+      threads: Array<{ id: string; title?: string; metadata?: Record<string, unknown> }>;
+      hasMore?: boolean;
+      total?: number;
+    }>;
+    updateThread?(args: { id: string; title: string; metadata: Record<string, unknown> }): Promise<unknown>;
+  };
+  resourceId?: string;
 }
 
 export interface GithubCommandResult {
@@ -57,10 +88,13 @@ export interface GithubPRSignalInput {
 }
 
 export interface GithubPRNotificationInput extends GithubPRSignalInput {
-  kind: 'ci-failure' | 'review-comment' | 'command-error';
+  kind: 'ci-failure' | 'comment' | 'review' | 'command-error';
   title: string;
   details: string;
   url?: string;
+  user?: string;
+  reviewState?: string;
+  checkCount?: number;
 }
 
 export interface GithubPRSubscriptionMetadata {
@@ -84,6 +118,11 @@ export interface GithubSignalsThreadMetadata {
 
 interface ActiveSubscription extends GithubPRSubscriptionMetadata {
   key: string;
+}
+
+interface RegisteredGithubAgent {
+  agent: Agent<any, any, any, any>;
+  getStreamOptions?: GithubSignalStreamOptionsGetter;
 }
 
 interface GithubPRSnapshot {
@@ -111,14 +150,18 @@ export const ghSignals = {
 
   prNotification(input: GithubPRNotificationInput): CreatedAgentSignal {
     return createSignal({
-      type: GITHUB_NOTIFICATION_SIGNAL,
+      type: 'system-reminder',
       contents: input.details,
       attributes: {
+        type: getGithubReminderType(input.kind),
         kind: input.kind,
-        prNumber: input.prNumber,
+        pr: input.prNumber,
         repo: input.repo,
         title: input.title,
         url: input.url,
+        user: input.user,
+        reviewState: input.reviewState,
+        checkCount: input.checkCount,
       },
       metadata: { ...input },
     });
@@ -127,9 +170,10 @@ export const ghSignals = {
 
 function createGithubSignal(type: string, input: GithubPRSignalInput, contents: string): CreatedAgentSignal {
   return createSignal({
-    type,
+    type: 'system-reminder',
     contents,
     attributes: {
+      type,
       prNumber: input.prNumber,
       repo: input.repo,
     },
@@ -138,7 +182,10 @@ function createGithubSignal(type: string, input: GithubPRSignalInput, contents: 
 }
 
 function defaultCommandRunner(args: string[]): Promise<GithubCommandResult> {
-  return execFileAsync('gh', args, { encoding: 'utf8' });
+  return execFileAsync('gh', args, {
+    encoding: 'utf8',
+    env: { ...process.env, NO_COLOR: '1', CLICOLOR: '0', GH_FORCE_TTY: undefined },
+  });
 }
 
 function subscriptionKey(
@@ -161,7 +208,7 @@ function parsePrNumber(value: unknown): number | undefined {
 }
 
 function parseSignalPayload(signal: ReturnType<typeof mastraDBMessageToSignal>): GithubPRSignalInput | undefined {
-  const prNumber = parsePrNumber(signal.attributes?.prNumber ?? signal.metadata?.prNumber);
+  const prNumber = parsePrNumber(signal.attributes?.prNumber ?? signal.attributes?.pr ?? signal.metadata?.prNumber);
   if (!prNumber) return undefined;
 
   const repo = signal.attributes?.repo ?? signal.metadata?.repo;
@@ -201,6 +248,17 @@ function setGithubSignalsMetadata(
   };
 }
 
+function getGithubSignalType(signal: CreatedAgentSignal): string {
+  return typeof signal.attributes?.type === 'string' ? signal.attributes.type : signal.type;
+}
+
+function getGithubReminderType(kind: GithubPRNotificationInput['kind']): string {
+  if (kind === 'ci-failure') return GITHUB_CI_FAILURE_SIGNAL;
+  if (kind === 'comment') return GITHUB_COMMENT_SIGNAL;
+  if (kind === 'review') return GITHUB_REVIEW_SIGNAL;
+  return GITHUB_COMMAND_ERROR_SIGNAL;
+}
+
 function isGithubSignalType(type: string): type is typeof GITHUB_SUBSCRIBE_SIGNAL | typeof GITHUB_UNSUBSCRIBE_SIGNAL {
   return type === GITHUB_SUBSCRIBE_SIGNAL || type === GITHUB_UNSUBSCRIBE_SIGNAL;
 }
@@ -211,6 +269,10 @@ function truncateProcessedSignalIds(ids: string[]) {
 
 function stableFingerprint(value: unknown): string {
   return JSON.stringify(value, Object.keys(value as Record<string, unknown>).sort());
+}
+
+function stripAnsi(value: string) {
+  return value.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
 }
 
 function normalizeTimestamp(value: unknown): string | undefined {
@@ -225,6 +287,20 @@ function isAfterTimestamp(value: string | undefined, watermark: string | undefin
   return new Date(value).getTime() > new Date(watermark).getTime();
 }
 
+function getFailedChecksFingerprint(failedChecks: GithubPRSnapshot['failedChecks']) {
+  return JSON.stringify(
+    [...failedChecks].sort((a, b) => a.name.localeCompare(b.name)).map(check => [check.name, check.status]),
+  );
+}
+
+function getLatestTimestamp<T>(items: T[], getTimestamp: (item: T) => string | undefined) {
+  return items
+    .map(getTimestamp)
+    .filter((value): value is string => !!value)
+    .sort()
+    .at(-1);
+}
+
 function summarizeText(value: string | undefined, fallback: string) {
   if (!value) return fallback;
   const normalized = value.replace(/\s+/g, ' ').trim();
@@ -235,7 +311,7 @@ function summarizeText(value: string | undefined, fallback: string) {
 export class GithubSignals {
   readonly processor: GithubSignalsProcessor;
 
-  #agents = new Map<string, Agent<any, any, any, any>>();
+  #agents = new Map<string, RegisteredGithubAgent>();
   #activeSubscriptions = new Map<string, ActiveSubscription>();
   #timer?: ReturnType<typeof setInterval>;
   #polling = false;
@@ -248,12 +324,13 @@ export class GithubSignals {
       includeTool: options.includeTool ?? true,
       commandRunner: options.commandRunner ?? defaultCommandRunner,
       now: options.now ?? (() => new Date()),
+      getStreamOptions: options.getStreamOptions,
     };
     this.processor = new GithubSignalsProcessor(this, this.#options);
   }
 
   addAgent(agent: Agent<any, any, any, any>, options: GithubSignalsAddAgentOptions = {}) {
-    this.#agents.set(options.id ?? agent.id, agent);
+    this.#agents.set(options.id ?? agent.id, { agent, getStreamOptions: options.getStreamOptions });
     return this;
   }
 
@@ -262,6 +339,48 @@ export class GithubSignals {
       this.addSubscription(subscription);
     }
     return this;
+  }
+
+  async init(options: GithubSignalsInitOptions) {
+    const subscriptions: GithubPRSubscriptionMetadata[] = [];
+    let page = 0;
+
+    do {
+      const result = await options.memory.listThreads({
+        page,
+        perPage: 100,
+        filter: options.resourceId ? { resourceId: options.resourceId } : undefined,
+      });
+
+      for (const thread of result.threads) {
+        const metadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+        const baselinedSubscriptions = await Promise.all(
+          Object.entries(metadata.subscriptions).map(async ([key, subscription]) => [
+            key,
+            await this.baselineSubscription(subscription, { force: true }),
+          ]),
+        );
+        if (baselinedSubscriptions.length === 0) continue;
+
+        metadata.subscriptions = Object.fromEntries(baselinedSubscriptions);
+        subscriptions.push(...Object.values(metadata.subscriptions));
+
+        if (options.memory.updateThread) {
+          await options.memory.updateThread({
+            id: thread.id,
+            title: thread.title ?? '',
+            metadata: setGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined, metadata),
+          });
+        }
+      }
+
+      page += 1;
+      if (result.hasMore === false || result.threads.length === 0) break;
+      if (typeof result.total === 'number' && page * 100 >= result.total) break;
+    } while (true);
+
+    this.start(subscriptions);
+    return subscriptions;
   }
 
   getAgentId(agentId?: string) {
@@ -289,6 +408,32 @@ export class GithubSignals {
     const key = subscriptionKey(subscription);
     this.#activeSubscriptions.set(key, { ...subscription, key });
     this.#ensureTimer();
+  }
+
+  async baselineSubscription(
+    subscription: GithubPRSubscriptionMetadata,
+    options: { force?: boolean } = {},
+  ): Promise<GithubPRSubscriptionMetadata> {
+    if (
+      !options.force &&
+      (subscription.lastCheckFingerprint || subscription.lastCommentTimestamp || subscription.lastReviewTimestamp)
+    ) {
+      return subscription;
+    }
+
+    try {
+      const snapshot = await this.#loadPullRequestSnapshot(subscription);
+      return {
+        ...subscription,
+        lastCheckFingerprint: getFailedChecksFingerprint(snapshot.failedChecks),
+        lastCommentTimestamp: getLatestTimestamp(snapshot.comments, comment => comment.createdAt),
+        lastReviewTimestamp: getLatestTimestamp(snapshot.reviews, review => review.submittedAt),
+        lastErrorFingerprint: undefined,
+        updatedAt: this.#options.now().toISOString(),
+      };
+    } catch {
+      return subscription;
+    }
   }
 
   removeSubscription(
@@ -334,14 +479,14 @@ export class GithubSignals {
   }
 
   async #pollSubscription(subscription: ActiveSubscription) {
-    const agent = this.#agents.get(subscription.agentId);
-    if (!agent) return;
+    const registeredAgent = this.#agents.get(subscription.agentId);
+    if (!registeredAgent) return;
 
     try {
       const snapshot = await this.#loadPullRequestSnapshot(subscription);
-      await this.#emitSnapshotNotifications(agent, subscription, snapshot);
+      await this.#emitSnapshotNotifications(registeredAgent, subscription, snapshot);
     } catch (error) {
-      await this.#emitCommandError(agent, subscription, error);
+      await this.#emitCommandError(registeredAgent, subscription, error);
     }
   }
 
@@ -350,7 +495,7 @@ export class GithubSignals {
     if (subscription.repo) args.push('--repo', subscription.repo);
 
     const { stdout } = await this.#options.commandRunner(args);
-    const data = JSON.parse(stdout || '{}') as Record<string, unknown>;
+    const data = JSON.parse(stripAnsi(stdout || '{}')) as Record<string, unknown>;
 
     const checks = Array.isArray(data.statusCheckRollup) ? data.statusCheckRollup : [];
     const comments = Array.isArray(data.comments) ? data.comments : [];
@@ -371,20 +516,21 @@ export class GithubSignals {
   }
 
   async #emitSnapshotNotifications(
-    agent: Agent<any, any, any, any>,
+    registeredAgent: RegisteredGithubAgent,
     subscription: ActiveSubscription,
     snapshot: GithubPRSnapshot,
   ) {
     const failedChecks = snapshot.failedChecks.sort((a, b) => a.name.localeCompare(b.name));
-    const checkFingerprint = JSON.stringify(failedChecks.map(check => [check.name, check.status]));
+    const checkFingerprint = getFailedChecksFingerprint(failedChecks);
     if (failedChecks.length > 0 && checkFingerprint !== subscription.lastCheckFingerprint) {
-      await this.#sendNotification(agent, subscription, {
+      await this.#sendNotification(registeredAgent, subscription, {
         kind: 'ci-failure',
-        title: `Github PR #${subscription.prNumber} has failing checks`,
-        details: `Github PR #${subscription.prNumber} has failing checks:\n${failedChecks
+        title: `GitHub CI failure`,
+        details: failedChecks
           .map(check => `- ${check.name}: ${check.status}${check.url ? ` (${check.url})` : ''}`)
-          .join('\n')}`,
+          .join('\n'),
         url: failedChecks.find(check => check.url)?.url,
+        checkCount: failedChecks.length,
       });
       subscription.lastCheckFingerprint = checkFingerprint;
       subscription.lastErrorFingerprint = undefined;
@@ -394,51 +540,46 @@ export class GithubSignals {
       isAfterTimestamp(comment.createdAt, subscription.lastCommentTimestamp),
     );
     for (const comment of newComments) {
-      await this.#sendNotification(agent, subscription, {
-        kind: 'review-comment',
-        title: `New Github PR #${subscription.prNumber} comment`,
-        details: `New Github PR #${subscription.prNumber} comment${comment.author ? ` from ${comment.author}` : ''}: ${summarizeText(comment.body, 'No comment body.')}`,
+      await this.#sendNotification(registeredAgent, subscription, {
+        kind: 'comment',
+        title: `GitHub comment`,
+        details: summarizeText(comment.body, 'No comment body.'),
         url: comment.url,
+        user: comment.author,
       });
     }
-    const latestCommentTimestamp = newComments
-      .map(comment => comment.createdAt)
-      .filter((value): value is string => !!value)
-      .sort()
-      .at(-1);
+    const latestCommentTimestamp = getLatestTimestamp(newComments, comment => comment.createdAt);
     if (latestCommentTimestamp) subscription.lastCommentTimestamp = latestCommentTimestamp;
 
     const newReviews = snapshot.reviews.filter(review =>
       isAfterTimestamp(review.submittedAt, subscription.lastReviewTimestamp),
     );
     for (const review of newReviews) {
-      await this.#sendNotification(agent, subscription, {
-        kind: 'review-comment',
-        title: `New Github PR #${subscription.prNumber} review`,
-        details: `New Github PR #${subscription.prNumber} review${review.author ? ` from ${review.author}` : ''}${review.state ? ` (${review.state})` : ''}: ${summarizeText(review.body, 'No review body.')}`,
+      await this.#sendNotification(registeredAgent, subscription, {
+        kind: 'review',
+        title: `GitHub review`,
+        details: summarizeText(review.body, 'No review body.'),
         url: review.url,
+        user: review.author,
+        reviewState: review.state,
       });
     }
-    const latestReviewTimestamp = newReviews
-      .map(review => review.submittedAt)
-      .filter((value): value is string => !!value)
-      .sort()
-      .at(-1);
+    const latestReviewTimestamp = getLatestTimestamp(newReviews, review => review.submittedAt);
     if (latestReviewTimestamp) subscription.lastReviewTimestamp = latestReviewTimestamp;
 
     subscription.updatedAt = this.#options.now().toISOString();
     this.#activeSubscriptions.set(subscription.key, subscription);
   }
 
-  async #emitCommandError(agent: Agent<any, any, any, any>, subscription: ActiveSubscription, error: unknown) {
+  async #emitCommandError(registeredAgent: RegisteredGithubAgent, subscription: ActiveSubscription, error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     const fingerprint = stableFingerprint({ message });
     if (fingerprint === subscription.lastErrorFingerprint) return;
 
-    await this.#sendNotification(agent, subscription, {
+    await this.#sendNotification(registeredAgent, subscription, {
       kind: 'command-error',
-      title: `Github PR #${subscription.prNumber} polling failed`,
-      details: `Github PR #${subscription.prNumber} polling failed: ${message}`,
+      title: `GitHub polling error`,
+      details: message,
     });
     subscription.lastErrorFingerprint = fingerprint;
     subscription.updatedAt = this.#options.now().toISOString();
@@ -446,11 +587,18 @@ export class GithubSignals {
   }
 
   async #sendNotification(
-    agent: Agent<any, any, any, any>,
+    registeredAgent: RegisteredGithubAgent,
     subscription: GithubPRSubscriptionMetadata,
     notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
   ) {
-    const result = agent.sendSignal(
+    const streamOptions = await (registeredAgent.getStreamOptions ?? this.#options.getStreamOptions)?.({
+      agentId: subscription.agentId,
+      resourceId: subscription.resourceId,
+      threadId: subscription.threadId,
+      repo: subscription.repo,
+      prNumber: subscription.prNumber,
+    });
+    const result = registeredAgent.agent.sendSignal(
       ghSignals.prNotification({
         ...notification,
         repo: subscription.repo,
@@ -459,11 +607,12 @@ export class GithubSignals {
       {
         resourceId: subscription.resourceId,
         threadId: subscription.threadId,
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', ...(streamOptions ? { streamOptions: streamOptions as any } : {}) },
         ifActive: { behavior: 'deliver' },
       },
     );
     await result.persisted;
+    await result.started;
   }
 }
 
@@ -488,6 +637,19 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
   }
 
   async #processSignals(args: ProcessInputStepArgs) {
+    for (const message of args.messages) {
+      if (!isMastraSignalMessage(message)) continue;
+      await this.#applyGithubSignal(args, mastraDBMessageToSignal(message));
+    }
+  }
+
+  async #applyGithubSignal(args: ProcessInputStepArgs, signal: CreatedAgentSignal) {
+    const signalType = getGithubSignalType(signal);
+    if (!isGithubSignalType(signalType)) return;
+
+    const payload = parseSignalPayload(signal);
+    if (!payload) return;
+
     const contextThreadId = args.requestContext?.get(MASTRA_THREAD_ID_KEY);
     const contextResourceId = args.requestContext?.get(MASTRA_RESOURCE_ID_KEY);
     const threadId =
@@ -506,52 +668,39 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
 
     const githubMetadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
     const processedSignalIds = new Set(githubMetadata.processedSignalIds);
-    let changed = false;
+    if (processedSignalIds.has(signal.id)) return;
 
-    for (const message of args.messages) {
-      if (!isMastraSignalMessage(message)) continue;
-      const signal = mastraDBMessageToSignal(message);
-      if (!isGithubSignalType(signal.type) || processedSignalIds.has(signal.id)) continue;
+    const repo = payload.repo ?? this.#options.repo;
+    const now = this.#options.now().toISOString();
+    const agentId = this.#owner.getAgentId(
+      signal.metadata?.agentId && typeof signal.metadata.agentId === 'string' ? signal.metadata.agentId : undefined,
+    );
+    const baseSubscription = {
+      agentId,
+      resourceId,
+      threadId,
+      repo,
+      prNumber: payload.prNumber,
+    };
+    const key = threadSubscriptionKey(baseSubscription);
 
-      const payload = parseSignalPayload(signal);
-      if (!payload) continue;
-
-      const repo = payload.repo ?? this.#options.repo;
-      const now = this.#options.now().toISOString();
-      const agentId = this.#owner.getAgentId(
-        signal.metadata?.agentId && typeof signal.metadata.agentId === 'string' ? signal.metadata.agentId : undefined,
-      );
-      const baseSubscription = {
-        agentId,
-        resourceId,
-        threadId,
-        repo,
-        prNumber: payload.prNumber,
-      };
-      const key = threadSubscriptionKey(baseSubscription);
-
-      if (signal.type === GITHUB_SUBSCRIBE_SIGNAL) {
-        const existing = githubMetadata.subscriptions[key];
-        const subscription: GithubPRSubscriptionMetadata = {
-          ...existing,
-          ...baseSubscription,
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
-        };
-        githubMetadata.subscriptions[key] = subscription;
-        this.#owner.addSubscription(subscription);
-      } else {
-        const existing = githubMetadata.subscriptions[key];
-        delete githubMetadata.subscriptions[key];
-        this.#owner.removeSubscription(existing ?? { ...baseSubscription });
-      }
-
-      processedSignalIds.add(signal.id);
-      changed = true;
+    if (signalType === GITHUB_SUBSCRIBE_SIGNAL) {
+      const existing = githubMetadata.subscriptions[key];
+      const subscription = await this.#owner.baselineSubscription({
+        ...existing,
+        ...baseSubscription,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      });
+      githubMetadata.subscriptions[key] = subscription;
+      this.#owner.addSubscription(subscription);
+    } else {
+      const existing = githubMetadata.subscriptions[key];
+      delete githubMetadata.subscriptions[key];
+      this.#owner.removeSubscription(existing ?? { ...baseSubscription });
     }
 
-    if (!changed) return;
-
+    processedSignalIds.add(signal.id);
     githubMetadata.processedSignalIds = truncateProcessedSignalIds([...processedSignalIds]);
     const metadata = setGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined, githubMetadata);
     await memory.updateThread({ id: thread.id, title: thread.title ?? '', metadata });
@@ -585,7 +734,8 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
               action === 'subscribe'
                 ? ghSignals.prSubscribe({ prNumber, repo })
                 : ghSignals.prUnsubscribe({ prNumber, repo });
-            await args.sendSignal?.(signal);
+            const persistedSignal = await args.sendSignal?.(signal);
+            await this.#applyGithubSignal(args, persistedSignal ?? signal);
             return {
               success: true,
               message:

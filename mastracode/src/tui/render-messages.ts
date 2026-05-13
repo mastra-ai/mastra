@@ -126,7 +126,21 @@ function renderTaskTransitionFromHistory(
 
 function createReminderComponent(
   reminderType: string | undefined,
-  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
+  options: {
+    message?: string;
+    path?: string;
+    gapText?: string;
+    goalMaxTurns?: number;
+    judgeModelId?: string;
+    repo?: string;
+    prNumber?: number;
+    user?: string;
+    reviewState?: string;
+    url?: string;
+    kind?: string;
+    title?: string;
+    checkCount?: number;
+  },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -141,6 +155,14 @@ function createReminderComponent(
     path: options.path,
     goalMaxTurns: options.goalMaxTurns,
     judgeModelId: options.judgeModelId,
+    repo: options.repo,
+    prNumber: options.prNumber,
+    user: options.user,
+    reviewState: options.reviewState,
+    url: options.url,
+    kind: options.kind,
+    title: options.title,
+    checkCount: options.checkCount,
   });
 }
 
@@ -276,13 +298,32 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const goalMetadata = reminderPart as typeof reminderPart & {
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+      repo?: string;
+      prNumber?: number;
+      user?: string;
+      reviewState?: string;
+      url?: string;
+      kind?: string;
+      title?: string;
+      checkCount?: number;
+    };
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
       gapText: reminderPart.gapText,
       goalMaxTurns: goalMetadata.goalMaxTurns,
       judgeModelId: goalMetadata.judgeModelId,
+      repo: goalMetadata.repo,
+      prNumber: goalMetadata.prNumber,
+      user: goalMetadata.user,
+      reviewState: goalMetadata.reviewState,
+      url: goalMetadata.url,
+      kind: goalMetadata.kind,
+      title: goalMetadata.title,
+      checkCount: goalMetadata.checkCount,
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);

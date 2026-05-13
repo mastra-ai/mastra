@@ -33,13 +33,15 @@ const agent = new Agent({
 
 github.addAgent(agent)
 
+await github.init({ memory, resourceId: 'user_123' })
+
 await agent.sendSignal(ghSignals.prSubscribe({ prNumber: 1234 }), {
   resourceId: 'user_123',
   threadId: 'thread_456',
 })
 ```
 
-The subscribe signal tells the model that the thread is subscribed to the PR. On the next input step, the processor records the subscription in thread metadata and starts polling GitHub with the `gh` CLI.
+Call `init()` during application startup to explicitly rehydrate persisted subscriptions and start polling. The subscribe signal tells the model that the thread is subscribed to the PR. On the next input step, the processor records the subscription in thread metadata, snapshots the current PR state as a silent baseline, and starts polling GitHub with the `gh` CLI. Existing checks, comments, and reviews are not replayed when the subscription starts.
 
 ## Constructor parameters
 
@@ -62,7 +64,7 @@ The subscribe signal tells the model that the thread is subscribed to the PR. On
         type: 'number',
         description: 'How often to poll active PR subscriptions.',
         isOptional: true,
-        defaultValue: '60000',
+        defaultValue: '20000',
       },
       {
         name: 'includeTool',
@@ -139,13 +141,17 @@ Creates an internal notification signal for poller output. Most applications do 
 const signal = ghSignals.prNotification({
   prNumber: 1234,
   repo: 'mastra-ai/mastra',
-  kind: 'ci-failure',
-  title: 'GitHub PR #1234 has failing checks',
-  details: 'GitHub PR #1234 has failing checks:\n- unit tests: FAILURE',
+  kind: 'review',
+  title: 'GitHub review',
+  details: 'test2',
+  user: 'TylerBarnes',
+  reviewState: 'COMMENTED',
 })
 ```
 
 Returns: `CreatedAgentSignal`.
+
+Notification signals use compact GitHub-specific reminder types such as `github-ci-failure`, `github-comment`, `github-review`, and `github-command-error`. Metadata like PR number, repo, user, review state, URL, and failed check count is stored on signal attributes/metadata while the message body stays concise for model context.
 
 ## Methods
 
@@ -171,9 +177,19 @@ github.removeAgent('code-agent')
 
 ### Subscription lifecycle
 
+#### `init(options)`
+
+Explicitly rehydrates persisted subscriptions from memory and starts polling. Call this during application startup after registering agents.
+
+```typescript
+await github.init({ memory, resourceId: 'user_123' })
+```
+
+Returns: `Promise<GithubPRSubscriptionMetadata[]>`.
+
 #### `start(subscriptions?)`
 
-Adds persisted subscriptions and starts polling. Use this to rehydrate subscriptions at application startup.
+Adds explicit subscriptions and starts polling.
 
 ```typescript
 github.start([
@@ -241,7 +257,7 @@ github.destroy()
 
 ## Thread metadata
 
-The processor stores subscription state under `thread.metadata.mastra.githubSignals`. The metadata includes processed signal IDs and active subscriptions keyed by repository and PR number.
+The processor stores subscription state under `thread.metadata.mastra.githubSignals`. The metadata includes processed signal IDs and active subscriptions keyed by repository and PR number. Each subscription also stores watermarks for failed checks, latest comment timestamp, and latest review timestamp so the first poll after subscribing only reports future changes.
 
 ## GitHub CLI requirements
 
