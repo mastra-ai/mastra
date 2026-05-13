@@ -93,6 +93,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/processors',
+          label: 'Processors',
+        },
+        {
+          type: 'doc',
+          id: 'agents/guardrails',
+          label: 'Guardrails',
+        },
+        {
+          type: 'doc',
+          id: 'agents/agent-approval',
+          label: 'Agent Approval',
+        },
+        {
+          type: 'doc',
           id: 'agents/supervisor-agents',
           label: 'Supervisor Agents',
         },
@@ -106,34 +121,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/processors',
-          label: 'Processors',
-        },
-        {
-          type: 'doc',
-          id: 'agents/guardrails',
-          label: 'Guardrails',
-        },
-        {
-          type: 'doc',
-          id: 'agents/response-caching',
-          label: 'Response Caching',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'agents/agent-approval',
-          label: 'Agent Approval',
-        },
-        {
-          type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
-        },
-        {
-          type: 'doc',
           id: 'agents/channels',
           label: 'Channels',
           customProps: {
@@ -142,8 +129,29 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/a2a',
+          label: 'A2A',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/signals',
           label: 'Signals',
+          customProps: {
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/adding-voice',
+          label: 'Voice',
+        },
+        {
+          type: 'doc',
+          id: 'agents/response-caching',
+          label: 'Response Caching',
           customProps: {
             tags: ['experimental'],
           },
