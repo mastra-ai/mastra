@@ -565,7 +565,10 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           resolveText = resolve;
         });
 
-        // @ts-expect-error - TODO: fix this
+        if (typeof params.streamLegacy !== 'function') {
+          throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+        }
+
         const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           ...observabilityContext,
