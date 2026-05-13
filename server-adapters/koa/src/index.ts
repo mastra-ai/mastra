@@ -869,19 +869,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const abortCustomRoute = () => {
         customRouteAbortController.abort();
       };
-      const abortCustomRouteOnClose = () => {
-        if (!ctx.res.writableEnded) {
-          abortCustomRoute();
-        }
-      };
-      const abortCustomRouteOnError = () => {
+      const abortCustomRouteIfOpen = () => {
         if (!ctx.res.writableEnded) {
           abortCustomRoute();
         }
       };
 
-      ctx.res.once('close', abortCustomRouteOnClose);
-      ctx.res.once('error', abortCustomRouteOnError);
+      ctx.res.once('close', abortCustomRouteIfOpen);
+      ctx.res.once('error', abortCustomRouteIfOpen);
 
       try {
         if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
@@ -964,8 +959,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.respond = false;
         await server.writeCustomRouteResponse(response, ctx.res, customRouteAbortController.signal);
       } finally {
-        ctx.res.off('close', abortCustomRouteOnClose);
-        ctx.res.off('error', abortCustomRouteOnError);
+        ctx.res.off('close', abortCustomRouteIfOpen);
+        ctx.res.off('error', abortCustomRouteIfOpen);
       }
     });
   }

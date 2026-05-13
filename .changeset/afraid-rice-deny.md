@@ -6,7 +6,7 @@
 '@mastra/server': patch
 ---
 
-Custom API route streams in Node-based adapters now stop reading when clients disconnect, custom route handlers receive the request abort signal, and upstream response body stream errors are rethrown instead of being treated as client disconnects.
+Developers can now cancel long-running custom API route work when clients disconnect. Node-based adapters pass abort signals into custom route handlers, clean up response streams correctly, and still surface upstream response body errors.
 
 ```ts
 registerApiRoute('/stream', {

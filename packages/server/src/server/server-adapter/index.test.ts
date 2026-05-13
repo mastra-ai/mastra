@@ -258,6 +258,17 @@ describe('custom route response bridge', () => {
     expect(nodeRes.end).toHaveBeenCalledTimes(1);
   });
 
+  it('skips header writes when the node response is already closed', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    nodeRes.destroy();
+
+    await adapter.writeResponse(new Response('late response', { status: 200 }), nodeRes);
+
+    expect(nodeRes.writeHead).not.toHaveBeenCalled();
+    expect(nodeRes.end).not.toHaveBeenCalled();
+  });
+
   it('cancels custom route response streams when the node response closes early', async () => {
     const adapter = createTestAdapter();
     const nodeRes = createWritableResponse();
