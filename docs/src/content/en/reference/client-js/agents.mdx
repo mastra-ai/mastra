@@ -160,6 +160,140 @@ for await (const part of uiMessageStream) {
 }
 ```
 
+### `sendSignal()`
+
+Send a signal to an active agent run or memory thread. Use this with `subscribeToThread()` so the client can render the stream that wakes from, or receives, the signal.
+
+```typescript
+const agent = mastraClient.getAgent('support-agent')
+
+const result = await agent.sendSignal({
+  signal: {
+    type: 'user-message',
+    contents: 'Also consider the customer note I just added.',
+  },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+
+console.log(result.runId)
+```
+
+Use `ifActive.behavior` and `ifIdle.behavior` to control whether Mastra delivers, persists, discards, or wakes from a signal:
+
+```typescript
+await agent.sendSignal({
+  signal: { type: 'user-message', contents: 'Store this for later.' },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  ifIdle: {
+    behavior: 'persist',
+  },
+})
+```
+
+Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context:
+
+```typescript
+await agent.sendSignal({
+  signal: { type: 'user-message', contents: 'Start from this signal.' },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  ifIdle: {
+    behavior: 'wake',
+    streamOptions: {
+      maxSteps: 3,
+    },
+  },
+})
+```
+
+Returns `{ accepted: true, runId: string }`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'signal',
+    type: "{ type: 'user-message'; contents: MessageListInput } | { type: string; contents: string }",
+    description:
+      '`user-message` signals are treated as user input. Other signal types are converted to contextual XML before the next model call.',
+  },
+  {
+    name: 'runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Run ID to target directly.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread. Use with `threadId` for thread-targeted signals.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to target. Use with `resourceId` for thread-targeted signals.',
+  },
+  {
+    name: 'ifActive.behavior',
+    type: "'deliver' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+  },
+  {
+    name: 'ifIdle.behavior',
+    type: "'wake' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+  },
+  {
+    name: 'ifIdle.streamOptions',
+    type: "Omit<AgentExecutionOptions, 'messages'>",
+    isOptional: true,
+    description: 'Options for the stream that starts when `ifIdle.behavior` is `wake`.',
+  },
+]}
+/>
+
+### `subscribeToThread()`
+
+Subscribe to raw stream chunks for a memory thread. Use this to render output from a thread that may be started or continued by `sendSignal()`.
+
+```typescript
+const agent = mastraClient.getAgent('support-agent')
+
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+
+await subscription.processDataStream({
+  onChunk: async chunk => {
+    console.log(chunk)
+  },
+})
+```
+
+`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread ID to subscribe to.',
+  },
+]}
+/>
+
 ### `streamUntilIdle()`
 
 Stream a response and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `stream()`.

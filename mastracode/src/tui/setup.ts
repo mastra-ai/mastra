@@ -152,7 +152,8 @@ export function setupKeyboardShortcuts(
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
-  // Enter - submit immediately when idle, queue follow-up input while streaming
+  // Enter - submit immediately. The submit handler decides whether active input
+  // should be sent as a signal or queued for cases signals cannot handle.
   state.editor.onAction('followUp', () => {
     if (isGoalJudgeInputLocked(state)) {
       showGoalJudgeInputLockInfo(state);
@@ -160,20 +161,35 @@ export function setupKeyboardShortcuts(
       return true;
     }
 
-    if (!state.harness.isRunning()) {
-      state.editor.onSubmit?.(state.editor.getExpandedText());
+    state.editor.onSubmit?.(state.editor.getExpandedText());
+    return true;
+  });
+
+  // Ctrl+F - explicitly queue a follow-up while a run is active. Enter now sends
+  // normal messages as signals during active runs; this preserves manual FIFO
+  // queueing for slash commands, image messages, and messages the user wants to
+  // hold until the current run finishes.
+  state.editor.onAction('queueFollowUp', () => {
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      state.ui.requestRender();
       return true;
     }
 
-    const text = state.editor.getExpandedText().trim();
-    if (!text) {
+    const text = state.editor.getExpandedText();
+    if (!state.harness.isRunning()) {
+      state.editor.onSubmit?.(text);
+      return true;
+    }
+
+    const trimmedText = text.trim();
+    if (!trimmedText) {
       return true;
     }
 
     state.editor.addToHistory(text);
     state.editor.setText('');
     callbacks.queueFollowUpMessage(text);
-    state.ui.requestRender();
     return true;
   });
 }
