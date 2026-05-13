@@ -447,7 +447,7 @@ export class XAIRealtimeVoice extends MastraVoice<
   }
 
   private getTransformedTools(): XAITransformedTool[] {
-    this.transformedTools ??= transformTools(this.tools);
+    this.transformedTools ??= transformTools(this.tools, this.logger);
     return this.transformedTools;
   }
 
@@ -556,7 +556,7 @@ export class XAIRealtimeVoice extends MastraVoice<
     const responseId = this.getResponseId(event);
     const audio = event.delta || '';
     const audioData = Buffer.from(audio, 'base64');
-    const stream = this.getOrCreateSpeakerStream(responseId);
+    const stream = this.createSpeakerStream(responseId);
     stream.write(audioData);
     this.emit('speaking', { audio, audioData, response_id: responseId });
   }
@@ -916,10 +916,6 @@ export class XAIRealtimeVoice extends MastraVoice<
     this.speakerStreams.set(responseId, stream);
     this.emit('speaker', stream);
     return stream;
-  }
-
-  private getOrCreateSpeakerStream(responseId: string): StreamWithId {
-    return this.createSpeakerStream(responseId);
   }
 
   private closeSpeakerStreams(): void {

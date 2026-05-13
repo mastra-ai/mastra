@@ -13,6 +13,14 @@ export type XAIExecuteFunction = (
 ) => Promise<unknown>;
 export type XAITransformedTool = { xaiTool: XAIFunctionTool; execute: XAIExecuteFunction };
 
+/**
+ * Minimal logger contract accepted by {@link transformTools}. Pass the
+ * voice provider's `this.logger` from inside the class so warnings respect
+ * the configured Mastra log level instead of writing to stdout/stderr
+ * unconditionally.
+ */
+export type XAITransformToolsLogger = { warn(message: string): void };
+
 export const isReadableStream = (obj: unknown): obj is NodeJS.ReadableStream => {
   return (
     !!obj &&
@@ -45,7 +53,7 @@ export const readableToBase64 = async (stream: NodeJS.ReadableStream): Promise<s
   return (await readableToBuffer(stream)).toString('base64');
 };
 
-export const transformTools = (tools?: ToolsInput) => {
+export const transformTools = (tools?: ToolsInput, logger: XAITransformToolsLogger = console) => {
   const xaiTools: XAITransformedTool[] = [];
 
   for (const [name, tool] of Object.entries(tools || {})) {
@@ -65,7 +73,7 @@ export const transformTools = (tools?: ToolsInput) => {
     }
 
     if (!tool.execute) {
-      console.warn(`Skipping xAI realtime tool "${name}" because it has no execute function.`);
+      logger.warn(`Skipping xAI realtime tool "${name}" because it has no execute function.`);
       continue;
     }
 

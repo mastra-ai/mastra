@@ -69,11 +69,29 @@ describe('xAI realtime utils', () => {
     );
   });
 
-  it('warns when skipping tools without execute functions', () => {
+  it('warns through the provided logger when skipping tools without execute functions', () => {
+    const logger = { warn: vi.fn() };
+
+    const tools = transformTools(
+      {
+        lookup: {
+          id: 'lookup',
+          description: 'Lookup',
+          inputSchema: z.object({ id: z.string() }),
+        },
+      },
+      logger,
+    );
+
+    expect(tools).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith('Skipping xAI realtime tool "lookup" because it has no execute function.');
+  });
+
+  it('falls back to console.warn when no logger is provided', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     try {
-      const tools = transformTools({
+      transformTools({
         lookup: {
           id: 'lookup',
           description: 'Lookup',
@@ -81,7 +99,6 @@ describe('xAI realtime utils', () => {
         },
       });
 
-      expect(tools).toEqual([]);
       expect(warn).toHaveBeenCalledWith('Skipping xAI realtime tool "lookup" because it has no execute function.');
     } finally {
       warn.mockRestore();
