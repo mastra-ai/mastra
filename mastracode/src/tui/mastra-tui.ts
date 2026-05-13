@@ -23,6 +23,7 @@ import {
   MEMORY_GATEWAY_PROVIDER,
 } from '../onboarding/settings.js';
 import {
+  computeChangelogEntryWidth,
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
@@ -1206,7 +1207,11 @@ export class MastraTUI {
       return;
     }
 
-    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
+    const maxEntryWidth = computeChangelogEntryWidth(this.state.ui?.terminal?.columns);
+    const [pm, changelog] = await Promise.all([
+      detectPackageManager(),
+      fetchChangelog(latestVersion, { maxEntryWidth }),
+    ]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;

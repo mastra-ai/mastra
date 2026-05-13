@@ -1,5 +1,6 @@
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import {
+  computeChangelogEntryWidth,
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
@@ -30,7 +31,11 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
     return;
   }
 
-  const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
+  const maxEntryWidth = computeChangelogEntryWidth(ctx.state.ui?.terminal?.columns);
+  const [pm, changelog] = await Promise.all([
+    detectPackageManager(),
+    fetchChangelog(latestVersion, { maxEntryWidth }),
+  ]);
 
   // Clear any previously dismissed version so the prompt always shows
   const settings = loadSettings();

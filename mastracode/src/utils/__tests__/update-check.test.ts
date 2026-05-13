@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fetchChangelog, parseChangelog } from '../update-check.js';
+import { computeChangelogEntryWidth, fetchChangelog, parseChangelog } from '../update-check.js';
 
 describe('parseChangelog', () => {
   const SAMPLE_CHANGELOG = [
@@ -81,7 +81,7 @@ describe('parseChangelog', () => {
     expect(parseChangelog(depOnly, '1.0.0')).toBeNull();
   });
 
-  it('truncates entries longer than 120 characters', () => {
+  it('truncates entries longer than the default cap', () => {
     const longEntry = 'A'.repeat(200);
     const md = `## 1.0.0\n\n- ${longEntry}`;
     const result = parseChangelog(md, '1.0.0')!;
@@ -90,11 +90,47 @@ describe('parseChangelog', () => {
     expect(result).toContain('…');
   });
 
+  it('honors a wider maxEntryWidth so entries are not trimmed when there is space', () => {
+    const longEntry = 'A'.repeat(140);
+    const md = `## 1.0.0\n\n- ${longEntry}`;
+    const result = parseChangelog(md, '1.0.0', { maxEntryWidth: 200 })!;
+    expect(result).not.toContain('…');
+    expect(result).toContain(longEntry);
+  });
+
+  it('truncates to the provided maxEntryWidth when narrower than the default', () => {
+    const longEntry = 'A'.repeat(140);
+    const md = `## 1.0.0\n\n- ${longEntry}`;
+    const result = parseChangelog(md, '1.0.0', { maxEntryWidth: 50 })!;
+    expect(result).toContain('…');
+    // "  • " prefix (4) + 50 chars + "…" (1) = 55
+    expect(result.length).toBe(55);
+  });
+
   it('cuts at the first sentence when under 100 chars', () => {
     const md = '## 1.0.0\n\n- First sentence here. Then a longer explanation follows with details.';
     const result = parseChangelog(md, '1.0.0')!;
     expect(result).toContain('First sentence here.');
     expect(result).not.toContain('longer explanation');
+  });
+});
+
+describe('computeChangelogEntryWidth', () => {
+  it('returns a sane default when terminal width is unknown', () => {
+    // Default cols = 120 → dialog = min(108, 160) = 108 → 108 - 8 = 100
+    expect(computeChangelogEntryWidth(undefined)).toBe(100);
+    expect(computeChangelogEntryWidth(0)).toBe(100);
+  });
+
+  it('scales with terminal width up to the 160-column dialog cap', () => {
+    // 200 cols → dialog = min(180, 160) = 160 → 160 - 8 = 152
+    expect(computeChangelogEntryWidth(200)).toBe(152);
+    // 400 cols → still capped at 160 - 8 = 152
+    expect(computeChangelogEntryWidth(400)).toBe(152);
+  });
+
+  it('clamps to a minimum of 40 chars on tiny terminals', () => {
+    expect(computeChangelogEntryWidth(20)).toBe(40);
   });
 });
 
