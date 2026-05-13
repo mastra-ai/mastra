@@ -47,6 +47,25 @@ themselves or dictate values for you to write.
 
 ## Steps
 
+### 0. Auth ON — extract the session cookie for curl
+
+The WorkOS session cookie is `httpOnly`, so `curl` cannot mint it via `/api/auth/login` and `document.cookie` cannot read it in the browser. **Do this before any other auth-on step that uses `curl`.** Don't fall back to "UI only" — every snippet below uses `-H "Cookie: $COOKIE"` and this is how you get the value.
+
+The scaffold ships a debug route gated by `SMOKE_TEST_COOKIE_LEAK=1` that echoes back the request's Cookie header. Recipe:
+
+```bash
+# 1. Add the leak flag to $PROJECT_DIR/.env (only for the smoke test)
+echo 'SMOKE_TEST_COOKIE_LEAK=1' >> "$PROJECT_DIR/.env"
+# 2. Restart `mastra dev` so it picks up the env change.
+# 3. In the browser, sign in via WorkOS (navigate to $BASE/agent-builder).
+# 4. In the same browser session, navigate to $BASE/smoke-test/cookie
+#    and copy the response body (it's the raw Cookie header).
+# 5. Export it for the rest of the run:
+export COOKIE='wos-session=...; Path=/; ...'
+```
+
+After that, every `-H 'Cookie: <session-cookie>'` placeholder below becomes `-H "Cookie: $COOKIE"`. Re-run steps 3-5 if the dev server is restarted with a different `WORKOS_COOKIE_PASSWORD` (the scaffold derives a stable one, so this is usually a one-shot operation per scaffold).
+
 ### 1. Auth ON — verify login required
 
 Ensure `--expect on` passes, restart `mastra dev` if you just edited `.env`.

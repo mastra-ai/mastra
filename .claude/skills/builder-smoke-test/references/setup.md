@@ -154,6 +154,10 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 
 If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't run — check that the `Workspace` instance is registered in the Mastra constructor in `$PROJECT_DIR/src/mastra/index.ts`.
 
+## Cookie extraction (auth on only)
+
+Under `--auth on`, before any other section runs `curl` against an authenticated endpoint, follow `references/auth.md` step 0 to extract the session cookie via `GET /smoke-test/cookie` (gated by `SMOKE_TEST_COOKIE_LEAK=1` in `$PROJECT_DIR/.env`). Export it as `$COOKIE` and use `-H "Cookie: $COOKIE"` for the rest of the run. The cookie is `httpOnly` and cannot be obtained any other way — do not skip auth-on `curl` checks because you "can't get the cookie."
+
 ## Checklist
 
 - [ ] Preflight passes for the expected mode (`--expect off` or `--expect on`)
@@ -163,3 +167,4 @@ If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't 
 - [ ] Builder settings endpoint returns valid config (`features.agent.skills: true`, both `configuration.agent.models` and `modelPolicy` present)
 - [ ] Builder workspace exists in DB with correct metadata (and `runtimeRegistered: true` on the list response)
 - [ ] Baseline entity counts recorded from `{ page, total }` shape
+- [ ] Under `--auth on`: `$COOKIE` exported via `/smoke-test/cookie` recipe (see `references/auth.md` step 0)

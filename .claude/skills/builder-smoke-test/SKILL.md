@@ -37,9 +37,10 @@ This skill is for **branch QA** — it complements the release-time `mastra-smok
 
 1. **Confirm the project directory.** Before scaffolding, ask the user where they want `$PROJECT_DIR` to live. Offer the default (`~/mastra-builder-smoke-tests/builder-smoke`) as a suggestion. Skip the question if they already passed `--dir` or have `$BUILDER_SMOKE_TEST_DIR` exported. See `references/setup.md` step 0.
 2. **Read the reference file** for each section you're about to run.
-3. **Execute the steps** — use `curl` for API checks, whichever browser tool the harness has wired up (Stagehand, Chrome MCP, etc.) for UI checks.
-4. **Record results** in the summary table.
-5. **Mark the section complete** with `task_write` before moving to the next.
+3. **Under `--auth on`, extract the session cookie before running any other section.** The WorkOS cookie is `httpOnly`, so `curl` cannot mint it and `document.cookie` cannot read it. The scaffold ships a debug route at `GET /smoke-test/cookie` gated by `SMOKE_TEST_COOKIE_LEAK=1`. Follow the **"Extracting the session cookie for curl (auth on)"** section below before touching any auth-on endpoint. **Do not pivot to UI-only testing because curl is "blocked" — the cookie route is the unblock path.**
+4. **Execute the steps** — use `curl` for API checks (with `-H "Cookie: $COOKIE"` under `--auth on`), whichever browser tool the harness has wired up (Stagehand, Chrome MCP, etc.) for UI checks.
+5. **Record results** in the summary table.
+6. **Mark the section complete** with `task_write` before moving to the next.
 
 ### Partial testing (`--test`)
 
