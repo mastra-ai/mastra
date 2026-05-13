@@ -33,30 +33,42 @@ export interface ObservabilityPromptResult {
 }
 
 export async function promptForObservability(): Promise<ObservabilityPromptResult> {
-  const choice = await p.select({
-    message: 'Enable Mastra Observability? (will open auth flow)',
-    options: [
-      { value: 'yes', label: 'Yes' },
-      { value: 'no', label: 'No' },
-    ],
-    initialValue: 'yes',
-  });
+  // Loop so that if the browser-based auth flow fails (user closed the browser
+  // tab, timed out, network error, …) we re-ask the same question instead of
+  // leaving the user stuck. Picking "No" is always a clean escape hatch.
+  while (true) {
+    const choice = await p.select({
+      message: 'Enable Mastra Observability? (will open auth flow)',
+      options: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+      ],
+      initialValue: 'yes',
+    });
 
-  if (p.isCancel(choice)) return {};
-  if (choice !== 'yes') return { enabled: false };
+    if (p.isCancel(choice)) return {};
+    if (choice !== 'yes') return { enabled: false };
 
-  // Only surface the logged-in user when creds already existed before getToken().
-  // If they didn't, getToken() ran the browser login() flow which prints its own
-  // "Logged in as <email>" message — printing again here would duplicate it.
-  // Re-read creds after getToken() so the email reflects the actual logged-in
-  // account, even when stale creds forced a browser re-login as a different user.
-  const hadCachedCreds = (await loadCredentials()) !== null;
-  const token = await getToken();
-  if (hadCachedCreds) {
-    const creds = await loadCredentials();
-    if (creds) p.log.info(`Logged in as ${creds.user.email}`);
+    // Only surface the logged-in user when creds already existed before getToken().
+    // If they didn't, getToken() ran the browser login() flow which prints its own
+    // "Logged in as <email>" message — printing again here would duplicate it.
+    // Re-read creds after getToken() so the email reflects the actual logged-in
+    // account, even when stale creds forced a browser re-login as a different user.
+    const hadCachedCreds = (await loadCredentials()) !== null;
+    try {
+      const token = await getToken();
+      if (hadCachedCreds) {
+        const creds = await loadCredentials();
+        if (creds) p.log.info(`Logged in as ${creds.user.email}`);
+      }
+      return { enabled: true, token };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      p.log.warn(`Could not sign in to Mastra: ${message}`);
+      // Fall through and re-prompt the same question so the user can retry
+      // or pick "No" to continue without observability.
+    }
   }
-  return { enabled: true, token };
 }
 
 /**
