@@ -326,13 +326,6 @@ export class Session {
   private _currentTraceId?: string;
   private readonly _activeTools = new Map<string, ActiveToolState>();
   private readonly _toolInputBuffers = new Map<string, { toolName: string; text: string }>();
-  /**
-   * Per-run bookkeeping kept by the subscription drain. Each runId on the
-   * thread maps to a small accumulator so chunks from concurrent runs (e.g.
-   * resume run landing while the original is still emitting) don't clobber
-   * each other.
-   */
-  private readonly _runState = new Map<string, { startedAt: number }>();
   private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
   /** Cumulative usage for the session's thread. Updated on `agent_end`. */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -853,35 +846,23 @@ export class Session {
   }
 
   /**
-   * Drain the long-lived subscription stream. Each chunk carries a `runId`;
-   * the loop emits harness events for that runId and, on terminal chunks
-   * (`finish` / `error` / `abort` / `tool-call-suspended`), resolves the
-   * matching `_runCompletionPromises` entry with the agent's bundled
-   * `FullOutput` (fetched via `agent.getRunOutput(runId).getFullOutput()`).
+   * Drain the long-lived subscription stream. The drain is the **sole event
+   * emitter** for the session — each chunk is translated into the matching
+   * harness event(s) via `_emitForChunk`. Completion delivery is handled
+   * elsewhere (`_watchRunCompletion` driven by `_waitUntilFinished()`); this
+   * loop deliberately does not inspect terminal chunks.
    *
-   * Per-run state (active messageId / open tool calls) lives in
-   * `_runState` so multiple runs on the same thread don't clobber each
-   * other's accumulators. On drain shutdown (stream end or unhandled
-   * error) every outstanding completion promise is rejected so callers
-   * don't hang.
+   * On drain shutdown (stream end or unhandled error) every outstanding
+   * completion promise is rejected so callers don't hang.
    */
   private async _drainSubscriptionStream(sub: AgentThreadSubscription<unknown>): Promise<void> {
     try {
       for await (const chunk of sub.stream) {
         const runId = (chunk as { runId?: string }).runId;
-        if (runId) {
+        if (runId && this._currentRunId === undefined) {
           // First chunk for a run marks our "current run" for getDisplayState().
-          if (!this._runState.has(runId)) {
-            this._runState.set(runId, { startedAt: Date.now() });
-          }
-          if (this._currentRunId === undefined) {
-            this._currentRunId = runId;
-          }
+          this._currentRunId = runId;
         }
-
-        // Per-chunk event emission (was previously in _drainStreamToEvents).
-        // The drain loop is the sole event emitter; completion delivery is
-        // handled by `_watchRunCompletion` driven by `_waitUntilFinished()`.
         this._emitForChunk(chunk);
       }
     } catch (err) {
@@ -890,8 +871,8 @@ export class Session {
       }
       this._runCompletionPromises.clear();
     } finally {
-      // Stream ended normally — any caller still waiting for a runId we
-      // never saw a terminal chunk for would hang forever otherwise.
+      // Stream ended normally — any caller still waiting for a runId whose
+      // completion we never observed would hang forever otherwise.
       for (const [, entry] of this._runCompletionPromises) {
         entry.reject(
           new HarnessValidationError('_drainSubscriptionStream()', 'Thread subscription closed before run completion'),
@@ -921,8 +902,6 @@ export class Session {
     } catch (err) {
       if (waiter) waiter.reject(err);
       else this._completedRuns.set(runId, { ok: false, err });
-    } finally {
-      this._runState.delete(runId);
     }
   }
 
