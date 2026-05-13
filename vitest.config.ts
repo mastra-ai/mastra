@@ -141,6 +141,7 @@ const EXCLUDED_DIRS = new Set([
         'workflows/temporal',
         'packages/_external-types',
         'packages/_changeset-cli',
+        'packages/_internal-core',
       ]
     : []),
 ]);
