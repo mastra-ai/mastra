@@ -10,6 +10,7 @@ import {
   ThreadListNewItem,
   ThreadListSeparator,
 } from '@/components/thread-list';
+import { isDefaultThreadName } from '@/domains/agents/utils/thread-title';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -125,11 +126,6 @@ const ChatThreadSkeleton = () => (
     <Skeleton className="h-4" />
   </div>
 );
-
-function isDefaultThreadName(name: string): boolean {
-  const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
-  return defaultPattern.test(name);
-}
 
 function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; createdAt?: Date }) {
   if (!title || isDefaultThreadName(title)) {

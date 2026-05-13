@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
+import { deriveThreadTitleFromMessage, isDefaultThreadName } from '@/domains/agents/utils/thread-title';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
@@ -395,6 +396,32 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
   return convertedMessages;
 };
 
+async function autoTitleThreadIfDefault({
+  client,
+  agentId,
+  threadId,
+  input,
+  requestContext,
+}: {
+  client: MastraClient;
+  agentId: string;
+  threadId: string;
+  input: string;
+  requestContext?: Record<string, any>;
+}): Promise<boolean> {
+  try {
+    const thread = client.getMemoryThread({ threadId, agentId });
+    const current = await thread.get(requestContext);
+    if (current.title && !isDefaultThreadName(current.title)) return false;
+    const title = deriveThreadTitleFromMessage(input);
+    if (!title) return false;
+    await thread.update({ title, agentId, requestContext });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function MastraRuntimeProvider({
   children,
   agentId,
@@ -744,6 +771,12 @@ export function MastraRuntimeProvider({
     if (!isSupportedModel) {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
+
+    // Snapshot before send: if this is the first user message in a memory-enabled
+    // thread, we'll auto-title it from the input after the stream completes.
+    // OM, if active, may later overwrite this title with a smarter summary.
+    const priorMessageCount = isSupportedModel ? messages.length : legacyMessages.length;
+    const shouldAutoTitle = Boolean(memory) && Boolean(threadId) && priorMessageCount === 0 && input.trim().length > 0;
 
     // Reset persisted errors at the start of a new turn so a fresh send doesn't
     // carry over errors from a previous failed run.
@@ -1261,6 +1294,18 @@ export function MastraRuntimeProvider({
       setTimeout(() => {
         refreshThreadList?.();
       }, 500);
+
+      if (shouldAutoTitle) {
+        void autoTitleThreadIfDefault({
+          client: baseClient,
+          agentId,
+          threadId: threadId!,
+          input,
+          requestContext,
+        }).then(updated => {
+          if (updated) refreshThreadList?.();
+        });
+      }
 
       // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
       if (threadId && isOMEnabled) {
