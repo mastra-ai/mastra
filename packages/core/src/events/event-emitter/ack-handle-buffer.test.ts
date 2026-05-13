@@ -264,4 +264,30 @@ describe('AckHandleBuffer', () => {
     expect(seen).toEqual(['a']);
     expect(cb).toHaveBeenCalledTimes(1);
   });
+
+  // Regression: a push() that arrives while a flush is mid-delivery and
+  // requests flush-now must not be dropped. Previously flush() bailed on
+  // `if (this.flushing) return;` and those events sat until the policy
+  // timer fired, adding up to `maxWaitMs` of unintended latency.
+  it('honors flush-now requests that arrive during an in-flight flush', async () => {
+    const { deps } = makeFakeClock();
+    let buffer!: AckHandleBuffer;
+    const seen: string[] = [];
+    const cb = vi.fn().mockImplementation(async (event: Event) => {
+      seen.push(event.id);
+      // The first delivery, while the outer flush is still running,
+      // pushes another flush-now event. Without the reflush latch
+      // this push never gets delivered until the policy timer fires.
+      if (event.id === 'a') {
+        await buffer.push(makeEvent({ id: 'b' }));
+      }
+    });
+    // maxSize=1 makes every push() request flush-now.
+    buffer = new AckHandleBuffer(cb, { maxSize: 1 }, deps);
+
+    await buffer.push(makeEvent({ id: 'a' }));
+
+    expect(seen).toEqual(['a', 'b']);
+    expect(cb).toHaveBeenCalledTimes(2);
+  });
 });

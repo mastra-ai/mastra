@@ -9,6 +9,27 @@ Add batching primitives to the PubSub abstraction.
 - `SubscribeOptions.batch` (`SubscribeBatchOptions`): opt in to coalesced delivery on a per-subscriber basis. Fields: `maxSize`, `maxWaitMs`, `minIntervalMs`, `isImmediate`, `coalesce`, `maxBufferSize`, `overflow`.
 - `EventEmitterPubSub` constructor accepts optional `EventEmitterPubSubOptions` with a `logger` for batched-delivery error diagnostics.
 
+**Example**
+
+```ts
+import { EventEmitterPubSub } from '@mastra/core/events';
+
+const pubsub = new EventEmitterPubSub();
+
+await pubsub.subscribe(
+  'agent-events',
+  event => {
+    // delivered in coalesced batches; the cb is still invoked once per event
+  },
+  {
+    batch: {
+      maxSize: 10, // flush once 10 events have queued
+      maxWaitMs: 500, // ...or after 500ms, whichever comes first
+    },
+  },
+);
+```
+
 **New exports**
 
 - `SubscribeBatchOptions` type.
