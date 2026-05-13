@@ -1,16 +1,4 @@
-import {
-  AgentIcon,
-  Notice,
-  Badge,
-  Button,
-  Header,
-  HeaderAction,
-  HeaderTitle,
-  Icon,
-  MainContentLayout,
-  Skeleton,
-  Spinner,
-} from '@mastra/playground-ui';
+import { Notice, Badge, Button, MainContentLayout, Spinner } from '@mastra/playground-ui';
 import { Check, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -23,6 +11,7 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { useLinkComponent } from '@/lib/framework';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 function EditFormContent({
   agentId,
@@ -170,8 +159,6 @@ function EditLayoutWrapper() {
     return {} as AgentDataSource;
   }, [isViewingVersion, versionData, agent, codeAgent]);
 
-  const agentName = agent?.name ?? codeAgent?.name;
-
   const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, isDirty } = useAgentCmsForm({
     mode: 'edit',
     agentId: agentId ?? '',
@@ -205,18 +192,10 @@ function EditLayoutWrapper() {
 
   return (
     <MainContentLayout>
-      <Header className="bg-surface1">
-        <HeaderTitle>
-          <Icon>
-            <AgentIcon />
-          </Icon>
-          {isLoading && <Skeleton className="h-6 w-[200px]" />}
-          {isNotFound && 'Agent not found'}
-          {isReady && `Edit agent: ${agentName}`}
-          {isReady && hasDraft && <Badge variant="info">Unpublished changes</Badge>}
-        </HeaderTitle>
-        {isReady && (
-          <HeaderAction>
+      {isReady && (
+        <RouteHeaderActions>
+          <div className="flex items-center gap-2">
+            {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
             <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
               {isSavingDraft ? (
                 <>
@@ -251,9 +230,9 @@ function EditLayoutWrapper() {
                 </>
               )}
             </Button>
-          </HeaderAction>
-        )}
-      </Header>
+          </div>
+        </RouteHeaderActions>
+      )}
 
       {isNotFound ? (
         <>

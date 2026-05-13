@@ -354,10 +354,7 @@ export const routes: RouteObject[] = [
       {
         path: '/mcps/:serverId/tools/:toolId',
         element: <MCPServerToolExecutor />,
-        handle: navHandleWithChildren('/mcps', [
-          { node: <McpServerCrumb />, to: undefined },
-          { node: <McpServerToolCrumb /> },
-        ]),
+        handle: navHandleWithChildren('/mcps', [{ node: <McpServerCrumb /> }, { node: <McpServerToolCrumb /> }]),
       },
 
       { path: '/workspaces', element: <Workspace />, handle: navHandle('/workspaces') },
@@ -381,7 +378,7 @@ export const routes: RouteObject[] = [
       {
         path: '/workflows/schedules',
         element: <SchedulesPage />,
-        handle: navHandleWithChildren('/workflows', [{ ...schedulesCrumb, to: undefined }]),
+        handle: navHandleWithChildren('/workflows', [schedulesCrumb]),
       },
       {
         path: '/workflows/schedules/:scheduleId',

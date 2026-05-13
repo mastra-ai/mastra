@@ -16,8 +16,6 @@ export interface CrumbDef {
   node: ReactNode;
   to?: string;
   icon?: RouteHeaderIcon;
-  /** Right-aligned action rendered inline with this crumb (e.g., a switcher chevron). */
-  action?: ReactNode;
 }
 
 export interface DocsLink {

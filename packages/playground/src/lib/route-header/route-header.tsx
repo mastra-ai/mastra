@@ -21,7 +21,6 @@ export function RouteHeader() {
                 as={linkable ? Link : 'span'}
                 to={linkable ? def.to : undefined}
                 isCurrent={isCurrent}
-                action={def.action}
               >
                 {IconComponent && (
                   <Icon>

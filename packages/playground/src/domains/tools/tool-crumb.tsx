@@ -7,8 +7,3 @@ export function ToolCrumb() {
 
   return <ToolCombobox value={toolId} variant="ghost" />;
 }
-
-export function ToolIdCrumb() {
-  const { toolId } = useParams<{ toolId: string }>();
-  return toolId ?? null;
-}

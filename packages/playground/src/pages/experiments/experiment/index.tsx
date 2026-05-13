@@ -1,8 +1,4 @@
 import {
-  Breadcrumb,
-  Crumb,
-  Header,
-  Icon,
   MainContentLayout,
   PermissionDenied,
   SessionExpired,
@@ -10,8 +6,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { FlaskConical } from 'lucide-react';
-import { useParams, Link } from 'react-router';
+import { useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { ExperimentPageContent } from '@/domains/experiments/components/experiment-page-content';
@@ -89,20 +84,6 @@ function ExperimentPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/experiments">
-            <Icon>
-              <FlaskConical />
-            </Icon>
-            Experiments
-          </Crumb>
-          <Crumb isCurrent as="span">
-            Experiment
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />

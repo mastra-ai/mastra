@@ -4,14 +4,7 @@ import { Link } from 'react-router';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 import { RouteHeaderActions } from '@/lib/route-header';
 
-export function WorkflowHeader({
-  workflowName,
-  workflowId,
-}: {
-  workflowName: string;
-  workflowId: string;
-  runId?: string;
-}) {
+export function WorkflowHeader({ workflowName, workflowId }: { workflowName: string; workflowId: string }) {
   const { data: schedules } = useSchedules({ workflowId });
   const scheduleCount = schedules?.length ?? 0;
   const singleSchedule = scheduleCount === 1 ? schedules?.[0] : undefined;

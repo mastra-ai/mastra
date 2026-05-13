@@ -54,7 +54,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       <SchemaRequestContextProvider>
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
           <div className="h-full min-h-0">
-            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
+            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
             <WorkflowLayoutUI
               workflowId={workflowId!}
               leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}

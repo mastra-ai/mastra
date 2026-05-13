@@ -299,8 +299,8 @@ test.describe('Login Flow', () => {
       // Should see login prompt instead of content
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
 
-      // Should NOT see the agents heading
-      await expect(page.locator('h1:has-text("Agents")')).not.toBeVisible();
+      // Should NOT see the agents route header breadcrumb
+      await expect(page.getByLabel('Breadcrumb').getByText('Agents')).toHaveCount(0);
     });
   });
 

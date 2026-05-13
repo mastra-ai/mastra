@@ -109,7 +109,12 @@ function RouteHeaderProbe() {
 }
 
 describe('route header handles', () => {
-  it('gives every main app page breadcrumb data', () => {
+  it('every page under RootLayout inherits or declares breadcrumb data', () => {
+    // Scope: only routes nested in the main RootLayout subtree are covered.
+    // MinimalRootLayout pages (e.g. /agents/:agentId/session) and unauthenticated
+    // pages (/login, /signup) intentionally do not render <RouteHeader/> and are
+    // excluded. A child route is considered "covered" when its parent provides
+    // crumbs — the test does not require leaf routes to append their own leaf.
     expect(collectRoutesMissingCrumbs(getAppRoutes())).toEqual([]);
   });
 
