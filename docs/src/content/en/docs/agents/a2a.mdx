@@ -28,13 +28,11 @@ A2A maps to the roles described in the [A2A core concepts](https://a2a-protocol.
 
 Any registered Mastra agent can be called as an A2A remote agent. It keeps using its own instructions, tools, memory, workflows, and server configuration; A2A changes how the agent is reached, not how it's authored.
 
-Mastra Server exposes A2A routes for registered agents automatically. You don't need to create a separate remote-agent wrapper. Use the agent's registered ID in the agent card URL and execution URL.
-
 The flow is:
 
 1. Register a standard Mastra agent in your `Mastra` instance.
 1. Start Mastra Server or mount Mastra routes into your own server.
-1. Mastra exposes each registered agent through an agent card at `/.well-known/:agentId/agent-card.json` and an execution endpoint at `/a2a/:agentId`.
+1. Mastra exposes the agent through an agent card at `/.well-known/:agentId/agent-card.json` and an execution endpoint at `/a2a/:agentId`.
 1. A client reads the card, sends A2A JSON-RPC methods such as `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`, or `tasks/resubscribe`, then receives task, artifact, and status events.
 
 Agent cards describe the remote agent's name, description, provider, endpoint URL, capabilities, security metadata, and skills. Capabilities advertise features such as streaming and push notifications. Skills describe what the remote agent can do so callers can decide whether it fits the task.
