@@ -45,7 +45,13 @@ import { convertStoredMessageToHarnessMessage } from '../_shared/message-convers
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import type { HarnessMessage } from '../types';
 
-import { HarnessConfigError, HarnessQueueFullError, HarnessValidationError, HarnessWorkspaceLostError } from './errors';
+import {
+  HarnessConfigError,
+  HarnessQueueFullError,
+  HarnessSessionClosedError,
+  HarnessValidationError,
+  HarnessWorkspaceLostError,
+} from './errors';
 import { EventEmitter } from './events';
 import type {
   EmitInput,
@@ -214,6 +220,19 @@ export interface TokenUsage {
 }
 
 /**
+ * Internal: outstanding `waitForIdle()` waiter. `check()` re-evaluates
+ * `isBusy()` and resolves the underlying Promise if idle (returns `true`
+ * when the waiter is satisfied); `reject()` finalises with an error
+ * (close/timeout); `cleanup()` disposes timers + removes the waiter from
+ * `_idleWaiters`.
+ */
+interface IdleWaiter {
+  check: () => boolean;
+  reject: (err: unknown) => void;
+  cleanup: () => void;
+}
+
+/**
  * Point-in-time snapshot returned by `getDisplayState()` (§4.2). Reads off
  * the in-memory `SessionRecord` plus a few transient run-only fields.
  *
@@ -329,6 +348,12 @@ export class Session {
   private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
   /** Cumulative usage for the session's thread. Updated on `agent_end`. */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  /**
+   * Outstanding `waitForIdle()` callers. On close/evict each waiter is
+   * rejected with `HarnessSessionClosedError` so callers don't hang on a
+   * dead session.
+   */
+  private readonly _idleWaiters = new Set<IdleWaiter>();
   /**
    * In-process serialization for `_flushUpdate`. Concurrent setters chain
    * onto this so each CAS write reads the latest in-memory version. Without
@@ -536,6 +561,7 @@ export class Session {
       this._activeTools.clear();
       this._toolInputBuffers.clear();
     }
+    this._notifyMaybeIdle();
   }
 
   /**
@@ -572,6 +598,107 @@ export class Session {
    */
   isRunning(): boolean {
     return this._currentTurnAbortController !== undefined;
+  }
+
+  /**
+   * True when the session has any pending work — an in-flight turn, an
+   * active queue drain, a queued item awaiting its turn, or a pending
+   * `respondTo*` suspension. False only when the session is fully idle.
+   *
+   * Broader than `isRunning()`: a session can be `!isRunning()` but still
+   * `isBusy()` (queue items not yet drained, awaiting `respondToQuestion`,
+   * etc.). UI affordances that care about "anything happening at all"
+   * (e.g. "session is working" indicators) should read this; affordances
+   * tied to a single live turn (spinner, abort button) should read
+   * `isRunning()`.
+   */
+  isBusy(): boolean {
+    if (this._currentTurnAbortController !== undefined) return true;
+    if (this._draining) return true;
+    if (this._currentQueuedItemId !== undefined) return true;
+    if ((this._record.pendingQueue?.length ?? 0) > 0) return true;
+    if (this._record.pendingResume !== undefined) return true;
+    return false;
+  }
+
+  /**
+   * Number of items currently waiting in `pendingQueue` (excluding any
+   * queued item already drained into a live turn — that one is tracked
+   * via `_currentQueuedItemId`). Cheap, synchronous, safe to poll from UI.
+   */
+  getQueueDepth(): number {
+    return this._record.pendingQueue?.length ?? 0;
+  }
+
+  /**
+   * Cumulative token usage for this session, accumulated across every
+   * completed turn (manual or queued). Returns a fresh shallow copy so
+   * callers can't mutate the running aggregate.
+   *
+   * Note: this is **not** persisted across rehydration — token counts
+   * reset to zero when a closed/evicted session is hydrated from storage.
+   * Callers that need cross-process aggregates should sum from message
+   * history themselves.
+   */
+  getTokenUsage(): TokenUsage {
+    return { ...this._tokenUsage };
+  }
+
+  /**
+   * Resolve when the session goes fully idle (`!isBusy()`). If the session
+   * is already idle when called, resolves on the next microtask.
+   *
+   * Rejects with `HarnessValidationError` if `timeoutMs` is provided and
+   * elapses before the session becomes idle. Rejects with
+   * `HarnessSessionClosedError` if the session closes while waiting.
+   *
+   * Useful in tests and TUI flows that want to await a clean boundary
+   * before tearing down or asserting final state.
+   */
+  waitForIdle(opts?: { timeoutMs?: number }): Promise<void> {
+    this._assertLive('waitForIdle()');
+    if (!this.isBusy()) return Promise.resolve();
+
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiter: IdleWaiter = {
+        check: () => {
+          if (!this.isBusy()) {
+            cleanup();
+            resolve();
+            return true;
+          }
+          return false;
+        },
+        reject,
+        cleanup: () => {},
+      };
+      const cleanup = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        this._idleWaiters.delete(waiter);
+      };
+      waiter.cleanup = cleanup;
+      this._idleWaiters.add(waiter);
+      if (opts?.timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new HarnessValidationError('waitForIdle()', `session did not become idle within ${opts.timeoutMs}ms`));
+        }, opts.timeoutMs);
+      }
+    });
+  }
+
+  /**
+   * Re-check `isBusy()` and resolve every `waitForIdle()` waiter whose
+   * predicate is now satisfied. Cheap when there are no waiters (common
+   * case). Called from every state transition that might tip the session
+   * idle: `_endTurn`, queue drain shutdown, queued-turn settlement.
+   */
+  private _notifyMaybeIdle(): void {
+    if (this._idleWaiters.size === 0) return;
+    if (this.isBusy()) return;
+    const waiters = Array.from(this._idleWaiters);
+    for (const w of waiters) w.check();
   }
 
   /**
@@ -2441,6 +2568,7 @@ export class Session {
       }
     } finally {
       this._draining = false;
+      this._notifyMaybeIdle();
     }
   }
 
@@ -2516,6 +2644,7 @@ export class Session {
       this._queueResolvers.delete(itemId);
       resolver.resolve(result);
     }
+    this._notifyMaybeIdle();
     // Kick the drain again — there may be more items waiting.
     void this._maybeDrainQueue();
   }
@@ -2533,6 +2662,7 @@ export class Session {
       this._queueResolvers.delete(itemId);
       resolver.reject(err);
     }
+    this._notifyMaybeIdle();
     void this._maybeDrainQueue();
   }
 
@@ -2667,6 +2797,7 @@ export class Session {
     this._record = updatedRecord;
     this._state = 'closed';
     this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
+    this._rejectIdleWaiters(new HarnessSessionClosedError(this.id));
   }
 
   /**
@@ -2678,6 +2809,22 @@ export class Session {
     this._record = updatedRecord;
     this._state = 'evicted';
     this._tearDownThreadSubscription(new HarnessValidationError('session.evict()', 'Session evicted'));
+    this._rejectIdleWaiters(new HarnessSessionClosedError(this.id));
+  }
+
+  /**
+   * Reject every outstanding `waitForIdle()` waiter with `reason`. Drains
+   * `_idleWaiters` via each waiter's own `cleanup` so subscribers and
+   * timers are properly disposed. Idempotent.
+   */
+  private _rejectIdleWaiters(reason: unknown): void {
+    if (this._idleWaiters.size === 0) return;
+    const waiters = Array.from(this._idleWaiters);
+    this._idleWaiters.clear();
+    for (const w of waiters) {
+      w.cleanup();
+      w.reject(reason);
+    }
   }
 
   /**
