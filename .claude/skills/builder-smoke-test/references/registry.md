@@ -104,6 +104,8 @@ In `/agent-builder/skills`:
 
 ## Steps — Library Copy flow
 
+> **There is no dedicated copy endpoint.** Library "Copy" is implemented client-side as a regular `POST /stored/skills` with the source's fields plus `metadata.origin = { type: 'library-copy', sourceSkillId, sourceAuthorId, copiedAt }`. Don't grep the server for `/copy`; verify origin metadata on the resulting record instead. Because the action goes through the normal create path, it is gated by `stored-skills:write`. The view-page Copy button is also gated on the same permission (`canCopy = !rbacEnabled || hasPermission('stored-skills:write')` in `pages/agent-builder/skills/view.tsx`), so member and viewer simply don't see the button — there is no button-vs-action asymmetry. Under non-admin runs, mark the Copy steps `n/a — role lacks stored-skills:write` (the absence of the button is correct UX, not a gap).
+
 > **Setup note — requires multi-user data:** The Library Copy flow requires at least one public skill **owned by a different user** so the current user can "Copy" it. A fresh scaffold has none. Options:
 >
 > 1. **Recommended:** run `bash .claude/skills/builder-smoke-test/scripts/seed-multi-user.sh` after the server has booted at least once. This inserts `smoke-seed-public-skill` (public) and `smoke-seed-private-skill` (private) owned by a fake `user_seed_other`, so all checklist items below become exercisable without a second WorkOS account.

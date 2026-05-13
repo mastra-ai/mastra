@@ -4,6 +4,8 @@ The builder's `configuration.agent.models.allowed` array constrains which models
 
 > **Two shapes, same concept.** Builder _config_ (TypeScript, the scaffolded project's `src/mastra/index.ts`) uses `{ provider, modelId }`. Stored-agents _API_ (`POST /stored/agents`, schema in `packages/server/src/server/schemas/stored-agents.ts`) uses `{ provider, name }`. When you POST to create an agent, use `name`. When you read the policy from the settings endpoint or the TS source, you'll see `modelId`.
 
+> **Non-admin runs (Run 3): read-side only.** Policy enforcement at create-time can't be observed without `stored-agents:write`, because RBAC returns 403 before the 422 model-policy error can fire. For non-admin roles, run step 1 (settings exposes the policy) and skip steps 2–4 (the disallowed-model 422 assertion needs an admin session). UI dropdown gating in `references/ui.md` is the alternative path for non-admin model-policy verification.
+
 ## Source-of-truth
 
 In the scaffolded project's `src/mastra/index.ts`:
@@ -19,6 +21,8 @@ models: {
 ```
 
 ## Steps
+
+> **Non-admin runs:** Only step 1 (read-side) is exercisable for `member` / `viewer`. Steps 2–4 all `POST /stored/agents`, which is gated by `stored-agents:write` — the 403 fires before the model-policy 422, so you cannot observe policy enforcement from a non-write role. Either re-run those steps from an admin role, or pair them with the UI dropdown check in `references/ui.md` (the picker greys out disallowed models regardless of role).
 
 ### 1. Settings exposes the policy
 

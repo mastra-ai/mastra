@@ -141,6 +141,21 @@ curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/skills/$SKILL_ID
 curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/skills/$SKILL_ID              # → 404
 ```
 
+### 9. Non-owner visibility filtering (requires `seed-multi-user.sh`)
+
+Requires `--auth on` and the seeded rows from `seed-multi-user.sh` (run from SKILL.md execution flow step 4). The seed inserts two skills owned by `user_seed_other`: `smoke-seed-public-skill` (public) and `smoke-seed-private-skill` (private). The current user is **not** the owner.
+
+```bash
+# Public seeded skill: should be visible to the current user
+curl -s -H "$SESSION" "$BASE/stored/skills/smoke-seed-public-skill" | jq '{id, visibility, authorId}'
+# Private seeded skill: should be filtered (404)
+curl -s -o /dev/null -w "%{http_code}\n" -H "$SESSION" "$BASE/stored/skills/smoke-seed-private-skill"
+```
+
+- [ ] Public seed: 200, `visibility: "public"`, `authorId: "user_seed_other"`
+- [ ] Private seed: 404 (non-owner cannot read another user's private skill)
+- [ ] If you got 200 on the private seed: real bug, log it as a product issue with the response body
+
 ## Filesystem persistence (#16000)
 
 The publish flow is the path that materializes `SKILL.md` (and any `references/`, `scripts/`, `assets/` subdirs) on disk. Verify by inspecting filesystem state before and after a successful publish.

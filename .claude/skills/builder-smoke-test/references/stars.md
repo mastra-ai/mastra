@@ -27,7 +27,9 @@ curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/agents/$AGENT_ID
 
 ## Prerequisites (auth-on)
 
-You need a logged-in session (`$SESSION` should be a `Cookie:` header). Create test entities first:
+You need a logged-in session (`$SESSION` should be a `Cookie:` header) and a stored entity to target.
+
+**If you have `stored-agents:write` / `stored-skills:write`** (owner, admin), create test entities:
 
 ```bash
 # Test agent
@@ -51,6 +53,14 @@ SKILL_RESP=$(curl -s -X POST $BASE/stored/skills \
     "instructions": "Star test instructions."
   }')
 SKILL_ID=$(echo "$SKILL_RESP" | jq -r '.id')
+```
+
+**If you don't have write perms** (member, viewer), use the rows from `seed-multi-user.sh` (run it from SKILL.md execution flow step 4 if you haven't):
+
+```bash
+SKILL_ID=smoke-seed-public-skill   # public, owned by user_seed_other
+# For agents, skip steps 1–3 and run the skill steps only — the seed script does not
+# seed stored agents. Note "agent star CRUD: not exercised in non-admin runs" in the report.
 ```
 
 ## Steps
