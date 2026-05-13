@@ -98,28 +98,24 @@ export interface SubAgent<TId = string, TRequestContext extends Record<string, a
 }
 
 export function isAgentCompatible<TId extends string>(input: unknown): input is SubAgent<TId, any> {
+  if (typeof input !== 'object' || input === null) {
+    return false;
+  }
+
+  const candidate = input as Record<string, unknown>;
+
   return (
-    typeof input === 'object' &&
-    input !== null &&
-    'generate' in input &&
-    typeof input.generate === 'function' &&
-    'stream' in input &&
-    typeof input.stream === 'function' &&
-    'getDescription' in input &&
-    typeof input.getDescription === 'function' &&
-    'getModel' in input &&
-    typeof input.getModel === 'function' &&
-    'hasOwnMemory' in input &&
-    typeof input.hasOwnMemory === 'function' &&
-    '__setMemory' in input &&
-    typeof input.__setMemory === 'function' &&
-    'getMemory' in input &&
-    typeof input.getMemory === 'function' &&
-    'getInstructions' in input &&
-    typeof input.getInstructions === 'function' &&
-    'resumeGenerate' in input &&
-    typeof input.resumeGenerate === 'function' &&
-    'resumeStream' in input &&
-    typeof input.resumeStream === 'function'
+    typeof candidate.id === 'string' &&
+    candidate.id.length > 0 &&
+    typeof candidate.generate === 'function' &&
+    typeof candidate.stream === 'function' &&
+    typeof candidate.getDescription === 'function' &&
+    typeof candidate.getModel === 'function' &&
+    typeof candidate.hasOwnMemory === 'function' &&
+    typeof candidate.__setMemory === 'function' &&
+    typeof candidate.getMemory === 'function' &&
+    typeof candidate.getInstructions === 'function' &&
+    typeof candidate.resumeGenerate === 'function' &&
+    typeof candidate.resumeStream === 'function'
   );
 }
