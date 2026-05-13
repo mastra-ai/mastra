@@ -20,6 +20,7 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -30,6 +31,7 @@
       }
     },
     "./scorers/prebuilt": {
+      "mastra-source": "./src/scorers/prebuilt/index.ts",
       "import": {
         "types": "./dist/scorers/prebuilt/index.d.ts",
         "default": "./dist/scorers/prebuilt/index.js"
@@ -40,6 +42,7 @@
       }
     },
     "./scorers/utils": {
+      "mastra-source": "./src/scorers/utils.ts",
       "import": {
         "types": "./dist/scorers/utils.d.ts",
         "default": "./dist/scorers/utils.js"

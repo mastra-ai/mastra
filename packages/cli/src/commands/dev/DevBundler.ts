@@ -50,6 +50,11 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+    if (process.env.MASTRA_SOURCE_MODE === '1') {
+      await fsExtra.ensureDir(studioServePath);
+      return;
+    }
+
     await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
       overwrite: true,
     });
@@ -129,7 +134,10 @@ export class DevBundler extends Bundler {
           },
         ],
         input: {
-          index: join(__dirname, 'templates', 'dev.entry.js'),
+          index:
+            process.env.MASTRA_SOURCE_MODE === '1'
+              ? join(dirname(dirname(__dirname)), 'public', 'templates', 'dev.entry.js')
+              : join(__dirname, 'templates', 'dev.entry.js'),
           ...toolsInputOptions,
         },
       },

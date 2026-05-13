@@ -12,6 +12,7 @@
   ],
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -22,6 +23,7 @@
       }
     },
     "./a2a": {
+      "mastra-source": "./src/a2a/index.ts",
       "import": {
         "types": "./dist/a2a/index.d.ts",
         "default": "./dist/a2a/index.js"
@@ -32,6 +34,7 @@
       }
     },
     "./a2a/client": {
+      "mastra-source": "./src/a2a/client.ts",
       "import": {
         "types": "./dist/a2a/client.d.ts",
         "default": "./dist/a2a/client.js"
@@ -42,6 +45,7 @@
       }
     },
     "./agent": {
+      "mastra-source": "./src/agent/index.ts",
       "import": {
         "types": "./dist/agent/index.d.ts",
         "default": "./dist/agent/index.js"
@@ -52,6 +56,7 @@
       }
     },
     "./agent/durable": {
+      "mastra-source": "./src/agent/durable/index.ts",
       "import": {
         "types": "./dist/agent/durable/index.d.ts",
         "default": "./dist/agent/durable/index.js"
@@ -62,6 +67,7 @@
       }
     },
     "./agent/message-list": {
+      "mastra-source": "./src/agent/message-list/index.ts",
       "import": {
         "types": "./dist/agent/message-list/index.d.ts",
         "default": "./dist/agent/message-list/index.js"
@@ -72,6 +78,7 @@
       }
     },
     "./auth": {
+      "mastra-source": "./src/auth/index.ts",
       "import": {
         "types": "./dist/auth/index.d.ts",
         "default": "./dist/auth/index.js"
@@ -82,6 +89,7 @@
       }
     },
     "./auth/ee": {
+      "mastra-source": "./src/auth/ee/index.ts",
       "import": {
         "types": "./dist/auth/ee/index.d.ts",
         "default": "./dist/auth/ee/index.js"
@@ -92,6 +100,7 @@
       }
     },
     "./background-tasks": {
+      "mastra-source": "./src/background-tasks/index.ts",
       "import": {
         "types": "./dist/background-tasks/index.d.ts",
         "default": "./dist/background-tasks/index.js"
@@ -102,6 +111,7 @@
       }
     },
     "./browser": {
+      "mastra-source": "./src/browser/index.ts",
       "import": {
         "types": "./dist/browser/index.d.ts",
         "default": "./dist/browser/index.js"
@@ -112,6 +122,7 @@
       }
     },
     "./bundler": {
+      "mastra-source": "./src/bundler/index.ts",
       "import": {
         "types": "./dist/bundler/index.d.ts",
         "default": "./dist/bundler/index.js"
@@ -122,6 +133,7 @@
       }
     },
     "./cache": {
+      "mastra-source": "./src/cache/index.ts",
       "import": {
         "types": "./dist/cache/index.d.ts",
         "default": "./dist/cache/index.js"
@@ -132,6 +144,7 @@
       }
     },
     "./channels": {
+      "mastra-source": "./src/channels/index.ts",
       "import": {
         "types": "./dist/channels/index.d.ts",
         "default": "./dist/channels/index.js"
@@ -142,6 +155,7 @@
       }
     },
     "./datasets": {
+      "mastra-source": "./src/datasets/index.ts",
       "import": {
         "types": "./dist/datasets/index.d.ts",
         "default": "./dist/datasets/index.js"
@@ -152,6 +166,7 @@
       }
     },
     "./deployer": {
+      "mastra-source": "./src/deployer/index.ts",
       "import": {
         "types": "./dist/deployer/index.d.ts",
         "default": "./dist/deployer/index.js"
@@ -162,6 +177,7 @@
       }
     },
     "./di": {
+      "mastra-source": "./src/di/index.ts",
       "import": {
         "types": "./dist/di/index.d.ts",
         "default": "./dist/di/index.js"
@@ -172,6 +188,7 @@
       }
     },
     "./editor": {
+      "mastra-source": "./src/editor/index.ts",
       "import": {
         "types": "./dist/editor/index.d.ts",
         "default": "./dist/editor/index.js"
@@ -182,6 +199,7 @@
       }
     },
     "./error": {
+      "mastra-source": "./src/error/index.ts",
       "import": {
         "types": "./dist/error/index.d.ts",
         "default": "./dist/error/index.js"
@@ -192,6 +210,7 @@
       }
     },
     "./evals": {
+      "mastra-source": "./src/evals/index.ts",
       "import": {
         "types": "./dist/evals/index.d.ts",
         "default": "./dist/evals/index.js"
@@ -202,6 +221,7 @@
       }
     },
     "./evals/scoreTraces": {
+      "mastra-source": "./src/evals/scoreTraces/index.ts",
       "import": {
         "types": "./dist/evals/scoreTraces/index.d.ts",
         "default": "./dist/evals/scoreTraces/index.js"
@@ -212,6 +232,7 @@
       }
     },
     "./events": {
+      "mastra-source": "./src/events/index.ts",
       "import": {
         "types": "./dist/events/index.d.ts",
         "default": "./dist/events/index.js"
@@ -222,6 +243,7 @@
       }
     },
     "./features": {
+      "mastra-source": "./src/features/index.ts",
       "import": {
         "types": "./dist/features/index.d.ts",
         "default": "./dist/features/index.js"
@@ -232,6 +254,7 @@
       }
     },
     "./harness": {
+      "mastra-source": "./src/harness/index.ts",
       "import": {
         "types": "./dist/harness/index.d.ts",
         "default": "./dist/harness/index.js"
@@ -242,6 +265,7 @@
       }
     },
     "./hooks": {
+      "mastra-source": "./src/hooks/index.ts",
       "import": {
         "types": "./dist/hooks/index.d.ts",
         "default": "./dist/hooks/index.js"
@@ -252,6 +276,7 @@
       }
     },
     "./integration": {
+      "mastra-source": "./src/integration/index.ts",
       "import": {
         "types": "./dist/integration/index.d.ts",
         "default": "./dist/integration/index.js"
@@ -262,6 +287,7 @@
       }
     },
     "./llm": {
+      "mastra-source": "./src/llm/index.ts",
       "import": {
         "types": "./dist/llm/index.d.ts",
         "default": "./dist/llm/index.js"
@@ -272,6 +298,7 @@
       }
     },
     "./logger": {
+      "mastra-source": "./src/logger/index.ts",
       "import": {
         "types": "./dist/logger/index.d.ts",
         "default": "./dist/logger/index.js"
@@ -282,6 +309,7 @@
       }
     },
     "./loop": {
+      "mastra-source": "./src/loop/index.ts",
       "import": {
         "types": "./dist/loop/index.d.ts",
         "default": "./dist/loop/index.js"
@@ -292,6 +320,7 @@
       }
     },
     "./mastra": {
+      "mastra-source": "./src/mastra/index.ts",
       "import": {
         "types": "./dist/mastra/index.d.ts",
         "default": "./dist/mastra/index.js"
@@ -302,6 +331,7 @@
       }
     },
     "./mcp": {
+      "mastra-source": "./src/mcp/index.ts",
       "import": {
         "types": "./dist/mcp/index.d.ts",
         "default": "./dist/mcp/index.js"
@@ -312,6 +342,7 @@
       }
     },
     "./memory": {
+      "mastra-source": "./src/memory/index.ts",
       "import": {
         "types": "./dist/memory/index.d.ts",
         "default": "./dist/memory/index.js"
@@ -322,6 +353,7 @@
       }
     },
     "./observability": {
+      "mastra-source": "./src/observability/index.ts",
       "import": {
         "types": "./dist/observability/index.d.ts",
         "default": "./dist/observability/index.js"
@@ -332,6 +364,7 @@
       }
     },
     "./processor-provider": {
+      "mastra-source": "./src/processor-provider/index.ts",
       "import": {
         "types": "./dist/processor-provider/index.d.ts",
         "default": "./dist/processor-provider/index.js"
@@ -342,6 +375,7 @@
       }
     },
     "./processors": {
+      "mastra-source": "./src/processors/index.ts",
       "import": {
         "types": "./dist/processors/index.d.ts",
         "default": "./dist/processors/index.js"
@@ -352,6 +386,7 @@
       }
     },
     "./relevance": {
+      "mastra-source": "./src/relevance/index.ts",
       "import": {
         "types": "./dist/relevance/index.d.ts",
         "default": "./dist/relevance/index.js"
@@ -362,6 +397,7 @@
       }
     },
     "./request-context": {
+      "mastra-source": "./src/request-context/index.ts",
       "import": {
         "types": "./dist/request-context/index.d.ts",
         "default": "./dist/request-context/index.js"
@@ -372,6 +408,7 @@
       }
     },
     "./schema": {
+      "mastra-source": "./src/schema/index.ts",
       "import": {
         "types": "./dist/schema/index.d.ts",
         "default": "./dist/schema/index.js"
@@ -382,6 +419,7 @@
       }
     },
     "./server": {
+      "mastra-source": "./src/server/index.ts",
       "import": {
         "types": "./dist/server/index.d.ts",
         "default": "./dist/server/index.js"
@@ -392,6 +430,7 @@
       }
     },
     "./storage": {
+      "mastra-source": "./src/storage/index.ts",
       "import": {
         "types": "./dist/storage/index.d.ts",
         "default": "./dist/storage/index.js"
@@ -402,6 +441,7 @@
       }
     },
     "./stream": {
+      "mastra-source": "./src/stream/index.ts",
       "import": {
         "types": "./dist/stream/index.d.ts",
         "default": "./dist/stream/index.js"
@@ -412,6 +452,7 @@
       }
     },
     "./tool-loop-agent": {
+      "mastra-source": "./src/tool-loop-agent/index.ts",
       "import": {
         "types": "./dist/tool-loop-agent/index.d.ts",
         "default": "./dist/tool-loop-agent/index.js"
@@ -422,6 +463,7 @@
       }
     },
     "./tool-provider": {
+      "mastra-source": "./src/tool-provider/index.ts",
       "import": {
         "types": "./dist/tool-provider/index.d.ts",
         "default": "./dist/tool-provider/index.js"
@@ -432,6 +474,7 @@
       }
     },
     "./tools": {
+      "mastra-source": "./src/tools/index.ts",
       "import": {
         "types": "./dist/tools/index.d.ts",
         "default": "./dist/tools/index.js"
@@ -442,6 +485,7 @@
       }
     },
     "./tts": {
+      "mastra-source": "./src/tts/index.ts",
       "import": {
         "types": "./dist/tts/index.d.ts",
         "default": "./dist/tts/index.js"
@@ -452,6 +496,7 @@
       }
     },
     "./types": {
+      "mastra-source": "./src/types/index.ts",
       "import": {
         "types": "./dist/types/index.d.ts",
         "default": "./dist/types/index.js"
@@ -462,6 +507,7 @@
       }
     },
     "./vector": {
+      "mastra-source": "./src/vector/index.ts",
       "import": {
         "types": "./dist/vector/index.d.ts",
         "default": "./dist/vector/index.js"
@@ -472,6 +518,7 @@
       }
     },
     "./vector/filter": {
+      "mastra-source": "./src/vector/filter/index.ts",
       "import": {
         "types": "./dist/vector/filter/index.d.ts",
         "default": "./dist/vector/filter/index.js"
@@ -482,6 +529,7 @@
       }
     },
     "./voice": {
+      "mastra-source": "./src/voice/index.ts",
       "import": {
         "types": "./dist/voice/index.d.ts",
         "default": "./dist/voice/index.js"
@@ -492,6 +540,7 @@
       }
     },
     "./workflows": {
+      "mastra-source": "./src/workflows/index.ts",
       "import": {
         "types": "./dist/workflows/index.d.ts",
         "default": "./dist/workflows/index.js"
@@ -502,6 +551,7 @@
       }
     },
     "./workflows/evented": {
+      "mastra-source": "./src/workflows/evented/index.ts",
       "import": {
         "types": "./dist/workflows/evented/index.d.ts",
         "default": "./dist/workflows/evented/index.js"
@@ -512,6 +562,7 @@
       }
     },
     "./worker": {
+      "mastra-source": "./src/worker/index.ts",
       "import": {
         "types": "./dist/worker/index.d.ts",
         "default": "./dist/worker/index.js"
@@ -522,6 +573,7 @@
       }
     },
     "./workspace": {
+      "mastra-source": "./src/workspace/index.ts",
       "import": {
         "types": "./dist/workspace/index.d.ts",
         "default": "./dist/workspace/index.js"
@@ -532,6 +584,7 @@
       }
     },
     "./tools/is-vercel-tool": {
+      "mastra-source": "./src/tools/is-vercel-tool.ts",
       "import": {
         "types": "./dist/tools/is-vercel-tool.d.ts",
         "default": "./dist/tools/is-vercel-tool.js"
@@ -542,6 +595,7 @@
       }
     },
     "./workflows/_constants": {
+      "mastra-source": "./src/workflows/constants.ts",
       "import": {
         "types": "./dist/workflows/constants.d.ts",
         "default": "./dist/workflows/constants.js"
@@ -562,6 +616,7 @@
       }
     },
     "./observability/context-storage": {
+      "mastra-source": "./src/observability/context-storage.ts",
       "import": {
         "types": "./dist/observability/context-storage.d.ts",
         "default": "./dist/observability/context-storage.js"
@@ -572,6 +627,7 @@
       }
     },
     "./utils": {
+      "mastra-source": "./src/utils.ts",
       "import": {
         "types": "./dist/utils.d.ts",
         "default": "./dist/utils.js"
@@ -582,6 +638,7 @@
       }
     },
     "./base": {
+      "mastra-source": "./src/base.ts",
       "import": {
         "types": "./dist/base.d.ts",
         "default": "./dist/base.js"
@@ -602,6 +659,7 @@
       }
     },
     "./test-utils/llm-mock": {
+      "mastra-source": "./src/test-utils/llm-mock.ts",
       "import": {
         "types": "./dist/test-utils/llm-mock.d.ts",
         "default": "./dist/test-utils/llm-mock.js"
@@ -612,6 +670,7 @@
       }
     },
     "./utils/zod-to-json": {
+      "mastra-source": "./src/zod-to-json.ts",
       "import": {
         "types": "./dist/zod-to-json.d.ts",
         "default": "./dist/zod-to-json.js"
@@ -622,6 +681,7 @@
       }
     },
     "./loop/server": {
+      "mastra-source": "./src/loop/server.ts",
       "import": {
         "types": "./dist/loop/server.d.ts",
         "default": "./dist/loop/server.js"
@@ -632,6 +692,7 @@
       }
     },
     "./storage/constants": {
+      "mastra-source": "./src/storage/constants.ts",
       "import": {
         "types": "./dist/storage/constants.d.ts",
         "default": "./dist/storage/constants.js"
@@ -643,6 +704,7 @@
     },
     "./package.json": "./package.json",
     "./storage/domains/agents": {
+      "mastra-source": "./src/storage/domains/agents/index.ts",
       "import": {
         "types": "./dist/storage/domains/agents/index.d.ts",
         "default": "./dist/storage/domains/agents/index.js"
@@ -653,6 +715,7 @@
       }
     },
     "./storage/domains/mcp-clients": {
+      "mastra-source": "./src/storage/domains/mcp-clients/index.ts",
       "import": {
         "types": "./dist/storage/domains/mcp-clients/index.d.ts",
         "default": "./dist/storage/domains/mcp-clients/index.js"
@@ -663,6 +726,7 @@
       }
     },
     "./storage/domains/mcp-servers": {
+      "mastra-source": "./src/storage/domains/mcp-servers/index.ts",
       "import": {
         "types": "./dist/storage/domains/mcp-servers/index.d.ts",
         "default": "./dist/storage/domains/mcp-servers/index.js"
@@ -673,6 +737,7 @@
       }
     },
     "./storage/domains/prompt-blocks": {
+      "mastra-source": "./src/storage/domains/prompt-blocks/index.ts",
       "import": {
         "types": "./dist/storage/domains/prompt-blocks/index.d.ts",
         "default": "./dist/storage/domains/prompt-blocks/index.js"
@@ -683,6 +748,7 @@
       }
     },
     "./storage/domains/scorer-definitions": {
+      "mastra-source": "./src/storage/domains/scorer-definitions/index.ts",
       "import": {
         "types": "./dist/storage/domains/scorer-definitions/index.d.ts",
         "default": "./dist/storage/domains/scorer-definitions/index.js"
@@ -693,6 +759,7 @@
       }
     },
     "./storage/domains/skills": {
+      "mastra-source": "./src/storage/domains/skills/index.ts",
       "import": {
         "types": "./dist/storage/domains/skills/index.d.ts",
         "default": "./dist/storage/domains/skills/index.js"
@@ -703,6 +770,7 @@
       }
     },
     "./storage/domains/workspaces": {
+      "mastra-source": "./src/storage/domains/workspaces/index.ts",
       "import": {
         "types": "./dist/storage/domains/workspaces/index.d.ts",
         "default": "./dist/storage/domains/workspaces/index.js"

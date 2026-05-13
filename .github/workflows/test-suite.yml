@@ -30,7 +30,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
-      NODE_OPTIONS: --max-old-space-size=8192
+      MASTRA_SOURCE_MODE: '1'
+      NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     permissions:
       contents: read
 
@@ -53,19 +54,17 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-
 
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+      - name: Validate source exports
+        run: pnpm source-exports:check
 
-      - name: Run changed tests (Shard ${{ matrix.shard }}/4)
+      - name: Run changed tests from source (Shard ${{ matrix.shard }}/4)
         run: |
-          pnpm vitest run \
-            --project 'unit:*' --project 'typecheck:*' \
+          pnpm test:source-mode -- \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-unit-${{ matrix.shard }}.json \
-            --shard=${{ matrix.shard }}/4 \
-            --passWithNoTests
+            --shard=${{ matrix.shard }}/4
 
       - name: Upload test results
         if: always()
@@ -89,6 +88,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+      MASTRA_SOURCE_MODE: '1'
+      NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     permissions:
       contents: read
     steps:
@@ -110,10 +111,8 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-
 
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Validate source exports
+        run: pnpm source-exports:check
 
       - name: Normalize project name
         id: normalize
@@ -128,8 +127,6 @@ jobs:
             --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-e2e-${{ steps.normalize.outputs.project_id }}.json \
             --passWithNoTests
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Upload test results
         if: always()

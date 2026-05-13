@@ -14,6 +14,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const resourceId = 'resource';
 const NUMBER_OF_WORKERS = 2;
+const SOURCE_MODE = process.env.MASTRA_SOURCE_MODE === '1';
 
 export enum StorageType {
   LibSQL = 'libsql',
@@ -1020,15 +1021,24 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
           const chunk = messagesForWorkers.slice(i * chunkSize, (i + 1) * chunkSize);
           if (chunk.length === 0) continue;
           const workerPromise = new Promise((resolve, reject) => {
-            const worker = new Worker(path.resolve(__dirname, '..', 'worker', 'generic-memory-worker.js'), {
-              workerData: {
-                messages: chunk,
-                storageType: workerTestConfig.storageTypeForWorker,
-                storageConfig: workerTestConfig.storageConfigForWorker,
-                memoryOptions: workerTestConfig.memoryOptionsForWorker || { generateTitle: false },
-                vectorConfig: workerTestConfig.vectorConfigForWorker,
+            const worker = new Worker(
+              path.resolve(
+                __dirname,
+                '..',
+                'worker',
+                SOURCE_MODE ? 'generic-memory-worker.ts' : 'generic-memory-worker.js',
+              ),
+              {
+                execArgv: SOURCE_MODE ? ['--import', 'tsx'] : undefined,
+                workerData: {
+                  messages: chunk,
+                  storageType: workerTestConfig.storageTypeForWorker,
+                  storageConfig: workerTestConfig.storageConfigForWorker,
+                  memoryOptions: workerTestConfig.memoryOptionsForWorker || { generateTitle: false },
+                  vectorConfig: workerTestConfig.vectorConfigForWorker,
+                },
               },
-            });
+            );
             let completed = false;
             worker.on('message', msg => {
               if ((msg as any).success) {

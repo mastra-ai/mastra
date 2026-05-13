@@ -24,6 +24,7 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
+      MASTRA_SOURCE_MODE: '1'
     # Minimal permissions - read-only access
     permissions:
       contents: read
@@ -37,23 +38,17 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Validate source exports
+        run: pnpm source-exports:check
 
-      - name: Run all tests (Shard ${{ matrix.shard }}/4)
+      - name: Run all tests from source (Shard ${{ matrix.shard }}/4)
         run: |
-          pnpm vitest run \
-            --project 'unit:*' --project 'typecheck:*' \
+          pnpm test:source-mode -- \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-${{ matrix.shard }}.json \
-            --shard=${{ matrix.shard }}/4 \
-            --passWithNoTests
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
+            --shard=${{ matrix.shard }}/4
 
       - name: Upload test results
         if: always()
@@ -87,6 +82,7 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
+      MASTRA_SOURCE_MODE: '1'
     # Minimal permissions - read-only access
     permissions:
       contents: read
@@ -100,10 +96,8 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Validate source exports
+        run: pnpm source-exports:check
 
       - name: Normalize project name
         id: normalize
@@ -119,7 +113,7 @@ jobs:
             --outputFile.blob=.vitest-reports/blob-${{ steps.normalize.outputs.project_id }}.json \
             --passWithNoTests
         env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
+          NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
           # LLM API Keys
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

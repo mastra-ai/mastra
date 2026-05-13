@@ -173,9 +173,15 @@ export function llmRecorderPlugin(options: LLMRecorderPluginOptions = {}): Plugi
     transformRequest,
   } = options;
 
+  let projectRoot: string | undefined;
+
   return {
     name: 'vitest-llm-recorder',
     enforce: 'pre',
+
+    configResolved(config) {
+      projectRoot = config.root;
+    },
 
     transform(code, id) {
       // Only transform files that match include patterns
@@ -211,9 +217,8 @@ export function llmRecorderPlugin(options: LLMRecorderPluginOptions = {}): Plugi
         const exportName = transformRequest.exportName || 'transformRequest';
         // If importPath is relative, compute the path from the test file to the transform module
         let importPath = transformRequest.importPath;
-        if (importPath.startsWith('./') || importPath.startsWith('../')) {
+        if (projectRoot && (importPath.startsWith('./') || importPath.startsWith('../'))) {
           const testDir = path.dirname(id);
-          const projectRoot = process.cwd();
           const absoluteTransformPath = path.resolve(projectRoot, importPath);
           importPath = path.relative(testDir, absoluteTransformPath);
           // Ensure the path starts with ./ for relative imports

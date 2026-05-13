@@ -12,6 +12,7 @@
   ],
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.es.js"
@@ -19,6 +20,7 @@
     },
     "./style.css": "./dist/index.css",
     "./tokens": {
+      "mastra-source": "./src/ds/tokens/index.ts",
       "import": {
         "types": "./dist/tokens.d.ts",
         "default": "./dist/tokens.es.js"
@@ -29,6 +31,7 @@
       }
     },
     "./utils": {
+      "mastra-source": "./src/utils.ts",
       "import": {
         "types": "./dist/utils.d.ts",
         "default": "./dist/utils.es.js"

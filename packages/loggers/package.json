@@ -20,6 +20,7 @@
   "main": "./dist/index.js",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -30,6 +31,7 @@
       }
     },
     "./file": {
+      "mastra-source": "./src/file/index.ts",
       "import": {
         "types": "./dist/file/index.d.ts",
         "default": "./dist/file/index.js"
@@ -40,6 +42,7 @@
       }
     },
     "./upstash": {
+      "mastra-source": "./src/upstash/index.ts",
       "import": {
         "types": "./dist/upstash/index.d.ts",
         "default": "./dist/upstash/index.js"
@@ -50,6 +53,7 @@
       }
     },
     "./http": {
+      "mastra-source": "./src/http/index.ts",
       "import": {
         "types": "./dist/http/index.d.ts",
         "default": "./dist/http/index.js"
@@ -66,6 +70,7 @@
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
+    "test:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run --bail 1 --reporter=dot",
     "lint": "eslint ."
   },
   "keywords": [],

@@ -41,6 +41,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
+      MASTRA_SOURCE_MODE: '1'
+      NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     strategy:
       fail-fast: false
       matrix:
@@ -51,14 +53,11 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        run: pnpm turbo build --filter "@mastra/${{ matrix.package }}"
+      - name: Validate source exports
+        run: pnpm source-exports:check
 
       - name: Run ${{ matrix.package }} unit tests
-        run: pnpm test:unit
-        working-directory: workspaces/${{ matrix.package }}
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
+        run: pnpm vitest run --project "unit:workspaces/${{ matrix.package }}" --exclude '**/*.integration.test.ts' --passWithNoTests
 
   test-docker:
     # Only run on the main repository, not on forks
@@ -68,6 +67,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
+      MASTRA_SOURCE_MODE: '1'
+      NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     strategy:
       fail-fast: false
       matrix:
@@ -78,11 +79,17 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        run: pnpm turbo build --filter "@mastra/${{ matrix.package }}"
+      - name: Validate source exports
+        run: pnpm source-exports:check
+
+      - name: Start ${{ matrix.package }} test services
+        run: docker compose up -d && sleep 3
+        working-directory: workspaces/${{ matrix.package }}
 
       - name: Run ${{ matrix.package }} integration tests
-        run: pnpm test
+        run: pnpm vitest run --project "unit:workspaces/${{ matrix.package }}" "workspaces/${{ matrix.package }}/src/**/*.integration.test.ts" --passWithNoTests
+
+      - name: Stop ${{ matrix.package }} test services
+        if: always()
+        run: docker compose down -v
         working-directory: workspaces/${{ matrix.package }}
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'

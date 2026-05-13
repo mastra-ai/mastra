@@ -4,11 +4,13 @@
   "version": "0.1.0",
   "scripts": {
     "test:mcp": "vitest run ./src/server.test.ts",
+    "test:mcp:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run ./src/server.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {
     "@ai-sdk/react": "^1.2.12",
     "@mastra/client-js": "*",
+    "@mastra/hono": "*",
     "@mastra/mcp": "*",
     "dotenv": "^17.2.3",
     "vite": "^7.3.1",
@@ -26,6 +28,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../core",
+      "@mastra/hono": "link:../../../server-adapters/hono",
       "@mastra/mcp": "link:../",
       "@mastra/client-js": "link:../../../client-sdks/client-js",
       "mastra": "link:../../cli"

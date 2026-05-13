@@ -124,6 +124,9 @@ const startServer = async (
       commands.push(...startOptions.customArgs);
     }
 
+    if (process.env.MASTRA_SOURCE_MODE === '1') {
+      commands.push('--import', 'tsx');
+    }
     commands.push(join(dotMastraPath, 'index.mjs'));
 
     // Write mastra packages to a file and pass the file path via env var

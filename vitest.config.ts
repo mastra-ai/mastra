@@ -4,6 +4,100 @@ import { loadConfigFromFile } from 'vite';
 import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
 import { defineConfig } from 'vitest/config';
 
+const SOURCE_MODE = process.env.MASTRA_SOURCE_MODE === '1';
+const SOURCE_MODE_CONDITIONS = ['mastra-source', 'node'];
+const SOURCE_MODE_WORKSPACE_DEPS = [/^@mastra\//, /^@internal\//, /^mastra$/];
+const SOURCE_MODE_ALIASES = {
+  '@internal/test-utils/setup': resolve(process.cwd(), 'packages/_test-utils/src/setup.ts'),
+};
+const SOURCE_MODE_TEST_EXCLUDES = [
+  '**/node_modules/**',
+  '**/dist/**',
+  'packages/core/src/workflows/workflow.test.ts',
+  'src/workflows/workflow.test.ts',
+  'src/workflows/evented/evented-workflow.test.ts',
+  'src/storage/bundle.test.ts',
+  'src/workspace/lsp/servers.test.ts',
+  'packages/deployer/src/build/analyze/analyzeEntry.test.ts',
+  'src/build/analyze/analyzeEntry.test.ts',
+];
+
+const SOURCE_MODE_CONFIG: UserWorkspaceConfig = SOURCE_MODE
+  ? {
+      resolve: {
+        conditions: SOURCE_MODE_CONDITIONS,
+      },
+      ssr: {
+        noExternal: SOURCE_MODE_WORKSPACE_DEPS,
+        resolve: {
+          conditions: SOURCE_MODE_CONDITIONS,
+          externalConditions: SOURCE_MODE_CONDITIONS,
+        },
+      },
+      test: {
+        server: {
+          deps: {
+            inline: SOURCE_MODE_WORKSPACE_DEPS,
+          },
+        },
+      },
+    }
+  : {};
+
+function sourceModeSetupFiles(setupFiles: any) {
+  if (!setupFiles) return setupFiles;
+  const files = Array.isArray(setupFiles) ? setupFiles : [setupFiles];
+  const resolved = files.map(file =>
+    file === '@internal/test-utils/setup' ? SOURCE_MODE_ALIASES['@internal/test-utils/setup'] : file,
+  );
+  return Array.isArray(setupFiles) ? resolved : resolved[0];
+}
+
+function withSourceModeConfig(project: UserWorkspaceConfig): UserWorkspaceConfig {
+  if (!SOURCE_MODE) return project;
+
+  return {
+    ...project,
+    plugins: project.plugins,
+    resolve: {
+      ...SOURCE_MODE_CONFIG.resolve,
+      ...project.resolve,
+      conditions: SOURCE_MODE_CONDITIONS,
+      alias: Array.isArray(project.resolve?.alias)
+        ? project.resolve.alias
+        : {
+            ...SOURCE_MODE_ALIASES,
+            ...project.resolve?.alias,
+          },
+    },
+    ssr: {
+      ...SOURCE_MODE_CONFIG.ssr,
+      ...project.ssr,
+      noExternal: SOURCE_MODE_WORKSPACE_DEPS,
+      resolve: {
+        ...SOURCE_MODE_CONFIG.ssr?.resolve,
+        ...project.ssr?.resolve,
+        conditions: SOURCE_MODE_CONDITIONS,
+        externalConditions: SOURCE_MODE_CONDITIONS,
+      },
+    },
+    test: {
+      ...SOURCE_MODE_CONFIG.test,
+      ...project.test,
+      setupFiles: sourceModeSetupFiles(project.test?.setupFiles),
+      server: {
+        ...SOURCE_MODE_CONFIG.test?.server,
+        ...project.test?.server,
+        deps: {
+          ...SOURCE_MODE_CONFIG.test?.server?.deps,
+          ...project.test?.server?.deps,
+          inline: SOURCE_MODE_WORKSPACE_DEPS,
+        },
+      },
+    },
+  };
+}
+
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
   'packages/_config',
@@ -13,6 +107,7 @@ const EXCLUDED_DIRS = new Set([
   'packages/playground-ui',
   'server-adapters/_test-utils',
   'observability/_examples',
+  ...(SOURCE_MODE ? ['observability/_test-utils', 'stores/redis', 'workflows/inngest', 'workflows/temporal'] : []),
 ]);
 
 // Directories to scan for vitest configs
@@ -27,6 +122,7 @@ const PROJECT_GLOBS = [
   'observability/*/vitest.config.ts',
   'pubsub/*/vitest.config.ts',
   'workflows/*/vitest.config.ts',
+  'workspaces/*/vitest.config.ts',
 ];
 
 /**
@@ -52,13 +148,6 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
     const configContent = readFileSync(configPath, 'utf-8');
     const hasNestedProjects = /test:\s*\{[\s\S]*?projects:\s*\[/.test(configContent);
 
-    if (!hasNestedProjects) {
-      // Simple config - use directory path
-      projects.push(projectDir);
-      continue;
-    }
-
-    // Config has nested projects - load it using Vite's config loader
     try {
       const absolutePath = resolve(process.cwd(), configPath);
       const loaded = await loadConfigFromFile({} as any, absolutePath);
@@ -67,6 +156,23 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
         continue;
       }
       const config = loaded.config as UserWorkspaceConfig;
+
+      if (!hasNestedProjects) {
+        projects.push(
+          withSourceModeConfig({
+            ...config,
+            test: {
+              ...config.test,
+              name: config.test?.name ?? `unit:${projectDir}`,
+              root: `./${projectDir}`,
+              exclude: SOURCE_MODE
+                ? [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES]
+                : config.test?.exclude,
+            },
+          }),
+        );
+        continue;
+      }
 
       if (!config.test?.projects) {
         // Fallback if config parsing didn't work as expected
@@ -82,13 +188,19 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
         } else {
           // Inline project config - add root path
           const projectConfig = nestedProject as UserWorkspaceConfig;
-          projects.push({
-            ...projectConfig,
-            test: {
-              ...projectConfig.test,
-              root: `./${projectDir}`,
-            },
-          });
+          projects.push(
+            withSourceModeConfig({
+              ...projectConfig,
+              test: {
+                ...projectConfig.test,
+                name: projectConfig.test?.name ?? `unit:${projectDir}`,
+                root: `./${projectDir}`,
+                exclude: SOURCE_MODE
+                  ? [...(projectConfig.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES]
+                  : projectConfig.test?.exclude,
+              },
+            }),
+          );
         }
       }
     } catch (error) {

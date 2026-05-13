@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -16,6 +17,7 @@
       }
     },
     "./ui": {
+      "mastra-source": "./src/ui.ts",
       "import": {
         "types": "./dist/ui.d.ts",
         "default": "./dist/ui.js"

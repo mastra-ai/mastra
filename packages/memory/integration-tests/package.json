@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "test": "vitest run",
+    "test:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run",
     "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
     "dev": "mastra dev"
   },

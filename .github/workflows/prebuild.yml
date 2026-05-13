@@ -37,7 +37,7 @@ jobs:
           fi
 
   prebuild:
-    name: Build
+    name: Build artifact check
     needs: changes
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 20
@@ -72,9 +72,15 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
+      - name: Validate package outputs
+        run: |
+          cd e2e-tests/pkg-outputs
+          pnpm install --ignore-workspace
+          pnpm test
+
   test-suite:
     name: Unit and E2E Tests
-    needs: [changes, prebuild]
+    needs: changes
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     uses: ./.github/workflows/test-suite.yml
     permissions:

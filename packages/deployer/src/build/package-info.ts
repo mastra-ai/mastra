@@ -3,7 +3,7 @@
  * It is in a separate file to avoid including local-pkg in runtime code.
  */
 
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getPackageInfo } from 'local-pkg';
 
 /**
@@ -25,7 +25,14 @@ export async function getPackageRootPath(packageName: string, parentPath?: strin
     }
 
     const pkg = await getPackageInfo(packageName, options);
-    rootPath = pkg?.rootPath ?? null;
+    const pkgRootPath = pkg?.rootPath as string | URL | undefined;
+    if (typeof pkgRootPath === 'string') {
+      rootPath = pkgRootPath;
+    } else if (pkgRootPath instanceof URL) {
+      rootPath = fileURLToPath(pkgRootPath);
+    } else {
+      rootPath = null;
+    }
   } catch {
     rootPath = null;
   }

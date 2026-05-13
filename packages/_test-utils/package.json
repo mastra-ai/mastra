@@ -11,6 +11,7 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -21,6 +22,7 @@
       }
     },
     "./setup": {
+      "mastra-source": "./src/setup.ts",
       "import": {
         "types": "./dist/setup.d.ts",
         "default": "./dist/setup.js"

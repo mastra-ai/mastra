@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@mastra/core': link:../../core
+  '@mastra/hono': link:../../../server-adapters/hono
   '@mastra/mcp': link:../
   '@mastra/client-js': link:../../../client-sdks/client-js
   mastra: link:../../cli
@@ -19,6 +20,9 @@ importers:
       '@mastra/client-js':
         specifier: link:../../../client-sdks/client-js
         version: link:../../../client-sdks/client-js
+      '@mastra/hono':
+        specifier: link:../../../server-adapters/hono
+        version: link:../../../server-adapters/hono
       '@mastra/mcp':
         specifier: link:..
         version: link:..

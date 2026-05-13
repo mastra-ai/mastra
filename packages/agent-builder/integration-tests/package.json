@@ -4,9 +4,13 @@
   "version": "0.1.4",
   "scripts": {
     "test": "vitest run",
+    "test:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run",
     "test:agent": "vitest run ./src/agent-template-behavior.test.ts",
+    "test:agent:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run ./src/agent-template-behavior.test.ts",
     "test:template": "vitest run ./src/template-integration.test.ts",
+    "test:template:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run ./src/template-integration.test.ts",
     "test:workflow": "vitest run ./src/workflow-builder-integration.test.ts",
+    "test:workflow:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run ./src/workflow-builder-integration.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {

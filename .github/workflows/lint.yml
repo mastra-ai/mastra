@@ -70,39 +70,8 @@ jobs:
       - name: Format
         run: pnpm prettier --check . '!docs/**/*' '!examples/**/*' '!explorations/**/*'
 
-  check-bundle:
-    name: Validate build outputs
-    needs: changes
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-    permissions:
-      pull-requests: read
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v5
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
-
-      - name: Validate generated files are committed
-        run: bash .github/scripts/check-clean-worktree.bash
-
-      - name: Install test dependencies
-        working-directory: ./e2e-tests/pkg-outputs
-        run: pnpm install --ignore-workspace
-
-      - name: Check bundles
-        working-directory: ./e2e-tests/pkg-outputs
-        run: pnpm test
+      - name: Validate CI source-mode contract
+        run: pnpm ci:source-mode:check
 
   validator:
     name: Validate examples packages.json
