@@ -3669,7 +3669,8 @@ export class Agent<
               'getDefaultOptions' in resolvedAgent
                 ? await (resolvedAgent as Agent).getDefaultOptions({ requestContext })
                 : {};
-            const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
+            const resolvedHasOwnMemoryConfig =
+              resolvedDefaultOptions?.memory !== undefined || resolvedAgent.hasOwnMemory();
 
             // Propagate parent memory to the resolved agent if it doesn't have its own.
             // This must happen before onDelegationStart so the rejection path can
