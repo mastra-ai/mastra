@@ -102,8 +102,24 @@ export function isAgentCompatible<TId extends string>(input: unknown): input is 
     typeof input === 'object' &&
     input !== null &&
     'generate' in input &&
+    typeof input.generate === 'function' &&
     'stream' in input &&
+    typeof input.stream === 'function' &&
     'getDescription' in input &&
-    'getModel' in input
+    typeof input.getDescription === 'function' &&
+    'getModel' in input &&
+    typeof input.getModel === 'function' &&
+    'hasOwnMemory' in input &&
+    typeof input.hasOwnMemory === 'function' &&
+    '__setMemory' in input &&
+    typeof input.__setMemory === 'function' &&
+    'getMemory' in input &&
+    typeof input.getMemory === 'function' &&
+    'getInstructions' in input &&
+    typeof input.getInstructions === 'function' &&
+    'resumeGenerate' in input &&
+    typeof input.resumeGenerate === 'function' &&
+    'resumeStream' in input &&
+    typeof input.resumeStream === 'function'
   );
 }
