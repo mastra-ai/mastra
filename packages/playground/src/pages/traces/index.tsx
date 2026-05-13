@@ -10,7 +10,6 @@ import {
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
-  TracesListModeToggle,
   TracesListView,
   TracesToolbar,
   buildTraceListFilters,
@@ -242,7 +241,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const toolbarControls = (
     <>
-      <TracesListModeToggle value={url.listMode} onChange={url.handleListModeChange} disabled={isTracesLoading} />
       <DateTimeRangePicker
         preset={url.datePreset}
         onPresetChange={url.handleDatePresetChange}

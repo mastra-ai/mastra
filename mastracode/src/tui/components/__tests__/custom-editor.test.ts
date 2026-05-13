@@ -141,6 +141,35 @@ describe('CustomEditor image paste handling', () => {
     expect(followUp).not.toHaveBeenCalled();
   });
 
+  it('queues a follow-up on Ctrl+F', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'ctrl+f');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const queueFollowUp = vi.fn(() => true);
+    editor.onAction('queueFollowUp', queueFollowUp);
+
+    editor.handleInput('\x06');
+
+    expect(queueFollowUp).toHaveBeenCalledTimes(1);
+    expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+
+  it('resolves slash autocomplete before queueing a follow-up on Ctrl+F', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'ctrl+f');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const queueFollowUp = vi.fn(() => true);
+    editor.onAction('queueFollowUp', queueFollowUp);
+    editor.getText = vi.fn().mockReturnValueOnce('/rev').mockReturnValue('review ');
+    editor.isShowingAutocomplete = vi.fn(() => true);
+
+    editor.handleInput('\x06');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(mocks.editorSetText).toHaveBeenCalledWith('/review ');
+    expect(queueFollowUp).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a chevron prompt when no animator is active', () => {
     const editor = new CustomEditor({} as any, {} as any);
     editor.getText = vi.fn(() => 'hello');

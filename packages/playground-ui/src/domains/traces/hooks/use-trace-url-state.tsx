@@ -173,7 +173,7 @@ export function useTraceUrlState(
 
   const listMode = useMemo<TraceListMode>(() => {
     const value = searchParams.get(TRACE_LIST_MODE_PARAM);
-    return value && TRACE_LIST_MODE_VALUES.has(value as TraceListMode) ? (value as TraceListMode) : 'traces';
+    return value && TRACE_LIST_MODE_VALUES.has(value as TraceListMode) ? (value as TraceListMode) : 'branches';
   }, [searchParams]);
   const selectedEntityOption = useMemo(
     () => ROOT_ENTITY_TYPE_OPTIONS.find(option => option.entityType === searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM)),
@@ -365,7 +365,7 @@ export function useTraceUrlState(
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          if (mode === 'traces') {
+          if (mode === 'branches') {
             next.delete(TRACE_LIST_MODE_PARAM);
           } else {
             next.set(TRACE_LIST_MODE_PARAM, mode);
