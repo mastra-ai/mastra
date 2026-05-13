@@ -138,6 +138,29 @@ describe('validateConfig', () => {
     });
   });
 
+  it('accepts IPv4 loopback range HTTP OAuth redirect URLs', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: { redirectUrl: 'http://127.0.0.2:3000/oauth/callback' },
+        },
+      },
+    });
+
+    expect(result.mcpServers!['remote']).toEqual({
+      url: 'https://mcp.example.com/sse',
+      headers: undefined,
+      oauth: {
+        redirectUrl: 'http://127.0.0.2:3000/oauth/callback',
+        clientName: undefined,
+        scopes: undefined,
+        clientId: undefined,
+        clientSecret: undefined,
+      },
+    });
+  });
+
   it('skips http server entry with invalid OAuth config', () => {
     const result = validateConfig({
       mcpServers: {

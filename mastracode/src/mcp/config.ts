@@ -152,7 +152,9 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
   try {
     const redirectUrl = new URL(obj.redirectUrl);
     const isLoopback =
-      redirectUrl.hostname === 'localhost' || redirectUrl.hostname === '127.0.0.1' || redirectUrl.hostname === '[::1]';
+      redirectUrl.hostname === 'localhost' ||
+      redirectUrl.hostname.startsWith('127.') ||
+      redirectUrl.hostname === '[::1]';
     if (redirectUrl.protocol !== 'https:' && !(redirectUrl.protocol === 'http:' && isLoopback)) {
       return { reason: 'Invalid OAuth redirectUrl: must use HTTPS unless it is a loopback HTTP URL' };
     }

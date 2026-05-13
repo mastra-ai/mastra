@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
-import type { MastraMCPServerDefinition, OAuthStorage } from '@mastra/mcp';
+import type { MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
 import { getAppDataDir } from '../utils/project.js';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
 import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
@@ -186,7 +186,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
         ? ({
             client_id: cfg.oauth.clientId,
             ...(cfg.oauth.clientSecret ? { client_secret: cfg.oauth.clientSecret } : {}),
-          } as any)
+          } satisfies OAuthClientInformation)
         : undefined,
       storage: new FileOAuthStorage(getOAuthStoragePath(projectDir, name, cfg)),
     });
