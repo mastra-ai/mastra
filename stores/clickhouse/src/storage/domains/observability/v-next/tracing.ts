@@ -42,6 +42,9 @@ import {
   invalidDeltaCursorError,
 } from './polling';
 
+const TUPLE_CURSOR_MIN_INGESTED_AT = '1970-01-01 00:00:00.000000000';
+const TUPLE_CURSOR_MIN_STARTED_AT = '1970-01-01 00:00:00.000';
+
 const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 
 // ---------------------------------------------------------------------------
@@ -430,6 +433,7 @@ export async function listBranches(
 
   const sortField = orderBy?.field === 'endedAt' ? 'endedAt' : 'startedAt';
   const sortDirection = orderBy?.direction === 'ASC' ? 'ASC' : 'DESC';
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, params, strategy) : null;
 
   // Count (deduplicated)
   const countResult = await client.query({
@@ -453,7 +457,7 @@ export async function listBranches(
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
-      ...(deltaCursorEnabled ? { deltaCursor: null } : {}),
+      ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
     };
   }
 
@@ -489,7 +493,7 @@ export async function listBranches(
       hasMore: (page + 1) * perPage < total,
     },
     branches: toTraceSpans(spans),
-    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, params, strategy) } : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 
@@ -625,7 +629,19 @@ async function getDeltaCursor(
     ).json()) as Array<{ cursorId?: string | null }>;
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    if (cursorId) {
+      return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId });
+    }
+
+    const streamRows = (await (
+      await client.query({
+        query: `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_TRACE_BRANCHES_DELTA}`,
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<{ cursorId?: string | null }>;
+
+    return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: streamRows[0]?.cursorId ?? '0' });
   }
 
   const rows = (await (
@@ -663,19 +679,55 @@ async function getDeltaCursor(
   }>;
 
   const row = rows[0];
-  if (!row?.cursorIngestedAt || !row.spanType || !row.startedAt || !row.traceId || !row.spanId || !row.dedupeKey) {
-    return null;
+  if (row?.cursorIngestedAt && row.spanType && row.startedAt && row.traceId && row.spanId && row.dedupeKey) {
+    return encodeDeltaCursor({
+      version: 1,
+      kind: 'branch',
+      ingestedAt: row.cursorIngestedAt,
+      spanType: row.spanType,
+      startedAt: row.startedAt,
+      traceId: row.traceId,
+      spanId: row.spanId,
+      dedupeKey: row.dedupeKey,
+    });
   }
 
+  const streamRows = (await (
+    await client.query({
+      query: `
+        SELECT
+          toString(ingestedAt) AS cursorIngestedAt,
+          spanType AS spanType,
+          toString(startedAt) AS startedAt,
+          traceId AS traceId,
+          spanId AS spanId,
+          dedupeKey AS dedupeKey
+        FROM ${TABLE_TRACE_BRANCHES_DELTA}
+        ORDER BY ingestedAt DESC, spanType DESC, startedAt DESC, traceId DESC, spanId DESC, dedupeKey DESC
+        LIMIT 1
+      `,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as Array<{
+    cursorIngestedAt?: string;
+    spanType?: string;
+    startedAt?: string;
+    traceId?: string;
+    spanId?: string;
+    dedupeKey?: string;
+  }>;
+
+  const streamRow = streamRows[0];
   return encodeDeltaCursor({
     version: 1,
     kind: 'branch',
-    ingestedAt: row.cursorIngestedAt,
-    spanType: row.spanType,
-    startedAt: row.startedAt,
-    traceId: row.traceId,
-    spanId: row.spanId,
-    dedupeKey: row.dedupeKey,
+    ingestedAt: streamRow?.cursorIngestedAt ?? TUPLE_CURSOR_MIN_INGESTED_AT,
+    spanType: streamRow?.spanType ?? '0',
+    startedAt: streamRow?.startedAt ?? TUPLE_CURSOR_MIN_STARTED_AT,
+    traceId: streamRow?.traceId ?? '0',
+    spanId: streamRow?.spanId ?? '0',
+    dedupeKey: streamRow?.dedupeKey ?? '0',
   });
 }
 

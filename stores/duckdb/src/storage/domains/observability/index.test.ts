@@ -1444,6 +1444,39 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(afterPageCursor.logs.map(log => log.logId)).toEqual(['log-delta-new']);
     });
+
+    it('returns a resumable page deltaCursor for empty filtered logs', async () => {
+      const page = await storage.listLogs({ filters: { environment: 'production' } });
+      expect(page.logs).toEqual([]);
+      expect(page.deltaCursor).toBeTruthy();
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'log-delta-empty-page',
+            timestamp: new Date('2026-05-01T00:00:03Z'),
+            level: 'info',
+            message: 'new-log-after-empty-page',
+            data: null,
+            traceId: 'trace-log',
+            spanId: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'production',
+            metadata: null,
+          },
+        ],
+      });
+
+      const delta = await storage.listLogs({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: page.deltaCursor!,
+      });
+      expect(delta.logs.map(log => log.logId)).toEqual(['log-delta-empty-page']);
+    });
   });
 
   // ==========================================================================

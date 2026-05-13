@@ -1,11 +1,11 @@
-.changeset/six-beds-learn.md---
+---
 '@mastra/core': minor
 '@mastra/clickhouse': patch
 '@mastra/server': patch
 '@mastra/duckdb': patch
 ---
 
-Observability list endpoints now support stateless delta polling so clients can fetch only new data since the last request.
+Observability list endpoints now support stateless delta polling so clients can fetch new data since the last request.
 
 ```ts
 const page = await client.observability.listTraces({

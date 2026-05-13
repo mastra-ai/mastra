@@ -317,12 +317,13 @@ export const ALL_MIGRATIONS = [
   `CREATE SEQUENCE IF NOT EXISTS score_events_cursor_id_seq START 1`,
   `CREATE SEQUENCE IF NOT EXISTS feedback_events_cursor_id_seq START 1`,
 
-  // Span events
+  // Span events. Existing rows intentionally keep NULL cursorId values; delta
+  // polling only applies to rows written after this migration path is in place.
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE span_events ALTER COLUMN cursorId SET DEFAULT nextval('span_events_cursor_id_seq')`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
 
-  // Metrics
+  // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE metric_events ALTER COLUMN cursorId SET DEFAULT nextval('metric_events_cursor_id_seq')`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
@@ -349,7 +350,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS metadata JSON`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS scope JSON`,
 
-  // Logs
+  // Logs. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE log_events ALTER COLUMN cursorId SET DEFAULT nextval('log_events_cursor_id_seq')`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
@@ -376,7 +377,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS metadata JSON`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS scope JSON`,
 
-  // Scores
+  // Scores. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE score_events ALTER COLUMN cursorId SET DEFAULT nextval('score_events_cursor_id_seq')`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
@@ -407,7 +408,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS scoreSource VARCHAR`,
   `ALTER TABLE score_events ALTER COLUMN traceId DROP NOT NULL`,
 
-  // Feedback
+  // Feedback. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE feedback_events ALTER COLUMN cursorId SET DEFAULT nextval('feedback_events_cursor_id_seq')`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,

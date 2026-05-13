@@ -426,6 +426,37 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(delta.deltaCursor).toBeTruthy();
     });
 
+    it('returns a resumable page deltaCursor for empty filtered logs', async () => {
+      const page = await storage.listLogs({ filters: { traceId: 'delta-log-empty' } });
+      expect(page.logs).toEqual([]);
+      expect(page.deltaCursor).toBeTruthy();
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'delta-log-empty-1',
+            timestamp: new Date('2026-05-03T00:00:02Z'),
+            level: 'info',
+            message: 'delta log after empty page',
+            data: null,
+            traceId: 'delta-log-empty',
+            metadata: null,
+          },
+        ],
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listLogs({
+            mode: 'delta',
+            after: page.deltaCursor!,
+            filters: { traceId: 'delta-log-empty' },
+          }),
+        result => result.logs.length === 1,
+      );
+      expect(delta.logs.map(log => log.logId)).toEqual(['delta-log-empty-1']);
+    });
+
     it('supports page deltaCursor and delta polling for metrics', async () => {
       await storage.batchCreateMetrics({
         metrics: [

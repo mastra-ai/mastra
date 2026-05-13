@@ -377,6 +377,7 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
 
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getDeltaCursor(db, filterClause, filterParams) : null;
 
   const countResult = await db.query<{ total: number }>(
     `SELECT COUNT(*) AS total FROM metric_events ${filterClause}`,
@@ -392,7 +393,7 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     metrics: rows.map(row => rowToMetricRecord(row)) as ListMetricsResponse['metrics'],
-    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getDeltaCursor(db, filterClause, filterParams) } : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 
@@ -406,7 +407,13 @@ async function getDeltaCursor(
     filterParams,
   );
 
-  return encodeDeltaCursor(rows[0]?.cursorId);
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM metric_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
 }
 
 // ============================================================================

@@ -33,6 +33,9 @@ import {
   invalidDeltaCursorError,
 } from './polling';
 
+const TUPLE_CURSOR_MIN_INGESTED_AT = '1970-01-01 00:00:00.000000000';
+const TUPLE_CURSOR_MIN_TIMESTAMP = '1970-01-01 00:00:00.000';
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -245,6 +248,9 @@ export async function listFeedback(
     };
   }
 
+  const currentDeltaCursor = deltaCursorEnabled
+    ? await getDeltaCursor(client, whereClause, filter.params, strategy)
+    : null;
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause}`,
@@ -267,7 +273,7 @@ export async function listFeedback(
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     feedback: rows.map(rowToFeedbackRecord),
-    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, filter.params, strategy) } : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 
@@ -372,7 +378,17 @@ async function getDeltaCursor(
     );
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    if (cursorId) {
+      return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId });
+    }
+
+    const streamRows = await queryJson<{ cursorId?: string | null }>(
+      client,
+      `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_FEEDBACK_EVENTS_DELTA}`,
+      {},
+    );
+
+    return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: streamRows[0]?.cursorId ?? '0' });
   }
 
   const rows = await queryJson<{
@@ -401,17 +417,45 @@ async function getDeltaCursor(
   );
 
   const row = rows[0];
-  if (!row?.cursorIngestedAt || row.traceId == null || !row.timestamp || !row.feedbackId) {
-    return null;
+  if (row?.cursorIngestedAt && row.traceId != null && row.timestamp && row.feedbackId) {
+    return encodeDeltaCursor({
+      version: 1,
+      kind: 'feedback',
+      ingestedAt: row.cursorIngestedAt,
+      traceId: row.traceId,
+      timestamp: row.timestamp,
+      feedbackId: row.feedbackId,
+    });
   }
 
+  const streamRows = await queryJson<{
+    cursorIngestedAt?: string;
+    traceId?: string | null;
+    timestamp?: string;
+    feedbackId?: string;
+  }>(
+    client,
+    `
+      SELECT
+        toString(ingestedAt) AS cursorIngestedAt,
+        ifNull(traceId, '') AS traceId,
+        toString(timestamp) AS timestamp,
+        feedbackId AS feedbackId
+      FROM ${TABLE_FEEDBACK_EVENTS_DELTA}
+      ORDER BY ingestedAt DESC, ifNull(traceId, '') DESC, timestamp DESC, feedbackId DESC
+      LIMIT 1
+    `,
+    {},
+  );
+
+  const streamRow = streamRows[0];
   return encodeDeltaCursor({
     version: 1,
     kind: 'feedback',
-    ingestedAt: row.cursorIngestedAt,
-    traceId: row.traceId,
-    timestamp: row.timestamp,
-    feedbackId: row.feedbackId,
+    ingestedAt: streamRow?.cursorIngestedAt ?? TUPLE_CURSOR_MIN_INGESTED_AT,
+    traceId: streamRow?.traceId ?? '0',
+    timestamp: streamRow?.timestamp ?? TUPLE_CURSOR_MIN_TIMESTAMP,
+    feedbackId: streamRow?.feedbackId ?? '0',
   });
 }
 

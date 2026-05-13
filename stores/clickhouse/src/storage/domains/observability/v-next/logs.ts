@@ -16,6 +16,9 @@ import {
   invalidDeltaCursorError,
 } from './polling';
 
+const TUPLE_CURSOR_MIN_INGESTED_AT = '1970-01-01 00:00:00.000000000';
+const TUPLE_CURSOR_MIN_TIMESTAMP = '1970-01-01 00:00:00.000';
+
 export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreateLogsArgs): Promise<void> {
   if (args.logs.length === 0) return;
 
@@ -80,6 +83,9 @@ export async function listLogs(
     };
   }
 
+  const currentDeltaCursor = deltaCursorEnabled
+    ? await getDeltaCursor(client, whereClause, filter.params, strategy)
+    : null;
   const countResult = (await (
     await client.query({
       query: `SELECT count() AS total FROM ${TABLE_LOG_EVENTS} AS l ${whereClause}`,
@@ -118,7 +124,7 @@ export async function listLogs(
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     logs: rows.map(rowToLogRecord),
-    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, filter.params, strategy) } : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 
@@ -233,7 +239,19 @@ async function getDeltaCursor(
     ).json()) as Array<{ cursorId?: string | null }>;
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    if (cursorId) {
+      return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId });
+    }
+
+    const streamRows = (await (
+      await client.query({
+        query: `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_LOG_EVENTS_DELTA}`,
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<{ cursorId?: string | null }>;
+
+    return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: streamRows[0]?.cursorId ?? '0' });
   }
 
   const rows = (await (
@@ -258,16 +276,39 @@ async function getDeltaCursor(
   ).json()) as Array<{ cursorIngestedAt?: string; timestamp?: string; logId?: string }>;
 
   const row = rows[0];
-  if (!row?.cursorIngestedAt || !row.timestamp || !row.logId) {
-    return null;
+  if (row?.cursorIngestedAt && row.timestamp && row.logId) {
+    return encodeDeltaCursor({
+      version: 1,
+      kind: 'log',
+      ingestedAt: row.cursorIngestedAt,
+      timestamp: row.timestamp,
+      logId: row.logId,
+    });
   }
 
+  const streamRows = (await (
+    await client.query({
+      query: `
+        SELECT
+          toString(ingestedAt) AS cursorIngestedAt,
+          toString(timestamp) AS timestamp,
+          logId AS logId
+        FROM ${TABLE_LOG_EVENTS_DELTA}
+        ORDER BY ingestedAt DESC, timestamp DESC, logId DESC
+        LIMIT 1
+      `,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as Array<{ cursorIngestedAt?: string; timestamp?: string; logId?: string }>;
+
+  const streamRow = streamRows[0];
   return encodeDeltaCursor({
     version: 1,
     kind: 'log',
-    ingestedAt: row.cursorIngestedAt,
-    timestamp: row.timestamp,
-    logId: row.logId,
+    ingestedAt: streamRow?.cursorIngestedAt ?? TUPLE_CURSOR_MIN_INGESTED_AT,
+    timestamp: streamRow?.timestamp ?? TUPLE_CURSOR_MIN_TIMESTAMP,
+    logId: streamRow?.logId ?? '0',
   });
 }
 

@@ -360,6 +360,8 @@ function buildDeltaOrderBy(strategy: ClickHouseDeltaCursorStrategy, locatorColum
 // ---------------------------------------------------------------------------
 // trace_roots_delta — append-only cursor index for incremental trace polling
 // ---------------------------------------------------------------------------
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
 
 export function buildTraceRootsDeltaDDL(strategy: ClickHouseDeltaCursorStrategy): string {
   return `
@@ -387,6 +389,8 @@ FROM ${TABLE_TRACE_ROOTS}
 // ---------------------------------------------------------------------------
 // trace_branches_delta — append-only cursor index for incremental branch polling
 // ---------------------------------------------------------------------------
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
 
 export function buildTraceBranchesDeltaDDL(strategy: ClickHouseDeltaCursorStrategy): string {
   return `
@@ -563,6 +567,8 @@ TTL ingestedAt + toIntervalDay(2)
 `;
 }
 
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
 export const LOG_EVENTS_DELTA_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_LOG_EVENTS_DELTA}
 TO ${TABLE_LOG_EVENTS_DELTA}
@@ -653,6 +659,8 @@ SETTINGS allow_nullable_key = 1
 `;
 }
 
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
 export const SCORE_EVENTS_DELTA_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
 TO ${TABLE_SCORE_EVENTS_DELTA}
@@ -746,6 +754,8 @@ SETTINGS allow_nullable_key = 1
 `;
 }
 
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
 export const FEEDBACK_EVENTS_DELTA_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_FEEDBACK_EVENTS_DELTA}
 TO ${TABLE_FEEDBACK_EVENTS_DELTA}
@@ -773,6 +783,8 @@ TTL ingestedAt + toIntervalDay(2)
 `;
 }
 
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
 export const METRIC_EVENTS_DELTA_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_METRIC_EVENTS_DELTA}
 TO ${TABLE_METRIC_EVENTS_DELTA}

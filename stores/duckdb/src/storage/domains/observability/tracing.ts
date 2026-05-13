@@ -706,6 +706,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   if (orderDir !== 'ASC' && orderDir !== 'DESC') {
     throw new Error(`Invalid sort direction: ${orderBy.direction}`);
   }
+  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getTraceDeltaCursor(db, filters) : null;
 
   // The fast path orders + paginates on raw `span_events` start rows. That's
   // only safe when the order field's start-row value matches the reconstructed
@@ -748,7 +749,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
       spans: toTraceSpans(spans),
-      ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getTraceDeltaCursor(db, filters) } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
     };
   }
 
@@ -793,7 +794,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     spans: toTraceSpans(spans),
-    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getTraceDeltaCursor(db, filters) } : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 
@@ -857,19 +858,20 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   // through).
   const userSpanType = filterRecord.spanType;
   if (typeof userSpanType === 'string' && !(BRANCH_SPAN_TYPES as readonly string[]).includes(userSpanType)) {
+    const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getBranchDeltaCursor(db, filters) : null;
     if (mode === 'delta') {
       assertDeltaPollingEnabled();
       return {
         branches: [],
         delta: { limit, hasMore: false },
-        deltaCursor: null,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
-      ...(deltaPollingFeatureEnabled() ? { deltaCursor: null } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
     };
   }
 
@@ -969,6 +971,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   if (orderDir !== 'ASC' && orderDir !== 'DESC') {
     throw new Error(`Invalid sort direction: ${orderBy.direction}`);
   }
+  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getBranchDeltaCursor(db, filters) : null;
 
   // Same allowlist gate as listTraces — see SAFE_PREFILTER_ORDER_FIELDS.
   const canOrderInPrefilter = SAFE_PREFILTER_ORDER_FIELDS.has(orderBy.field);
@@ -993,7 +996,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
       return {
         pagination: { total: 0, page, perPage, hasMore: false },
         branches: [],
-        ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
+        ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
       };
     }
 
@@ -1016,7 +1019,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
       branches: toTraceSpans(spans),
-      ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
     };
   }
 
@@ -1050,7 +1053,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
-      ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
     };
   }
 
@@ -1064,7 +1067,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     branches: toTraceSpans(spans),
-    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 
@@ -1088,7 +1091,15 @@ async function getTraceDeltaCursor(db: DuckDBConnection, filters: ListTracesArgs
       `SELECT max(cursorId) AS cursorId FROM span_events AS ${outerAlias} ${prefilterWhere}`,
       prefilterParams,
     );
-    return encodeDeltaCursor(rows[0]?.cursorId);
+    const cursorId = rows[0]?.cursorId;
+    if (cursorId !== null && cursorId !== undefined) {
+      return encodeDeltaCursor(cursorId);
+    }
+
+    const streamRows = await db.query<Record<string, unknown>>(
+      `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND parentSpanId IS NULL AND cursorId IS NOT NULL`,
+    );
+    return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
   }
 
   const cteSql = `
@@ -1111,7 +1122,15 @@ async function getTraceDeltaCursor(db: DuckDBConnection, filters: ListTracesArgs
     `${cteSql} SELECT max(anchorCursorId) AS cursorId FROM root_spans ${postAggWhere}`,
     [...prefilterParams, ...postAggParams],
   );
-  return encodeDeltaCursor(rows[0]?.cursorId);
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND parentSpanId IS NULL AND cursorId IS NOT NULL`,
+  );
+  return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
 }
 
 async function getBranchDeltaCursor(
@@ -1120,9 +1139,6 @@ async function getBranchDeltaCursor(
 ): Promise<string | null> {
   const filterRecord = (filters ?? {}) as Record<string, unknown>;
   const userSpanType = filterRecord.spanType;
-  if (typeof userSpanType === 'string' && !(BRANCH_SPAN_TYPES as readonly string[]).includes(userSpanType)) {
-    return null;
-  }
 
   const { spanType: _spanType, ...rest } = filterRecord;
   const { prefilter, postAgg } = partitionAnchorFilters(rest);
@@ -1147,7 +1163,16 @@ async function getBranchDeltaCursor(
       `SELECT max(cursorId) AS cursorId FROM span_events AS ${outerAlias} ${prefilterWhere}`,
       prefilterParams,
     );
-    return encodeDeltaCursor(rows[0]?.cursorId);
+    const cursorId = rows[0]?.cursorId;
+    if (cursorId !== null && cursorId !== undefined) {
+      return encodeDeltaCursor(cursorId);
+    }
+
+    const streamRows = await db.query<Record<string, unknown>>(
+      `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS}) AND cursorId IS NOT NULL`,
+      [...BRANCH_SPAN_TYPES],
+    );
+    return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
   }
 
   const cteSql = `
@@ -1170,5 +1195,14 @@ async function getBranchDeltaCursor(
     `${cteSql} SELECT max(anchorCursorId) AS cursorId FROM branch_anchors ${postAggClause}`,
     [...prefilterParams, ...postAggParams],
   );
-  return encodeDeltaCursor(rows[0]?.cursorId);
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS}) AND cursorId IS NOT NULL`,
+    [...BRANCH_SPAN_TYPES],
+  );
+  return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
 }
