@@ -630,49 +630,6 @@ For detailed configuration options and advanced features, check out [Speech to S
     Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
   </TabItem>
 
-  <TabItem value="xai" label="xAI">
-    ```typescript
-    import { Agent } from '@mastra/core/agent'
-    import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
-    import { XAIRealtimeVoice } from '@mastra/voice-xai-realtime'
-
-    const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'xai/grok-4.3',
-      voice: new XAIRealtimeVoice({
-        apiKey: process.env.XAI_API_KEY,
-        model: 'grok-voice-think-fast-1.0',
-        speaker: 'eve',
-        turnDetection: { type: 'server_vad' },
-      }),
-    })
-
-    // Connect before using speak/send
-    await voiceAgent.voice.connect()
-
-    // Listen for agent audio responses
-    voiceAgent.voice.on('speaker', audioStream => {
-      playAudio(audioStream)
-    })
-
-    // Listen for text responses and transcriptions
-    voiceAgent.voice.on('writing', ({ text, role }) => {
-      console.log(`${role}: ${text}`)
-    })
-
-    // Initiate the conversation
-    await voiceAgent.voice.speak('How can I help you today?')
-
-    // Send continuous audio from the microphone
-    const micStream = getMicrophoneStream()
-    await voiceAgent.voice.send(micStream)
-    ```
-
-    Visit the [xAI Realtime Voice Reference](/reference/voice/xai-realtime) for more information on the xAI voice provider.
-  </TabItem>
-
   <TabItem value="google" label="Google">
     ```typescript
     import { Agent } from '@mastra/core/agent'
@@ -763,6 +720,49 @@ For detailed configuration options and advanced features, check out [Speech to S
     ```
 
     Visit the [AWS Nova Sonic Reference](/reference/voice/aws-nova-sonic) for more information on the AWS Nova Sonic voice provider.
+  </TabItem>
+
+  <TabItem value="xai" label="xAI">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+    import { XAIRealtimeVoice } from '@mastra/voice-xai-realtime'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: 'xai/grok-4.3',
+      voice: new XAIRealtimeVoice({
+        apiKey: process.env.XAI_API_KEY,
+        model: 'grok-voice-think-fast-1.0',
+        speaker: 'eve',
+        turnDetection: { type: 'server_vad' },
+      }),
+    })
+
+    // Connect before using speak/send
+    await voiceAgent.voice.connect()
+
+    // Listen for agent audio responses
+    voiceAgent.voice.on('speaker', audioStream => {
+      playAudio(audioStream)
+    })
+
+    // Listen for text responses and transcriptions
+    voiceAgent.voice.on('writing', ({ text, role }) => {
+      console.log(`${role}: ${text}`)
+    })
+
+    // Initiate the conversation
+    await voiceAgent.voice.speak('How can I help you today?')
+
+    // Send continuous audio from the microphone
+    const micStream = getMicrophoneStream()
+    await voiceAgent.voice.send(micStream)
+    ```
+
+    Visit the [xAI Realtime Voice Reference](/reference/voice/xai-realtime) for more information on the xAI voice provider.
   </TabItem>
 </Tabs>
 
