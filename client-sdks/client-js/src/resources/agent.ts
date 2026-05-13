@@ -280,9 +280,23 @@ export class Agent extends BaseResource {
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    const body = params.ifIdle?.streamOptions
+      ? {
+          ...params,
+          ifIdle: {
+            ...params.ifIdle,
+            streamOptions: {
+              ...params.ifIdle.streamOptions,
+              requestContext: parseClientRequestContext(params.ifIdle.streamOptions.requestContext),
+              clientTools: processClientTools(params.ifIdle.streamOptions.clientTools),
+            },
+          },
+        }
+      : params;
+
     return this.request(`/agents/${this.agentId}/signals`, {
       method: 'POST',
-      body: params,
+      body,
     });
   }
 
@@ -298,9 +312,13 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { clientTools, requestContext, continuationOptions, ...subscribeBody } = params;
+    const processedClientTools = clientTools ? processClientTools(clientTools) : undefined;
+    const processedRequestContext = parseClientRequestContext(requestContext);
+
     const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
       method: 'POST',
-      body: params,
+      body: subscribeBody,
       stream: true,
     })) as Response & {
       processDataStream: ({
@@ -314,14 +332,81 @@ export class Agent extends BaseResource {
       throw new Error('No response body');
     }
 
+    const agent = this;
+    const { threadId, resourceId } = params;
+
     streamResponse.processDataStream = async ({
       onChunk,
     }: {
       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
     }) => {
+      const wrappedOnChunk: typeof onChunk = async chunk => {
+        await onChunk(chunk);
+
+        if (chunk.type !== 'tool-call' || !clientTools) return;
+
+        const payload = (chunk as { payload?: { toolCallId?: string; toolName?: string; args?: unknown } }).payload;
+        const toolCallId = payload?.toolCallId;
+        const toolName = payload?.toolName;
+        if (!toolCallId || !toolName) return;
+
+        const clientTool = clientTools[toolName] as Tool | undefined;
+        if (!clientTool || typeof clientTool.execute !== 'function') return;
+
+        let result: unknown;
+        try {
+          result = await clientTool.execute(
+            payload?.args as never,
+            {
+              requestContext: requestContext as RequestContext,
+              tracingContext: { currentSpan: undefined },
+              agent: {
+                agentId: agent.agentId,
+                messages: [],
+                toolCallId,
+                suspend: async () => {},
+                threadId,
+                resourceId,
+              },
+            } as never,
+          );
+        } catch (error) {
+          result = { error: String(error) };
+        }
+
+        // Emit a synthetic tool-result chunk so UI consumers patch their
+        // local message state through the same chunk pipeline as everything
+        // else. No special-casing required outside subscribeToThread.
+        await onChunk({
+          type: 'tool-result',
+          runId: (chunk as { runId?: string }).runId,
+          payload: { toolCallId, toolName, result },
+        } as never);
+
+        // Resume the run with the tool result threaded into memory. The new
+        // run's chunks are published back through this same subscription, so
+        // we discard the continuation response body.
+        try {
+          const continuation = await agent.streamUntilIdle([], {
+            runId: uuid(),
+            ...(continuationOptions ?? {}),
+            requestContext: processedRequestContext,
+            memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+            clientTools: processedClientTools,
+          } as never);
+          try {
+            void continuation.body?.cancel?.();
+          } catch {
+            // ignore
+          }
+        } catch (error) {
+          console.error('Error running client-tool continuation:', error);
+        }
+      };
+
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
+        onChunk: wrappedOnChunk,
         signal: this.options.abortSignal,
       });
     };
