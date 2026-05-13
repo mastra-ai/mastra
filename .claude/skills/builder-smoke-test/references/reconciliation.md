@@ -38,8 +38,21 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 - [ ] Workspace exists with `metadata.source: "builder"`
-- [ ] `runtimeRegistered` is `true`
 - [ ] Filesystem and sandbox config match what's in the scaffolded project's `src/mastra/index.ts`
+
+To confirm the workspace is also registered at runtime (the runtime registry is separate from the stored projection), check either the list endpoint or the infrastructure endpoint:
+
+```bash
+# Option A: list response annotates each workspace with runtimeRegistered.
+curl -s $BASE/stored/workspaces | jq '.workspaces[] | select(.id == "'"$WORKSPACE_ID"'") | .runtimeRegistered'
+# → true
+
+# Option B: infrastructure endpoint reports it as workspace.registered.
+curl -s $BASE/editor/builder/infrastructure | jq '.workspace.registered'
+# → true
+```
+
+Note: the detail GET (`/stored/workspaces/:id`) does **not** include `runtimeRegistered`; the field is only computed on the list response.
 
 ### 2. Idempotent Restart (No-Op) — manual only
 

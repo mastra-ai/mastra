@@ -50,6 +50,20 @@ export const mastra = new Mastra({
     build: {
       swaggerUI: true,
     },
+    // Smoke-test cookie leak route. Off by default; set SMOKE_TEST_COOKIE_LEAK=1
+    // in .env to enable. Lets the smoke-test agent read the WorkOS session
+    // cookie (which is httpOnly and hidden from document.cookie) so it can
+    // hit authenticated endpoints from curl after a browser SSO login.
+    apiRoutes:
+      process.env.SMOKE_TEST_COOKIE_LEAK === '1'
+        ? [
+            {
+              path: '/smoke-test/cookie',
+              method: 'GET' as const,
+              handler: async (c: any) => c.text(c.req.header('cookie') ?? ''),
+            },
+          ]
+        : undefined,
   },
   observability: new Observability({
     configs: {

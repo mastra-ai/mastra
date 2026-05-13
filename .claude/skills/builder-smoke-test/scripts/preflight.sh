@@ -21,8 +21,13 @@
 #     --workos-organization-id org_...        # scaffold auth-on
 #   bash preflight.sh --dir /custom/path      # custom project dir
 #   BUILDER_SMOKE_TEST_DIR=/custom/path bash preflight.sh
+#   bash preflight.sh --skip-scaffold         # inspect an already-scaffolded project; no install, no .env rewrite
 #
 # All --openai-key, --workos-*, --dir, --reuse flags are forwarded to scaffold.sh.
+# --skip-scaffold short-circuits scaffold.sh entirely and just validates the
+# existing $PROJECT_DIR (deps present, .env has OPENAI_API_KEY, auth mode
+# matches --expect). Use this when re-checking mid-run without disturbing
+# the project state.
 #
 # Exit codes:
 #   0 — scaffold + checks passed (mode matches --expect if given)
@@ -34,13 +39,18 @@ set -uo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 EXPECT_MODE=""
+SKIP_SCAFFOLD="no"
+PROJECT_DIR_OVERRIDE=""
 SCAFFOLD_ARGS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --expect) EXPECT_MODE="${2:-}"; shift 2 ;;
     --expect=*) EXPECT_MODE="${1#--expect=}"; shift ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --skip-scaffold) SKIP_SCAFFOLD="yes"; shift ;;
+    --dir) PROJECT_DIR_OVERRIDE="${2:-}"; SCAFFOLD_ARGS+=("$1" "${2:-}"); shift 2 ;;
+    --dir=*) PROJECT_DIR_OVERRIDE="${1#--dir=}"; SCAFFOLD_ARGS+=("$1"); shift ;;
+    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) SCAFFOLD_ARGS+=("$1"); shift ;;
   esac
 done
@@ -70,20 +80,43 @@ errors=0
 err() { echo "✗ $*" >&2; errors=$((errors + 1)); }
 ok()  { echo "✓ $*"; }
 
-# 1. Run scaffold. Capture its output so we can extract PROJECT_DIR + AUTH_MODE.
-echo "→ scaffolding builder-smoke test project"
-scaffold_out=$(bash "${SCRIPT_DIR}/scaffold.sh" ${SCAFFOLD_ARGS[@]+"${SCAFFOLD_ARGS[@]}"} 2>&1)
-scaffold_rc=$?
-echo "${scaffold_out}"
-if [ "${scaffold_rc}" -ne 0 ]; then
-  err "error: scaffold-failed (rc=${scaffold_rc})"
-  echo
-  echo "✗ Preflight failed."
-  exit 1
-fi
+PROJECT_DIR=""
+AUTH_MODE=""
+DEFAULT_PROJECT_DIR="${HOME}/mastra-builder-smoke-tests/builder-smoke"
 
-PROJECT_DIR=$(echo "${scaffold_out}" | grep -E '^PROJECT_DIR=' | tail -n1 | cut -d= -f2-)
-AUTH_MODE=$(echo "${scaffold_out}" | grep -E '^AUTH_MODE=' | tail -n1 | cut -d= -f2-)
+if [ "${SKIP_SCAFFOLD}" = "yes" ]; then
+  # 1. Resolve PROJECT_DIR without running scaffold.
+  PROJECT_DIR="${PROJECT_DIR_OVERRIDE:-${BUILDER_SMOKE_TEST_DIR:-$DEFAULT_PROJECT_DIR}}"
+  echo "→ skip-scaffold: inspecting ${PROJECT_DIR}"
+  if [ ! -d "${PROJECT_DIR}" ]; then
+    err "error: project-dir-missing (${PROJECT_DIR})"
+    echo
+    echo "✗ Preflight failed."
+    exit 1
+  fi
+  # Detect auth mode from the existing .env.
+  if grep -qE '^[[:space:]]*AUTH_PROVIDER=workos' "${PROJECT_DIR}/.env" 2>/dev/null; then
+    AUTH_MODE="on"
+  else
+    AUTH_MODE="off"
+  fi
+  ok "project: ${PROJECT_DIR} (auth mode detected from .env: ${AUTH_MODE})"
+else
+  # 1. Run scaffold. Capture its output so we can extract PROJECT_DIR + AUTH_MODE.
+  echo "→ scaffolding builder-smoke test project"
+  scaffold_out=$(bash "${SCRIPT_DIR}/scaffold.sh" ${SCAFFOLD_ARGS[@]+"${SCAFFOLD_ARGS[@]}"} 2>&1)
+  scaffold_rc=$?
+  echo "${scaffold_out}"
+  if [ "${scaffold_rc}" -ne 0 ]; then
+    err "error: scaffold-failed (rc=${scaffold_rc})"
+    echo
+    echo "✗ Preflight failed."
+    exit 1
+  fi
+
+  PROJECT_DIR=$(echo "${scaffold_out}" | grep -E '^PROJECT_DIR=' | tail -n1 | cut -d= -f2-)
+  AUTH_MODE=$(echo "${scaffold_out}" | grep -E '^AUTH_MODE=' | tail -n1 | cut -d= -f2-)
+fi
 
 if [ -z "${PROJECT_DIR}" ] || [ ! -d "${PROJECT_DIR}" ]; then
   err "error: project-dir-missing (${PROJECT_DIR:-<unset>})"

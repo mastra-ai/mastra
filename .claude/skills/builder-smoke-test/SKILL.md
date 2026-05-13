@@ -153,19 +153,32 @@ in the result table — don't silently omit it.
 
 ### Cleanup
 
-Always leave the project in a runnable state. At the end of every run:
+The scaffold is a self-contained throwaway directory at `$PROJECT_DIR`. All
+fixture state (workspaces, agents, skills, libsql DB, `.mastra/workspace`
+files) lives inside it. The smoke test never writes to anything outside
+`$PROJECT_DIR` (other than the dev server it runs).
 
-1. Delete every smoke-test entity you created (workspaces, agents,
-   skills). Use the per-section cleanup snippet from the matching
-   reference file or `--clean`.
-2. If you toggled `.env` for Auth, restore it to the state you found it
-   in and ask the user to confirm.
+At the end of every run:
+
+1. Stop the dev server (`kill $(lsof -i :4111 -sTCP:LISTEN -t)` or
+   foreground `Ctrl-C`).
+2. Choose how to dispose of fixture state:
+   - **Reuse:** leave `$PROJECT_DIR` in place. The next run can pass
+     `--reuse` (or `--skip-scaffold` to preflight) and pick up where this
+     one left off. Fastest for iterating.
+   - **Reset:** `rm -rf "$PROJECT_DIR"` (or re-run `scripts/scaffold.sh`
+     without `--reuse`). Cheapest way to get back to a known-clean state.
+     Don't bother per-entity DELETE — the directory IS the state.
 3. If a section bailed mid-flight (assertion failure, network error),
    record the partial state in the report's **Issues** section so the
    next run knows what to expect.
 
-Never leave the dev server running with stale fixtures or with `.env`
-in a state the user didn't ask for.
+Per-entity DELETE calls are only needed when a specific section
+explicitly tests DELETE behavior (those sections include the DELETE step
+inline). Otherwise the throwaway-directory model handles cleanup.
+
+Never leave the dev server running on `:4111` after the report is filed —
+it blocks future runs.
 
 ## Prerequisites
 
@@ -206,11 +219,12 @@ For a long-lived setup, exporting `BUILDER_SMOKE_TEST_DIR` once in your shell rc
 
 All scripts under `.claude/skills/builder-smoke-test/scripts/` resolve the worktree root from their own location. They can be invoked from anywhere, but conventionally the repo root.
 
-| Script               | Run from | Notes                                                                                          |
-| -------------------- | -------- | ---------------------------------------------------------------------------------------------- |
-| `scaffold.sh`        | anywhere | Creates / refreshes `$PROJECT_DIR`. Forwards `--openai-key`, `--workos-*`, `--reuse`, `--dir`. |
-| `preflight.sh`       | anywhere | Calls `scaffold.sh` then asserts the resulting `.env` matches `--expect off\|on`.              |
-| `wait-for-server.sh` | anywhere | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                                   |
+| Script               | Run from | Notes                                                                                                                                                                                                                                        |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scaffold.sh`        | anywhere | Creates / refreshes `$PROJECT_DIR`. Forwards `--openai-key`, `--workos-*`, `--reuse`, `--dir`.                                                                                                                                               |
+| `preflight.sh`       | anywhere | Calls `scaffold.sh` then asserts the resulting `.env` matches `--expect off\|on`.                                                                                                                                                            |
+| `wait-for-server.sh` | anywhere | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                                                                                                                                                                                 |
+| `seed-multi-user.sh` | anywhere | Inserts two skills owned by `user_seed_other` (1 public + 1 private) into the scaffold's libsql DB so non-owner / Library Copy flows can be tested without a second WorkOS account. Server must have booted at least once first. Idempotent. |
 
 Invoke them as `bash .claude/skills/builder-smoke-test/scripts/<name>.sh`. Don't `cd` into `scripts/` first — relative path resolution will break.
 
@@ -283,6 +297,48 @@ If `scaffold.sh` or `preflight.sh` reports a missing `OPENAI_API_KEY` or `WORKOS
 | `bad-expect-value`      | `--expect` got something other than `off` or `on`.                                                                              | Fix the invocation.                                                                                                                      |
 
 **`.env` policy:** the scaffold **owns** `$PROJECT_DIR/.env`. Re-running scaffold overwrites it. Do not hand-edit the scaffolded `.env`; instead, re-run scaffold with different flags. (The skill never edits `.env` files outside `$PROJECT_DIR`.)
+
+### Extracting the session cookie for curl (auth on)
+
+The WorkOS session cookie is `httpOnly`, so `document.cookie` and Stagehand's
+`extract` cannot read it from a normal page. To hit authenticated endpoints
+from `curl` after a browser SSO login, the scaffold exposes a tiny debug
+route gated by an env var:
+
+1. Add `SMOKE_TEST_COOKIE_LEAK=1` to `$PROJECT_DIR/.env` (single line append; the scaffold leaves this var alone on re-run as long as the file already exists).
+2. Restart `mastra dev` so the new env is picked up.
+3. Sign in once in the Stagehand browser (`stagehand_navigate` to `http://localhost:4111`, complete WorkOS SSO).
+4. From the same browser tab, navigate to `http://localhost:4111/smoke-test/cookie` and use `stagehand_extract` to read the page body. The page is a single `text/plain` line containing the request's `Cookie` header verbatim (e.g. `wos_session=…`).
+5. Export it once: `export COOKIE='<the-string-from-step-4>'`. From here on, every authenticated curl is `curl -H "Cookie: $COOKIE" "$BASE/…"`.
+
+The route is **only registered when `SMOKE_TEST_COOKIE_LEAK=1`** and is intentionally insecure — never enable it in a real project. The `WORKOS_COOKIE_PASSWORD` written by the scaffold is derived from `$PROJECT_DIR`, so the cookie value stays valid across `mastra dev` restarts within the same scaffold; you only need to repeat step 4 if you re-scaffold to a new directory.
+
+### Seeding non-owner skills (Library Copy / non-owner flows)
+
+A fresh scaffold has zero skills, and everything created through the API
+is owned by either the auth-off "no caller" (no `authorId`) or the
+currently signed-in user under auth-on. To exercise flows that require a
+skill **owned by someone else** (Library Copy, non-owner read-only view,
+private-skill visibility from a non-owner) without provisioning a second
+WorkOS account, run the seed script after the server has booted at least
+once:
+
+```bash
+# Start the server once so libsql initializes the skills tables.
+cd $PROJECT_DIR
+pnpm mastra:dev                # leave running, then in another shell:
+
+bash .claude/skills/builder-smoke-test/scripts/seed-multi-user.sh
+# → seeds smoke-seed-public-skill  (visibility=public,  status=published)
+#         smoke-seed-private-skill (visibility=private, status=published)
+#   both owned by authorId='user_seed_other'
+```
+
+The script writes directly to `$PROJECT_DIR/src/mastra/public/mastra.db`
+via the `sqlite3` CLI (no Node deps). It's idempotent — re-running
+replaces the seeded rows. Use the seeded skills wherever a reference
+file asks for "a skill owned by another user"; clean them up with
+`DELETE` curls against `/api/stored/skills/:id` or by re-scaffolding.
 
 ## Starting the dev server
 

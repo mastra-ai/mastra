@@ -104,7 +104,11 @@ In `/agent-builder/skills`:
 
 ## Steps — Library Copy flow
 
-> **Setup note:** The smoke-test scaffold has no seeded public skills. To exercise this flow you must either (a) run the smoke test against a project that has seeded skills (e.g. `examples/agent-builder` with its `mastra.db`), or (b) under `--auth on`, create a public skill while impersonating a different user (or use a separate WorkOS account) so the current user can "Copy" a non-owned skill. Under `--auth off`, every skill resolves to the same `null` author, so the Copy affordance won't appear — defer this section to Run 2.
+> **Setup note — requires multi-user data:** The Library Copy flow requires at least one public skill **owned by a different user** so the current user can "Copy" it. A fresh scaffold has none. Options:
+>
+> 1. **Recommended:** run `bash .claude/skills/builder-smoke-test/scripts/seed-multi-user.sh` after the server has booted at least once. This inserts `smoke-seed-public-skill` (public) and `smoke-seed-private-skill` (private) owned by a fake `user_seed_other`, so all checklist items below become exercisable without a second WorkOS account.
+> 2. **Auth-on with a second account:** sign in as a different WorkOS user, publish a skill as public, sign back in as the test user and Copy it.
+> 3. **Skip:** under `--auth off`, every API-created skill resolves to the same `null` author, so the Copy affordance won't appear naturally. If you didn't seed and don't have a second account, mark these steps `n/a — multi-user data not available` and move on; do not flag them as failures.
 
 ### 9. Library page lists public skills
 
