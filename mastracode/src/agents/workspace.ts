@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import fs, { existsSync } from 'node:fs';
 import os from 'node:os';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +8,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig } from '@mastra/core/workspace';
 import type { z } from 'zod';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
@@ -100,39 +101,80 @@ function buildSandboxEnv(): NodeJS.ProcessEnv {
 // =============================================================================
 
 // We support multiple skill locations for compatibility:
-// 1. Project-local: .mastracode/skills (project-specific mastracode skills)
+// 1. Project-local: <configDir>/skills (project-specific mastracode skills)
 // 2. Project-local: .claude/skills (Claude Code compatible skills)
 // 3. Project-local: .agents/skills (Agent Skills spec compatible)
-// 4. Global: ~/.mastracode/skills (user-wide mastracode skills)
+// 4. Global: ~/<configDir>/skills (user-wide mastracode skills)
 // 5. Global: ~/.claude/skills (user-wide Claude Code skills)
 // 6. Global: ~/.agents/skills (user-wide Agent Skills spec compatible)
 
-const mastraCodeLocalSkillsPath = path.join(process.cwd(), '.mastracode', 'skills');
-
-const claudeLocalSkillsPath = path.join(process.cwd(), '.claude', 'skills');
-
-const agentSkillsLocalPath = path.join(process.cwd(), '.agents', 'skills');
-
-const mastraCodeGlobalSkillsPath = path.join(os.homedir(), '.mastracode', 'skills');
-
 const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
-
 const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
 
-export const skillPaths = [
-  mastraCodeLocalSkillsPath,
-  claudeLocalSkillsPath,
-  agentSkillsLocalPath,
-  mastraCodeGlobalSkillsPath,
-  claudeGlobalSkillsPath,
-  agentSkillsGlobalPath,
-];
+// Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
+// returns false for symlinks. Tools like `npx skills add` install skills as
+// symlinks, so we need to resolve them. For each symlinked skill directory,
+// we add the real (resolved) parent path as an additional skill scan path.
+function collectSkillPaths(skillsDirs: string[]): string[] {
+  const paths: string[] = [];
+  const seen = new Set<string>();
 
+  for (const skillsDir of skillsDirs) {
+    const resolved = path.resolve(skillsDir);
+    if (!seen.has(resolved)) {
+      seen.add(resolved);
+      paths.push(skillsDir);
+    }
+
+    if (!fs.existsSync(skillsDir)) continue;
+
+    try {
+      const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isSymbolicLink()) {
+          const linkPath = path.join(skillsDir, entry.name);
+          const realPath = fs.realpathSync(linkPath);
+          const stat = fs.statSync(realPath);
+          if (stat.isDirectory()) {
+            const realParent = path.dirname(realPath);
+            if (!seen.has(realParent)) {
+              seen.add(realParent);
+              paths.push(realParent);
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore errors during symlink resolution
+    }
+  }
+
+  return paths;
+}
+
+// Build skill paths dynamically based on configDir and projectPath
+export function buildSkillPaths(projectPath: string, configDir: string): string[] {
+  const mastraCodeLocalSkillsPath = path.join(projectPath, configDir, 'skills');
+  const claudeLocalSkillsPath = path.join(projectPath, '.claude', 'skills');
+  const agentSkillsLocalPath = path.join(projectPath, '.agents', 'skills');
+  const mastraCodeGlobalSkillsPath = path.join(os.homedir(), configDir, 'skills');
+
+  return collectSkillPaths([
+    mastraCodeLocalSkillsPath,
+    claudeLocalSkillsPath,
+    agentSkillsLocalPath,
+    mastraCodeGlobalSkillsPath,
+    claudeGlobalSkillsPath,
+    agentSkillsGlobalPath,
+  ]);
+}
+
+export const skillPaths = buildSkillPaths(process.cwd(), DEFAULT_CONFIG_DIR);
 export const allowedSkillPaths = skillPaths;
 
 /**
  * Paths the agent is always allowed to access (in addition to the project root
- * and any per-thread sandboxAllowedPaths).  The OS temp directory is included
+ * and any per-thread sandboxAllowedPaths). The OS temp directory is included
  * so the agent can use it as a scratchpad without requesting access every time.
  */
 const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp'].reduce<string[]>((acc, p) => {
@@ -168,10 +210,12 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   }
 
   const projectPath = path.resolve(rawProjectPath);
+  const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
+  const skillPaths = buildSkillPaths(projectPath, configDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [
-    ...allowedSkillPaths,
+    ...skillPaths,
     ...DEFAULT_ALLOWED_PATHS,
     ...sandboxPaths.map((p: string) => path.resolve(p)),
   ];

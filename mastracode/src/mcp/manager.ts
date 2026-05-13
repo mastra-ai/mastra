@@ -5,6 +5,7 @@
 
 import { MCPClient } from '@mastra/mcp';
 import type { MastraMCPServerDefinition } from '@mastra/mcp';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
 import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
@@ -54,14 +55,14 @@ function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
  */
-export function createMcpManager(projectDir: string, extraServers?: Record<string, McpServerConfig>): McpManager {
+export function createMcpManager(projectDir: string, configDirName = DEFAULT_CONFIG_DIR, extraServers?: Record<string, McpServerConfig>): McpManager {
   /** Merge programmatic servers into a base config (highest priority). */
   const applyExtraServers = (base: McpConfig): McpConfig => {
     if (!extraServers || Object.keys(extraServers).length === 0) return base;
     return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
   };
 
-  let config = applyExtraServers(loadMcpConfig(projectDir));
+  let config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
@@ -236,7 +237,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
     async reload() {
       await disconnect();
-      config = applyExtraServers(loadMcpConfig(projectDir));
+      config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
       tools = {};
       serverStatuses = new Map();
       stderrLogs = new Map();
@@ -376,8 +377,8 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
     getConfigPaths() {
       return {
-        project: getProjectMcpPath(projectDir),
-        global: getGlobalMcpPath(),
+        project: getProjectMcpPath(projectDir, configDirName),
+        global: getGlobalMcpPath(configDirName),
         claude: getClaudeSettingsPath(projectDir),
       };
     },
