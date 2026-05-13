@@ -231,9 +231,9 @@ describe('Session — surface area (M1)', () => {
         'setState',
         'getDisplayState',
         'getWorkspace',
-        'listSkills',
-        'getSkill',
-        'refreshSkills',
+        '_skillsList',
+        '_skillsGet',
+        '_skillsRefresh',
         'setGoal',
         'getGoal',
         'pauseGoal',
@@ -325,5 +325,12 @@ describe('Session — surface area (M1)', () => {
     expect(Object.keys(session.models).sort()).toEqual(
       ['current', 'currentAuthStatus', 'getSubagent', 'hasSelected', 'setSubagent', 'switch'].sort(),
     );
+  });
+
+  it('exposes a frozen `skills` namespace with the §4.2c methods', () => {
+    const { session } = makeStandaloneSession();
+    expect(typeof session.skills).toBe('object');
+    expect(Object.isFrozen(session.skills)).toBe(true);
+    expect(Object.keys(session.skills).sort()).toEqual(['get', 'list', 'refresh'].sort());
   });
 });

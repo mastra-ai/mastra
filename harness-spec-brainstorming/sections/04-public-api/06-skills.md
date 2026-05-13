@@ -161,8 +161,10 @@ workspace-discovered, with code wins on name collision). This is the "what can
 this session actually invoke?" answer, and matches what `useSkill` will resolve.
 Both methods are async because workspace discovery requires I/O against the
 configured skill source.
-  - `session.listSkills(): Promise<HarnessSkill[]>`
-  - `session.getSkill(name: string): Promise<HarnessSkill | undefined>`
+  - `session.skills.list(): Promise<HarnessSkill[]>`
+  - `session.skills.get(name: string): Promise<HarnessSkill | undefined>`
+  - `session.skills.refresh(): Promise<void>` — drops the cached discovery
+    generation (see below).
 
 In a single-user TUI with a `shared` workspace, harness and session views differ
 only by the workspace skills. In a multi-tenant deployment with `per-resource`

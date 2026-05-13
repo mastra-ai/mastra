@@ -911,46 +911,58 @@ export class Session {
   // -------------------------------------------------------------------------
 
   /**
-   * List skills available to this session. See §4.6.
+   * Skill discovery and inspection — see §4.6 and §4.2c.
    *
-   * Returns an empty array when the session has no workspace configured.
-   * Otherwise delegates to the resolved workspace's `WorkspaceSkills`
-   * surface and projects each entry into a `HarnessSkill` with
-   * `source: 'workspace'`. Workspace skills omit `argsSchema`,
-   * `outputSchema`, and `defaultMode` unless the configured workspace
-   * skill source supplies equivalent metadata (the core
-   * `WorkspaceSkills.list()` projection does not today).
+   * Workspace-discovered skills are projected into `HarnessSkill`
+   * descriptors with `source: 'workspace'`. Discovery runs asynchronously
+   * on the first `list` / `get` call per in-memory Session instance and is
+   * cached for the session's lifetime. Concurrent callers share a
+   * single-flight promise. `refresh()` drops the cache so the next call
+   * re-runs discovery.
+   *
+   * Phase 1 ships workspace-only discovery; code-registered skills and
+   * `useSkill` execution land in a follow-up slice.
    */
-  async listSkills(): Promise<HarnessSkill[]> {
-    this._assertLive('listSkills()');
+  readonly skills = Object.freeze({
+    /**
+     * List skills available to this session.
+     *
+     * Returns an empty array when the session has no workspace configured.
+     * Otherwise delegates to the resolved workspace's `WorkspaceSkills`
+     * surface and projects each entry into a `HarnessSkill` with
+     * `source: 'workspace'`.
+     */
+    list: (): Promise<HarnessSkill[]> => this._skillsList(),
+    /**
+     * Look up a skill by name. Returns `undefined` when the name does not
+     * resolve. In Phase 1 the only source consulted is the session's
+     * workspace.
+     */
+    get: (name: string): Promise<HarnessSkill | undefined> => this._skillsGet(name),
+    /**
+     * Drop the cached workspace-discovery result. The next `list` / `get`
+     * call re-runs discovery through the configured workspace skill
+     * source. Local-only — absent from `RemoteSession` (§13.5).
+     */
+    refresh: (): Promise<void> => this._skillsRefresh(),
+  });
+
+  private async _skillsList(): Promise<HarnessSkill[]> {
+    this._assertLive('skills.list()');
     return this._resolveSkills();
   }
 
-  /**
-   * Look up a skill by name. See §4.6.
-   *
-   * Returns `undefined` when the name does not resolve. In Phase 1 the only
-   * source consulted is the session's workspace; `session.useSkill()` and
-   * code-registered skills land in a follow-up slice.
-   */
-  async getSkill(name: string): Promise<HarnessSkill | undefined> {
-    this._assertLive('getSkill()');
+  private async _skillsGet(name: string): Promise<HarnessSkill | undefined> {
+    this._assertLive('skills.get()');
     if (typeof name !== 'string' || name.length === 0) {
-      throw new HarnessValidationError('getSkill()', 'name must be a non-empty string');
+      throw new HarnessValidationError('skills.get()', 'name must be a non-empty string');
     }
     const skills = await this._resolveSkills();
     return skills.find(s => s.name === name);
   }
 
-  /**
-   * Drop the cached workspace-discovery result. The next `listSkills` /
-   * `getSkill` call re-runs discovery through the configured workspace
-   * skill source. Local-only — workspace discovery requires server-side
-   * access to the skill source, so the method is absent from
-   * `RemoteSession` (§13.5).
-   */
-  async refreshSkills(): Promise<void> {
-    this._assertLive('refreshSkills()');
+  private async _skillsRefresh(): Promise<void> {
+    this._assertLive('skills.refresh()');
     // Drop cached generation. Any in-flight discovery promise is allowed to
     // run to completion (its result will not repopulate the cache because
     // `_resolveSkills` always writes through `_skillsCache` after the
@@ -988,6 +1000,11 @@ export class Session {
         instructions: '',
         source: 'workspace',
         ...(meta.path ? { filePath: meta.path } : {}),
+        // Pass through arbitrary skill frontmatter metadata so callers can
+        // discover skill-level flags (e.g. `metadata.goal === true` for
+        // goal-mode skills). Workspace's `SkillMetadata.metadata` is
+        // typed `Record<string, unknown>` and is already JSON-serialisable.
+        ...(meta.metadata ? { metadata: meta.metadata } : {}),
       }));
       return projected;
     };

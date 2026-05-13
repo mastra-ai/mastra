@@ -2,17 +2,20 @@
 
 ```ts
   // Skill discovery — applies the full resolution chain (code-registered,
-  // then workspace-discovered). See §4.6.
-  listSkills(): Promise<HarnessSkill[]>;
-  getSkill(name: string): Promise<HarnessSkill | undefined>;
-
-  // Drop the cached workspace-discovery result. The next listSkills /
-  // getSkill / useSkill call re-runs async workspace discovery.
-  // Code-registered skills are unaffected — they live on the harness and
-  // don't need refreshing. Local-only: workspace discovery requires
-  // server-side access to the configured workspace skill source, so
-  // refreshSkills is absent from RemoteSession.  See §4.6 and §13.5.
-  refreshSkills(): Promise<void>;
+  // then workspace-discovered). See §4.6. Exposed as a frozen
+  // `skills` namespace to mirror `permissions`, `models`, and
+  // `attachments`.
+  readonly skills: {
+    list(): Promise<HarnessSkill[]>;
+    get(name: string): Promise<HarnessSkill | undefined>;
+    // Drop the cached workspace-discovery result. The next list / get /
+    // useSkill call re-runs async workspace discovery. Code-registered
+    // skills are unaffected — they live on the harness and don't need
+    // refreshing. Local-only: workspace discovery requires server-side
+    // access to the configured workspace skill source, so `refresh` is
+    // absent from `RemoteSession`. See §4.6 and §13.5.
+    refresh(): Promise<void>;
+  };
 
   // Concurrency / inspection (read-only). These methods read the owning
   // session's live projection when resident, otherwise the reconciled

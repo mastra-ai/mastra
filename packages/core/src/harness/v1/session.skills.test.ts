@@ -21,6 +21,7 @@ type FakeSkillMeta = {
   name: string;
   description: string;
   path?: string;
+  metadata?: Record<string, unknown>;
 };
 
 class FakeWorkspaceSkills {
@@ -33,6 +34,7 @@ class FakeWorkspaceSkills {
       name: e.name,
       description: e.description,
       path: e.path ?? `skills/${e.name}`,
+      ...(e.metadata ? { metadata: e.metadata } : {}),
     }));
   }
   async get(name: string) {
@@ -108,8 +110,8 @@ describe('Session skill discovery (§4.6)', () => {
   it('returns an empty list when no workspace is configured', async () => {
     const { harness } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    expect(await session.listSkills()).toEqual([]);
-    expect(await session.getSkill('anything')).toBeUndefined();
+    expect(await session.skills.list()).toEqual([]);
+    expect(await session.skills.get('anything')).toBeUndefined();
   });
 
   it('returns an empty list when the workspace has no skills surface', async () => {
@@ -123,8 +125,8 @@ describe('Session skill discovery (§4.6)', () => {
       workspace: { kind: 'per-session', provider },
     });
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    expect(await session.listSkills()).toEqual([]);
-    expect(await session.getSkill('any')).toBeUndefined();
+    expect(await session.skills.list()).toEqual([]);
+    expect(await session.skills.get('any')).toBeUndefined();
   });
 
   it('projects workspace skills into HarnessSkill descriptors with source="workspace"', async () => {
@@ -134,7 +136,7 @@ describe('Session skill discovery (§4.6)', () => {
     ]);
     const harness = makeHarnessWithSkills(fakeSkills);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    const skills = await session.listSkills();
+    const skills = await session.skills.list();
     expect(skills).toHaveLength(2);
     expect(skills[0]).toMatchObject<Partial<HarnessSkill>>({
       name: 'lint',
@@ -155,27 +157,27 @@ describe('Session skill discovery (§4.6)', () => {
     const fakeSkills = new FakeWorkspaceSkills([{ name: 'lint', description: 'Lint the repo' }]);
     const harness = makeHarnessWithSkills(fakeSkills);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    const lint = await session.getSkill('lint');
+    const lint = await session.skills.get('lint');
     expect(lint?.name).toBe('lint');
     expect(lint?.source).toBe('workspace');
-    expect(await session.getSkill('unknown')).toBeUndefined();
+    expect(await session.skills.get('unknown')).toBeUndefined();
   });
 
   it('getSkill rejects empty / non-string names', async () => {
     const harness = makeHarnessWithSkills(new FakeWorkspaceSkills([]));
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await expect(session.getSkill('')).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(session.skills.get('')).rejects.toBeInstanceOf(HarnessValidationError);
     // @ts-expect-error — runtime validation guards against bad inputs
-    await expect(session.getSkill(undefined)).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(session.skills.get(undefined)).rejects.toBeInstanceOf(HarnessValidationError);
   });
 
   it('caches the catalog for the session lifetime — workspace.skills.list called once across reads', async () => {
     const fakeSkills = new FakeWorkspaceSkills([{ name: 'a', description: 'A' }]);
     const harness = makeHarnessWithSkills(fakeSkills);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await session.listSkills();
-    await session.listSkills();
-    await session.getSkill('a');
+    await session.skills.list();
+    await session.skills.list();
+    await session.skills.get('a');
     expect(fakeSkills.listCallCount).toBe(1);
   });
 
@@ -183,7 +185,7 @@ describe('Session skill discovery (§4.6)', () => {
     const fakeSkills = new FakeWorkspaceSkills([{ name: 'a', description: 'A' }]);
     const harness = makeHarnessWithSkills(fakeSkills);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await Promise.all([session.listSkills(), session.listSkills(), session.getSkill('a')]);
+    await Promise.all([session.skills.list(), session.skills.list(), session.skills.get('a')]);
     expect(fakeSkills.listCallCount).toBe(1);
   });
 
@@ -191,16 +193,16 @@ describe('Session skill discovery (§4.6)', () => {
     const fakeSkills = new FakeWorkspaceSkills([{ name: 'a', description: 'A' }]);
     const harness = makeHarnessWithSkills(fakeSkills);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await session.listSkills();
+    await session.skills.list();
     expect(fakeSkills.listCallCount).toBe(1);
 
     fakeSkills.entries.push({ name: 'b', description: 'B' });
     // Without refresh, the new skill is invisible.
-    expect((await session.listSkills()).map(s => s.name)).toEqual(['a']);
+    expect((await session.skills.list()).map(s => s.name)).toEqual(['a']);
     expect(fakeSkills.listCallCount).toBe(1);
 
-    await session.refreshSkills();
-    const after = await session.listSkills();
+    await session.skills.refresh();
+    const after = await session.skills.list();
     expect(after.map(s => s.name).sort()).toEqual(['a', 'b']);
     expect(fakeSkills.listCallCount).toBe(2);
   });
@@ -209,9 +211,9 @@ describe('Session skill discovery (§4.6)', () => {
     const harness = makeHarnessWithSkills(new FakeWorkspaceSkills([]));
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     await session.close();
-    await expect(session.listSkills()).rejects.toBeInstanceOf(HarnessSessionClosedError);
-    await expect(session.getSkill('a')).rejects.toBeInstanceOf(HarnessSessionClosedError);
-    await expect(session.refreshSkills()).rejects.toBeInstanceOf(HarnessSessionClosedError);
+    await expect(session.skills.list()).rejects.toBeInstanceOf(HarnessSessionClosedError);
+    await expect(session.skills.get('a')).rejects.toBeInstanceOf(HarnessSessionClosedError);
+    await expect(session.skills.refresh()).rejects.toBeInstanceOf(HarnessSessionClosedError);
   });
 });
 
