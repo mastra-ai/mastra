@@ -100,7 +100,64 @@ for await (const event of updates) {
 
 Agent cards can contain sensitive information, such as internal URLs or private skill descriptions. Protect restricted cards with access controls, and use agent card verification when a client needs to validate that a card came from a trusted source.
 
-## How subagents work
+## Push notifications
+
+Mastra supports A2A push notifications for remote agents that advertise `capabilities.pushNotifications`. Use push notifications when a client can't keep a stream open, or when a long-running task should update a callback URL after the original request ends.
+
+After a client has a task ID, it can register a callback URL for that task:
+
+```typescript title="src/a2a-client.ts"
+await a2a.setTaskPushNotificationConfig({
+  taskId: 'task-123',
+  pushNotificationConfig: {
+    url: 'https://app.example.com/a2a/tasks',
+    token: process.env.A2A_WEBHOOK_TOKEN,
+  },
+})
+```
+
+Mastra Server sends the current task snapshot to registered callbacks when the task reaches `completed`, `failed`, `canceled`, or `input-required`. Push notification delivery is best-effort. Protect callback URLs, validate notification tokens, and avoid exposing internal network targets as push notification destinations.
+
+## Sign and verify agent cards
+
+Mastra supports signed A2A agent cards so clients can verify that a discovered card came from a trusted publisher and wasn't changed in transit. Configure signing on the Mastra server that exposes the remote agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  server: {
+    a2a: {
+      agentCardSigning: {
+        privateKey: process.env.A2A_AGENT_CARD_PRIVATE_KEY!,
+        protectedHeader: {
+          alg: 'ES256',
+          kid: 'agent-card-key',
+        },
+      },
+    },
+  },
+})
+```
+
+When signing is configured, Mastra includes a `signatures` array on the agent card. Client verification is opt-in, and unsigned cards still return unchanged.
+
+Verify a signed card with `MastraClient.getA2A()`:
+
+```typescript title="src/a2a-client.ts"
+const card = await a2a.getAgentCard({
+  verifySignature: {
+    algorithms: ['ES256'],
+    keyProvider: async ({ kid, jku }) => {
+      return fetchTrustedPublicJwk({ kid, jku })
+    },
+  },
+})
+```
+
+Use client-side signature verification to enforce trusted keys before calling the remote agent.
+
+## Use remote agents as subagents
 
 Use `A2AAgent` when a Mastra parent agent should call a remote A2A agent as a subagent. Create an `A2AAgent` with a remote agent card URL or single-agent domain, then register it in the parent agent's `agents` map.
 
@@ -141,81 +198,7 @@ During execution, `A2AAgent`:
 
 If the remote card doesn't advertise streaming support, `A2AAgent.stream()` falls back to the non-streaming generate path and returns a buffered stream result.
 
-## Verify agent cards
-
-Mastra supports signed A2A agent cards so clients can verify that a discovered card came from a trusted publisher and wasn't changed in transit. Configure signing on the Mastra server that exposes the remote agent:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-
-export const mastra = new Mastra({
-  server: {
-    a2a: {
-      agentCardSigning: {
-        privateKey: process.env.A2A_AGENT_CARD_PRIVATE_KEY!,
-        protectedHeader: {
-          alg: 'ES256',
-          kid: 'agent-card-key',
-        },
-      },
-    },
-  },
-})
-```
-
-When signing is configured, Mastra includes a `signatures` array on the agent card. Client verification is opt-in, and unsigned cards still return unchanged.
-
-Verify a signed card with `MastraClient.getA2A()`:
-
-```typescript title="src/a2a-client.ts"
-const card = await a2a.getAgentCard({
-  verifySignature: {
-    algorithms: ['ES256'],
-    keyProvider: async ({ kid, jku }) => {
-      return fetchTrustedPublicJwk({ kid, jku })
-    },
-  },
-})
-```
-
-Use `verifyAgentCard` when a parent agent should validate a remote agent before delegating work to it. The verification hook receives the fetched agent card and context about where and when it was fetched.
-
-```typescript title="src/mastra/agents/support-agent.ts"
-import { A2AAgent } from '@mastra/core/a2a'
-
-const remoteWeatherAgent = new A2AAgent({
-  url: 'https://weather.example.com/.well-known/agent-card.json',
-  verifyAgentCard: {
-    verify: async (card, context) => {
-      if (card.provider?.organization !== 'Weather Inc') {
-        throw new Error(`Unexpected provider for ${context.cardUrl}`)
-      }
-    },
-  },
-})
-```
-
-Use verification to enforce trusted keys, expected providers, expected endpoints, certificate-bound identities, signed cards, or other trust requirements before a client calls the remote agent.
-
-## Push notifications
-
-Mastra supports A2A push notifications for remote agents that advertise `capabilities.pushNotifications`. Use push notifications when a client can't keep a stream open, or when a long-running task should update a callback URL after the original request ends.
-
-After a client has a task ID, it can register a callback URL for that task:
-
-```typescript title="src/a2a-client.ts"
-await a2a.setTaskPushNotificationConfig({
-  taskId: 'task-123',
-  pushNotificationConfig: {
-    url: 'https://app.example.com/a2a/tasks',
-    token: process.env.A2A_WEBHOOK_TOKEN,
-  },
-})
-```
-
-Mastra Server sends the current task snapshot to registered callbacks when the task reaches `completed`, `failed`, `canceled`, or `input-required`. Push notification delivery is best-effort. Protect callback URLs, validate notification tokens, and avoid exposing internal network targets as push notification destinations.
-
-## Configure remote calls
+## Configure subagent calls
 
 `A2AAgent` accepts request options for authenticated or constrained environments:
 
@@ -235,6 +218,27 @@ const remoteWeatherAgent = new A2AAgent({
 ```
 
 You can also pass `credentials`, `fetch`, and `abortSignal` when the runtime needs custom fetch behavior or request cancellation.
+
+## Verify subagent cards
+
+Use `verifyAgentCard` when a parent agent should validate a remote agent before delegating work to it. The verification hook receives the fetched agent card and context about where and when it was fetched.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com/.well-known/agent-card.json',
+  verifyAgentCard: {
+    verify: async (card, context) => {
+      if (card.provider?.organization !== 'Weather Inc') {
+        throw new Error(`Unexpected provider for ${context.cardUrl}`)
+      }
+    },
+  },
+})
+```
+
+Use this hook to enforce expected providers, expected endpoints, certificate-bound identities, signed cards, or other trust requirements before a parent agent delegates to the remote agent.
 
 ## Related
 
