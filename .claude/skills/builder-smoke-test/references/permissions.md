@@ -15,6 +15,8 @@ Defined in `packages/core/src/auth/ee/defaults/roles.ts`:
 
 Public stored skills/agents short-circuit read checks (see `authorship.ts`). Auth disabled bypasses role checks entirely.
 
+> **WorkOS role mapping note:** The matrix above describes the **default** roles. When auth runs through `@mastra/auth-workos`, the live `/auth/me` `permissions` array is produced by the WorkOS role-mapping config, not by `default-roles.ts`. In practice, WorkOS-provisioned admins often carry `permissions: ["*"]` (owner-equivalent), which means they pass DELETE checks. Before flagging a row as a regression, `GET /auth/me` and compare actual `permissions` to what the matrix predicts — if the user has `["*"]`, treat them as `owner` for matrix purposes.
+
 ## Picking the role to test
 
 Under `--auth on`, the smoke test runs as whichever role the **logged-in WorkOS user actually has**. The `--role` flag (default `admin`) is the agent's expectation; setup asserts it matches `/api/auth/me`'s `roles` field and stops if it doesn't.
@@ -45,7 +47,7 @@ Pass criteria per role for representative endpoints. The agent uses this to set 
 | `GET /editor/builder/infrastructure`    | 200   | 200   | 403    | 403    |
 | `PUT /stored/agents/:id/star`           | 200   | 200   | 200    | 200    |
 
-\* `admin` has no `*:delete` grant; deletes are gated to `owner` (or explicit `:delete` grant). If you see `admin` succeeding at DELETE, that's a real regression.
+\* The `admin` **role definition** has no `*:delete` grant; deletes are gated to `owner` (or explicit `:delete` grant). If you see `admin` succeeding at DELETE, first check `/auth/me` — WorkOS-mapped admins frequently carry `permissions: ["*"]` (owner-equivalent), in which case the success is expected. Only file a regression when an admin with `permissions` matching the default `admin` row (no `*` wildcard) still passes a DELETE.
 
 ## Steps
 
@@ -100,7 +102,7 @@ If `--role viewer`:
 
 If `--role admin`:
 
-- [ ] `DELETE /stored/agents/:id` against an agent the admin owns → 403 (admin lacks `*:delete`)
+- [ ] `DELETE /stored/agents/:id` against an agent the admin owns → 403 **provided** `/auth/me` reports the default admin grants (`*:read`, `*:write`, `*:execute`, `*:publish`, `*:share` — no `*` wildcard). If `permissions` contains `*`, expect 200 instead and treat the user as owner-equivalent.
 
 If `--role owner`:
 

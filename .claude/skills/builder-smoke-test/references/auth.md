@@ -69,10 +69,10 @@ In the browser:
 `--role` defaults to `admin`. After login, ask the server who you are:
 
 ```bash
-curl -s -H "Cookie: <session-cookie>" "$BASE/auth/me" | jq '{userId, email, roles, permissions}'
+curl -s -H "Cookie: <session-cookie>" "$BASE/auth/me" | jq '{id, email, roles, permissions}'
 ```
 
-- [ ] HTTP 200 + JSON body with `userId`, `email`, `roles`, `permissions`
+- [ ] HTTP 200 + JSON body with `id`, `email`, `roles`, `permissions` (the user identifier field is `id`, not `userId`)
 - [ ] `roles` includes the value passed via `--role` (e.g. `--role viewer` → `roles` contains `"viewer"`)
 
 If `roles` does not contain the `--role` value, **stop the run** and tell the user:

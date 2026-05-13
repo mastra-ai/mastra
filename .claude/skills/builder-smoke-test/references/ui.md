@@ -68,7 +68,7 @@ You should be on `/agent-builder/skills/<id>/edit` from step 3 (or by clicking a
 - [ ] Right panel: skill details form — Name, Description, Instructions
 - [ ] No explicit Save button visible — saving is autosaved (look for a saving/saved indicator near the form)
 - [ ] `Delete skill` button is reachable somewhere on the page (typically bottom-right of the details panel). If you cannot find it, log that as drift.
-- [ ] Visibility selector: not visible under `--auth off` (server forces public). Under `--auth on`, log whether the selector is rendered and where.
+- [ ] Visibility selector: not visible under `--auth off` (server forces public). Under `--auth on`, the selector renders in the page-header action group on `lg` viewports and above (≥1024px) via `VisibilitySelectConnected`. Below `lg` it moves into the mobile menu (`SkillBuilderMobileMenu` with `showSetVisibility`). Resize the viewport or open the mobile menu to confirm if the desktop slot looks empty.
 
 ### 5. Agent List Page _(Core)_
 
@@ -85,7 +85,7 @@ You should be on `/agent-builder/agents/<id>/view`.
 
 - [ ] `View mode` pill badge near the header
 - [ ] Header: back arrow, agent name, `View mode` pill (no refresh button)
-- [ ] Top-right: `Publish to...` dropdown and avatar
+- [ ] Top-right action group: `Switch to Edit mode`, `Add to library`, `Show configuration` buttons. (The avatar lives in the sidebar user menu, not in this header.)
 - [ ] Center: agent name + description and a row of starter prompt cards (e.g. What can you do? / Show available tools / Suggest a task / Run a self-check)
 - [ ] Bottom: `Message your agent...` chat input — agents are runnable from view
 
@@ -105,18 +105,19 @@ On the agents list page:
 
 UI-only feature wired through `role-impersonation-context.tsx`. Frontend state, no backend role-override header. Only run this subset when the live user is `admin` or `owner` (otherwise the menu is hidden).
 
-Open the user menu → `View as role` (or equivalent picker — confirm exact label in the live UI and log it if it differs):
+Open the user menu → the picker label is `PREVIEW AS ROLE` (a section header in the user menu). Each role is its own menu item directly under that header.
 
-- [ ] Picker offers `admin`, `member`, `viewer`
-- [ ] Selecting `viewer`:
+- [ ] Picker offers only roles **different from the current role**. Logged in as admin, you'll see `Member` and `Viewer` (no `Admin` item — admin is the implicit baseline). This is intentional.
+- [ ] Selecting `Viewer`:
   - [ ] Impersonation banner appears at the top of the page indicating the active role
   - [ ] Sidebar collapses to viewer-allowed entries (no Create/Edit affordances)
+  - [ ] `Infrastructure` sidebar entry remains visible — viewer permissions include `*:read`, which matches `infrastructure:read`. The infra page itself is read-only for viewers. Not a regression.
   - [ ] Create buttons (e.g. `New skill`, `New agent`) disappear or render disabled
   - [ ] Direct navigation to a write-only route (e.g. `/agent-builder/skills/create`) is blocked at the UI layer
-- [ ] Selecting `member`:
+- [ ] Selecting `Member`:
   - [ ] Banner updates to show member
   - [ ] Read + execute affordances visible; create/edit hidden
-- [ ] `Exit impersonation` (or equivalent) restores the original admin UI
+- [ ] The exit affordance is labeled `Exit role preview` (in the impersonation banner and as a user-menu item under the role list). Clicking it restores the original admin UI.
 
 > **Important:** impersonation is UI-only. The API still answers per the _real_ logged-in role. If you `curl` the same endpoint while impersonating viewer, you'll still get the admin's response. That's expected — record it that way in the report, don't file it as a bug.
 
