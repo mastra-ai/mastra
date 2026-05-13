@@ -129,7 +129,7 @@ export function mapVariable<TWorkflow extends AnyWorkflow>({
   path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
 }): {
   initData: TWorkflow;
-  patth: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
+  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
 };
 export function mapVariable(config: any): any {
   return config;
