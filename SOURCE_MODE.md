@@ -18,13 +18,13 @@ Synchronize source export entries after adding or changing package exports:
 pnpm source-exports:sync
 ```
 
-Run unit/typecheck Vitest projects from source without a prebuild:
+Run unit Vitest projects from source without a prebuild:
 
 ```sh
 pnpm test:source-mode
 ```
 
-`pnpm test:source-mode` invokes `scripts/run-source-mode-tests.mjs`, which sets `MASTRA_SOURCE_MODE=1` and `NODE_OPTIONS="--conditions=mastra-source"`, then runs the source-safe unit/typecheck project groups sequentially. Splitting the groups avoids Vite/Vitest project-initialization recursion while preserving the no-build contract.
+`pnpm test:source-mode` invokes `scripts/run-source-mode-tests.mjs`, which sets `MASTRA_SOURCE_MODE=1` and `NODE_OPTIONS="--conditions=mastra-source"`, then runs the source-safe unit project groups sequentially. Splitting the groups avoids Vite/Vitest project-initialization recursion while preserving the no-build contract.
 
 Run the no-dist smoke proof for representative packages:
 
@@ -108,7 +108,7 @@ CI tests use source mode by default. Test workflows set `MASTRA_SOURCE_MODE=1` a
 The PR topology has two parallelizable lanes after change detection:
 
 1. **Source-mode test lane**
-   - `.github/workflows/test-suite.yml` unit/typecheck and E2E shards
+   - `.github/workflows/test-suite.yml` unit and E2E shards
    - secret-backed memory, combined-store, workspace, and E2E workflows
    - no package build prerequisite
    - runs `pnpm source-exports:check`

@@ -15,13 +15,16 @@ export const server = serve({
 // Get the actual port the server is running on
 const port = (server.address() as { port: number }).port;
 
+const sourceMode = process.env.MASTRA_SOURCE_MODE === '1';
+
 export const mcp = new MCPClient({
   id: 'test-mcp',
   servers: {
     mastra: {
-      command: 'node',
-      args: [path.join(__dirname, '../../../dist/stdio.js')],
+      command: sourceMode ? path.join(__dirname, '../../../node_modules/.bin/tsx') : process.execPath,
+      args: sourceMode ? [path.join(__dirname, '../../stdio.ts')] : [path.join(__dirname, '../../../dist/stdio.js')],
       env: {
+        ...process.env,
         BLOG_URL: `http://localhost:${port}`,
       },
     },

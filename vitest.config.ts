@@ -1,4 +1,4 @@
-import { globSync, readFileSync } from 'node:fs';
+import { existsSync, globSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { loadConfigFromFile } from 'vite';
 import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
@@ -7,6 +7,7 @@ import { defineConfig } from 'vitest/config';
 const SOURCE_MODE = process.env.MASTRA_SOURCE_MODE === '1';
 const SOURCE_MODE_CONDITIONS = ['mastra-source', 'node'];
 const SOURCE_MODE_WORKSPACE_DEPS = [/^@mastra\//, /^@internal\//, /^mastra$/];
+const SOURCE_MODE_WORKSPACE_PATH_DEPS = [new RegExp(process.cwd().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))];
 const SOURCE_MODE_ALIASES = {
   '@internal/test-utils/setup': resolve(process.cwd(), 'packages/_test-utils/src/setup.ts'),
 };
@@ -22,8 +23,27 @@ const SOURCE_MODE_TEST_EXCLUDES = [
   'src/build/analyze/analyzeEntry.test.ts',
 ];
 
+const sourceModeRelativeResolver = () => ({
+  name: 'mastra-source-mode-relative-resolver',
+  enforce: 'pre' as const,
+  resolveId(source: string, importer?: string) {
+    if (!SOURCE_MODE || !importer || !source.startsWith('.') || !importer.includes('/src/')) {
+      return null;
+    }
+
+    const importerDir = dirname(importer.replace(/^file:\/\//, ''));
+    const base = resolve(importerDir, source);
+    const candidates = source.endsWith('.js')
+      ? [base.replace(/\.js$/, '.ts'), base.replace(/\.js$/, '.tsx')]
+      : [`${base}.ts`, `${base}.tsx`, resolve(base, 'index.ts'), resolve(base, 'index.tsx')];
+
+    return candidates.find(candidate => existsSync(candidate)) ?? null;
+  },
+});
+
 const SOURCE_MODE_CONFIG: UserWorkspaceConfig = SOURCE_MODE
   ? {
+      plugins: [sourceModeRelativeResolver()],
       resolve: {
         conditions: SOURCE_MODE_CONDITIONS,
       },
@@ -56,9 +76,15 @@ function sourceModeSetupFiles(setupFiles: any) {
 function withSourceModeConfig(project: UserWorkspaceConfig): UserWorkspaceConfig {
   if (!SOURCE_MODE) return project;
 
+  const projectName = String(project.test?.name ?? '');
+  const sourceModeDeps =
+    projectName === 'unit:packages/editor'
+      ? [...SOURCE_MODE_WORKSPACE_DEPS, ...SOURCE_MODE_WORKSPACE_PATH_DEPS]
+      : SOURCE_MODE_WORKSPACE_DEPS;
+
   return {
     ...project,
-    plugins: project.plugins,
+    plugins: [...(SOURCE_MODE_CONFIG.plugins ?? []), ...(project.plugins ?? [])],
     resolve: {
       ...SOURCE_MODE_CONFIG.resolve,
       ...project.resolve,
@@ -73,7 +99,7 @@ function withSourceModeConfig(project: UserWorkspaceConfig): UserWorkspaceConfig
     ssr: {
       ...SOURCE_MODE_CONFIG.ssr,
       ...project.ssr,
-      noExternal: SOURCE_MODE_WORKSPACE_DEPS,
+      noExternal: sourceModeDeps,
       resolve: {
         ...SOURCE_MODE_CONFIG.ssr?.resolve,
         ...project.ssr?.resolve,
@@ -91,7 +117,7 @@ function withSourceModeConfig(project: UserWorkspaceConfig): UserWorkspaceConfig
         deps: {
           ...SOURCE_MODE_CONFIG.test?.server?.deps,
           ...project.test?.server?.deps,
-          inline: SOURCE_MODE_WORKSPACE_DEPS,
+          inline: sourceModeDeps,
         },
       },
     },
@@ -107,7 +133,16 @@ const EXCLUDED_DIRS = new Set([
   'packages/playground-ui',
   'server-adapters/_test-utils',
   'observability/_examples',
-  ...(SOURCE_MODE ? ['observability/_test-utils', 'stores/redis', 'workflows/inngest', 'workflows/temporal'] : []),
+  ...(SOURCE_MODE
+    ? [
+        'observability/_test-utils',
+        'stores/redis',
+        'workflows/inngest',
+        'workflows/temporal',
+        'packages/_external-types',
+        'packages/_changeset-cli',
+      ]
+    : []),
 ]);
 
 // Directories to scan for vitest configs

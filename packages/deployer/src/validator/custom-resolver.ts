@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import type { LoadHookContext, ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
-import { isDependencyPartOfPackage } from '../build/utils';
+
+function isDependencyPartOfPackage(dep: string, packageName: string) {
+  return dep === packageName || dep.startsWith(`${packageName}/`);
+}
 
 const STUB_PREFIX = 'mastra-stub:';
 
