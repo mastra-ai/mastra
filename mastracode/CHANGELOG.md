@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.18.1-alpha.1
+
+### Patch Changes
+
+- Fixed a bug where clicking Approve on a plan from `/plan` mode would show the system reminder twice and sometimes hang instead of starting build execution. Approving now reliably triggers the build agent with a single reminder. ([#16521](https://github.com/mastra-ai/mastra/pull/16521))
+
+- Updated dependencies [[`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb)]:
+  - @mastra/core@1.33.1-alpha.1
+
 ## 0.18.1-alpha.0
 
 ### Patch Changes

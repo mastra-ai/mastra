@@ -11,6 +11,7 @@ when package splits unit integration or E2E coverage run narrowest suite first
 From root prefer specific scripts like pnpm build:core or pnpm --filter ./packages/name script
 Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
 Building whole monorepo is slow and should be last resort
+Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
 some integration tests need pnpm i --ignore-workspace
 
 features and new packages need related docs updates

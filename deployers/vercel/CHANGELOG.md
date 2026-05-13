@@ -1,5 +1,15 @@
 # @mastra/deployer-vercel
 
+## 1.1.28-alpha.1
+
+### Patch Changes
+
+- Make the playground/Studio chat runtime opt into the agent-signals streaming path (`sendSignal` + `subscribeToThread`) via the `MASTRA_AGENT_SIGNALS` environment variable. When unset (the default), Studio falls back to the existing `streamUntilIdle` route — this restores the pre-signals behavior while issues with tool approvals and dropped signal/UI messages are fixed. ([#16551](https://github.com/mastra-ai/mastra/pull/16551))
+
+- Updated dependencies [[`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb), [`fd1d852`](https://github.com/mastra-ai/mastra/commit/fd1d85248ccf197d138ebfed2f71a25319102919)]:
+  - @mastra/core@1.33.1-alpha.1
+  - @mastra/deployer@1.33.1-alpha.1
+
 ## 1.1.28-alpha.0
 
 ### Patch Changes

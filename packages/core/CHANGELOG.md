@@ -1,5 +1,22 @@
 # @mastra/core
 
+## 1.33.1-alpha.1
+
+### Patch Changes
+
+- Fixed a bug where clicking Approve on a plan from `/plan` mode would show the system reminder twice and sometimes hang instead of starting build execution. Approving now reliably triggers the build agent with a single reminder. ([#16521](https://github.com/mastra-ai/mastra/pull/16521))
+
+- **Added** ([#16520](https://github.com/mastra-ai/mastra/pull/16520))
+  You can now call `run.restart()` for evented workflows to continue execution from the latest persisted run state.
+
+  ```ts
+  const run = workflow.createRun();
+  await run.start({ inputData: { jobId: 'job-123' } });
+
+  // Later, restart the same run from the last active step
+  await run.restart();
+  ```
+
 ## 1.33.1-alpha.0
 
 ### Patch Changes
