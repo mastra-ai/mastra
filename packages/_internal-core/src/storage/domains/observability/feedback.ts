@@ -251,7 +251,7 @@ export const listFeedbackResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    deltaCursor: deltaCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.optional(),
     feedback: z.array(feedbackRecordSchema),
   })
   .describe('Response from listing feedback');

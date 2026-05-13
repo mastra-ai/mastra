@@ -92,11 +92,12 @@ import {
   BASE_MV_DDL,
   BASE_TABLE_DDL,
   buildAllTableDDL,
-  ALL_MV_DDL,
+  buildAllMvDDL,
   ALL_MIGRATIONS,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
   DELTA_TABLE_NAMES,
+  DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
   buildRetentionEntries,
@@ -273,7 +274,7 @@ async function detectDeltaCursorStrategy(
     });
     return 'serial';
   } catch {
-    return 'tuple';
+    return 'fallback';
   }
 }
 
@@ -281,24 +282,37 @@ async function detectExistingDeltaCursorStrategy(
   client: ClickHouseClient,
 ): Promise<ClickHouseDeltaCursorStrategy | 'mixed' | null> {
   try {
-    const result = await client.query({
-      query: `
-        SELECT table, name
-        FROM system.columns
-        WHERE database = currentDatabase()
-          AND table IN ({tables:Array(String)})
-      `,
-      query_params: { tables: [...DELTA_TABLE_NAMES] },
-      format: 'JSONEachRow',
-    });
-    const rows = (await result.json()) as Array<{ table: string; name: string }>;
+    const [columnResult, mvResult] = await Promise.all([
+      client.query({
+        query: `
+          SELECT table, name
+          FROM system.columns
+          WHERE database = currentDatabase()
+            AND table IN ({tables:Array(String)})
+        `,
+        query_params: { tables: [...DELTA_TABLE_NAMES] },
+        format: 'JSONEachRow',
+      }),
+      client.query({
+        query: `
+          SELECT name, create_table_query
+          FROM system.tables
+          WHERE database = currentDatabase()
+            AND name IN ({tables:Array(String)})
+        `,
+        query_params: { tables: [...DELTA_MV_NAMES] },
+        format: 'JSONEachRow',
+      }),
+    ]);
 
-    if (rows.length === 0) {
+    const columnRows = (await columnResult.json()) as Array<{ table: string; name: string }>;
+
+    if (columnRows.length === 0) {
       return null;
     }
 
     const columnsByTable = new Map<string, Set<string>>();
-    for (const row of rows) {
+    for (const row of columnRows) {
       let columns = columnsByTable.get(row.table);
       if (!columns) {
         columns = new Set<string>();
@@ -307,8 +321,8 @@ async function detectExistingDeltaCursorStrategy(
       columns.add(row.name);
     }
 
-    let sawTupleTable = false;
-    let sawSerialTable = false;
+    let sawFallbackTable = false;
+    let sawCursorTable = false;
 
     for (const table of DELTA_TABLE_NAMES) {
       const columns = columnsByTable.get(table);
@@ -317,22 +331,43 @@ async function detectExistingDeltaCursorStrategy(
       }
 
       if (columns.has('cursorId')) {
-        sawSerialTable = true;
+        sawCursorTable = true;
       } else {
-        sawTupleTable = true;
+        sawFallbackTable = true;
       }
     }
 
-    if (sawTupleTable && !sawSerialTable) {
-      return 'tuple';
+    if (sawFallbackTable && sawCursorTable) {
+      return 'mixed';
     }
 
-    if (sawSerialTable && !sawTupleTable) {
+    if (sawFallbackTable) {
+      return 'fallback';
+    }
+
+    const mvRows = (await mvResult.json()) as Array<{ name: string; create_table_query?: string | null }>;
+    let sawSerialMv = false;
+    let sawFallbackMv = false;
+
+    for (const row of mvRows) {
+      const ddl = row.create_table_query ?? '';
+      if (ddl.includes('generateSerialID(')) {
+        sawSerialMv = true;
+      } else if (ddl.includes('farmFingerprint64(')) {
+        sawFallbackMv = true;
+      }
+    }
+
+    if (sawSerialMv && sawFallbackMv) {
+      return 'mixed';
+    }
+
+    if (sawSerialMv) {
       return 'serial';
     }
 
-    if (sawTupleTable && sawSerialTable) {
-      return 'mixed';
+    if (sawFallbackMv) {
+      return 'fallback';
     }
 
     return null;
@@ -345,7 +380,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
-  #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'tuple';
+  #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
     super();
@@ -392,7 +427,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       const coreDdl =
         this.#deltaCursorStrategy === null
           ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
-          : [...buildAllTableDDL(this.#deltaCursorStrategy), ...ALL_MV_DDL];
+          : [...buildAllTableDDL(), ...buildAllMvDDL(this.#deltaCursorStrategy)];
       for (const ddl of coreDdl) {
         await this.#client.command({ query: ddl });
       }

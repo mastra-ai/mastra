@@ -188,12 +188,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return Math.max(0, this.db.observabilityNextCursorId - 1);
   }
 
-  private encodeDeltaCursor(cursorId: number): string {
-    return `inmem:${cursorId.toString(36)}`;
+  private encodeDeltaCursor(cursorId?: number | null): string {
+    return (cursorId ?? 0).toString();
   }
 
   private decodeDeltaCursor(cursor: string): number {
-    if (!cursor.startsWith('inmem:')) {
+    if (!/^\d+$/.test(cursor)) {
       throw new MastraError({
         id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
         domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -202,7 +202,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       });
     }
 
-    const cursorId = Number.parseInt(cursor.slice('inmem:'.length), 36);
+    const cursorId = Number.parseInt(cursor, 10);
     if (!Number.isInteger(cursorId) || cursorId < 0) {
       throw new MastraError({
         id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
@@ -215,16 +215,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return cursorId;
   }
 
-  private encodeResolvedDeltaCursor(cursorId: number | null): string {
-    return this.encodeDeltaCursor(cursorId ?? 0);
-  }
-
   private pageDeltaCursor(cursorId: number | null): { deltaCursor?: string } {
     if (!this.deltaPollingFeatureEnabled()) {
       return {};
     }
 
-    return { deltaCursor: this.encodeResolvedDeltaCursor(cursorId) };
+    return { deltaCursor: this.encodeDeltaCursor(cursorId) };
   }
 
   private maxMatchingCursorId<T extends object>(
@@ -288,7 +284,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       deltaCursor:
         visibleRows.length > 0
           ? this.encodeDeltaCursor(visibleRows[visibleRows.length - 1]!.cursorId)
-          : this.encodeResolvedDeltaCursor(fallbackCursorId),
+          : this.encodeDeltaCursor(fallbackCursorId),
     };
   }
 
@@ -307,7 +303,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return {
         rows: [],
         delta: { limit, hasMore: false },
-        deltaCursor: this.encodeResolvedDeltaCursor(fallbackCursorId),
+        deltaCursor: this.encodeDeltaCursor(fallbackCursorId),
       };
     }
 
@@ -613,7 +609,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         return {
           spans: [],
           delta: { limit, hasMore: false },
-          deltaCursor: this.encodeResolvedDeltaCursor(fallbackCursorId),
+          deltaCursor: this.encodeDeltaCursor(fallbackCursorId),
         };
       }
 
@@ -847,7 +843,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         return {
           branches: [],
           delta: { limit, hasMore: false },
-          deltaCursor: this.encodeResolvedDeltaCursor(fallbackCursorId),
+          deltaCursor: this.encodeDeltaCursor(fallbackCursorId),
         };
       }
 

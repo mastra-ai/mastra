@@ -167,7 +167,7 @@ export const listLogsResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    deltaCursor: deltaCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.optional(),
     logs: z.array(logRecordSchema),
   })
   .describe('Response from listing logs');

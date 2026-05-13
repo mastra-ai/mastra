@@ -23,19 +23,8 @@ import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_DELTA } from './ddl';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
-import type { ClickHouseDeltaCursorStrategy, ClickHouseDeltaCursor } from './polling';
-import {
-  assertCursorKind,
-  assertDeltaPollingSupported,
-  buildTupleCursorFilter,
-  decodeDeltaCursor,
-  deltaPollingFeatureEnabled,
-  encodeDeltaCursor,
-  invalidDeltaCursorError,
-} from './polling';
-
-const TUPLE_CURSOR_MIN_INGESTED_AT = '1970-01-01 00:00:00.000000000';
-const TUPLE_CURSOR_MIN_TIMESTAMP = '1970-01-01 00:00:00.000';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingFeatureEnabled, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -204,7 +193,7 @@ export async function listScores(
   if (parsed.mode === 'delta') {
     assertDeltaPollingSupported(strategy);
 
-    const currentDeltaCursor = await getDeltaCursor(client, whereClause, filter.params, strategy);
+    const currentDeltaCursor = await getDeltaCursor(client, whereClause, filter.params);
     if (parsed.after === undefined) {
       return {
         scores: [],
@@ -213,24 +202,8 @@ export async function listScores(
       };
     }
 
-    const afterCursor = decodeDeltaCursor(parsed.after);
-    const rows =
-      afterCursor.kind === 'serial'
-        ? await queryScoresAfterSerialCursor(
-            client,
-            whereClause,
-            filter.params,
-            parsed.limit,
-            strategy,
-            afterCursor.cursorId,
-          )
-        : await queryScoresAfterTupleCursor(
-            client,
-            whereClause,
-            filter.params,
-            parsed.limit,
-            assertCursorKind(afterCursor, 'score'),
-          );
+    const afterCursor = validateCursorId(parsed.after);
+    const rows = await queryScoresAfterCursor(client, whereClause, filter.params, parsed.limit, afterCursor);
 
     const visibleRows = rows.slice(0, parsed.limit);
 
@@ -238,13 +211,11 @@ export async function listScores(
       scores: visibleRows.map(rowToScoreRecord),
       delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
       deltaCursor:
-        visibleRows.length > 0 ? buildScoresCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentDeltaCursor,
+        visibleRows.length > 0 ? buildScoresCursor(visibleRows[visibleRows.length - 1]!) : currentDeltaCursor,
     };
   }
 
-  const currentDeltaCursor = deltaCursorEnabled
-    ? await getDeltaCursor(client, whereClause, filter.params, strategy)
-    : null;
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause}`,
@@ -273,24 +244,18 @@ export async function listScores(
 
 type ScoreDeltaRow = Record<string, any> & {
   cursorId?: string;
-  cursorIngestedAt?: string;
   traceId: string | null;
   timestamp: string;
   scoreId: string;
 };
 
-async function queryScoresAfterSerialCursor(
+async function queryScoresAfterCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
-  strategy: ClickHouseDeltaCursorStrategy,
   cursorId: string,
 ): Promise<ScoreDeltaRow[]> {
-  if (strategy !== 'serial') {
-    throw invalidDeltaCursorError();
-  }
-
   return await queryJson<ScoreDeltaRow>(
     client,
     `
@@ -299,54 +264,17 @@ async function queryScoresAfterSerialCursor(
         s.traceId AS traceId,
         s.timestamp AS timestamp,
         s.scoreId AS scoreId,
-        toString(d.cursorId) AS cursorId,
-        toString(d.ingestedAt) AS cursorIngestedAt
+        toString(d.cursorId) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
       INNER JOIN ${TABLE_SCORE_EVENTS} s
         ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
        AND s.timestamp = d.timestamp
        AND s.scoreId = d.scoreId
       ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
-      ORDER BY d.cursorId ASC, s.scoreId ASC
+      ORDER BY d.cursorId ASC
       LIMIT {fetchLimit:UInt32}
     `,
     { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
-  );
-}
-
-async function queryScoresAfterTupleCursor(
-  client: ClickHouseClient,
-  whereClause: string,
-  params: Record<string, unknown>,
-  limit: number,
-  afterCursor: Extract<ClickHouseDeltaCursor, { kind: 'score' }>,
-): Promise<ScoreDeltaRow[]> {
-  const tupleFilter = buildTupleCursorFilter([
-    { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
-    { expr: `ifNull(d.traceId, '')`, param: 'afterTraceId', type: 'String', value: afterCursor.traceId },
-    { expr: 'd.timestamp', param: 'afterTimestamp', type: `DateTime64(3, 'UTC')`, value: afterCursor.timestamp },
-    { expr: 'd.scoreId', param: 'afterScoreId', type: 'String', value: afterCursor.scoreId },
-  ]);
-
-  return await queryJson<ScoreDeltaRow>(
-    client,
-    `
-      SELECT
-        s.* EXCEPT(traceId, timestamp, scoreId),
-        s.traceId AS traceId,
-        s.timestamp AS timestamp,
-        s.scoreId AS scoreId,
-        toString(d.ingestedAt) AS cursorIngestedAt
-      FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
-        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-       AND s.timestamp = d.timestamp
-       AND s.scoreId = d.scoreId
-      ${whereClause ? `${whereClause} AND ${tupleFilter.clause}` : `WHERE ${tupleFilter.clause}`}
-      ORDER BY d.ingestedAt ASC, ifNull(d.traceId, '') ASC, d.timestamp ASC, d.scoreId ASC
-      LIMIT {fetchLimit:UInt32}
-    `,
-    { ...params, ...tupleFilter.params, fetchLimit: limit + 1 },
   );
 }
 
@@ -354,120 +282,37 @@ async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
-  strategy: ClickHouseDeltaCursorStrategy,
-): Promise<string | null> {
-  if (strategy === 'serial') {
-    const rows = await queryJson<{ cursorId?: string | null }>(
-      client,
-      `
-        SELECT toString(max(d.cursorId)) AS cursorId
-        FROM ${TABLE_SCORE_EVENTS_DELTA} d
-        INNER JOIN ${TABLE_SCORE_EVENTS} s
-          ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-         AND s.timestamp = d.timestamp
-         AND s.scoreId = d.scoreId
-        ${whereClause}
-      `,
-      params,
-    );
-
-    const cursorId = rows[0]?.cursorId ?? null;
-    if (cursorId) {
-      return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId });
-    }
-
-    const streamRows = await queryJson<{ cursorId?: string | null }>(
-      client,
-      `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_SCORE_EVENTS_DELTA}`,
-      {},
-    );
-
-    return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: streamRows[0]?.cursorId ?? '0' });
-  }
-
-  const rows = await queryJson<{
-    cursorIngestedAt?: string;
-    traceId?: string | null;
-    timestamp?: string;
-    scoreId?: string;
-  }>(
+): Promise<string> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
     client,
     `
-      SELECT
-        toString(d.ingestedAt) AS cursorIngestedAt,
-        ifNull(d.traceId, '') AS traceId,
-        toString(d.timestamp) AS timestamp,
-        d.scoreId AS scoreId
+      SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
       INNER JOIN ${TABLE_SCORE_EVENTS} s
         ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
        AND s.timestamp = d.timestamp
        AND s.scoreId = d.scoreId
       ${whereClause}
-      ORDER BY d.ingestedAt DESC, ifNull(d.traceId, '') DESC, d.timestamp DESC, d.scoreId DESC
-      LIMIT 1
     `,
     params,
   );
 
-  const row = rows[0];
-  if (row?.cursorIngestedAt && row.traceId != null && row.timestamp && row.scoreId) {
-    return encodeDeltaCursor({
-      version: 1,
-      kind: 'score',
-      ingestedAt: row.cursorIngestedAt,
-      traceId: row.traceId,
-      timestamp: row.timestamp,
-      scoreId: row.scoreId,
-    });
+  const cursorId = rows[0]?.cursorId ?? null;
+  if (cursorId) {
+    return cursorId;
   }
 
-  const streamRows = await queryJson<{
-    cursorIngestedAt?: string;
-    traceId?: string | null;
-    timestamp?: string;
-    scoreId?: string;
-  }>(
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
     client,
-    `
-      SELECT
-        toString(ingestedAt) AS cursorIngestedAt,
-        ifNull(traceId, '') AS traceId,
-        toString(timestamp) AS timestamp,
-        scoreId AS scoreId
-      FROM ${TABLE_SCORE_EVENTS_DELTA}
-      ORDER BY ingestedAt DESC, ifNull(traceId, '') DESC, timestamp DESC, scoreId DESC
-      LIMIT 1
-    `,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_SCORE_EVENTS_DELTA}`,
     {},
   );
 
-  const streamRow = streamRows[0];
-  return encodeDeltaCursor({
-    version: 1,
-    kind: 'score',
-    ingestedAt: streamRow?.cursorIngestedAt ?? TUPLE_CURSOR_MIN_INGESTED_AT,
-    traceId: streamRow?.traceId ?? '0',
-    timestamp: streamRow?.timestamp ?? TUPLE_CURSOR_MIN_TIMESTAMP,
-    scoreId: streamRow?.scoreId ?? '0',
-  });
+  return streamRows[0]?.cursorId ?? '0';
 }
 
-function buildScoresCursor(row: ScoreDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
-  if (strategy === 'serial') {
-    return row.cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
-  }
-
-  return row.cursorIngestedAt
-    ? encodeDeltaCursor({
-        version: 1,
-        kind: 'score',
-        ingestedAt: row.cursorIngestedAt,
-        traceId: row.traceId ?? '',
-        timestamp: row.timestamp,
-        scoreId: row.scoreId,
-      })
-    : null;
+function buildScoresCursor(row: ScoreDeltaRow): string {
+  return row.cursorId ?? '0';
 }
 
 export async function getScoreById(client: ClickHouseClient, scoreId: string): Promise<ScoreRecord | null> {

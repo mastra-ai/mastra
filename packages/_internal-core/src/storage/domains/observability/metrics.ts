@@ -218,7 +218,7 @@ export const listMetricsResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    deltaCursor: deltaCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.optional(),
     metrics: z.array(metricRecordSchema),
   })
   .describe('Response from listing metrics');

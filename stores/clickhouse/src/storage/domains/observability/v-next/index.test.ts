@@ -14,7 +14,14 @@ import { createClient } from '@clickhouse/client';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALL_MIGRATIONS, buildAllTableDDL, buildRetentionDDL, buildRetentionEntries, parseTtlExpression } from './ddl';
+import {
+  ALL_MIGRATIONS,
+  buildAllMvDDL,
+  buildAllTableDDL,
+  buildRetentionDDL,
+  buildRetentionEntries,
+  parseTtlExpression,
+} from './ddl';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -51,8 +58,8 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   describe('delta polling', () => {
-    async function withTupleStorage<T>(
-      run: (tupleStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,
+    async function withFallbackStorage<T>(
+      run: (fallbackStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,
     ): Promise<T> {
       const adminClient = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -65,7 +72,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-      const database = `tuple_delta_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const database = `fallback_delta_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       await adminClient.command({ query: `CREATE DATABASE ${database}` });
 
       const client = createClient({
@@ -81,18 +88,18 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         },
       });
 
-      const tupleStorage = new ObservabilityStorageClickhouseVNext({
+      const fallbackStorage = new ObservabilityStorageClickhouseVNext({
         client,
-        deltaCursorStrategy: 'tuple',
+        deltaCursorStrategy: 'fallback',
       });
 
-      await tupleStorage.init();
-      await tupleStorage.dangerouslyClearAll();
+      await fallbackStorage.init();
+      await fallbackStorage.dangerouslyClearAll();
 
       try {
-        return await run(tupleStorage);
+        return await run(fallbackStorage);
       } finally {
-        await tupleStorage.dangerouslyClearAll();
+        await fallbackStorage.dangerouslyClearAll();
         await client.close();
         await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
         await adminClient.close();
@@ -622,7 +629,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           SELECT create_table_query
           FROM system.tables
           WHERE database = currentDatabase()
-            AND name = 'mastra_log_events_delta'
+            AND name = 'mastra_mv_log_events_delta'
         `,
         format: 'JSONEachRow',
       });
@@ -631,32 +638,32 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       await client.close();
 
       expect(ddl).toContain(`generateSerialID('mastra_log_events_delta_cursor')`);
-      expect(ddl).toContain(`DateTime64(9, 'UTC') DEFAULT now64(9, 'UTC')`);
-      expect(ddl).toContain('ORDER BY (cursorId, timestamp, logId)');
+      expect(ddl).toContain('AS cursorId');
     });
 
     it('builds serial-backed delta DDL when explicitly requested', () => {
-      const serialDdl = buildAllTableDDL('serial').join('\n');
-      const tupleDdl = buildAllTableDDL('tuple').join('\n');
+      const serialDdl = [...buildAllTableDDL(), ...buildAllMvDDL('serial')].join('\n');
+      const fallbackDdl = [...buildAllTableDDL(), ...buildAllMvDDL('fallback')].join('\n');
 
       expect(serialDdl).toContain(`generateSerialID('mastra_log_events_delta_cursor')`);
       expect(serialDdl).toContain(`generateSerialID('mastra_trace_roots_delta_cursor')`);
-      expect(tupleDdl).not.toContain('generateSerialID(');
+      expect(fallbackDdl).toContain('farmFingerprint64(');
+      expect(fallbackDdl).not.toContain('generateSerialID(');
     });
 
-    it('supports tuple-mode delta polling for traces when forced', async () => {
-      await withTupleStorage(async tupleStorage => {
-        await tupleStorage.createSpan({
+    it('supports fallback-mode delta polling for traces when forced', async () => {
+      await withFallbackStorage(async fallbackStorage => {
+        await fallbackStorage.createSpan({
           span: {
-            traceId: 'tuple-trace-1',
-            spanId: 'tuple-trace-root-1',
+            traceId: 'fallback-trace-1',
+            spanId: 'fallback-trace-root-1',
             parentSpanId: null,
-            name: 'tuple-trace-root',
+            name: 'fallback-trace-root',
             spanType: SpanType.AGENT_RUN,
             isEvent: false,
             entityType: EntityType.AGENT,
-            entityId: 'tuple-trace-agent',
-            entityName: 'tuple-trace-agent',
+            entityId: 'fallback-trace-agent',
+            entityName: 'fallback-trace-agent',
             userId: null,
             organizationId: null,
             resourceId: null,
@@ -664,7 +671,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             sessionId: null,
             threadId: null,
             requestId: null,
-            environment: 'tuple',
+            environment: 'fallback',
             source: null,
             serviceName: null,
             scope: null,
@@ -681,21 +688,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         });
 
         const page = await waitForValue(
-          () => tupleStorage.listTraces({ filters: { entityName: 'tuple-trace-agent' } }),
+          () => fallbackStorage.listTraces({ filters: { entityName: 'fallback-trace-agent' } }),
           result => result.spans.length === 1 && typeof result.deltaCursor === 'string',
         );
 
-        await tupleStorage.createSpan({
+        await fallbackStorage.createSpan({
           span: {
-            traceId: 'tuple-trace-2',
-            spanId: 'tuple-trace-root-2',
+            traceId: 'fallback-trace-2',
+            spanId: 'fallback-trace-root-2',
             parentSpanId: null,
-            name: 'tuple-trace-root',
+            name: 'fallback-trace-root',
             spanType: SpanType.AGENT_RUN,
             isEvent: false,
             entityType: EntityType.AGENT,
-            entityId: 'tuple-trace-agent',
-            entityName: 'tuple-trace-agent',
+            entityId: 'fallback-trace-agent',
+            entityName: 'fallback-trace-agent',
             userId: null,
             organizationId: null,
             resourceId: null,
@@ -703,7 +710,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             sessionId: null,
             threadId: null,
             requestId: null,
-            environment: 'tuple',
+            environment: 'fallback',
             source: null,
             serviceName: null,
             scope: null,
@@ -721,31 +728,31 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
         const delta = await waitForValue(
           () =>
-            tupleStorage.listTraces({
+            fallbackStorage.listTraces({
               mode: 'delta',
               after: page.deltaCursor!,
-              filters: { entityName: 'tuple-trace-agent' },
+              filters: { entityName: 'fallback-trace-agent' },
             }),
           result => result.spans.length === 1,
         );
-        expect(delta.spans.map(span => span.traceId)).toEqual(['tuple-trace-2']);
+        expect(delta.spans.map(span => span.traceId)).toEqual(['fallback-trace-2']);
       });
     });
 
-    it('supports tuple-mode delta polling for branches when forced', async () => {
-      await withTupleStorage(async tupleStorage => {
-        await tupleStorage.batchCreateSpans({
+    it('supports fallback-mode delta polling for branches when forced', async () => {
+      await withFallbackStorage(async fallbackStorage => {
+        await fallbackStorage.batchCreateSpans({
           records: [
             {
-              traceId: 'tuple-branch-trace-1',
-              spanId: 'tuple-branch-root-1',
+              traceId: 'fallback-branch-trace-1',
+              spanId: 'fallback-branch-root-1',
               parentSpanId: null,
               name: 'root',
               spanType: SpanType.WORKFLOW_RUN,
               isEvent: false,
               entityType: EntityType.WORKFLOW_RUN,
-              entityId: 'tuple-wf',
-              entityName: 'tuple-wf',
+              entityId: 'fallback-wf',
+              entityName: 'fallback-wf',
               userId: null,
               organizationId: null,
               resourceId: null,
@@ -768,15 +775,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
               endedAt: new Date('2026-05-09T00:00:01Z'),
             },
             {
-              traceId: 'tuple-branch-trace-1',
-              spanId: 'tuple-branch-anchor-1',
-              parentSpanId: 'tuple-branch-root-1',
+              traceId: 'fallback-branch-trace-1',
+              spanId: 'fallback-branch-anchor-1',
+              parentSpanId: 'fallback-branch-root-1',
               name: 'observer',
               spanType: SpanType.AGENT_RUN,
               isEvent: false,
               entityType: EntityType.AGENT,
-              entityId: 'tuple-branch-agent',
-              entityName: 'tuple-branch-agent',
+              entityId: 'fallback-branch-agent',
+              entityName: 'fallback-branch-agent',
               userId: null,
               organizationId: null,
               resourceId: null,
@@ -802,22 +809,22 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         });
 
         const page = await waitForValue(
-          () => tupleStorage.listBranches({ filters: { entityName: 'tuple-branch-agent' } }),
+          () => fallbackStorage.listBranches({ filters: { entityName: 'fallback-branch-agent' } }),
           result => result.branches.length === 1 && typeof result.deltaCursor === 'string',
         );
 
-        await tupleStorage.batchCreateSpans({
+        await fallbackStorage.batchCreateSpans({
           records: [
             {
-              traceId: 'tuple-branch-trace-2',
-              spanId: 'tuple-branch-root-2',
+              traceId: 'fallback-branch-trace-2',
+              spanId: 'fallback-branch-root-2',
               parentSpanId: null,
               name: 'root',
               spanType: SpanType.WORKFLOW_RUN,
               isEvent: false,
               entityType: EntityType.WORKFLOW_RUN,
-              entityId: 'tuple-wf',
-              entityName: 'tuple-wf',
+              entityId: 'fallback-wf',
+              entityName: 'fallback-wf',
               userId: null,
               organizationId: null,
               resourceId: null,
@@ -840,15 +847,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
               endedAt: new Date('2026-05-09T00:00:03Z'),
             },
             {
-              traceId: 'tuple-branch-trace-2',
-              spanId: 'tuple-branch-anchor-2',
-              parentSpanId: 'tuple-branch-root-2',
+              traceId: 'fallback-branch-trace-2',
+              spanId: 'fallback-branch-anchor-2',
+              parentSpanId: 'fallback-branch-root-2',
               name: 'observer',
               spanType: SpanType.AGENT_RUN,
               isEvent: false,
               entityType: EntityType.AGENT,
-              entityId: 'tuple-branch-agent',
-              entityName: 'tuple-branch-agent',
+              entityId: 'fallback-branch-agent',
+              entityName: 'fallback-branch-agent',
               userId: null,
               organizationId: null,
               resourceId: null,
@@ -875,47 +882,47 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
         const delta = await waitForValue(
           () =>
-            tupleStorage.listBranches({
+            fallbackStorage.listBranches({
               mode: 'delta',
               after: page.deltaCursor!,
-              filters: { entityName: 'tuple-branch-agent' },
+              filters: { entityName: 'fallback-branch-agent' },
             }),
           result => result.branches.length === 1,
         );
-        expect(delta.branches.map(branch => branch.traceId)).toEqual(['tuple-branch-trace-2']);
+        expect(delta.branches.map(branch => branch.traceId)).toEqual(['fallback-branch-trace-2']);
       });
     });
 
-    it('supports tuple-mode delta polling for logs when forced', async () => {
-      await withTupleStorage(async tupleStorage => {
-        await tupleStorage.batchCreateLogs({
+    it('supports fallback-mode delta polling for logs when forced', async () => {
+      await withFallbackStorage(async fallbackStorage => {
+        await fallbackStorage.batchCreateLogs({
           logs: [
             {
-              logId: 'tuple-log-1',
+              logId: 'fallback-log-1',
               timestamp: new Date('2026-05-10T00:00:00Z'),
               level: 'info',
-              message: 'tuple log 1',
+              message: 'fallback log 1',
               data: null,
-              traceId: 'tuple-log-trace',
+              traceId: 'fallback-log-trace',
               metadata: null,
             },
           ],
         });
 
         const page = await waitForValue(
-          () => tupleStorage.listLogs({ filters: { traceId: 'tuple-log-trace' } }),
+          () => fallbackStorage.listLogs({ filters: { traceId: 'fallback-log-trace' } }),
           result => result.logs.length === 1 && typeof result.deltaCursor === 'string',
         );
 
-        await tupleStorage.batchCreateLogs({
+        await fallbackStorage.batchCreateLogs({
           logs: [
             {
-              logId: 'tuple-log-2',
+              logId: 'fallback-log-2',
               timestamp: new Date('2026-05-10T00:00:01Z'),
               level: 'info',
-              message: 'tuple log 2',
+              message: 'fallback log 2',
               data: null,
-              traceId: 'tuple-log-trace',
+              traceId: 'fallback-log-trace',
               metadata: null,
             },
           ],
@@ -923,44 +930,44 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
         const delta = await waitForValue(
           () =>
-            tupleStorage.listLogs({
+            fallbackStorage.listLogs({
               mode: 'delta',
               after: page.deltaCursor!,
-              filters: { traceId: 'tuple-log-trace' },
+              filters: { traceId: 'fallback-log-trace' },
             }),
           result => result.logs.length === 1,
         );
-        expect(delta.logs.map(log => log.logId)).toEqual(['tuple-log-2']);
+        expect(delta.logs.map(log => log.logId)).toEqual(['fallback-log-2']);
       });
     });
 
-    it('keeps using tuple mode after reinit on a Keeper-enabled server when tuple delta tables already exist', async () => {
-      const tupleStorage = new ObservabilityStorageClickhouseVNext({
+    it('keeps using fallback mode after reinit on a Keeper-enabled server when fallback delta tables already exist', async () => {
+      const fallbackStorage = new ObservabilityStorageClickhouseVNext({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
         password: process.env.CLICKHOUSE_PASSWORD || 'password',
-        deltaCursorStrategy: 'tuple',
+        deltaCursorStrategy: 'fallback',
       });
-      await tupleStorage.init();
-      await tupleStorage.dangerouslyClearAll();
+      await fallbackStorage.init();
+      await fallbackStorage.dangerouslyClearAll();
 
       try {
-        await tupleStorage.batchCreateLogs({
+        await fallbackStorage.batchCreateLogs({
           logs: [
             {
-              logId: 'tuple-upgrade-log-1',
+              logId: 'fallback-upgrade-log-1',
               timestamp: new Date('2026-05-11T00:00:00Z'),
               level: 'info',
-              message: 'tuple upgrade log 1',
+              message: 'fallback upgrade log 1',
               data: null,
-              traceId: 'tuple-upgrade-trace',
+              traceId: 'fallback-upgrade-trace',
               metadata: null,
             },
           ],
         });
 
         const page = await waitForValue(
-          () => tupleStorage.listLogs({ filters: { traceId: 'tuple-upgrade-trace' } }),
+          () => fallbackStorage.listLogs({ filters: { traceId: 'fallback-upgrade-trace' } }),
           result => result.logs.length === 1 && typeof result.deltaCursor === 'string',
         );
 
@@ -974,12 +981,12 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         await defaultStorage.batchCreateLogs({
           logs: [
             {
-              logId: 'tuple-upgrade-log-2',
+              logId: 'fallback-upgrade-log-2',
               timestamp: new Date('2026-05-11T00:00:01Z'),
               level: 'info',
-              message: 'tuple upgrade log 2',
+              message: 'fallback upgrade log 2',
               data: null,
-              traceId: 'tuple-upgrade-trace',
+              traceId: 'fallback-upgrade-trace',
               metadata: null,
             },
           ],
@@ -990,13 +997,13 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             defaultStorage.listLogs({
               mode: 'delta',
               after: page.deltaCursor!,
-              filters: { traceId: 'tuple-upgrade-trace' },
+              filters: { traceId: 'fallback-upgrade-trace' },
             }),
           result => result.logs.length === 1,
         );
-        expect(delta.logs.map(log => log.logId)).toEqual(['tuple-upgrade-log-2']);
+        expect(delta.logs.map(log => log.logId)).toEqual(['fallback-upgrade-log-2']);
       } finally {
-        await tupleStorage.dangerouslyClearAll();
+        await fallbackStorage.dangerouslyClearAll();
       }
     });
   });

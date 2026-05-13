@@ -547,7 +547,7 @@ export type ListTracesArgs = z.input<typeof listTracesArgsSchema>;
 export const listTracesResponseSchema = z.object({
   pagination: paginationInfoSchema.optional(),
   delta: deltaInfoSchema.optional(),
-  deltaCursor: deltaCursorSchema.nullable().optional(),
+  deltaCursor: deltaCursorSchema.optional(),
   spans: z.array(traceSpanSchema),
 });
 
@@ -657,7 +657,7 @@ export type ListBranchesArgs = z.input<typeof listBranchesArgsSchema>;
 export const listBranchesResponseSchema = z.object({
   pagination: paginationInfoSchema.optional(),
   delta: deltaInfoSchema.optional(),
-  deltaCursor: deltaCursorSchema.nullable().optional(),
+  deltaCursor: deltaCursorSchema.optional(),
   branches: z.array(traceSpanSchema),
 });
 

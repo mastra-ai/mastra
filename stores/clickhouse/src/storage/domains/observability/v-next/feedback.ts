@@ -22,19 +22,8 @@ import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
-import type { ClickHouseDeltaCursorStrategy, ClickHouseDeltaCursor } from './polling';
-import {
-  assertCursorKind,
-  assertDeltaPollingSupported,
-  buildTupleCursorFilter,
-  decodeDeltaCursor,
-  deltaPollingFeatureEnabled,
-  encodeDeltaCursor,
-  invalidDeltaCursorError,
-} from './polling';
-
-const TUPLE_CURSOR_MIN_INGESTED_AT = '1970-01-01 00:00:00.000000000';
-const TUPLE_CURSOR_MIN_TIMESTAMP = '1970-01-01 00:00:00.000';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingFeatureEnabled, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -208,7 +197,7 @@ export async function listFeedback(
   if (parsed.mode === 'delta') {
     assertDeltaPollingSupported(strategy);
 
-    const currentDeltaCursor = await getDeltaCursor(client, whereClause, filter.params, strategy);
+    const currentDeltaCursor = await getDeltaCursor(client, whereClause, filter.params);
     if (parsed.after === undefined) {
       return {
         feedback: [],
@@ -217,24 +206,8 @@ export async function listFeedback(
       };
     }
 
-    const afterCursor = decodeDeltaCursor(parsed.after);
-    const rows =
-      afterCursor.kind === 'serial'
-        ? await queryFeedbackAfterSerialCursor(
-            client,
-            whereClause,
-            filter.params,
-            parsed.limit,
-            strategy,
-            afterCursor.cursorId,
-          )
-        : await queryFeedbackAfterTupleCursor(
-            client,
-            whereClause,
-            filter.params,
-            parsed.limit,
-            assertCursorKind(afterCursor, 'feedback'),
-          );
+    const afterCursor = validateCursorId(parsed.after);
+    const rows = await queryFeedbackAfterCursor(client, whereClause, filter.params, parsed.limit, afterCursor);
 
     const visibleRows = rows.slice(0, parsed.limit);
 
@@ -242,15 +215,11 @@ export async function listFeedback(
       feedback: visibleRows.map(rowToFeedbackRecord),
       delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
       deltaCursor:
-        visibleRows.length > 0
-          ? buildFeedbackCursor(visibleRows[visibleRows.length - 1]!, strategy)
-          : currentDeltaCursor,
+        visibleRows.length > 0 ? buildFeedbackCursor(visibleRows[visibleRows.length - 1]!) : currentDeltaCursor,
     };
   }
 
-  const currentDeltaCursor = deltaCursorEnabled
-    ? await getDeltaCursor(client, whereClause, filter.params, strategy)
-    : null;
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause}`,
@@ -279,24 +248,18 @@ export async function listFeedback(
 
 type FeedbackDeltaRow = Record<string, any> & {
   cursorId?: string;
-  cursorIngestedAt?: string;
   traceId: string | null;
   timestamp: string;
   feedbackId: string;
 };
 
-async function queryFeedbackAfterSerialCursor(
+async function queryFeedbackAfterCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
-  strategy: ClickHouseDeltaCursorStrategy,
   cursorId: string,
 ): Promise<FeedbackDeltaRow[]> {
-  if (strategy !== 'serial') {
-    throw invalidDeltaCursorError();
-  }
-
   return await queryJson<FeedbackDeltaRow>(
     client,
     `
@@ -305,54 +268,17 @@ async function queryFeedbackAfterSerialCursor(
         f.traceId AS traceId,
         f.timestamp AS timestamp,
         f.feedbackId AS feedbackId,
-        toString(d.cursorId) AS cursorId,
-        toString(d.ingestedAt) AS cursorIngestedAt
+        toString(d.cursorId) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
       INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
         ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
       ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
-      ORDER BY d.cursorId ASC, f.feedbackId ASC
+      ORDER BY d.cursorId ASC
       LIMIT {fetchLimit:UInt32}
     `,
     { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
-  );
-}
-
-async function queryFeedbackAfterTupleCursor(
-  client: ClickHouseClient,
-  whereClause: string,
-  params: Record<string, unknown>,
-  limit: number,
-  afterCursor: Extract<ClickHouseDeltaCursor, { kind: 'feedback' }>,
-): Promise<FeedbackDeltaRow[]> {
-  const tupleFilter = buildTupleCursorFilter([
-    { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
-    { expr: `ifNull(d.traceId, '')`, param: 'afterTraceId', type: 'String', value: afterCursor.traceId },
-    { expr: 'd.timestamp', param: 'afterTimestamp', type: `DateTime64(3, 'UTC')`, value: afterCursor.timestamp },
-    { expr: 'd.feedbackId', param: 'afterFeedbackId', type: 'String', value: afterCursor.feedbackId },
-  ]);
-
-  return await queryJson<FeedbackDeltaRow>(
-    client,
-    `
-      SELECT
-        f.* EXCEPT(traceId, timestamp, feedbackId),
-        f.traceId AS traceId,
-        f.timestamp AS timestamp,
-        f.feedbackId AS feedbackId,
-        toString(d.ingestedAt) AS cursorIngestedAt
-      FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
-        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
-       AND f.timestamp = d.timestamp
-       AND f.feedbackId = d.feedbackId
-      ${whereClause ? `${whereClause} AND ${tupleFilter.clause}` : `WHERE ${tupleFilter.clause}`}
-      ORDER BY d.ingestedAt ASC, ifNull(d.traceId, '') ASC, d.timestamp ASC, d.feedbackId ASC
-      LIMIT {fetchLimit:UInt32}
-    `,
-    { ...params, ...tupleFilter.params, fetchLimit: limit + 1 },
   );
 }
 
@@ -360,120 +286,37 @@ async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
-  strategy: ClickHouseDeltaCursorStrategy,
-): Promise<string | null> {
-  if (strategy === 'serial') {
-    const rows = await queryJson<{ cursorId?: string | null }>(
-      client,
-      `
-        SELECT toString(max(d.cursorId)) AS cursorId
-        FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-        INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
-          ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
-         AND f.timestamp = d.timestamp
-         AND f.feedbackId = d.feedbackId
-        ${whereClause}
-      `,
-      params,
-    );
-
-    const cursorId = rows[0]?.cursorId ?? null;
-    if (cursorId) {
-      return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId });
-    }
-
-    const streamRows = await queryJson<{ cursorId?: string | null }>(
-      client,
-      `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_FEEDBACK_EVENTS_DELTA}`,
-      {},
-    );
-
-    return encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: streamRows[0]?.cursorId ?? '0' });
-  }
-
-  const rows = await queryJson<{
-    cursorIngestedAt?: string;
-    traceId?: string | null;
-    timestamp?: string;
-    feedbackId?: string;
-  }>(
+): Promise<string> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
     client,
     `
-      SELECT
-        toString(d.ingestedAt) AS cursorIngestedAt,
-        ifNull(d.traceId, '') AS traceId,
-        toString(d.timestamp) AS timestamp,
-        d.feedbackId AS feedbackId
+      SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
       INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
         ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
       ${whereClause}
-      ORDER BY d.ingestedAt DESC, ifNull(d.traceId, '') DESC, d.timestamp DESC, d.feedbackId DESC
-      LIMIT 1
     `,
     params,
   );
 
-  const row = rows[0];
-  if (row?.cursorIngestedAt && row.traceId != null && row.timestamp && row.feedbackId) {
-    return encodeDeltaCursor({
-      version: 1,
-      kind: 'feedback',
-      ingestedAt: row.cursorIngestedAt,
-      traceId: row.traceId,
-      timestamp: row.timestamp,
-      feedbackId: row.feedbackId,
-    });
+  const cursorId = rows[0]?.cursorId ?? null;
+  if (cursorId) {
+    return cursorId;
   }
 
-  const streamRows = await queryJson<{
-    cursorIngestedAt?: string;
-    traceId?: string | null;
-    timestamp?: string;
-    feedbackId?: string;
-  }>(
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
     client,
-    `
-      SELECT
-        toString(ingestedAt) AS cursorIngestedAt,
-        ifNull(traceId, '') AS traceId,
-        toString(timestamp) AS timestamp,
-        feedbackId AS feedbackId
-      FROM ${TABLE_FEEDBACK_EVENTS_DELTA}
-      ORDER BY ingestedAt DESC, ifNull(traceId, '') DESC, timestamp DESC, feedbackId DESC
-      LIMIT 1
-    `,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_FEEDBACK_EVENTS_DELTA}`,
     {},
   );
 
-  const streamRow = streamRows[0];
-  return encodeDeltaCursor({
-    version: 1,
-    kind: 'feedback',
-    ingestedAt: streamRow?.cursorIngestedAt ?? TUPLE_CURSOR_MIN_INGESTED_AT,
-    traceId: streamRow?.traceId ?? '0',
-    timestamp: streamRow?.timestamp ?? TUPLE_CURSOR_MIN_TIMESTAMP,
-    feedbackId: streamRow?.feedbackId ?? '0',
-  });
+  return streamRows[0]?.cursorId ?? '0';
 }
 
-function buildFeedbackCursor(row: FeedbackDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
-  if (strategy === 'serial') {
-    return row.cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
-  }
-
-  return row.cursorIngestedAt
-    ? encodeDeltaCursor({
-        version: 1,
-        kind: 'feedback',
-        ingestedAt: row.cursorIngestedAt,
-        traceId: row.traceId ?? '',
-        timestamp: row.timestamp,
-        feedbackId: row.feedbackId,
-      })
-    : null;
+function buildFeedbackCursor(row: FeedbackDeltaRow): string {
+  return row.cursorId ?? '0';
 }
 
 // ============================================================================

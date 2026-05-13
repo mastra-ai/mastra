@@ -119,7 +119,10 @@ export const LIST_TRACES_ROUTE = createRoute({
   queryParamSchema: createObservabilityListQuerySchema(
     tracesFilterSchema.extend({
       ...legacyQueryParamsSchema.shape,
-      entityType: tracesFilterSchema.shape.entityType,
+      entityType: z.preprocess(
+        value => (value === 'workflow' ? 'workflow_run' : value),
+        tracesFilterSchema.shape.entityType,
+      ),
     }),
     tracesOrderBySchema,
   ),

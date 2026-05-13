@@ -226,7 +226,7 @@ export const listScoresResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    deltaCursor: deltaCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.optional(),
     scores: z.array(scoreRecordSchema),
   })
   .describe('Response from listing scores');

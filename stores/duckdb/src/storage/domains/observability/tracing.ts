@@ -22,13 +22,7 @@ import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, listTracesArgsSchema, toTrac
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
-import {
-  assertDeltaPollingEnabled,
-  decodeDeltaCursor,
-  deltaPollingFeatureEnabled,
-  encodeDeltaCursor,
-  normalizeCursorId,
-} from './polling';
+import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 
 // ============================================================================
 // Columns & Reconstruction
@@ -634,7 +628,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
       };
     }
 
-    const afterCursorId = decodeDeltaCursor(after);
+    const afterCursorId = validateCursorId(after);
     const { prefilter, postAgg, hasChildError } = partitionAnchorFilters(filterRecord);
     const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
     const prefilterParts = [
@@ -672,13 +666,13 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
       SELECT * FROM root_spans ${postAggWhere} ORDER BY anchorCursorId ASC LIMIT ?
     `;
     const rows = await db.query<Record<string, unknown>>(dataSql, [
-      afterCursorId.toString(),
+      afterCursorId,
       ...prefilterParams,
       ...postAggParams,
       limit + 1,
     ]);
     const visibleRows = rows.slice(0, limit).map(row => ({
-      cursorId: normalizeCursorId(row.anchorCursorId),
+      cursorId: row.anchorCursorId,
       span: rowToSpanRecord(row),
     }));
 
@@ -686,9 +680,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
       spans: toTraceSpans(visibleRows.map(row => row.span)),
       delta: { limit, hasMore: rows.length > limit },
       deltaCursor:
-        visibleRows.length > 0
-          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentDeltaCursor,
+        visibleRows.length > 0 ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId) : currentDeltaCursor,
     };
   }
 
@@ -706,7 +698,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   if (orderDir !== 'ASC' && orderDir !== 'DESC') {
     throw new Error(`Invalid sort direction: ${orderBy.direction}`);
   }
-  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getTraceDeltaCursor(db, filters) : null;
+  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getTraceDeltaCursor(db, filters) : undefined;
 
   // The fast path orders + paginates on raw `span_events` start rows. That's
   // only safe when the order field's start-row value matches the reconstructed
@@ -858,7 +850,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   // through).
   const userSpanType = filterRecord.spanType;
   if (typeof userSpanType === 'string' && !(BRANCH_SPAN_TYPES as readonly string[]).includes(userSpanType)) {
-    const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getBranchDeltaCursor(db, filters) : null;
+    const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getBranchDeltaCursor(db, filters) : undefined;
     if (mode === 'delta') {
       assertDeltaPollingEnabled();
       return {
@@ -887,7 +879,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
       };
     }
 
-    const afterCursorId = decodeDeltaCursor(after);
+    const afterCursorId = validateCursorId(after);
     const { spanType: _spanType, ...rest } = filterRecord;
     const { prefilter, postAgg, hasChildError: _hasChildError } = partitionAnchorFilters(rest);
     const { clause: prefilterClause, params: prefilterFilterParams } = buildWhereClause(prefilter);
@@ -902,7 +894,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     }
     if (prefilterClause) prefilterParts.push(prefilterClause.replace(/^WHERE\s+/i, ''));
     const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
-    const prefilterParams = [afterCursorId.toString(), ...spanTypeParams, ...prefilterFilterParams];
+    const prefilterParams = [afterCursorId, ...spanTypeParams, ...prefilterFilterParams];
 
     const { clause: postAggClause, params: postAggParams } = buildWhereClause(postAgg);
     const postAggWhere = postAggClause ? postAggClause : '';
@@ -927,7 +919,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     `;
     const rows = await db.query<Record<string, unknown>>(dataSql, [...prefilterParams, ...postAggParams, limit + 1]);
     const visibleRows = rows.slice(0, limit).map(row => ({
-      cursorId: normalizeCursorId(row.anchorCursorId),
+      cursorId: row.anchorCursorId,
       branch: rowToSpanRecord(row),
     }));
 
@@ -935,9 +927,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
       branches: toTraceSpans(visibleRows.map(row => row.branch)),
       delta: { limit, hasMore: rows.length > limit },
       deltaCursor:
-        visibleRows.length > 0
-          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentDeltaCursor,
+        visibleRows.length > 0 ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId) : currentDeltaCursor,
     };
   }
 
@@ -971,7 +961,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   if (orderDir !== 'ASC' && orderDir !== 'DESC') {
     throw new Error(`Invalid sort direction: ${orderBy.direction}`);
   }
-  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getBranchDeltaCursor(db, filters) : null;
+  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getBranchDeltaCursor(db, filters) : undefined;
 
   // Same allowlist gate as listTraces — see SAFE_PREFILTER_ORDER_FIELDS.
   const canOrderInPrefilter = SAFE_PREFILTER_ORDER_FIELDS.has(orderBy.field);
@@ -1071,7 +1061,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   };
 }
 
-async function getTraceDeltaCursor(db: DuckDBConnection, filters: ListTracesArgs['filters']): Promise<string | null> {
+async function getTraceDeltaCursor(db: DuckDBConnection, filters: ListTracesArgs['filters']): Promise<string> {
   const { prefilter, postAgg, hasChildError } = partitionAnchorFilters((filters ?? {}) as Record<string, unknown>);
   const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
   const prefilterParts = [`eventType = 'start'`, `parentSpanId IS NULL`, `cursorId IS NOT NULL`];
@@ -1099,7 +1089,7 @@ async function getTraceDeltaCursor(db: DuckDBConnection, filters: ListTracesArgs
     const streamRows = await db.query<Record<string, unknown>>(
       `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND parentSpanId IS NULL AND cursorId IS NOT NULL`,
     );
-    return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
+    return encodeDeltaCursor(streamRows[0]?.cursorId);
   }
 
   const cteSql = `
@@ -1130,13 +1120,10 @@ async function getTraceDeltaCursor(db: DuckDBConnection, filters: ListTracesArgs
   const streamRows = await db.query<Record<string, unknown>>(
     `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND parentSpanId IS NULL AND cursorId IS NOT NULL`,
   );
-  return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
 }
 
-async function getBranchDeltaCursor(
-  db: DuckDBConnection,
-  filters: ListBranchesArgs['filters'],
-): Promise<string | null> {
+async function getBranchDeltaCursor(db: DuckDBConnection, filters: ListBranchesArgs['filters']): Promise<string> {
   const filterRecord = (filters ?? {}) as Record<string, unknown>;
   const userSpanType = filterRecord.spanType;
 
@@ -1172,7 +1159,7 @@ async function getBranchDeltaCursor(
       `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS}) AND cursorId IS NOT NULL`,
       [...BRANCH_SPAN_TYPES],
     );
-    return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
+    return encodeDeltaCursor(streamRows[0]?.cursorId);
   }
 
   const cteSql = `
@@ -1204,5 +1191,5 @@ async function getBranchDeltaCursor(
     `SELECT max(cursorId) AS cursorId FROM span_events WHERE eventType = 'start' AND spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS}) AND cursorId IS NOT NULL`,
     [...BRANCH_SPAN_TYPES],
   );
-  return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
 }

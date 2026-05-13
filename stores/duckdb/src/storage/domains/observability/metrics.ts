@@ -27,11 +27,10 @@ import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereCla
 import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
 import {
   assertDeltaPollingEnabled,
-  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
   encodeDeltaCursor,
   extendWhereClause,
-  normalizeCursorId,
+  validateCursorId,
 } from './polling';
 
 // ============================================================================
@@ -353,15 +352,15 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
       };
     }
 
-    const afterCursorId = decodeDeltaCursor(after);
+    const afterCursorId = validateCursorId(after);
     const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
     const rows = await db.query<Record<string, unknown>>(
       `SELECT * FROM metric_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
-      [...filterParams, afterCursorId.toString(), limit + 1],
+      [...filterParams, afterCursorId, limit + 1],
     );
 
     const visibleRows = rows.slice(0, limit).map(row => ({
-      cursorId: normalizeCursorId(row.cursorId),
+      cursorId: row.cursorId,
       metric: rowToMetricRecord(row),
     }));
 
@@ -369,15 +368,15 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
       metrics: visibleRows.map(row => row.metric) as ListMetricsResponse['metrics'],
       delta: { limit, hasMore: rows.length > limit },
       deltaCursor:
-        visibleRows.length > 0
-          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentDeltaCursor,
+        visibleRows.length > 0 ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId) : currentDeltaCursor,
     };
   }
 
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
-  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getDeltaCursor(db, filterClause, filterParams) : null;
+  const currentDeltaCursor = deltaPollingFeatureEnabled()
+    ? await getDeltaCursor(db, filterClause, filterParams)
+    : undefined;
 
   const countResult = await db.query<{ total: number }>(
     `SELECT COUNT(*) AS total FROM metric_events ${filterClause}`,
@@ -397,11 +396,7 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
   };
 }
 
-async function getDeltaCursor(
-  db: DuckDBConnection,
-  filterClause: string,
-  filterParams: unknown[],
-): Promise<string | null> {
+async function getDeltaCursor(db: DuckDBConnection, filterClause: string, filterParams: unknown[]): Promise<string> {
   const rows = await db.query<Record<string, unknown>>(
     `SELECT max(cursorId) AS cursorId FROM metric_events ${filterClause}`,
     filterParams,
@@ -413,7 +408,7 @@ async function getDeltaCursor(
   }
 
   const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM metric_events`);
-  return encodeDeltaCursor(streamRows[0]?.cursorId ?? 0);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
 }
 
 // ============================================================================
