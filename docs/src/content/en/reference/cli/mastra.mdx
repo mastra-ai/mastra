@@ -659,7 +659,7 @@ For runtime commands, the command resolves the target server in this order:
 
 Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
 
-For observability commands (`trace`, `log`, and `score`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. It resolves credentials in this order:
+For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. It resolves credentials in this order:
 
 1. Explicit `Authorization` and `X-Mastra-Project-Id` headers passed with `--header`.
 1. `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your environment.
