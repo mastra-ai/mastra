@@ -239,6 +239,17 @@ The filename (or directory structure) determines the command name. For example, 
 
 Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
 
+Add `goal: true` to expose the command as a goal entry point under `/goal/<command-name>`:
+
+```md title=".mastracode/commands/pr-triage.md"
+---
+description: Triage every open PR
+goal: true
+---
+
+Review every open PR and continue until each PR has a concise TL;DR.
+```
+
 ## Skills
 
 Skills are structured instruction files that the agent loads automatically based on trigger conditions. They provide domain-specific guidance without manually pasting instructions.
@@ -253,6 +264,19 @@ Mastra Code scans these directories for skills:
 | Lowest | `~/.claude/skills/` | Global (Claude Code compatible) |
 
 Each skill is a directory containing a `SKILL.md` file with instructions and trigger descriptions. Skills installed via symlinks (e.g., from `npx skills add`) are automatically resolved.
+
+Add `metadata.goal: true` to expose a skill as a goal entry point under `/goal/<skill-name>`:
+
+```md title=".mastracode/skills/release-check/SKILL.md"
+---
+name: release-check
+description: Check whether a release is ready
+metadata:
+  goal: true
+---
+
+Run the release checks and continue until the release is ready or a human decision is required.
+```
 
 ## Agent instructions
 
