@@ -676,7 +676,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
           workflowName: 'restart-nestedWorkflow',
           runId: nestedRunId,
           snapshot: {
-            runId,
+            runId: nestedRunId,
             status: 'running',
             activePaths: [1],
             activeStepsPath: { step3: [1] },
