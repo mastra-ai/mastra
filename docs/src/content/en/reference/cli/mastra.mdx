@@ -1022,6 +1022,62 @@ Lists observability logs. Pass optional JSON input for route-supported filters o
 mastra api log list [input]
 ```
 
+#### `mastra api metric aggregate`
+
+Gets a single aggregate metric value.
+
+```bash
+mastra api metric aggregate '{"name":["latency_ms"],"aggregation":"avg"}'
+```
+
+#### `mastra api metric breakdown`
+
+Gets metric values grouped by a label or field.
+
+```bash
+mastra api metric breakdown '{"name":["latency_ms"],"aggregation":"avg","groupBy":["model"],"limit":10}'
+```
+
+#### `mastra api metric timeseries`
+
+Gets metric values over time.
+
+```bash
+mastra api metric timeseries '{"name":["latency_ms"],"aggregation":"avg","interval":"1h"}'
+```
+
+#### `mastra api metric percentiles`
+
+Gets metric percentile values over time. Percentile values use decimals from `0` to `1`.
+
+```bash
+mastra api metric percentiles '{"name":"latency_ms","percentiles":[0.5,0.95,0.99],"interval":"1h"}'
+```
+
+#### `mastra api metric names`
+
+Lists discovered metric names. Pass optional JSON input for prefix search and limit.
+
+```bash
+mastra api metric names '{"prefix":"lat","limit":10}'
+```
+
+#### `mastra api metric label-keys`
+
+Lists label keys for a metric.
+
+```bash
+mastra api metric label-keys '{"metricName":"latency_ms"}'
+```
+
+#### `mastra api metric label-values`
+
+Lists label values for a metric label key. Pass optional prefix and limit values to narrow the result.
+
+```bash
+mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","prefix":"g","limit":10}'
+```
+
 #### Observability with `curl`
 
 You can call the hosted observability API directly with your platform access token and project ID:

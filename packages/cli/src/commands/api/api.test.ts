@@ -257,6 +257,89 @@ describe('api command executor', () => {
     expect(JSON.parse(stdout)).toEqual({ data: { traceId: 'trace-1', spanId: 'span-2', input: { value: 'hello' } } });
   });
 
+  it('queries metric aggregates and discovery endpoints', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ value: 123 }))
+      .mockResolvedValueOnce(jsonResponse({ series: [{ timestamp: '2026-05-13T00:00:00Z', value: 42 }] }))
+      .mockResolvedValueOnce(jsonResponse({ names: ['latency_ms'] }));
+
+    await executeDescriptor(API_COMMANDS.metricAggregate, [], '{"name":"latency_ms","aggregation":"avg"}', {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://observability.mastra.ai/api/observability/metrics/aggregate',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer token',
+          'X-Mastra-Project-Id': 'project-1',
+          'content-type': 'application/json',
+        },
+        signal: expect.any(AbortSignal),
+        body: JSON.stringify({ name: 'latency_ms', aggregation: 'avg' }),
+      },
+    );
+    expect(JSON.parse(stdout)).toEqual({ data: { value: 123 } });
+
+    stdout = '';
+
+    await executeDescriptor(
+      API_COMMANDS.metricTimeseries,
+      [],
+      '{"name":"latency_ms","aggregation":"avg","interval":"1h"}',
+      {
+        url: 'https://observability.mastra.ai',
+        header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+        pretty: false,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://observability.mastra.ai/api/observability/metrics/timeseries',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer token',
+          'X-Mastra-Project-Id': 'project-1',
+          'content-type': 'application/json',
+        },
+        signal: expect.any(AbortSignal),
+        body: JSON.stringify({ name: 'latency_ms', aggregation: 'avg', interval: '1h' }),
+      },
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      data: [{ timestamp: '2026-05-13T00:00:00Z', value: 42 }],
+      page: { total: 1, page: 0, perPage: 1, hasMore: false },
+    });
+
+    stdout = '';
+
+    await executeDescriptor(API_COMMANDS.metricNames, [], '{"prefix":"lat","limit":10}', {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'https://observability.mastra.ai/api/observability/discovery/metric-names?prefix=lat&limit=10',
+      {
+        method: 'GET',
+        headers: { Authorization: 'Bearer token', 'X-Mastra-Project-Id': 'project-1' },
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      data: ['latency_ms'],
+      page: { total: 1, page: 0, perPage: 1, hasMore: false },
+    });
+  });
+
   it('encodes DELETE JSON input as query params when the route has no body schema', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ result: 'Thread deleted' }));
 
