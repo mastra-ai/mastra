@@ -389,7 +389,10 @@ describe('A2A Handler', () => {
           role: 'user',
           parts: [
             { kind: 'text', text: 'Please summarize the attached invoice.' },
-            { kind: 'file', file: { uri: 'https://example.com/invoice.pdf', mimeType: 'application/pdf', name: 'invoice.pdf' } },
+            {
+              kind: 'file',
+              file: { uri: 'https://example.com/invoice.pdf', mimeType: 'application/pdf', name: 'invoice.pdf' },
+            },
             { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/png', name: 'screenshot.png' } },
           ],
         },
@@ -440,11 +443,12 @@ describe('A2A Handler', () => {
         },
       } as unknown as MessageSendParams;
 
-      const result = await handleMessageSend({
+      const result = await getAgentExecutionHandler({
         requestId,
+        mastra: mockMastra,
+        method: 'message/send',
         params,
         taskStore: mockTaskStore,
-        agent: mockMastra.getAgentById(agentId),
         agentId,
         requestContext: new RequestContext(),
       });
