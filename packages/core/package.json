@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.33.0-alpha.12",
+  "version": "1.33.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -29,6 +29,16 @@
       "require": {
         "types": "./dist/a2a/index.d.ts",
         "default": "./dist/a2a/index.cjs"
+      }
+    },
+    "./a2a/client": {
+      "import": {
+        "types": "./dist/a2a/client.d.ts",
+        "default": "./dist/a2a/client.js"
+      },
+      "require": {
+        "types": "./dist/a2a/client.d.ts",
+        "default": "./dist/a2a/client.cjs"
       }
     },
     "./agent": {

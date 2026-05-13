@@ -142,6 +142,22 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.stepExecutor.__registerMastra(mastra);
   }
 
+  /**
+   * Resolves a workflow by id without throwing. Searches first by the
+   * workflow's `.id` (the value that ends up on event payloads) and then
+   * falls back to the registration key in `Mastra.workflows`. Returns
+   * `undefined` if neither lookup succeeds — callers decide how to handle
+   * the missing case (e.g. terminal failure vs. cleanup pass-through) so
+   * we don't throw inside `#dispatch` and trigger infinite event retries.
+   */
+  #tryResolveWorkflow(workflowId: string): Workflow | undefined {
+    try {
+      return this.mastra.getWorkflowById(workflowId) as Workflow;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async errorWorkflow(
     {
       parentWorkflow,
@@ -2357,10 +2373,25 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (type.startsWith('workflow.user-event.')) {
+      const userEventWorkflow = this.#tryResolveWorkflow(workflowData.workflowId);
+      if (!userEventWorkflow) {
+        // Workflow no longer registered (e.g. deleted from code). Treat as a
+        // terminal failure rather than throwing — otherwise the transport
+        // would redeliver this event indefinitely.
+        return this.errorWorkflow(
+          workflowData,
+          new MastraError({
+            id: 'MASTRA_WORKFLOW',
+            text: `Workflow not found: ${workflowData.workflowId}`,
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            category: ErrorCategory.SYSTEM,
+          }),
+        );
+      }
       await processWorkflowWaitForEvent(
         {
           ...workflowData,
-          workflow: this.mastra.getWorkflow(workflowData.workflowId),
+          workflow: userEventWorkflow,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -2377,19 +2408,29 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else if (workflowData.parentWorkflow) {
       workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
     } else {
-      workflow = this.mastra.getWorkflow(workflowData.workflowId);
+      workflow = this.#tryResolveWorkflow(workflowData.workflowId);
     }
 
     if (!workflow) {
-      return this.errorWorkflow(
-        workflowData,
-        new MastraError({
-          id: 'MASTRA_WORKFLOW',
-          text: `Workflow not found: ${workflowData.workflowId}`,
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.SYSTEM,
-        }),
-      );
+      // For terminal/cleanup events (`workflow.fail`, `workflow.end`,
+      // `workflow.cancel`), we deliberately keep dispatching with
+      // `workflow=undefined` so the processors can finish their cleanup work
+      // (persist final state, notify parent workflow, publish to
+      // workflows-finish). Republishing `workflow.fail` here would loop
+      // forever because the redelivered event would hit this same branch.
+      if (type === 'workflow.fail' || type === 'workflow.end' || type === 'workflow.cancel') {
+        // fall through to switch below with workflow=undefined
+      } else {
+        return this.errorWorkflow(
+          workflowData,
+          new MastraError({
+            id: 'MASTRA_WORKFLOW',
+            text: `Workflow not found: ${workflowData.workflowId}`,
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            category: ErrorCategory.SYSTEM,
+          }),
+        );
+      }
     }
 
     if (type === 'workflow.start' || type === 'workflow.resume') {
@@ -2406,52 +2447,60 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    // For the cleanup-path events (`workflow.fail`/`workflow.end`/
+    // `workflow.cancel`) we may have fallen through above with no resolved
+    // workflow. The processors for those events tolerate `workflow=undefined`
+    // (they rely on optional chaining / persisted state), so we cast here to
+    // avoid widening the shared `ProcessorArgs.workflow` type across the
+    // hundreds of usage sites in this file.
+    const workflowArg = workflow as Workflow;
+
     switch (type) {
       case 'workflow.cancel':
         await this.processWorkflowCancel({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.start':
         await this.processWorkflowStart({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.resume':
         await this.processWorkflowStart({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.end':
         await this.processWorkflowEnd({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.step.end':
         await this.processWorkflowStepEnd({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.step.run':
         await this.processWorkflowStepRun({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.suspend':
         await this.processWorkflowSuspend({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;
       case 'workflow.fail':
         await this.processWorkflowFail({
-          workflow,
+          workflow: workflowArg,
           ...workflowData,
         });
         break;

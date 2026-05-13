@@ -891,6 +891,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7',
     'MiniMax-M2.7-highspeed',
   ];
+  readonly claudinio: readonly ['claudinio'];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro'];
   readonly llama: readonly [
@@ -1689,6 +1690,8 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.6',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
+    'xiaomi/mimo-v2.5',
+    'xiaomi/mimo-v2.5-pro',
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.6V',
     'zai-org/GLM-4.7',
@@ -2582,7 +2585,7 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model'];
-  readonly 'wafer.ai': readonly ['DeepSeek-V4-Pro', 'GLM-5.1', 'MiniMax-M2.7', 'Qwen3.5-397B-A17B'];
+  readonly 'wafer.ai': readonly ['GLM-5.1', 'Qwen3.5-397B-A17B'];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'meta-llama/Llama-3.3-70B-Instruct',
