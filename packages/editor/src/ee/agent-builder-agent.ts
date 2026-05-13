@@ -1,6 +1,21 @@
 import { Agent } from '@mastra/core/agent';
-
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const workspacePath = path.join(__dirname, 'workspace');
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: workspacePath,
+  }),
+  skills: ['skills'],
+});
 
 const memory = new Memory();
 
@@ -151,4 +166,5 @@ Ask only when you cannot safely continue.
 Ask one simple question at a time.`,
   model: 'openai/gpt-5-mini',
   memory,
+  workspace,
 });

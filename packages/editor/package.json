@@ -63,8 +63,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts src/ee/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts src/ee/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
