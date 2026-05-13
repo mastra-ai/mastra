@@ -74,8 +74,8 @@ jobs:
 
   test-suite:
     name: Unit and E2E Tests
-    needs: [changes, prebuild]
-    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
+    needs: changes
+    if: github.repository == 'mastra-ai/mastra'
     uses: ./.github/workflows/test-suite.yml
     permissions:
       actions: read
@@ -83,6 +83,7 @@ jobs:
     with:
       head_sha: ${{ github.event.pull_request.head.sha }}
       base_ref: ${{ github.event.pull_request.base.ref }}
+      has_code: ${{ needs.changes.outputs.has_code }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
