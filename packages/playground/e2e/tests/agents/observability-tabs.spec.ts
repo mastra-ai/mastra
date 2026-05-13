@@ -43,14 +43,14 @@ async function mockSystemPackages(page: Page, observabilityEnabled: boolean) {
 test('requests agent traces when runtime observability is available without package metadata', async ({ page }) => {
   await mockSystemPackages(page, true);
 
-  let tracesUrl: URL | undefined;
-  await page.route('**/api/observability/traces?**', async route => {
-    tracesUrl = new URL(route.request().url());
+  let branchesUrl: URL | undefined;
+  await page.route('**/api/observability/branches?**', async route => {
+    branchesUrl = new URL(route.request().url());
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        spans: [],
+        branches: [],
         pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
       }),
     });
@@ -67,8 +67,10 @@ test('requests agent traces when runtime observability is available without pack
   // With the scope filters pre-applied the empty-state copy comes from the list
   // view ("filters applied" variant), not the standalone NoTracesInfo screen.
   await expect(page.getByText(/No traces found for applied filters/i)).toBeVisible();
-  expect(tracesUrl?.searchParams.get('entityId')).toBe('weather-agent');
-  expect(tracesUrl?.searchParams.get('entityType')).toBe('agent');
+  await expect
+    .poll(() => branchesUrl?.searchParams.get('entityType'), { message: 'branch list request is scoped to agent' })
+    .toBe('agent');
+  expect(branchesUrl?.searchParams.get('entityId')).toBe('weather-agent');
 });
 
 test('keeps agent observability tabs disabled when runtime observability is unavailable', async ({ page }) => {
@@ -83,14 +85,14 @@ test('keeps agent observability tabs disabled when runtime observability is unav
 test('agent traces tab pre-fills the agent filter as URL params on first visit', async ({ page }) => {
   await mockSystemPackages(page, true);
 
-  let tracesUrl: URL | undefined;
-  await page.route('**/api/observability/traces?**', async route => {
-    tracesUrl = new URL(route.request().url());
+  let branchesUrl: URL | undefined;
+  await page.route('**/api/observability/branches?**', async route => {
+    branchesUrl = new URL(route.request().url());
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        spans: [],
+        branches: [],
         pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
       }),
     });
@@ -104,8 +106,10 @@ test('agent traces tab pre-fills the agent filter as URL params on first visit',
   await expect(page).toHaveURL(/filterEntityId=weather-agent/);
 
   // The API call should reflect those filter params (driven by URL state).
-  expect(tracesUrl?.searchParams.get('entityType')).toBe('agent');
-  expect(tracesUrl?.searchParams.get('entityId')).toBe('weather-agent');
+  await expect
+    .poll(() => branchesUrl?.searchParams.get('entityType'), { message: 'branch list request is scoped to agent' })
+    .toBe('agent');
+  expect(branchesUrl?.searchParams.get('entityId')).toBe('weather-agent');
 });
 
 test('agent traces tab locks the scope filter pills and hides them from the creator dropdown', async ({ page }) => {

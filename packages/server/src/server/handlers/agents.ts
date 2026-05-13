@@ -1603,7 +1603,15 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     ifIdle,
   }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      const bodyRequestContext = ifIdle?.streamOptions?.requestContext;
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext, bodyRequestContext as Record<string, unknown>),
+        requestContext: serverRequestContext,
+      });
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
