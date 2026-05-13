@@ -157,6 +157,44 @@ export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
   backgroundProcesses?: BackgroundProcessConfig;
 }
 
+/**
+ * Extended configuration for the read_file tool.
+ *
+ * Controls which mime types are surfaced to the model as media parts (image
+ * or file parts the model can natively consume) rather than dumped as text
+ * or base64. Files whose mime type doesn't match are read as text/base64 as
+ * usual.
+ *
+ * - **Array of globs** — e.g. `['image/*']`, `['image/*', 'application/pdf']`
+ * - **Function** — `(mimeType: string) => boolean`
+ * - **`false`** — disable media parts; always return text
+ *
+ * Only applies when the caller doesn't pass an explicit `encoding` (since an
+ * explicit encoding is a clear request for raw bytes/text).
+ *
+ * @default `['image/*', 'application/pdf']`
+ *
+ * @example
+ * ```ts
+ * // Only return images as media parts (skip PDFs)
+ * mastra_workspace_read_file: { mediaTypes: ['image/*'] }
+ *
+ * // Disable media parts entirely
+ * mastra_workspace_read_file: { mediaTypes: false }
+ *
+ * // Custom predicate
+ * mastra_workspace_read_file: { mediaTypes: (mime) => mime.startsWith('image/') }
+ * ```
+ */
+export interface ReadFileToolConfig extends WorkspaceToolConfig {
+  /**
+   * Which mime types to surface to the model as media parts (file/image
+   * parts) rather than as text. Defaults to `['image/*', 'application/pdf']`.
+   * Pass `false` to disable media parts entirely.
+   */
+  mediaTypes?: string[] | ((mimeType: string) => boolean) | false;
+}
+
 // =============================================================================
 // Top-Level Tools Config
 // =============================================================================
@@ -207,4 +245,14 @@ export type WorkspaceToolsConfig = {
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
-} & Partial<Record<Exclude<WorkspaceToolName, typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND>, WorkspaceToolConfig>>;
+} & {
+  [K in typeof WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?: ReadFileToolConfig;
+} & Partial<
+    Record<
+      Exclude<
+        WorkspaceToolName,
+        typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND | typeof WORKSPACE_TOOLS.FILESYSTEM.READ_FILE
+      >,
+      WorkspaceToolConfig
+    >
+  >;
