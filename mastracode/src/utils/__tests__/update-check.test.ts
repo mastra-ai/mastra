@@ -113,6 +113,18 @@ describe('parseChangelog', () => {
     expect(result).toContain('First sentence here.');
     expect(result).not.toContain('longer explanation');
   });
+
+  it('still truncates a first sentence that exceeds the dialog width', () => {
+    // A 95-char first sentence on a narrow terminal (cap=40) must still be
+    // truncated so it does not overflow the dialog. Regression test for the
+    // case where the first-sentence branch short-circuits the width cap.
+    const longSentence = 'A'.repeat(94) + '.';
+    const md = `## 1.0.0\n\n- ${longSentence} Trailing content.`;
+    const result = parseChangelog(md, '1.0.0', { maxEntryWidth: 40 })!;
+    expect(result).toContain('…');
+    // "  • " prefix (4) + 40 chars + "…" (1) = 45
+    expect(result.length).toBe(45);
+  });
 });
 
 describe('computeChangelogEntryWidth', () => {

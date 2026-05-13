@@ -252,9 +252,13 @@ export function parseChangelog(markdown: string, version: string, options?: Chan
     const sentenceEnd = entry.search(/\.\s/);
     if (sentenceEnd !== -1 && sentenceEnd < 100) {
       entry = entry.slice(0, sentenceEnd + 1);
-    } else if (entry.length > maxEntryWidth + 3) {
-      // Truncate with an ellipsis; +3 grace margin avoids replacing a handful
-      // of characters with a single "…" (e.g. 121 → 117 chars).
+    }
+    // The first-sentence slice can still exceed the dialog width on narrow
+    // terminals (e.g. a 95-char sentence on an 80-col terminal where the cap
+    // is 64). Apply the width cap unconditionally so the entry never overflows.
+    if (entry.length > maxEntryWidth + 3) {
+      // +3 grace margin avoids replacing a handful of characters with a
+      // single "…" (e.g. 121 → 117 chars).
       entry = entry.slice(0, maxEntryWidth).trimEnd() + '…';
     }
     entry = entry.trim();
