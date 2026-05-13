@@ -3,8 +3,12 @@
  * Created once at startup, provides tools from connected MCP servers.
  */
 
-import { MCPClient } from '@mastra/mcp';
-import type { MastraMCPServerDefinition } from '@mastra/mcp';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, renameSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
+import type { MastraMCPServerDefinition, OAuthStorage } from '@mastra/mcp';
+import { getAppDataDir } from '../utils/project.js';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
 import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
@@ -48,6 +52,60 @@ export interface McpManager {
 
 function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
   return 'url' in cfg ? 'http' : 'stdio';
+}
+
+class FileOAuthStorage implements OAuthStorage {
+  constructor(private filePath: string) {}
+
+  get(key: string): string | undefined {
+    return this.read()[key];
+  }
+
+  set(key: string, value: string): void {
+    const data = this.read();
+    data[key] = value;
+    this.write(data);
+  }
+
+  delete(key: string): void {
+    const data = this.read();
+    delete data[key];
+    this.write(data);
+  }
+
+  private read(): Record<string, string> {
+    if (!existsSync(this.filePath)) return {};
+    try {
+      return JSON.parse(readFileSync(this.filePath, 'utf-8')) as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+
+  private write(data: Record<string, string>): void {
+    const dir = dirname(this.filePath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+    const tmpPath = `${this.filePath}.tmp`;
+    writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+    chmodSync(tmpPath, 0o600);
+    renameSync(tmpPath, this.filePath);
+    chmodSync(this.filePath, 0o600);
+  }
+}
+
+function getOAuthStoragePath(projectDir: string, name: string, cfg: McpHttpServerConfig): string {
+  const key = JSON.stringify({
+    projectDir,
+    name,
+    url: cfg.url,
+    redirectUrl: cfg.oauth?.redirectUrl,
+    clientId: cfg.oauth?.clientId,
+    scopes: cfg.oauth?.scopes ?? [],
+  });
+  const hash = createHash('sha256').update(key).digest('hex').slice(0, 32);
+  return join(getAppDataDir(), 'mcp-oauth', `${hash}.json`);
 }
 
 /**
@@ -105,6 +163,28 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
     });
   }
 
+  function createOAuthProvider(name: string, cfg: McpHttpServerConfig) {
+    if (!cfg.oauth) return undefined;
+
+    return new MCPOAuthClientProvider({
+      redirectUrl: cfg.oauth.redirectUrl,
+      clientMetadata: {
+        redirect_uris: [cfg.oauth.redirectUrl],
+        client_name: cfg.oauth.clientName ?? `Mastra Code MCP ${name}`,
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        ...(cfg.oauth.scopes?.length ? { scope: cfg.oauth.scopes.join(' ') } : {}),
+      },
+      clientInformation: cfg.oauth.clientId
+        ? ({
+            client_id: cfg.oauth.clientId,
+            ...(cfg.oauth.clientSecret ? { client_secret: cfg.oauth.clientSecret } : {}),
+          } as any)
+        : undefined,
+      storage: new FileOAuthStorage(getOAuthStoragePath(projectDir, name, cfg)),
+    });
+  }
+
   function buildServerDefs(servers: Record<string, McpServerConfig>): Record<string, MastraMCPServerDefinition> {
     const defs: Record<string, MastraMCPServerDefinition> = {};
     for (const [name, cfg] of Object.entries(servers)) {
@@ -113,6 +193,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
         defs[name] = {
           url: new URL(httpCfg.url),
           requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
+          authProvider: createOAuthProvider(name, httpCfg),
         };
       } else {
         defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env, stderr: 'pipe' };

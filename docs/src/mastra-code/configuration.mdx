@@ -53,6 +53,12 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
+OpenAI OAuth uses the browser flow by default. Set `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` before running Mastra Code to use a device-code flow for headless or remote environments.
+
+```sh
+export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
+```
+
 ### Authentication priority for Anthropic
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
@@ -118,7 +124,45 @@ Connect to a remote MCP server via URL. Requires a `url` field. The optional `he
 }
 ```
 
-Since `headers` only supports static values, use a stdio wrapper for dynamic authentication such as token refresh.
+#### HTTP OAuth
+
+HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object with a `redirectUrl`. Mastra Code stores OAuth client data and tokens in the app data directory.
+
+Mastra Code passes this configuration to `@mastra/mcp` when connecting. The redirect URL must use HTTPS unless it is a loopback HTTP URL, and it must be handled by a callback endpoint that can complete the OAuth flow for that server.
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientName": "Remote MCP",
+        "scopes": ["mcp:read", "mcp:write"]
+      }
+    }
+  }
+}
+```
+
+Use `clientId` and `clientSecret` when the MCP server requires a pre-registered OAuth client:
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret"
+      }
+    }
+  }
+}
+```
+
+Do not commit real `clientSecret` values to a repository. Prefer a project-local or global config file that is not shared.
 
 #### Startup behavior
 
