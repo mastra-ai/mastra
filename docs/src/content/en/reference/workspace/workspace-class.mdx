@@ -483,7 +483,7 @@ The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control
     description:
       "Which mime types to surface to the model as media parts (file/image parts) rather than as text. Accepts an array of globs (e.g. `['image/*']`), a custom predicate function, or `false` to disable media detection. Defaults to the cross-provider-safe intersection of image formats plus PDF. Only applies when the caller doesn't pass an explicit `encoding`.",
     isOptional: true,
-    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf']",
+    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
   },
   {
     name: 'maxMediaBytes',

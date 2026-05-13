@@ -41,7 +41,7 @@ function isMediaToolResult(value: unknown): value is MediaToolResult {
  * `image/*` is *not* used so we don't surface exotic subtypes like SVG/BMP
  * that some providers reject. Override `mediaTypes` to broaden this.
  */
-const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'];
+const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
 /**
  * Default cap (in bytes) on inline media reads. Files larger than this fall

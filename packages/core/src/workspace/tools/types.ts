@@ -175,7 +175,7 @@ export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
  * explicit encoding is a clear request for raw bytes/text).
  *
  * The default is the cross-provider-safe intersection of image formats
- * (`image/png`, `image/jpeg`, `image/webp`, `image/gif`) plus
+ * (`image/png`, `image/jpeg`, `image/webp`) plus
  * `application/pdf`. Use `['image/*']` (or a function) if you want to
  * surface exotic subtypes like SVG/BMP/HEIC.
  *
@@ -198,7 +198,7 @@ export interface ReadFileToolConfig extends WorkspaceToolConfig {
   /**
    * Which mime types to surface to the model as media parts (file/image
    * parts) rather than as text. Defaults to the cross-provider-safe set
-   * `['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf']`.
+   * `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`.
    * Pass `false` to disable media detection; non-text binaries then fall
    * back to metadata-only output unless an explicit `encoding` is provided.
    */
