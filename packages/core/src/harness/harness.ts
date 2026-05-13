@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
-import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import { createSignal } from '../agent/signals';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -33,7 +35,7 @@ import {
   taskWriteTool,
 } from './tools';
 import type { TaskItemSnapshot } from './tools';
-import { defaultDisplayState, defaultOMProgressState } from './types';
+import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   ActiveSubagentState,
@@ -58,9 +60,12 @@ import type {
   ToolCategory,
 } from './types';
 
-function createEmptyTokenUsage(): TokenUsage {
-  return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-}
+type HarnessStreamState = {
+  currentMessage: HarnessMessage;
+  isSuspended: boolean;
+  textContentById: Map<string, { index: number; text: string }>;
+  thinkingContentById: Map<string, { index: number; text: string }>;
+};
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -89,6 +94,97 @@ function addOptionalUsageField(
 function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase, fallback: unknown) {
   const transform = getTransformedToolPayload(metadata, 'display', phase);
   return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
+}
+
+function getStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getRecordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
+  if (typeof contents === 'string') return [{ type: 'text', text: contents }];
+  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
+  if (!contents || typeof contents !== 'object') return [];
+
+  const content = (contents as { content?: unknown }).content;
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (Array.isArray(content)) {
+    return content.flatMap((part): HarnessMessageContent[] => {
+      const record = getRecordValue(part);
+      if (!record) return [];
+      if (record.type === 'text' && typeof record.text === 'string') {
+        return [{ type: 'text', text: record.text }];
+      }
+      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
+        if (record.mediaType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
+        }
+        return [
+          {
+            type: 'file',
+            data: record.data,
+            mediaType: record.mediaType,
+            filename: typeof record.filename === 'string' ? record.filename : undefined,
+          },
+        ];
+      }
+      return [];
+    });
+  }
+
+  return [];
+}
+
+function toSystemReminderContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
+  const attributes = getRecordValue(payload.attributes);
+  const metadata = getRecordValue(payload.metadata);
+  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  if (message === undefined) return undefined;
+
+  return {
+    type: 'system_reminder',
+    message,
+    reminderType:
+      getStringValue(payload.reminderType) ?? getStringValue(attributes?.type) ?? getStringValue(payload.type),
+    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
+    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
+    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
+    gapMs:
+      typeof payload.gapMs === 'number'
+        ? payload.gapMs
+        : typeof attributes?.gapMs === 'number'
+          ? attributes.gapMs
+          : undefined,
+    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
+    goalMaxTurns:
+      typeof payload.goalMaxTurns === 'number'
+        ? payload.goalMaxTurns
+        : typeof metadata?.goalMaxTurns === 'number'
+          ? metadata.goalMaxTurns
+          : undefined,
+    judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
+  };
+}
+
+function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
+  const id = getStringValue(payload.id);
+  const contents = payload.contents ?? payload.message;
+  if (!id || contents === undefined) return undefined;
+
+  const content = signalContentsToHarnessContent(contents);
+  if (content.length === 0) return undefined;
+
+  return {
+    id,
+    role: 'user',
+    content,
+    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
+  };
 }
 
 /**
@@ -134,6 +230,8 @@ export class Harness<TState = {}> {
   private currentRunId: string | null = null;
   private currentTraceId: string | null = null;
   private currentOperationId: number = 0;
+  private agentThreadSubscription: AgentThreadSubscription<any> | null = null;
+  private agentThreadSubscriptionKey: string | null = null;
   private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
   private pendingApprovalResolve:
     | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
@@ -217,6 +315,20 @@ export class Harness<TState = {}> {
    */
   getMastra(): Mastra | undefined {
     return this.#internalMastra;
+  }
+
+  /**
+   * Sets or updates the harness-level browser and propagates it to static mode agents.
+   */
+  setBrowser(browser: MastraBrowser | undefined): void {
+    this.browser = browser;
+    this.browserFn = undefined;
+
+    for (const mode of this.config.modes) {
+      const agent = typeof mode.agent === 'function' ? null : mode.agent;
+      if (!agent || agent.hasOwnBrowser()) continue;
+      agent.setBrowser(browser);
+    }
   }
 
   // ===========================================================================
@@ -712,6 +824,7 @@ export class Harness<TState = {}> {
   }
 
   setResourceId({ resourceId }: { resourceId: string }): void {
+    this.cleanupAgentThreadSubscription();
     this.resourceId = resourceId;
     this.currentThreadId = null;
   }
@@ -727,6 +840,7 @@ export class Harness<TState = {}> {
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
+    this.cleanupAgentThreadSubscription();
     const now = new Date();
     const thread: HarnessThread = {
       id: this.generateId(),
@@ -853,6 +967,7 @@ export class Harness<TState = {}> {
       } catch {
         // Lock release failed; proceed with state cleanup regardless
       }
+      this.cleanupAgentThreadSubscription();
       this.currentThreadId = null;
       this.tokenUsage = createEmptyTokenUsage();
     }
@@ -926,6 +1041,7 @@ export class Harness<TState = {}> {
       }
     }
 
+    this.cleanupAgentThreadSubscription();
     this.currentThreadId = clonedThread.id;
     await this.loadThreadMetadata();
     this.tokenUsage = createEmptyTokenUsage();
@@ -936,6 +1052,7 @@ export class Harness<TState = {}> {
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
     this.abort();
+    this.cleanupAgentThreadSubscription();
 
     // Acquire lock on new thread before releasing old one.
     // Lock operations must be adjacent (no intermediate awaits) so callers
@@ -1058,6 +1175,8 @@ export class Harness<TState = {}> {
           promptTokens: savedUsage.promptTokens ?? 0,
           completionTokens: savedUsage.completionTokens ?? 0,
           totalTokens: savedUsage.totalTokens ?? 0,
+          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
+          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
         };
       } else {
         this.tokenUsage = createEmptyTokenUsage();
@@ -1431,6 +1550,206 @@ export class Harness<TState = {}> {
   // Message Handling
   // ===========================================================================
 
+  private cleanupAgentThreadSubscription(): void {
+    this.agentThreadSubscription?.abort();
+    this.agentThreadSubscription?.unsubscribe();
+    this.agentThreadSubscription = null;
+    this.agentThreadSubscriptionKey = null;
+    this.currentRunId = null;
+    this.currentTraceId = null;
+    this.abortController = null;
+    this.abortRequested = false;
+  }
+
+  private getAgentThreadSubscriptionKey(agent: Agent, threadId: string): string {
+    return `${agent.id}:${this.resourceId}:${threadId}`;
+  }
+
+  private async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
+    const key = this.getAgentThreadSubscriptionKey(agent, threadId);
+    if (this.agentThreadSubscriptionKey === key && this.agentThreadSubscription) return;
+
+    this.cleanupAgentThreadSubscription();
+    const subscription = await agent.subscribeToThread({ resourceId: this.resourceId, threadId });
+    this.agentThreadSubscription = subscription;
+    this.agentThreadSubscriptionKey = key;
+    void this.processSubscribedThreadStream(subscription);
+  }
+
+  private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
+    if (this.followUpQueue.length === 0) return;
+
+    const next = this.followUpQueue.shift()!;
+    await this.sendMessage({
+      content: next.content,
+      requestContext: next.requestContext,
+      tracingContext: options?.tracingContext,
+      tracingOptions: options?.tracingOptions,
+    });
+  }
+
+  private isActiveAgentThreadSubscription(subscription: AgentThreadSubscription<any>): boolean {
+    return this.agentThreadSubscription === subscription;
+  }
+
+  private async finishSubscribedStreamRun({
+    suspended,
+    error,
+    aborted,
+  }: {
+    suspended?: boolean;
+    error?: boolean;
+    aborted?: boolean;
+  }): Promise<void> {
+    const reason = error ? 'error' : suspended ? 'suspended' : aborted || this.abortRequested ? 'aborted' : 'complete';
+    this.emit({ type: 'agent_end', reason });
+    this.currentRunId = null;
+    this.currentTraceId = null;
+    this.abortController = null;
+    this.abortRequested = false;
+    await this.drainFollowUpQueue();
+  }
+
+  private async handleSubscribedStreamError(error: unknown): Promise<void> {
+    if (error instanceof Error && error.name === 'AbortError') {
+      this.emit({ type: 'agent_end', reason: 'aborted' });
+    } else {
+      this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+      this.emit({ type: 'agent_end', reason: 'error' });
+    }
+    this.agentThreadSubscription?.unsubscribe();
+    this.agentThreadSubscription = null;
+    this.agentThreadSubscriptionKey = null;
+    this.currentRunId = null;
+    this.currentTraceId = null;
+    this.abortController = null;
+    this.abortRequested = false;
+    await this.drainFollowUpQueue();
+  }
+
+  private async processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
+    const requestContext = await this.buildRequestContext();
+    let currentRun: HarnessStreamState | undefined;
+    let lastFinishedRunId: string | null = null;
+
+    try {
+      for await (const chunk of subscription.stream) {
+        if (!this.isActiveAgentThreadSubscription(subscription)) {
+          subscription.unsubscribe();
+          break;
+        }
+
+        const chunkRunId = 'runId' in chunk ? chunk.runId : null;
+        if (lastFinishedRunId && chunkRunId === lastFinishedRunId) {
+          continue;
+        }
+
+        if (!currentRun) {
+          currentRun = this.createStreamState();
+          this.currentOperationId += 1;
+          this.abortController ??= new AbortController();
+          this.currentRunId = subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null);
+          this.currentTraceId = null;
+          this.emit({ type: 'agent_start' });
+        }
+
+        if (chunk.type === 'start') {
+          continue;
+        }
+
+        try {
+          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
+          if (
+            streamResult ||
+            chunk.type === 'finish' ||
+            chunk.type === 'error' ||
+            chunk.type === 'abort' ||
+            chunk.type === 'tool-call-suspended'
+          ) {
+            const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
+            await this.finishSubscribedStreamRun({
+              suspended:
+                chunk.type === 'tool-call-suspended' ||
+                (streamResult ?? this.finishStreamState(currentRun)).suspended ||
+                undefined,
+              error: chunk.type === 'error',
+              aborted: chunk.type === 'abort',
+            });
+            lastFinishedRunId = finishedRunId;
+            currentRun = undefined;
+          }
+        } catch (error) {
+          await this.handleSubscribedStreamError(error);
+          currentRun = undefined;
+        }
+      }
+    } catch (error) {
+      if (this.isActiveAgentThreadSubscription(subscription)) {
+        await this.handleSubscribedStreamError(error);
+      }
+    }
+  }
+
+  /**
+   * Send a signal to the current agent/thread.
+   */
+  sendSignal(
+    input:
+      | AgentSignalInput
+      | {
+          content: AgentSignalContents;
+          tracingContext?: TracingContext;
+          tracingOptions?: TracingOptions;
+          requestContext?: RequestContext;
+        },
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
+    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
+    const accepted = Promise.resolve().then(async () => {
+      if (!this.currentThreadId) {
+        const thread = await this.createThread();
+        this.currentThreadId = thread.id;
+      }
+
+      const agent = this.getCurrentAgent();
+      await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
+
+      if (this.agentThreadSubscription?.activeRunId()) {
+        const result = agent.sendSignal(signal, {
+          resourceId: this.resourceId,
+          threadId: this.currentThreadId,
+        });
+        return { accepted: result.accepted, runId: result.runId };
+      }
+
+      this.abortRequested = false;
+      this.abortController ??= new AbortController();
+      const requestContext = await this.buildRequestContext(requestContextInput);
+      const isYolo = (this.state as Record<string, unknown>).yolo === true;
+      const streamOptions: Record<string, unknown> = {
+        memory: { thread: this.currentThreadId, resource: this.resourceId },
+        abortSignal: this.abortController.signal,
+        requestContext,
+        maxSteps: 1000,
+        savePerStep: false,
+        requireToolApproval: !isYolo,
+        modelSettings: { temperature: 1 },
+        ...(tracingContext && { tracingContext }),
+        ...(tracingOptions && { tracingOptions }),
+      };
+      streamOptions.toolsets = await this.buildToolsets(requestContext);
+
+      const result = agent.sendSignal(signal, {
+        resourceId: this.resourceId,
+        threadId: this.currentThreadId,
+        ifIdle: { streamOptions: streamOptions as any },
+      });
+      return { accepted: result.accepted, runId: result.runId };
+    });
+
+    return { id: signal.id, type: signal.type, accepted };
+  }
+
   /**
    * Send a message to the current agent.
    * Streams the response and emits events.
@@ -1448,136 +1767,59 @@ export class Harness<TState = {}> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.currentThreadId) {
-      const thread = await this.createThread();
-      this.currentThreadId = thread.id;
-    }
-
-    const operationId = ++this.currentOperationId;
-    this.abortController = new AbortController();
-    this.currentTraceId = null;
-    const agent = this.getCurrentAgent();
-    this.emit({ type: 'agent_start' });
-
-    try {
-      const requestContext = await this.buildRequestContext(requestContextInput);
-
-      const isYolo = (this.state as Record<string, unknown>).yolo === true;
-
-      const streamOptions: Record<string, unknown> = {
-        memory: { thread: this.currentThreadId, resource: this.resourceId },
-        abortSignal: this.abortController.signal,
-        requestContext,
-        maxSteps: 1000,
-        // Harness supports suspending + resuming streams (tool approvals, tool suspensions, workflows).
-        // Persisting per-step snapshots ensures `resumeStream()` can load state reliably (especially in CI).
-        // Doesn't do anything when OM is enabled though, OM does its own saving per step
-        // actually disable for now, it still breaks OM somehow! TODO fix it
-        savePerStep: false,
-        requireToolApproval: !isYolo,
-        modelSettings: { temperature: 1 },
-        ...(tracingContext && { tracingContext }),
-        ...(tracingOptions && { tracingOptions }),
-      };
-
-      streamOptions.toolsets = await this.buildToolsets(requestContext);
-
-      let messageInput: string | Record<string, unknown> = content;
-      if (files?.length) {
-        const fileParts = files.map(f => {
-          const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
-          if (isText) {
-            let textContent = f.data;
-            // Decode data URI to plain text
-            const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
-            if (base64Match) {
-              try {
-                textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
-              } catch {
-                // Fall through with raw data
-              }
+    let messageInput: AgentSignalContents = content;
+    if (files?.length) {
+      const fileParts = files.map(f => {
+        const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+        if (isText) {
+          let textContent = f.data;
+          const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+          if (base64Match) {
+            try {
+              textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+            } catch {
+              // Fall through with raw data
             }
-            const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
-            return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
           }
-          return {
-            type: 'file' as const,
-            data: f.data,
-            mediaType: f.mediaType,
-            filename: f.filename,
-          };
-        });
-        messageInput = {
-          role: 'user',
-          content: [{ type: 'text', text: content }, ...fileParts],
+          const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+          return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
+        }
+        return {
+          type: 'file' as const,
+          data: f.data,
+          mediaType: f.mediaType,
+          filename: f.filename,
         };
-      }
+      });
+      messageInput = {
+        role: 'user',
+        content: [{ type: 'text', text: content }, ...fileParts],
+      } as AgentSignalContents;
+    }
 
-      const response = await agent.stream(
-        typeof messageInput === 'string' && messageInput === ''
-          ? // allow sending an empty message to manually re-trigger agent from its last output
-            []
-          : (messageInput as any),
-        streamOptions as any,
-      );
-      const streamResult = await this.processStream(response, requestContext);
-
-      if (this.currentOperationId === operationId) {
-        const reason = streamResult.suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
-        this.emit({ type: 'agent_end', reason });
-      }
-    } catch (error) {
-      if (this.currentOperationId !== operationId) return;
-
-      if (error instanceof Error && error.name === 'AbortError') {
-        this.emit({ type: 'agent_end', reason: 'aborted' });
-      } else if (error instanceof Error && error.message.match(/^Tool .+ not found$/)) {
-        const badTool = error.message.replace('Tool ', '').replace(' not found', '');
-        this.emit({
-          type: 'error',
-          error: new Error(`Unknown tool "${badTool}".`),
-          retryable: true,
+    const wasActive = this.isCurrentThreadStreamActive();
+    let emittedAgentEnd = false;
+    const unsubscribeAgentEnd = wasActive
+      ? undefined
+      : this.subscribe(event => {
+          if (event.type === 'agent_end') emittedAgentEnd = true;
         });
-        this.followUpQueue.push({
-          content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
-          requestContext: requestContextInput,
-        });
-        this.emit({ type: 'agent_end', reason: 'error' });
-      } else if (
-        error instanceof Error &&
-        /does not support assistant message prefill|must end with a user message/i.test(error.message)
-      ) {
-        this.emit({
-          type: 'error',
-          error: new Error('Model does not support assistant message prefill. Retrying with a user message.'),
-          retryable: true,
-        });
-        this.followUpQueue.push({
-          content: '<system-reminder>There was an API error, please continue.</system-reminder>',
-          requestContext: requestContextInput,
-        });
-        this.emit({ type: 'agent_end', reason: 'error' });
-      } else {
-        const err = error instanceof Error ? error : new Error(String(error));
-        this.emit({ type: 'error', error: err });
-        this.emit({ type: 'agent_end', reason: 'error' });
-      }
-    } finally {
-      if (this.currentOperationId === operationId) {
-        this.abortController = null;
-        this.abortRequested = false;
-      }
-
-      if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
-        const next = this.followUpQueue.shift()!;
-        await this.sendMessage({
-          content: next.content,
-          requestContext: next.requestContext,
-          tracingContext,
-          tracingOptions,
-        });
+    const signal = this.sendSignal({
+      content: messageInput,
+      tracingContext,
+      tracingOptions,
+      requestContext: requestContextInput,
+    });
+    await signal.accepted;
+    if (!wasActive) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await this.waitForCurrentThreadStreamIdle();
+      unsubscribeAgentEnd?.();
+      if (!emittedAgentEnd && !this.pendingSuspensionRunId) {
+        this.emit({ type: 'agent_end', reason: 'complete' });
       }
     }
+    return;
   }
 
   async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
@@ -1673,9 +1915,10 @@ export class Harness<TState = {}> {
 
   private convertToHarnessMessage(msg: {
     id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'signal';
     createdAt: Date;
     content: {
+      content?: string;
       parts: Array<{
         type: string;
         text?: string;
@@ -1699,44 +1942,53 @@ export class Harness<TState = {}> {
     };
   }): HarnessMessage {
     const content: HarnessMessageContent[] = [];
-    const systemReminder =
-      typeof msg.content.metadata?.systemReminder === 'object' && msg.content.metadata.systemReminder !== null
-        ? msg.content.metadata.systemReminder
-        : undefined;
+    const systemReminder = getRecordValue(msg.content.metadata?.systemReminder);
 
-    if (systemReminder && 'type' in systemReminder && typeof systemReminder.type === 'string') {
-      content.push({
-        type: 'system_reminder',
-        message:
-          'message' in systemReminder && typeof systemReminder.message === 'string' ? systemReminder.message : '',
+    if (systemReminder && typeof systemReminder.type === 'string') {
+      const reminder = toSystemReminderContent({
+        ...systemReminder,
+        contents: typeof systemReminder.message === 'string' ? systemReminder.message : '',
         reminderType: systemReminder.type,
-        path: 'path' in systemReminder && typeof systemReminder.path === 'string' ? systemReminder.path : undefined,
-        precedesMessageId:
-          'precedesMessageId' in systemReminder && typeof systemReminder.precedesMessageId === 'string'
-            ? systemReminder.precedesMessageId
-            : undefined,
-        gapText:
-          'gapText' in systemReminder && typeof systemReminder.gapText === 'string'
-            ? systemReminder.gapText
-            : undefined,
-        gapMs: 'gapMs' in systemReminder && typeof systemReminder.gapMs === 'number' ? systemReminder.gapMs : undefined,
-        timestamp:
-          'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
-            ? systemReminder.timestamp
-            : undefined,
-        goalMaxTurns:
-          'goalMaxTurns' in systemReminder && typeof systemReminder.goalMaxTurns === 'number'
-            ? systemReminder.goalMaxTurns
-            : undefined,
-        judgeModelId:
-          'judgeModelId' in systemReminder && typeof systemReminder.judgeModelId === 'string'
-            ? systemReminder.judgeModelId
-            : undefined,
       });
+      if (reminder) {
+        content.push(reminder);
+      }
 
       return {
         id: msg.id,
-        role: msg.role,
+        role: msg.role === 'signal' ? 'user' : msg.role,
+        content,
+        createdAt: msg.createdAt,
+      };
+    }
+
+    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
+    if (signalMetadata?.type === 'user-message') {
+      const signalContent = signalContentsToHarnessContent(signalMetadata.contents ?? msg.content.content);
+      if (signalContent.length > 0) {
+        return {
+          id: msg.id,
+          role: 'user',
+          content: signalContent,
+          createdAt: msg.createdAt,
+        };
+      }
+    }
+
+    if (signalMetadata?.type === 'system-reminder') {
+      const reminder = toSystemReminderContent({
+        type: signalMetadata.type,
+        contents: signalMetadata.contents ?? msg.content.content,
+        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
+        metadata: getRecordValue(signalMetadata.metadata),
+      });
+      if (reminder) {
+        content.push(reminder);
+      }
+
+      return {
+        id: msg.id,
+        role: 'user',
         content,
         createdAt: msg.createdAt,
       };
@@ -1759,12 +2011,14 @@ export class Harness<TState = {}> {
             const inv = part.toolInvocation;
             content.push({ type: 'tool_call', id: inv.toolCallId, name: inv.toolName, args: inv.args });
             if (inv.state === 'result' && inv.result !== undefined) {
+              const partProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
               content.push({
                 type: 'tool_result',
                 id: inv.toolCallId,
                 name: inv.toolName,
                 result: inv.result,
                 isError: inv.isError ?? false,
+                ...(partProviderMetadata ? { providerMetadata: partProviderMetadata } : {}),
               });
             }
           } else if (part.toolCallId && part.toolName) {
@@ -1778,12 +2032,14 @@ export class Harness<TState = {}> {
           break;
         case 'tool-result':
           if (part.toolCallId && part.toolName) {
+            const resultProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
             content.push({
               type: 'tool_result',
               id: part.toolCallId,
               name: part.toolName,
               result: part.result,
               isError: part.isError ?? false,
+              ...(resultProviderMetadata ? { providerMetadata: resultProviderMetadata } : {}),
             });
           }
           break;
@@ -1820,20 +2076,19 @@ export class Harness<TState = {}> {
           });
           break;
         }
+        case 'data-user-message': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          const message = toUserSignalMessage(data);
+          if (message) {
+            content.push(...message.content);
+          }
+          break;
+        }
         case 'data-system-reminder': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          const message = data.message;
-          if (typeof message === 'string') {
-            content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
-              path: typeof data.path === 'string' ? data.path : undefined,
-              precedesMessageId: typeof data.precedesMessageId === 'string' ? data.precedesMessageId : undefined,
-              gapText: typeof data.gapText === 'string' ? data.gapText : undefined,
-              gapMs: typeof data.gapMs === 'number' ? data.gapMs : undefined,
-              timestamp: typeof data.timestamp === 'string' ? data.timestamp : undefined,
-            });
+          const reminder = toSystemReminderContent(data);
+          if (reminder) {
+            content.push(reminder);
           }
           break;
         }
@@ -1883,539 +2138,591 @@ export class Harness<TState = {}> {
       }
     }
 
-    return { id: msg.id, role: msg.role, content, createdAt: msg.createdAt };
+    return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
   }
 
   /**
    * Process a stream response (shared between sendMessage and tool approval).
    */
-  private async processStream(
-    response: { fullStream: AsyncIterable<any>; traceId?: string },
-    requestContext: RequestContext,
-  ): Promise<{ message: HarnessMessage; suspended?: boolean }> {
-    if (response.traceId) {
-      this.currentTraceId = response.traceId;
-    }
-    let currentMessage: HarnessMessage = {
-      id: this.generateId(),
-      role: 'assistant',
-      content: [],
-      createdAt: new Date(),
+  private createStreamState(): HarnessStreamState {
+    return {
+      currentMessage: {
+        id: this.generateId(),
+        role: 'assistant',
+        content: [],
+        createdAt: new Date(),
+      },
+      isSuspended: false,
+      textContentById: new Map<string, { index: number; text: string }>(),
+      thinkingContentById: new Map<string, { index: number; text: string }>(),
     };
+  }
 
-    let isSuspended = false;
-    const textContentById = new Map<string, { index: number; text: string }>();
-    const thinkingContentById = new Map<string, { index: number; text: string }>();
-    const abortForOmFailure = ({
-      operationType,
-      stage,
-      error,
-    }: {
-      operationType: string;
-      stage: string;
-      error: string;
-    }) => {
-      this.emit({
-        type: 'error',
-        error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
-      });
-      this.abort();
-    };
+  private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
+    this.emit({
+      type: 'error',
+      error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
+    });
+    this.abort();
+  }
+
+  private async processStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContextInput?: RequestContext,
+  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+    const state = this.createStreamState();
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    this.currentOperationId += 1;
+    this.emit({ type: 'agent_start' });
+
+    let result: { message: HarnessMessage; suspended?: boolean } | undefined;
+    let error = false;
+    let aborted = false;
 
     for await (const chunk of response.fullStream) {
-      if ('runId' in chunk && chunk.runId) {
-        this.currentRunId = chunk.runId;
+      result = await this.processStreamChunk(state, chunk, requestContext);
+      if (chunk.type === 'error') {
+        error = true;
       }
-
-      switch (chunk.type) {
-        case 'text-start': {
-          const textIndex = currentMessage.content.length;
-          currentMessage.content.push({ type: 'text', text: '' });
-          textContentById.set(chunk.payload.id, { index: textIndex, text: '' });
-          this.emit({ type: 'message_start', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'text-delta': {
-          const textState = textContentById.get(chunk.payload.id);
-          if (textState) {
-            textState.text += chunk.payload.text;
-            const textContent = currentMessage.content[textState.index];
-            if (textContent && textContent.type === 'text') {
-              textContent.text = textState.text;
-            }
-            this.emit({ type: 'message_update', message: { ...currentMessage } });
-          }
-          break;
-        }
-
-        case 'reasoning-start': {
-          const thinkingIndex = currentMessage.content.length;
-          currentMessage.content.push({ type: 'thinking', thinking: '' });
-          thinkingContentById.set(chunk.payload.id, { index: thinkingIndex, text: '' });
-          this.emit({ type: 'message_update', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'reasoning-delta': {
-          const thinkingState = thinkingContentById.get(chunk.payload.id);
-          if (thinkingState) {
-            thinkingState.text += chunk.payload.text;
-            const thinkingContent = currentMessage.content[thinkingState.index];
-            if (thinkingContent && thinkingContent.type === 'thinking') {
-              thinkingContent.thinking = thinkingState.text;
-            }
-            this.emit({ type: 'message_update', message: { ...currentMessage } });
-          }
-          break;
-        }
-
-        case 'tool-call-input-streaming-start': {
-          const { toolCallId, toolName } = chunk.payload;
-          this.emit({ type: 'tool_input_start', toolCallId, toolName });
-          break;
-        }
-
-        case 'tool-call-delta': {
-          const { toolCallId, argsTextDelta, toolName } = chunk.payload;
-          const transform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
-          if (!transform?.suppress) {
-            this.emit({
-              type: 'tool_input_delta',
-              toolCallId,
-              argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
-              toolName,
-            });
-          }
-          break;
-        }
-
-        case 'tool-call-input-streaming-end': {
-          const { toolCallId } = chunk.payload;
-          this.emit({ type: 'tool_input_end', toolCallId });
-          break;
-        }
-
-        case 'tool-call': {
-          const toolCall = chunk.payload;
-          currentMessage.content.push({
-            type: 'tool_call',
-            id: toolCall.toolCallId,
-            name: toolCall.toolName,
-            args: getDisplayTransform(chunk.metadata, 'input-available', toolCall.args),
-          });
-          this.emit({
-            type: 'tool_start',
-            toolCallId: toolCall.toolCallId,
-            toolName: toolCall.toolName,
-            args: getDisplayTransform(chunk.metadata, 'input-available', toolCall.args),
-          });
-          this.emit({ type: 'message_update', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'tool-result': {
-          const toolResult = chunk.payload;
-          currentMessage.content.push({
-            type: 'tool_result',
-            id: toolResult.toolCallId,
-            name: toolResult.toolName,
-            result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
-            isError: toolResult.isError ?? false,
-          });
-          this.emit({
-            type: 'tool_end',
-            toolCallId: toolResult.toolCallId,
-            result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
-            isError: toolResult.isError ?? false,
-          });
-          this.emit({ type: 'message_update', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'tool-error': {
-          const toolError = chunk.payload;
-          this.emit({
-            type: 'tool_end',
-            toolCallId: toolError.toolCallId,
-            result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
-            isError: true,
-          });
-          break;
-        }
-
-        case 'tool-call-approval': {
-          const toolCallId = chunk.payload.toolCallId;
-          const toolName = chunk.payload.toolName;
-          const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
-          const toolArgs = hasTransformedToolPayload(approvalTransform)
-            ? approvalTransform.transformed
-            : getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
-
-          const policy = this.resolveToolApproval(toolName);
-
-          if (policy === 'allow') {
-            const result = await this.handleToolApprove({ toolCallId, requestContext });
-            currentMessage = result.message;
-            return result;
-          }
-
-          if (policy === 'deny') {
-            const result = await this.handleToolDecline({ toolCallId, requestContext });
-            currentMessage = result.message;
-            return result;
-          }
-
-          this.pendingApprovalToolName = toolName;
-          this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
-
-          const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
-            resolve => {
-              this.pendingApprovalResolve = resolve;
-            },
-          );
-          this.pendingApprovalToolName = null;
-
-          if (approval.decision === 'approve') {
-            const result = await this.handleToolApprove({
-              toolCallId,
-              requestContext: approval.requestContext ?? requestContext,
-            });
-            currentMessage = result.message;
-            return result;
-          } else {
-            const result = await this.handleToolDecline({
-              toolCallId,
-              requestContext: approval.requestContext ?? requestContext,
-            });
-            currentMessage = result.message;
-            return result;
-          }
-        }
-
-        case 'tool-call-suspended': {
-          const suspToolCallId = chunk.payload.toolCallId;
-          const suspToolName = chunk.payload.toolName;
-          const suspArgs = getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
-          const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
-          const suspResumeSchema = chunk.payload.resumeSchema;
-
-          this.emit({
-            type: 'tool_suspended',
-            toolCallId: suspToolCallId,
-            toolName: suspToolName,
-            args: suspArgs,
-            suspendPayload: suspPayload,
-            resumeSchema: suspResumeSchema,
-          });
-
-          this.pendingSuspensionRunId = this.currentRunId;
-          this.pendingSuspensionToolCallId = suspToolCallId;
-
-          // Don't return immediately — continue draining the stream so the
-          // workflow engine has a chance to persist the snapshot before the
-          // caller tries to resume.
-          isSuspended = true;
-          break;
-        }
-
-        case 'error': {
-          const streamError =
-            chunk.payload.error instanceof Error ? chunk.payload.error : new Error(String(chunk.payload.error));
-          this.emit({ type: 'error', error: streamError });
-          break;
-        }
-
-        case 'step-finish': {
-          const usage = chunk.payload?.output?.usage;
-          if (usage) {
-            const usageRecord = usage as Record<string, unknown>;
-            const promptTokens =
-              getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-            const completionTokens =
-              getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-            const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-            const stepUsage: TokenUsage = {
-              promptTokens,
-              completionTokens,
-              totalTokens,
-            };
-            addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-            addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-            addOptionalUsageField(
-              stepUsage,
-              'cacheCreationInputTokens',
-              getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-            );
-            if (usageRecord.raw !== undefined) {
-              stepUsage.raw = usageRecord.raw;
-            }
-
-            this.tokenUsage.promptTokens += promptTokens;
-            this.tokenUsage.completionTokens += completionTokens;
-            this.tokenUsage.totalTokens += totalTokens;
-            addOptionalUsageField(this.tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
-            addOptionalUsageField(this.tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
-            addOptionalUsageField(this.tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
-            if (stepUsage.raw !== undefined) {
-              this.tokenUsage.raw = stepUsage.raw;
-            }
-
-            this.persistTokenUsage().catch(() => {});
-            this.emit({ type: 'usage_update', usage: stepUsage });
-          }
-          break;
-        }
-
-        case 'finish': {
-          const finishReason = chunk.payload.stepResult?.reason;
-          if (finishReason === 'stop' || finishReason === 'end-turn') {
-            currentMessage.stopReason = 'complete';
-          } else if (finishReason === 'tool-calls') {
-            currentMessage.stopReason = 'tool_use';
-          } else {
-            currentMessage.stopReason = 'complete';
-          }
-          break;
-        }
-
-        // Observational Memory data parts
-        // NOTE: OM data parts arrive as { type, data: { ... } } — NOT { type, payload }
-        case 'data-om-status': {
-          const d = (chunk as any).data as Record<string, any> | undefined;
-          if (d?.windows) {
-            const w = d.windows;
-            const active = w.active ?? {};
-            const msgs = active.messages ?? {};
-            const obs = active.observations ?? {};
-            const buffObs = w.buffered?.observations ?? {};
-            const buffRef = w.buffered?.reflection ?? {};
-
-            this.emit({
-              type: 'om_status',
-              windows: {
-                active: {
-                  messages: { tokens: msgs.tokens ?? 0, threshold: msgs.threshold ?? 0 },
-                  observations: { tokens: obs.tokens ?? 0, threshold: obs.threshold ?? 0 },
-                },
-                buffered: {
-                  observations: {
-                    status: buffObs.status ?? 'idle',
-                    chunks: buffObs.chunks ?? 0,
-                    messageTokens: buffObs.messageTokens ?? 0,
-                    projectedMessageRemoval: buffObs.projectedMessageRemoval ?? 0,
-                    observationTokens: buffObs.observationTokens ?? 0,
-                  },
-                  reflection: {
-                    status: buffRef.status ?? 'idle',
-                    inputObservationTokens: buffRef.inputObservationTokens ?? 0,
-                    observationTokens: buffRef.observationTokens ?? 0,
-                  },
-                },
-              },
-              recordId: d.recordId ?? '',
-              threadId: d.threadId ?? '',
-              stepNumber: d.stepNumber ?? 0,
-              generationCount: d.generationCount ?? 0,
-            });
-          }
-          break;
-        }
-        case 'data-om-observation-start': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            if (payload.operationType === 'observation') {
-              this.emit({
-                type: 'om_observation_start',
-                cycleId: payload.cycleId,
-                operationType: payload.operationType,
-                tokensToObserve: payload.tokensToObserve ?? 0,
-              });
-            } else if (payload.operationType === 'reflection') {
-              this.emit({
-                type: 'om_reflection_start',
-                cycleId: payload.cycleId,
-                tokensToReflect: payload.tokensToObserve ?? 0,
-              });
-            }
-          }
-          break;
-        }
-        case 'data-om-observation-end': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            if (payload.operationType === 'reflection') {
-              this.emit({
-                type: 'om_reflection_end',
-                cycleId: payload.cycleId,
-                durationMs: payload.durationMs ?? 0,
-                compressedTokens: payload.observationTokens ?? 0,
-                observations: payload.observations,
-              });
-            } else {
-              this.emit({
-                type: 'om_observation_end',
-                cycleId: payload.cycleId,
-                durationMs: payload.durationMs ?? 0,
-                tokensObserved: payload.tokensObserved ?? 0,
-                observationTokens: payload.observationTokens ?? 0,
-                observations: payload.observations,
-                currentTask: payload.currentTask,
-                suggestedResponse: payload.suggestedResponse,
-              });
-            }
-          }
-          break;
-        }
-        case 'data-om-observation-failed': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload) {
-            const operationType = payload.operationType === 'reflection' ? 'reflection' : 'observation';
-            const error = payload.error ?? 'Unknown error';
-
-            if (operationType === 'reflection') {
-              this.emit({
-                type: 'om_reflection_failed',
-                cycleId: payload.cycleId ?? 'unknown',
-                error,
-                durationMs: payload.durationMs ?? 0,
-              });
-            } else {
-              this.emit({
-                type: 'om_observation_failed',
-                cycleId: payload.cycleId ?? 'unknown',
-                error,
-                durationMs: payload.durationMs ?? 0,
-              });
-            }
-
-            abortForOmFailure({ operationType, stage: 'run', error });
-            return { message: currentMessage };
-          }
-          break;
-        }
-        // Async buffering lifecycle
-        case 'data-om-buffering-start': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            this.emit({
-              type: 'om_buffering_start',
-              cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              tokensToBuffer: payload.tokensToBuffer ?? 0,
-            });
-          }
-          break;
-        }
-        case 'data-om-buffering-end': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            this.emit({
-              type: 'om_buffering_end',
-              cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              tokensBuffered: payload.tokensBuffered ?? 0,
-              bufferedTokens: payload.bufferedTokens ?? 0,
-              observations: payload.observations,
-            });
-          }
-          break;
-        }
-        case 'data-om-buffering-failed': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload) {
-            const operationType = payload.operationType ?? 'observation';
-            const error = payload.error ?? 'Unknown error';
-
-            this.emit({
-              type: 'om_buffering_failed',
-              cycleId: payload.cycleId,
-              operationType,
-              error,
-            });
-
-            abortForOmFailure({ operationType, stage: 'buffering', error });
-            return { message: currentMessage };
-          }
-          break;
-        }
-        case 'data-system-reminder': {
-          const payload = (chunk as any).data as Record<string, unknown> | undefined;
-          const message = payload?.message;
-          if (typeof message === 'string') {
-            currentMessage.content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
-              path: typeof payload?.path === 'string' ? payload.path : undefined,
-              precedesMessageId: typeof payload?.precedesMessageId === 'string' ? payload.precedesMessageId : undefined,
-              gapText: typeof payload?.gapText === 'string' ? payload.gapText : undefined,
-              gapMs: typeof payload?.gapMs === 'number' ? payload.gapMs : undefined,
-              timestamp: typeof payload?.timestamp === 'string' ? payload.timestamp : undefined,
-            });
-            this.emit({ type: 'message_update', message: currentMessage });
-          }
-          break;
-        }
-        case 'data-om-activation': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            this.emit({
-              type: 'om_activation',
-              cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              chunksActivated: payload.chunksActivated ?? 0,
-              tokensActivated: payload.tokensActivated ?? 0,
-              observationTokens: payload.observationTokens ?? 0,
-              messagesActivated: payload.messagesActivated ?? 0,
-              generationCount: payload.generationCount ?? 0,
-              triggeredBy: payload.triggeredBy,
-              lastActivityAt: payload.lastActivityAt,
-              ttlExpiredMs: payload.ttlExpiredMs,
-              activateAfterIdle: payload.config?.activateAfterIdle,
-              previousModel: payload.previousModel,
-              currentModel: payload.currentModel,
-            });
-          }
-          break;
-        }
-        case 'data-om-thread-update': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.newTitle) {
-            this.emit({
-              type: 'om_thread_title_updated',
-              cycleId: payload.cycleId ?? 'unknown',
-              threadId: payload.threadId ?? this.currentThreadId ?? 'unknown',
-              oldTitle: payload.oldTitle,
-              newTitle: payload.newTitle,
-            });
-          }
-          break;
-        }
-
-        // Sandbox streaming data chunks (from workspace execute_command tool)
-        case 'data-sandbox-stdout': {
-          const d = (chunk as any).data as Record<string, any> | undefined;
-          if (d?.output && d?.toolCallId) {
-            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
-          }
-          break;
-        }
-        case 'data-sandbox-stderr': {
-          const d = (chunk as any).data as Record<string, any> | undefined;
-          if (d?.output && d?.toolCallId) {
-            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
-          }
-          break;
-        }
-
-        default:
-          break;
+      if (chunk.type === 'abort') {
+        aborted = true;
+      }
+      if (
+        result ||
+        chunk.type === 'finish' ||
+        chunk.type === 'error' ||
+        chunk.type === 'abort' ||
+        chunk.type === 'tool-call-suspended' ||
+        this.abortRequested
+      ) {
+        result ??= this.finishStreamState(state);
+        break;
       }
     }
 
-    this.emit({ type: 'message_end', message: currentMessage });
-    return { message: currentMessage, suspended: isSuspended || undefined };
+    result ??= this.finishStreamState(state);
+    this.emit({
+      type: 'agent_end',
+      reason: error
+        ? 'error'
+        : result.suspended
+          ? 'suspended'
+          : aborted || this.abortRequested
+            ? 'aborted'
+            : 'complete',
+    });
+
+    this.currentRunId = null;
+    this.currentTraceId = null;
+    this.abortController = null;
+    this.abortRequested = false;
+    await this.drainFollowUpQueue();
+
+    return result;
+  }
+
+  private async processStreamChunk(
+    state: HarnessStreamState,
+    chunk: any,
+    requestContext: RequestContext,
+  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+    if ('runId' in chunk && chunk.runId) {
+      this.currentRunId = chunk.runId;
+    }
+
+    switch (chunk.type) {
+      case 'text-start': {
+        const textIndex = state.currentMessage.content.length;
+        state.currentMessage.content.push({ type: 'text', text: '' });
+        state.textContentById.set(chunk.payload.id, { index: textIndex, text: '' });
+        this.emit({ type: 'message_start', message: { ...state.currentMessage } });
+        break;
+      }
+
+      case 'text-delta': {
+        const textState = state.textContentById.get(chunk.payload.id);
+        if (textState) {
+          textState.text += chunk.payload.text;
+          const textContent = state.currentMessage.content[textState.index];
+          if (textContent && textContent.type === 'text') {
+            textContent.text = textState.text;
+          }
+          this.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        }
+        break;
+      }
+
+      case 'reasoning-start': {
+        const thinkingIndex = state.currentMessage.content.length;
+        state.currentMessage.content.push({ type: 'thinking', thinking: '' });
+        state.thinkingContentById.set(chunk.payload.id, { index: thinkingIndex, text: '' });
+        this.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        break;
+      }
+
+      case 'reasoning-delta': {
+        const thinkingState = state.thinkingContentById.get(chunk.payload.id);
+        if (thinkingState) {
+          thinkingState.text += chunk.payload.text;
+          const thinkingContent = state.currentMessage.content[thinkingState.index];
+          if (thinkingContent && thinkingContent.type === 'thinking') {
+            thinkingContent.thinking = thinkingState.text;
+          }
+          this.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        }
+        break;
+      }
+
+      case 'tool-call-input-streaming-start': {
+        const { toolCallId, toolName } = chunk.payload;
+        this.emit({ type: 'tool_input_start', toolCallId, toolName });
+        break;
+      }
+
+      case 'tool-call-delta': {
+        const { toolCallId, argsTextDelta, toolName } = chunk.payload;
+        const transform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
+        if (!transform?.suppress) {
+          this.emit({
+            type: 'tool_input_delta',
+            toolCallId,
+            argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
+            toolName,
+          });
+        }
+        break;
+      }
+
+      case 'tool-call-input-streaming-end': {
+        const { toolCallId } = chunk.payload;
+        this.emit({ type: 'tool_input_end', toolCallId });
+        break;
+      }
+
+      case 'tool-call': {
+        const toolCall = chunk.payload;
+        const args = getDisplayTransform(chunk.metadata, 'input-available', toolCall.args);
+        state.currentMessage.content.push({
+          type: 'tool_call',
+          id: toolCall.toolCallId,
+          name: toolCall.toolName,
+          args,
+        });
+        this.emit({
+          type: 'tool_start',
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          args,
+        });
+        this.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        break;
+      }
+
+      case 'tool-result': {
+        const toolResult = chunk.payload;
+        const providerMetadata = toolResult.providerMetadata as Record<string, unknown> | undefined;
+        const result = getDisplayTransform(chunk.metadata, 'output-available', toolResult.result);
+        state.currentMessage.content.push({
+          type: 'tool_result',
+          id: toolResult.toolCallId,
+          name: toolResult.toolName,
+          result,
+          isError: toolResult.isError ?? false,
+          ...(providerMetadata ? { providerMetadata } : {}),
+        });
+        this.emit({
+          type: 'tool_end',
+          toolCallId: toolResult.toolCallId,
+          result,
+          isError: toolResult.isError ?? false,
+          ...(providerMetadata ? { providerMetadata } : {}),
+        });
+        this.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        break;
+      }
+
+      case 'tool-error': {
+        const toolError = chunk.payload;
+        this.emit({
+          type: 'tool_end',
+          toolCallId: toolError.toolCallId,
+          result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
+          isError: true,
+        });
+        break;
+      }
+
+      case 'tool-call-approval': {
+        const toolCallId = chunk.payload.toolCallId;
+        const toolName = chunk.payload.toolName;
+        const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
+        const toolArgs = hasTransformedToolPayload(approvalTransform)
+          ? approvalTransform.transformed
+          : getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
+
+        const policy = this.resolveToolApproval(toolName);
+
+        if (policy === 'allow') {
+          await this.handleToolApprove({ toolCallId, requestContext });
+          break;
+        }
+
+        if (policy === 'deny') {
+          await this.handleToolDecline({ toolCallId, requestContext });
+          break;
+        }
+
+        this.pendingApprovalToolName = toolName;
+        this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
+
+        const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+          resolve => {
+            this.pendingApprovalResolve = resolve;
+          },
+        );
+        this.pendingApprovalToolName = null;
+
+        if (approval.decision === 'approve') {
+          await this.handleToolApprove({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+        } else {
+          await this.handleToolDecline({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+        }
+        break;
+      }
+
+      case 'tool-call-suspended': {
+        const suspToolCallId = chunk.payload.toolCallId;
+        const suspToolName = chunk.payload.toolName;
+        const suspArgs = getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
+        const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
+        const suspResumeSchema = chunk.payload.resumeSchema;
+
+        this.emit({
+          type: 'tool_suspended',
+          toolCallId: suspToolCallId,
+          toolName: suspToolName,
+          args: suspArgs,
+          suspendPayload: suspPayload,
+          resumeSchema: suspResumeSchema,
+        });
+
+        this.pendingSuspensionRunId = this.currentRunId;
+        this.pendingSuspensionToolCallId = suspToolCallId;
+
+        state.isSuspended = true;
+        break;
+      }
+
+      case 'error': {
+        const streamError =
+          chunk.payload.error instanceof Error ? chunk.payload.error : new Error(String(chunk.payload.error));
+        this.emit({ type: 'error', error: streamError });
+        break;
+      }
+
+      case 'step-finish': {
+        const usage = chunk.payload?.output?.usage;
+        if (usage) {
+          const usageRecord = usage as Record<string, unknown>;
+          const promptTokens =
+            getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
+          const completionTokens =
+            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
+          const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
+          const stepUsage: TokenUsage = {
+            promptTokens,
+            completionTokens,
+            totalTokens,
+          };
+          addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
+          addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
+          );
+          if (usageRecord.raw !== undefined) {
+            stepUsage.raw = usageRecord.raw;
+          }
+
+          this.tokenUsage.promptTokens += promptTokens;
+          this.tokenUsage.completionTokens += completionTokens;
+          this.tokenUsage.totalTokens += totalTokens;
+          addOptionalUsageField(this.tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
+          addOptionalUsageField(this.tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
+          addOptionalUsageField(this.tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
+          if (stepUsage.raw !== undefined) {
+            this.tokenUsage.raw = stepUsage.raw;
+          }
+
+          this.persistTokenUsage().catch(() => {});
+          this.emit({ type: 'usage_update', usage: stepUsage });
+        }
+        break;
+      }
+
+      case 'finish': {
+        const finishReason = chunk.payload.stepResult?.reason;
+        if (finishReason === 'stop' || finishReason === 'end-turn') {
+          state.currentMessage.stopReason = 'complete';
+        } else if (finishReason === 'tool-calls') {
+          state.currentMessage.stopReason = 'tool_use';
+        } else {
+          state.currentMessage.stopReason = 'complete';
+        }
+        break;
+      }
+
+      // Observational Memory data parts
+      // NOTE: OM data parts arrive as { type, data: { ... } } — NOT { type, payload }
+      case 'data-om-status': {
+        const d = (chunk as any).data as Record<string, any> | undefined;
+        if (d?.windows) {
+          const w = d.windows;
+          const active = w.active ?? {};
+          const msgs = active.messages ?? {};
+          const obs = active.observations ?? {};
+          const buffObs = w.buffered?.observations ?? {};
+          const buffRef = w.buffered?.reflection ?? {};
+
+          this.emit({
+            type: 'om_status',
+            windows: {
+              active: {
+                messages: { tokens: msgs.tokens ?? 0, threshold: msgs.threshold ?? 0 },
+                observations: { tokens: obs.tokens ?? 0, threshold: obs.threshold ?? 0 },
+              },
+              buffered: {
+                observations: {
+                  status: buffObs.status ?? 'idle',
+                  chunks: buffObs.chunks ?? 0,
+                  messageTokens: buffObs.messageTokens ?? 0,
+                  projectedMessageRemoval: buffObs.projectedMessageRemoval ?? 0,
+                  observationTokens: buffObs.observationTokens ?? 0,
+                },
+                reflection: {
+                  status: buffRef.status ?? 'idle',
+                  inputObservationTokens: buffRef.inputObservationTokens ?? 0,
+                  observationTokens: buffRef.observationTokens ?? 0,
+                },
+              },
+            },
+            recordId: d.recordId ?? '',
+            threadId: d.threadId ?? '',
+            stepNumber: d.stepNumber ?? 0,
+            generationCount: d.generationCount ?? 0,
+          });
+        }
+        break;
+      }
+      case 'data-om-observation-start': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload && payload.cycleId) {
+          if (payload.operationType === 'observation') {
+            this.emit({
+              type: 'om_observation_start',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType,
+              tokensToObserve: payload.tokensToObserve ?? 0,
+            });
+          } else if (payload.operationType === 'reflection') {
+            this.emit({
+              type: 'om_reflection_start',
+              cycleId: payload.cycleId,
+              tokensToReflect: payload.tokensToObserve ?? 0,
+            });
+          }
+        }
+        break;
+      }
+      case 'data-om-observation-end': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload && payload.cycleId) {
+          if (payload.operationType === 'reflection') {
+            this.emit({
+              type: 'om_reflection_end',
+              cycleId: payload.cycleId,
+              durationMs: payload.durationMs ?? 0,
+              compressedTokens: payload.observationTokens ?? 0,
+              observations: payload.observations,
+            });
+          } else {
+            this.emit({
+              type: 'om_observation_end',
+              cycleId: payload.cycleId,
+              durationMs: payload.durationMs ?? 0,
+              tokensObserved: payload.tokensObserved ?? 0,
+              observationTokens: payload.observationTokens ?? 0,
+              observations: payload.observations,
+              currentTask: payload.currentTask,
+              suggestedResponse: payload.suggestedResponse,
+            });
+          }
+        }
+        break;
+      }
+      case 'data-om-observation-failed': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload) {
+          const operationType = payload.operationType === 'reflection' ? 'reflection' : 'observation';
+          const error = payload.error ?? 'Unknown error';
+
+          if (operationType === 'reflection') {
+            this.emit({
+              type: 'om_reflection_failed',
+              cycleId: payload.cycleId ?? 'unknown',
+              error,
+              durationMs: payload.durationMs ?? 0,
+            });
+          } else {
+            this.emit({
+              type: 'om_observation_failed',
+              cycleId: payload.cycleId ?? 'unknown',
+              error,
+              durationMs: payload.durationMs ?? 0,
+            });
+          }
+
+          this.abortForOmFailure({ operationType, stage: 'run', error });
+          return { message: state.currentMessage };
+        }
+        break;
+      }
+      // Async buffering lifecycle
+      case 'data-om-buffering-start': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload && payload.cycleId) {
+          this.emit({
+            type: 'om_buffering_start',
+            cycleId: payload.cycleId,
+            operationType: payload.operationType ?? 'observation',
+            tokensToBuffer: payload.tokensToBuffer ?? 0,
+          });
+        }
+        break;
+      }
+      case 'data-om-buffering-end': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload && payload.cycleId) {
+          this.emit({
+            type: 'om_buffering_end',
+            cycleId: payload.cycleId,
+            operationType: payload.operationType ?? 'observation',
+            tokensBuffered: payload.tokensBuffered ?? 0,
+            bufferedTokens: payload.bufferedTokens ?? 0,
+            observations: payload.observations,
+          });
+        }
+        break;
+      }
+      case 'data-om-buffering-failed': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload) {
+          const operationType = payload.operationType ?? 'observation';
+          const error = payload.error ?? 'Unknown error';
+
+          this.emit({
+            type: 'om_buffering_failed',
+            cycleId: payload.cycleId,
+            operationType,
+            error,
+          });
+
+          this.abortForOmFailure({ operationType, stage: 'buffering', error });
+          return { message: state.currentMessage };
+        }
+        break;
+      }
+      case 'data-user-message': {
+        const payload = (chunk as any).data as Record<string, unknown> | undefined;
+        const message = payload ? toUserSignalMessage(payload) : undefined;
+        if (message) {
+          if (state.currentMessage.content.length > 0) {
+            state.currentMessage.stopReason ??= 'complete';
+            this.emit({ type: 'message_end', message: { ...state.currentMessage } });
+            state.currentMessage = {
+              id: this.generateId(),
+              role: 'assistant',
+              content: [],
+              createdAt: new Date(),
+            };
+            state.textContentById.clear();
+            state.thinkingContentById.clear();
+          }
+          this.emit({ type: 'message_start', message });
+          this.emit({ type: 'message_end', message });
+        }
+        break;
+      }
+      case 'data-system-reminder': {
+        const payload = (chunk as any).data as Record<string, unknown> | undefined;
+        const reminder = payload ? toSystemReminderContent(payload) : undefined;
+        if (reminder) {
+          state.currentMessage.content.push(reminder);
+          this.emit({ type: 'message_update', message: state.currentMessage });
+        }
+        break;
+      }
+      case 'data-om-activation': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload && payload.cycleId) {
+          this.emit({
+            type: 'om_activation',
+            cycleId: payload.cycleId,
+            operationType: payload.operationType ?? 'observation',
+            chunksActivated: payload.chunksActivated ?? 0,
+            tokensActivated: payload.tokensActivated ?? 0,
+            observationTokens: payload.observationTokens ?? 0,
+            messagesActivated: payload.messagesActivated ?? 0,
+            generationCount: payload.generationCount ?? 0,
+            triggeredBy: payload.triggeredBy,
+            lastActivityAt: payload.lastActivityAt,
+            ttlExpiredMs: payload.ttlExpiredMs,
+            activateAfterIdle: payload.config?.activateAfterIdle,
+            previousModel: payload.previousModel,
+            currentModel: payload.currentModel,
+          });
+        }
+        break;
+      }
+      case 'data-om-thread-update': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload && payload.newTitle) {
+          this.emit({
+            type: 'om_thread_title_updated',
+            cycleId: payload.cycleId ?? 'unknown',
+            threadId: payload.threadId ?? this.currentThreadId ?? 'unknown',
+            oldTitle: payload.oldTitle,
+            newTitle: payload.newTitle,
+          });
+        }
+        break;
+      }
+
+      // Sandbox streaming data chunks (from workspace execute_command tool)
+      case 'data-sandbox-stdout': {
+        const d = (chunk as any).data as Record<string, any> | undefined;
+        if (d?.output && d?.toolCallId) {
+          this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
+        }
+        break;
+      }
+      case 'data-sandbox-stderr': {
+        const d = (chunk as any).data as Record<string, any> | undefined;
+        if (d?.output && d?.toolCallId) {
+          this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  private finishStreamState(state: HarnessStreamState): { message: HarnessMessage; suspended?: boolean } {
+    this.emit({ type: 'message_end', message: state.currentMessage });
+    return { message: state.currentMessage, suspended: state.isSuspended || undefined };
   }
 
   // ===========================================================================
@@ -2426,8 +2733,11 @@ export class Harness<TState = {}> {
    * Abort the current operation.
    */
   abort(): void {
+    this.abortRequested = true;
+    try {
+      this.agentThreadSubscription?.abort();
+    } catch {}
     if (this.abortController) {
-      this.abortRequested = true;
       try {
         this.abortController.abort();
       } catch {}
@@ -2465,11 +2775,27 @@ export class Harness<TState = {}> {
   }
 
   getCurrentRunId(): string | null {
-    return this.currentRunId;
+    return this.agentThreadSubscription?.activeRunId() ?? this.currentRunId;
+  }
+
+  isCurrentThreadStreamActive(): boolean {
+    return (
+      this.agentThreadSubscription?.activeRunId() !== null && this.agentThreadSubscription?.activeRunId() !== undefined
+    );
+  }
+
+  private async waitForCurrentThreadStreamIdle(): Promise<void> {
+    while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
   }
 
   getCurrentTraceId(): string | null {
     return this.currentTraceId;
+  }
+
+  private getSubagentDisplayName(agentType: string): string | undefined {
+    return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
   }
 
   // ===========================================================================
@@ -2557,16 +2883,11 @@ export class Harness<TState = {}> {
   }): Promise<void> {
     if (!this.pendingSuspensionRunId) return;
 
-    this.emit({ type: 'agent_start' });
-
     try {
-      const streamResult = await this.handleToolResume({
+      await this.handleToolResume({
         resumeData,
         requestContext,
       });
-
-      const reason = streamResult.suspended ? 'suspended' : 'complete';
-      this.emit({ type: 'agent_end', reason });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit({ type: 'error', error: err });
@@ -2620,7 +2941,7 @@ export class Harness<TState = {}> {
 
   /**
    * Respond to a pending plan approval.
-   * On approval: switches to the default mode, then resolves the promise.
+   * On approval: resolves the suspended plan tool, then switches to the default mode.
    * On rejection: resolves with feedback (stays in current mode).
    */
   async respondToPlanApproval({
@@ -2633,15 +2954,16 @@ export class Harness<TState = {}> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
+    this.pendingPlanApprovals.delete(planId);
+    resolve(response);
+
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
+        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
         await this.switchMode({ modeId: defaultMode.id });
       }
     }
-
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
   }
 
   private async handleToolApprove({
@@ -2650,7 +2972,7 @@ export class Harness<TState = {}> {
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
-  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+  }): Promise<void> {
     if (!this.currentRunId) {
       throw new Error('No active run to approve tool call for');
     }
@@ -2663,7 +2985,7 @@ export class Harness<TState = {}> {
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
-    const response = await agent.approveToolCall({
+    await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
       requireToolApproval: !isYolo,
@@ -2672,8 +2994,6 @@ export class Harness<TState = {}> {
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
-
-    return await this.processStream(response, requestContext);
   }
 
   private async handleToolDecline({
@@ -2682,7 +3002,7 @@ export class Harness<TState = {}> {
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
-  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+  }): Promise<void> {
     if (!this.currentRunId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -2694,7 +3014,7 @@ export class Harness<TState = {}> {
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
-    const response = await agent.declineToolCall({
+    await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
       requireToolApproval: !isYolo,
@@ -2703,8 +3023,6 @@ export class Harness<TState = {}> {
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
-
-    return await this.processStream(response, requestContext);
   }
 
   private async handleToolResume({
@@ -2713,7 +3031,7 @@ export class Harness<TState = {}> {
   }: {
     resumeData: any;
     requestContext?: RequestContext;
-  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+  }): Promise<void> {
     if (!this.pendingSuspensionRunId) {
       throw new Error('No active suspension to resume');
     }
@@ -2726,7 +3044,7 @@ export class Harness<TState = {}> {
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
-    const response = await agent.resumeStream(resumeData, {
+    const output = await agent.resumeStream(resumeData, {
       runId: this.pendingSuspensionRunId,
       toolCallId: this.pendingSuspensionToolCallId ?? undefined,
       requireToolApproval: !isYolo,
@@ -2735,11 +3053,10 @@ export class Harness<TState = {}> {
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
+    await this.processStream(output, requestContext);
 
     this.pendingSuspensionRunId = null;
     this.pendingSuspensionToolCallId = null;
-
-    return await this.processStream(response, requestContext);
   }
 
   // ===========================================================================
@@ -3045,9 +3362,11 @@ export class Harness<TState = {}> {
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
-      case 'subagent_start':
+      case 'subagent_start': {
+        const displayName = this.getSubagentDisplayName(event.agentType);
         ds.activeSubagents.set(event.toolCallId, {
           agentType: event.agentType,
+          ...(displayName !== undefined ? { displayName } : {}),
           task: event.task,
           modelId: event.modelId,
           forked: event.forked,
@@ -3057,6 +3376,7 @@ export class Harness<TState = {}> {
           startedAt: new Date(),
         });
         break;
+      }
 
       case 'subagent_text_delta': {
         const sub = ds.activeSubagents.get(event.toolCallId);
@@ -3572,6 +3892,7 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
+    this.cleanupAgentThreadSubscription();
     for (const scheduler of this.displayStateSchedulers) {
       scheduler.dispose();
     }

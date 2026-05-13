@@ -110,6 +110,21 @@ export class MemoryLibSQL extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+
+    await this.#client.batch(
+      [
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_created_at ON ${TABLE_MESSAGES} (thread_id, "createdAt")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_resource_created_at ON ${TABLE_MESSAGES} (thread_id, "resourceId", "createdAt")`,
+          args: [],
+        },
+      ],
+      'write',
+    );
+
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       await this.#client.execute({
@@ -961,13 +976,24 @@ export class MemoryLibSQL extends MemoryStorage {
     return updatedResource;
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
+      const keys: Record<string, any> = { id: threadId };
+      if (resourceId !== undefined) {
+        keys.resourceId = resourceId;
+      }
+
       const result = await this.#db.select<
         Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
       >({
         tableName: TABLE_THREADS,
-        keys: { id: threadId },
+        keys,
       });
 
       if (!result) {

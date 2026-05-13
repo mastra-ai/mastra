@@ -59,7 +59,8 @@ describe('handleAskQuestion goal mode', () => {
 });
 
 describe('handlePlanApproval goal mode', () => {
-  it('approves the plan and starts a goal without sending the normal approval reminder', async () => {
+  it('approves the plan, activates goal mode, and injects the goal trigger through fireMessage', async () => {
+    vi.useFakeTimers();
     const state = {
       harness: {
         setState: vi.fn().mockResolvedValue(undefined),
@@ -88,13 +89,24 @@ describe('handlePlanApproval goal mode', () => {
 
     await (component as any).onGoal();
     await promise;
+    expect(ctx.fireMessage).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(50);
 
     expect(state.harness.respondToPlanApproval).toHaveBeenCalledWith({
       planId: 'plan-1',
       response: { action: 'approved' },
     });
-    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
+    expect(ctx.startGoal).toHaveBeenCalledTimes(1);
+    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', {
+      trigger: 'none',
+    });
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
-    expect(ctx.fireMessage).not.toHaveBeenCalled();
+    expect(ctx.fireMessage).toHaveBeenCalledTimes(1);
+    expect(ctx.fireMessage).toHaveBeenCalledWith(
+      '<system-reminder type="goal"># Ship it\n\n1. Build\n2. Test</system-reminder>',
+    );
+    expect(ctx.fireMessage).not.toHaveBeenCalledWith(expect.stringContaining('begin executing'));
+    vi.useRealTimers();
   });
 });

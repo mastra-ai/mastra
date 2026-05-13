@@ -438,6 +438,17 @@ export interface TokenUsage {
   raw?: unknown;
 }
 
+/** Creates a zero-initialized TokenUsage object. */
+export function createEmptyTokenUsage(): TokenUsage {
+  return {
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  };
+}
+
 // =============================================================================
 // Observational Memory Progress
 // =============================================================================
@@ -512,6 +523,7 @@ export interface ActiveToolState {
  */
 export interface ActiveSubagentState {
   agentType: string;
+  displayName?: string;
   task: string;
   modelId?: string;
   forked?: boolean;
@@ -523,6 +535,8 @@ export interface ActiveSubagentState {
   durationMs?: number;
   result?: string;
 }
+
+export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
 
 /**
  * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
@@ -650,7 +664,7 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
@@ -729,7 +743,13 @@ export type HarnessEvent =
       resumeSchema?: string;
     }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
+  | {
+      type: 'tool_end';
+      toolCallId: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: Record<string, unknown>;
+    }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
@@ -926,7 +946,14 @@ export type HarnessMessageContent =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
+  | {
+      type: 'tool_result';
+      id: string;
+      name: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: Record<string, unknown>;
+    }
   | {
       type: 'system_reminder';
       message: string;

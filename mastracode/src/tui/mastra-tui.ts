@@ -5,7 +5,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessEvent } from '@mastra/core/harness';
+import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -46,7 +46,9 @@ import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
+  addPendingUserMessage,
   addUserMessage,
+  removePendingUserMessage,
   renderCompletedTasksInline,
   renderClearedTasksInline,
   renderExistingMessages,
@@ -256,46 +258,14 @@ export class MastraTUI {
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        // Show the user message in the TUI right away — before any async work
-        // (thread creation, hooks, sending) so the UI feels instant even when
-        // GC pauses or I/O slow things down.
-        const messageId = `user-${Date.now()}`;
-        addUserMessage(this.state, {
-          id: messageId,
-          role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...(images?.map(img => ({
-              type: 'image' as const,
-              data: img.data,
-              mimeType: img.mimeType,
-            })) ?? []),
-          ],
-          createdAt: new Date(),
-        });
-        this.state.ui.requestRender();
-
+        const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
-          // Hook blocked the message — remove it from the chat
-          const comp = this.state.messageComponentsById.get(messageId);
-          if (comp) {
-            this.state.chatContainer.removeChild(comp as never);
-            this.state.messageComponentsById.delete(messageId);
-            this.state.ui.requestRender();
-          }
+          this.removeOptimisticUserMessage(optimisticMessageId);
           continue;
         }
 
-        // Create thread lazily on first message (may load last-used model).
-        // Runs after the hook check so we don't create a thread for blocked messages.
-        if (this.state.pendingNewThread) {
-          await this.state.harness.createThread();
-          this.state.pendingNewThread = false;
-        }
-
-        // Normal send — fire and forget; events handle the rest
-        this.fireMessage(content, images);
+        this.sendOptimisticSignal(content, images, optimisticMessageId);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -309,6 +279,122 @@ export class MastraTUI {
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
     this.state.harness.sendMessage({ content, files }).catch(error => {
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+    });
+  }
+
+  private createUserSignalMessage(
+    content: string,
+    images?: Array<{ data: string; mimeType: string }>,
+    id = '',
+  ): HarnessMessage {
+    return {
+      id,
+      role: 'user',
+      content: [
+        { type: 'text', text: content },
+        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+      ],
+      createdAt: new Date(),
+    };
+  }
+
+  private createUserSignalContent(content: string, images?: Array<{ data: string; mimeType: string }>) {
+    return images?.length
+      ? {
+          role: 'user' as const,
+          content: [
+            { type: 'text' as const, text: content },
+            ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
+          ],
+        }
+      : content;
+  }
+
+  private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
+    const messageId = `user-${Date.now()}`;
+    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId));
+    this.state.ui.requestRender();
+    return messageId;
+  }
+
+  private removeOptimisticUserMessage(messageId: string): void {
+    const component = this.state.messageComponentsById.get(messageId);
+    if (!component) return;
+    this.state.chatContainer.removeChild(component as never);
+    this.state.messageComponentsById.delete(messageId);
+    this.state.ui.requestRender();
+  }
+
+  private remapOptimisticUserMessage(optimisticMessageId: string, signalId: string): void {
+    if (optimisticMessageId === signalId) return;
+    const component = this.state.messageComponentsById.get(optimisticMessageId);
+    if (!component) return;
+    this.state.messageComponentsById.delete(optimisticMessageId);
+    this.state.messageComponentsById.set(signalId, component);
+  }
+
+  private createPendingNewThread(): Promise<void> | undefined {
+    if (!this.state.pendingNewThread) return undefined;
+    this.state.pendingNewThread = false;
+    return this.state.harness.createThread().then(() => undefined);
+  }
+
+  private sendOptimisticSignal(
+    content: string,
+    images: Array<{ data: string; mimeType: string }> | undefined,
+    optimisticMessageId: string,
+  ): void {
+    const send = () => {
+      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
+      signal.accepted.catch((error: unknown) => {
+        this.removeOptimisticUserMessage(signal.id);
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
+    };
+
+    const pendingThread = this.createPendingNewThread();
+    if (!pendingThread) {
+      send();
+      return;
+    }
+
+    pendingThread.then(send).catch((error: unknown) => {
+      this.removeOptimisticUserMessage(optimisticMessageId);
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+    });
+  }
+
+  private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
+    const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
+
+    const send = () => {
+      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+
+      if (hasActiveRun) {
+        addPendingUserMessage(this.state, signal.id, content, images);
+      } else {
+        addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
+      }
+
+      signal.accepted.catch((error: unknown) => {
+        if (hasActiveRun) {
+          removePendingUserMessage(this.state, signal.id);
+        } else {
+          this.removeOptimisticUserMessage(signal.id);
+        }
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
+    };
+
+    const pendingThread = this.createPendingNewThread();
+    if (!pendingThread) {
+      send();
+      return;
+    }
+
+    pendingThread.then(send).catch((error: unknown) => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
@@ -404,16 +490,10 @@ export class MastraTUI {
     this.state.isInitialized = true;
 
     // Start MCP connections now that the TUI owns the terminal.
-    // Using showInfo() instead of console.info() avoids corrupting the display.
     if (this.state.mcpManager?.hasServers()) {
-      const serverCount = Object.keys(this.state.mcpManager.getConfig().mcpServers ?? {}).length;
-      showInfo(this.state, `MCP: Connecting to ${serverCount} server(s)...`);
       this.state.mcpManager
         .initInBackground()
         .then(result => {
-          if (result.connected.length > 0) {
-            showInfo(this.state, `MCP: ${result.connected.length} server(s) connected, ${result.totalTools} tool(s)`);
-          }
           for (const s of result.failed) {
             showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
           }
@@ -437,8 +517,8 @@ export class MastraTUI {
       await this.showOnboarding();
     }
 
-    // Check for updates (after onboarding so it doesn't interfere)
-    await this.checkForUpdate();
+    // Check for updates after first render so network latency never blocks startup.
+    void this.checkForUpdate().catch(() => {});
 
     // Periodically recheck for updates during long-running sessions (passive only)
     this.updateCheckTimer = setInterval(() => {
@@ -594,6 +674,7 @@ export class MastraTUI {
       cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+      'github-copilot': accessLevel('github-copilot'),
     };
     // Gateway covers all providers
     const mgKey =
@@ -690,9 +771,16 @@ export class MastraTUI {
    * If no follow-ups are pending, appends to end.
    */
   private addChildBeforeFollowUps(child: Component): void {
-    if (this.state.followUpComponents.length > 0) {
-      const firstFollowUp = this.state.followUpComponents[0];
-      const idx = this.state.chatContainer.children.indexOf(firstFollowUp as any);
+    const firstPinned = [
+      ...this.state.followUpComponents,
+      ...this.state.pendingSignalMessageComponentsById.values(),
+    ].find(pinned =>
+      this.state.chatContainer.children.includes(('component' in pinned ? pinned.component : pinned) as any),
+    );
+
+    if (firstPinned) {
+      const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
+      const idx = this.state.chatContainer.children.indexOf(component as any);
       if (idx >= 0) {
         (this.state.chatContainer.children as unknown[]).splice(idx, 0, child);
         this.state.chatContainer.invalidate();
@@ -723,7 +811,20 @@ export class MastraTUI {
         this.state.editor.setText('');
 
         if (this.state.harness.isRunning()) {
-          this.queueFollowUpMessage(text);
+          if (text.startsWith('/')) {
+            this.queueFollowUpMessage(text);
+            return;
+          }
+
+          const { content, images } = consumePendingImages(text, this.state.pendingImages);
+          this.state.pendingImages = [];
+          if (images?.length) {
+            this.state.pendingImages = images;
+            this.queueFollowUpMessage(text);
+            return;
+          }
+
+          this.signalMessage(content);
           return;
         }
 
@@ -782,8 +883,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      startGoal: (objective, cancelMessage) =>
-        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      startGoal: (objective, cancelMessage, options) =>
+        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: () => renderExistingMessages(this.state),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>

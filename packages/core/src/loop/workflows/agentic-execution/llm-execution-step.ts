@@ -5,6 +5,7 @@ import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import type { CreatedAgentSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
@@ -17,7 +18,7 @@ import { ConsoleLogger } from '../../../logger';
 import { createObservabilityContext, SpanType } from '../../../observability';
 import type { ModelInferenceContext } from '../../../observability';
 import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
-import type { InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
+import type { CachedLLMStepResponse, InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -30,6 +31,7 @@ import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
+  StreamChunkType,
   StreamTransport,
   StreamTransportRef,
 } from '../../../stream/types';
@@ -80,21 +82,28 @@ function getRequestInputProcessors({
     : llmRequestInputProcessors;
 }
 
+type ProcessOutputStreamResult = {
+  collectedChunks: CollectedChunk[];
+  interjectedSignals: CreatedAgentSignal[];
+};
+
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
+  runId: string;
   messageId: string;
   includeRawChunks?: boolean;
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig<OUTPUT>;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   responseFromModel: {
     warnings: any;
     request: any;
     rawResponse: any;
   };
   logger?: IMastraLogger;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
   toolPayloadTransform?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
@@ -245,7 +254,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
   _internal,
 }: {
   error: TripWire;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   runId: string;
   model: MastraLanguageModel;
   messageList: MessageList;
@@ -306,10 +315,12 @@ async function processOutputStream<OUTPUT = undefined>({
   responseFromModel,
   includeRawChunks,
   logger,
+  runId,
+  drainPendingSignals,
   transportRef,
   transportResolver,
   toolPayloadTransform,
-}: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
+}: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
 
@@ -337,6 +348,13 @@ async function processOutputStream<OUTPUT = undefined>({
     if (chunk.type == 'object' || chunk.type == 'object-result') {
       controller.enqueue(chunk);
       continue;
+    }
+
+    if (['tool-call', 'tool-call-input-streaming-start'].includes(chunk.type)) {
+      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
+      if (interjectedSignals.length > 0) {
+        return { collectedChunks, interjectedSignals };
+      }
     }
 
     chunk = await addToolPayloadTransformToChunk(chunk, {
@@ -502,9 +520,19 @@ async function processOutputStream<OUTPUT = undefined>({
     if (runState.state.hasErrored) {
       break;
     }
+
+    // Drain signals only at stream boundaries so follow-ups do not split visible assistant text
+    // or separate a tool call from its result. Tool calls are handled before enqueueing so
+    // an interjection can cancel a not-yet-visible tool call from the current step.
+    if (['text-end', 'reasoning-end', 'tool-result', 'finish'].includes(chunk.type)) {
+      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
+      if (interjectedSignals.length > 0) {
+        return { collectedChunks, interjectedSignals };
+      }
+    }
   }
 
-  return collectedChunks;
+  return { collectedChunks, interjectedSignals: [] };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -661,6 +689,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
+          const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
+          for (const initialSignal of initialSignalEchoes) {
+            safeEnqueue(controller, initialSignal.toDataPart());
+          }
+
+          const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
+          if (pendingSignals.length > 0) {
+            currentMessageId = _internal?.generateId?.() ?? generateId();
+          }
+          for (const pendingSignal of pendingSignals) {
+            messageList.add(pendingSignal, 'input');
+            safeEnqueue(controller, pendingSignal.toDataPart());
+          }
+
           const currentStep: {
             messageId: string;
             model: MastraLanguageModel;
@@ -681,6 +723,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             modelSettings,
             structuredOutput,
             workspace,
+          };
+          const rotateResponseMessageId = () => {
+            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentStep.messageId = currentMessageId;
+            return currentMessageId;
           };
 
           const inputStepProcessors = [
@@ -719,11 +766,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,
-                rotateResponseMessageId: () => {
-                  currentMessageId = _internal?.generateId?.() ?? generateId();
-                  currentStep.messageId = currentMessageId;
-                  return currentMessageId;
-                },
+                rotateResponseMessageId,
                 tools,
                 toolChoice,
                 activeTools: activeTools as string[] | undefined,
@@ -950,58 +993,86 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           // Run `processLLMRequest` for any input processors that implement it.
           // This hook lets processors rewrite the outbound prompt transiently
-          // without persisting changes back to the message list.
-          {
-            const requestStepRunner = new ProcessorRunner({
-              inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
-              outputProcessors: [],
-              logger: logger || new ConsoleLogger({ level: 'error' }),
-              agentName: agentId || 'unknown',
-              processorStates,
-            });
-            const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
-              ? {
-                  custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                    outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
-                }
-              : undefined;
-            try {
-              const requestStepResult = await requestStepRunner.runProcessLLMRequest({
-                prompt: inputMessages,
-                model: currentStep.model,
-                stepNumber: inputData.output?.steps?.length || 0,
-                steps: inputData.output?.steps || [],
-                retryCount: inputData.processorRetryCount || 0,
-                requestContext,
-                tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                writer: requestStepWriter,
-                abortSignal: options?.abortSignal,
-              });
-              inputMessages = requestStepResult.prompt;
-            } catch (error) {
-              if (error instanceof TripWire) {
-                logger?.warn('Streaming request processor tripwire triggered', {
-                  reason: error.message,
-                  processorId: error.processorId,
-                  retry: error.options?.retry,
-                });
-                return buildTripWireBailResponse({
-                  error,
-                  controller,
-                  runId,
-                  model: currentStep.model,
-                  messageList,
-                  messageId: currentStep.messageId,
-                  stepTools: currentStep.tools,
-                  _internal: _internal!,
-                });
+          // without persisting changes back to the message list, or short-circuit
+          // the call entirely by returning a cached response.
+          const requestStepRunner = new ProcessorRunner({
+            inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
+            outputProcessors: [],
+            logger: logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId || 'unknown',
+            processorStates,
+          });
+          const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
+            ? {
+                custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                  outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
               }
-              logger?.error('Error in processLLMRequest processors:', error);
-              throw error;
+            : undefined;
+          let cachedResponse: CachedLLMStepResponse | undefined;
+          try {
+            const requestStepResult = await requestStepRunner.runProcessLLMRequest({
+              prompt: inputMessages,
+              model: currentStep.model,
+              stepNumber: inputData.output?.steps?.length || 0,
+              steps: inputData.output?.steps || [],
+              retryCount: inputData.processorRetryCount || 0,
+              requestContext,
+              tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+              writer: requestStepWriter,
+              abortSignal: options?.abortSignal,
+            });
+            inputMessages = requestStepResult.prompt;
+            cachedResponse = requestStepResult.response;
+          } catch (error) {
+            if (error instanceof TripWire) {
+              logger?.warn('Streaming request processor tripwire triggered', {
+                reason: error.message,
+                processorId: error.processorId,
+                retry: error.options?.retry,
+              });
+              return buildTripWireBailResponse({
+                error,
+                controller,
+                runId,
+                model: currentStep.model,
+                messageList,
+                messageId: currentStep.messageId,
+                stepTools: currentStep.tools,
+                _internal: _internal!,
+              });
             }
+            logger?.error('Error in processLLMRequest processors:', error);
+            throw error;
           }
 
-          if (isSupportedLanguageModel(currentStep.model)) {
+          if (cachedResponse) {
+            // Short-circuit: replay cached chunks instead of calling the model.
+            // Output processors are skipped on cache hit because the cached
+            // chunks already reflect their effects from the original call.
+            warnings = cachedResponse.warnings ?? [];
+            request = cachedResponse.request ?? {};
+            rawResponse = cachedResponse.rawResponse;
+            modelSpanTracker?.updateStep?.({
+              request: request || {},
+              inputMessages,
+              warnings: warnings || [],
+              messageId: currentStep.messageId,
+            });
+            const replayChunks = cachedResponse.chunks;
+            modelResult = new ReadableStream({
+              start(controller) {
+                for (const chunk of replayChunks) {
+                  // Reattach per-run metadata that was stripped at cache time.
+                  controller.enqueue({
+                    ...chunk,
+                    runId,
+                    from: ChunkFrom.AGENT,
+                  });
+                }
+                controller.close();
+              },
+            }) as unknown as ReturnType<typeof execute>;
+          } else if (isSupportedLanguageModel(currentStep.model)) {
             // Apply request-side context to MODEL_INFERENCE using the post-processor
             // tool set + per-step settings, then open the inference span. Doing this
             // immediately before execute() ensures the span's startTime excludes
@@ -1111,7 +1182,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               toolCallStreaming,
               includeRawChunks,
               structuredOutput: currentStep.structuredOutput,
-              outputProcessors,
+              // Cached chunks were already shaped by output processors in the
+              // original call. Re-running them on replay would double up.
+              outputProcessors: cachedResponse ? [] : outputProcessors,
               isLLMExecutionStep: true,
               tracingContext,
               processorStates,
@@ -1126,10 +1199,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
-            const collectedChunks = await processOutputStream({
+            const { collectedChunks, interjectedSignals } = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
+              runId,
               messageId: currentStep.messageId,
               messageList,
               runState,
@@ -1141,6 +1215,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 rawResponse,
               },
               logger,
+              drainPendingSignals: _internal?.drainPendingSignals,
               transportRef: _internal?.transportRef,
               transportResolver,
               toolPayloadTransform: _internal?.toolPayloadTransform,
@@ -1159,6 +1234,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageList.add(msg, 'response');
             }
 
+            if (interjectedSignals.length > 0) {
+              messageList.markResponseMessageBoundary(currentStep.messageId);
+              outputStream.messageId = rotateResponseMessageId();
+              for (const signal of interjectedSignals) {
+                messageList.add(signal, 'input');
+                safeEnqueue(controller, signal.toDataPart());
+              }
+              runState.setState({
+                stepResult: {
+                  reason: 'other',
+                  messageId: currentMessageId,
+                  isContinued: true,
+                },
+              });
+            }
+
             // Apply structuredOutput metadata to the assistant message.
             // MastraModelOutput's finish handler runs during the stream before messages
             // are added to messageList, so it can't find the message. We apply it here.
@@ -1171,6 +1262,52 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   lastAssistant.content.metadata = {};
                 }
                 lastAssistant.content.metadata.structuredOutput = bufferedObject;
+              }
+            }
+
+            // Run `processLLMResponse` for any input processors that implement
+            // it. Pairs with `processLLMRequest`: lets a processor write the
+            // response to a cache (or sink) using state stashed in the
+            // request hook. Skipped on cache hit — that response did not come
+            // from the model, so writing it back would just rewrite the same
+            // value to the same key.
+            if (!cachedResponse) {
+              try {
+                await requestStepRunner.runProcessLLMResponse({
+                  chunks: collectedChunks,
+                  model: currentStep.model,
+                  stepNumber: inputData.output?.steps?.length || 0,
+                  steps: inputData.output?.steps || [],
+                  warnings,
+                  request,
+                  rawResponse,
+                  fromCache: false,
+                  retryCount: inputData.processorRetryCount || 0,
+                  requestContext,
+                  tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                  writer: requestStepWriter,
+                  abortSignal: options?.abortSignal,
+                });
+              } catch (responseProcessorError) {
+                if (responseProcessorError instanceof TripWire) {
+                  logger?.warn('Streaming response processor tripwire triggered', {
+                    reason: responseProcessorError.message,
+                    processorId: responseProcessorError.processorId,
+                    retry: responseProcessorError.options?.retry,
+                  });
+                  return buildTripWireBailResponse({
+                    error: responseProcessorError,
+                    controller,
+                    runId,
+                    model: currentStep.model,
+                    messageList,
+                    messageId: currentStep.messageId,
+                    stepTools: currentStep.tools,
+                    _internal: _internal!,
+                  });
+                }
+                logger?.error('Error in processLLMResponse processors:', responseProcessorError);
+                throw responseProcessorError;
               }
             }
           } catch (error) {
