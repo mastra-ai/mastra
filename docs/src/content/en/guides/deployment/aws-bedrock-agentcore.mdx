@@ -54,8 +54,7 @@ Navigate to the `app/MastraAgent` directory and initialize a new Node.js project
 
 ```bash
 cd app/MastraAgent
-npm init -y
-npm pkg set type=module
+npm init --init-type=module -y
 ```
 
 Install the required dependencies. The `bedrock-agentcore` package provides the `BedrockAgentCoreApp` HTTP server that implements the [AgentCore Runtime service contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html). The `@ai-sdk/amazon-bedrock` and `@aws-sdk/credential-providers` packages let the Mastra agent call Bedrock through the AgentCore Runtime execution role:
