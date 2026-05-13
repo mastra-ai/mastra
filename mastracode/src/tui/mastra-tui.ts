@@ -1239,6 +1239,7 @@ export class MastraTUI {
         { label: 'Yes', description: 'Update and restart' },
         { label: 'No', description: 'Skip this version' },
       ],
+      overlay: { maxWidth: 999 },
     });
 
     if (answer === 'Yes') {

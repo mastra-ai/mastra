@@ -117,16 +117,16 @@ describe('parseChangelog', () => {
 
 describe('computeChangelogEntryWidth', () => {
   it('returns a sane default when terminal width is unknown', () => {
-    // Default cols = 120 → dialog = min(108, 160) = 108 → 108 - 8 = 100
+    // Default cols = 120 → dialog = 108 → 108 - 8 = 100
     expect(computeChangelogEntryWidth(undefined)).toBe(100);
     expect(computeChangelogEntryWidth(0)).toBe(100);
   });
 
-  it('scales with terminal width up to the 160-column dialog cap', () => {
-    // 200 cols → dialog = min(180, 160) = 160 → 160 - 8 = 152
-    expect(computeChangelogEntryWidth(200)).toBe(152);
-    // 400 cols → still capped at 160 - 8 = 152
-    expect(computeChangelogEntryWidth(400)).toBe(152);
+  it('scales with terminal width', () => {
+    // 200 cols → dialog = 180 → 180 - 8 = 172
+    expect(computeChangelogEntryWidth(200)).toBe(172);
+    // 400 cols → dialog = 360 → 360 - 8 = 352
+    expect(computeChangelogEntryWidth(400)).toBe(352);
   });
 
   it('clamps to a minimum of 40 chars on tiny terminals', () => {
