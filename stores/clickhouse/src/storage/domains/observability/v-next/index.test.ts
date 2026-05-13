@@ -54,10 +54,35 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     async function withTupleStorage<T>(
       run: (tupleStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,
     ): Promise<T> {
-      const tupleStorage = new ObservabilityStorageClickhouseVNext({
+      const adminClient = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
         password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+      const database = `tuple_delta_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const tupleStorage = new ObservabilityStorageClickhouseVNext({
+        client,
         deltaCursorStrategy: 'tuple',
       });
 
@@ -68,6 +93,9 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         return await run(tupleStorage);
       } finally {
         await tupleStorage.dangerouslyClearAll();
+        await client.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
       }
     }
 

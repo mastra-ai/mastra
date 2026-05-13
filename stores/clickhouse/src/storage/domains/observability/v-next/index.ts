@@ -280,61 +280,65 @@ async function detectDeltaCursorStrategy(
 async function detectExistingDeltaCursorStrategy(
   client: ClickHouseClient,
 ): Promise<ClickHouseDeltaCursorStrategy | 'mixed' | null> {
-  const result = await client.query({
-    query: `
-      SELECT table, name
-      FROM system.columns
-      WHERE database = currentDatabase()
-        AND table IN ({tables:Array(String)})
-    `,
-    query_params: { tables: [...DELTA_TABLE_NAMES] },
-    format: 'JSONEachRow',
-  });
-  const rows = (await result.json()) as Array<{ table: string; name: string }>;
+  try {
+    const result = await client.query({
+      query: `
+        SELECT table, name
+        FROM system.columns
+        WHERE database = currentDatabase()
+          AND table IN ({tables:Array(String)})
+      `,
+      query_params: { tables: [...DELTA_TABLE_NAMES] },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ table: string; name: string }>;
 
-  if (rows.length === 0) {
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const columnsByTable = new Map<string, Set<string>>();
+    for (const row of rows) {
+      let columns = columnsByTable.get(row.table);
+      if (!columns) {
+        columns = new Set<string>();
+        columnsByTable.set(row.table, columns);
+      }
+      columns.add(row.name);
+    }
+
+    let sawTupleTable = false;
+    let sawSerialTable = false;
+
+    for (const table of DELTA_TABLE_NAMES) {
+      const columns = columnsByTable.get(table);
+      if (!columns) {
+        continue;
+      }
+
+      if (columns.has('cursorId')) {
+        sawSerialTable = true;
+      } else {
+        sawTupleTable = true;
+      }
+    }
+
+    if (sawTupleTable && !sawSerialTable) {
+      return 'tuple';
+    }
+
+    if (sawSerialTable && !sawTupleTable) {
+      return 'serial';
+    }
+
+    if (sawTupleTable && sawSerialTable) {
+      return 'mixed';
+    }
+
+    return null;
+  } catch {
     return null;
   }
-
-  const columnsByTable = new Map<string, Set<string>>();
-  for (const row of rows) {
-    let columns = columnsByTable.get(row.table);
-    if (!columns) {
-      columns = new Set<string>();
-      columnsByTable.set(row.table, columns);
-    }
-    columns.add(row.name);
-  }
-
-  let sawTupleTable = false;
-  let sawSerialTable = false;
-
-  for (const table of DELTA_TABLE_NAMES) {
-    const columns = columnsByTable.get(table);
-    if (!columns) {
-      continue;
-    }
-
-    if (columns.has('cursorId')) {
-      sawSerialTable = true;
-    } else {
-      sawTupleTable = true;
-    }
-  }
-
-  if (sawTupleTable && !sawSerialTable) {
-    return 'tuple';
-  }
-
-  if (sawSerialTable && !sawTupleTable) {
-    return 'serial';
-  }
-
-  if (sawTupleTable && sawSerialTable) {
-    return 'mixed';
-  }
-
-  return null;
 }
 
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {

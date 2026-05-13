@@ -215,16 +215,37 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return cursorId;
   }
 
-  private currentDeltaCursor(): string {
-    return this.encodeDeltaCursor(this.currentObservabilityCursorId());
+  private encodeResolvedDeltaCursor(cursorId: number | null): string {
+    return this.encodeDeltaCursor(cursorId ?? 0);
   }
 
-  private pageDeltaCursor(): { deltaCursor?: string } {
+  private pageDeltaCursor(cursorId: number | null): { deltaCursor?: string } {
     if (!this.deltaPollingFeatureEnabled()) {
       return {};
     }
 
-    return { deltaCursor: this.currentDeltaCursor() };
+    return { deltaCursor: this.encodeResolvedDeltaCursor(cursorId) };
+  }
+
+  private maxMatchingCursorId<T extends object>(
+    rows: Iterable<T>,
+    cursorIds: Map<T, number>,
+    matches: (row: T) => boolean,
+  ): number | null {
+    let maxCursorId: number | null = null;
+
+    for (const row of rows) {
+      const cursorId = cursorIds.get(row);
+      if (cursorId === undefined || !matches(row)) {
+        continue;
+      }
+
+      if (maxCursorId === null || cursorId > maxCursorId) {
+        maxCursorId = cursorId;
+      }
+    }
+
+    return maxCursorId;
   }
 
   private createBranchCursorKey(traceId: string, spanId: string): string {
@@ -256,6 +277,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   private buildDeltaResponse<T>(
     rows: Array<{ cursorId: number; row: T }>,
     limit: number,
+    fallbackCursorId: number | null,
   ): { rows: T[]; delta: { limit: number; hasMore: boolean }; deltaCursor: string } {
     const visibleRows = rows.slice(0, limit);
     const hasMore = rows.length > limit;
@@ -266,7 +288,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       deltaCursor:
         visibleRows.length > 0
           ? this.encodeDeltaCursor(visibleRows[visibleRows.length - 1]!.cursorId)
-          : this.currentDeltaCursor(),
+          : this.encodeResolvedDeltaCursor(fallbackCursorId),
     };
   }
 
@@ -277,11 +299,15 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     after: string | undefined,
     limit: number,
   ): { rows: T[]; delta: { limit: number; hasMore: boolean }; deltaCursor: string } {
+    const currentCursorId = this.maxMatchingCursorId(rows, cursorIds, matches);
+    const streamCursorId = this.maxMatchingCursorId(rows, cursorIds, () => true);
+    const fallbackCursorId = currentCursorId ?? streamCursorId;
+
     if (after === undefined) {
       return {
         rows: [],
         delta: { limit, hasMore: false },
-        deltaCursor: this.currentDeltaCursor(),
+        deltaCursor: this.encodeResolvedDeltaCursor(fallbackCursorId),
       };
     }
 
@@ -298,7 +324,95 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       .sort((a, b) => a.cursorId - b.cursorId)
       .slice(0, limit + 1);
 
-    return this.buildDeltaResponse(matchingRows, limit);
+    return this.buildDeltaResponse(matchingRows, limit, fallbackCursorId);
+  }
+
+  private getTraceCursorId(traceId: string, filters: ListTracesArgs['filters']): number | null {
+    const cursorId = this.db.traceCursorIds.get(traceId);
+    const traceEntry = this.db.traces.get(traceId);
+    if (cursorId === undefined || !traceEntry?.rootSpan || !this.traceMatchesFilters(traceEntry, filters)) {
+      return null;
+    }
+
+    return cursorId;
+  }
+
+  private getMaxTraceCursorId(filters: ListTracesArgs['filters']): number | null {
+    let maxCursorId: number | null = null;
+
+    for (const traceId of this.db.traceCursorIds.keys()) {
+      const cursorId = this.getTraceCursorId(traceId, filters);
+      if (cursorId === null) {
+        continue;
+      }
+
+      if (maxCursorId === null || cursorId > maxCursorId) {
+        maxCursorId = cursorId;
+      }
+    }
+
+    return maxCursorId;
+  }
+
+  private getMaxTraceStreamCursorId(): number | null {
+    let maxCursorId: number | null = null;
+
+    for (const cursorId of this.db.traceCursorIds.values()) {
+      if (maxCursorId === null || cursorId > maxCursorId) {
+        maxCursorId = cursorId;
+      }
+    }
+
+    return maxCursorId;
+  }
+
+  private getBranchCursorId(key: string, filters: ListBranchesArgs['filters']): number | null {
+    const cursorId = this.db.branchCursorIds.get(key);
+    if (cursorId === undefined) {
+      return null;
+    }
+
+    const [traceId, spanId] = key.split('\u0000');
+    if (!traceId || !spanId) {
+      return null;
+    }
+
+    const traceEntry = this.db.traces.get(traceId);
+    const span = traceEntry?.spans[spanId];
+    if (!span || !this.spanMatchesBranchFilters(span, filters)) {
+      return null;
+    }
+
+    return cursorId;
+  }
+
+  private getMaxBranchCursorId(filters: ListBranchesArgs['filters']): number | null {
+    let maxCursorId: number | null = null;
+
+    for (const key of this.db.branchCursorIds.keys()) {
+      const cursorId = this.getBranchCursorId(key, filters);
+      if (cursorId === null) {
+        continue;
+      }
+
+      if (maxCursorId === null || cursorId > maxCursorId) {
+        maxCursorId = cursorId;
+      }
+    }
+
+    return maxCursorId;
+  }
+
+  private getMaxBranchStreamCursorId(): number | null {
+    let maxCursorId: number | null = null;
+
+    for (const cursorId of this.db.branchCursorIds.values()) {
+      if (maxCursorId === null || cursorId > maxCursorId) {
+        maxCursorId = cursorId;
+      }
+    }
+
+    return maxCursorId;
   }
 
   async createSpan(args: CreateSpanArgs): Promise<void> {
@@ -492,12 +606,14 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     if (mode === 'delta') {
       this.assertDeltaPollingEnabled();
+      const currentCursorId = this.getMaxTraceCursorId(filters);
+      const fallbackCursorId = currentCursorId ?? this.getMaxTraceStreamCursorId();
 
       if (after === undefined) {
         return {
           spans: [],
           delta: { limit, hasMore: false },
-          deltaCursor: this.currentDeltaCursor(),
+          deltaCursor: this.encodeResolvedDeltaCursor(fallbackCursorId),
         };
       }
 
@@ -518,7 +634,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         .sort((a, b) => a.cursorId - b.cursorId)
         .slice(0, limit + 1);
 
-      const deltaResponse = this.buildDeltaResponse(matchingRootSpans, limit);
+      const deltaResponse = this.buildDeltaResponse(matchingRootSpans, limit, fallbackCursorId);
       return {
         spans: toTraceSpans(deltaResponse.rows),
         delta: deltaResponse.delta,
@@ -572,7 +688,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       spans: toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore: end < total },
-      ...this.pageDeltaCursor(),
+      ...this.pageDeltaCursor(this.getMaxTraceCursorId(filters) ?? this.getMaxTraceStreamCursorId()),
     };
   }
 
@@ -724,12 +840,14 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     if (mode === 'delta') {
       this.assertDeltaPollingEnabled();
+      const currentCursorId = this.getMaxBranchCursorId(filters);
+      const fallbackCursorId = currentCursorId ?? this.getMaxBranchStreamCursorId();
 
       if (after === undefined) {
         return {
           branches: [],
           delta: { limit, hasMore: false },
-          deltaCursor: this.currentDeltaCursor(),
+          deltaCursor: this.encodeResolvedDeltaCursor(fallbackCursorId),
         };
       }
 
@@ -756,7 +874,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         .sort((a, b) => a.cursorId - b.cursorId)
         .slice(0, limit + 1);
 
-      const deltaResponse = this.buildDeltaResponse(matches, limit);
+      const deltaResponse = this.buildDeltaResponse(matches, limit, fallbackCursorId);
       return {
         branches: deltaResponse.rows.map(toTraceSpan),
         delta: deltaResponse.delta,
@@ -803,7 +921,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       pagination: { total, page, perPage, hasMore: end < total },
       branches: paged.map(toTraceSpan),
-      ...this.pageDeltaCursor(),
+      ...this.pageDeltaCursor(this.getMaxBranchCursorId(filters) ?? this.getMaxBranchStreamCursorId()),
     };
   }
 
@@ -990,7 +1108,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       metrics: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageDeltaCursor(),
+      ...this.pageDeltaCursor(
+        this.maxMatchingCursorId(this.db.metricRecords, this.db.metricCursorIds, metric =>
+          this.metricMatchesFilters(metric, filters as Record<string, unknown>),
+        ),
+      ),
     };
   }
 
@@ -1529,7 +1651,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       logs: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageDeltaCursor(),
+      ...this.pageDeltaCursor(
+        this.maxMatchingCursorId(this.db.logRecords, this.db.logCursorIds, log => this.logMatchesFilters(log, filters)),
+      ),
     };
   }
 
@@ -1661,7 +1785,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       scores: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageDeltaCursor(),
+      ...this.pageDeltaCursor(
+        this.maxMatchingCursorId(this.db.scoreRecords, this.db.scoreCursorIds, score =>
+          this.scoreMatchesFilters(score, filters),
+        ),
+      ),
     };
   }
 
@@ -2006,7 +2134,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       feedback: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageDeltaCursor(),
+      ...this.pageDeltaCursor(
+        this.maxMatchingCursorId(this.db.feedbackRecords, this.db.feedbackCursorIds, feedback =>
+          this.feedbackMatchesFilters(feedback, filters),
+        ),
+      ),
     };
   }
 

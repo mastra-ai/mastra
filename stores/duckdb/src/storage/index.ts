@@ -125,6 +125,8 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   }
 
   getListCapabilities(): ReturnType<ObservabilityStoreImpl['getListCapabilities']> {
+    // Deliberately mirrored here so the lazy facade can advertise DuckDB's
+    // static delta support before the delegate is instantiated.
     if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
       return undefined;
     }

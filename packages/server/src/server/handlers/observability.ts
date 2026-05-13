@@ -117,7 +117,10 @@ export const LIST_TRACES_ROUTE = createRoute({
   path: '/observability/traces',
   responseType: 'json',
   queryParamSchema: createObservabilityListQuerySchema(
-    tracesFilterSchema.extend(legacyQueryParamsSchema.shape),
+    tracesFilterSchema.extend({
+      ...legacyQueryParamsSchema.shape,
+      entityType: tracesFilterSchema.shape.entityType,
+    }),
     tracesOrderBySchema,
   ),
   responseSchema: listTracesResponseSchema,

@@ -35,7 +35,7 @@ export function normalizeCursorId(value: unknown): bigint | null {
   }
 
   if (typeof value === 'number') {
-    if (!Number.isInteger(value) || value < 0) {
+    if (!Number.isSafeInteger(value) || value < 0) {
       return null;
     }
     return BigInt(value);
