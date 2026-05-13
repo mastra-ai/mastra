@@ -96,7 +96,6 @@ import {
   ALL_MIGRATIONS,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
-  DELTA_TABLE_NAMES,
   DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
@@ -256,12 +255,12 @@ async function queryNamesByTable(
 async function detectDeltaCursorStrategy(
   client: ClickHouseClient,
   override?: ClickHouseDeltaCursorStrategy,
+  existingStrategy?: ClickHouseDeltaCursorStrategy | 'mixed' | null,
 ): Promise<ClickHouseDeltaCursorStrategy> {
   if (override) {
     return override;
   }
 
-  const existingStrategy = await detectExistingDeltaCursorStrategy(client);
   if (existingStrategy && existingStrategy !== 'mixed') {
     return existingStrategy;
   }
@@ -282,70 +281,22 @@ async function detectExistingDeltaCursorStrategy(
   client: ClickHouseClient,
 ): Promise<ClickHouseDeltaCursorStrategy | 'mixed' | null> {
   try {
-    const [columnResult, mvResult] = await Promise.all([
-      client.query({
-        query: `
-          SELECT table, name
-          FROM system.columns
-          WHERE database = currentDatabase()
-            AND table IN ({tables:Array(String)})
-        `,
-        query_params: { tables: [...DELTA_TABLE_NAMES] },
-        format: 'JSONEachRow',
-      }),
-      client.query({
-        query: `
-          SELECT name, create_table_query
-          FROM system.tables
-          WHERE database = currentDatabase()
-            AND name IN ({tables:Array(String)})
-        `,
-        query_params: { tables: [...DELTA_MV_NAMES] },
-        format: 'JSONEachRow',
-      }),
-    ]);
+    const mvResult = await client.query({
+      query: `
+        SELECT name, create_table_query
+        FROM system.tables
+        WHERE database = currentDatabase()
+          AND name IN ({tables:Array(String)})
+      `,
+      query_params: { tables: [...DELTA_MV_NAMES] },
+      format: 'JSONEachRow',
+    });
 
-    const columnRows = (await columnResult.json()) as Array<{ table: string; name: string }>;
-
-    if (columnRows.length === 0) {
+    const mvRows = (await mvResult.json()) as Array<{ name: string; create_table_query?: string | null }>;
+    if (mvRows.length === 0) {
       return null;
     }
 
-    const columnsByTable = new Map<string, Set<string>>();
-    for (const row of columnRows) {
-      let columns = columnsByTable.get(row.table);
-      if (!columns) {
-        columns = new Set<string>();
-        columnsByTable.set(row.table, columns);
-      }
-      columns.add(row.name);
-    }
-
-    let sawFallbackTable = false;
-    let sawCursorTable = false;
-
-    for (const table of DELTA_TABLE_NAMES) {
-      const columns = columnsByTable.get(table);
-      if (!columns) {
-        continue;
-      }
-
-      if (columns.has('cursorId')) {
-        sawCursorTable = true;
-      } else {
-        sawFallbackTable = true;
-      }
-    }
-
-    if (sawFallbackTable && sawCursorTable) {
-      return 'mixed';
-    }
-
-    if (sawFallbackTable) {
-      return 'fallback';
-    }
-
-    const mvRows = (await mvResult.json()) as Array<{ name: string; create_table_query?: string | null }>;
     let sawSerialMv = false;
     let sawFallbackMv = false;
 
@@ -420,7 +371,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       } else if (existingStrategy) {
         this.#deltaCursorStrategy = existingStrategy;
       } else {
-        this.#deltaCursorStrategy = await detectDeltaCursorStrategy(this.#client);
+        this.#deltaCursorStrategy = await detectDeltaCursorStrategy(this.#client, undefined, existingStrategy);
       }
 
       // Core tables + incremental MVs (must succeed)
