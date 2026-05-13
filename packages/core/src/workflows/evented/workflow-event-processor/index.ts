@@ -282,6 +282,27 @@ export class WorkflowEventProcessor extends EventProcessor {
           value: initialState,
         },
       });
+
+      if (parentWorkflow) {
+        const parentSnap = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+        });
+        const existing = parentSnap?.context?.[workflowId] as any;
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          stepId: workflowId,
+          result: {
+            startedAt: existing?.startedAt ?? Date.now(),
+            status: 'running',
+            payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
+            ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
+            metadata: { ...(existing?.metadata ?? {}), nestedRunId: runId },
+          },
+          requestContext,
+        });
+      }
     }
 
     await this.mastra.pubsub.publish('workflows', {
@@ -1040,10 +1061,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
+        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: step.step.id,
-            runId,
+            runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
         // Cast to Workflow since we know this is a nested workflow at this point
@@ -1082,7 +1104,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               resumeData,
             },
             executionPath: timeTravelParams.executionPath,
-            runId: randomUUID(),
+            runId: nestedRunId,
             stepResults: timeTravelParams.stepResults,
             prevResult: { status: 'success', output: nestedPrevResult?.payload },
             timeTravel: timeTravelParams,
@@ -1095,10 +1117,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (restart && !!restart.activeStepsPath?.[step.step.id]) {
+        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: step.step.id,
-            runId,
+            runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
         // Cast to Workflow since we know this is a nested workflow at this point
         const nestedWorkflow = step.step as any;
@@ -1128,7 +1151,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               resumeData,
             },
             executionPath: restartParams.activePaths,
-            runId: randomUUID(),
+            runId: nestedRunId,
             stepResults: restartParams.stepResults,
             prevResult: { status: 'success', output: nestedPrevResult?.payload },
             restart: restartParams,
