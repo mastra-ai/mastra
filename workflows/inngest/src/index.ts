@@ -56,9 +56,13 @@ function isAgentCompatible<TId extends string>(input: unknown): input is Inngest
     typeof input === 'object' &&
     input !== null &&
     'generate' in input &&
+    typeof input.generate === 'function' &&
     'stream' in input &&
+    typeof input.stream === 'function' &&
     'getDescription' in input &&
-    'getModel' in input
+    typeof input.getDescription === 'function' &&
+    'getModel' in input &&
+    typeof input.getModel === 'function'
   );
 }
 
