@@ -1163,23 +1163,6 @@ export class AgentChannels {
       platform,
     });
 
-    // eslint-disable-next-line no-console
-    console.log(
-      '[CHANNEL→sendSignal]',
-      JSON.stringify(
-        {
-          platform,
-          mastraThreadId: mastraThread.id,
-          messageId: message.id,
-          textPreview: text.slice(0, 200),
-          partsCount: parts.length,
-          partTypes: parts.map(p => p.type),
-        },
-        null,
-        2,
-      ),
-    );
-
     this.agent.sendSignal(
       {
         type: 'user-message',
