@@ -143,6 +143,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/auriko',
+          label: 'Auriko',
+        },
+        {
+          type: 'doc',
           id: 'providers/azure',
           label: 'Azure',
         },
@@ -175,6 +180,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/clarifai',
           label: 'Clarifai',
+        },
+        {
+          type: 'doc',
+          id: 'providers/claudinio',
+          label: 'Claudinio',
         },
         {
           type: 'doc',

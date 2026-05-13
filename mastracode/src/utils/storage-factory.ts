@@ -13,6 +13,11 @@ import { PostgresStore } from '@mastra/pg';
 import type { StorageConfig, PgStorageConfig } from './project.js';
 import { getDatabasePath, getVectorDatabasePath } from './project.js';
 
+const MASTRA_CODE_LOCAL_PRAGMAS = {
+  cacheSize: -128000,
+  mmapSize: 536870912,
+};
+
 export interface StorageResult {
   storage: MastraCompositeStore;
   /** The effective backend after any fallback logic has run. */
@@ -25,6 +30,7 @@ function createFallbackLibSQL(): MastraCompositeStore {
   return new LibSQLStore({
     id: 'mastra-code-storage',
     url: `file:${getDatabasePath()}`,
+    localPragmas: MASTRA_CODE_LOCAL_PRAGMAS,
   });
 }
 
@@ -45,6 +51,7 @@ export async function createStorage(config: StorageConfig): Promise<StorageResul
       id: 'mastra-code-storage',
       url: config.url,
       ...(config.authToken ? { authToken: config.authToken } : {}),
+      localPragmas: MASTRA_CODE_LOCAL_PRAGMAS,
     }),
     backend: 'libsql',
   };
