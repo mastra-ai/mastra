@@ -102,11 +102,11 @@ Navigate to `http://localhost:4111/agent-builder/infrastructure`.
 - [ ] Browser, Workspace, and Channels sections render
 - [ ] Unset values show "Provider default" / "Not set" rather than empty strings
 - [ ] Mobile bottom-bar also exposes the "Infra" link
-- [ ] Viewer/member: link hidden; direct navigation denied
+- [ ] Viewer/member: link visible (every default role has `*:read`, which matches `infrastructure:read`); direct navigation also resolves
 
 ## Checklist
 
-- [ ] Admin can GET; non-admin cannot
+- [ ] Every default role with `*:read` (admin, member, viewer) can GET — the gate is `infrastructure:read`
 - [ ] Browser block: `type`, `provider`, `registered`, `availableProviders`, `config` all present
 - [ ] Workspace block: `type`, `workspaceId`, `filesystemProvider`, `sandboxProvider`, `config`
 - [ ] Channels block: `{ providers: [...] }` shape; only configured providers listed

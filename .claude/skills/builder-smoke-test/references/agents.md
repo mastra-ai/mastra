@@ -162,15 +162,22 @@ From the agents list, clicking a row navigates to `/agent-builder/agents/$AGENT_
 
 Owners may upload an avatar; non-owners (even admins) cannot. This step requires `--auth on`.
 
+There is **no dedicated `/avatar` endpoint**. Avatars ride on the regular agent PATCH as `metadata.avatarUrl` (a data URL). The server validates size and shape via `validateMetadataAvatarUrl` in `packages/server/src/server/handlers/validate-avatar.ts` (current cap is 512 KB; accepted MIME types are `image/png`, `image/jpeg`, `image/webp`, `image/gif`).
+
 ```bash
-curl -s -X POST "$BASE/stored/agents/$AGENT_ID/avatar" \
+# Construct a small PNG data URL (any tiny image works; example is 1x1 transparent)
+SAMPLE_PNG="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII="
+
+curl -s -X PATCH "$BASE/stored/agents/$AGENT_ID" \
+  -H "Content-Type: application/json" \
   -H "$SESSION" \
-  -F 'file=@/path/to/sample.png' | jq .
+  -d "{\"metadata\": {\"avatarUrl\": \"$SAMPLE_PNG\"}}" | jq '.metadata.avatarUrl'
 ```
 
-- [ ] Owner: 200 with the persisted avatar URL/blob ID
-- [ ] Non-owner authenticated user: 403
-- [ ] Auth off: behaves as owner (bypass)
+- [ ] Owner: 200, response `metadata.avatarUrl` is the data URL you sent (or a server-rewritten URL)
+- [ ] Non-owner authenticated user: 403 (ownership check inside `assertWriteAccess`)
+- [ ] Auth off: behaves as owner (no caller → bypass)
+- [ ] Oversized blob (>512 KB) is rejected with a structured 400 from `validateMetadataAvatarUrl`
 
 ## Builder defaults at create
 

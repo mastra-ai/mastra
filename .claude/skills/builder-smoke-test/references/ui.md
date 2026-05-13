@@ -38,6 +38,8 @@ Navigate to `http://localhost:4111/agent-builder`.
 - [ ] `Infrastructure` is pinned at the bottom of the sidebar, visually separated from the main group
 - [ ] No `Workspaces` entry in the sidebar (single-workspace layout)
 
+> **Route naming.** The `Favorites` sidebar item navigates to `/agent-builder/favorite` (**singular**), not `/favorites`. The plural URL is not registered and returns a React Router 404. Use the sidebar link or the singular path when scripting navigation; don't autocomplete to the plural form.
+
 ### 2. Skills List Page _(Core)_
 
 Navigate to `http://localhost:4111/agent-builder/skills`.
@@ -120,6 +122,25 @@ Open the user menu → the picker label is `PREVIEW AS ROLE` (a section header i
 - [ ] The exit affordance is labeled `Exit role preview` (in the impersonation banner and as a user-menu item under the role list). Clicking it restores the original admin UI.
 
 > **Important:** impersonation is UI-only. The API still answers per the _real_ logged-in role. If you `curl` the same endpoint while impersonating viewer, you'll still get the admin's response. That's expected — record it that way in the report, don't file it as a bug.
+
+### 8b. Run 3 / non-admin UI parity _(Core, non-admin runs only)_
+
+Run this **instead of** step 8 under `--auth on --role member` or `--role viewer`. Step 8 (role impersonation) is admin-only — when the live user is a non-admin, the picker is hidden and there's nothing to impersonate.
+
+The goal here is to record the live UI surface for a non-admin and confirm it matches the permission matrix in `references/permissions.md`. Anything that contradicts the matrix is a real bug; anything that matches is expected.
+
+- [ ] Sidebar entries visible match the user's actual permissions (see matrix). All of `My agents`, `Skills`, `Favorites`, `Library`, `Infrastructure` are visible to every default role under `--auth on` because each has `*:read`.
+- [ ] User-menu **does not** contain a `PREVIEW AS ROLE` section (admin/owner only).
+- [ ] Create buttons (`New skill`, `New agent`) visible to **member** (member has `stored-{skills,agents}:write`); hidden or disabled for **viewer**.
+- [ ] Direct navigation to `/agent-builder/skills/create` and `/agent-builder/agents/create`:
+  - **member:** page loads (write perm present)
+  - **viewer:** redirected to the list page (Navigate via `canWrite` guard)
+- [ ] On a public skill the current user does **not** own:
+  - `Copy` button visible to **member** (has `stored-skills:write`); hidden for **viewer**
+  - `Delete` and `Publish` affordances hidden for both (admin-only verbs)
+- [ ] `Infrastructure` page renders for both member and viewer (read-only surface — deployment-shape data, no secrets).
+
+> If you observe a write-only UI affordance rendering for **viewer**, log it as a real product issue. If you observe a read-only UI affordance failing to render for **member**, same.
 
 ### 9. Model Dropdown (Agent Create/Edit) _(Extended)_
 

@@ -454,6 +454,8 @@ After testing, provide:
 
 - For any **shape mismatch / missing field / wrong key name** claim, paste the actual JSON fragment (or the relevant keys) directly under the bullet so the claim is reproducible. If the skill says `features.agent.skills` and the response has `features.agent.skills`, that is not a skill issue — names that look similar in passing (`featSkills`, `agent.features.skill`, etc.) are easy to misread.
 - For any **endpoint inconsistency** claim (e.g. "endpoint A returns X but B returns Y"), re-curl both endpoints fresh in the same run rather than reusing a stale response from earlier in the section.
+- For any **RBAC / authz** claim (403 where you expected 200, or vice versa), check `references/permissions.md` for the matrix _and_ check the "Design decisions" list in this file. Several roles intentionally share `*:read`, which means infra/list/get endpoints look "ungated" but are working as intended. Also confirm the cookie you sent belongs to the role you think it does (`curl -H "Cookie: $(cat /tmp/cookie.txt)" $BASE/auth/me | jq '.role // .roles'`).
+- For any **missing endpoint** claim (e.g. "agent avatar 404"), confirm the contract first — several flows are client-composed on top of generic CRUD (avatar = `PATCH metadata.avatarUrl`; Library Copy = `POST /stored/skills` with `metadata.origin`). The "Design decisions (don't file as bugs)" section enumerates the common ones.
 - If a claim can't be reproduced on a fresh request, drop it.
   **Regressions**: (list any behavioral changes from a previous run)
   **Warnings**: (e.g., dev-server crash on `/auth/refresh` polling, OPENAI_API_KEY required at startup)
@@ -469,6 +471,20 @@ The branch has accumulated minor papercuts. Note these in your report only if yo
 - `OPENAI_API_KEY` is required at startup — server won't boot without it, even if you only test non-LLM surfaces.
 - `mastra dev` overwrites `process.env` from `.env` at boot, so inline env overrides on the command line don't reach the server. Re-run scaffold to change `.env`.
 - The scaffold links against the **current worktree's** packages via `link:` overrides. If you switch worktrees, re-run scaffold so the symlinks point at the right tree.
+
+## Design decisions (don't file as bugs)
+
+These have come up across multiple runs and are intentional. If you observe one, note it in your report as "expected behavior" — do **not** open a product issue.
+
+- **`GET /auth/me` without a cookie returns `200` with a `null`-ish body.** The route is mounted as a public route (`createPublicRoute`); the contract is "return the current user or `null`", not "401 if missing". A `401` here would break the public app shell.
+- **`/editor/builder/infrastructure` is readable by every default role (admin / member / viewer).** The handler gates on `infrastructure:read` and every default role has `*:read`, which matches by resource-wildcard. The page only exposes deployment-shape data (provider names, registered flags, configured/unconfigured booleans) — no secrets.
+- **Flipping a skill's `visibility` from `private` to `public` does not auto-publish unless the skill has a registered `skillPath`.** Visibility and publication are independent fields by design. A plain-create skill flipped public stays at `activeVersionId: null` until a real `POST /publish` runs against a source path.
+- **Zod schema validation runs before the permission middleware on `/stored/*` writes.** A malformed body from a viewer returns a 400, not a 403. This is standard request lifecycle; the response surface doesn't leak resource state.
+- **The role-impersonation picker only lists roles _different from the current one_.** Logged in as `admin`, you'll see `Member` and `Viewer` and nothing else — there is no `Admin` self-item. This is intentional (admin is the baseline; you're already there).
+- **Impersonation is UI-only.** The API still answers per the real logged-in role. A `curl` while impersonating `viewer` will still return the admin's response.
+- **`Favorites` sidebar entry links to `/agent-builder/favorite` (singular).** The plural `/favorites` is not a registered route and renders the React Router 404. Use the sidebar link or the singular URL when scripting.
+- **Avatar upload uses agent `PATCH` with `metadata.avatarUrl`, not a dedicated `/avatar` endpoint.** See `references/agents.md`.
+- **Copy is client-side.** There is no `POST /stored/skills/:id/copy`. The UI fetches the source skill and POSTs a new row to `/stored/skills` with `metadata.origin = "library-copy"`. See `references/registry.md`.
 
 ## Out of smoke-test scope
 

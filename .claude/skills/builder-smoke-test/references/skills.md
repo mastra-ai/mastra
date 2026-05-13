@@ -192,12 +192,17 @@ curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.files'
 - [ ] `files` is populated and includes a `SKILL.md` entry (`name: "SKILL.md", type: "file"`)
 - [ ] `instructions` is not duplicated inside the file node's `content`
 
-### F3. Auto-publish on visibility flip
+### F3. Auto-publish on visibility flip (requires a registered `skillPath`)
 
 Requires `--auth on`. See `references/auth.md`.
 
-- [ ] Flipping `visibility` from `private` to `public` triggers a new active version (visible via `activeVersionId` change on GET)
-- [ ] No 5xx errors during the flip
+> **Precondition.** A visibility flip only auto-publishes when the skill has source on disk — meaning it was created with a `skillPath` *or* a prior `POST /stored/skills/:id/publish` set one. Without a registered path, `visibility: "public"` is accepted (200), the row is now listed as public, but `activeVersionId` stays `null` and no new version is created. Visibility and publication are **independent fields by design**.
+>
+> Run this step against a skill you created from a real on-disk directory under `SKILLS_BASE_DIR`. If you flipped visibility on a "plain create" skill (no `skillPath`), expect 200 + unchanged `activeVersionId`, not a new version.
+
+- [ ] Flipping `visibility` from `private` to `public` on a skill **with a registered `skillPath`** creates a new active version (`activeVersionId` changes on GET)
+- [ ] Same flip on a skill **without** a registered `skillPath` returns 200 but `activeVersionId` stays `null` — that's the intended contract, not a bug
+- [ ] No 5xx errors during the flip in either case
 
 ## Frontmatter handling (skills.sh + library copies)
 
