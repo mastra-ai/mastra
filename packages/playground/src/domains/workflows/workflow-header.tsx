@@ -14,10 +14,10 @@ export function WorkflowHeader({
 }) {
   const { data: schedules } = useSchedules({ workflowId });
   const scheduleCount = schedules?.length ?? 0;
-  const schedulesHref =
-    scheduleCount === 1
-      ? `/workflows/schedules/${encodeURIComponent(schedules![0].id)}`
-      : `/workflows/schedules?workflowId=${encodeURIComponent(workflowId)}`;
+  const singleSchedule = scheduleCount === 1 ? schedules?.[0] : undefined;
+  const schedulesHref = singleSchedule
+    ? `/workflows/schedules/${encodeURIComponent(singleSchedule.id)}`
+    : `/workflows/schedules?workflowId=${encodeURIComponent(workflowId)}`;
 
   return (
     <RouteHeaderActions>

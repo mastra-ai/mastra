@@ -531,6 +531,7 @@ function App() {
     [baseUrl, apiPrefix],
   );
   const studioHeaders = useMemo(() => ({ ...headers, 'x-mastra-client-type': 'studio' }), [headers]);
+  const router = useMemo(() => createBrowserRouter(routes, { basename: studioBasePath }), [studioBasePath]);
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -541,8 +542,6 @@ function App() {
   if (!baseUrl) {
     return <PlaygroundConfigGuard />;
   }
-
-  const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
