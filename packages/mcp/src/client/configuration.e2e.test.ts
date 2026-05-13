@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -15,39 +16,95 @@ setupDummyApiKeys(MODE, ['openai']);
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
+type WeatherFixtureServer = {
+  port: number;
+  process: ReturnType<typeof spawn>;
+};
+
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, () => {
+      const address = server.address();
+      server.close(error => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!address || typeof address === 'string') {
+          reject(new Error('Could not allocate a test port'));
+          return;
+        }
+
+        resolve(address.port);
+      });
+    });
+  });
+}
+
+async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
+  const port = await getAvailablePort();
+  const childProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
+    env: { ...process.env, WEATHER_SERVER_PORT: String(port) },
+  });
+
+  let resolved = false;
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        reject(new Error(`Timed out waiting for weather fixture server on port ${port}`));
+      }
+    }, 15000);
+
+    childProcess.on('exit', (code, signal) => {
+      if (!resolved) {
+        clearTimeout(timeout);
+        reject(new Error(`Weather fixture server exited before startup with code ${code} and signal ${signal}`));
+      }
+    });
+    childProcess.stderr?.on('data', chunk => {
+      console.error(chunk.toString());
+    });
+    childProcess.stdout?.on('data', chunk => {
+      if (chunk.toString().includes('server is running on SSE')) {
+        resolved = true;
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+  });
+
+  return { port, process: childProcess };
+}
+
+async function stopWeatherFixtureServer(process?: ReturnType<typeof spawn>): Promise<void> {
+  if (!process || process.killed || process.exitCode !== null || process.signalCode !== null) {
+    return;
+  }
+
+  await new Promise<void>(resolve => {
+    const timeout = setTimeout(resolve, 5000);
+    process.once('exit', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    process.kill('SIGINT');
+  });
+}
+
 describe('MCPClient', () => {
   let mcp: MCPClient;
-  let weatherProcess: ReturnType<typeof spawn>;
+  let weatherFixtureServer: WeatherFixtureServer;
   let clients: MCPClient[] = [];
   let weatherServerPort: number;
 
   beforeAll(async () => {
-    weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
-    // Start the weather SSE server
-    weatherProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-      env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
-    });
-
-    // Wait for SSE server to be ready
-    let resolved = false;
-    await new Promise<void>((resolve, reject) => {
-      weatherProcess.on(`exit`, () => {
-        if (!resolved) reject();
-      });
-      if (weatherProcess.stderr) {
-        weatherProcess.stderr.on(`data`, chunk => {
-          console.error(chunk.toString());
-        });
-      }
-      if (weatherProcess.stdout) {
-        weatherProcess.stdout.on('data', chunk => {
-          if (chunk.toString().includes('server is running on SSE')) {
-            resolve();
-            resolved = true;
-          }
-        });
-      }
-    });
+    weatherFixtureServer = await startWeatherFixtureServer();
+    weatherServerPort = weatherFixtureServer.port;
   });
 
   beforeEach(async () => {
@@ -81,8 +138,7 @@ describe('MCPClient', () => {
   });
 
   afterAll(async () => {
-    // Kill the weather SSE server
-    weatherProcess.kill('SIGINT');
+    await stopWeatherFixtureServer(weatherFixtureServer?.process);
   });
 
   describe('Instance Management', () => {
@@ -858,15 +914,25 @@ describe('MCPClient', () => {
   });
 
   describe('Per-server fault isolation (issue #13521)', () => {
+    let faultIsolationWeatherFixtureServer: WeatherFixtureServer;
+    let faultIsolationWeatherServerPort: number;
+
+    beforeAll(async () => {
+      faultIsolationWeatherFixtureServer = await startWeatherFixtureServer();
+      faultIsolationWeatherServerPort = faultIsolationWeatherFixtureServer.port;
+    });
+
+    afterAll(async () => {
+      await stopWeatherFixtureServer(faultIsolationWeatherFixtureServer?.process);
+    });
+
     it('listTools should return tools from healthy servers when one server fails', async () => {
       const mixedMcp = new MCPClient({
         id: 'test-fault-isolation-tools',
         servers: {
-          // Healthy server - the weather SSE server started in beforeAll
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://localhost:${faultIsolationWeatherServerPort}/sse`),
           },
-          // Failing server - nonexistent command will fail to connect
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
             args: [],
@@ -889,11 +955,9 @@ describe('MCPClient', () => {
       const mixedMcp = new MCPClient({
         id: 'test-fault-isolation-toolsets',
         servers: {
-          // Healthy server
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://localhost:${faultIsolationWeatherServerPort}/sse`),
           },
-          // Failing server
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
             args: [],
@@ -919,7 +983,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-disconnect',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://localhost:${faultIsolationWeatherServerPort}/sse`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
