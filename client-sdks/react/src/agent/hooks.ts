@@ -28,9 +28,8 @@ export interface MastraChatProps {
   onThreadSignalsUnsupported?: () => void;
   /**
    * Opt into the agent-signals streaming path (sendSignal + subscribeToThread).
-   * Defaults to `true` to preserve existing behavior. Pass `false` to always
-   * use the legacy `streamUntilIdle` route — useful while the signals path is
-   * being stabilized.
+   * Defaults to `false` so consumers stay on the legacy `streamUntilIdle` route
+   * unless they explicitly enable the signals path.
    */
   enableThreadSignals?: boolean;
 }
@@ -81,7 +80,7 @@ export const useChat = ({
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
-  enableThreadSignals = true,
+  enableThreadSignals = false,
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
@@ -255,15 +254,17 @@ export const useChat = ({
   }, [agentId, resourceId, threadId, closeThreadSubscription]);
 
   useEffect(() => {
-    if (!threadId) return;
-    if (threadSignalsDisabled) return;
+    if (!threadId || threadSignalsDisabled) {
+      closeThreadSubscription();
+      return;
+    }
 
     void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
       if ((error as { name?: string }).name !== 'AbortError') {
         console.error('[useChat] Thread subscription failed', error);
       }
     });
-  }, [agentId, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
+  }, [agentId, closeThreadSubscription, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
   const generate = async ({
     coreUserMessages,
