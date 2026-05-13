@@ -7,7 +7,7 @@ import type { Agent } from '../agent';
 import { createSignal, isMastraSignalMessage, mastraDBMessageToSignal } from '../agent/signals';
 import type { CreatedAgentSignal } from '../agent/signals';
 import { BaseProcessor } from '../processors';
-import type { ProcessInputStepArgs, ProcessInputStepResult } from '../processors';
+import type { ProcessInputStepArgs, ProcessInputStepResult, ProcessOutputResultArgs } from '../processors';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import { createTool } from '../tools';
 
@@ -19,6 +19,7 @@ const GITHUB_CI_FAILURE_SIGNAL = 'github-ci-failure';
 const GITHUB_COMMENT_SIGNAL = 'github-comment';
 const GITHUB_REVIEW_SIGNAL = 'github-review';
 const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
+const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const MAX_PROCESSED_SIGNAL_IDS = 200;
 const DEFAULT_AUTHORIZED_PERMISSIONS = ['admin', 'maintain', 'write'] as const;
@@ -135,6 +136,13 @@ export interface GithubPRSubscriptionMetadata {
 export interface GithubSignalsThreadMetadata {
   processedSignalIds: string[];
   subscriptions: Record<string, GithubPRSubscriptionMetadata>;
+  subscriptionHintShown?: boolean;
+}
+
+interface ActiveThreadContext {
+  agentId: string;
+  resourceId: string;
+  threadId: string;
 }
 
 interface ActiveSubscription extends GithubPRSubscriptionMetadata {
@@ -204,16 +212,22 @@ function createGithubSignal(type: string, input: GithubPRSignalInput, contents: 
 }
 
 function defaultCommandRunner(args: string[]): Promise<GithubCommandResult> {
+  const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', CLICOLOR: '0' };
+  delete env.GH_FORCE_TTY;
   return execFileAsync('gh', args, {
     encoding: 'utf8',
-    env: { ...process.env, NO_COLOR: '1', CLICOLOR: '0', GH_FORCE_TTY: undefined },
+    env,
   });
+}
+
+function activeThreadKey(input: ActiveThreadContext) {
+  return [input.agentId, input.resourceId, input.threadId].join(':');
 }
 
 function subscriptionKey(
   input: Pick<GithubPRSubscriptionMetadata, 'agentId' | 'resourceId' | 'threadId' | 'repo' | 'prNumber'>,
 ) {
-  return [input.agentId, input.resourceId, input.threadId, input.repo ?? '', input.prNumber].join(':');
+  return [activeThreadKey(input), input.repo ?? '', input.prNumber].join(':');
 }
 
 function threadSubscriptionKey(input: Pick<GithubPRSubscriptionMetadata, 'repo' | 'prNumber'>) {
@@ -254,6 +268,7 @@ function getGithubSignalsMetadata(metadata: ThreadMetadata | undefined): GithubS
       !Array.isArray(githubSignals.subscriptions)
         ? ({ ...githubSignals.subscriptions } as Record<string, GithubPRSubscriptionMetadata>)
         : {},
+    subscriptionHintShown: githubSignals?.subscriptionHintShown === true,
   };
 }
 
@@ -370,6 +385,7 @@ export class GithubSignals {
 
   #agents = new Map<string, RegisteredGithubAgent>();
   #activeSubscriptions = new Map<string, ActiveSubscription>();
+  #activeThreads = new Set<string>();
   #timer?: ReturnType<typeof setInterval>;
   #polling = false;
   #options: NormalizedGithubSignalsOptions;
@@ -541,11 +557,22 @@ export class GithubSignals {
     this.#ensureTimer();
   }
 
-  async poll() {
+  markActive(context: ActiveThreadContext) {
+    this.#activeThreads.add(activeThreadKey(context));
+  }
+
+  async markIdle(context: ActiveThreadContext) {
+    this.#activeThreads.delete(activeThreadKey(context));
+    await this.poll(context);
+  }
+
+  async poll(context?: ActiveThreadContext) {
     if (this.#polling) return;
     this.#polling = true;
     try {
       for (const subscription of this.#activeSubscriptions.values()) {
+        if (context && activeThreadKey(subscription) !== activeThreadKey(context)) continue;
+        if (this.#activeThreads.has(activeThreadKey(subscription))) continue;
         await this.#pollSubscription(subscription);
       }
     } finally {
@@ -559,17 +586,11 @@ export class GithubSignals {
       this.#timer = undefined;
     }
     this.#activeSubscriptions.clear();
+    this.#activeThreads.clear();
     this.#agents.clear();
   }
 
   #ensureTimer() {
-    if (this.#activeSubscriptions.size > 0 && !this.#timer) {
-      this.#timer = setInterval(() => {
-        void this.poll();
-      }, this.#options.pollIntervalMs);
-      return;
-    }
-
     if (this.#activeSubscriptions.size === 0 && this.#timer) {
       clearInterval(this.#timer);
       this.#timer = undefined;
@@ -787,8 +808,30 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined> {
     if (args.stepNumber !== 0) return this.#toolResult(args);
 
+    const context = this.#getThreadContext(args);
+    if (context) this.#owner.markActive(context);
     await this.#processSignals(args);
+    await this.#maybeSendSubscriptionHint(args);
     return this.#toolResult(args);
+  }
+
+  async processOutputResult(args: ProcessOutputResultArgs) {
+    const context = this.#getThreadContext(args);
+    if (context) await this.#owner.markIdle(context);
+    return args.messages;
+  }
+
+  #getThreadContext(args: Pick<ProcessInputStepArgs, 'messages' | 'requestContext'>): ActiveThreadContext | undefined {
+    const contextThreadId = args.requestContext?.get(MASTRA_THREAD_ID_KEY);
+    const contextResourceId = args.requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+    const threadId =
+      typeof contextThreadId === 'string' ? contextThreadId : args.messages.find(message => message.threadId)?.threadId;
+    const resourceId =
+      typeof contextResourceId === 'string'
+        ? contextResourceId
+        : args.messages.find(message => message.resourceId)?.resourceId;
+    if (!threadId || !resourceId) return undefined;
+    return { agentId: this.#owner.getAgentId(), resourceId, threadId };
   }
 
   async #processSignals(args: ProcessInputStepArgs) {
@@ -796,6 +839,35 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
       if (!isMastraSignalMessage(message)) continue;
       await this.#applyGithubSignal(args, mastraDBMessageToSignal(message));
     }
+  }
+
+  async #maybeSendSubscriptionHint(args: ProcessInputStepArgs) {
+    const context = this.#getThreadContext(args);
+    if (!context || !args.sendSignal) return;
+
+    const memory = await this.mastra?.getStorage()?.getStore('memory');
+    if (!memory) return;
+
+    const thread = await memory.getThreadById({ threadId: context.threadId, resourceId: context.resourceId });
+    if (!thread) return;
+
+    const githubMetadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+    if (githubMetadata.subscriptionHintShown || Object.keys(githubMetadata.subscriptions).length > 0) return;
+    if (!hasGithubSubscriptionHint(args.messages) && !hasPrWorkEvidence(args.messages)) return;
+    if (hasGithubSubscriptionHint(args.messages)) return;
+
+    const signal = createSignal({
+      type: 'system-reminder',
+      contents: 'The system detected you may be working on a PR. Subscribe to updates using the github subscribe tool.',
+      attributes: { type: GITHUB_SUBSCRIPTION_HINT_SIGNAL },
+    });
+    await args.sendSignal(signal);
+    githubMetadata.subscriptionHintShown = true;
+    await memory.updateThread({
+      id: thread.id,
+      title: thread.title ?? '',
+      metadata: setGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined, githubMetadata),
+    });
   }
 
   async #applyGithubSignal(args: ProcessInputStepArgs, signal: CreatedAgentSignal) {
@@ -917,6 +989,30 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
         }),
       },
     };
+  }
+}
+
+function hasGithubSubscriptionHint(messages: Array<Record<string, unknown>>) {
+  return messages.some(message => messageContains(message, GITHUB_SUBSCRIPTION_HINT_SIGNAL));
+}
+
+function hasPrWorkEvidence(messages: Array<Record<string, unknown>>) {
+  return messages.some(message =>
+    messageContains(
+      message,
+      /\bgh\s+pr\b|\bgh\s+pr\s+(view|checkout|create|status|checks)\b|\bgit\s+push\b|github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/i,
+    ),
+  );
+}
+
+function messageContains(value: unknown, pattern: string | RegExp): boolean {
+  if (typeof value === 'string') return typeof pattern === 'string' ? value.includes(pattern) : pattern.test(value);
+  if (!value || typeof value !== 'object') return false;
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof pattern === 'string' ? serialized.includes(pattern) : pattern.test(serialized);
+  } catch {
+    return false;
   }
 }
 

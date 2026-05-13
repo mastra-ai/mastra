@@ -7,7 +7,7 @@ packages:
 
 # GithubSignals
 
-`GithubSignals` connects Mastra agent threads to GitHub pull request events. It exposes a `processor` for agent configuration, helper signals for subscribe and unsubscribe actions, and an in-process poller that sends PR notifications back to the thread.
+`GithubSignals` connects Mastra agent threads to GitHub pull request events. It exposes a `processor` for agent configuration, helper signals for subscribe and unsubscribe actions, and an idle-time poller that sends PR notifications back to the thread after agent runs finish.
 
 Use it when an agent needs CI failure, PR comment, or review notifications while it continues working in a thread.
 
@@ -41,7 +41,7 @@ await agent.sendSignal(ghSignals.prSubscribe({ prNumber: 1234 }), {
 })
 ```
 
-Call `init()` during application startup to explicitly rehydrate persisted subscriptions and start polling. The subscribe signal tells the model that the thread is subscribed to the PR. On the next input step, the processor records the subscription in thread metadata, snapshots the current PR state as a silent baseline, and starts polling GitHub with the `gh` CLI. Existing checks, comments, and reviews are not replayed when the subscription starts.
+Call `init()` during application startup to explicitly rehydrate persisted subscriptions. The subscribe signal tells the model that the thread is subscribed to the PR. On the next input step, the processor records the subscription in thread metadata and snapshots the current PR state as a silent baseline. After each agent run finishes, it polls GitHub once with lightweight `gh api` REST calls. Existing checks, comments, and reviews are not replayed when the subscription starts.
 
 ## Constructor parameters
 
@@ -62,7 +62,8 @@ Call `init()` during application startup to explicitly rehydrate persisted subsc
       {
         name: 'pollIntervalMs',
         type: 'number',
-        description: 'How often to poll active PR subscriptions.',
+        description:
+          'Reserved for custom polling loops. The built-in processor polls once when a subscribed thread becomes idle.',
         isOptional: true,
         defaultValue: '20000',
       },
@@ -171,6 +172,8 @@ Notification signals use compact GitHub-specific reminder types such as `github-
 
 Comment and review notifications are authorization-gated. By default, only users with `admin`, `maintain`, or `write` repository permissions can trigger those notifications. Bot users must be explicitly included in `authorizedBots`.
 
+When the processor detects likely PR work in recent shell/tool activity, such as `gh pr` commands or `git push`, and the thread is not subscribed yet, it emits a one-time `github-subscription-hint` reminder asking the agent to use the `github` subscribe tool. MastraCode also shows active PR subscriptions as a sky-blue `PR#123` badge next to the thread title in the status line.
+
 ## Methods
 
 ### Agent registration
@@ -197,7 +200,7 @@ github.removeAgent('code-agent')
 
 #### `init(options)`
 
-Explicitly rehydrates persisted subscriptions from memory and starts polling. Call this during application startup after registering agents.
+Explicitly rehydrates persisted subscriptions from memory. Call this during application startup after registering agents.
 
 ```typescript
 await github.init({ memory, resourceId: 'user_123' })
@@ -207,7 +210,7 @@ Returns: `Promise<GithubPRSubscriptionMetadata[]>`.
 
 #### `start(subscriptions?)`
 
-Adds explicit subscriptions and starts polling.
+Adds explicit subscriptions for future idle-time polls.
 
 ```typescript
 github.start([
@@ -227,7 +230,7 @@ Returns: `GithubSignals`.
 
 #### `addSubscription(subscription)`
 
-Adds one subscription and starts polling if no poller is running.
+Adds one subscription for future idle-time polls.
 
 ```typescript
 github.addSubscription({
@@ -257,9 +260,18 @@ github.removeSubscription({
 
 ### Polling
 
-#### `poll()`
+#### `markActive(context)` / `markIdle(context)`
 
-Runs one poll cycle for active subscriptions.
+Marks a thread as actively running or idle. The processor calls these lifecycle hooks automatically. Active threads are skipped, and `markIdle()` triggers one immediate poll for that thread.
+
+```typescript
+github.markActive({ agentId: 'code-agent', resourceId: 'user_123', threadId: 'thread_456' })
+await github.markIdle({ agentId: 'code-agent', resourceId: 'user_123', threadId: 'thread_456' })
+```
+
+#### `poll(context?)`
+
+Runs one REST poll cycle for idle subscriptions. Pass a thread context to poll only that thread.
 
 ```typescript
 await github.poll()
@@ -267,7 +279,7 @@ await github.poll()
 
 #### `destroy()`
 
-Stops the polling timer and clears registered agents and active subscriptions.
+Clears registered agents, active subscriptions, and active-thread state.
 
 ```typescript
 github.destroy()
@@ -279,4 +291,4 @@ The processor stores subscription state under `thread.metadata.mastra.githubSign
 
 ## GitHub CLI requirements
 
-The default command runner uses `gh pr view` with `execFile`. The environment running the agent must have the GitHub CLI installed and authenticated. Provide `commandRunner` to use a custom GitHub client or to mock GitHub in tests.
+The default command runner uses `gh api` REST endpoints with `execFile`. It reads PR head metadata, issue comments, PR reviews, commit check runs, and collaborator permissions. The environment running the agent must have the GitHub CLI installed and authenticated. Provide `commandRunner` to use a custom GitHub client or to mock GitHub in tests.
