@@ -72,6 +72,27 @@ function isTextLikeMimeType(mimeType: string | undefined): boolean {
 }
 
 /**
+ * Validates a single `mediaTypes` pattern. Accepts:
+ * - `*` or `*​/*` — match anything
+ * - `type/*` — match all subtypes of a top-level type (e.g. `image/*`)
+ * - `type/subtype` — exact mime type (e.g. `application/pdf`, `application/vnd.api+json`)
+ *
+ * Throws a descriptive error for anything else so misconfigurations surface
+ * immediately instead of silently failing to match.
+ */
+const MEDIA_TYPE_PATTERN = /^(?:\*|\*\/\*|[a-z0-9!#$&^_.+-]+\/(?:\*|[a-z0-9!#$&^_.+-]+))$/i;
+
+function validateMediaTypePatterns(patterns: string[]): void {
+  for (const pattern of patterns) {
+    if (typeof pattern !== 'string' || !MEDIA_TYPE_PATTERN.test(pattern)) {
+      throw new Error(
+        `Invalid \`mediaTypes\` pattern: ${JSON.stringify(pattern)}. Expected \`*\`, \`*/*\`, \`type/*\`, or a full mime type like \`application/pdf\`.`,
+      );
+    }
+  }
+}
+
+/**
  * Build a predicate from the `mediaTypes` config option.
  * Supports glob patterns (e.g. `'image/*'`), custom functions, and `false`
  * to disable media parts entirely.
@@ -84,6 +105,7 @@ function buildMediaTypeCheck(
     return (mimeType: string | undefined) => (mimeType ? config(mimeType) : false);
   }
   const patterns = config ?? DEFAULT_MEDIA_TYPES;
+  validateMediaTypePatterns(patterns);
   return (mimeType: string | undefined) => {
     if (!mimeType) return false;
     return patterns.some(pattern => {
@@ -104,12 +126,16 @@ export const readFileTool = createTool({
     path: z.string().describe('The path to the file to read (e.g., "data/config.json")'),
     offset: z
       .number()
+      .int()
+      .min(1)
       .optional()
       .describe(
         'Line number to start reading from (1-indexed). Only used when reading text files; ignored for media and other binary files. Defaults to line 1 if omitted.',
       ),
     limit: z
       .number()
+      .int()
+      .min(1)
       .optional()
       .describe(
         'Maximum number of lines to read. Only used when reading text files; ignored for media and other binary files. Defaults to the end of the file if omitted.',

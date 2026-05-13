@@ -417,6 +417,71 @@ describe('workspace_read_file', () => {
     expect(result).toContain(png.toString('base64'));
   });
 
+  it('should reject offset that is not a positive integer', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+    const tool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+
+    const parsed = tool.inputSchema.safeParse({ path: 'test.txt', offset: 0 });
+    expect(parsed.success).toBe(false);
+
+    const negative = tool.inputSchema.safeParse({ path: 'test.txt', offset: -1 });
+    expect(negative.success).toBe(false);
+
+    const fractional = tool.inputSchema.safeParse({ path: 'test.txt', offset: 1.5 });
+    expect(fractional.success).toBe(false);
+  });
+
+  it('should reject limit that is not a positive integer', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+    const tool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+
+    const zero = tool.inputSchema.safeParse({ path: 'test.txt', limit: 0 });
+    expect(zero.success).toBe(false);
+
+    const negative = tool.inputSchema.safeParse({ path: 'test.txt', limit: -5 });
+    expect(negative.success).toBe(false);
+
+    const fractional = tool.inputSchema.safeParse({ path: 'test.txt', limit: 2.5 });
+    expect(fractional.success).toBe(false);
+  });
+
+  it('should throw a descriptive error for invalid mediaTypes patterns', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+          mediaTypes: ['image/png', 'not-a-mime-type'],
+        },
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    await expect(
+      tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'test.txt' }, { workspace }),
+    ).rejects.toThrow(/Invalid `mediaTypes` pattern.*not-a-mime-type/);
+  });
+
+  it('should accept mime types with suffixes like application/vnd.api+json', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+          mediaTypes: ['application/vnd.api+json', 'image/*'],
+        },
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'test.txt' }, { workspace });
+    expect(typeof result).toBe('string');
+  });
+
   it('should apply token limit to large files', async () => {
     // Create a file with many words that will exceed default token limit (~3k tokens)
     const lines = Array.from({ length: 2000 }, (_, i) => `line ${i + 1} with some words here`);
