@@ -7,12 +7,12 @@ Verify role-based gating across Studio and Agent Builder. Covers route-level RBA
 The scaffolded project configures its own WorkOS `roleMapping` in
 `src/mastra/auth.ts` (so it doesn't depend on `DEFAULT_ROLES` in core):
 
-| Role     | Permission grants                                                                                              |
-| -------- | -------------------------------------------------------------------------------------------------------------- |
-| `owner`  | `*` (everything, including delete)                                                                             |
-| `admin`  | `*` (owner-equivalent via WorkOS mapping; see note below)                                                      |
-| `member` | `*:read`, `*:execute`, `stored-agents:write`, `stored-skills:write`, `stored-workspaces:write`                 |
-| `viewer` | `*:read`                                                                                                       |
+| Role     | Permission grants                                                                              |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| `owner`  | `*` (everything, including delete)                                                             |
+| `admin`  | `*` (owner-equivalent via WorkOS mapping; see note below)                                      |
+| `member` | `*:read`, `*:execute`, `stored-agents:write`, `stored-skills:write`, `stored-workspaces:write` |
+| `viewer` | `*:read`                                                                                       |
 
 Public stored skills/agents short-circuit read checks (see `authorship.ts`). Auth disabled bypasses role checks entirely.
 

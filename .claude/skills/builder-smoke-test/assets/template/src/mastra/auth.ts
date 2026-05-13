@@ -38,13 +38,7 @@ async function initAuth(): Promise<AuthBundle> {
           // star flows under a non-admin role. Publish/delete/share remain
           // admin-only (note matchesPermission's owner check still applies, so
           // members can only edit their own rows).
-          member: [
-            '*:read',
-            '*:execute',
-            'stored-agents:write',
-            'stored-skills:write',
-            'stored-workspaces:write',
-          ],
+          member: ['*:read', '*:execute', 'stored-agents:write', 'stored-skills:write', 'stored-workspaces:write'],
           viewer: ['*:read'],
           _default: [],
         },
