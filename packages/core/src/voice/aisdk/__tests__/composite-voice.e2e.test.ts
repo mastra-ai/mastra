@@ -2,7 +2,8 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openai } from '@ai-sdk/openai-v5';
-import { useLLMRecording } from '@internal/llm-recorder';
+import { getLLMTestMode, useLLMRecording } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { CompositeVoice } from '../../composite-voice';
@@ -10,6 +11,8 @@ import { CompositeVoice } from '../../composite-voice';
 const testDir = dirname(fileURLToPath(import.meta.url));
 const recordingsDir = resolve(testDir, '__recordings__');
 const outputDir = resolve(testDir, 'test-outputs');
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 describe('CompositeVoice with AI SDK Models', () => {
   useLLMRecording('core-src-voice-aisdk-__tests__-composite-voice.e2e', { recordingsDir });
