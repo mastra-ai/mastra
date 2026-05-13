@@ -259,18 +259,19 @@ export async function handlePlanApproval(
           state.activeInlinePlanApproval = undefined;
           await approvePlan(ctx, planId, title, plan);
 
-          // Now that mode switch is complete, add system reminder and trigger build agent
-          // Use setTimeout to ensure the plan approval component has fully rendered
-          setTimeout(() => {
-            const reminderText = '<system-reminder>The user has approved the plan, begin executing.</system-reminder>';
-            ctx.addUserMessage({
-              id: `system-${Date.now()}`,
-              role: 'user',
-              content: [{ type: 'text', text: reminderText }],
-              createdAt: new Date(),
-            });
-            ctx.fireMessage(reminderText);
-          }, 50);
+          // Fire the "begin executing" trigger through the same signal path
+          // as a normal follow-up message. The signal echoes back as a user
+          // message whose XML body is rendered as a system-reminder by the
+          // legacy reminder regex in `addUserMessage`. We intentionally do
+          // not also call `ctx.addUserMessage` locally — pairing it with the
+          // echo would render the reminder twice.
+          //
+          // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
+          // for the aborted plan-mode run to fully idle before returning, so
+          // this signal always starts a fresh build-mode run instead of
+          // queuing onto the dying run.
+          const reminderText = '<system-reminder>The user has approved the plan, begin executing.</system-reminder>';
+          ctx.fireMessage(reminderText);
 
           resolve();
         },
@@ -281,11 +282,11 @@ export async function handlePlanApproval(
           const objective = formatPlanGoalObjective(title, plan);
           await ctx.startGoal(objective, 'Goal cancelled.', { trigger: 'none' });
 
-          // Match the normal approval path: inject the trigger through the TUI
-          // instead of harness follow-up queueing, while goal state is already active.
-          setTimeout(() => {
-            ctx.fireMessage(createGoalReminderXml(objective));
-          }, 50);
+          // Inject the goal-reminder trigger through the TUI signal path while
+          // goal state is already active. `approvePlan` waits for the aborted
+          // plan-mode run to idle before returning, so this fires a fresh
+          // run rather than queuing onto a dying one.
+          ctx.fireMessage(createGoalReminderXml(objective));
 
           resolve();
         },
