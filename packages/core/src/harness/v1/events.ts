@@ -348,6 +348,23 @@ export interface ThreadClonedEvent extends HarnessEventBase {
   title?: string;
 }
 
+/**
+ * Emitted after `harness.threads.setSettings()` commits a patch to a thread's
+ * metadata. `patch` includes only the keys that actually changed (no-op
+ * writes do not emit). `removedKeys` lists keys that were present before and
+ * absent after — drives reactive UI invalidation without subscribers having
+ * to diff metadata themselves.
+ */
+export interface ThreadSettingsChangedEvent extends HarnessEventBase {
+  type: 'thread_settings_changed';
+  threadId: string;
+  resourceId: string;
+  /** Keys whose values changed (does not include removed keys). */
+  patch: Record<string, unknown>;
+  /** Keys that were deleted by this patch (had `value: undefined`). */
+  removedKeys: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Subagent events (§10.2 / §10.6 — parent-session attribution).
 //
@@ -523,6 +540,7 @@ export type HarnessEvent =
   | ThreadRenamedEvent
   | ThreadDeletedEvent
   | ThreadClonedEvent
+  | ThreadSettingsChangedEvent
   | SubagentStartEvent
   | SubagentTextDeltaEvent
   | SubagentToolStartEvent
@@ -716,6 +734,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'thread_renamed',
   'thread_deleted',
   'thread_cloned',
+  'thread_settings_changed',
   'goal_set',
   'goal_judged',
   'goal_done',

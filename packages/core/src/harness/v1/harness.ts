@@ -63,11 +63,14 @@ import type {
   ThreadCreateOptions,
   ThreadDeleteOptions,
   ThreadGetOptions,
+  ThreadGetSettingOptions,
+  ThreadGetSettingsOptions,
   ThreadListOptions,
   ThreadListResult,
   ThreadRecord,
   ThreadRenameOptions,
   ThreadSelectOrCreateOptions,
+  ThreadSetSettingsOptions,
   ToolCategory,
 } from './types';
 import { WorkspaceRegistry } from './workspace-registry';
@@ -1175,6 +1178,98 @@ export class Harness {
         resourceId: opts.resourceId,
         cascadedSessionClose: cascaded,
       });
+    },
+
+    /**
+     * Shallow-merges `patch` into the thread's `metadata`. Keys whose values
+     * are `undefined` in the patch are removed from the stored metadata. The
+     * patch is otherwise a verbatim overwrite — nested objects are replaced,
+     * not deep-merged, matching `Session.setState()` semantics.
+     *
+     * Emits `thread_settings_changed` only when the on-disk metadata actually
+     * differs from the prior state, so subscribers can treat the event as a
+     * real change signal rather than a write-acknowledgement.
+     *
+     * Throws `HarnessThreadNotFoundError` if the thread does not exist or
+     * is owned by a different resource — cross-resource existence is never
+     * leaked.
+     */
+    setSettings: async (opts: ThreadSetSettingsOptions): Promise<void> => {
+      const memory = await this._requireMemoryStorage('threads.setSettings()');
+      const existing = await memory.getThreadById({ threadId: opts.threadId });
+      if (!existing || existing.resourceId !== opts.resourceId) {
+        throw new HarnessThreadNotFoundError(opts.resourceId, opts.threadId);
+      }
+
+      const before = (existing.metadata as Record<string, unknown> | undefined) ?? {};
+      const next: Record<string, unknown> = { ...before };
+      const effectivePatch: Record<string, unknown> = {};
+      const removedKeys: string[] = [];
+
+      for (const [key, value] of Object.entries(opts.patch)) {
+        if (value === undefined) {
+          if (key in next) {
+            delete next[key];
+            removedKeys.push(key);
+          }
+          continue;
+        }
+        // Only record real diffs so the event reflects actual change.
+        if (!Object.is(before[key], value)) {
+          next[key] = value;
+          effectivePatch[key] = value;
+        }
+      }
+
+      if (Object.keys(effectivePatch).length === 0 && removedKeys.length === 0) {
+        // No-op write — skip the storage round trip and the event.
+        return;
+      }
+
+      await memory.saveThread({
+        thread: {
+          ...existing,
+          metadata: Object.keys(next).length > 0 ? next : undefined,
+          updatedAt: new Date(),
+        },
+      });
+
+      this._emitter.emit({
+        type: 'thread_settings_changed',
+        threadId: opts.threadId,
+        resourceId: opts.resourceId,
+        patch: effectivePatch,
+        removedKeys,
+      });
+    },
+
+    /**
+     * Returns a frozen snapshot of the thread's metadata. An empty object is
+     * returned when the thread has no metadata. Throws
+     * `HarnessThreadNotFoundError` if the thread does not exist or is owned
+     * by a different resource.
+     */
+    getSettings: async (opts: ThreadGetSettingsOptions): Promise<Readonly<Record<string, unknown>>> => {
+      const memory = await this._requireMemoryStorage('threads.getSettings()');
+      const existing = await memory.getThreadById({ threadId: opts.threadId });
+      if (!existing || existing.resourceId !== opts.resourceId) {
+        throw new HarnessThreadNotFoundError(opts.resourceId, opts.threadId);
+      }
+      const metadata = (existing.metadata as Record<string, unknown> | undefined) ?? {};
+      return Object.freeze({ ...metadata });
+    },
+
+    /**
+     * Convenience accessor for a single setting. Returns `undefined` when the
+     * key is absent. Throws `HarnessThreadNotFoundError` if the thread does
+     * not exist or is owned by a different resource.
+     */
+    getSetting: async (opts: ThreadGetSettingOptions): Promise<unknown> => {
+      const settings = await this.threads.getSettings({
+        resourceId: opts.resourceId,
+        threadId: opts.threadId,
+      });
+      return settings[opts.key];
     },
   };
 

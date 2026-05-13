@@ -549,6 +549,30 @@ export interface ThreadDeleteOptions {
   threadId: string;
 }
 
+/**
+ * Shallow-merge patch applied to thread metadata via
+ * `harness.threads.setSettings()`. Keys with `value: undefined` are removed;
+ * all other keys overwrite existing values. Patch semantics mirror
+ * `Session.setState()` so callers don't have to learn two write models.
+ */
+export interface ThreadSetSettingsOptions {
+  resourceId: string;
+  threadId: string;
+  /** Shallow-merge patch. Keys set to `undefined` are deleted. */
+  patch: Record<string, unknown>;
+}
+
+export interface ThreadGetSettingsOptions {
+  resourceId: string;
+  threadId: string;
+}
+
+export interface ThreadGetSettingOptions {
+  resourceId: string;
+  threadId: string;
+  key: string;
+}
+
 export interface SessionListOptions {
   resourceId: string;
   includeClosed?: boolean;
