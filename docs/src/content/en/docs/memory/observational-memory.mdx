@@ -439,11 +439,16 @@ const filePart = {
 }
 ```
 
-Notes:
+The `tokenEstimate` object follows the same shape the Token Counter uses internally for cached estimates:
+
+- `v` — cache schema version. Set to `0`. Caller-supplied entries are exempt from the framework's version check, so the value isn't read.
+- `source` — cache lineage marker. Must be `'client'`. This is what tells the Token Counter the entry is authoritative and should be honored verbatim instead of being recomputed or overwritten.
+- `key` — content fingerprint slot. Set to `'client'`. Framework entries use a content hash here so they invalidate when the payload changes; the `'client'` sentinel keeps caller estimates stable across writes.
+- `tokens` — the token count to use. Must be a finite non-negative number.
+
+Additional notes:
 
 - The estimate is only honored on `image` and `file` parts. `text` and `tool-invocation` parts are always counted normally, even if they carry a `tokenEstimate`.
-- The shape must be exactly `{ v: 0, source: 'client', key: 'client', tokens: N }`, where `tokens` is a finite non-negative number.
-- Caller-supplied estimates survive cache rotations because they use the `'client'` source instead of the framework's content-hash key.
 
 ## Async buffering
 
