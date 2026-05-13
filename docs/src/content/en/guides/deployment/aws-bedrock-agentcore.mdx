@@ -78,22 +78,23 @@ npx mastra@latest init
 Replace the generated `src/mastra/agents/weather-agent.ts` to use Amazon Bedrock. The original `memory: new Memory()` is removed because the storage layer is removed in the next step:
 
 ```ts title="app/MastraAgent/src/mastra/agents/weather-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
-import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
-import { weatherTool } from '../tools/weather-tool.js';
+import { Agent } from '@mastra/core/agent'
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock'
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers'
+import { weatherTool } from '../tools/weather-tool.js'
 
 const bedrock = createAmazonBedrock({
   credentialProvider: fromNodeProviderChain(),
-});
+})
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
-  instructions: 'You are a helpful weather assistant. Use the weatherTool to fetch current weather data.',
+  instructions:
+    'You are a helpful weather assistant. Use the weatherTool to fetch current weather data.',
   model: bedrock('us.anthropic.claude-sonnet-4-6'),
   tools: { weatherTool },
-});
+})
 ```
 
 :::note
@@ -105,10 +106,10 @@ export const weatherAgent = new Agent({
 Replace the generated `src/mastra/index.ts` to remove the default file-based storage and observability config. AgentCore Runtime containers run as a non-root user with a read-only application directory, so the default `LibSQLStore` cannot open `./mastra.db` and the runtime fails at startup:
 
 ```ts title="app/MastraAgent/src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { weatherWorkflow } from './workflows/weather-workflow.js';
-import { weatherAgent } from './agents/weather-agent.js';
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+import { weatherWorkflow } from './workflows/weather-workflow.js'
+import { weatherAgent } from './agents/weather-agent.js'
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
@@ -117,7 +118,7 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-});
+})
 ```
 
 Create a `tsconfig.json` file with the following content:
