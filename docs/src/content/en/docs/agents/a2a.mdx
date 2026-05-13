@@ -41,38 +41,14 @@ A2A represents work as messages and tasks. Messages carry text, file, or structu
 
 ## Quickstart
 
-Use `A2AAgent` when a Mastra parent agent should call a remote A2A agent as a subagent. Create an `A2AAgent` with a remote agent card URL or single-agent domain, then register it in the parent agent's `agents` map.
+Start with any agent registered in your `Mastra` instance. When Mastra Server runs, the agent is available as a remote A2A agent through its registered ID.
 
-```typescript title="src/mastra/agents/support-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { A2AAgent } from '@mastra/core/a2a'
+For an agent registered as `research-agent`, Mastra exposes:
 
-const remoteWeatherAgent = new A2AAgent({
-  url: 'https://weather.example.com',
-})
+- Agent card: `/.well-known/research-agent/agent-card.json`
+- Execution endpoint: `/a2a/research-agent`
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Answer user questions and delegate weather questions when needed.',
-  model: 'openai/gpt-5.4',
-  agents: {
-    remoteWeatherAgent,
-  },
-})
-```
-
-:::tip
-
-If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-known/agent-card.json`. Use this for single-agent servers. For multi-agent servers, pass the explicit card URL, such as `https://agent.example.com/.well-known/:agentId/agent-card.json`. If `url` already ends with `/agent-card.json`, Mastra uses that URL directly. `A2AAgent` doesn't discover agent IDs beyond the URL you provide.
-
-:::
-
-## Discover and call remote agents
-
-A2A discovery starts with the agent card. The [A2A discovery guide](https://a2a-protocol.org/latest/topics/agent-discovery/) describes well-known URI discovery, registries, and direct configuration. Mastra supports the well-known route for registered agents at `/.well-known/:agentId/agent-card.json`.
-
-Use `MastraClient.getA2A()` when an application needs direct programmatic access to a remote Mastra agent over A2A:
+Use `MastraClient.getA2A()` to fetch the agent card and call the remote agent:
 
 ```typescript title="src/a2a-client.ts"
 import { MastraClient } from '@mastra/client-js'
@@ -86,6 +62,10 @@ const card = await a2a.getAgentCard()
 
 console.log(card.name, card.capabilities)
 ```
+
+## Discover and call remote agents
+
+A2A discovery starts with the agent card. The [A2A discovery guide](https://a2a-protocol.org/latest/topics/agent-discovery/) describes well-known URI discovery, registries, and direct configuration. Mastra supports the well-known route for registered agents at `/.well-known/:agentId/agent-card.json`.
 
 Use `sendMessageStream()` to receive task status and artifact updates over Server-Sent Events (SSE):
 
@@ -121,6 +101,33 @@ for await (const event of updates) {
 Agent cards can contain sensitive information, such as internal URLs or private skill descriptions. Protect restricted cards with access controls, and use agent card verification when a client needs to validate that a card came from a trusted source.
 
 ## How subagents work
+
+Use `A2AAgent` when a Mastra parent agent should call a remote A2A agent as a subagent. Create an `A2AAgent` with a remote agent card URL or single-agent domain, then register it in the parent agent's `agents` map.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com',
+})
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer user questions and delegate weather questions when needed.',
+  model: 'openai/gpt-5.4',
+  agents: {
+    remoteWeatherAgent,
+  },
+})
+```
+
+:::tip
+
+If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-known/agent-card.json`. Use this for single-agent servers. For multi-agent servers, pass the explicit card URL, such as `https://agent.example.com/.well-known/:agentId/agent-card.json`. If `url` already ends with `/agent-card.json`, Mastra uses that URL directly. `A2AAgent` doesn't discover agent IDs beyond the URL you provide.
+
+:::
 
 `A2AAgent` implements Mastra's subagent interface. The parent agent can call it like any other subagent, while `A2AAgent` handles the protocol details.
 
