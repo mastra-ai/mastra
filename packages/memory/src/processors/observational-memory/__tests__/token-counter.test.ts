@@ -333,7 +333,7 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(85);
     });
 
-    it('counts non-image file parts from descriptors instead of raw payload bytes', () => {
+    it('counts URL-only non-image file parts from descriptor metadata', () => {
       const counter = new TokenCounter();
       const pdfUrlMessage = createMessage({
         format: 2,
@@ -346,6 +346,22 @@ describe('TokenCounter', () => {
           },
         ],
       });
+
+      const pdfUrlTokens = counter.countMessage(pdfUrlMessage);
+
+      // URL-only file parts have no measurable body, so they fall back to the
+      // small descriptor-only estimate.
+      expect(pdfUrlTokens).toBeGreaterThan(0);
+      expect(pdfUrlTokens).toBeLessThan(50);
+    });
+
+    // Large file bodies (e.g. an uploaded PDF) used to count only the
+    // descriptor JSON (~8 tokens), so the Observational Memory threshold
+    // never tripped. TokenCounter now auto-estimates token cost from the
+    // attachment's byte size and mime type so large attachments are reflected
+    // in OM and context budgets.
+    it('auto-estimates non-image file part tokens from byte size for uploaded files', () => {
+      const counter = new TokenCounter();
       const uploadedPdfMessage = createMessage({
         format: 2,
         parts: [
@@ -358,13 +374,75 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const pdfUrlTokens = counter.countMessage(pdfUrlMessage);
       const uploadedPdfTokens = counter.countMessage(uploadedPdfMessage);
 
-      expect(pdfUrlTokens).toBeGreaterThan(0);
-      expect(uploadedPdfTokens).toBeGreaterThan(0);
-      expect(uploadedPdfTokens).toBeLessThan(500);
-      expect(Math.abs(uploadedPdfTokens - pdfUrlTokens)).toBeLessThan(50);
+      // 200_000 base64 chars decodes to ~150_000 bytes; with the default
+      // PDF heuristic (bytes/4) that's ~37_500 tokens — well above the
+      // ~8-token descriptor estimate that used to be returned.
+      expect(uploadedPdfTokens).toBeGreaterThan(10_000);
+    });
+
+    it('scales non-image file part tokens with byte size for text mime types', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: `data:text/plain;base64,${Buffer.from('x'.repeat(40_000)).toString('base64')}`,
+            mimeType: 'text/plain',
+            filename: 'notes.txt',
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+
+      // 40_000 bytes / 4 ≈ 10_000 tokens (well over the descriptor estimate).
+      expect(tokens).toBeGreaterThan(5_000);
+    });
+
+    it('produces a smaller estimate for Google PDFs than Anthropic PDFs of the same size', () => {
+      const data = `data:application/pdf;base64,${'a'.repeat(200000)}`;
+      const buildMessage = () =>
+        createMessage({
+          format: 2,
+          parts: [{ type: 'file', data, mimeType: 'application/pdf', filename: 'doc.pdf' }],
+        });
+
+      const googleCounter = new TokenCounter({
+        model: { provider: 'google', modelId: 'gemini-2.5-flash' },
+      });
+      const anthropicCounter = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      });
+
+      const googleTokens = googleCounter.countMessage(buildMessage());
+      const anthropicTokens = anthropicCounter.countMessage(buildMessage());
+
+      // Google bills PDFs at 258 tokens/page (~5KB/page); Anthropic bills at
+      // 1500–3000 tokens/page. So for any given non-trivial size Google's
+      // estimate is significantly smaller.
+      expect(googleTokens).toBeLessThan(anthropicTokens);
+    });
+
+    it('reuses cached non-image file estimates across fresh TokenCounter instances', () => {
+      const part: Record<string, any> = {
+        type: 'file',
+        data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
+        mimeType: 'application/pdf',
+        filename: 'cached.pdf',
+      };
+      const message = createMessage({ format: 2, parts: [part] });
+
+      const first = new TokenCounter().countMessage(message);
+      const cachedAfterFirst = part.providerMetadata?.mastra?.tokenEstimate;
+      const second = new TokenCounter().countMessage(message);
+
+      expect(second).toBe(first);
+      // The byte-size estimate is persisted under the new 'non-image-file'
+      // cache source so subsequent counters re-use it without recomputing.
+      expect(cachedAfterFirst).toBeDefined();
     });
 
     it('reuses cached image estimates across repeated counts', () => {
