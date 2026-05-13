@@ -474,20 +474,21 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       let stream: ReadableStream<any>;
 
-      if ((await params.getModel()).specificationVersion === 'v1') {
-        const { fullStream } = await params!.streamLegacy!((inputData as { prompt: string }).prompt, {
+      const handleFinish = (result: any) => {
+        const resultWithObject = result as typeof result & { object?: unknown };
+        if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+          structuredResult = resultWithObject.object;
+        }
+        streamPromise.resolve(result.text);
+        void agentOptions?.onFinish?.(result);
+      };
+
+      if ((await params.getModel()).specificationVersion === 'v1' && typeof params.streamLegacy === 'function') {
+        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
           ...observabilityContext,
-          onFinish: (result: any) => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
+          onFinish: handleFinish,
           abortSignal,
         });
         stream = fullStream as any;
@@ -496,18 +497,11 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           ...agentOptions,
           requestContext,
           ...observabilityContext,
-          onFinish: (result: any) => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
+          onFinish: handleFinish,
           abortSignal,
         });
 
+        void modelOutput.text.then(streamPromise.resolve, streamPromise.reject);
         stream = modelOutput.fullStream as ReadableStream<ChunkType>;
       }
 
