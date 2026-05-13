@@ -470,6 +470,7 @@ export function MastraRuntimeProvider({
     threadId,
     initialMessages,
     requestContext: chatRequestContext,
+    enableThreadSignals: window.MASTRA_AGENT_SIGNALS === 'true',
     onSignalSent: addPendingSignal,
     onSignalEcho: removePendingSignal,
     onThreadSignalsUnsupported: () => {

@@ -109,6 +109,7 @@ export const HEAD = handle(app);
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
       experimentalUI: `'false'`,
+      agentSignals: `'false'`,
     });
 
     writeFileSync(indexPath, html);

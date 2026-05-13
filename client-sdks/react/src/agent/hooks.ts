@@ -26,6 +26,13 @@ export interface MastraChatProps {
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
+  /**
+   * Opt into the agent-signals streaming path (sendSignal + subscribeToThread).
+   * Defaults to `true` to preserve existing behavior. Pass `false` to always
+   * use the legacy `streamUntilIdle` route — useful while the signals path is
+   * being stabilized.
+   */
+  enableThreadSignals?: boolean;
 }
 
 interface SharedArgs {
@@ -74,7 +81,9 @@ export const useChat = ({
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
+  enableThreadSignals = true,
 }: MastraChatProps) => {
+  const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
@@ -247,13 +256,14 @@ export const useChat = ({
 
   useEffect(() => {
     if (!threadId) return;
+    if (threadSignalsDisabled) return;
 
     void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
       if ((error as { name?: string }).name !== 'AbortError') {
         console.error('[useChat] Thread subscription failed', error);
       }
     });
-  }, [agentId, ensureThreadSubscription, resourceId, threadId]);
+  }, [agentId, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
   const generate = async ({
     coreUserMessages,
@@ -436,7 +446,7 @@ export const useChat = ({
       setIsRunning(false);
     };
 
-    if (!threadId || _threadSignalsUnsupportedRef.current) {
+    if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
       await streamWithLegacyRoute();
       return;
     }
@@ -775,7 +785,9 @@ export const useChat = ({
 
     const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
     const signalId =
-      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current ? uiMessages[0]?.id : undefined;
+      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
+        ? uiMessages[0]?.id
+        : undefined;
     if (!signalId) {
       setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
     }
