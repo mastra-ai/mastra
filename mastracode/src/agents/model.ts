@@ -206,9 +206,7 @@ export function resolveModel(
     // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
     // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
     if (normalizedModelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth
-        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
-        : normalizedModelId;
+      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
       const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
       const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
       const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
@@ -287,9 +285,7 @@ export function resolveModel(
     const storedCred = authStorage.get('openai-codex');
 
     if (storedCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth
-        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
-        : normalizedModelId;
+      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
         headers,
@@ -321,5 +317,5 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
 
   const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
-  return resolveModel(modelId, { thinkingLevel, requestContext });
+  return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }

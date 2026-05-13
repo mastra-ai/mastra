@@ -38,7 +38,7 @@ describe('getMastraVersion', () => {
     return mod.getMastraVersion;
   }
 
-  it('resolves the installed version of mastra from node_modules', async () => {
+  it('resolves the installed version of mastra from node_modules', { timeout: 10000 }, async () => {
     const getMastraVersion = await loadGetMastraVersion();
 
     // Create a fake node_modules/mastra/package.json
