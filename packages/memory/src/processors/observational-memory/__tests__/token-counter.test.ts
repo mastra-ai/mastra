@@ -367,6 +367,143 @@ describe('TokenCounter', () => {
       expect(Math.abs(uploadedPdfTokens - pdfUrlTokens)).toBeLessThan(50);
     });
 
+    // Pipelines that strip the real binary payload before persistence (e.g.
+    // uploading to cloud storage and leaving a hidden reference token in the
+    // `data` field) cannot rely on the on-device file size. They can stamp an
+    // authoritative estimate via `providerMetadata.mastra.tokenEstimate` so
+    // Observational Memory thresholds and context budgets account for it.
+    it('honors a client-supplied tokenEstimate on non-image file parts', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'storage://bucket/abc123',
+            mimeType: 'application/pdf',
+            filename: 'real-on-cloud.pdf',
+            providerMetadata: {
+              mastra: {
+                tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: 25_000 },
+              },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+
+      expect(tokens).toBeGreaterThanOrEqual(25_000);
+    });
+
+    it('honors a client-supplied tokenEstimate on image parts', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/cloud-ref.png'),
+            providerMetadata: {
+              mastra: {
+                tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: 5_000 },
+              },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+
+      expect(tokens).toBeGreaterThanOrEqual(5_000);
+    });
+
+    it('preserves a client-supplied tokenEstimate across repeated counts', () => {
+      const part: Record<string, any> = {
+        type: 'file',
+        data: 'storage://bucket/abc123',
+        mimeType: 'application/pdf',
+        filename: 'real-on-cloud.pdf',
+        providerMetadata: {
+          mastra: {
+            tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: 42_000 },
+          },
+        },
+      };
+      const message = createMessage({ format: 2, parts: [part] });
+
+      const first = new TokenCounter().countMessage(message);
+      const second = new TokenCounter().countMessage(message);
+
+      expect(second).toBe(first);
+      const cache = part.providerMetadata.mastra.tokenEstimate;
+      const clientEntry =
+        cache?.source === 'client'
+          ? cache
+          : Object.values(cache).find((entry: any) => entry?.source === 'client');
+      expect(clientEntry).toMatchObject({ source: 'client', tokens: 42_000 });
+    });
+
+    it('falls back to the default estimator when the client tokenEstimate is invalid', () => {
+      const buildMessage = (tokens: unknown) =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'file',
+              data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
+              mimeType: 'application/pdf',
+              filename: 'with-invalid-estimate.pdf',
+              providerMetadata: {
+                mastra: {
+                  tokenEstimate: { v: 0, source: 'client', key: 'client', tokens },
+                },
+              },
+            },
+          ],
+        });
+
+      const counter = new TokenCounter();
+      const nan = counter.countMessage(buildMessage(Number.NaN));
+      const negative = counter.countMessage(buildMessage(-1));
+      const nonNumeric = counter.countMessage(buildMessage('lots'));
+
+      // Invalid values fall through to the descriptor estimate (<500 tokens),
+      // not the raw stringified value the caller supplied.
+      expect(nan).toBeLessThan(500);
+      expect(negative).toBeLessThan(500);
+      expect(nonNumeric).toBeLessThan(500);
+    });
+
+    it('does not call provider fetches when a client tokenEstimate is present', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'storage://bucket/abc123',
+            mimeType: 'application/pdf',
+            filename: 'real-on-cloud.pdf',
+            providerMetadata: {
+              mastra: {
+                tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: 25_000 },
+              },
+            },
+          },
+        ],
+      });
+
+      const tokens = await counter.countMessageAsync(message);
+
+      expect(tokens).toBeGreaterThanOrEqual(25_000);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it('reuses cached image estimates across repeated counts', () => {
       const counter = new TokenCounter();
       const message = createMessage({

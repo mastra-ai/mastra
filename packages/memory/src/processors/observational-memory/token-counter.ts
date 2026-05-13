@@ -53,6 +53,17 @@ const IMAGE_FILE_EXTENSIONS = new Set([
 
 const TOKEN_ESTIMATE_CACHE_VERSION = 6;
 
+/**
+ * Cache `source` marker for token estimates supplied by the caller via
+ * `part.providerMetadata.mastra.tokenEstimate`. Pipelines that strip the real
+ * binary payload before persistence (e.g. uploading files to cloud storage and
+ * leaving only a reference token in `data`) cannot rely on the on-device file
+ * size, so they can stamp an authoritative estimate here. Entries marked with
+ * this source survive cache-version rotations and are honored ahead of
+ * provider fetches and the default descriptor estimator.
+ */
+const CLIENT_TOKEN_ESTIMATE_SOURCE = 'client';
+
 const DEFAULT_IMAGE_ESTIMATOR: ImageTokenEstimatorConfig = {
   baseTokens: 85,
   tileTokens: 170,
@@ -212,6 +223,39 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mastraMetadata = ensurePartMastraMetadata(part);
   mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
+}
+
+/**
+ * Extracts a caller-supplied token estimate stamped on a part via
+ * `part.providerMetadata.mastra.tokenEstimate`. Used by pipelines that strip
+ * the binary payload from file parts (e.g. cloud-storage references) and
+ * therefore cannot rely on the on-device file size. Returns the entry only
+ * when `source === 'client'` and `tokens` is a finite non-negative number.
+ *
+ * Public contract for callers:
+ *   part.providerMetadata = {
+ *     mastra: {
+ *       tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: N }
+ *     }
+ *   }
+ */
+function getClientPartTokenEstimate(part: CacheablePart): TokenEstimateCacheEntry | undefined {
+  const cache = getPartMastraMetadata(part)?.tokenEstimate;
+  if (!cache || typeof cache !== 'object') return undefined;
+
+  const matches = (entry: unknown): entry is TokenEstimateCacheEntry =>
+    isTokenEstimateEntry(entry) &&
+    entry.source === CLIENT_TOKEN_ESTIMATE_SOURCE &&
+    Number.isFinite(entry.tokens) &&
+    entry.tokens >= 0;
+
+  if (matches(cache)) return cache;
+
+  for (const value of Object.values(cache as Record<string, unknown>)) {
+    if (matches(value)) return value;
+  }
+
+  return undefined;
 }
 
 function getMessageCacheEntry(message: MastraDBMessage, key: string): TokenEstimateCacheEntry | undefined {
@@ -1267,6 +1311,11 @@ export class TokenCounter {
   }
 
   private countAttachmentPartSync(part: CacheablePart): number | undefined {
+    const clientEstimate = getClientPartTokenEstimate(part);
+    if (clientEstimate) {
+      return clientEstimate.tokens;
+    }
+
     if (part.type === 'image') {
       const estimate = this.estimateImageTokens(part);
       return this.readOrPersistFixedPartEstimate(part, 'image', estimate.cachePayload, estimate.tokens);
@@ -1343,6 +1392,11 @@ export class TokenCounter {
   }
 
   private async countAttachmentPartAsync(part: CacheablePart): Promise<number | undefined> {
+    const clientEstimate = getClientPartTokenEstimate(part);
+    if (clientEstimate) {
+      return clientEstimate.tokens;
+    }
+
     const isImageAttachment = part.type === 'image' || (part.type === 'file' && isImageLikeFilePart(part));
     const remotePayload = this.buildRemoteAttachmentCachePayload(part);
 
