@@ -152,11 +152,21 @@ test.describe('Observational Memory - Behavior Tests', () => {
       const observationMarker = threadWrapper.getByRole('button', { name: /Observed.*→.*tokens/i }).first();
       await expect(observationMarker).toBeVisible({ timeout: 15000 });
 
-      // ASSERT: The extracted topic from the OM stream marker is rendered in the chat badge.
-      const extractedSummary = threadWrapper.getByTestId('om-extracted-summary').first();
-      await expect(extractedSummary).toContainText('active-topic', { timeout: 10000 });
+      // ASSERT: The extracted topic from the OM stream marker is rendered as its own inline marker
+      // and can be expanded to inspect the persisted extracted values.
+      const extractedMarker = threadWrapper.getByTestId('om-extracted-marker').first();
+      await expect(extractedMarker).toBeVisible({ timeout: 10000 });
+
+      const extractedSummary = extractedMarker.getByTestId('om-extracted-summary');
+      await expect(extractedSummary).toContainText('active-topic');
       await expect(extractedSummary).toContainText('billing');
       await expect(extractedSummary).toContainText('normalized');
+
+      await extractedMarker.getByRole('button', { name: /Extracted values/i }).click();
+      const extractedValues = extractedMarker.getByTestId('om-extracted-values');
+      await expect(extractedValues).toContainText('active-topic');
+      await expect(extractedValues).toContainText('billing');
+      await expect(extractedValues).toContainText('normalized');
     });
 
     test('should show completion stats when observation finishes', async ({ page }) => {
