@@ -6,6 +6,8 @@ import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
 import type { MessageInput } from '../../agent/message-list';
+import { isAgentCompatible } from '../../agent/subagent';
+import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
 import { RequestContext } from '../../di';
@@ -125,10 +127,6 @@ export function cloneStep<TStepId extends string>(
 // Type Guards
 // ============================================
 
-function isAgent<TStepId extends string>(input: unknown): input is Agent<TStepId, any> {
-  return input instanceof Agent;
-}
-
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
   return input instanceof Tool;
 }
@@ -216,7 +214,7 @@ export function createStep<
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
     structuredOutput: { schema: TStepOutput };
     retries?: number;
@@ -234,7 +232,9 @@ export function createStep<
   TStepOutput extends { text: string },
   TResume,
   TSuspend,
->(agent: Agent<TStepId, any>): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+>(
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
+): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 /**
  * Creates a step from a tool
@@ -305,7 +305,7 @@ export function createStep<
 export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
   // Type guards determine the correct factory function
   // Overloads ensure type safety for consumers
-  if (isAgent(params)) {
+  if (isAgentCompatible(params)) {
     return createStepFromAgent(params, agentOrToolOptions);
   }
 
@@ -480,7 +480,7 @@ async function safeOnFinish(
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
-  params: Agent<TStepId, any>,
+  params: SubAgent<TStepId, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<TStepId, any, any, TStepOutput, unknown, unknown, DefaultEngineType> {
   const options = (agentOrToolOptions ?? {}) as
@@ -522,14 +522,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
       const toolData = {
-        name: params.name,
+        name: params.name ?? params.id,
         args: inputData,
-      };
+      } as const;
 
       // Detect model version to choose streaming method
-      const llm = await params.getLLM({ requestContext });
-      const modelInfo = llm.getModel();
-      const isV2Model = isSupportedLanguageModel(modelInfo);
+      const isV2Model = isSupportedLanguageModel(await params.getModel({ requestContext }));
 
       // Track structured output result
       let structuredResult: any = null;
@@ -548,12 +546,11 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       if (isV2Model) {
         // V2+ model path: use .stream() which returns MastraModelOutput
-        // @ts-expect-error - TODO: fix this
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           ...observabilityContext,
           requestContext,
-          onFinish: result => {
+          onFinish: (result: any) => {
             handleFinish(result);
             void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
           },
@@ -568,11 +565,15 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           resolveText = resolve;
         });
 
+        if (typeof params.streamLegacy !== 'function') {
+          throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+        }
+
         const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           ...observabilityContext,
           requestContext,
-          onFinish: result => {
+          onFinish: (result: any) => {
             handleFinish(result);
             resolveText!(result.text);
             void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
@@ -612,7 +613,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         text: await textPromise,
       } as TStepOutput;
     },
-    component: params.component,
+    component: 'AGENT',
   };
 }
 

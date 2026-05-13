@@ -30,6 +30,16 @@ export * from './serve';
 export * from './types';
 export * from './durable-agent';
 
+type InngestSubAgent<TId extends string = string> = {
+  id: TId;
+  name?: string;
+  getDescription: () => string;
+  getModel: () => Promise<{ specificationVersion: string }> | { specificationVersion: string };
+  generate: (...args: any[]) => Promise<any>;
+  stream: (...args: any[]) => Promise<{ fullStream: ReadableStream<any> }>;
+  streamLegacy?: (...args: any[]) => Promise<{ fullStream: ReadableStream<any> }>;
+};
+
 // ============================================
 // Type Guards
 // ============================================
@@ -38,8 +48,22 @@ function isInngestWorkflow(input: unknown): input is InngestWorkflow<any, any, a
   return input instanceof InngestWorkflow;
 }
 
-function isAgent<TStepId extends string>(input: unknown): input is Agent<TStepId, any> {
-  return input instanceof Agent;
+/**
+ * copied from @mastra/core/agent/subagent.ts for compatible
+ */
+function isAgentCompatible<TId extends string>(input: unknown): input is InngestSubAgent<TId> {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'generate' in input &&
+    typeof input.generate === 'function' &&
+    'stream' in input &&
+    typeof input.stream === 'function' &&
+    'getDescription' in input &&
+    typeof input.getDescription === 'function' &&
+    'getModel' in input &&
+    typeof input.getModel === 'function'
+  );
 }
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
@@ -116,7 +140,7 @@ export function createStep<
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
-  agent: Agent<TStepId, any>,
+  agent: InngestSubAgent<TStepId> | Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
     structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
@@ -135,7 +159,7 @@ export function createStep<
   TResume,
   TSuspend,
 >(
-  agent: Agent<TStepId, any>,
+  agent: InngestSubAgent<TStepId> | Agent<TStepId, any>,
   agentOptions?: AgentStepOptions<TStepOutput> & {
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
@@ -218,7 +242,7 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
     return params;
   }
 
-  if (isAgent(params)) {
+  if (isAgentCompatible(params)) {
     return createStepFromAgent(params, agentOrToolOptions);
   }
 
@@ -288,7 +312,7 @@ function createStepFromParams<
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
-  params: Agent<TStepId, any>,
+  params: InngestSubAgent<TStepId> | Agent<TStepId, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<TStepId, any, any, TStepOutput, unknown, unknown, InngestEngineType> {
   const options = (agentOrToolOptions ?? {}) as
@@ -310,7 +334,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     });
 
   return {
-    id: params.name as TStepId,
+    id: params.id,
     description: params.getDescription(),
     inputSchema: toStandardSchema(
       z.object({
@@ -347,18 +371,21 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       let structuredResult: any = null;
 
       const toolData = {
-        name: params.name,
+        name: params.name ?? params.id,
         args: inputData,
       };
 
       let stream: ReadableStream<any>;
 
       if ((await params.getModel()).specificationVersion === 'v1') {
-        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+        if (typeof params.streamLegacy !== 'function') {
+          throw new Error(`Agent step ${params.id} returned a v1 model but does not implement streamLegacy`);
+        }
+        const modelOutput = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           requestContext,
           tracingContext,
-          onFinish: result => {
+          onFinish: (result: any) => {
             // Capture structured output if available
             const resultWithObject = result as typeof result & { object?: unknown };
             if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
@@ -369,7 +396,10 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           },
           abortSignal,
         });
-        stream = fullStream as any;
+        if ('text' in modelOutput) {
+          void (modelOutput as { text: Promise<string> }).text.then(streamPromise.resolve, streamPromise.reject);
+        }
+        stream = modelOutput.fullStream as any;
       } else {
         const { structuredOutput, ...restAgentOptions } = agentOptions ?? {};
         const baseOptions = {
@@ -389,13 +419,14 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         };
 
         const modelOutput = structuredOutput
-          ? await params.stream<any>((inputData as { prompt: string }).prompt, {
+          ? await params.stream((inputData as { prompt: string }).prompt, {
               ...baseOptions,
               structuredOutput,
             } as any)
-          : await params.stream<any>((inputData as { prompt: string }).prompt, baseOptions as any);
+          : await params.stream((inputData as { prompt: string }).prompt, baseOptions as any);
 
-        stream = modelOutput.fullStream;
+        stream = modelOutput.fullStream as ReadableStream<any>;
+        void (modelOutput as { text: Promise<string> }).text.then(streamPromise.resolve, streamPromise.reject);
       }
 
       if (streamFormat === 'legacy') {
@@ -436,7 +467,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         text: await streamPromise.promise,
       } as TStepOutput;
     },
-    component: params.component,
+    component: 'AGENT',
   };
 }
 
