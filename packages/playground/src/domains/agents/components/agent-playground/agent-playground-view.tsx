@@ -70,8 +70,8 @@ function LeftPanel({
   });
 
   return (
-    <div className="h-full w-full py-2 pl-2">
-      <div className="flex flex-col h-full overflow-hidden bg-surface2 rounded-3xl border border-border2/40">
+    <div className="h-full w-full pb-2 pl-2">
+      <div className="flex flex-col h-full overflow-hidden bg-surface3 rounded-studio-panel border border-border1">
         {versionSelector}
 
         <div className="px-4 pt-3">
@@ -114,7 +114,7 @@ export function AgentPlaygroundView({
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-playground-${agentId}`,
+    id: `agent-playground`,
     storage: localStorage,
   });
 
@@ -160,7 +160,7 @@ export function AgentPlaygroundView({
           collapsible
           className="overflow-hidden"
         >
-          <div className="flex flex-col h-full overflow-hidden bg-surface1">
+          <div className="flex flex-col h-full overflow-hidden">
             <div className="flex-1 min-h-0">
               <AgentPlaygroundTestChat
                 agentId={agentId}

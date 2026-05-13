@@ -8,9 +8,9 @@ export interface WorkflowLayoutProps {
   rightSlot?: React.ReactNode;
 }
 
-export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: WorkflowLayoutProps) => {
+export const WorkflowLayout = ({ children, leftSlot, rightSlot }: WorkflowLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `workflow-layout-${workflowId}`,
+    id: `workflow-layout`,
     storage: localStorage,
   });
 

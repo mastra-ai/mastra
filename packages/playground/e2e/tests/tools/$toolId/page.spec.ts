@@ -16,3 +16,11 @@ test('verifies a tool s behaviour', async ({ page }) => {
 
   await expect(page.locator('[data-language="json"]')).toHaveText('{  "hello": "world",  "thisIsA": "fixture"}');
 });
+
+test('exposes breadcrumb navigation for a standalone tool route', async ({ page }) => {
+  await page.goto('/tools/simpleMcpTool');
+
+  const breadcrumb = page.locator('header nav').first();
+  await expect(breadcrumb.getByRole('link', { name: 'Tools' })).toHaveAttribute('href', '/tools');
+  await expect(breadcrumb.locator('[aria-current="page"]')).toContainText('simpleMcpTool');
+});

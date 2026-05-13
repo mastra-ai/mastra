@@ -3,7 +3,6 @@ import {
   ButtonWithTooltip,
   DateTimeRangePicker,
   NoTracesInfo,
-  PageHeader,
   PageLayout,
   PropertyFilterCreator,
   SpanDataPanelView,
@@ -28,7 +27,7 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
-import { BookIcon, EyeIcon, ListIcon, ListTreeIcon } from 'lucide-react';
+import { ListIcon, ListTreeIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
@@ -267,38 +266,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       >
         {groupByThread ? <ListIcon /> : <ListTreeIcon />}
       </ButtonWithTooltip>
-      <ButtonWithTooltip
-        as="a"
-        href="https://mastra.ai/en/docs/observability/tracing/overview"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Traces documentation"
-        tooltipContent="Go to Traces documentation"
-      >
-        <BookIcon />
-      </ButtonWithTooltip>
     </>
   );
 
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        {isScoped ? (
-          <PageLayout.Column className="flex items-start justify-start gap-2 flex-wrap">
-            {toolbarControls}
-          </PageLayout.Column>
-        ) : (
-          <>
-            <PageLayout.Column>
-              <PageHeader>
-                <PageHeader.Title isLoading={isTracesLoading}>
-                  <EyeIcon /> Traces
-                </PageHeader.Title>
-              </PageHeader>
-            </PageLayout.Column>
-            <PageLayout.Column className="flex justify-end items-center gap-2">{toolbarControls}</PageLayout.Column>
-          </>
-        )}
+        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
+          {toolbarControls}
+        </PageLayout.Column>
       </PageLayout.Row>
 
       <TracesToolbar

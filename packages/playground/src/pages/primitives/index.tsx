@@ -1,5 +1,5 @@
-import { AgentIcon, McpServerIcon, PageHeader, PageLayout, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
-import { FileTextIcon, Cpu, FolderIcon, GlobeIcon, GripIcon } from 'lucide-react';
+import { AgentIcon, McpServerIcon, PageLayout, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { FileTextIcon, Cpu, FolderIcon, GlobeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 const sections = [
@@ -56,14 +56,6 @@ const sections = [
 export default function Primitives() {
   return (
     <PageLayout width="narrow">
-      <PageLayout.TopArea>
-        <PageHeader>
-          <PageHeader.Title>
-            <GripIcon /> Primitives
-          </PageHeader.Title>
-        </PageHeader>
-      </PageLayout.TopArea>
-
       <PageLayout.MainArea>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sections.map(section => (

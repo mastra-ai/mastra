@@ -15,10 +15,9 @@ export function PageLayoutRoot({
   return (
     <main
       className={cn(
-        'w-full h-full grid grid-rows-[auto_auto] px-10 mx-auto pb-6 content-start overflow-y-auto',
+        'w-full h-full grid grid-rows-[auto_auto] p-6 content-start overflow-y-auto',
         {
-          'max-w-[110rem]': width === 'default',
-          'max-w-[55rem]': width === 'narrow',
+          'max-w-[55rem] mx-auto': width === 'narrow',
           'grid-rows-[auto_1fr]': height === 'full',
         },
         className,

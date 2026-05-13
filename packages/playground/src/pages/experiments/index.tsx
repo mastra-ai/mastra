@@ -1,15 +1,13 @@
 import {
-  ButtonWithTooltip,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, FlaskConical } from 'lucide-react';
+import { FlaskConical } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
@@ -90,26 +88,6 @@ export default function Experiments() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <FlaskConical /> Experiments
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/evals/datasets/running-experiments"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Experiments documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
         <ExperimentsToolbar
           search={search}
           onSearchChange={setSearch}

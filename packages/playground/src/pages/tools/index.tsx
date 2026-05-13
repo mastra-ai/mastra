@@ -1,9 +1,7 @@
 import {
-  ButtonWithTooltip,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -11,7 +9,6 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
@@ -61,26 +58,6 @@ export default function Tools() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <ToolsIcon /> Tools
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Tools documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
         </div>

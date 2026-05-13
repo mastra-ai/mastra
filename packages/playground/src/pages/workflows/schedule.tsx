@@ -2,7 +2,6 @@ import {
   Button,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -34,7 +33,7 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
 export default function SchedulePage() {
   const { scheduleId } = useParams<{ scheduleId: string }>();
   const { paths } = useLinkComponent();
-  const { data: schedule, isLoading, error } = useSchedule(scheduleId);
+  const { data: schedule, error } = useSchedule(scheduleId);
   const {
     data: triggers,
     isLoading: triggersLoading,
@@ -74,15 +73,7 @@ export default function SchedulePage() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <CalendarClockIcon />
-                <span className="font-mono">{schedule?.id ?? scheduleId}</span>
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
+        <PageLayout.Row className="justify-end">
           <PageLayout.Column className="flex justify-end gap-2">
             <Button as={Link} to={paths.schedulesLink()} variant="ghost">
               <ArrowLeftIcon />

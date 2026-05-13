@@ -1,5 +1,4 @@
 import {
-  PageHeader,
   PageLayout,
   SectionCard,
   Select,
@@ -7,7 +6,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SettingsIcon,
   SettingsRow,
   useTheme,
 } from '@mastra/playground-ui';
@@ -29,14 +27,6 @@ export const StudioSettingsPage = () => {
 
   return (
     <PageLayout width="narrow">
-      <PageLayout.TopArea>
-        <PageHeader>
-          <PageHeader.Title>
-            <SettingsIcon /> Settings
-          </PageHeader.Title>
-        </PageHeader>
-      </PageLayout.TopArea>
-
       <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
         <SectionCard title="Theme" description="Customize the appearance of the studio.">
           <SettingsRow label="Theme mode" htmlFor="theme">

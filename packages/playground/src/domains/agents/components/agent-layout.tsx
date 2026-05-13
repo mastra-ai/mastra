@@ -9,9 +9,9 @@ export interface AgentLayoutProps {
   browserOverlay?: React.ReactNode;
 }
 
-export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOverlay }: AgentLayoutProps) => {
+export const AgentLayout = ({ children, leftSlot, rightSlot, browserOverlay }: AgentLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-layout-v2-${agentId}`,
+    id: `agent-layout-v2`,
     storage: localStorage,
   });
 
@@ -40,7 +40,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
             <PanelSeparator />
           </>
         )}
-        <Panel id="main-slot" className="grid overflow-y-auto relative bg-surface1">
+        <Panel id="main-slot" className="grid overflow-y-auto relative">
           {children}
         </Panel>
         {rightSlot && (

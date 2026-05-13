@@ -2,7 +2,6 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebar } from './main-sidebar-context';
-import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -30,24 +29,21 @@ export function MainSidebarNavHeader({
 
   if (!isDefaultState) {
     return (
-      <div className={cn('grid items-center min-h-11', className)}>
+      <VisuallyHidden asChild>
         {/* Keep `...props` on the slotted <header> so consumers' `id` reaches the
             DOM — `MainSidebarSections` uses it as the section's `aria-labelledby`. */}
-        <VisuallyHidden asChild>
-          <header {...props}>{children}</header>
-        </VisuallyHidden>
-        <MainSidebarNavSeparator />
-      </div>
+        <header {...props}>{children}</header>
+      </VisuallyHidden>
     );
   }
 
   return (
-    <div className={cn('grid grid-cols-[auto_1fr] items-center gap-2 min-w-0 min-h-11', className)}>
+    <div className={cn('min-w-0 min-h-8 flex items-center mt-2 mb-0.5', className)}>
       <header
         {...props}
-        className={cn('min-w-0 max-w-full truncate text-ui-xs uppercase tracking-widest pl-3', {
-          'text-black dark:text-white font-semibold': isActive,
-          'text-neutral3/75': !isActive,
+        className={cn('min-w-0 max-w-full truncate text-ui-sm font-medium pl-3', {
+          'text-neutral5': isActive,
+          'text-neutral3/70': !isActive,
         })}
       >
         {href ? (
@@ -55,7 +51,7 @@ export function MainSidebarNavHeader({
             href={href}
             className={cn('block min-w-0 truncate transition-colors duration-normal', {
               'hover:text-neutral5': !isActive,
-              'text-black dark:text-white': isActive,
+              'text-neutral5': isActive,
             })}
           >
             {children}
@@ -64,7 +60,6 @@ export function MainSidebarNavHeader({
           children
         )}
       </header>
-      <MainSidebarNavSeparator />
     </div>
   );
 }

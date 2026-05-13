@@ -1,7 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { MainContentLayout } from '@mastra/playground-ui';
 import { useParams, useLocation } from 'react-router';
-import { AgentHeader } from './agent-header';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
@@ -45,8 +44,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
     (showPlayground || showObservability);
 
   const content = (
-    <MainContentLayout className="grid-rows-[auto_auto_1fr]">
-      <AgentHeader agentId={agentId!} />
+    <MainContentLayout>
       <AgentPageTabs
         agentId={agentId!}
         activeTab={activeTab}

@@ -2,7 +2,6 @@ import {
   ButtonWithTooltip,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -15,7 +14,7 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
-import { BookIcon, Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
+import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
@@ -365,39 +364,19 @@ export default function Workspace() {
 
   return (
     <PageLayout>
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title>
-                <Folder /> Workspace
-              </PageHeader.Title>
-              <PageHeader.Description>Manage files, skills, and search your workspace</PageHeader.Description>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            {hasSearchCapability && (
-              <ButtonWithTooltip
-                onClick={() => setShowSearch(!showSearch)}
-                tooltipContent="Search workspace"
-                aria-label="Search workspace"
-              >
-                <Search />
-              </ButtonWithTooltip>
-            )}
+      {hasSearchCapability && (
+        <PageLayout.TopArea>
+          <PageLayout.Row className="justify-end">
             <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/workspace/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Workspaces documentation"
-              aria-label="Workspaces documentation"
+              onClick={() => setShowSearch(!showSearch)}
+              tooltipContent="Search workspace"
+              aria-label="Search workspace"
             >
-              <BookIcon />
+              <Search />
             </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
+          </PageLayout.Row>
+        </PageLayout.TopArea>
+      )}
 
       <PageLayout.MainArea className="grid content-start gap-6">
         {/* Workspace Selector - shown when multiple workspaces exist */}

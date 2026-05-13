@@ -8,6 +8,7 @@ const config = await createConfig();
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
+  { ignores: ['storybook-static/**'] },
   ...config,
   {
     plugins: {

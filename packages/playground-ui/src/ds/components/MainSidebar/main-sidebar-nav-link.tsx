@@ -16,6 +16,7 @@ export type NavLink = {
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
   isExperimental?: boolean;
+  /** @deprecated Sidebar nav items now render flush; this option is accepted but ignored. */
   indent?: boolean;
 };
 
@@ -23,7 +24,6 @@ type ItemStyleOptions = {
   isActive?: boolean;
   isCollapsed?: boolean;
   isFeatured?: boolean;
-  indent?: boolean;
 };
 
 /**
@@ -32,24 +32,23 @@ type ItemStyleOptions = {
  * elements (e.g. router Links) all receive the same styling without relying
  * on `[&>a]:` child selectors.
  */
-export const navItemClasses = ({ isActive, isCollapsed, isFeatured, indent }: ItemStyleOptions = {}) =>
+export const navItemClasses = ({ isActive, isCollapsed, isFeatured }: ItemStyleOptions = {}) =>
   cn(
     'flex items-center text-ui-md text-neutral3 rounded-lg h-9 min-w-0 whitespace-nowrap',
     'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
-    '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0 [&_svg]:text-neutral3/60 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
-    'hover:bg-surface3 hover:text-neutral5 [&:hover_svg]:text-neutral3',
+    '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0 [&_svg]:text-neutral3/70 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
+    'hover:bg-sidebar-nav-hover hover:text-neutral6 [&:hover_svg]:text-neutral5',
     'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
     !isCollapsed && 'w-full gap-2.5 py-1 px-3 justify-start',
     isCollapsed && 'w-9 mx-auto p-0 justify-center',
-    isActive && 'text-neutral5 bg-surface4 [&_svg]:text-neutral5',
-    isCollapsed && '[&_svg]:text-neutral3',
-    isFeatured &&
-      'rounded-md my-2 bg-accent1Dark hover:bg-accent1Darker text-accent1 hover:text-accent1 border border-accent1/30',
+    isActive &&
+      'text-neutral6 bg-sidebar-nav-active hover:bg-sidebar-nav-active hover:text-neutral6 [&_svg]:text-neutral6 [&:hover_svg]:text-neutral6',
+    isCollapsed && !isActive && '[&_svg]:text-neutral3',
+    isFeatured && 'my-2 bg-accent1Dark hover:bg-accent1Darker text-accent1 hover:text-accent1 border border-accent1/30',
     isFeatured &&
       'dark:bg-accent1 dark:hover:bg-accent1/90 dark:text-black dark:hover:text-black dark:border-transparent',
     isFeatured &&
       '[&_svg]:text-accent1 [&:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&:hover_svg]:text-black',
-    indent && !isCollapsed && 'pl-7 text-ui-sm',
   );
 
 export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'children'> & {
@@ -91,7 +90,6 @@ export function MainSidebarNavLink({
     isActive,
     isCollapsed,
     isFeatured,
-    indent: link?.indent,
   });
 
   let interactiveEl: React.ReactNode = null;
@@ -120,18 +118,7 @@ export function MainSidebarNavLink({
   }
 
   return (
-    <li
-      {...props}
-      className={cn(
-        'flex relative min-w-0',
-        // Active indicator bar (expanded only) — sits on the <li> so it works
-        // regardless of which interactive element is slotted in.
-        isActive &&
-          !isCollapsed &&
-          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-5 before:bg-accent1 before:rounded-r-full before:transition-all before:duration-normal motion-reduce:before:transition-none',
-        className,
-      )}
-    >
+    <li {...props} className={cn('flex relative min-w-0', className)}>
       {link && needsTooltip && interactiveEl ? (
         <Tooltip>
           <TooltipTrigger asChild>{interactiveEl}</TooltipTrigger>

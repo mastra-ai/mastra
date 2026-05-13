@@ -10,10 +10,10 @@ export interface ThreadListProps {
 
 export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads' }: ThreadListProps) => {
   return (
-    <div className="h-full w-full py-2 pl-2">
+    <div className="h-full w-full pb-2 pl-2">
       <nav
         aria-label={ariaLabel}
-        className="bg-surface2 rounded-3xl border border-border2/40 h-full overflow-y-auto p-1"
+        className="bg-surface3 rounded-studio-panel border border-border1/50 h-full overflow-y-auto p-1"
       >
         {children}
       </nav>
@@ -30,7 +30,7 @@ export interface ThreadListNewItemProps {
 
 export const ThreadListNewItem = ({ as, href, to, children }: ThreadListNewItemProps) => {
   return (
-    <Button as={as} href={href} to={to} variant="ghost" className="w-full justify-start">
+    <Button as={as} href={href} to={to} variant="ghost" className="w-full justify-start rounded-xl">
       {children}
     </Button>
   );
@@ -76,7 +76,7 @@ export const ThreadListItem = ({
         href={href}
         to={to}
         variant="ghost"
-        className={cn('w-full justify-start', isActive && 'bg-surface4 text-neutral6')}
+        className={cn('w-full justify-start rounded-xl', isActive && 'bg-surface4 text-neutral6')}
       >
         {children}
       </Button>

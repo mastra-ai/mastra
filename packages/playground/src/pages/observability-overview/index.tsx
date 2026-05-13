@@ -1,4 +1,4 @@
-import { EntityListPageLayout, MainHeader } from '@mastra/playground-ui';
+import { EntityListPageLayout } from '@mastra/playground-ui';
 import { BarChart3Icon, EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -20,17 +20,7 @@ const sections = [
 export default function ObservabilityOverview() {
   return (
     <EntityListPageLayout>
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title>
-              <EyeIcon /> Observability
-            </MainHeader.Title>
-          </MainHeader.Column>
-        </MainHeader>
-      </EntityListPageLayout.Top>
-
-      <div className="px-6 pt-6 overflow-y-auto">
+      <div className="px-6 overflow-y-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
           {sections.map(section => (
             <Link
