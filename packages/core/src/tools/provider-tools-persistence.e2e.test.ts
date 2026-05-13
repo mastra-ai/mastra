@@ -11,9 +11,6 @@ setupDummyApiKeys(getLLMTestMode(), ['anthropic']);
 
 // Anthropic only defers provider tool execution non-deterministically, so this
 // test must always run against the recorded response.
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
-
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());

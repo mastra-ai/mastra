@@ -799,7 +799,7 @@ describe('SemanticRecall', () => {
           parts: [{ type: 'text', text: 'Previous question' }],
         },
         threadId: 'other-thread-1',
-        createdAt: new Date('2024-01-15T10:30:00.000Z'),
+        createdAt: new Date('2024-01-15T10:30:45.000Z'),
       };
 
       const crossThreadMessage2: MastraDBMessage = {
@@ -811,7 +811,43 @@ describe('SemanticRecall', () => {
           parts: [{ type: 'text', text: 'Previous answer' }],
         },
         threadId: 'other-thread-1',
-        createdAt: new Date('2024-01-15T10:31:00.000Z'),
+        createdAt: new Date('2024-01-15T10:30:44.500Z'),
+      };
+
+      const crossThreadMessage3: MastraDBMessage = {
+        id: 'msg-other-3',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Previous follow-up',
+          parts: [{ type: 'text', text: 'Previous follow-up' }],
+        },
+        threadId: 'other-thread-1',
+        createdAt: new Date('2024-01-15T10:30:50.000Z'),
+      };
+
+      const crossThreadMessage4: MastraDBMessage = {
+        id: 'msg-other-4',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'Previous follow-up answer',
+          parts: [{ type: 'text', text: 'Previous follow-up answer' }],
+        },
+        threadId: 'other-thread-1',
+        createdAt: new Date('2024-01-15T10:30:55.000Z'),
+      };
+
+      const crossThreadMessage5: MastraDBMessage = {
+        id: 'msg-other-5',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Interleaved thread message',
+          parts: [{ type: 'text', text: 'Interleaved thread message' }],
+        },
+        threadId: 'other-thread-2',
+        createdAt: new Date('2024-01-15T10:30:44.750Z'),
       };
 
       const sameThreadMessage: MastraDBMessage = {
@@ -832,14 +868,24 @@ describe('SemanticRecall', () => {
 
       vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra-memory']);
       vi.mocked(mockVector.query).mockResolvedValue([
-        { id: 'msg-other-1', score: 0.9, metadata: { message_id: 'msg-other-1', thread_id: 'other-thread-1' } },
-        { id: 'msg-other-2', score: 0.85, metadata: { message_id: 'msg-other-2', thread_id: 'other-thread-1' } },
+        { id: 'msg-other-2', score: 0.9, metadata: { message_id: 'msg-other-2', thread_id: 'other-thread-1' } },
+        { id: 'msg-other-1', score: 0.85, metadata: { message_id: 'msg-other-1', thread_id: 'other-thread-1' } },
+        { id: 'msg-other-5', score: 0.84, metadata: { message_id: 'msg-other-5', thread_id: 'other-thread-2' } },
+        { id: 'msg-other-4', score: 0.83, metadata: { message_id: 'msg-other-4', thread_id: 'other-thread-1' } },
+        { id: 'msg-other-3', score: 0.82, metadata: { message_id: 'msg-other-3', thread_id: 'other-thread-1' } },
         { id: 'msg-same', score: 0.8, metadata: { message_id: 'msg-same', thread_id: 'thread-1' } },
       ]);
 
       vi.mocked(mockStorage.listMessages).mockResolvedValue({
-        messages: [crossThreadMessage1, crossThreadMessage2, sameThreadMessage],
-        total: 3,
+        messages: [
+          crossThreadMessage2,
+          crossThreadMessage5,
+          crossThreadMessage1,
+          crossThreadMessage4,
+          crossThreadMessage3,
+          sameThreadMessage,
+        ],
+        total: 6,
         page: 1,
         perPage: false,
         hasMore: false,
@@ -866,6 +912,15 @@ describe('SemanticRecall', () => {
       expect(promptMessages[0]!.content).toContain('Previous answer');
       expect(promptMessages[0]!.content).toContain('User:');
       expect(promptMessages[0]!.content).toContain('Assistant:');
+      expect(promptMessages[0]!.content.indexOf('User: Previous question')).toBeLessThan(
+        promptMessages[0]!.content.indexOf('Assistant: Previous answer'),
+      );
+      expect(promptMessages[0]!.content.indexOf('Assistant: Previous answer')).toBeLessThan(
+        promptMessages[0]!.content.indexOf('User: Previous follow-up'),
+      );
+      expect(promptMessages[0]!.content.indexOf('User: Previous follow-up')).toBeLessThan(
+        promptMessages[0]!.content.indexOf('Assistant: Previous follow-up answer'),
+      );
 
       // Second message should be the same-thread message
       expect(promptMessages[1]!.role).toBe(sameThreadMessage.role);

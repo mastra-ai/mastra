@@ -255,7 +255,64 @@ export class SemanticRecall implements Processor {
     const v1Messages = new MessageList().add(messages, 'memory').get.all.v1();
     let lastYmd: string | null = null;
 
-    for (const msg of v1Messages) {
+    const minuteBucket = (date: Date) =>
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes());
+    const isSameThreadNearAssistantUserSkew = (
+      a: (typeof v1Messages)[number],
+      b: (typeof v1Messages)[number],
+      timeDiff: number,
+    ) =>
+      a.threadId === b.threadId &&
+      a.threadId !== currentThreadId &&
+      a.role === 'assistant' &&
+      b.role === 'user' &&
+      minuteBucket(a.createdAt) === minuteBucket(b.createdAt) &&
+      timeDiff >= 0 &&
+      timeDiff <= 1000;
+
+    const sortedMessages = v1Messages
+      .map((message, index) => ({ message, index }))
+      .sort((a, b) => {
+        const timeDiff = a.message.createdAt.getTime() - b.message.createdAt.getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.index - b.index;
+      })
+      .map(({ message }) => message);
+
+    const repairedThreads = new Set<string>();
+    for (let index = 0; index < sortedMessages.length - 1; index++) {
+      const current = sortedMessages[index]!;
+      const threadId = current.threadId;
+
+      if (!threadId || repairedThreads.has(threadId) || current.role !== 'assistant') {
+        continue;
+      }
+
+      const hasEarlierThreadMessage = sortedMessages.slice(0, index).some(message => message.threadId === threadId);
+      if (hasEarlierThreadMessage) {
+        repairedThreads.add(threadId);
+        continue;
+      }
+
+      for (let nextIndex = index + 1; nextIndex < sortedMessages.length; nextIndex++) {
+        const next = sortedMessages[nextIndex]!;
+        const timeDiff = next.createdAt.getTime() - current.createdAt.getTime();
+        if (timeDiff > 1000 || minuteBucket(next.createdAt) !== minuteBucket(current.createdAt)) {
+          break;
+        }
+        if (next.threadId !== threadId) {
+          continue;
+        }
+        if (isSameThreadNearAssistantUserSkew(current, next, timeDiff)) {
+          sortedMessages[index] = next;
+          sortedMessages[nextIndex] = current;
+          repairedThreads.add(threadId);
+        }
+        break;
+      }
+    }
+
+    for (const msg of sortedMessages) {
       const date = msg.createdAt;
       const year = date.getUTCFullYear();
       const month = date.toLocaleString('default', { month: 'short' });

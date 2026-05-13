@@ -365,7 +365,7 @@ export interface WorkflowRunState {
   // Core state info
   runId: string;
   status: WorkflowRunStatus;
-  result?: Record<string, any>;
+  result?: any;
   error?: SerializedError;
   requestContext?: Record<string, any>;
   value: Record<string, string>;

@@ -34,8 +34,15 @@ export function effectiveToolSetRequiresSequentialExecution({
         });
 
   return activeToolEntries.some(([, tool]) => {
-    const maybeTool = tool as { hasSuspendSchema?: unknown; requireApproval?: unknown; needsApprovalFn?: unknown };
-    return Boolean(maybeTool.hasSuspendSchema || maybeTool.requireApproval || maybeTool.needsApprovalFn);
+    const maybeTool = tool as {
+      hasSuspendSchema?: unknown;
+      requireApproval?: unknown;
+      needsApproval?: unknown;
+      needsApprovalFn?: unknown;
+    };
+    return Boolean(
+      maybeTool.hasSuspendSchema || maybeTool.requireApproval || maybeTool.needsApproval || maybeTool.needsApprovalFn,
+    );
   });
 }
 

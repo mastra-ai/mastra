@@ -25,6 +25,10 @@ export async function resolveToolRequiresApproval({
   logger?: { error: (...args: any[]) => void };
   toolName?: string;
 }): Promise<boolean> {
+  if (!tool) {
+    return Boolean(requireToolApproval);
+  }
+
   const toolRequireApproval = (tool as any).requireApproval;
   const aiSdkNeedsApproval = (tool as any).needsApproval;
   const staticRequiresApproval = Boolean(

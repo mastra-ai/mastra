@@ -4269,7 +4269,7 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(dynamicToolExecute).not.toHaveBeenCalled();
     });
 
-    it('should honor direct declined dynamic network resumes even if approval later returns false', async () => {
+    it('should honor explicit declined dynamic network resumes even if approval later returns false', async () => {
       const dynamicToolExecute = vi.fn().mockResolvedValue({ result: 'should not run' });
       const needsApprovalFn = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
       const dynamicApprovalTool = createTool({
@@ -4318,21 +4318,29 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-approval');
 
       let rejectionFound = false;
-      const resumeStream = await registeredAgent.resumeNetwork(
-        { approved: false },
-        {
+      const recallSpy = vi.spyOn(memory, 'recall').mockResolvedValue({
+        messages: [],
+        total: 0,
+        page: 0,
+        perPage: false,
+        hasMore: false,
+      });
+      try {
+        const resumeStream = await registeredAgent.declineNetworkToolCall({
           runId: anStream.runId,
           memory: {
             thread: 'test-thread-decline-dynamic-direct-resume',
             resource: 'test-resource-decline-dynamic-direct-resume',
           },
-        },
-      );
+        });
 
-      for await (const chunk of resumeStream) {
-        if (chunk.type === 'tool-execution-end') {
-          rejectionFound = chunk.payload?.result === 'Tool call was not approved by the user';
+        for await (const chunk of resumeStream) {
+          if (chunk.type === 'tool-execution-end') {
+            rejectionFound = chunk.payload?.result === 'Tool call was not approved by the user';
+          }
         }
+      } finally {
+        recallSpy.mockRestore();
       }
 
       expect(rejectionFound).toBe(true);
@@ -4499,19 +4507,21 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(toolResult?.result).toContain('my additional info');
     });
 
-    it('should pass approved-shaped resume data to suspended direct network tools', async () => {
+    it('should pass approved-shaped resume data to suspended dynamic-approval-capable direct network tools', async () => {
       const approvedShapeToolExecute = vi.fn().mockImplementation(async (_input, context) => {
         if (!context?.agent?.resumeData) {
           return await context?.agent?.suspend({ message: 'Please approve or decline' });
         }
         return { result: `Approved value: ${context.agent.resumeData.approved}` };
       });
+      const needsApprovalFn = vi.fn().mockReturnValue(false);
       const approvedShapeSuspendingTool = createTool({
         id: 'approvedShapeSuspendingTool',
         description: 'A tool that resumes with an approved-shaped payload.',
         inputSchema: z.object({ initialQuery: z.string() }),
         suspendSchema: z.object({ message: z.string() }),
         resumeSchema: z.object({ approved: z.boolean() }),
+        requireApproval: needsApprovalFn,
         execute: approvedShapeToolExecute,
       });
 
@@ -4584,6 +4594,7 @@ describe('Agent - network - tool approval and suspension', () => {
 
       expect(toolResult?.result).toBe('Approved value: false');
       expect(approvedShapeToolExecute).toHaveBeenCalledTimes(2);
+      expect(needsApprovalFn).toHaveBeenCalledTimes(2);
     });
 
     it('should resume suspended nested agent tool', async () => {

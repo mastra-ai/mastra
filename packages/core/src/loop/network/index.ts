@@ -1665,6 +1665,9 @@ export async function createNetworkLoop({
       const isMalformedStoredApprovalResumeData = Boolean(resumeData) && isKnownApprovalResume && !isApprovalResumeData;
       const isExplicitApprovalResume =
         hasApprovalResumeShape && requestContext.get('__mastra_networkToolApprovalResume') === true;
+      if (isExplicitApprovalResume) {
+        requestContext.delete('__mastra_networkToolApprovalResume');
+      }
 
       await writer?.write({
         type: 'tool-execution-start',

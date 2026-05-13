@@ -367,7 +367,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const getStoredResumeMetadata = (toolName: string) => {
-          const messages = [...messageList.get.all.db()].reverse();
+          const messages = [...messageList.get.all.db()].reverse().filter(message => message.role === 'assistant');
           for (const message of messages) {
             const metadata =
               typeof message.content.metadata === 'object' && message.content.metadata !== null
@@ -435,6 +435,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           };
         }
 
+        if (isApprovalResumeData) {
+          await removeToolMetadata(inputData.toolName, 'approval');
+        }
+
         const toolRequiresApproval = await resolveToolRequiresApproval({
           tool,
           args,
@@ -500,17 +504,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 resumeLabel: inputData.toolCallId,
               },
             );
-          } else if (isApprovalResumeData) {
-            // Remove approval metadata since we're resuming (either approved or declined)
-            await removeToolMetadata(inputData.toolName, 'approval');
-
-            if (resumeData.approved === false) {
-              return {
-                ...inputData,
-                result: 'Tool call was not approved by the user',
-              };
-            }
-          } else if (!isKnownSuspensionResume && !isDelegatedApprovalResume) {
+          } else if (!isApprovalResumeData && !isKnownSuspensionResume && !isDelegatedApprovalResume) {
             await removeToolMetadata(inputData.toolName, 'approval');
 
             if (!hasApprovalResumeShape || resumeData.approved === false) {
@@ -522,13 +516,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        //this is to avoid passing resume data to the tool if it's not needed
-        // For agent tools, always pass resume data so the agent tool wrapper knows to call
-        // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
+        // Avoid passing approval sentinels to tools. Delegated agent/workflow
+        // resumes still receive their resume data so wrappers call resumeStream
+        // instead of starting the sub-run from scratch.
         const shouldTreatResumeDataAsApproval =
           hasApprovalResumeShape && !isKnownSuspensionResume && !isDelegatedApprovalResume;
         const shouldStripApprovalResumeData =
-          toolRequiresApproval &&
+          (toolRequiresApproval || isKnownApprovalResume) &&
           shouldTreatResumeDataAsApproval &&
           Object.keys(resumeData).length === 1 &&
           'approved' in resumeData;

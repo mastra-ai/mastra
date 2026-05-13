@@ -15,11 +15,19 @@ import type {
   DurableAgenticWorkflowInput,
 } from '../types';
 
+type SerializableApprovalTool = CoreTool & {
+  requireApproval?: boolean;
+  needsApproval?: boolean | ((args: any, ctx?: any) => boolean | Promise<boolean>);
+  needsApprovalFn?: (args: any, ctx?: any) => boolean | Promise<boolean>;
+  hasSuspendSchema?: boolean;
+};
+
 /**
  * Extract serializable metadata from a CoreTool
  * This strips out the execute function and converts the schema to JSON Schema
  */
 export function serializeToolMetadata(name: string, tool: CoreTool): SerializableToolMetadata {
+  const approvalTool = tool as SerializableApprovalTool;
   // Extract JSON Schema from the parameters
   let inputSchema: JSONSchema7 = { type: 'object' };
 
@@ -45,8 +53,10 @@ export function serializeToolMetadata(name: string, tool: CoreTool): Serializabl
     name,
     description: tool.description,
     inputSchema,
-    requireApproval: Boolean((tool as any).requireApproval || (tool as any).needsApprovalFn),
-    hasSuspendSchema: (tool as any).hasSuspendSchema,
+    requireApproval: Boolean(
+      approvalTool.requireApproval || approvalTool.needsApproval || approvalTool.needsApprovalFn,
+    ),
+    hasSuspendSchema: approvalTool.hasSuspendSchema,
   };
 }
 

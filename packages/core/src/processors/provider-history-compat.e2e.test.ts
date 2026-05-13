@@ -33,8 +33,6 @@ const reasoningModel = openrouter('minimax/minimax-m2.5', {
   reasoning: { effort: 'low', exclude: false },
 });
 const anthropicModel = anthropic('claude-haiku-4-5-20251001');
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
 
 const mock = createGatewayMock({
   name: 'core-src-processors-provider-history-compat-native-anthropic-foreign-reasoning.e2e',
