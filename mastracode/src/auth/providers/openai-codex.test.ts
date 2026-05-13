@@ -442,16 +442,12 @@ describe('openaiCodexOAuthProvider auth modes', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ device_auth_id: 'device-123', user_code: 'ABCD-EFGH', interval: '1' }),
-          { status: 200 },
-        ),
+        new Response(JSON.stringify({ device_auth_id: 'device-123', user_code: 'ABCD-EFGH', interval: '1' }), {
+          status: 200,
+        }),
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ authorization_code: 'auth-code', code_verifier: 'verifier' }),
-          { status: 200 },
-        ),
+        new Response(JSON.stringify({ authorization_code: 'auth-code', code_verifier: 'verifier' }), { status: 200 }),
       )
       .mockResolvedValueOnce(
         new Response(

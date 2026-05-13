@@ -539,7 +539,9 @@ export async function loginOpenAICodex(options: {
   mode?: 'browser' | 'device';
 }): Promise<OAuthCredentials> {
   const envMode =
-    typeof process !== 'undefined' && process.env?.MASTRACODE_OPENAI_CODEX_AUTH_MODE === 'device' ? 'device' : undefined;
+    typeof process !== 'undefined' && process.env?.MASTRACODE_OPENAI_CODEX_AUTH_MODE === 'device'
+      ? 'device'
+      : undefined;
   const mode = options.mode ?? envMode ?? 'browser';
   if (mode === 'device') {
     return loginOpenAICodexDevice({
