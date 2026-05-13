@@ -462,7 +462,7 @@ Added when a filesystem is configured:
 
 | Tool | Description |
 | - | - |
-| `mastra_workspace_read_file` | Read file contents. Supports optional line range for reading specific portions of large files. |
+| `mastra_workspace_read_file` | Read file contents. Text files return as text (with optional line range). Images and PDFs return as native media parts the model can view directly. Other binaries return metadata only unless an explicit `encoding` is passed. |
 | `mastra_workspace_write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
 | `mastra_workspace_edit_file` | Edit an existing file by finding and replacing text. Useful for targeted changes without rewriting the entire file. |
 | `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits, glob patterns, and `.gitignore` filtering (enabled by default). |
@@ -472,6 +472,33 @@ Added when a filesystem is configured:
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
 With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
+
+The `read_file` tool accepts a `mediaTypes` option to control which mime types are surfaced to the model as native media parts:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mediaTypes',
+    type: 'string[] | ((mimeType: string) => boolean) | false',
+    description:
+      "Which mime types to surface to the model as media parts (file/image parts) rather than as text. Accepts an array of globs (e.g. `['image/*']`), a custom predicate function, or `false` to disable media detection. Only applies when the caller doesn't pass an explicit `encoding`.",
+    isOptional: true,
+    defaultValue: "['image/*', 'application/pdf']",
+  },
+]}
+/>
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+      // Only inline images; PDFs fall back to metadata-only
+      mediaTypes: ['image/*'],
+    },
+  },
+})
+```
 
 ### Sandbox tools
 
