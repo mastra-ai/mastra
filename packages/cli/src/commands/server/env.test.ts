@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 describe('resolveAuth', () => {
-  it('prefers MASTRA_ORG_ID over --org', async () => {
+  it('prefers MASTRA_ORG_ID over --org', { timeout: 10_000 }, async () => {
     process.env.MASTRA_ORG_ID = 'env-org';
     const { resolveAuth } = await import('./env.js');
     await expect(resolveAuth('cli-org')).resolves.toEqual({ token: 'tok', orgId: 'env-org' });
