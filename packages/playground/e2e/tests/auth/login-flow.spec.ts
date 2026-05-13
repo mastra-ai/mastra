@@ -14,6 +14,7 @@
 import { test, expect } from '@playwright/test';
 import { setupMockAuth, setupUnauthenticated, setupAdminAuth, clearMockAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Login Flow', () => {
   test.afterEach(async () => {
@@ -112,7 +113,7 @@ test.describe('Login Flow', () => {
       await page.reload();
 
       // Should now see the agents page content and restored sidebar navigation
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
       await expect(page.getByRole('link', { name: 'Agents', exact: true })).toBeVisible();
       await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
     });
@@ -212,13 +213,13 @@ test.describe('Login Flow', () => {
       await page.goto('/agents');
 
       // Verify we see authenticated content
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Reload the page (auth state will still be mocked)
       await page.reload();
 
       // Should still see authenticated content
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('authenticated state persists across navigation', async ({ page }) => {
@@ -226,15 +227,15 @@ test.describe('Login Flow', () => {
 
       // Navigate to agents
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Navigate to workflows
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Navigate back to agents
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('unauthenticated state shows login prompt consistently', async ({ page }) => {
@@ -258,7 +259,7 @@ test.describe('Login Flow', () => {
       await page.goto('/agents');
 
       // Wait for the page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see application UI elements (sidebar navigation)
       await expect(page.getByRole('link', { name: /Workflows/i })).toBeVisible();
@@ -269,15 +270,15 @@ test.describe('Login Flow', () => {
 
       // Access agents page
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Access workflows page
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Access tools page
       await page.goto('/tools');
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
     });
 
     test('authenticated user does not see login prompt', async ({ page }) => {
@@ -288,7 +289,7 @@ test.describe('Login Flow', () => {
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).not.toBeVisible();
 
       // Should see the agents content
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('unauthenticated user sees login prompt instead of content', async ({ page }) => {

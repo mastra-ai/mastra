@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { expectBreadcrumbLink, expectRouteDocsLink } from '../../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -10,8 +11,7 @@ test('has breadcrumb navigation', async ({ page }) => {
 
   await expect(page).toHaveTitle(/Mastra Studio/);
 
-  const breadcrumb = page.locator('nav a:has-text("Processors")').first();
-  await expect(breadcrumb).toHaveAttribute('href', '/processors');
+  await expectBreadcrumbLink(page, 'Processors', '/processors');
 });
 
 test('has processor combobox for navigation', async ({ page }) => {
@@ -25,8 +25,5 @@ test('has processor combobox for navigation', async ({ page }) => {
 test('has documentation link', async ({ page }) => {
   await page.goto('/processors/logging-processor');
 
-  await expect(page.locator('text=Processors documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/docs/agents/processors',
-  );
+  await expectRouteDocsLink(page, 'Processors documentation', 'https://mastra.ai/en/docs/agents/processors');
 });

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb, expectRouteDocsLink } from '../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -9,11 +10,8 @@ test('has overall information', async ({ page }) => {
   await page.goto('/observability');
 
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('h1').first()).toHaveText('Traces');
-  await expect(page.getByRole('link', { name: 'Traces documentation' })).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/observability/tracing/overview',
-  );
+  await expectCurrentBreadcrumb(page, 'Traces');
+  await expectRouteDocsLink(page, 'Traces documentation', 'https://mastra.ai/en/docs/observability/tracing/overview');
 });
 
 test('has filter dropdown', async ({ page }) => {

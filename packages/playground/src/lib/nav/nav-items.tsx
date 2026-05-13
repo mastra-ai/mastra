@@ -66,6 +66,7 @@ export const mainNav: NavSection[] = [
         name: 'Workflows',
         url: '/workflows',
         Icon: WorkflowIcon,
+        docs: { href: 'https://mastra.ai/en/docs/workflows/overview', label: 'Workflows documentation' },
         isOnMastraPlatform: true,
         requiredPermission: 'workflows:read',
       },

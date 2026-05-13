@@ -23,9 +23,9 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
     await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
 
     // Locate nav links by role — these span from top (Agents) to bottom (Settings)
-    const sidebar = page.locator('nav[aria-label="Main"]');
-    const agentsLink = sidebar.getByRole('link', { name: 'Agents' });
-    const settingsLink = sidebar.getByRole('link', { name: 'Settings' });
+    const sidebar = page.locator('[data-sidebar-state="default"]');
+    const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
+    const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
 
     // All nav links should exist in DOM
     await expect(agentsLink).toBeAttached();
@@ -47,8 +47,8 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
     await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
 
     // ACT: Scroll to and click Settings link
-    const sidebar = page.locator('nav[aria-label="Main"]');
-    const settingsLink = sidebar.getByRole('link', { name: 'Settings' });
+    const sidebar = page.locator('[data-sidebar-state="default"]');
+    const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
     await settingsLink.scrollIntoViewIfNeeded();
     await settingsLink.click();
 
@@ -63,8 +63,8 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
     await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
 
     // ACT: Scroll to Agents link (top of nav) and click
-    const sidebar = page.locator('nav[aria-label="Main"]');
-    const agentsLink = sidebar.getByRole('link', { name: 'Agents' });
+    const sidebar = page.locator('[data-sidebar-state="default"]');
+    const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
     await agentsLink.scrollIntoViewIfNeeded();
     await agentsLink.click();
 
