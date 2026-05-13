@@ -172,6 +172,13 @@ describe('transformAgent tool input streaming (issue #16422)', () => {
       bufferedSteps,
     );
     transformAgent(
+      makePayload('tool-call-delta', runId, {
+        toolCallId: 'call-1',
+        argsTextDelta: '{"name":"kept"}',
+      }),
+      bufferedSteps,
+    );
+    transformAgent(
       makePayload('tool-call-input-streaming-start', runId, {
         toolCallId: 'call-1',
         toolName: 'updatedName',
@@ -194,7 +201,7 @@ describe('transformAgent tool input streaming (issue #16422)', () => {
           {
             toolCallId: 'call-1',
             toolName: 'updatedName',
-            argsText: '',
+            argsText: '{"name":"kept"}',
             state: 'input-streaming',
           },
           {

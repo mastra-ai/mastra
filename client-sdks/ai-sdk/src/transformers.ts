@@ -633,11 +633,14 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       break;
     case 'tool-call-input-streaming-start': {
       const toolInputStartRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      const existing = toolInputStartRun.pendingToolCalls?.find(
+        (call: PendingAgentToolCall) => call.toolCallId === payload.payload.toolCallId,
+      );
       bufferedSteps.set(payload.runId!, {
         ...toolInputStartRun,
         pendingToolCalls: upsertPendingToolCall(toolInputStartRun.pendingToolCalls, payload.payload.toolCallId, {
           toolName: payload.payload.toolName,
-          argsText: '',
+          argsText: existing?.argsText ?? '',
           state: 'input-streaming',
           providerExecuted: payload.payload.providerExecuted,
           providerMetadata: payload.payload.providerMetadata,
