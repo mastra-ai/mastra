@@ -3,7 +3,6 @@
  * Created once at startup, provides tools from connected MCP servers.
  */
 
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
@@ -104,8 +103,16 @@ function getOAuthStoragePath(projectDir: string, name: string, cfg: McpHttpServe
     clientId: cfg.oauth?.clientId,
     scopes: cfg.oauth?.scopes ?? [],
   });
-  const hash = createHash('sha256').update(key).digest('hex').slice(0, 32);
-  return join(getAppDataDir(), 'mcp-oauth', `${hash}.json`);
+  return join(getAppDataDir(), 'mcp-oauth', `${getStorageKeyFingerprint(key)}.json`);
+}
+
+function getStorageKeyFingerprint(value: string): string {
+  let fingerprint = 0xcbf29ce484222325n;
+  for (let i = 0; i < value.length; i += 1) {
+    fingerprint ^= BigInt(value.charCodeAt(i));
+    fingerprint = BigInt.asUintN(64, fingerprint * 0x100000001b3n);
+  }
+  return fingerprint.toString(16).padStart(16, '0');
 }
 
 /**

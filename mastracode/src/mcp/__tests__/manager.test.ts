@@ -212,8 +212,8 @@ describe('createMcpManager', () => {
 
       const firstStoragePath = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage?.filePath;
       const secondStoragePath = MockedMCPOAuthClientProvider.mock.calls[1]?.[0]?.storage?.filePath;
-      expect(firstStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{32}\.json$/));
-      expect(secondStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{32}\.json$/));
+      expect(firstStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+      expect(secondStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
       expect(firstStoragePath).not.toBe(secondStoragePath);
     });
 
