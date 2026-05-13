@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
+import type { CommandResult } from '../../sandbox';
 import { Workspace } from '../../workspace';
 import { executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
 import { getProcessOutputTool } from '../get-process-output';
@@ -25,16 +26,7 @@ function createMockHandle(opts: {
   stdout?: string;
   stderr?: string;
   exitCode?: number;
-  waitResult?: {
-    exitCode: number;
-    success: boolean;
-    stdout: string;
-    stderr: string;
-    stdoutTruncated?: boolean;
-    stderrTruncated?: boolean;
-    stdoutDroppedBytes?: number;
-    stderrDroppedBytes?: number;
-  };
+  waitResult?: CommandResult;
 }) {
   const handle = {
     pid: opts.pid,

@@ -21,7 +21,10 @@ class TestProcessHandle extends ProcessHandle {
     super(options);
   }
 
-  async wait(): Promise<CommandResult> {
+  async wait(_options?: {
+    onStdout?: (data: string) => void;
+    onStderr?: (data: string) => void;
+  }): Promise<CommandResult> {
     return this.waitPromise;
   }
 
@@ -39,6 +42,10 @@ class TestProcessHandle extends ProcessHandle {
       exitCode: 0,
       stdout: this.stdout,
       stderr: this.stderr,
+      stdoutTruncated: this.stdoutTruncated,
+      stderrTruncated: this.stderrTruncated,
+      stdoutDroppedBytes: this.stdoutDroppedBytes,
+      stderrDroppedBytes: this.stderrDroppedBytes,
       executionTimeMs: 0,
     });
   }
