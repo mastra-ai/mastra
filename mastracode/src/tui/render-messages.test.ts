@@ -167,6 +167,52 @@ describe('addUserMessage', () => {
   });
 });
 
+describe('renderExistingMessages startup history loading', () => {
+  it('loads only the visible startup window and renders returned messages in order', async () => {
+    const messages = [createUserMessage('first', 'user-1'), createUserMessage('second', 'user-2')];
+    const state = createState();
+    const listMessages = vi.fn().mockResolvedValue(messages);
+    state.harness = {
+      listMessages,
+      getDisplayState: () => ({ isRunning: false }),
+      setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(state.chatContainer.children).toHaveLength(2);
+    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[0]);
+    expect(state.messageComponentsById.get('user-2')).toBe(state.chatContainer.children[1]);
+  });
+
+  it('does not clear existing task display state when the bounded startup window has no task snapshot', async () => {
+    const messages = [createUserMessage('recent', 'user-1')];
+    const existingTasks = [{ id: 'old-task', content: 'Old task', status: 'pending', activeForm: 'Working' }];
+    const state = createState();
+    const listMessages = vi.fn().mockResolvedValue(messages);
+    const updateTasks = vi.fn();
+    const setState = vi.fn().mockResolvedValue(undefined);
+    const restoreDisplayTasks = vi.fn();
+    state.taskProgress = { updateTasks, getTasks: () => existingTasks } as unknown as TUIState['taskProgress'];
+    state.harness = {
+      listMessages,
+      getDisplayState: () => ({ isRunning: false, tasks: existingTasks, previousTasks: [] }),
+      getState: () => ({ tasks: existingTasks }),
+      setState,
+      restoreDisplayTasks,
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(updateTasks).not.toHaveBeenCalled();
+    expect(setState).not.toHaveBeenCalled();
+    expect(restoreDisplayTasks).not.toHaveBeenCalled();
+  });
+});
+
 describe('renderExistingMessages subagents', () => {
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
     const message: HarnessMessage = {
@@ -431,7 +477,7 @@ describe('renderExistingMessages task tools', () => {
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockRejectedValue(new Error('Invalid state update'));
-    const displayState = { isRunning: false };
+    const displayState = { isRunning: false, tasks: [], previousTasks: [] };
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
       listMessages: vi.fn().mockResolvedValue(messages),
@@ -521,33 +567,8 @@ describe('renderExistingMessages task tools', () => {
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
   });
 
-  it('keeps task state when the original task_write is outside the rendered message window', async () => {
-    const oldTaskWrite: HarnessMessage = {
-      id: 'assistant-old',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: [
-        {
-          type: 'tool_call',
-          id: 'tool-1',
-          name: 'task_write',
-          args: {
-            tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-          },
-        },
-        {
-          type: 'tool_result',
-          id: 'tool-1',
-          name: 'task_write',
-          result: {
-            content: 'Tasks updated',
-            tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-          },
-          isError: false,
-        },
-      ],
-    };
-    const fillerMessages = Array.from({ length: 40 }, (_, index): HarnessMessage => {
+  it('restores task state from snapshots in the bounded rendered window', async () => {
+    const fillerMessages = Array.from({ length: 39 }, (_, index): HarnessMessage => {
       return {
         id: `user-${index}`,
         role: 'user',
@@ -581,9 +602,10 @@ describe('renderExistingMessages task tools', () => {
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
+    const listMessages = vi.fn().mockResolvedValue([...fillerMessages, visibleTaskUpdate]);
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue([oldTaskWrite, ...fillerMessages, visibleTaskUpdate]),
+      listMessages,
       getDisplayState: () => ({ isRunning: false }),
       setState,
       restoreDisplayTasks: vi.fn(),
@@ -592,6 +614,7 @@ describe('renderExistingMessages task tools', () => {
     await renderExistingMessages(state);
 
     const expectedTasks = [{ id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' }];
+    expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
     expect(state.chatContainer.children).toHaveLength(39);
@@ -811,10 +834,11 @@ describe('renderExistingMessages task tools', () => {
     expect(rendered).toContain('2 more completed tasks');
   });
 
-  it('clears the pinned task list when history has no active tasks', async () => {
+  it('preserves the pinned task list when bounded history has no task snapshots', async () => {
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
+    const restoreDisplayTasks = vi.fn();
     state.taskProgress = {
       updateTasks,
       getTasks: () => [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Doing old task' }],
@@ -823,12 +847,13 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue([]),
       getDisplayState: () => ({ isRunning: false }),
       setState,
-      restoreDisplayTasks: vi.fn(),
+      restoreDisplayTasks,
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
 
-    expect(updateTasks).toHaveBeenCalledWith([]);
-    expect(setState).toHaveBeenCalledWith({ tasks: [] });
+    expect(updateTasks).not.toHaveBeenCalled();
+    expect(setState).not.toHaveBeenCalled();
+    expect(restoreDisplayTasks).not.toHaveBeenCalled();
   });
 });
