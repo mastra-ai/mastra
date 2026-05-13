@@ -396,6 +396,42 @@ describe('GithubSignals', () => {
     vi.useRealTimers();
   });
 
+  it('persists polling watermarks back to thread metadata', async () => {
+    const commandRunner = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createSnapshot({
+          comments: [{ id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createSnapshot({
+          comments: [
+            { id: 'comment-1', body: 'old comment', createdAt: '2026-01-02T00:00:00.000Z' },
+            { id: 'comment-2', body: 'new comment', createdAt: '2026-01-02T00:02:00.000Z' },
+          ],
+        }),
+      );
+    const harness = createHarness();
+    const github = new GithubSignals({ repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    const signal = ghSignals.prSubscribe({ prNumber: 123 }).toDBMessage({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+
+    await processSignals(github, harness, [signal]);
+    await github.poll();
+
+    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
+      lastCommentTimestamp: '2026-01-02T00:02:00.000Z',
+    });
+    expect(harness.memory.updateThread).toHaveBeenCalledTimes(2);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    github.destroy();
+  });
+
   it('baselines existing activity on subscribe and only emits future comments and reviews', async () => {
     const commandRunner = vi
       .fn()
@@ -454,6 +490,10 @@ describe('GithubSignals', () => {
     expect(reviewNotification).toMatchObject({
       contents: 'Requested changes',
       attributes: { type: 'github-review', user: 'reviewer', reviewState: 'CHANGES_REQUESTED', pr: 123 },
+    });
+    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
+      lastCommentTimestamp: '2026-01-02T00:02:00.000Z',
+      lastReviewTimestamp: '2026-01-02T00:03:00.000Z',
     });
     github.destroy();
   });

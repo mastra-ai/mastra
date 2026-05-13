@@ -6,6 +6,7 @@
 Added `GithubSignals`, a signal controller exported from `@mastra/core/signals`, for subscribing agent threads to GitHub pull request notifications. New subscriptions establish a silent baseline before polling, and notifications use compact GitHub-specific system reminder types so agents receive token-efficient context.
 
 ```ts
+import { Agent } from '@mastra/core/agent';
 import { GithubSignals, ghSignals } from '@mastra/core/signals';
 
 const github = new GithubSignals({ repo: 'mastra-ai/mastra' });

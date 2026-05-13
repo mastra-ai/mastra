@@ -64,15 +64,28 @@ export interface GithubSignalsAddAgentOptions {
 }
 
 export interface GithubSignalsInitOptions {
-  memory: {
-    listThreads(args: { perPage?: number | false; page?: number; filter?: { resourceId?: string } }): Promise<{
-      threads: Array<{ id: string; title?: string; metadata?: Record<string, unknown> }>;
-      hasMore?: boolean;
-      total?: number;
-    }>;
-    updateThread?(args: { id: string; title: string; metadata: Record<string, unknown> }): Promise<unknown>;
-  };
+  memory: GithubSignalsMemory;
   resourceId?: string;
+}
+
+interface GithubSignalsMemory {
+  listThreads(args: { perPage?: number | false; page?: number; filter?: { resourceId?: string } }): Promise<{
+    threads: Array<GithubSignalsThread>;
+    hasMore?: boolean;
+    total?: number;
+  }>;
+  getThreadById?(args: { threadId: string; resourceId: string }): Promise<GithubSignalsThread | undefined>;
+  updateThread?(args: { id: string; title: string; metadata: Record<string, unknown> }): Promise<unknown>;
+}
+
+interface GithubSignalsThread {
+  id: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface GithubSubscriptionPersistence {
+  update(subscription: GithubPRSubscriptionMetadata): Promise<void>;
 }
 
 export interface GithubCommandResult {
@@ -118,6 +131,7 @@ export interface GithubSignalsThreadMetadata {
 
 interface ActiveSubscription extends GithubPRSubscriptionMetadata {
   key: string;
+  persistence?: GithubSubscriptionPersistence;
 }
 
 interface RegisteredGithubAgent {
@@ -363,15 +377,13 @@ export class GithubSignals {
         if (baselinedSubscriptions.length === 0) continue;
 
         metadata.subscriptions = Object.fromEntries(baselinedSubscriptions);
-        subscriptions.push(...Object.values(metadata.subscriptions));
-
-        if (options.memory.updateThread) {
-          await options.memory.updateThread({
-            id: thread.id,
-            title: thread.title ?? '',
-            metadata: setGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined, metadata),
-          });
+        const persistence = this.createSubscriptionPersistence(options.memory, thread);
+        for (const subscription of Object.values(metadata.subscriptions)) {
+          subscriptions.push(subscription);
+          this.addSubscription(subscription, persistence);
         }
+
+        await this.#persistThreadSubscriptions(options.memory, thread, metadata.subscriptions);
       }
 
       page += 1;
@@ -379,8 +391,48 @@ export class GithubSignals {
       if (typeof result.total === 'number' && page * 100 >= result.total) break;
     } while (true);
 
-    this.start(subscriptions);
     return subscriptions;
+  }
+
+  createSubscriptionPersistence(
+    memory: GithubSignalsMemory,
+    thread: GithubSignalsThread,
+  ): GithubSubscriptionPersistence | undefined {
+    if (!memory.updateThread) return undefined;
+    return {
+      update: subscription => this.#persistSubscription(memory, thread, subscription),
+    };
+  }
+
+  async #persistSubscription(
+    memory: GithubSignalsMemory,
+    fallbackThread: GithubSignalsThread,
+    subscription: GithubPRSubscriptionMetadata,
+  ) {
+    const thread =
+      (await memory.getThreadById?.({ threadId: subscription.threadId, resourceId: subscription.resourceId })) ??
+      fallbackThread;
+    const metadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+    const key = threadSubscriptionKey(subscription);
+    if (!metadata.subscriptions[key]) return;
+
+    metadata.subscriptions[key] = { ...subscription };
+    await this.#persistThreadSubscriptions(memory, thread, metadata.subscriptions);
+  }
+
+  async #persistThreadSubscriptions(
+    memory: GithubSignalsMemory,
+    thread: GithubSignalsThread,
+    subscriptions: Record<string, GithubPRSubscriptionMetadata>,
+  ) {
+    if (!memory.updateThread) return;
+    const metadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+    metadata.subscriptions = subscriptions;
+    await memory.updateThread({
+      id: thread.id,
+      title: thread.title ?? '',
+      metadata: setGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined, metadata),
+    });
   }
 
   getAgentId(agentId?: string) {
@@ -404,9 +456,9 @@ export class GithubSignals {
     return this.#agents.keys().next().value as string | undefined;
   }
 
-  addSubscription(subscription: GithubPRSubscriptionMetadata) {
+  addSubscription(subscription: GithubPRSubscriptionMetadata, persistence?: GithubSubscriptionPersistence) {
     const key = subscriptionKey(subscription);
-    this.#activeSubscriptions.set(key, { ...subscription, key });
+    this.#activeSubscriptions.set(key, { ...subscription, key, persistence });
     this.#ensureTimer();
   }
 
@@ -569,6 +621,7 @@ export class GithubSignals {
 
     subscription.updatedAt = this.#options.now().toISOString();
     this.#activeSubscriptions.set(subscription.key, subscription);
+    await subscription.persistence?.update(subscription);
   }
 
   async #emitCommandError(registeredAgent: RegisteredGithubAgent, subscription: ActiveSubscription, error: unknown) {
@@ -584,6 +637,7 @@ export class GithubSignals {
     subscription.lastErrorFingerprint = fingerprint;
     subscription.updatedAt = this.#options.now().toISOString();
     this.#activeSubscriptions.set(subscription.key, subscription);
+    await subscription.persistence?.update(subscription);
   }
 
   async #sendNotification(
@@ -693,7 +747,10 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
         updatedAt: now,
       });
       githubMetadata.subscriptions[key] = subscription;
-      this.#owner.addSubscription(subscription);
+      this.#owner.addSubscription(
+        subscription,
+        this.#owner.createSubscriptionPersistence(memory as GithubSignalsMemory, thread),
+      );
     } else {
       const existing = githubMetadata.subscriptions[key];
       delete githubMetadata.subscriptions[key];
