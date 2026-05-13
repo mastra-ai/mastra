@@ -12,6 +12,8 @@ The model values used below (`openai/gpt-4o-mini`, `openai/gpt-4o`) are valid un
 
 > Schemas are in `packages/server/src/server/schemas/stored-agents.ts`. Treat that file as the source of truth for response shapes.
 
+> **Capability gate.** Create / PATCH / DELETE steps require `stored-agents:write`. The scaffold grants this to owner, admin, and member; viewer does not have it. Under `--role viewer`, mark write steps `n/a — role lacks stored-agents:write` and run only the read-side steps (GET list, GET by id).
+
 ## Steps
 
 ### 1. Create a stored agent

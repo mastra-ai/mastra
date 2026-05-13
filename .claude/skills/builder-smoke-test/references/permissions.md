@@ -4,18 +4,21 @@ Verify role-based gating across Studio and Agent Builder. Covers route-level RBA
 
 ## Default roles
 
-Defined in `packages/core/src/auth/ee/defaults/roles.ts`:
+The scaffolded project configures its own WorkOS `roleMapping` in
+`src/mastra/auth.ts` (so it doesn't depend on `DEFAULT_ROLES` in core):
 
-| Role     | Permission grants                                                    |
-| -------- | -------------------------------------------------------------------- |
-| `owner`  | `*` (everything, including delete)                                   |
-| `admin`  | `*:read`, `*:write`, `*:execute`, `*:publish`, `*:share` (no delete) |
-| `member` | `*:read`, `*:execute`                                                |
-| `viewer` | `*:read`                                                             |
+| Role     | Permission grants                                                                                              |
+| -------- | -------------------------------------------------------------------------------------------------------------- |
+| `owner`  | `*` (everything, including delete)                                                                             |
+| `admin`  | `*` (owner-equivalent via WorkOS mapping; see note below)                                                      |
+| `member` | `*:read`, `*:execute`, `stored-agents:write`, `stored-skills:write`, `stored-workspaces:write`                 |
+| `viewer` | `*:read`                                                                                                       |
 
 Public stored skills/agents short-circuit read checks (see `authorship.ts`). Auth disabled bypasses role checks entirely.
 
-> **WorkOS role mapping note:** The matrix above describes the **default** roles. When auth runs through `@mastra/auth-workos`, the live `/auth/me` `permissions` array is produced by the WorkOS role-mapping config, not by `default-roles.ts`. In practice, WorkOS-provisioned admins often carry `permissions: ["*"]` (owner-equivalent), which means they pass DELETE checks. Before flagging a row as a regression, `GET /auth/me` and compare actual `permissions` to what the matrix predicts — if the user has `["*"]`, treat them as `owner` for matrix purposes.
+> **Member write grants are narrow.** Members can create/PATCH their own stored agents/skills/workspaces (so Library Copy, Stars, and edit flows are exercisable under a non-admin role), but cannot `:publish`, `:delete`, or `:share`. Ownership rules still apply: a member PATCHing another author's record gets 403. This mapping lives in the scaffolded project's `auth.ts` — `DEFAULT_ROLES` in core is unchanged.
+
+> **WorkOS admin → owner-equivalent.** The scaffold maps `admin` → `['*']`, so a WorkOS-provisioned admin in this project carries `permissions: ["*"]` and passes DELETE checks. Treat admin as owner-equivalent for matrix purposes.
 
 ## Picking the role to test
 
@@ -36,18 +39,18 @@ Pass criteria per role for representative endpoints. The agent uses this to set 
 | --------------------------------------- | ----- | ----- | ------ | ------ |
 | `GET /stored/agents`                    | 200   | 200   | 200    | 200    |
 | `GET /stored/skills`                    | 200   | 200   | 200    | 200    |
-| `POST /stored/agents` (create)          | 200   | 200   | 403    | 403    |
-| `POST /stored/skills` (create)          | 200   | 200   | 403    | 403    |
-| `PATCH /stored/agents/:id` (own)        | 200   | 200   | 403    | 403    |
+| `POST /stored/agents` (create)          | 200   | 200   | 200    | 403    |
+| `POST /stored/skills` (create)          | 200   | 200   | 200    | 403    |
+| `PATCH /stored/agents/:id` (own)        | 200   | 200   | 200    | 403    |
 | `PATCH /stored/agents/:id` (other's)    | 200   | 200   | 403    | 403    |
-| `DELETE /stored/agents/:id` (own)       | 200   | 403\* | 403    | 403    |
-| `PATCH /stored/skills/:id` `visibility` | 200   | 200   | 403    | 403    |
+| `DELETE /stored/agents/:id` (own)       | 200   | 200   | 403    | 403    |
+| `PATCH /stored/skills/:id` `visibility` | 200   | 200   | 200    | 403    |
 | `POST /stored/skills/:id/publish`       | 200   | 200   | 403    | 403    |
 | `POST /agents/:id/chat` (execute)       | 200   | 200   | 200    | 403    |
 | `GET /editor/builder/infrastructure`    | 200   | 200   | 200    | 200    |
 | `PUT /stored/agents/:id/star`           | 200   | 200   | 200    | 200    |
 
-\* The `admin` **role definition** has no `*:delete` grant; deletes are gated to `owner` (or explicit `:delete` grant). If you see `admin` succeeding at DELETE, first check `/auth/me` — WorkOS-mapped admins frequently carry `permissions: ["*"]` (owner-equivalent), in which case the success is expected. Only file a regression when an admin with `permissions` matching the default `admin` row (no `*` wildcard) still passes a DELETE.
+Member create/PATCH on own works because the scaffold grants `stored-{agents,skills,workspaces}:write`. Publish/delete/share remain admin-only. Member PATCH on another author's record returns 403 via the ownership check, not the permission check.
 
 ## Steps
 
@@ -87,28 +90,29 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "$SESSION" \
 - [ ] Status matches the matrix for `--role`
 - [ ] 403 bodies are JSON with an error message (no stack trace, no HTML)
 
-### 4. Execute gated separately from write (member case)
+### 4. Execute and write differ by resource (member case)
 
-`member` has `*:execute` but not `*:write`. If `--role member`:
+If `--role member`:
 
-- [ ] `POST /stored/agents` → 403 (no `:write`)
+- [ ] `POST /stored/agents` → 200 (has `stored-agents:write`)
 - [ ] `POST /agents/:id/chat` against an existing public agent → 200 (has `:execute`)
+- [ ] `POST /stored/skills/:id/publish` against own draft → 403 (no `:publish`)
+- [ ] `PATCH /stored/skills/:id` on another author's row → 403 (ownership check, not perm check)
 
 If `--role viewer`:
 
 - [ ] `POST /agents/:id/chat` → 403 (no `:execute`)
+- [ ] `POST /stored/agents` → 403 (no `:write`)
 
 ### 5. Delete is owner-only
 
-If `--role admin`:
+The scaffold maps `admin` → `['*']`, so an admin in this project passes DELETE checks (owner-equivalent). Only `viewer` and `member` see 403 on DELETE.
 
-- [ ] `DELETE /stored/agents/:id` against an agent the admin owns → 403 **provided** `/auth/me` reports the default admin grants (`*:read`, `*:write`, `*:execute`, `*:publish`, `*:share` — no `*` wildcard). If `permissions` contains `*`, expect 200 instead and treat the user as owner-equivalent.
+- [ ] `--role owner` or `--role admin`: `DELETE /stored/agents/:id` on own → 200
+- [ ] `--role member`: same DELETE → 403
+- [ ] `--role viewer`: same DELETE → 403
 
-If `--role owner`:
-
-- [ ] Same DELETE → 200
-
-If the matrix and the live response disagree, that is the finding — file it, don't "correct" the matrix without checking `default-roles.ts` first.
+If the matrix and the live response disagree, that is the finding — file it, don't "correct" the matrix without checking the scaffold's `roleMapping` in `auth.ts` first.
 
 ### 6. Visibility flip + publish semantics
 

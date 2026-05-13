@@ -33,7 +33,18 @@ async function initAuth(): Promise<AuthBundle> {
         cache: { ttlMs: 1 },
         roleMapping: {
           admin: ['*'],
-          member: ['*:read', '*:execute'],
+          // Members get read + execute, plus narrow write on the user-content
+          // stored families so the smoke test can exercise create/PATCH/copy/
+          // star flows under a non-admin role. Publish/delete/share remain
+          // admin-only (note matchesPermission's owner check still applies, so
+          // members can only edit their own rows).
+          member: [
+            '*:read',
+            '*:execute',
+            'stored-agents:write',
+            'stored-skills:write',
+            'stored-workspaces:write',
+          ],
           viewer: ['*:read'],
           _default: [],
         },

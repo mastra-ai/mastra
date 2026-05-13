@@ -29,7 +29,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/agents/$AGENT_ID
 
 You need a logged-in session (`$SESSION` should be a `Cookie:` header) and a stored entity to target.
 
-**If you have `stored-agents:write` / `stored-skills:write`** (owner, admin), create test entities:
+**If you have `stored-agents:write` / `stored-skills:write`** (owner, admin, member), create test entities:
 
 ```bash
 # Test agent
@@ -55,7 +55,7 @@ SKILL_RESP=$(curl -s -X POST $BASE/stored/skills \
 SKILL_ID=$(echo "$SKILL_RESP" | jq -r '.id')
 ```
 
-**If you don't have write perms** (member, viewer), use the rows from `seed-multi-user.sh` (run it from SKILL.md execution flow step 4 if you haven't):
+**If you don't have write perms** (viewer), use the rows from `seed-multi-user.sh` (run it from SKILL.md execution flow step 4 if you haven't):
 
 ```bash
 SKILL_ID=smoke-seed-public-skill   # public, owned by user_seed_other

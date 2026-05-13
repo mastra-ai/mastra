@@ -6,6 +6,8 @@ Test stored skill create, read, update, delete, visibility, publish, and filesys
 
 > **Pagination is 0-indexed.** `page=0` is the first page.
 
+> **Capability gate.** Steps 1, 3, 5, 7, 8 require `stored-skills:write`. The scaffold grants this to owner, admin, and member; viewer does not have it. Under `--role viewer`, mark those steps `n/a — role lacks stored-skills:write` and run only the read-side steps (2, 4 GET, 6, 9).
+
 ## Endpoints
 
 | Endpoint                     | Method | Purpose                                |
@@ -155,6 +157,15 @@ curl -s -o /dev/null -w "%{http_code}\n" -H "$SESSION" "$BASE/stored/skills/smok
 - [ ] Public seed: 200, `visibility: "public"`, `authorId: "user_seed_other"`
 - [ ] Private seed: 404 (non-owner cannot read another user's private skill)
 - [ ] If you got 200 on the private seed: real bug, log it as a product issue with the response body
+
+Also verify the list endpoint applies the same filter:
+
+```bash
+curl -s -H "$SESSION" "$BASE/stored/skills?perPage=100" | jq '.skills | map(.id) | sort'
+```
+
+- [ ] `smoke-seed-public-skill` is in the list
+- [ ] `smoke-seed-private-skill` is **not** in the list (unless caller is owner-equivalent / admin with `*`)
 
 ## Filesystem persistence (#16000)
 
