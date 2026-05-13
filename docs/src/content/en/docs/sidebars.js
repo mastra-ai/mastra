@@ -620,7 +620,7 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/mastra-platform',
-                  label: 'Mastra Platform',
+                  label: 'Mastra platform',
                 },
                 {
                   type: 'doc',
@@ -744,7 +744,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       customProps: {
         tags: ['new'],
       },
@@ -753,6 +753,21 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
         },
         {
           type: 'doc',

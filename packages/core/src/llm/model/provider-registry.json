@@ -957,6 +957,15 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
     },
+    "claudinio": {
+      "url": "https://api.claudin.io/v1",
+      "apiKeyEnvVar": "CLAUDINIO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Claudinio",
+      "models": ["claudinio"],
+      "docUrl": "https://claudin.io",
+      "gateway": "models.dev"
+    },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
@@ -1952,6 +1961,8 @@
         "moonshotai/Kimi-K2.6",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
+        "xiaomi/mimo-v2.5",
+        "xiaomi/mimo-v2.5-pro",
         "zai-org/GLM-4.6",
         "zai-org/GLM-4.6V",
         "zai-org/GLM-4.7",
@@ -3031,7 +3042,7 @@
       "apiKeyEnvVar": "WAFER_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Wafer",
-      "models": ["DeepSeek-V4-Pro", "GLM-5.1", "MiniMax-M2.7", "Qwen3.5-397B-A17B"],
+      "models": ["GLM-5.1", "Qwen3.5-397B-A17B"],
       "docUrl": "https://docs.wafer.ai/wafer-pass",
       "gateway": "models.dev"
     },
@@ -5721,6 +5732,7 @@
       "MiniMax-M2.7",
       "MiniMax-M2.7-highspeed"
     ],
+    "claudinio": ["claudinio"],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
     "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
     "llama": [
@@ -6519,6 +6531,8 @@
       "moonshotai/Kimi-K2.6",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
+      "xiaomi/mimo-v2.5",
+      "xiaomi/mimo-v2.5-pro",
       "zai-org/GLM-4.6",
       "zai-org/GLM-4.6V",
       "zai-org/GLM-4.7",
@@ -7412,7 +7426,7 @@
       "kimi-k2.6"
     ],
     "abliteration-ai": ["abliterated-model"],
-    "wafer.ai": ["DeepSeek-V4-Pro", "GLM-5.1", "MiniMax-M2.7", "Qwen3.5-397B-A17B"],
+    "wafer.ai": ["GLM-5.1", "Qwen3.5-397B-A17B"],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
       "meta-llama/Llama-3.3-70B-Instruct",

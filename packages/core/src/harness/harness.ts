@@ -316,6 +316,20 @@ export class Harness<TState = {}> {
     return this.#internalMastra;
   }
 
+  /**
+   * Sets or updates the harness-level browser and propagates it to static mode agents.
+   */
+  setBrowser(browser: MastraBrowser | undefined): void {
+    this.browser = browser;
+    this.browserFn = undefined;
+
+    for (const mode of this.config.modes) {
+      const agent = typeof mode.agent === 'function' ? null : mode.agent;
+      if (!agent || agent.hasOwnBrowser()) continue;
+      agent.setBrowser(browser);
+    }
+  }
+
   // ===========================================================================
   // Initialization
   // ===========================================================================

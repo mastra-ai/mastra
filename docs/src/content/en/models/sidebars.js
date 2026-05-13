@@ -178,6 +178,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/claudinio',
+          label: 'Claudinio',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },
