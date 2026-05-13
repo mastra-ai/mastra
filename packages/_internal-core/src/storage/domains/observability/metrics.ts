@@ -12,7 +12,7 @@ import {
   deltaInfoSchema,
   dimensionsField,
   groupBySchema,
-  liveCursorSchema,
+  deltaCursorSchema,
   listModeSchema,
   normalizeObservabilityListArgs,
   paginationArgsSchema,
@@ -198,7 +198,7 @@ export const listMetricsArgsSchema = z
     filters: metricsFilterSchema.optional(),
     pagination: paginationArgsSchema.optional(),
     orderBy: metricsOrderBySchema.optional(),
-    after: liveCursorSchema.optional(),
+    after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
   })
   .strict()
@@ -218,7 +218,7 @@ export const listMetricsResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    liveCursor: liveCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.nullable().optional(),
     metrics: z.array(metricRecordSchema),
   })
   .describe('Response from listing metrics');

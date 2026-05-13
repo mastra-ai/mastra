@@ -3,12 +3,12 @@ import { coreFeatures } from '@mastra/core/features';
 
 export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 
-const LIVE_CURSOR_PREFIX = 'clickhouse:';
-const LIVE_CURSOR_VERSION = 1;
+const DELTA_CURSOR_PREFIX = 'clickhouse:';
+const DELTA_CURSOR_VERSION = 1;
 
 export type ClickHouseDeltaCursorStrategy = 'serial' | 'tuple';
 
-export type ClickHouseLiveCursor =
+export type ClickHouseDeltaCursor =
   | { version: 1; kind: 'serial'; cursorId: string }
   | { version: 1; kind: 'trace'; ingestedAt: string; startedAt: string; traceId: string; dedupeKey: string }
   | {
@@ -96,12 +96,12 @@ export function normalizeCursorId(value: unknown): string | null {
   return null;
 }
 
-export function invalidLiveCursorError(): MastraError {
+export function invalidDeltaCursorError(): MastraError {
   return new MastraError({
-    id: 'OBSERVABILITY_INVALID_LIVE_CURSOR',
+    id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
     domain: ErrorDomain.MASTRA_OBSERVABILITY,
     category: ErrorCategory.USER,
-    text: 'Invalid observability live cursor',
+    text: 'Invalid observability delta cursor',
   });
 }
 
@@ -111,21 +111,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function expectString(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0) {
-    throw invalidLiveCursorError();
+    throw invalidDeltaCursorError();
   }
   return value;
 }
 
-function decodeLiveCursorPayload(payload: unknown): ClickHouseLiveCursor {
-  if (!isPlainObject(payload) || payload.v !== LIVE_CURSOR_VERSION || typeof payload.kind !== 'string') {
-    throw invalidLiveCursorError();
+function decodeDeltaCursorPayload(payload: unknown): ClickHouseDeltaCursor {
+  if (!isPlainObject(payload) || payload.v !== DELTA_CURSOR_VERSION || typeof payload.kind !== 'string') {
+    throw invalidDeltaCursorError();
   }
 
   switch (payload.kind) {
     case 'serial': {
       const cursorId = normalizeCursorId(payload.cursorId);
       if (cursorId === null) {
-        throw invalidLiveCursorError();
+        throw invalidDeltaCursorError();
       }
       return { version: 1, kind: 'serial', cursorId };
     }
@@ -185,33 +185,33 @@ function decodeLiveCursorPayload(payload: unknown): ClickHouseLiveCursor {
         feedbackId: expectString(payload.feedbackId),
       };
     default:
-      throw invalidLiveCursorError();
+      throw invalidDeltaCursorError();
   }
 }
 
-export function encodeLiveCursor(value: ClickHouseLiveCursor | null): string | null {
+export function encodeDeltaCursor(value: ClickHouseDeltaCursor | null): string | null {
   if (value === null) {
     return null;
   }
 
   const payload =
     value.kind === 'serial'
-      ? { v: LIVE_CURSOR_VERSION, kind: value.kind, cursorId: normalizeCursorId(value.cursorId) }
-      : { v: LIVE_CURSOR_VERSION, ...value };
+      ? { v: DELTA_CURSOR_VERSION, kind: value.kind, cursorId: normalizeCursorId(value.cursorId) }
+      : { v: DELTA_CURSOR_VERSION, ...value };
 
   if (payload.kind === 'serial' && payload.cursorId === null) {
     return null;
   }
 
-  return `${LIVE_CURSOR_PREFIX}${Buffer.from(JSON.stringify(payload)).toString('base64url')}`;
+  return `${DELTA_CURSOR_PREFIX}${Buffer.from(JSON.stringify(payload)).toString('base64url')}`;
 }
 
-export function decodeLiveCursor(cursor: string): ClickHouseLiveCursor {
-  if (!cursor.startsWith(LIVE_CURSOR_PREFIX)) {
-    throw invalidLiveCursorError();
+export function decodeDeltaCursor(cursor: string): ClickHouseDeltaCursor {
+  if (!cursor.startsWith(DELTA_CURSOR_PREFIX)) {
+    throw invalidDeltaCursorError();
   }
 
-  const rawValue = cursor.slice(LIVE_CURSOR_PREFIX.length);
+  const rawValue = cursor.slice(DELTA_CURSOR_PREFIX.length);
   const normalized = normalizeCursorId(rawValue);
 
   if (normalized !== null) {
@@ -220,20 +220,20 @@ export function decodeLiveCursor(cursor: string): ClickHouseLiveCursor {
 
   try {
     const payload = JSON.parse(Buffer.from(rawValue, 'base64url').toString('utf8'));
-    return decodeLiveCursorPayload(payload);
+    return decodeDeltaCursorPayload(payload);
   } catch {
-    throw invalidLiveCursorError();
+    throw invalidDeltaCursorError();
   }
 }
 
-export function assertCursorKind<TKind extends ClickHouseLiveCursor['kind']>(
-  cursor: ClickHouseLiveCursor,
+export function assertCursorKind<TKind extends ClickHouseDeltaCursor['kind']>(
+  cursor: ClickHouseDeltaCursor,
   ...expectedKinds: TKind[]
-): Extract<ClickHouseLiveCursor, { kind: TKind }> {
+): Extract<ClickHouseDeltaCursor, { kind: TKind }> {
   if (expectedKinds.includes(cursor.kind as TKind)) {
-    return cursor as Extract<ClickHouseLiveCursor, { kind: TKind }>;
+    return cursor as Extract<ClickHouseDeltaCursor, { kind: TKind }>;
   }
-  throw invalidLiveCursorError();
+  throw invalidDeltaCursorError();
 }
 
 export function buildTupleCursorFilter(columns: TupleCursorColumn[]): {

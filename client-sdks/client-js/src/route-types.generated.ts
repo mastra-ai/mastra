@@ -14849,7 +14849,7 @@ export type GetObservabilityTraces_Response = {
         hasMore: boolean;
       }
     | undefined;
-  liveCursor?: (string | null) | undefined;
+  deltaCursor?: (string | null) | undefined;
   spans: {
     /** Unique trace identifier */
     traceId: string;
@@ -15238,7 +15238,7 @@ export type GetObservabilityBranches_Response = {
         hasMore: boolean;
       }
     | undefined;
-  liveCursor?: (string | null) | undefined;
+  deltaCursor?: (string | null) | undefined;
   branches: {
     /** Unique trace identifier */
     traceId: string;
@@ -16410,7 +16410,7 @@ export type GetObservabilityLogs_Response = {
         hasMore: boolean;
       }
     | undefined;
-  liveCursor?: (string | null) | undefined;
+  deltaCursor?: (string | null) | undefined;
   logs: {
     /** Unique id for this log event */
     logId?: (string | null) | undefined;
@@ -16671,7 +16671,7 @@ export type GetObservabilityScores_Response = {
         hasMore: boolean;
       }
     | undefined;
-  liveCursor?: (string | null) | undefined;
+  deltaCursor?: (string | null) | undefined;
   scores: {
     /** Unique id for this score event */
     scoreId?: (string | null) | undefined;
@@ -17758,7 +17758,7 @@ export type GetObservabilityFeedback_Response = {
         hasMore: boolean;
       }
     | undefined;
-  liveCursor?: (string | null) | undefined;
+  deltaCursor?: (string | null) | undefined;
   feedback: {
     /** Unique id for this feedback event */
     feedbackId?: (string | null) | undefined;

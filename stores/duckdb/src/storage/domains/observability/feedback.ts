@@ -21,9 +21,9 @@ import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './f
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
 import {
   assertDeltaPollingEnabled,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
+  encodeDeltaCursor,
   extendWhereClause,
   normalizeCursorId,
 } from './polling';
@@ -372,16 +372,16 @@ export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs)
   if (mode === 'delta') {
     assertDeltaPollingEnabled();
 
-    const currentLiveCursor = await getFeedbackLiveCursor(db, filterClause, filterParams);
+    const currentDeltaCursor = await getDeltaCursor(db, filterClause, filterParams);
     if (after === undefined) {
       return {
         feedback: [],
         delta: { limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursorId = decodeLiveCursor(after);
+    const afterCursorId = decodeDeltaCursor(after);
     const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
     const rows = await db.query<Record<string, unknown>>(
       `SELECT * FROM feedback_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
@@ -396,10 +396,10 @@ export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs)
     return {
       feedback: visibleRows.map(row => row.feedback) as ListFeedbackResponse['feedback'],
       delta: { limit, hasMore: rows.length > limit },
-      liveCursor:
+      deltaCursor:
         visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentDeltaCursor,
     };
   }
 
@@ -420,13 +420,11 @@ export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs)
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     feedback: rows.map(row => rowToFeedbackRecord(row)) as ListFeedbackResponse['feedback'],
-    ...(deltaPollingFeatureEnabled()
-      ? { liveCursor: await getFeedbackLiveCursor(db, filterClause, filterParams) }
-      : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getDeltaCursor(db, filterClause, filterParams) } : {}),
   };
 }
 
-async function getFeedbackLiveCursor(
+async function getDeltaCursor(
   db: DuckDBConnection,
   filterClause: string,
   filterParams: unknown[],
@@ -436,7 +434,7 @@ async function getFeedbackLiveCursor(
     filterParams,
   );
 
-  return encodeLiveCursor(rows[0]?.cursorId);
+  return encodeDeltaCursor(rows[0]?.cursorId);
 }
 
 export async function getFeedbackAggregate(

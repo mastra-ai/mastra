@@ -59,7 +59,7 @@ import {
   getEnvironmentsResponseSchema,
   getTagsArgsSchema,
   getTagsResponseSchema,
-  liveCursorSchema,
+  deltaCursorSchema,
   paginationArgsSchema,
 } from '@internal/core/storage';
 import { generateSignalId } from '@mastra/core/observability';
@@ -127,7 +127,7 @@ export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
       return await observabilityStore.listLogs({
         mode,
         filters,
-        after: liveCursorSchema.optional().parse(after),
+        after: deltaCursorSchema.optional().parse(after),
         limit,
       });
     }
@@ -156,7 +156,7 @@ export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
       return await observabilityStore.listScores({
         mode,
         filters,
-        after: liveCursorSchema.optional().parse(after),
+        after: deltaCursorSchema.optional().parse(after),
         limit,
       });
     }
@@ -247,7 +247,7 @@ export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
       return await observabilityStore.listFeedback({
         mode,
         filters,
-        after: liveCursorSchema.optional().parse(after),
+        after: deltaCursorSchema.optional().parse(after),
         limit,
       });
     }
@@ -328,7 +328,7 @@ export const LIST_METRICS = createNewRoute(NEW_ROUTE_DEFS.LIST_METRICS, {
       return await observabilityStore.listMetrics({
         mode,
         filters,
-        after: liveCursorSchema.optional().parse(after),
+        after: deltaCursorSchema.optional().parse(after),
         limit,
       });
     }

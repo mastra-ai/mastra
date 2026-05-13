@@ -7,7 +7,7 @@ import {
   spanContextFields,
   dateRangeSchema,
   dbTimestamps,
-  liveCursorSchema,
+  deltaCursorSchema,
   listModeSchema,
   metadataField,
   normalizeObservabilityListArgs,
@@ -528,7 +528,7 @@ export const listTracesArgsSchema = z
     filters: tracesFilterSchema.optional().describe('Optional filters to apply'),
     pagination: paginationArgsSchema.optional(),
     orderBy: tracesOrderBySchema.optional(),
-    after: liveCursorSchema.optional(),
+    after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
   })
   .strict()
@@ -547,7 +547,7 @@ export type ListTracesArgs = z.input<typeof listTracesArgsSchema>;
 export const listTracesResponseSchema = z.object({
   pagination: paginationInfoSchema.optional(),
   delta: deltaInfoSchema.optional(),
-  liveCursor: liveCursorSchema.nullable().optional(),
+  deltaCursor: deltaCursorSchema.nullable().optional(),
   spans: z.array(traceSpanSchema),
 });
 
@@ -631,7 +631,7 @@ export const listBranchesArgsSchema = z
     filters: branchesFilterSchema.optional().describe('Optional filters to apply'),
     pagination: paginationArgsSchema.optional(),
     orderBy: branchesOrderBySchema.optional(),
-    after: liveCursorSchema.optional(),
+    after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
   })
   .strict()
@@ -657,7 +657,7 @@ export type ListBranchesArgs = z.input<typeof listBranchesArgsSchema>;
 export const listBranchesResponseSchema = z.object({
   pagination: paginationInfoSchema.optional(),
   delta: deltaInfoSchema.optional(),
-  liveCursor: liveCursorSchema.nullable().optional(),
+  deltaCursor: deltaCursorSchema.nullable().optional(),
   branches: z.array(traceSpanSchema),
 });
 

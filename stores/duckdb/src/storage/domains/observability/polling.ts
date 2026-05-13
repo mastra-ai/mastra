@@ -3,7 +3,7 @@ import { coreFeatures } from '@mastra/core/features';
 
 export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 
-const LIVE_CURSOR_PREFIX = 'duckdb:';
+const DELTA_CURSOR_PREFIX = 'duckdb:';
 
 export function deltaPollingFeatureEnabled(): boolean {
   return coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE);
@@ -51,32 +51,32 @@ export function normalizeCursorId(value: unknown): bigint | null {
   return null;
 }
 
-export function encodeLiveCursor(value: unknown): string | null {
+export function encodeDeltaCursor(value: unknown): string | null {
   const cursorId = normalizeCursorId(value);
   if (cursorId === null) {
     return null;
   }
 
-  return `${LIVE_CURSOR_PREFIX}${cursorId.toString()}`;
+  return `${DELTA_CURSOR_PREFIX}${cursorId.toString()}`;
 }
 
-export function decodeLiveCursor(cursor: string): bigint {
-  if (!cursor.startsWith(LIVE_CURSOR_PREFIX)) {
+export function decodeDeltaCursor(cursor: string): bigint {
+  if (!cursor.startsWith(DELTA_CURSOR_PREFIX)) {
     throw new MastraError({
-      id: 'OBSERVABILITY_INVALID_LIVE_CURSOR',
+      id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.USER,
-      text: 'Invalid observability live cursor',
+      text: 'Invalid observability delta cursor',
     });
   }
 
-  const rawValue = cursor.slice(LIVE_CURSOR_PREFIX.length);
+  const rawValue = cursor.slice(DELTA_CURSOR_PREFIX.length);
   if (!/^\d+$/.test(rawValue)) {
     throw new MastraError({
-      id: 'OBSERVABILITY_INVALID_LIVE_CURSOR',
+      id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.USER,
-      text: 'Invalid observability live cursor',
+      text: 'Invalid observability delta cursor',
     });
   }
 

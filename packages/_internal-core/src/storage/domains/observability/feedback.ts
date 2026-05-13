@@ -13,7 +13,7 @@ import {
   contextFields,
   dimensionsField,
   groupBySchema,
-  liveCursorSchema,
+  deltaCursorSchema,
   listModeSchema,
   normalizeObservabilityListArgs,
   paginationArgsSchema,
@@ -231,7 +231,7 @@ export const listFeedbackArgsSchema = z
     filters: z.preprocess(normalizeLegacyFeedbackActor, feedbackFilterObjectSchema).optional(),
     pagination: paginationArgsSchema.optional(),
     orderBy: feedbackOrderBySchema.optional(),
-    after: liveCursorSchema.optional(),
+    after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
   })
   .strict()
@@ -251,7 +251,7 @@ export const listFeedbackResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    liveCursor: liveCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.nullable().optional(),
     feedback: z.array(feedbackRecordSchema),
   })
   .describe('Response from listing feedback');

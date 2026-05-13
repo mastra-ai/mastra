@@ -24,9 +24,9 @@ import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './f
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
 import {
   assertDeltaPollingEnabled,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
+  encodeDeltaCursor,
   normalizeCursorId,
 } from './polling';
 
@@ -625,16 +625,16 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   if (mode === 'delta') {
     assertDeltaPollingEnabled();
 
-    const currentLiveCursor = await getTraceLiveCursor(db, filters);
+    const currentDeltaCursor = await getTraceDeltaCursor(db, filters);
     if (after === undefined) {
       return {
         spans: [],
         delta: { limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursorId = decodeLiveCursor(after);
+    const afterCursorId = decodeDeltaCursor(after);
     const { prefilter, postAgg, hasChildError } = partitionAnchorFilters(filterRecord);
     const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
     const prefilterParts = [
@@ -685,10 +685,10 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
     return {
       spans: toTraceSpans(visibleRows.map(row => row.span)),
       delta: { limit, hasMore: rows.length > limit },
-      liveCursor:
+      deltaCursor:
         visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentDeltaCursor,
     };
   }
 
@@ -748,7 +748,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
       spans: toTraceSpans(spans),
-      ...(deltaPollingFeatureEnabled() ? { liveCursor: await getTraceLiveCursor(db, filters) } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getTraceDeltaCursor(db, filters) } : {}),
     };
   }
 
@@ -793,7 +793,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     spans: toTraceSpans(spans),
-    ...(deltaPollingFeatureEnabled() ? { liveCursor: await getTraceLiveCursor(db, filters) } : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getTraceDeltaCursor(db, filters) } : {}),
   };
 }
 
@@ -862,30 +862,30 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
       return {
         branches: [],
         delta: { limit, hasMore: false },
-        liveCursor: null,
+        deltaCursor: null,
       };
     }
 
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
-      ...(deltaPollingFeatureEnabled() ? { liveCursor: null } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: null } : {}),
     };
   }
 
   if (mode === 'delta') {
     assertDeltaPollingEnabled();
 
-    const currentLiveCursor = await getBranchLiveCursor(db, filters);
+    const currentDeltaCursor = await getBranchDeltaCursor(db, filters);
     if (after === undefined) {
       return {
         branches: [],
         delta: { limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursorId = decodeLiveCursor(after);
+    const afterCursorId = decodeDeltaCursor(after);
     const { spanType: _spanType, ...rest } = filterRecord;
     const { prefilter, postAgg, hasChildError: _hasChildError } = partitionAnchorFilters(rest);
     const { clause: prefilterClause, params: prefilterFilterParams } = buildWhereClause(prefilter);
@@ -932,10 +932,10 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     return {
       branches: toTraceSpans(visibleRows.map(row => row.branch)),
       delta: { limit, hasMore: rows.length > limit },
-      liveCursor:
+      deltaCursor:
         visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentDeltaCursor,
     };
   }
 
@@ -993,7 +993,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
       return {
         pagination: { total: 0, page, perPage, hasMore: false },
         branches: [],
-        ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
+        ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
       };
     }
 
@@ -1016,7 +1016,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
       branches: toTraceSpans(spans),
-      ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
     };
   }
 
@@ -1050,7 +1050,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
-      ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
+      ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
     };
   }
 
@@ -1064,11 +1064,11 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     branches: toTraceSpans(spans),
-    ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getBranchDeltaCursor(db, filters) } : {}),
   };
 }
 
-async function getTraceLiveCursor(db: DuckDBConnection, filters: ListTracesArgs['filters']): Promise<string | null> {
+async function getTraceDeltaCursor(db: DuckDBConnection, filters: ListTracesArgs['filters']): Promise<string | null> {
   const { prefilter, postAgg, hasChildError } = partitionAnchorFilters((filters ?? {}) as Record<string, unknown>);
   const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
   const prefilterParts = [`eventType = 'start'`, `parentSpanId IS NULL`, `cursorId IS NOT NULL`];
@@ -1088,7 +1088,7 @@ async function getTraceLiveCursor(db: DuckDBConnection, filters: ListTracesArgs[
       `SELECT max(cursorId) AS cursorId FROM span_events AS ${outerAlias} ${prefilterWhere}`,
       prefilterParams,
     );
-    return encodeLiveCursor(rows[0]?.cursorId);
+    return encodeDeltaCursor(rows[0]?.cursorId);
   }
 
   const cteSql = `
@@ -1111,10 +1111,13 @@ async function getTraceLiveCursor(db: DuckDBConnection, filters: ListTracesArgs[
     `${cteSql} SELECT max(anchorCursorId) AS cursorId FROM root_spans ${postAggWhere}`,
     [...prefilterParams, ...postAggParams],
   );
-  return encodeLiveCursor(rows[0]?.cursorId);
+  return encodeDeltaCursor(rows[0]?.cursorId);
 }
 
-async function getBranchLiveCursor(db: DuckDBConnection, filters: ListBranchesArgs['filters']): Promise<string | null> {
+async function getBranchDeltaCursor(
+  db: DuckDBConnection,
+  filters: ListBranchesArgs['filters'],
+): Promise<string | null> {
   const filterRecord = (filters ?? {}) as Record<string, unknown>;
   const userSpanType = filterRecord.spanType;
   if (typeof userSpanType === 'string' && !(BRANCH_SPAN_TYPES as readonly string[]).includes(userSpanType)) {
@@ -1144,7 +1147,7 @@ async function getBranchLiveCursor(db: DuckDBConnection, filters: ListBranchesAr
       `SELECT max(cursorId) AS cursorId FROM span_events AS ${outerAlias} ${prefilterWhere}`,
       prefilterParams,
     );
-    return encodeLiveCursor(rows[0]?.cursorId);
+    return encodeDeltaCursor(rows[0]?.cursorId);
   }
 
   const cteSql = `
@@ -1167,5 +1170,5 @@ async function getBranchLiveCursor(db: DuckDBConnection, filters: ListBranchesAr
     `${cteSql} SELECT max(anchorCursorId) AS cursorId FROM branch_anchors ${postAggClause}`,
     [...prefilterParams, ...postAggParams],
   );
-  return encodeLiveCursor(rows[0]?.cursorId);
+  return encodeDeltaCursor(rows[0]?.cursorId);
 }

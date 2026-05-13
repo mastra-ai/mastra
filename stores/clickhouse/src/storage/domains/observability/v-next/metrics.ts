@@ -28,15 +28,15 @@ import { TABLE_METRIC_EVENTS, TABLE_METRIC_EVENTS_DELTA, TABLE_DISCOVERY_VALUES,
 import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
-import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseDeltaCursor } from './polling';
 import {
   assertCursorKind,
   assertDeltaPollingSupported,
   buildTupleCursorFilter,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
-  invalidLiveCursorError,
+  encodeDeltaCursor,
+  invalidDeltaCursorError,
 } from './polling';
 
 // ============================================================================
@@ -273,7 +273,7 @@ export async function listMetrics(
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListMetricsResponse> {
   const parsed = listMetricsArgsSchema.parse(args);
-  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
   const filter = buildMetricsFilterConditions(parsed.filters, 'm');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'm');
@@ -282,16 +282,16 @@ export async function listMetrics(
   if (parsed.mode === 'delta') {
     assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getMetricsLiveCursor(client, whereClause, filter.params, strategy);
+    const currentDeltaCursor = await getDeltaCursor(client, whereClause, filter.params, strategy);
     if (parsed.after === undefined) {
       return {
         metrics: [],
         delta: { limit: parsed.limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursor = decodeLiveCursor(parsed.after);
+    const afterCursor = decodeDeltaCursor(parsed.after);
     const rows =
       afterCursor.kind === 'serial'
         ? await queryMetricsAfterSerialCursor(
@@ -315,8 +315,10 @@ export async function listMetrics(
     return {
       metrics: visibleRows.map(rowToMetricRecord),
       delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
-      liveCursor:
-        visibleRows.length > 0 ? buildMetricsCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
+      deltaCursor:
+        visibleRows.length > 0
+          ? buildMetricsCursor(visibleRows[visibleRows.length - 1]!, strategy)
+          : currentDeltaCursor,
     };
   }
 
@@ -342,9 +344,7 @@ export async function listMetrics(
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     metrics: rows.map(rowToMetricRecord),
-    ...(liveCursorEnabled
-      ? { liveCursor: await getMetricsLiveCursor(client, whereClause, filter.params, strategy) }
-      : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, filter.params, strategy) } : {}),
   };
 }
 
@@ -365,7 +365,7 @@ async function queryMetricsAfterSerialCursor(
   cursorId: string,
 ): Promise<MetricDeltaRow[]> {
   if (strategy !== 'serial') {
-    throw invalidLiveCursorError();
+    throw invalidDeltaCursorError();
   }
 
   return await queryJson<MetricDeltaRow>(
@@ -396,7 +396,7 @@ async function queryMetricsAfterTupleCursor(
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
-  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'metric' }>,
+  afterCursor: Extract<ClickHouseDeltaCursor, { kind: 'metric' }>,
 ): Promise<MetricDeltaRow[]> {
   const tupleFilter = buildTupleCursorFilter([
     { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
@@ -427,7 +427,7 @@ async function queryMetricsAfterTupleCursor(
   );
 }
 
-async function getMetricsLiveCursor(
+async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
@@ -449,7 +449,7 @@ async function getMetricsLiveCursor(
     );
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
   }
 
   const rows = await queryJson<{ cursorIngestedAt?: string; name?: string; timestamp?: string; metricId?: string }>(
@@ -477,7 +477,7 @@ async function getMetricsLiveCursor(
     return null;
   }
 
-  return encodeLiveCursor({
+  return encodeDeltaCursor({
     version: 1,
     kind: 'metric',
     ingestedAt: row.cursorIngestedAt,
@@ -489,11 +489,11 @@ async function getMetricsLiveCursor(
 
 function buildMetricsCursor(row: MetricDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
   if (strategy === 'serial') {
-    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+    return row.cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
   }
 
   return row.cursorIngestedAt
-    ? encodeLiveCursor({
+    ? encodeDeltaCursor({
         version: 1,
         kind: 'metric',
         ingestedAt: row.cursorIngestedAt,

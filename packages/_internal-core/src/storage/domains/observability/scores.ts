@@ -14,7 +14,7 @@ import {
   dimensionsField,
   entityTypeField,
   groupBySchema,
-  liveCursorSchema,
+  deltaCursorSchema,
   listModeSchema,
   normalizeObservabilityListArgs,
   paginationArgsSchema,
@@ -206,7 +206,7 @@ export const listScoresArgsSchema = z
     filters: scoresFilterSchema.optional(),
     pagination: paginationArgsSchema.optional(),
     orderBy: scoresOrderBySchema.optional(),
-    after: liveCursorSchema.optional(),
+    after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
   })
   .strict()
@@ -226,7 +226,7 @@ export const listScoresResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    liveCursor: liveCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.nullable().optional(),
     scores: z.array(scoreRecordSchema),
   })
   .describe('Response from listing scores');

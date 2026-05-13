@@ -12,15 +12,15 @@ import type { GetRootSpanArgs, GetRootSpanResponse, ListTracesArgs, ListTracesRe
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from './ddl';
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
 import { CH_SETTINGS, rowToSpanRecord } from './helpers';
-import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseDeltaCursor } from './polling';
 import {
   assertCursorKind,
   assertDeltaPollingSupported,
   buildTupleCursorFilter,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
-  invalidLiveCursorError,
+  encodeDeltaCursor,
+  invalidDeltaCursorError,
 } from './polling';
 
 // ---------------------------------------------------------------------------
@@ -100,21 +100,21 @@ export async function listTraces(
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
 
   if (mode === 'delta') {
     assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getTraceLiveCursor(client, whereClause, params, strategy);
+    const currentDeltaCursor = await getDeltaCursor(client, whereClause, params, strategy);
     if (after === undefined) {
       return {
         spans: [],
         delta: { limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursor = decodeLiveCursor(after);
+    const afterCursor = decodeDeltaCursor(after);
     const rows =
       afterCursor.kind === 'serial'
         ? await queryTracesAfterSerialCursor(client, whereClause, params, limit, strategy, afterCursor.cursorId)
@@ -125,8 +125,8 @@ export async function listTraces(
     return {
       spans: toTraceSpans(visibleRows.map(rowToSpanRecord)),
       delta: { limit, hasMore: rows.length > limit },
-      liveCursor:
-        visibleRows.length > 0 ? buildTraceCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
+      deltaCursor:
+        visibleRows.length > 0 ? buildTraceCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentDeltaCursor,
     };
   }
 
@@ -156,7 +156,7 @@ export async function listTraces(
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       spans: [],
-      ...(liveCursorEnabled ? { liveCursor: null } : {}),
+      ...(deltaCursorEnabled ? { deltaCursor: null } : {}),
     };
   }
 
@@ -194,7 +194,7 @@ export async function listTraces(
       hasMore: (page + 1) * perPage < total,
     },
     spans: toTraceSpans(spans),
-    ...(liveCursorEnabled ? { liveCursor: await getTraceLiveCursor(client, whereClause, params, strategy) } : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, params, strategy) } : {}),
   };
 }
 
@@ -215,7 +215,7 @@ async function queryTracesAfterSerialCursor(
   cursorId: string,
 ): Promise<TraceDeltaRow[]> {
   if (strategy !== 'serial') {
-    throw invalidLiveCursorError();
+    throw invalidDeltaCursorError();
   }
 
   return (await (
@@ -253,7 +253,7 @@ async function queryTracesAfterTupleCursor(
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
-  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'trace' }>,
+  afterCursor: Extract<ClickHouseDeltaCursor, { kind: 'trace' }>,
 ): Promise<TraceDeltaRow[]> {
   const tupleFilter = buildTupleCursorFilter([
     { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
@@ -291,7 +291,7 @@ async function queryTracesAfterTupleCursor(
   ).json()) as TraceDeltaRow[];
 }
 
-async function getTraceLiveCursor(
+async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
@@ -316,7 +316,7 @@ async function getTraceLiveCursor(
     ).json()) as Array<{ cursorId?: string | null }>;
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
   }
 
   const rows = (await (
@@ -347,7 +347,7 @@ async function getTraceLiveCursor(
     return null;
   }
 
-  return encodeLiveCursor({
+  return encodeDeltaCursor({
     version: 1,
     kind: 'trace',
     ingestedAt: row.cursorIngestedAt,
@@ -359,11 +359,11 @@ async function getTraceLiveCursor(
 
 function buildTraceCursor(row: TraceDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
   if (strategy === 'serial') {
-    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+    return row.cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
   }
 
   return row.cursorIngestedAt
-    ? encodeLiveCursor({
+    ? encodeDeltaCursor({
         version: 1,
         kind: 'trace',
         ingestedAt: row.cursorIngestedAt,

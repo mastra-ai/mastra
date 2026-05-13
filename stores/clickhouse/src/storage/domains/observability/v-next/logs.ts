@@ -5,15 +5,15 @@ import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastr
 import { TABLE_LOG_EVENTS, TABLE_LOG_EVENTS_DELTA } from './ddl';
 import { buildLogsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, logRecordToRow, rowToLogRecord } from './helpers';
-import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseDeltaCursor } from './polling';
 import {
   assertCursorKind,
   assertDeltaPollingSupported,
   buildTupleCursorFilter,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
-  invalidLiveCursorError,
+  encodeDeltaCursor,
+  invalidDeltaCursorError,
 } from './polling';
 
 export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreateLogsArgs): Promise<void> {
@@ -33,7 +33,7 @@ export async function listLogs(
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListLogsResponse> {
   const parsed = listLogsArgsSchema.parse(args);
-  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
   const filter = buildLogsFilterConditions(parsed.filters, 'l');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'l');
@@ -42,16 +42,16 @@ export async function listLogs(
   if (parsed.mode === 'delta') {
     assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getLogsLiveCursor(client, whereClause, filter.params, strategy);
+    const currentDeltaCursor = await getDeltaCursor(client, whereClause, filter.params, strategy);
     if (parsed.after === undefined) {
       return {
         logs: [],
         delta: { limit: parsed.limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursor = decodeLiveCursor(parsed.after);
+    const afterCursor = decodeDeltaCursor(parsed.after);
     const rows =
       afterCursor.kind === 'serial'
         ? await queryLogsAfterSerialCursor(
@@ -75,8 +75,8 @@ export async function listLogs(
     return {
       logs: visibleRows.map(rowToLogRecord),
       delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
-      liveCursor:
-        visibleRows.length > 0 ? buildLogsCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
+      deltaCursor:
+        visibleRows.length > 0 ? buildLogsCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentDeltaCursor,
     };
   }
 
@@ -118,7 +118,7 @@ export async function listLogs(
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     logs: rows.map(rowToLogRecord),
-    ...(liveCursorEnabled ? { liveCursor: await getLogsLiveCursor(client, whereClause, filter.params, strategy) } : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, filter.params, strategy) } : {}),
   };
 }
 
@@ -138,7 +138,7 @@ async function queryLogsAfterSerialCursor(
   cursorId: string,
 ): Promise<LogDeltaRow[]> {
   if (strategy !== 'serial') {
-    throw invalidLiveCursorError();
+    throw invalidDeltaCursorError();
   }
 
   return (await (
@@ -174,7 +174,7 @@ async function queryLogsAfterTupleCursor(
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
-  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'log' }>,
+  afterCursor: Extract<ClickHouseDeltaCursor, { kind: 'log' }>,
 ): Promise<LogDeltaRow[]> {
   const tupleFilter = buildTupleCursorFilter([
     { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
@@ -209,7 +209,7 @@ async function queryLogsAfterTupleCursor(
   ).json()) as LogDeltaRow[];
 }
 
-async function getLogsLiveCursor(
+async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
@@ -233,7 +233,7 @@ async function getLogsLiveCursor(
     ).json()) as Array<{ cursorId?: string | null }>;
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
   }
 
   const rows = (await (
@@ -262,7 +262,7 @@ async function getLogsLiveCursor(
     return null;
   }
 
-  return encodeLiveCursor({
+  return encodeDeltaCursor({
     version: 1,
     kind: 'log',
     ingestedAt: row.cursorIngestedAt,
@@ -273,11 +273,11 @@ async function getLogsLiveCursor(
 
 function buildLogsCursor(row: LogDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
   if (strategy === 'serial') {
-    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+    return row.cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
   }
 
   return row.cursorIngestedAt
-    ? encodeLiveCursor({
+    ? encodeDeltaCursor({
         version: 1,
         kind: 'log',
         ingestedAt: row.cursorIngestedAt,

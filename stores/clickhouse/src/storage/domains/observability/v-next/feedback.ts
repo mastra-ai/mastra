@@ -22,15 +22,15 @@ import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
-import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseDeltaCursor } from './polling';
 import {
   assertCursorKind,
   assertDeltaPollingSupported,
   buildTupleCursorFilter,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
-  invalidLiveCursorError,
+  encodeDeltaCursor,
+  invalidDeltaCursorError,
 } from './polling';
 
 // ============================================================================
@@ -196,7 +196,7 @@ export async function listFeedback(
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListFeedbackResponse> {
   const parsed = listFeedbackArgsSchema.parse(args);
-  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
   const filter = buildFeedbackFilterConditions(parsed.filters, 'f');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'f');
@@ -205,16 +205,16 @@ export async function listFeedback(
   if (parsed.mode === 'delta') {
     assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getFeedbackLiveCursor(client, whereClause, filter.params, strategy);
+    const currentDeltaCursor = await getDeltaCursor(client, whereClause, filter.params, strategy);
     if (parsed.after === undefined) {
       return {
         feedback: [],
         delta: { limit: parsed.limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursor = decodeLiveCursor(parsed.after);
+    const afterCursor = decodeDeltaCursor(parsed.after);
     const rows =
       afterCursor.kind === 'serial'
         ? await queryFeedbackAfterSerialCursor(
@@ -238,10 +238,10 @@ export async function listFeedback(
     return {
       feedback: visibleRows.map(rowToFeedbackRecord),
       delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
-      liveCursor:
+      deltaCursor:
         visibleRows.length > 0
           ? buildFeedbackCursor(visibleRows[visibleRows.length - 1]!, strategy)
-          : currentLiveCursor,
+          : currentDeltaCursor,
     };
   }
 
@@ -267,9 +267,7 @@ export async function listFeedback(
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     feedback: rows.map(rowToFeedbackRecord),
-    ...(liveCursorEnabled
-      ? { liveCursor: await getFeedbackLiveCursor(client, whereClause, filter.params, strategy) }
-      : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, filter.params, strategy) } : {}),
   };
 }
 
@@ -290,7 +288,7 @@ async function queryFeedbackAfterSerialCursor(
   cursorId: string,
 ): Promise<FeedbackDeltaRow[]> {
   if (strategy !== 'serial') {
-    throw invalidLiveCursorError();
+    throw invalidDeltaCursorError();
   }
 
   return await queryJson<FeedbackDeltaRow>(
@@ -321,7 +319,7 @@ async function queryFeedbackAfterTupleCursor(
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
-  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'feedback' }>,
+  afterCursor: Extract<ClickHouseDeltaCursor, { kind: 'feedback' }>,
 ): Promise<FeedbackDeltaRow[]> {
   const tupleFilter = buildTupleCursorFilter([
     { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
@@ -352,7 +350,7 @@ async function queryFeedbackAfterTupleCursor(
   );
 }
 
-async function getFeedbackLiveCursor(
+async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
@@ -374,7 +372,7 @@ async function getFeedbackLiveCursor(
     );
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
   }
 
   const rows = await queryJson<{
@@ -407,7 +405,7 @@ async function getFeedbackLiveCursor(
     return null;
   }
 
-  return encodeLiveCursor({
+  return encodeDeltaCursor({
     version: 1,
     kind: 'feedback',
     ingestedAt: row.cursorIngestedAt,
@@ -419,11 +417,11 @@ async function getFeedbackLiveCursor(
 
 function buildFeedbackCursor(row: FeedbackDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
   if (strategy === 'serial') {
-    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+    return row.cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
   }
 
   return row.cursorIngestedAt
-    ? encodeLiveCursor({
+    ? encodeDeltaCursor({
         version: 1,
         kind: 'feedback',
         ingestedAt: row.cursorIngestedAt,

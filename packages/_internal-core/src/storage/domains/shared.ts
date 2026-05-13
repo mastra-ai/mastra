@@ -68,10 +68,10 @@ export const paginationInfoSchema = z.object({
 });
 
 /** Opaque cursor used to resume incremental polling for observability list endpoints. */
-export const liveCursorSchema = z.string().min(1).describe('Opaque cursor value for incremental polling');
+export const deltaCursorSchema = z.string().min(1).describe('Opaque cursor value for incremental polling');
 
-/** Public live cursor type used across observability list endpoints. */
-export type LiveCursor = z.output<typeof liveCursorSchema>;
+/** Public delta cursor type used across observability list endpoints. */
+export type DeltaCursor = z.output<typeof deltaCursorSchema>;
 
 /** Explicit list mode selector for observability list endpoints. */
 export const listModeSchema = z
@@ -101,7 +101,7 @@ type ObservabilityListModeValue<TFilters, TOrderBy> = {
   filters?: TFilters;
   pagination?: { page: number; perPage: number };
   orderBy?: TOrderBy;
-  after?: LiveCursor;
+  after?: DeltaCursor;
   limit?: number;
 };
 
@@ -116,7 +116,7 @@ type NormalizedObservabilityListArgs<TFilters, TOrderBy> = {
   filters: TFilters | undefined;
   pagination: { page: number; perPage: number };
   orderBy: TOrderBy;
-  after: LiveCursor | undefined;
+  after: DeltaCursor | undefined;
   limit: number;
 };
 

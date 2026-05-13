@@ -520,7 +520,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(reversedIds).not.toContain('trace-bound-b');
     });
 
-    it('supports page liveCursor and delta polling for traces', async () => {
+    it('supports page deltaCursor and delta polling for traces', async () => {
       await storage.batchCreateSpans({
         records: [
           {
@@ -558,7 +558,7 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       const page = await storage.listTraces({ filters: { environment: 'production' } });
-      expect(page.liveCursor).toBeTruthy();
+      expect(page.deltaCursor).toBeTruthy();
 
       const bootstrap = await storage.listTraces({
         mode: 'delta',
@@ -566,7 +566,7 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(bootstrap.spans).toEqual([]);
       expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
-      expect(bootstrap.liveCursor).toBeTruthy();
+      expect(bootstrap.deltaCursor).toBeTruthy();
 
       await storage.createSpan({
         span: {
@@ -605,7 +605,7 @@ describe('ObservabilityStorageDuckDB', () => {
       const afterExistingUpdate = await storage.listTraces({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(afterExistingUpdate.spans).toEqual([]);
 
@@ -679,15 +679,15 @@ describe('ObservabilityStorageDuckDB', () => {
       const delta = await storage.listTraces({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(delta.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
-      expect(delta.liveCursor).toBeTruthy();
+      expect(delta.deltaCursor).toBeTruthy();
 
       const afterPageCursor = await storage.listTraces({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: page.liveCursor!,
+        after: page.deltaCursor!,
       });
       expect(afterPageCursor.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
     });
@@ -1087,7 +1087,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(tagSpanIds).not.toContain('agent-b');
     });
 
-    it('supports page liveCursor and delta polling for branches', async () => {
+    it('supports page deltaCursor and delta polling for branches', async () => {
       await storage.batchCreateSpans({
         records: [
           {
@@ -1122,7 +1122,7 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       const page = await storage.listBranches({ filters: { environment: 'production' } });
-      expect(page.liveCursor).toBeTruthy();
+      expect(page.deltaCursor).toBeTruthy();
 
       const bootstrap = await storage.listBranches({
         mode: 'delta',
@@ -1130,7 +1130,7 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(bootstrap.branches).toEqual([]);
       expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
-      expect(bootstrap.liveCursor).toBeTruthy();
+      expect(bootstrap.deltaCursor).toBeTruthy();
 
       await storage.createSpan({
         span: {
@@ -1148,7 +1148,7 @@ describe('ObservabilityStorageDuckDB', () => {
       const afterExistingUpdate = await storage.listBranches({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(afterExistingUpdate.branches).toEqual([]);
 
@@ -1188,14 +1188,14 @@ describe('ObservabilityStorageDuckDB', () => {
       const delta = await storage.listBranches({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(delta.branches.map(branch => branch.spanId)).toEqual(['branch-new']);
 
       const afterPageCursor = await storage.listBranches({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: page.liveCursor!,
+        after: page.deltaCursor!,
       });
       expect(afterPageCursor.branches.map(branch => branch.spanId)).toEqual(['branch-new']);
     });
@@ -1367,7 +1367,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.logs[0]!.message).toBe('Error occurred');
     });
 
-    it('supports page liveCursor and delta polling for logs', async () => {
+    it('supports page deltaCursor and delta polling for logs', async () => {
       await storage.batchCreateLogs({
         logs: [
           {
@@ -1389,7 +1389,7 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       const page = await storage.listLogs({ filters: { environment: 'production' } });
-      expect(page.liveCursor).toBeTruthy();
+      expect(page.deltaCursor).toBeTruthy();
 
       const bootstrap = await storage.listLogs({ mode: 'delta', filters: { environment: 'production' } });
       expect(bootstrap.logs).toEqual([]);
@@ -1433,14 +1433,14 @@ describe('ObservabilityStorageDuckDB', () => {
       const delta = await storage.listLogs({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(delta.logs.map(log => log.logId)).toEqual(['log-delta-new']);
 
       const afterPageCursor = await storage.listLogs({
         mode: 'delta',
         filters: { environment: 'production' },
-        after: page.liveCursor!,
+        after: page.deltaCursor!,
       });
       expect(afterPageCursor.logs.map(log => log.logId)).toEqual(['log-delta-new']);
     });
@@ -1715,9 +1715,9 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(p50).toBeDefined();
     });
 
-    it('supports page liveCursor and delta polling for metrics', async () => {
+    it('supports page deltaCursor and delta polling for metrics', async () => {
       const page = await storage.listMetrics({ filters: { provider: 'openai' } });
-      expect(page.liveCursor).toBeTruthy();
+      expect(page.deltaCursor).toBeTruthy();
 
       const bootstrap = await storage.listMetrics({ mode: 'delta', filters: { provider: 'openai' } });
       expect(bootstrap.metrics).toEqual([]);
@@ -1759,7 +1759,7 @@ describe('ObservabilityStorageDuckDB', () => {
       const delta = await storage.listMetrics({
         mode: 'delta',
         filters: { provider: 'openai' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(delta.metrics.map(metric => metric.metricId)).toEqual(['metric-delta-new']);
     });
@@ -2054,7 +2054,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.scores[0]!.scoreSource).toBe('automated');
     });
 
-    it('supports page liveCursor and delta polling for scores', async () => {
+    it('supports page deltaCursor and delta polling for scores', async () => {
       await storage.createScore({
         score: {
           scoreId: 'score-delta-existing',
@@ -2070,7 +2070,7 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       const page = await storage.listScores({ filters: { scorerId: 'relevance' } });
-      expect(page.liveCursor).toBeTruthy();
+      expect(page.deltaCursor).toBeTruthy();
 
       const bootstrap = await storage.listScores({ mode: 'delta', filters: { scorerId: 'relevance' } });
       expect(bootstrap.scores).toEqual([]);
@@ -2106,7 +2106,7 @@ describe('ObservabilityStorageDuckDB', () => {
       const delta = await storage.listScores({
         mode: 'delta',
         filters: { scorerId: 'relevance' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(delta.scores.map(score => score.scoreId)).toEqual(['score-delta-new']);
     });
@@ -2305,7 +2305,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.feedback[0]!.feedbackSource).toBe('manual');
     });
 
-    it('supports page liveCursor and delta polling for feedback', async () => {
+    it('supports page deltaCursor and delta polling for feedback', async () => {
       await storage.createFeedback({
         feedback: {
           feedbackId: 'feedback-delta-existing',
@@ -2324,7 +2324,7 @@ describe('ObservabilityStorageDuckDB', () => {
       });
 
       const page = await storage.listFeedback({ filters: { feedbackSource: 'user' } });
-      expect(page.liveCursor).toBeTruthy();
+      expect(page.deltaCursor).toBeTruthy();
 
       const bootstrap = await storage.listFeedback({ mode: 'delta', filters: { feedbackSource: 'user' } });
       expect(bootstrap.feedback).toEqual([]);
@@ -2366,7 +2366,7 @@ describe('ObservabilityStorageDuckDB', () => {
       const delta = await storage.listFeedback({
         mode: 'delta',
         filters: { feedbackSource: 'user' },
-        after: bootstrap.liveCursor!,
+        after: bootstrap.deltaCursor!,
       });
       expect(delta.feedback.map(feedback => feedback.feedbackId)).toEqual(['feedback-delta-new']);
     });

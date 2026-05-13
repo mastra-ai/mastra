@@ -695,7 +695,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
           expect(bootstrap.spans).toEqual([]);
           expect(bootstrap.delta).toBeDefined();
-          expect(bootstrap.liveCursor).toBeDefined();
+          expect(bootstrap.deltaCursor).toBeDefined();
 
           await observabilityStorage.createSpan({
             span: createSpan({
@@ -710,7 +710,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           const afterExistingTraceUpdate = await observabilityStorage.listTraces({
             mode: 'delta',
             filters: { environment: 'production' },
-            after: bootstrap.liveCursor!,
+            after: bootstrap.deltaCursor!,
           });
 
           expect(afterExistingTraceUpdate.spans).toEqual([]);
@@ -746,7 +746,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           const delta = await observabilityStorage.listTraces({
             mode: 'delta',
             filters: { environment: 'production' },
-            after: bootstrap.liveCursor!,
+            after: bootstrap.deltaCursor!,
           });
 
           expect(delta.spans.map(span => span.traceId)).toEqual(['trace-5']);
@@ -1020,7 +1020,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         expect(bootstrap.branches).toEqual([]);
         expect(bootstrap.delta).toBeDefined();
-        expect(bootstrap.liveCursor).toBeDefined();
+        expect(bootstrap.deltaCursor).toBeDefined();
 
         await observabilityStorage.createSpan({
           span: createChildSpan('branch-1', {
@@ -1035,7 +1035,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const afterExistingBranchUpdate = await observabilityStorage.listBranches({
           mode: 'delta',
           filters: { environment: 'production' },
-          after: bootstrap.liveCursor!,
+          after: bootstrap.deltaCursor!,
         });
 
         expect(afterExistingBranchUpdate.branches).toEqual([]);
@@ -1071,7 +1071,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const delta = await observabilityStorage.listBranches({
           mode: 'delta',
           filters: { environment: 'production' },
-          after: bootstrap.liveCursor!,
+          after: bootstrap.deltaCursor!,
         });
 
         expect(delta.branches.map(branch => branch.spanId)).toEqual(['branch-2']);

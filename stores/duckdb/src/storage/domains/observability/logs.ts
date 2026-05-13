@@ -5,9 +5,9 @@ import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './f
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
 import {
   assertDeltaPollingEnabled,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
+  encodeDeltaCursor,
   extendWhereClause,
   normalizeCursorId,
 } from './polling';
@@ -145,16 +145,16 @@ export async function listLogs(db: DuckDBConnection, args: ListLogsArgs): Promis
   if (mode === 'delta') {
     assertDeltaPollingEnabled();
 
-    const currentLiveCursor = await getLogsLiveCursor(db, filterClause, filterParams);
+    const currentDeltaCursor = await getDeltaCursor(db, filterClause, filterParams);
     if (after === undefined) {
       return {
         logs: [],
         delta: { limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursorId = decodeLiveCursor(after);
+    const afterCursorId = decodeDeltaCursor(after);
     const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
     const rows = await db.query<Record<string, unknown>>(
       `SELECT * FROM log_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
@@ -169,10 +169,10 @@ export async function listLogs(db: DuckDBConnection, args: ListLogsArgs): Promis
     return {
       logs: visibleRows.map(row => row.log) as ListLogsResponse['logs'],
       delta: { limit, hasMore: rows.length > limit },
-      liveCursor:
+      deltaCursor:
         visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentDeltaCursor,
     };
   }
 
@@ -195,11 +195,11 @@ export async function listLogs(db: DuckDBConnection, args: ListLogsArgs): Promis
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     logs,
-    ...(deltaPollingFeatureEnabled() ? { liveCursor: await getLogsLiveCursor(db, filterClause, filterParams) } : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getDeltaCursor(db, filterClause, filterParams) } : {}),
   };
 }
 
-async function getLogsLiveCursor(
+async function getDeltaCursor(
   db: DuckDBConnection,
   filterClause: string,
   filterParams: unknown[],
@@ -209,5 +209,5 @@ async function getLogsLiveCursor(
     filterParams,
   );
 
-  return encodeLiveCursor(rows[0]?.cursorId);
+  return encodeDeltaCursor(rows[0]?.cursorId);
 }

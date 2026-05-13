@@ -712,7 +712,7 @@ describe('ObservabilityInMemory', () => {
         expect(storage.getListCapabilities()).toBeUndefined();
 
         const page = await storage.listLogs({});
-        expect(page.liveCursor).toBeUndefined();
+        expect(page.deltaCursor).toBeUndefined();
 
         await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
           'does not support observability delta polling',
@@ -726,15 +726,15 @@ describe('ObservabilityInMemory', () => {
       }
     });
 
-    it('returns a page liveCursor for empty trace results and delta without after starts from now', async () => {
+    it('returns a page deltaCursor for empty trace results and delta without after starts from now', async () => {
       const page = await storage.listTraces({ filters: { entityName: 'Observer' } });
       expect(page.spans).toEqual([]);
-      expect(page.liveCursor).toBeDefined();
+      expect(page.deltaCursor).toBeDefined();
 
       const start = await storage.listTraces({ mode: 'delta', filters: { entityName: 'Observer' } });
       expect(start.spans).toEqual([]);
       expect(start.delta).toEqual({ limit: 10, hasMore: false });
-      expect(start.liveCursor).toBeDefined();
+      expect(start.deltaCursor).toBeDefined();
 
       await storage.batchCreateSpans({
         records: [
@@ -751,14 +751,14 @@ describe('ObservabilityInMemory', () => {
       const deltaFromPage = await storage.listTraces({
         mode: 'delta',
         filters: { entityName: 'Observer' },
-        after: page.liveCursor!,
+        after: page.deltaCursor!,
       });
       expect(deltaFromPage.spans.map(span => span.traceId)).toEqual(['trace-1']);
 
       const deltaFromStart = await storage.listTraces({
         mode: 'delta',
         filters: { entityName: 'Observer' },
-        after: start.liveCursor!,
+        after: start.deltaCursor!,
       });
       expect(deltaFromStart.spans.map(span => span.traceId)).toEqual(['trace-1']);
     });
@@ -793,7 +793,7 @@ describe('ObservabilityInMemory', () => {
       const delta = await storage.listTraces({
         mode: 'delta',
         filters: { entityName: 'workflow' },
-        after: page.liveCursor!,
+        after: page.deltaCursor!,
       });
 
       expect(delta.spans).toEqual([]);
@@ -845,7 +845,7 @@ describe('ObservabilityInMemory', () => {
       const delta = await storage.listBranches({
         mode: 'delta',
         filters: { entityName: 'Observer' },
-        after: page.liveCursor!,
+        after: page.deltaCursor!,
       });
 
       expect(delta.branches.map(branch => branch.spanId)).toEqual(['observer-2']);
@@ -887,7 +887,7 @@ describe('ObservabilityInMemory', () => {
       const first = await storage.listMetrics({
         mode: 'delta',
         filters: { name: ['latency_ms'], threadId: 'thread-1' },
-        after: start.liveCursor!,
+        after: start.deltaCursor!,
         limit: 1,
       });
       expect(first.metrics.map(metric => metric.value)).toEqual([10]);
@@ -896,7 +896,7 @@ describe('ObservabilityInMemory', () => {
       const second = await storage.listMetrics({
         mode: 'delta',
         filters: { name: ['latency_ms'], threadId: 'thread-1' },
-        after: first.liveCursor!,
+        after: first.deltaCursor!,
         limit: 1,
       });
       expect(second.metrics.map(metric => metric.value)).toEqual([20]);
@@ -926,7 +926,7 @@ describe('ObservabilityInMemory', () => {
       const delta = await storage.listLogs({
         mode: 'delta',
         filters: { traceId: 'trace-1' },
-        after: start.liveCursor!,
+        after: start.deltaCursor!,
       });
 
       expect(delta.logs.map(log => log.message)).toEqual(['keep']);
@@ -955,7 +955,7 @@ describe('ObservabilityInMemory', () => {
       const delta = await storage.listScores({
         mode: 'delta',
         filters: { scorerId: 'relevance' },
-        after: start.liveCursor!,
+        after: start.deltaCursor!,
       });
 
       expect(delta.scores.map(score => score.score)).toEqual([0.9]);
@@ -984,7 +984,7 @@ describe('ObservabilityInMemory', () => {
       const delta = await storage.listFeedback({
         mode: 'delta',
         filters: { traceId: 'trace-1' },
-        after: start.liveCursor!,
+        after: start.deltaCursor!,
       });
 
       expect(delta.feedback.map(feedback => feedback.value)).toEqual([5]);

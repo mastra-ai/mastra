@@ -1,4 +1,4 @@
-import { deltaLimitSchema, liveCursorSchema, listModeSchema, paginationArgsSchema } from '@internal/core/storage';
+import { deltaLimitSchema, deltaCursorSchema, listModeSchema, paginationArgsSchema } from '@internal/core/storage';
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
@@ -301,7 +301,7 @@ export function createObservabilityListQuerySchema<
         field: fieldSchema,
         direction: directionSchema,
         mode: listModeSchema.optional(),
-        after: liveCursorSchema.optional(),
+        after: deltaCursorSchema.optional(),
         limit: deltaLimitSchema,
       })
       .partial(),

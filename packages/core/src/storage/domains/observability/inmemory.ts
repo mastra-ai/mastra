@@ -188,43 +188,43 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return Math.max(0, this.db.observabilityNextCursorId - 1);
   }
 
-  private encodeLiveCursor(cursorId: number): string {
+  private encodeDeltaCursor(cursorId: number): string {
     return `inmem:${cursorId.toString(36)}`;
   }
 
-  private decodeLiveCursor(cursor: string): number {
+  private decodeDeltaCursor(cursor: string): number {
     if (!cursor.startsWith('inmem:')) {
       throw new MastraError({
-        id: 'OBSERVABILITY_INVALID_LIVE_CURSOR',
+        id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
         domain: ErrorDomain.MASTRA_OBSERVABILITY,
         category: ErrorCategory.USER,
-        text: 'Invalid observability live cursor',
+        text: 'Invalid observability delta cursor',
       });
     }
 
     const cursorId = Number.parseInt(cursor.slice('inmem:'.length), 36);
     if (!Number.isInteger(cursorId) || cursorId < 0) {
       throw new MastraError({
-        id: 'OBSERVABILITY_INVALID_LIVE_CURSOR',
+        id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
         domain: ErrorDomain.MASTRA_OBSERVABILITY,
         category: ErrorCategory.USER,
-        text: 'Invalid observability live cursor',
+        text: 'Invalid observability delta cursor',
       });
     }
 
     return cursorId;
   }
 
-  private currentLiveCursor(): string {
-    return this.encodeLiveCursor(this.currentObservabilityCursorId());
+  private currentDeltaCursor(): string {
+    return this.encodeDeltaCursor(this.currentObservabilityCursorId());
   }
 
-  private pageLiveCursor(): { liveCursor?: string } {
+  private pageDeltaCursor(): { deltaCursor?: string } {
     if (!this.deltaPollingFeatureEnabled()) {
       return {};
     }
 
-    return { liveCursor: this.currentLiveCursor() };
+    return { deltaCursor: this.currentDeltaCursor() };
   }
 
   private createBranchCursorKey(traceId: string, spanId: string): string {
@@ -256,17 +256,17 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   private buildDeltaResponse<T>(
     rows: Array<{ cursorId: number; row: T }>,
     limit: number,
-  ): { rows: T[]; delta: { limit: number; hasMore: boolean }; liveCursor: string } {
+  ): { rows: T[]; delta: { limit: number; hasMore: boolean }; deltaCursor: string } {
     const visibleRows = rows.slice(0, limit);
     const hasMore = rows.length > limit;
 
     return {
       rows: visibleRows.map(entry => entry.row),
       delta: { limit, hasMore },
-      liveCursor:
+      deltaCursor:
         visibleRows.length > 0
-          ? this.encodeLiveCursor(visibleRows[visibleRows.length - 1]!.cursorId)
-          : this.currentLiveCursor(),
+          ? this.encodeDeltaCursor(visibleRows[visibleRows.length - 1]!.cursorId)
+          : this.currentDeltaCursor(),
     };
   }
 
@@ -276,16 +276,16 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     matches: (row: T) => boolean,
     after: string | undefined,
     limit: number,
-  ): { rows: T[]; delta: { limit: number; hasMore: boolean }; liveCursor: string } {
+  ): { rows: T[]; delta: { limit: number; hasMore: boolean }; deltaCursor: string } {
     if (after === undefined) {
       return {
         rows: [],
         delta: { limit, hasMore: false },
-        liveCursor: this.currentLiveCursor(),
+        deltaCursor: this.currentDeltaCursor(),
       };
     }
 
-    const afterCursorId = this.decodeLiveCursor(after);
+    const afterCursorId = this.decodeDeltaCursor(after);
     const matchingRows = rows
       .flatMap(row => {
         const cursorId = cursorIds.get(row);
@@ -497,11 +497,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         return {
           spans: [],
           delta: { limit, hasMore: false },
-          liveCursor: this.currentLiveCursor(),
+          deltaCursor: this.currentDeltaCursor(),
         };
       }
 
-      const afterCursorId = this.decodeLiveCursor(after);
+      const afterCursorId = this.decodeDeltaCursor(after);
       const matchingRootSpans = Array.from(this.db.traceCursorIds.entries())
         .flatMap(([traceId, cursorId]) => {
           if (cursorId <= afterCursorId) {
@@ -522,7 +522,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return {
         spans: toTraceSpans(deltaResponse.rows),
         delta: deltaResponse.delta,
-        liveCursor: deltaResponse.liveCursor,
+        deltaCursor: deltaResponse.deltaCursor,
       };
     }
 
@@ -572,7 +572,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       spans: toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore: end < total },
-      ...this.pageLiveCursor(),
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -729,11 +729,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         return {
           branches: [],
           delta: { limit, hasMore: false },
-          liveCursor: this.currentLiveCursor(),
+          deltaCursor: this.currentDeltaCursor(),
         };
       }
 
-      const afterCursorId = this.decodeLiveCursor(after);
+      const afterCursorId = this.decodeDeltaCursor(after);
       const matches = Array.from(this.db.branchCursorIds.entries())
         .flatMap(([key, cursorId]) => {
           if (cursorId <= afterCursorId) {
@@ -760,7 +760,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return {
         branches: deltaResponse.rows.map(toTraceSpan),
         delta: deltaResponse.delta,
-        liveCursor: deltaResponse.liveCursor,
+        deltaCursor: deltaResponse.deltaCursor,
       };
     }
 
@@ -803,7 +803,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       pagination: { total, page, perPage, hasMore: end < total },
       branches: paged.map(toTraceSpan),
-      ...this.pageLiveCursor(),
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -973,7 +973,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return {
         metrics: deltaResponse.rows,
         delta: deltaResponse.delta,
-        liveCursor: deltaResponse.liveCursor,
+        deltaCursor: deltaResponse.deltaCursor,
       };
     }
 
@@ -990,7 +990,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       metrics: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageLiveCursor(),
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -1510,7 +1510,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return {
         logs: deltaResponse.rows,
         delta: deltaResponse.delta,
-        liveCursor: deltaResponse.liveCursor,
+        deltaCursor: deltaResponse.deltaCursor,
       };
     }
 
@@ -1529,7 +1529,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       logs: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageLiveCursor(),
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -1638,7 +1638,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return {
         scores: deltaResponse.rows,
         delta: deltaResponse.delta,
-        liveCursor: deltaResponse.liveCursor,
+        deltaCursor: deltaResponse.deltaCursor,
       };
     }
 
@@ -1661,7 +1661,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       scores: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageLiveCursor(),
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -1987,7 +1987,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return {
         feedback: deltaResponse.rows,
         delta: deltaResponse.delta,
-        liveCursor: deltaResponse.liveCursor,
+        deltaCursor: deltaResponse.deltaCursor,
       };
     }
 
@@ -2006,7 +2006,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       feedback: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
-      ...this.pageLiveCursor(),
+      ...this.pageDeltaCursor(),
     };
   }
 

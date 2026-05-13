@@ -1,4 +1,4 @@
-import { liveCursorSchema } from '@internal/core/storage';
+import { deltaCursorSchema } from '@internal/core/storage';
 import type { Mastra } from '@mastra/core';
 import { extractTrajectoryFromTrace, listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
@@ -138,7 +138,7 @@ export const LIST_TRACES_ROUTE = createRoute({
         return await observabilityStore.listTraces({
           mode,
           filters,
-          after: liveCursorSchema.optional().parse(after),
+          after: deltaCursorSchema.optional().parse(after),
           limit,
         });
       }
@@ -175,7 +175,7 @@ export const LIST_BRANCHES_ROUTE = createRoute({
         return await observabilityStore.listBranches({
           mode,
           filters,
-          after: liveCursorSchema.optional().parse(after),
+          after: deltaCursorSchema.optional().parse(after),
           limit,
         });
       }

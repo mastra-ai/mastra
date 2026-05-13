@@ -5,7 +5,7 @@ import {
   deltaLimitSchema,
   deltaInfoSchema,
   listModeSchema,
-  liveCursorSchema,
+  deltaCursorSchema,
   metadataField,
   normalizeObservabilityListArgs,
   paginationArgsSchema,
@@ -147,7 +147,7 @@ export const listLogsArgsSchema = z
     filters: logsFilterSchema.optional().describe('Optional filters to apply'),
     pagination: paginationArgsSchema.optional(),
     orderBy: logsOrderBySchema.optional(),
-    after: liveCursorSchema.optional(),
+    after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
   })
   .strict()
@@ -167,7 +167,7 @@ export const listLogsResponseSchema = z
   .object({
     pagination: paginationInfoSchema.optional(),
     delta: deltaInfoSchema.optional(),
-    liveCursor: liveCursorSchema.nullable().optional(),
+    deltaCursor: deltaCursorSchema.nullable().optional(),
     logs: z.array(logRecordSchema),
   })
   .describe('Response from listing logs');

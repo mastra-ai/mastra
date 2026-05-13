@@ -27,9 +27,9 @@ import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereCla
 import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
 import {
   assertDeltaPollingEnabled,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
+  encodeDeltaCursor,
   extendWhereClause,
   normalizeCursorId,
 } from './polling';
@@ -344,16 +344,16 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
   if (mode === 'delta') {
     assertDeltaPollingEnabled();
 
-    const currentLiveCursor = await getMetricsLiveCursor(db, filterClause, filterParams);
+    const currentDeltaCursor = await getDeltaCursor(db, filterClause, filterParams);
     if (after === undefined) {
       return {
         metrics: [],
         delta: { limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursorId = decodeLiveCursor(after);
+    const afterCursorId = decodeDeltaCursor(after);
     const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
     const rows = await db.query<Record<string, unknown>>(
       `SELECT * FROM metric_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
@@ -368,10 +368,10 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
     return {
       metrics: visibleRows.map(row => row.metric) as ListMetricsResponse['metrics'],
       delta: { limit, hasMore: rows.length > limit },
-      liveCursor:
+      deltaCursor:
         visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentDeltaCursor,
     };
   }
 
@@ -392,11 +392,11 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     metrics: rows.map(row => rowToMetricRecord(row)) as ListMetricsResponse['metrics'],
-    ...(deltaPollingFeatureEnabled() ? { liveCursor: await getMetricsLiveCursor(db, filterClause, filterParams) } : {}),
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getDeltaCursor(db, filterClause, filterParams) } : {}),
   };
 }
 
-async function getMetricsLiveCursor(
+async function getDeltaCursor(
   db: DuckDBConnection,
   filterClause: string,
   filterParams: unknown[],
@@ -406,7 +406,7 @@ async function getMetricsLiveCursor(
     filterParams,
   );
 
-  return encodeLiveCursor(rows[0]?.cursorId);
+  return encodeDeltaCursor(rows[0]?.cursorId);
 }
 
 // ============================================================================

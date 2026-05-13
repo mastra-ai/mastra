@@ -261,7 +261,7 @@ describe('Observability Handlers', () => {
       const deltaResponse = {
         metrics: [],
         delta: { limit: 10, hasMore: false },
-        liveCursor: null,
+        deltaCursor: null,
       };
 
       (mockObservabilityStore.getListCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -686,7 +686,7 @@ describe('Observability Handlers', () => {
       const deltaResponse = {
         spans: [],
         delta: { limit: 10, hasMore: false },
-        liveCursor: 'cursor-1',
+        deltaCursor: 'cursor-1',
       };
 
       (mockObservabilityStore.getListCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -786,7 +786,7 @@ describe('Observability Handlers', () => {
       const deltaResponse = {
         branches: [],
         delta: { limit: 5, hasMore: false },
-        liveCursor: 'cursor-2',
+        deltaCursor: 'cursor-2',
       };
 
       (mockObservabilityStore.getListCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({

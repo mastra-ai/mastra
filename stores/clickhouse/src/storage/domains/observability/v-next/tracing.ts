@@ -31,15 +31,15 @@ import type {
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_BRANCHES_DELTA, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
-import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseDeltaCursor } from './polling';
 import {
   assertCursorKind,
   assertDeltaPollingSupported,
   buildTupleCursorFilter,
-  decodeLiveCursor,
+  decodeDeltaCursor,
   deltaPollingFeatureEnabled,
-  encodeLiveCursor,
-  invalidLiveCursorError,
+  encodeDeltaCursor,
+  invalidDeltaCursorError,
 } from './polling';
 
 const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
@@ -392,21 +392,21 @@ export async function listBranches(
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
 
   if (mode === 'delta') {
     assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getBranchLiveCursor(client, whereClause, params, strategy);
+    const currentDeltaCursor = await getDeltaCursor(client, whereClause, params, strategy);
     if (after === undefined) {
       return {
         branches: [],
         delta: { limit, hasMore: false },
-        liveCursor: currentLiveCursor,
+        deltaCursor: currentDeltaCursor,
       };
     }
 
-    const afterCursor = decodeLiveCursor(after);
+    const afterCursor = decodeDeltaCursor(after);
     const rows =
       afterCursor.kind === 'serial'
         ? await queryBranchesAfterSerialCursor(client, whereClause, params, limit, strategy, afterCursor.cursorId)
@@ -423,8 +423,8 @@ export async function listBranches(
     return {
       branches: toTraceSpans(visibleRows.map(rowToSpanRecord)),
       delta: { limit, hasMore: rows.length > limit },
-      liveCursor:
-        visibleRows.length > 0 ? buildBranchCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
+      deltaCursor:
+        visibleRows.length > 0 ? buildBranchCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentDeltaCursor,
     };
   }
 
@@ -453,7 +453,7 @@ export async function listBranches(
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
-      ...(liveCursorEnabled ? { liveCursor: null } : {}),
+      ...(deltaCursorEnabled ? { deltaCursor: null } : {}),
     };
   }
 
@@ -489,7 +489,7 @@ export async function listBranches(
       hasMore: (page + 1) * perPage < total,
     },
     branches: toTraceSpans(spans),
-    ...(liveCursorEnabled ? { liveCursor: await getBranchLiveCursor(client, whereClause, params, strategy) } : {}),
+    ...(deltaCursorEnabled ? { deltaCursor: await getDeltaCursor(client, whereClause, params, strategy) } : {}),
   };
 }
 
@@ -512,7 +512,7 @@ async function queryBranchesAfterSerialCursor(
   cursorId: string,
 ): Promise<BranchDeltaRow[]> {
   if (strategy !== 'serial') {
-    throw invalidLiveCursorError();
+    throw invalidDeltaCursorError();
   }
 
   return (await (
@@ -554,7 +554,7 @@ async function queryBranchesAfterTupleCursor(
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
-  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'branch' }>,
+  afterCursor: Extract<ClickHouseDeltaCursor, { kind: 'branch' }>,
 ): Promise<BranchDeltaRow[]> {
   const tupleFilter = buildTupleCursorFilter([
     { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
@@ -598,7 +598,7 @@ async function queryBranchesAfterTupleCursor(
   ).json()) as BranchDeltaRow[];
 }
 
-async function getBranchLiveCursor(
+async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
@@ -625,7 +625,7 @@ async function getBranchLiveCursor(
     ).json()) as Array<{ cursorId?: string | null }>;
 
     const cursorId = rows[0]?.cursorId ?? null;
-    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+    return cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId }) : null;
   }
 
   const rows = (await (
@@ -667,7 +667,7 @@ async function getBranchLiveCursor(
     return null;
   }
 
-  return encodeLiveCursor({
+  return encodeDeltaCursor({
     version: 1,
     kind: 'branch',
     ingestedAt: row.cursorIngestedAt,
@@ -681,11 +681,11 @@ async function getBranchLiveCursor(
 
 function buildBranchCursor(row: BranchDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
   if (strategy === 'serial') {
-    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+    return row.cursorId ? encodeDeltaCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
   }
 
   return row.cursorIngestedAt
-    ? encodeLiveCursor({
+    ? encodeDeltaCursor({
         version: 1,
         kind: 'branch',
         ingestedAt: row.cursorIngestedAt,
