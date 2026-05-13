@@ -446,11 +446,16 @@ export function MastraRuntimeProvider({
   }, [initialLegacyMessages]);
 
   const chatRequestContext = useMemo(() => {
-    if (!agentVersionId) return undefined;
+    if (!agentVersionId && !requestContext) return undefined;
     const ctx = new RequestContext();
-    ctx.set('agentVersionId', agentVersionId);
+    Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+      ctx.set(key, value);
+    });
+    if (agentVersionId) {
+      ctx.set('agentVersionId', agentVersionId);
+    }
     return ctx;
-  }, [agentVersionId]);
+  }, [agentVersionId, requestContext]);
 
   const {
     messages,

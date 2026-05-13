@@ -1204,6 +1204,42 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
+    it('should merge idle stream request context before waking a thread with a signal', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-with-context',
+        resourceId: 'user-a',
+        title: 'Signal Thread With Context',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      let capturedTarget: any;
+
+      (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
+        capturedTarget = target;
+        return { accepted: true, runId: 'signal-run-id' };
+      });
+
+      const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'signal-thread-with-context',
+        ifIdle: {
+          streamOptions: {
+            requestContext: {
+              fixture: 'text-stream',
+              [MASTRA_RESOURCE_ID_KEY]: 'user-b',
+            },
+          },
+        },
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+    });
+
     it('should reject sending a signal to a thread owned by a different resource', async () => {
       await mockMemory.createThread({
         threadId: 'signal-thread-owned-by-b',
