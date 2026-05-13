@@ -416,3 +416,101 @@ describe('OpenAI Codex device OAuth', () => {
     expect(sleep).toHaveBeenCalledWith(1000);
   });
 });
+
+describe('openaiCodexOAuthProvider auth modes', () => {
+  const originalAuthMode = process.env.MASTRACODE_OPENAI_CODEX_AUTH_MODE;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (originalAuthMode === undefined) {
+      delete process.env.MASTRACODE_OPENAI_CODEX_AUTH_MODE;
+    } else {
+      process.env.MASTRACODE_OPENAI_CODEX_AUTH_MODE = originalAuthMode;
+    }
+  });
+
+  it('advertises browser and device auth modes', async () => {
+    const { openaiCodexOAuthProvider, OPENAI_CODEX_AUTH_MODES } = await import('./openai-codex.js');
+
+    expect(openaiCodexOAuthProvider.authModes).toBe(OPENAI_CODEX_AUTH_MODES);
+    expect(OPENAI_CODEX_AUTH_MODES.map(m => m.id)).toEqual(['browser', 'device']);
+  });
+
+  it('uses the device flow when callbacks.authMode is "device" even without the env var', async () => {
+    delete process.env.MASTRACODE_OPENAI_CODEX_AUTH_MODE;
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ device_auth_id: 'device-123', user_code: 'ABCD-EFGH', interval: '1' }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ authorization_code: 'auth-code', code_verifier: 'verifier' }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: jwt({ chatgpt_account_id: 'acct-device' }),
+            refresh_token: 'refresh-device',
+            expires_in: 3600,
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { openaiCodexOAuthProvider } = await import('./openai-codex.js');
+    const onAuth = vi.fn();
+
+    await expect(
+      openaiCodexOAuthProvider.login({
+        onAuth,
+        onPrompt: async () => '',
+        authMode: 'device',
+      }),
+    ).resolves.toMatchObject({ accountId: 'acct-device', refresh: 'refresh-device' });
+
+    expect(onAuth).toHaveBeenCalledWith({
+      url: 'https://auth.openai.com/codex/device',
+      instructions: 'Enter code: ABCD-EFGH',
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://auth.openai.com/api/accounts/deviceauth/usercode',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('honors callbacks.authMode="browser" even when the env var requests device mode', async () => {
+    process.env.MASTRACODE_OPENAI_CODEX_AUTH_MODE = 'device';
+    const fetchMock = vi.fn().mockRejectedValue(new Error('unexpected fetch'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { openaiCodexOAuthProvider } = await import('./openai-codex.js');
+
+    // Browser flow needs a local callback server; the call may fail when the test
+    // environment cannot bind, but we only care that the device endpoint is *not* hit.
+    await openaiCodexOAuthProvider
+      .login({
+        onAuth: () => {
+          throw new Error('stop-after-onAuth');
+        },
+        onPrompt: async () => {
+          throw new Error('stop-after-onPrompt');
+        },
+        authMode: 'browser',
+      })
+      .catch(() => undefined);
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      'https://auth.openai.com/api/accounts/deviceauth/usercode',
+      expect.any(Object),
+    );
+  });
+});

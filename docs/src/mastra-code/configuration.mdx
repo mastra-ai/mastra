@@ -53,7 +53,12 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
-OpenAI OAuth uses the browser flow by default. Set `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` before running Mastra Code to use a device-code flow for headless or remote environments.
+When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/login` or during onboarding, Mastra Code asks how you want to sign in:
+
+- **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
+- **Device code (headless)**: shows a code to enter at `https://auth.openai.com/codex/device` — useful for SSH sessions, remote shells, or environments without a browser.
+
+To preselect the device-code flow (for example in scripts or remote shells where the prompt is inconvenient), set `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` before launching Mastra Code:
 
 ```sh
 export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device

@@ -34,7 +34,20 @@ if (typeof process !== 'undefined' && (process.versions?.node || process.version
 }
 
 import { generatePKCE } from '../pkce.js';
-import type { OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types.js';
+import type { AuthMode, OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types.js';
+
+export const OPENAI_CODEX_AUTH_MODES: ReadonlyArray<AuthMode> = [
+  {
+    id: 'browser',
+    name: 'Browser (local callback)',
+    description: 'Opens the browser and waits for the OAuth callback on localhost.',
+  },
+  {
+    id: 'device',
+    name: 'Device code (headless)',
+    description: 'Shows a code to enter at openai.com — for SSH, remote, or no-browser environments.',
+  },
+];
 
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 const ISSUER = 'https://auth.openai.com';
@@ -525,7 +538,9 @@ export async function loginOpenAICodex(options: {
   originator?: string;
   mode?: 'browser' | 'device';
 }): Promise<OAuthCredentials> {
-  const mode = options.mode ?? (process.env.MASTRACODE_OPENAI_CODEX_AUTH_MODE === 'device' ? 'device' : 'browser');
+  const envMode =
+    typeof process !== 'undefined' && process.env?.MASTRACODE_OPENAI_CODEX_AUTH_MODE === 'device' ? 'device' : undefined;
+  const mode = options.mode ?? envMode ?? 'browser';
   if (mode === 'device') {
     return loginOpenAICodexDevice({
       onAuth: options.onAuth,
@@ -680,14 +695,17 @@ export const openaiCodexOAuthProvider: OAuthProviderInterface = {
   id: 'openai-codex',
   name: 'ChatGPT Plus/Pro (Codex Subscription)',
   usesCallbackServer: true,
+  authModes: OPENAI_CODEX_AUTH_MODES,
 
   async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+    const mode = callbacks.authMode === 'device' || callbacks.authMode === 'browser' ? callbacks.authMode : undefined;
     return loginOpenAICodex({
       onAuth: callbacks.onAuth,
       onPrompt: callbacks.onPrompt,
       onProgress: callbacks.onProgress,
       onManualCodeInput: callbacks.onManualCodeInput,
       signal: callbacks.signal,
+      mode,
     });
   },
 

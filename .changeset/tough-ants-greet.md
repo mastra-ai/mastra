@@ -2,13 +2,9 @@
 'mastracode': minor
 ---
 
-Improved OpenAI Codex OAuth support in Mastra Code, including a device-code mode for headless or remote environments. HTTP MCP server config can now pass OAuth client metadata to `@mastra/mcp` and store per-server OAuth state without sharing tokens across projects.
+Improved OpenAI Codex OAuth support in Mastra Code. When you select the Codex provider in `/login` or during onboarding, Mastra Code now asks how to sign in — **Browser (local callback)** or **Device code (headless)** — so the device-code flow is discoverable without setting an env var. `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` still works as a preselect for scripted environments.
 
-Example:
-
-```sh
-export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
-```
+HTTP MCP server config can now pass OAuth client metadata to `@mastra/mcp` and store per-server OAuth state without sharing tokens across projects:
 
 ```json
 {
