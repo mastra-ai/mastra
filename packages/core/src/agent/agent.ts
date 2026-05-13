@@ -5992,6 +5992,19 @@ export class Agent<
   }
 
   /**
+   * Resolves with the `MastraModelOutput` for `runId` as soon as it is
+   * registered with the thread stream runtime (or immediately if already
+   * registered). Pairs with `sendSignal()` to give callers a handle to the
+   * output without polling `getRunOutput()` until it returns non-undefined.
+   *
+   * The returned promise never rejects; callers are expected to enforce
+   * their own completion deadline (e.g. tied to the per-run completion path).
+   */
+  waitForRunOutput<OUTPUT = TOutput>(runId: string): Promise<MastraModelOutput<OUTPUT>> {
+    return this.#getThreadStreamRuntime().waitForRunOutput<OUTPUT>(runId);
+  }
+
+  /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async subscribeToThread<OUTPUT = TOutput>(

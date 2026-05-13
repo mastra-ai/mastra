@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
-import { MockAgent, setupHarness } from './__test-utils__';
+import { extractSignalContents, MockAgent, setupHarness } from './__test-utils__';
 import { HarnessQueueFullError, HarnessValidationError } from './errors';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
@@ -44,7 +44,7 @@ describe('Session.queue() — admission', () => {
     expect(session.getRecord().pendingQueue).toEqual([]);
     // The agent saw a single stream call carrying the queued content.
     expect(agent.streamCalls).toHaveLength(1);
-    expect(agent.streamCalls[0]!.messages).toBe('do work');
+    expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('do work');
   });
 
   it('rejects when content is empty', async () => {
@@ -109,7 +109,7 @@ describe('Session.queue() — FIFO + per-turn overrides', () => {
     ]);
 
     expect([a.text, b.text, c.text]).toEqual(['A', 'B', 'C']);
-    expect(agent.streamCalls.map(c => c.messages)).toEqual(['a', 'b', 'c']);
+    expect(agent.streamCalls.map(c => extractSignalContents(c.messages))).toEqual(['a', 'b', 'c']);
   });
 
   it('threads a per-turn `mode` override into the agent.stream() options', async () => {
@@ -243,10 +243,7 @@ describe('Session.queue() — drains after message()', () => {
 
     expect(manual.text).toBe('manual');
     expect(queued.text).toBe('queued');
-    expect(agent.streamCalls.map(c => (c.messages as { contents?: unknown })?.contents ?? c.messages)).toEqual([
-      'manual call',
-      'queued call',
-    ]);
+    expect(agent.streamCalls.map(c => extractSignalContents(c.messages))).toEqual(['manual call', 'queued call']);
   });
 });
 

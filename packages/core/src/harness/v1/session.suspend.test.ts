@@ -15,6 +15,7 @@ import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import type { MastraModelOutput } from '../../stream/base/output';
+import { buildFakeOutput } from './__test-utils__/fake-output';
 
 import { HarnessValidationError } from './errors';
 import { Harness } from './harness';
@@ -66,37 +67,34 @@ class FakeAgent extends Agent<any, any, any> {
 
   private buildOutput(spec: RunSpec, runIdOverride?: string): MastraModelOutput {
     const runId = runIdOverride ?? spec.runId;
-    const fullOutput = {
-      text: spec.text ?? '',
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      finishReason: spec.finishReason,
-      object: undefined,
-      steps: [],
-      warnings: [],
-      providerMetadata: undefined,
-      request: {},
-      reasoning: [],
-      reasoningText: undefined,
-      toolCalls: [],
-      toolResults: [],
-      sources: [],
-      files: [],
-      response: { id: 'r', timestamp: new Date(), modelId: 'fake', messages: [], uiMessages: [] },
-      totalUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      error: undefined,
-      tripwire: undefined,
-      traceId: undefined,
-      spanId: undefined,
+    return buildFakeOutput({
       runId,
-      suspendPayload: spec.suspendPayload,
-      messages: [],
-      rememberedMessages: [],
-    };
-    return {
-      runId,
-      getFullOutput: async () => fullOutput,
-      _waitUntilFinished: () => Promise.resolve(),
-    } as unknown as MastraModelOutput;
+      fullOutput: {
+        text: spec.text ?? '',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: spec.finishReason,
+        object: undefined,
+        steps: [],
+        warnings: [],
+        providerMetadata: undefined,
+        request: {},
+        reasoning: [],
+        reasoningText: undefined,
+        toolCalls: [],
+        toolResults: [],
+        sources: [],
+        files: [],
+        response: { id: 'r', timestamp: new Date(), modelId: 'fake', messages: [], uiMessages: [] },
+        totalUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        error: undefined,
+        tripwire: undefined,
+        traceId: undefined,
+        spanId: undefined,
+        suspendPayload: spec.suspendPayload,
+        messages: [],
+        rememberedMessages: [],
+      },
+    });
   }
 
   async stream(_messages: any, options?: any): Promise<any> {

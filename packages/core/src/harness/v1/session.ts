@@ -326,6 +326,13 @@ export class Session {
   private _currentTraceId?: string;
   private readonly _activeTools = new Map<string, ActiveToolState>();
   private readonly _toolInputBuffers = new Map<string, { toolName: string; text: string }>();
+  /**
+   * Per-run bookkeeping kept by the subscription drain. Each runId on the
+   * thread maps to a small accumulator so chunks from concurrent runs (e.g.
+   * resume run landing while the original is still emitting) don't clobber
+   * each other.
+   */
+  private readonly _runState = new Map<string, { startedAt: number }>();
   private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
   /** Cumulative usage for the session's thread. Updated on `agent_end`. */
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -383,6 +390,18 @@ export class Session {
   private readonly _runCompletionPromises = new Map<
     string,
     { resolve: (full: FullOutput<unknown>) => void; reject: (err: unknown) => void }
+  >();
+  /**
+   * Cache of run completion results that landed before any caller had a chance
+   * to register a waiter. `sendSignal()` returns synchronously and the runtime
+   * can drive the entire run to completion in the same microtask tick, so by
+   * the time `_awaitRunCompletion(runId)` runs the terminal chunk may already
+   * have been processed. Entries are consumed by the first matching
+   * `_awaitRunCompletion` call.
+   */
+  private readonly _completedRuns = new Map<
+    string,
+    { ok: true; full: FullOutput<unknown> } | { ok: false; err: unknown }
   >();
 
   /** @internal — constructed by the Harness, not directly. */
@@ -771,6 +790,13 @@ export class Session {
    * rejected with a typed error.
    */
   private _awaitRunCompletion(runId: string): Promise<FullOutput<unknown>> {
+    // Fast path: the run may have already terminated before this call ran.
+    // Consume the cached result.
+    const cached = this._completedRuns.get(runId);
+    if (cached) {
+      this._completedRuns.delete(runId);
+      return cached.ok ? Promise.resolve(cached.full) : Promise.reject(cached.err);
+    }
     const existing = this._runCompletionPromises.get(runId);
     if (existing) {
       return new Promise<FullOutput<unknown>>((_resolve, reject) => {
@@ -785,36 +811,267 @@ export class Session {
         );
       });
     }
-    return new Promise<FullOutput<unknown>>((resolve, reject) => {
+    const promise = new Promise<FullOutput<unknown>>((resolve, reject) => {
       this._runCompletionPromises.set(runId, { resolve, reject });
     });
+    // Single canonical settler: wait for the runtime to register the run's
+    // `MastraModelOutput`, then await its `_waitUntilFinished()`. The drain
+    // loop emits events from chunks; it does NOT settle completion. This
+    // keeps event emission and completion delivery on independent paths and
+    // is robust to runs that finish without emitting an explicit terminal
+    // chunk in `fullStream` (test doubles, abort-before-first-chunk, etc.).
+    void this._watchRunCompletion(runId);
+    return promise;
+  }
+
+  /**
+   * Canonical completion watcher. Acquires the run's `MastraModelOutput`
+   * from the runtime via `waitForRunOutput()` (event-driven — no polling),
+   * awaits `_waitUntilFinished()`, then settles the outstanding completion
+   * promise (or stashes the result in `_completedRuns` if the waiter has not
+   * been registered yet, e.g. for very fast runs).
+   *
+   * The captured `out` reference is threaded through to `_handleRunTerminal`
+   * because the runtime drops the record from `getRunOutput()` after
+   * `_waitUntilFinished()` resolves.
+   */
+  private async _watchRunCompletion(runId: string): Promise<void> {
+    const agent = this._threadSubscriptionAgent;
+    if (!agent) return;
+    const out = (await agent.waitForRunOutput(runId)) as MastraModelOutput<unknown> & {
+      _waitUntilFinished?: () => Promise<void>;
+    };
+    try {
+      if (typeof out._waitUntilFinished === 'function') {
+        await out._waitUntilFinished();
+      }
+    } catch {
+      // Ignore — settlement happens via `_handleRunTerminal` below, which
+      // will pick up the run's own error state via `getFullOutput()`.
+    }
+    await this._handleRunTerminal(runId, out as MastraModelOutput<unknown>);
   }
 
   /**
    * Drain the long-lived subscription stream. Each chunk carries a `runId`;
-   * we maintain per-run accumulators in `_runAccumulators` so terminal
-   * chunks can synthesize a `FullOutput` for `_awaitRunCompletion(runId)`.
+   * the loop emits harness events for that runId and, on terminal chunks
+   * (`finish` / `error` / `abort` / `tool-call-suspended`), resolves the
+   * matching `_runCompletionPromises` entry with the agent's bundled
+   * `FullOutput` (fetched via `agent.getRunOutput(runId).getFullOutput()`).
    *
-   * On terminal chunks (`finish` / `error` / `abort` / `tool-call-suspended`)
-   * we resolve the matching completion promise. On drain shutdown (stream
-   * end or unhandled error) every outstanding promise is rejected so
-   * callers don't hang.
+   * Per-run state (active messageId / open tool calls) lives in
+   * `_runState` so multiple runs on the same thread don't clobber each
+   * other's accumulators. On drain shutdown (stream end or unhandled
+   * error) every outstanding completion promise is rejected so callers
+   * don't hang.
    */
   private async _drainSubscriptionStream(sub: AgentThreadSubscription<unknown>): Promise<void> {
     try {
-      for await (const _chunk of sub.stream) {
-        // Slice A commit 1: drain plumbing only — chunk → event translation
-        // still happens in `_drainStreamToEvents` driven directly from
-        // `message()`. Commit 2 moves the per-chunk switch in here and
-        // wires terminal chunks to `_runCompletionPromises`.
-        void _chunk;
+      for await (const chunk of sub.stream) {
+        const runId = (chunk as { runId?: string }).runId;
+        if (runId) {
+          // First chunk for a run marks our "current run" for getDisplayState().
+          if (!this._runState.has(runId)) {
+            this._runState.set(runId, { startedAt: Date.now() });
+          }
+          if (this._currentRunId === undefined) {
+            this._currentRunId = runId;
+          }
+        }
+
+        // Per-chunk event emission (was previously in _drainStreamToEvents).
+        // The drain loop is the sole event emitter; completion delivery is
+        // handled by `_watchRunCompletion` driven by `_waitUntilFinished()`.
+        this._emitForChunk(chunk);
       }
     } catch (err) {
-      // Reject all outstanding completion promises so callers don't hang.
       for (const [, entry] of this._runCompletionPromises) {
         entry.reject(err);
       }
       this._runCompletionPromises.clear();
+    } finally {
+      // Stream ended normally — any caller still waiting for a runId we
+      // never saw a terminal chunk for would hang forever otherwise.
+      for (const [, entry] of this._runCompletionPromises) {
+        entry.reject(
+          new HarnessValidationError('_drainSubscriptionStream()', 'Thread subscription closed before run completion'),
+        );
+      }
+      this._runCompletionPromises.clear();
+    }
+  }
+
+  /**
+   * Settle the outstanding completion waiter for `runId` with the bundled
+   * `FullOutput`. Always called from `_watchRunCompletion` with the output
+   * reference captured at registration time (runtime cleanup may have
+   * already dropped it from `getRunOutput()` by now).
+   *
+   * If no waiter is registered yet (very fast run), the result is stashed
+   * in `_completedRuns` so the next `_awaitRunCompletion(runId)` call can
+   * consume it.
+   */
+  private async _handleRunTerminal(runId: string, out: MastraModelOutput<unknown>): Promise<void> {
+    const waiter = this._runCompletionPromises.get(runId);
+    this._runCompletionPromises.delete(runId);
+    try {
+      const full = (await out.getFullOutput()) as FullOutput<unknown>;
+      if (waiter) waiter.resolve(full);
+      else this._completedRuns.set(runId, { ok: true, full });
+    } catch (err) {
+      if (waiter) waiter.reject(err);
+      else this._completedRuns.set(runId, { ok: false, err });
+    } finally {
+      this._runState.delete(runId);
+    }
+  }
+
+  /**
+   * Translate a single fullStream chunk into the matching harness event(s).
+   * Extracted from `_drainStreamToEvents` so the long-lived subscription
+   * drain is the single consumer of chunks.
+   */
+  private _emitForChunk(chunk: { type: string; payload?: unknown; data?: unknown; runId?: string }): void {
+    switch (chunk.type) {
+      case 'text-start': {
+        const payload = chunk.payload as { id: string };
+        this._currentMessageId = payload.id;
+        this._emitTurnEvent({ type: 'message_start', messageId: payload.id });
+        return;
+      }
+      case 'text-delta': {
+        const payload = chunk.payload as { id: string; text?: string };
+        if (typeof payload?.text === 'string' && payload.text.length > 0) {
+          this._emitTurnEvent({
+            type: 'message_update',
+            messageId: payload.id,
+            delta: payload.text,
+          });
+        }
+        return;
+      }
+      case 'text-end': {
+        const payload = chunk.payload as { id: string };
+        this._emitTurnEvent({ type: 'message_end', messageId: payload.id });
+        if (this._currentMessageId === payload.id) {
+          this._currentMessageId = undefined;
+        }
+        return;
+      }
+      case 'tool-call-input-streaming-start': {
+        const payload = chunk.payload as { toolCallId: string; toolName: string };
+        this._toolInputBuffers.set(payload.toolCallId, { toolName: payload.toolName, text: '' });
+        this._emitTurnEvent({
+          type: 'tool_input_start',
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+        });
+        return;
+      }
+      case 'tool-call-delta': {
+        const payload = chunk.payload as { toolCallId: string; argsTextDelta: string; toolName?: string };
+        const prev = this._toolInputBuffers.get(payload.toolCallId);
+        const toolName = prev?.toolName ?? payload.toolName ?? '';
+        this._toolInputBuffers.set(payload.toolCallId, {
+          toolName,
+          text: (prev?.text ?? '') + payload.argsTextDelta,
+        });
+        this._emitTurnEvent({
+          type: 'tool_input_delta',
+          toolCallId: payload.toolCallId,
+          argsTextDelta: payload.argsTextDelta,
+        });
+        return;
+      }
+      case 'tool-call-input-streaming-end': {
+        const payload = chunk.payload as { toolCallId: string };
+        this._toolInputBuffers.delete(payload.toolCallId);
+        this._emitTurnEvent({ type: 'tool_input_end', toolCallId: payload.toolCallId });
+        return;
+      }
+      case 'tool-call': {
+        const payload = chunk.payload as { toolCallId: string; toolName: string; args: unknown };
+        this._activeTools.set(payload.toolCallId, {
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+          args: payload.args,
+          startedAt: Date.now(),
+        });
+        this._toolInputBuffers.delete(payload.toolCallId);
+        this._emitTurnEvent({
+          type: 'tool_start',
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+          args: payload.args,
+        });
+        return;
+      }
+      case 'tool-result': {
+        const payload = chunk.payload as { toolCallId: string; result: unknown; isError?: boolean };
+        this._activeTools.delete(payload.toolCallId);
+        this._emitTurnEvent({
+          type: 'tool_end',
+          toolCallId: payload.toolCallId,
+          result: payload.result,
+          isError: payload.isError ?? false,
+        });
+        return;
+      }
+      case 'tool-error': {
+        const payload = chunk.payload as { toolCallId: string; error: unknown };
+        this._activeTools.delete(payload.toolCallId);
+        this._emitTurnEvent({
+          type: 'tool_end',
+          toolCallId: payload.toolCallId,
+          result: payload.error,
+          isError: true,
+        });
+        return;
+      }
+      default: {
+        // Bridge whitelisted data-* writer chunks (§10.2) into typed harness events.
+        if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
+          const data = (chunk as { data?: unknown }).data;
+          if (chunk.type === 'data-task-updated') {
+            const tasks = (data as { tasks?: unknown })?.tasks;
+            if (Array.isArray(tasks)) {
+              this._emitTurnEvent({ type: 'task_updated', tasks: tasks as TaskUpdatedEvent['tasks'] });
+            }
+          } else if (chunk.type === 'data-tool-update') {
+            const payload = data as { toolCallId?: unknown; partialResult?: unknown } | undefined;
+            if (
+              payload &&
+              typeof payload.toolCallId === 'string' &&
+              payload.toolCallId.length > 0 &&
+              this._activeTools.has(payload.toolCallId)
+            ) {
+              this._emitTurnEvent({
+                type: 'tool_update',
+                toolCallId: payload.toolCallId,
+                partialResult: payload.partialResult,
+              });
+            }
+          } else if (chunk.type === 'data-shell-output') {
+            const payload = data as { toolCallId?: unknown; output?: unknown; stream?: unknown } | undefined;
+            if (
+              payload &&
+              typeof payload.toolCallId === 'string' &&
+              payload.toolCallId.length > 0 &&
+              typeof payload.output === 'string' &&
+              (payload.stream === 'stdout' || payload.stream === 'stderr') &&
+              this._activeTools.has(payload.toolCallId)
+            ) {
+              this._emitTurnEvent({
+                type: 'shell_output',
+                toolCallId: payload.toolCallId,
+                output: payload.output,
+                stream: payload.stream,
+              });
+            }
+          }
+        }
+        return;
+      }
     }
   }
 
@@ -904,12 +1161,17 @@ export class Session {
     }
 
     // Signal-routed path: every non-structured message goes through
-    // `agent.sendSignal()`. On an idle thread the agent starts a fresh run
-    // with `agent.stream(signal, streamOptions)` and registers the output
-    // with the thread stream runtime; we look it up by `runId` to drain
-    // events. On an active same-agent run the signal drains mid-flight
-    // into the running execution loop — no new turn boundary, the existing
-    // drain on that run continues to emit events.
+    // `agent.sendSignal()`. The long-lived thread subscription is the
+    // single chunk consumer for this Session; the drain loop emits
+    // per-chunk harness events and resolves `_runCompletionPromises[runId]`
+    // when the run terminates.
+    //
+    // On an idle thread the agent starts a fresh run with
+    // `agent.stream(signal, streamOptions)`; on an active same-agent run
+    // the signal drains mid-flight into the running execution loop. Both
+    // paths surface chunks through the same subscription stream.
+    await this._ensureThreadSubscription(agent);
+
     const signal = agent.sendSignal(
       { type: 'user-message', contents: opts.content as never },
       {
@@ -919,37 +1181,49 @@ export class Session {
       },
     );
 
-    // Look up the output the runtime registered when it invoked
-    // `agent.stream(signal, streamOptions)` for the wake path. For active
-    // delivery the runId already pointed at an in-flight run whose output
-    // is already registered — same lookup works.
-    const out = agent.getRunOutput(signal.runId) as MastraModelOutput<unknown> | undefined;
+    // Register the completion waiter BEFORE the drain has a chance to see
+    // a terminal chunk for this runId (the run can start synchronously on
+    // the wake path).
+    const completion = this._awaitRunCompletion(signal.runId);
 
-    // Streaming path: hand the live MastraModelOutput back. We drain the
-    // stream ourselves to emit harness events; the caller's
-    // `getFullOutput()` is independent (each `fullStream` call returns a
-    // fresh evented stream). Errors during drain are swallowed — the
-    // caller already owns the visible stream. The turn stays in-flight
-    // until the drain settles so `isRunning()` stays true while the model
-    // is still producing chunks.
+    // Streaming path: hand the live `MastraModelOutput` back. The drain
+    // loop is responsible for harness events; we still keep the turn
+    // in-flight (so `isRunning()` reports true) until the run completes.
     if (opts.stream === true) {
+      const out = agent.getRunOutput(signal.runId) as MastraModelOutput<unknown> | undefined;
       if (!out) {
         this._endTurn(turnAbortController);
+        // Drop the completion waiter so the drain doesn't try to resolve into
+        // a dead listener.
+        this._runCompletionPromises.delete(signal.runId);
         throw new HarnessConfigError('message()', 'agent did not register a run for the dispatched signal');
       }
-      const drain = this._drainStreamToEvents(out);
-      void drain.finally(() => this._endTurn(turnAbortController));
+      void completion
+        .then(full => {
+          this._recordTurnCompletion(full);
+          return this._maybeCaptureSuspend(full).then(() => {
+            this._emitTurnEvent({
+              type: 'agent_end',
+              reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+              runId: full.runId,
+            });
+            return this._runGoalJudge(full, false);
+          });
+        })
+        .catch(() => {
+          // The caller owns the visible stream; swallow drain-side errors.
+        })
+        .finally(() => {
+          this._endTurn(turnAbortController);
+          void this._maybeDrainQueue();
+        });
       return out;
     }
 
-    // Default path: drain the stream for events, then resolve via
-    // getFullOutput to surface the bundled result.
+    // Default path: wait for the drain to deliver this run's terminal
+    // chunk and bundled `FullOutput`, then run post-turn bookkeeping.
     try {
-      if (!out) {
-        throw new HarnessConfigError('message()', 'agent did not register a run for the dispatched signal');
-      }
-      await this._drainStreamToEvents(out);
-      const full = await out.getFullOutput();
+      const full = await completion;
       this._recordTurnCompletion(full);
       await this._maybeCaptureSuspend(full);
       this._emitTurnEvent({
@@ -961,204 +1235,9 @@ export class Session {
       return full;
     } finally {
       this._endTurn(turnAbortController);
-    }
-  }
-
-  /**
-   * Drain a `MastraModelOutput.fullStream` once, emitting the corresponding
-   * harness events as chunks arrive. Returns when the stream completes.
-   *
-   * Chunks observed → events emitted:
-   *   - `text-start`                          → `message_start`
-   *   - `text-delta`                          → `message_update`
-   *   - `text-end`                            → `message_end`
-   *   - `tool-call-input-streaming-start`     → `tool_input_start`
-   *   - `tool-call-delta`                     → `tool_input_delta`
-   *   - `tool-call-input-streaming-end`       → `tool_input_end`
-   *   - `tool-call`                           → `tool_start`
-   *   - `tool-result`                         → `tool_end` (isError: false)
-   *   - `tool-error`                          → `tool_end` (isError: true)
-   *
-   * Approval / suspension chunks are intentionally NOT mapped here. The
-   * harness uses `_maybeCaptureSuspend` after `getFullOutput()` to persist
-   * the pending record under the lease and emit `suspension_required` after
-   * the durable-parking barrier. Emitting events from the streaming path
-   * would race with that commit.
-   */
-  private async _drainStreamToEvents(out: MastraModelOutput<unknown>): Promise<void> {
-    try {
-      for await (const chunk of out.fullStream) {
-        // Capture run identity from the first chunk that carries it so
-        // `getDisplayState().currentRunId` is populated for the in-flight turn.
-        const runId = (chunk as { runId?: string }).runId;
-        if (runId && this._currentRunId === undefined) {
-          this._currentRunId = runId;
-        }
-        switch (chunk.type) {
-          case 'text-start': {
-            const payload = chunk.payload as { id: string };
-            this._currentMessageId = payload.id;
-            this._emitTurnEvent({ type: 'message_start', messageId: payload.id });
-            break;
-          }
-          case 'text-delta': {
-            const payload = chunk.payload as { id: string; text?: string };
-            if (typeof payload?.text === 'string' && payload.text.length > 0) {
-              this._emitTurnEvent({
-                type: 'message_update',
-                messageId: payload.id,
-                delta: payload.text,
-              });
-            }
-            break;
-          }
-          case 'text-end': {
-            const payload = chunk.payload as { id: string };
-            this._emitTurnEvent({ type: 'message_end', messageId: payload.id });
-            if (this._currentMessageId === payload.id) {
-              this._currentMessageId = undefined;
-            }
-            break;
-          }
-          case 'tool-call-input-streaming-start': {
-            const payload = chunk.payload as { toolCallId: string; toolName: string };
-            this._toolInputBuffers.set(payload.toolCallId, { toolName: payload.toolName, text: '' });
-            this._emitTurnEvent({
-              type: 'tool_input_start',
-              toolCallId: payload.toolCallId,
-              toolName: payload.toolName,
-            });
-            break;
-          }
-          case 'tool-call-delta': {
-            const payload = chunk.payload as { toolCallId: string; argsTextDelta: string; toolName?: string };
-            const prev = this._toolInputBuffers.get(payload.toolCallId);
-            const toolName = prev?.toolName ?? payload.toolName ?? '';
-            this._toolInputBuffers.set(payload.toolCallId, {
-              toolName,
-              text: (prev?.text ?? '') + payload.argsTextDelta,
-            });
-            this._emitTurnEvent({
-              type: 'tool_input_delta',
-              toolCallId: payload.toolCallId,
-              argsTextDelta: payload.argsTextDelta,
-              toolName: payload.toolName,
-            });
-            break;
-          }
-          case 'tool-call-input-streaming-end': {
-            const payload = chunk.payload as { toolCallId: string };
-            this._emitTurnEvent({
-              type: 'tool_input_end',
-              toolCallId: payload.toolCallId,
-            });
-            break;
-          }
-          case 'tool-call': {
-            const payload = chunk.payload as { toolCallId: string; toolName: string; args: unknown };
-            this._activeTools.set(payload.toolCallId, {
-              toolCallId: payload.toolCallId,
-              toolName: payload.toolName,
-              args: payload.args,
-              startedAt: Date.now(),
-            });
-            this._toolInputBuffers.delete(payload.toolCallId);
-            this._emitTurnEvent({
-              type: 'tool_start',
-              toolCallId: payload.toolCallId,
-              toolName: payload.toolName,
-              args: payload.args,
-            });
-            break;
-          }
-          case 'tool-result': {
-            const payload = chunk.payload as { toolCallId: string; result: unknown; isError?: boolean };
-            this._activeTools.delete(payload.toolCallId);
-            this._emitTurnEvent({
-              type: 'tool_end',
-              toolCallId: payload.toolCallId,
-              result: payload.result,
-              isError: payload.isError ?? false,
-            });
-            break;
-          }
-          case 'tool-error': {
-            const payload = chunk.payload as { toolCallId: string; error: unknown };
-            this._activeTools.delete(payload.toolCallId);
-            this._emitTurnEvent({
-              type: 'tool_end',
-              toolCallId: payload.toolCallId,
-              result: payload.error,
-              isError: true,
-            });
-            break;
-          }
-          default:
-            // Bridge whitelisted `data-*` writer chunks (§10.2) into typed
-            // harness events so subscribers can switch on a stable type.
-            // Tools publish via `ctx.writer?.custom({ type: 'data-foo',
-            // data: {...} })` — the same call works outside Harness, where
-            // consumers read the chunk straight from `fullStream`.
-            //
-            // Only known data types are bridged; unknown `data-*` chunks
-            // pass silently (consumers needing them can stream:true).
-            if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
-              const data = (chunk as { data?: unknown }).data;
-              if (chunk.type === 'data-task-updated') {
-                const tasks = (data as { tasks?: unknown })?.tasks;
-                if (Array.isArray(tasks)) {
-                  this._emitTurnEvent({ type: 'task_updated', tasks: tasks as TaskUpdatedEvent['tasks'] });
-                }
-              } else if (chunk.type === 'data-tool-update') {
-                // Long-running tools publish incremental progress between
-                // tool_start and tool_end via
-                // `ctx.writer?.custom({ type: 'data-tool-update',
-                //   data: { toolCallId, partialResult } })`.
-                const payload = data as { toolCallId?: unknown; partialResult?: unknown } | undefined;
-                if (
-                  payload &&
-                  typeof payload.toolCallId === 'string' &&
-                  payload.toolCallId.length > 0 &&
-                  this._activeTools.has(payload.toolCallId)
-                ) {
-                  this._emitTurnEvent({
-                    type: 'tool_update',
-                    toolCallId: payload.toolCallId,
-                    partialResult: payload.partialResult,
-                  });
-                }
-              } else if (chunk.type === 'data-shell-output') {
-                // Tools that wrap a child process publish stdout/stderr via
-                // `ctx.writer?.custom({ type: 'data-shell-output',
-                //   data: { toolCallId, output, stream } })`.
-                const payload = data as { toolCallId?: unknown; output?: unknown; stream?: unknown } | undefined;
-                if (
-                  payload &&
-                  typeof payload.toolCallId === 'string' &&
-                  payload.toolCallId.length > 0 &&
-                  typeof payload.output === 'string' &&
-                  (payload.stream === 'stdout' || payload.stream === 'stderr') &&
-                  this._activeTools.has(payload.toolCallId)
-                ) {
-                  this._emitTurnEvent({
-                    type: 'shell_output',
-                    toolCallId: payload.toolCallId,
-                    output: payload.output,
-                    stream: payload.stream,
-                  });
-                }
-              }
-            }
-            // All other chunk types (start/finish, reasoning, source, file,
-            // abort, raw, …) are intentionally ignored at the harness event
-            // layer for v1. UIs that need them can subscribe to the agent's
-            // stream directly via stream:true.
-            break;
-        }
-      }
-    } catch {
-      // The caller still owns the visible promise — keep the drain best-
-      // effort so a stream-level error doesn't surface twice.
+      // Now that the manual turn has cleared the in-flight guard, kick
+      // the queue drain so any item that was admitted mid-turn can run.
+      void this._maybeDrainQueue();
     }
   }
 
@@ -2342,6 +2421,9 @@ export class Session {
     // `respondTo*` call — drain stays parked until that resolves.
     if (this._record.pendingResume !== undefined) return;
     if (this._currentQueuedItemId !== undefined) return;
+    // A manual `message()` turn is in flight — wait for it to settle.
+    // `_recordTurnCompletion` will re-kick the drain on its way out.
+    if (this._currentTurnAbortController !== undefined) return;
 
     this._draining = true;
     try {
@@ -2413,9 +2495,16 @@ export class Session {
     this._emitTurnEvent({ type: 'agent_start' });
 
     try {
-      const out = await agent.stream(item.content, baseExecOptions);
-      await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
-      const full = await out.getFullOutput();
+      await this._ensureThreadSubscription(agent);
+      const signal = agent.sendSignal(
+        { type: 'user-message', contents: item.content as never },
+        {
+          resourceId: this.resourceId,
+          threadId: this.threadId,
+          ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
+        },
+      );
+      const full = await this._awaitRunCompletion(signal.runId);
       this._recordTurnCompletion(full);
       await this._maybeCaptureSuspend(full);
       this._emitTurnEvent({

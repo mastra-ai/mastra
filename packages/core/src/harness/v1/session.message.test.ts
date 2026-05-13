@@ -13,8 +13,8 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
-import type { MastraModelOutput } from '../../stream/base/output';
 
+import { buildFakeOutput, extractSignalContents } from './__test-utils__/fake-output';
 import { Harness } from './harness';
 
 // ---------------------------------------------------------------------------
@@ -68,26 +68,10 @@ class FakeAgent extends Agent<any, any, any> {
 
   async stream(messages: any, options?: any): Promise<any> {
     this.calls.push({ type: 'stream', messages, options });
-    const fullOutput = {
-      ...this.fullOutput,
-      // Honour the runtime-allocated runId so signal-routed callers can
-      // look this output up via `agent.getRunOutput(signal.runId)`.
+    const out = buildFakeOutput({
       runId: options?.runId ?? this.fullOutput.runId,
-    };
-    // Build a minimal duck-typed MastraModelOutput. Only the bits Session
-    // touches are exercised; everything else stays loose.
-    const out = {
-      runId: fullOutput.runId,
-      // Awaitable promises read by .getFullOutput()
-      getFullOutput: async () => fullOutput,
-      // Used by streaming-path callers directly.
-      text: Promise.resolve(fullOutput.text),
-      finishReason: Promise.resolve(fullOutput.finishReason),
-      usage: Promise.resolve(fullOutput.usage),
-      // Settled "wait until finished" promise so the thread-stream runtime
-      // can clean up its registration entry.
-      _waitUntilFinished: () => Promise.resolve(),
-    } as unknown as MastraModelOutput;
+      fullOutput: this.fullOutput,
+    });
     this._internalRegisterStreamRun(out, (options ?? {}) as any);
     return out;
   }
@@ -126,7 +110,7 @@ describe('Session.message() — default path', () => {
     expect(agent.calls).toHaveLength(1);
     expect(agent.calls[0]!.type).toBe('stream');
     expect((agent.calls[0]!.messages as { type: string; contents: unknown }).type).toBe('user-message');
-    expect((agent.calls[0]!.messages as { type: string; contents: unknown }).contents).toBe('hi');
+    expect(extractSignalContents(agent.calls[0]!.messages)).toBe('hi');
   });
 
   it('threads memory.thread + memory.resource through to the agent', async () => {

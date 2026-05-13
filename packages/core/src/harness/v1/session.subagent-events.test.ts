@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
-import type { MastraModelOutput } from '../../stream/base/output';
+import { buildFakeOutput } from './__test-utils__/fake-output';
 
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
@@ -53,20 +53,11 @@ class FakeAgent extends Agent<any, any, any> {
   }
 
   async stream(_messages: any, options?: any): Promise<any> {
-    const chunks = this.chunks;
-    const fullOutput = { ...this.fullOutput, runId: options?.runId ?? this.fullOutput.runId };
-    const fullStream = (async function* () {
-      for (const chunk of chunks) yield chunk;
-    })();
-    const out = {
-      getFullOutput: async () => fullOutput,
-      fullStream,
-      text: Promise.resolve(fullOutput.text),
-      finishReason: Promise.resolve(fullOutput.finishReason),
-      usage: Promise.resolve(fullOutput.usage),
-      runId: fullOutput.runId,
-      _waitUntilFinished: () => Promise.resolve(),
-    } as unknown as MastraModelOutput;
+    const out = buildFakeOutput({
+      runId: options?.runId ?? this.fullOutput.runId,
+      fullOutput: this.fullOutput,
+      chunks: this.chunks,
+    });
     this._internalRegisterStreamRun(out, (options ?? {}) as any);
     return out;
   }

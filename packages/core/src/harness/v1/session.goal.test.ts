@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { GoalState } from '../../storage/domains/harness';
 
-import { setupHarness } from './__test-utils__';
+import { extractSignalContents, setupHarness } from './__test-utils__';
 import { HarnessValidationError } from './errors';
 import type { HarnessEvent } from './events';
 import type { Session } from './session';
@@ -203,7 +203,9 @@ describe('Session goal — judge loop', () => {
     expect(session.getGoal()?.turnsUsed).toBe(1);
     expect(agent.streamCalls).toHaveLength(2);
     // Continuation wrapped in system-reminder envelope:
-    expect(agent.streamCalls[1]!.messages).toMatch(/<system-reminder type="goal-judge">/);
+    expect(extractSignalContents(agent.streamCalls[1]!.messages) as string).toMatch(
+      /<system-reminder type="goal-judge">/,
+    );
   });
 
   it('pauses with reason "budget_exhausted" when turnsUsed reaches maxTurns', async () => {
@@ -319,7 +321,7 @@ describe('Session goal — continuation wording (TUI parity)', () => {
 
     // The continuation drained to the agent as a second stream call.
     expect(agent.streamCalls).toHaveLength(2);
-    expect(agent.streamCalls[1]!.messages).toBe(
+    expect(extractSignalContents(agent.streamCalls[1]!.messages)).toBe(
       '<system-reminder type="goal-judge">[Goal attempt 1/5] The goal is not yet complete. Judge feedback: not done yet\n\nContinue working toward the goal: ship X</system-reminder>',
     );
   });
@@ -342,7 +344,7 @@ describe('Session goal — continuation wording (TUI parity)', () => {
 
     expect(judgeCalls).toBe(0);
     expect(agent.streamCalls).toHaveLength(2);
-    expect(agent.streamCalls[1]!.messages).toBe(
+    expect(extractSignalContents(agent.streamCalls[1]!.messages)).toBe(
       '<system-reminder type="goal-judge">[Goal attempt 0/5] The goal is not yet complete. Judge feedback: No response yet, keep working.\n\nContinue working toward the goal: ship X</system-reminder>',
     );
   });

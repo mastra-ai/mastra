@@ -1550,7 +1550,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#baseStream;
   }
 
-  /** @internal */
+  /**
+   * Resolves once this output's stream has finished — i.e. `fullStream` has
+   * been fully consumed (the `'finish'` emitter event fires after the last
+   * chunk is delivered). Resolves immediately if the stream has already
+   * finished.
+   *
+   * Contract (load-bearing for harness v1 thread subscriptions):
+   * `_waitUntilFinished()` MUST NOT resolve before `fullStream` has been
+   * fully consumed. Harness `Session.message()` uses this as the single
+   * canonical signal that a run is complete; resolving early causes
+   * `Session.message()` to return before all events have been emitted.
+   * Real implementations resolve from `#emitter.once('finish', …)` which
+   * fires at the tail of `consumeStream()`. Test doubles must mirror this
+   * (e.g. resolve the promise in the `finally` block of the `fullStream`
+   * generator).
+   *
+   * @internal
+   */
   _waitUntilFinished() {
     if (this.#streamFinished) {
       return Promise.resolve();
