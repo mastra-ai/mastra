@@ -1,5 +1,5 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
-import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
+import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
 import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import './composer-sending.css';
 import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
+import { useThreadRuntimeState } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -44,7 +45,12 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
 
   return (
     <ThreadWrapper>
-      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+      <ThreadPrimitive.Viewport
+        ref={areaRef}
+        autoScroll={false}
+        className="overflow-y-scroll h-full"
+        style={{ overflowAnchor: 'none' }}
+      >
         <ThreadWelcome agentName={agentName} />
 
         <div
@@ -124,6 +130,8 @@ interface ComposerProps {
 const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRuntime = useComposerRuntime();
+  const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
   // Track IME composition state to prevent Enter from submitting during CJK input.
   // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
   // triggers form submission instead of completing the IME composition.
@@ -166,7 +174,22 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
       </div> */}
       {/* <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}> */}
       <ComposerPrimitive.Root onSubmit={() => setSendPulseKey(k => k + 1)}>
-        <ComposerAttachments />
+        <div className="max-w-3xl w-full mx-auto pb-2">
+          <ComposerAttachments />
+          {hasPendingMessages ? (
+            <div
+              className="mt-2 flex flex-col gap-1 text-icon-xs leading-icon-xs text-neutral3"
+              data-testid="pending-signal-message"
+            >
+              {pendingSignals.map(signal => (
+                <div key={signal.id} className="flex min-w-0 items-center gap-1 animate-pulse">
+                  <span className="shrink-0">pending:</span>
+                  <span className="truncate">{signal.preview}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
 
         <div
           className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
@@ -176,7 +199,11 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
         >
           <ComposerSendingGradient pulseKey={sendPulseKey} />
           <div className="relative z-10">
-            <ComposerPrimitive.Input asChild className="w-full">
+            <ComposerPrimitive.Input
+              asChild
+              className="w-full"
+              submitMode={isStreaming && !canSendWhileStreaming ? 'none' : undefined}
+            >
               <textarea
                 ref={textareaRef}
                 autoFocus={false}
@@ -191,6 +218,13 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                 onCompositionEnd={() => {
                   isComposingRef.current = false;
                 }}
+                onKeyDownCapture={e => {
+                  if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    composerRuntime.send();
+                  }
+                }}
                 onKeyDown={e => {
                   // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
                   // while an IME composition session is active (e.g. Chinese pinyin).
@@ -201,6 +235,13 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                   if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
                     e.preventDefault();
                     e.stopPropagation();
+                    return;
+                  }
+
+                  if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    composerRuntime.send();
                   }
                 }}
                 disabled={!canExecuteAgent}
@@ -311,9 +352,33 @@ const ComposerActionRow = ({ canExecute = true, agentId, showModelSwitcher }: Co
 };
 
 const ComposerSendButton = ({ canExecute = true }: ComposerActionProps) => {
+  const { isStreaming, canSendWhileStreaming, cancelStream } = useThreadRuntimeState();
+  const composerRuntime = useComposerRuntime();
+  const isComposerEmpty = useComposer(state => state.isEmpty);
+
+  if (isStreaming && !canSendWhileStreaming) {
+    return (
+      <Button variant="default" size="icon-md" tooltip="Cancel" onClick={() => void cancelStream()}>
+        <CircleStopIcon />
+      </Button>
+    );
+  }
+
   return (
     <>
-      <ThreadPrimitive.If running={false}>
+      {isStreaming ? (
+        <Button
+          variant="default"
+          size="icon-md"
+          type="button"
+          tooltip={canExecute ? 'Send' : 'No permission to execute'}
+          className="rounded-full border border-border1 bg-surface5"
+          disabled={!canExecute || isComposerEmpty}
+          onClick={() => composerRuntime.send()}
+        >
+          <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        </Button>
+      ) : (
         <ComposerPrimitive.Send asChild disabled={!canExecute}>
           <Button
             variant="default"
@@ -325,14 +390,12 @@ const ComposerSendButton = ({ canExecute = true }: ComposerActionProps) => {
             <ArrowUp className="h-5 w-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </ComposerPrimitive.Send>
-      </ThreadPrimitive.If>
-      <ThreadPrimitive.If running>
-        <ComposerPrimitive.Cancel asChild>
-          <Button variant="default" size="icon-md" className="rounded-full" tooltip="Cancel">
-            <CircleStopIcon />
-          </Button>
-        </ComposerPrimitive.Cancel>
-      </ThreadPrimitive.If>
+      )}
+      {isStreaming && (
+        <Button variant="default" size="icon-md" tooltip="Cancel" onClick={() => void cancelStream()}>
+          <CircleStopIcon />
+        </Button>
+      )}
     </>
   );
 };

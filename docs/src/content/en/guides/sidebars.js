@@ -147,9 +147,8 @@ const sidebars = {
           label: 'Inngest',
         },
         {
-          type: 'doc',
-          id: 'deployment/mastra-platform',
-          label: 'Mastra Platform',
+          type: 'html',
+          value: '<a class="menu__link" href="/docs/mastra-platform/server"><span>Mastra platform</span></a>',
         },
         {
           type: 'doc',
@@ -367,7 +366,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'migrations/mastra-cloud',
-          label: 'Mastra Cloud to Mastra Platform',
+          label: 'Mastra Cloud to Mastra platform',
         },
         {
           type: 'doc',

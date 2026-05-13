@@ -181,6 +181,8 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
 
   for (const reminder of systemReminderParts) {
+    if (reminder.reminderType === 'goal-judge') continue;
+
     const reminderKey = `${message.id}:${reminder.reminderType ?? ''}:${reminder.path ?? ''}:${reminder.message}`;
     if (!state.currentRunSystemReminderKeys.has(reminderKey)) {
       state.currentRunSystemReminderKeys.add(reminderKey);
@@ -189,10 +191,17 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   }
 
   if (!state.streamingComponent) {
-    if (systemReminderParts.length > 0) {
-      state.ui.requestRender();
+    const trailingParts = getTrailingContentParts(message);
+    const hasToolCalls = message.content.some(content => content.type === 'tool_call');
+    if (trailingParts.length === 0 && !hasToolCalls) {
+      if (systemReminderParts.length > 0) {
+        state.ui.requestRender();
+      }
+      return;
     }
-    return;
+
+    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    ctx.addChildBeforeFollowUps(state.streamingComponent);
   }
 
   state.streamingMessage = message;
