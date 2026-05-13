@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Implement `run.restart()` in evented workflows
+Add `run.restart()` to evented workflows

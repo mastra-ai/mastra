@@ -7,6 +7,7 @@ import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
+  RestartExecutionParams,
   StepFlowEntry,
   StepResult,
   TimeTravelContext,
