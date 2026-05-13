@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
-import { dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 type ValidationArgs = {
   message: string;
@@ -70,6 +70,9 @@ export function validate(
     stubbedExternals = [],
   }: { injectESMShim?: boolean; moduleResolveMapLocation: string; stubbedExternals?: string[] },
 ) {
+  const loader = process.env.MASTRA_SOURCE_MODE
+    ? pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), 'loader.js')).href
+    : import.meta.resolve('@mastra/deployer/loader');
   let prefixCode = '';
   if (injectESMShim) {
     prefixCode = `import { fileURLToPath } from 'url';
@@ -96,7 +99,7 @@ globalThis.__dirname = dirname(__filename);
     process.execPath,
     [
       '--import',
-      import.meta.resolve('@mastra/deployer/loader'),
+      loader,
       '--input-type=module',
       '--enable-source-maps',
       '-e',

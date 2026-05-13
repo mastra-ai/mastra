@@ -32,6 +32,7 @@ const GENERATED_EXPORT_EXCEPTIONS = {
 
 const SOURCE_TARGET_OVERRIDES = {
   '@internal/core ./storage': './src/storage/index.ts',
+  '@mastra/deployer ./loader': './src/validator/loader.js',
   '@mastra/playground-ui .': './src/index.ts',
   '@mastra/playground-ui ./tokens': './src/ds/tokens/index.ts',
   '@mastra/playground-ui ./utils': './src/utils.ts',

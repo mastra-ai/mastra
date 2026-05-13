@@ -77,7 +77,7 @@
       }
     },
     "./loader": {
-      "mastra-source": "./src/validator/loader.ts",
+      "mastra-source": "./src/validator/loader.js",
       "import": {
         "types": "./dist/validator/loader.d.ts",
         "default": "./dist/validator/loader.js"

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { serve } from '@hono/node-server';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
+import { prepare } from '../../../scripts/prepare-docs';
 
 // Set up test Hono server
 const app = new Hono();
@@ -16,6 +17,8 @@ export const server = serve({
 const port = (server.address() as { port: number }).port;
 
 const sourceMode = process.env.MASTRA_SOURCE_MODE === '1';
+
+export const docsReady = prepare();
 
 export const mcp = new MCPClient({
   id: 'test-mcp',

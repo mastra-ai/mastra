@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { callTool, mcp } from './test-setup';
+import { callTool, docsReady, mcp } from './test-setup';
 
 describe('migrationTool', () => {
   let tools: any;
 
   beforeAll(async () => {
+    await docsReady;
     tools = await mcp.listTools();
   });
 
