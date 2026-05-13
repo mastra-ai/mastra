@@ -3,7 +3,7 @@
  * Created once at startup, provides tools from connected MCP servers.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
 import type { MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
@@ -87,10 +87,8 @@ class FileOAuthStorage implements OAuthStorage {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
     const tmpPath = `${this.filePath}.tmp`;
-    writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-    chmodSync(tmpPath, 0o600);
+    writeFileSync(tmpPath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
     renameSync(tmpPath, this.filePath);
-    chmodSync(this.filePath, 0o600);
   }
 }
 
