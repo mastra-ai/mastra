@@ -32,10 +32,7 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
   }
 
   const maxEntryWidth = computeChangelogEntryWidth(ctx.state.ui?.terminal?.columns);
-  const [pm, changelog] = await Promise.all([
-    detectPackageManager(),
-    fetchChangelog(latestVersion, { maxEntryWidth }),
-  ]);
+  const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion, { maxEntryWidth })]);
 
   // Clear any previously dismissed version so the prompt always shows
   const settings = loadSettings();
