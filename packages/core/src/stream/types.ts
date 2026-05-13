@@ -955,6 +955,16 @@ export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCa
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
+export type PendingToolCall = {
+  toolCallId: string;
+  toolName: string;
+  argsText: string;
+  state: 'input-streaming' | 'input-available';
+  providerExecuted?: boolean;
+  providerMetadata?: ProviderMetadata;
+  dynamic?: boolean;
+};
+
 export type ExecuteStreamModelManager<T> = (
   callback: (modelConfig: ModelManagerModelConfig, isLastModel: boolean) => Promise<T>,
 ) => Promise<T>;
@@ -1049,6 +1059,7 @@ export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools
 export type LLMStepResult<OUTPUT = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
+  pendingToolCalls?: PendingToolCall[];
   toolResults: ToolResultChunk[];
   dynamicToolCalls: ToolCallChunk[];
   dynamicToolResults: ToolResultChunk[];
