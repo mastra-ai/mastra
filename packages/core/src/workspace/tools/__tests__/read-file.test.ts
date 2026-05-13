@@ -265,7 +265,7 @@ describe('workspace_read_file', () => {
     expect(typeof pdfResult).toBe('string');
   });
 
-  it('toModelOutput passes through string results unchanged as text parts', async () => {
+  it('toModelOutput returns undefined for string results so they are not duplicated on providerMetadata', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = await createWorkspaceTools(workspace);
@@ -274,7 +274,7 @@ describe('workspace_read_file', () => {
     const tool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
     const modelOutput = tool.toModelOutput?.(result);
 
-    expect(modelOutput).toEqual({ type: 'text', value: result });
+    expect(modelOutput).toBeUndefined();
   });
 
   it('should return metadata only for binary files that are not in mediaTypes and not text-readable', async () => {

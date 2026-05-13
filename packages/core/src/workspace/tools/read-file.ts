@@ -230,9 +230,9 @@ export const readFileTool = createTool({
         ],
       };
     }
-    if (typeof output === 'string') {
-      return { type: 'text', value: output };
-    }
-    return output;
+    // For plain string output, return undefined so we don't store a duplicate
+    // copy on providerMetadata.mastra.modelOutput — the original string result
+    // is already what the model sees.
+    return undefined;
   },
 });
