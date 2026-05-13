@@ -247,6 +247,81 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
 
+  const metric = api.command('metric').description('Query observability metrics');
+  addAction(metric, 'aggregate', 'POST /observability/metrics/aggregate', {
+    description: 'Get an aggregate metric value',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get an average latency metric',
+        command: `mastra api metric aggregate '{"name":"latency_ms","aggregation":"avg"}'`,
+      },
+    ],
+  });
+  addAction(metric, 'breakdown', 'POST /observability/metrics/breakdown', {
+    description: 'Get metric values grouped by a label or field',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'Break down latency by model',
+        command: `mastra api metric breakdown '{"name":"latency_ms","aggregation":"avg","groupBy":"model","limit":10}'`,
+      },
+    ],
+  });
+  addAction(metric, 'timeseries', 'POST /observability/metrics/timeseries', {
+    description: 'Get metric values over time',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'Get hourly average latency',
+        command: `mastra api metric timeseries '{"name":"latency_ms","aggregation":"avg","interval":"1h"}'`,
+      },
+    ],
+  });
+  addAction(metric, 'percentiles', 'POST /observability/metrics/percentiles', {
+    description: 'Get metric percentile values over time',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'Get latency percentiles',
+        command: `mastra api metric percentiles '{"name":"latency_ms","percentiles":[50,95,99],"interval":"1h"}'`,
+      },
+    ],
+  });
+  addAction(metric, 'names', 'GET /observability/discovery/metric-names', {
+    description: 'List discovered metric names',
+    input: 'optional',
+    list: true,
+    examples: [
+      { description: 'Search metric names', command: `mastra api metric names '{"prefix":"lat","limit":10}'` },
+    ],
+  });
+  addAction(metric, 'label-keys', 'GET /observability/discovery/metric-label-keys', {
+    description: 'List label keys for a metric',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List label keys for a metric',
+        command: `mastra api metric label-keys '{"metricName":"latency_ms"}'`,
+      },
+    ],
+  });
+  addAction(metric, 'label-values', 'GET /observability/discovery/metric-label-values', {
+    description: 'List label values for a metric label key',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'Search label values for a metric label key',
+        command: `mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","prefix":"g","limit":10}'`,
+      },
+    ],
+  });
+
   const score = api.command('score').description('Create, list, and inspect scores');
   addAction(score, 'create', 'POST /observability/scores', {
     description: 'Create a score',
