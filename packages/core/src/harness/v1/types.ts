@@ -110,6 +110,41 @@ export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
  */
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
+/**
+ * Catalog entry exposed through `harness.models.*` (§9). Purely a UX
+ * surface — the harness does not interpret these fields, it only stores
+ * and returns them. The catalog is intended for model pickers, auth-
+ * status pills, and capability hints in UIs.
+ */
+export interface ModelInfo {
+  /**
+   * Stable id used by every `harness.models.*` accessor and by all other
+   * `modelId` fields in the harness (mode `agentId`'s resolved model,
+   * per-turn `HarnessOverrides.model`, etc). Must be unique within the
+   * catalog.
+   */
+  id: string;
+  /** Provider id (e.g. `'anthropic'`, `'openai'`, `'bedrock'`). */
+  providerId: string;
+  /** Human-readable label for UIs. Defaults to `id` when absent. */
+  displayName?: string;
+  /** Max context window in tokens, when known. */
+  contextWindow?: number;
+  /** Free-form capability hints. Harness does not interpret these. */
+  capabilities?: readonly string[];
+  /** Provider-specific extras passed through to UIs verbatim. */
+  metadata?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Auth state for a catalog model entry. `'authenticated'` means a
+ * usable credential is on hand; `'needs_auth'` means the UI should
+ * prompt the user to sign in; `'unknown'` means the resolver could not
+ * decide (and is also the default when no
+ * {@link HarnessConfigCommon.modelAuthStatusResolver} is configured).
+ */
+export type ModelAuthStatus = 'authenticated' | 'needs_auth' | 'unknown';
+
 // ---------------------------------------------------------------------------
 // Placeholders.
 //
@@ -294,6 +329,40 @@ export interface HarnessConfigCommon {
    * `toolCategoryResolver` is also set.
    */
   toolCategories?: Record<string, ToolCategory>;
+
+  /**
+   * Static catalog of model entries that the harness exposes through
+   * `harness.models.*`. Lets UIs render a model picker and surface
+   * per-model metadata (display name, context window, capability hints)
+   * without going through provider plumbing.
+   *
+   * Each `id` must be unique within the catalog — duplicate ids throw
+   * `HarnessConfigError` at construction. May be omitted entirely; in
+   * that case `harness.models.list()` returns `[]` and
+   * `harness.models.getAuthStatus()` throws
+   * `HarnessModelNotFoundError` for every id.
+   *
+   * The catalog is not validated against {@link modes} — modes may
+   * reference agents whose model is outside the catalog, and the catalog
+   * may include models not currently bound to any mode. The catalog is
+   * purely a UX surface.
+   */
+  models?: ModelInfo[];
+
+  /**
+   * Resolves a catalog model id to its current auth status. Called by
+   * `harness.models.getAuthStatus(modelId)`. May return a `Promise`.
+   *
+   * The harness does not cache the resolver's result — every
+   * `getAuthStatus()` call re-invokes it, since auth state changes
+   * out-of-band (login/logout flows, expiring tokens). Implementations
+   * should be cheap (read a credential file, check a cached provider
+   * client, etc.) and never throw — surface unknowable cases as
+   * `'unknown'`.
+   *
+   * If omitted, every authenticated lookup resolves to `'unknown'`.
+   */
+  modelAuthStatusResolver?: (modelId: string) => ModelAuthStatus | Promise<ModelAuthStatus>;
 
   /**
    * Workspace configuration (§2.7). Selects one of three ownership models —

@@ -37,6 +37,7 @@ import type { Workspace } from '../../workspace';
 
 import {
   HarnessConfigError,
+  HarnessModelNotFoundError,
   HarnessSessionClosedError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
@@ -53,6 +54,8 @@ import type {
   AttachmentUploadOptions,
   HarnessConfig,
   HarnessMode,
+  ModelAuthStatus,
+  ModelInfo,
   PermissionPolicy,
   SessionListOptions,
   SessionLoadByIdOptions,
@@ -107,6 +110,8 @@ export class Harness {
   private readonly _goalDefaults: { defaultJudgeModel?: string; defaultMaxTurns: number };
   private readonly _defaultPermissionPolicy: PermissionPolicy;
   private readonly _toolCategoryResolver?: (toolName: string) => ToolCategory | null;
+  private readonly _modelCatalog: ReadonlyMap<string, ModelInfo>;
+  private readonly _modelAuthStatusResolver?: (modelId: string) => ModelAuthStatus | Promise<ModelAuthStatus>;
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -194,6 +199,31 @@ export class Harness {
     } else {
       this._toolCategoryResolver = undefined;
     }
+
+    // Model catalog (§9). Static list of `ModelInfo`; ids must be unique
+    // within the catalog. The catalog is independent of modes — modes may
+    // reference models outside the catalog, and the catalog may include
+    // models not bound to any mode. Pure UX surface.
+    const catalog = new Map<string, ModelInfo>();
+    if (config.models) {
+      if (!Array.isArray(config.models)) {
+        throw new HarnessConfigError('models', 'must be an array of ModelInfo');
+      }
+      for (const entry of config.models) {
+        if (!entry || typeof entry.id !== 'string' || entry.id.length === 0) {
+          throw new HarnessConfigError('models', 'every entry must have a non-empty string `id`');
+        }
+        if (typeof entry.providerId !== 'string' || entry.providerId.length === 0) {
+          throw new HarnessConfigError('models', `entry "${entry.id}" must have a non-empty string \`providerId\``);
+        }
+        if (catalog.has(entry.id)) {
+          throw new HarnessConfigError('models', `duplicate model id "${entry.id}"`);
+        }
+        catalog.set(entry.id, entry);
+      }
+    }
+    this._modelCatalog = catalog;
+    this._modelAuthStatusResolver = config.modelAuthStatusResolver;
 
     // Workspace (§2.7). Three ownership models; registry handles lifecycle.
     // Cross-checks against the subagent registry happen below.
@@ -1270,6 +1300,51 @@ export class Harness {
         threadId: opts.threadId,
       });
       return settings[opts.key];
+    },
+  };
+
+  // -------------------------------------------------------------------------
+  // §9 — `harness.models.*` (catalog + auth status). The catalog is static,
+  // declared at construction. Auth status is resolved on demand because it
+  // changes out-of-band (login flows, expiring tokens) and the harness has
+  // no signal to invalidate a cache on.
+  // -------------------------------------------------------------------------
+
+  models = {
+    /**
+     * Returns a frozen snapshot of every catalog entry in declaration order.
+     * The catalog is intentionally a pure UX surface — callers can render a
+     * picker without reaching into provider plumbing. Empty array when the
+     * harness was configured without a `models` list.
+     */
+    list: async (): Promise<readonly ModelInfo[]> => {
+      return Object.freeze(Array.from(this._modelCatalog.values()));
+    },
+
+    /**
+     * Returns the catalog entry for `modelId`, or `null` if no such entry
+     * exists. Async to match the rest of `harness.models.*` and leave room
+     * for backend-backed catalogs without a breaking change.
+     */
+    get: async (modelId: string): Promise<ModelInfo | null> => {
+      return this._modelCatalog.get(modelId) ?? null;
+    },
+
+    /**
+     * Resolves the current auth status for a catalog `modelId`. Calls the
+     * configured {@link HarnessConfigCommon.modelAuthStatusResolver}; if
+     * none was supplied, returns `'unknown'`.
+     *
+     * Throws `HarnessModelNotFoundError` when `modelId` is not in the
+     * catalog. Typos surface immediately rather than collapsing into a
+     * spurious `'unknown'` reading.
+     */
+    getAuthStatus: async (modelId: string): Promise<ModelAuthStatus> => {
+      if (!this._modelCatalog.has(modelId)) {
+        throw new HarnessModelNotFoundError(modelId);
+      }
+      if (!this._modelAuthStatusResolver) return 'unknown';
+      return await this._modelAuthStatusResolver(modelId);
     },
   };
 

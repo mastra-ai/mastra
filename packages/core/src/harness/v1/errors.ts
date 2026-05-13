@@ -144,6 +144,19 @@ export class HarnessThreadNotFoundError extends Error {
 }
 
 /**
+ * `harness.models.*` lookup targeted a `modelId` that is not present in
+ * the configured catalog ({@link HarnessConfigCommon.models}). Catalog
+ * membership is a hard precondition so typos surface immediately rather
+ * than silently resolving to `'unknown'` auth status.
+ */
+export class HarnessModelNotFoundError extends Error {
+  readonly name = 'HarnessModelNotFoundError';
+  constructor(public readonly modelId: string) {
+    super(`Model "${modelId}" is not present in the harness model catalog`);
+  }
+}
+
+/**
  * A harness-event publish path received a payload that is not
  * JSON-serializable. The check runs synchronously before any subscriber
  * observes the event, so in-process listeners and remote/SSE subscribers

@@ -32,6 +32,10 @@ export interface HarnessTestSetupOptions {
   defaultPermissionPolicy?: HarnessConfig['defaultPermissionPolicy'];
   /** Optional tool-category resolver (§4.2e). */
   toolCategoryResolver?: HarnessConfig['toolCategoryResolver'];
+  /** Optional model catalog (§9). */
+  models?: HarnessConfig['models'];
+  /** Optional model auth-status resolver (§9). */
+  modelAuthStatusResolver?: HarnessConfig['modelAuthStatusResolver'];
 }
 
 export interface HarnessTestSetup {
@@ -60,6 +64,8 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
     ...(opts.subagents ? { subagents: opts.subagents } : {}),
     ...(opts.defaultPermissionPolicy ? { defaultPermissionPolicy: opts.defaultPermissionPolicy } : {}),
     ...(opts.toolCategoryResolver ? { toolCategoryResolver: opts.toolCategoryResolver } : {}),
+    ...(opts.models ? { models: opts.models } : {}),
+    ...(opts.modelAuthStatusResolver ? { modelAuthStatusResolver: opts.modelAuthStatusResolver } : {}),
   });
   const firstAgent = Object.values(agents)[0]!;
   return { harness, agent: firstAgent, agents, storage };
