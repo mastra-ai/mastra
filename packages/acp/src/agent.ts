@@ -6,6 +6,7 @@ import type {
   AgentGenerateOptions,
   AgentInstructions,
   AgentStreamOptions,
+  MastraLanguageModel,
   SubAgent,
   SubAgentGenerateResult,
   SubAgentStreamResult,
@@ -16,7 +17,6 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { ChunkType } from '@mastra/core/stream';
 import type { DynamicArgument } from '@mastra/core/types';
 
-import type { MastraLanguageModelV3 } from '../../core/dist/llm/model/shared.types';
 import { ACPConnection } from './connection';
 import type { CreateACPToolOptions } from './types';
 
@@ -41,7 +41,7 @@ const model = {
       },
     }),
   }),
-} as const satisfies MastraLanguageModelV3;
+} as const satisfies MastraLanguageModel;
 
 export type AcpAgentOptions = CreateACPToolOptions & {
   name?: string;

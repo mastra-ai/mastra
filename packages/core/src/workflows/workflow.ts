@@ -227,7 +227,7 @@ export function createStep<
  * Creates a step from an agent (defaults to { text: string } output)
  */
 export function createStep<TStepId extends string>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
     structuredOutput?: never;
     retries?: number;
@@ -239,7 +239,7 @@ export function createStep<TStepId extends string>(
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
     structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;

@@ -42,6 +42,7 @@ export type {
   NetworkRoutingConfig,
 } from './agent.types';
 
-export type { SubAgent, isAgentCompatible, SubAgentGenerateResult, SubAgentStreamResult } from './subagent';
+export type { SubAgent, SubAgentGenerateResult, SubAgentStreamResult } from './subagent';
+export { isAgentCompatible } from './subagent';
 
 export type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';
