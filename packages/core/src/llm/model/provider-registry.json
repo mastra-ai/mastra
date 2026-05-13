@@ -2442,6 +2442,31 @@
       "docUrl": "https://kilo.ai",
       "gateway": "models.dev"
     },
+    "auriko": {
+      "url": "https://api.auriko.ai/v1",
+      "apiKeyEnvVar": "AURIKO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Auriko",
+      "models": [
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-sonnet-4-6",
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-3.1-pro-preview",
+        "glm-5.1",
+        "grok-4.3",
+        "kimi-k2.5",
+        "kimi-k2.6",
+        "minimax-m2-7",
+        "minimax-m2-7-highspeed",
+        "qwen-3.6-plus"
+      ],
+      "docUrl": "https://docs.auriko.ai",
+      "gateway": "models.dev"
+    },
     "morph": {
       "url": "https://api.morphllm.com/v1",
       "apiKeyEnvVar": "MORPH_API_KEY",
@@ -6991,6 +7016,23 @@
       "~moonshotai/kimi-latest",
       "~openai/gpt-latest",
       "~openai/gpt-mini-latest"
+    ],
+    "auriko": [
+      "claude-opus-4-6",
+      "claude-opus-4-7",
+      "claude-sonnet-4-6",
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-pro",
+      "gemini-3.1-pro-preview",
+      "glm-5.1",
+      "grok-4.3",
+      "kimi-k2.5",
+      "kimi-k2.6",
+      "minimax-m2-7",
+      "minimax-m2-7-highspeed",
+      "qwen-3.6-plus"
     ],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
     "mixlayer": [
