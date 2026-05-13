@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fix incompatible React versions in Storybook by adding explicit react and react-dom devDependencies. Also adds react-dom to peerDependencies so consumers get the right version.
+Fixed a React/React DOM version mismatch that prevented Storybook from rendering in `@mastra/playground-ui`.
