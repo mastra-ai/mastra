@@ -381,7 +381,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         if (typeof params.streamLegacy !== 'function') {
           throw new Error(`Agent step ${params.id} returned a v1 model but does not implement streamLegacy`);
         }
-        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+        const modelOutput = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           requestContext,
           tracingContext,
@@ -396,7 +396,10 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           },
           abortSignal,
         });
-        stream = fullStream as any;
+        if ('text' in modelOutput) {
+          void (modelOutput as { text: Promise<string> }).text.then(streamPromise.resolve, streamPromise.reject);
+        }
+        stream = modelOutput.fullStream as any;
       } else {
         const { structuredOutput, ...restAgentOptions } = agentOptions ?? {};
         const baseOptions = {
@@ -423,6 +426,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           : await params.stream((inputData as { prompt: string }).prompt, baseOptions as any);
 
         stream = modelOutput.fullStream as ReadableStream<any>;
+        void (modelOutput as { text: Promise<string> }).text.then(streamPromise.resolve, streamPromise.reject);
       }
 
       if (streamFormat === 'legacy') {
