@@ -23,9 +23,7 @@ import type {
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import type { CreateACPToolOptions } from './types';
 
-export type ACPStreamEvent =
-  | { type: 'text'; text: string }
-  | { type: 'session-update'; update: SessionUpdate };
+export type ACPStreamEvent = { type: 'text'; text: string } | { type: 'session-update'; update: SessionUpdate };
 
 type PromptState = {
   sessionId: string;
