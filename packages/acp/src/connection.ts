@@ -5,8 +5,6 @@ import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type {
   Client,
-  ContentBlock,
-  ContentChunk,
   InitializeRequest,
   NewSessionRequest,
   NewSessionResponse,
@@ -17,6 +15,7 @@ import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
   SessionNotification,
+  SessionUpdate,
   WriteTextFileRequest,
   WriteTextFileResponse,
 } from '@agentclientprotocol/sdk';
@@ -24,10 +23,13 @@ import type {
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import type { CreateACPToolOptions } from './types';
 
+export type ACPStreamEvent =
+  | { type: 'text'; text: string }
+  | { type: 'session-update'; update: SessionUpdate };
+
 type PromptState = {
   sessionId: string;
-  chunks: string[];
-  onChunk?: (chunk: string) => void;
+  onEvent?: (event: ACPStreamEvent) => void;
 };
 
 class ACPClient implements Client {
@@ -47,10 +49,11 @@ class ACPClient implements Client {
     const update = notification.update;
 
     if (update.sessionUpdate === 'agent_message_chunk') {
-      const chunk = appendContentChunk(state.chunks, update);
-      if (chunk) {
-        state.onChunk?.(chunk);
+      if (update.content.type === 'text') {
+        state.onEvent?.({ type: 'text', text: update.content.text });
       }
+    } else {
+      state.onEvent?.({ type: 'session-update', update });
     }
   }
 
@@ -112,16 +115,18 @@ export class ACPConnection {
   }
 
   async prompt(task: string, signal?: AbortSignal): Promise<string> {
-    const chunks: string[] = [];
+    const parts: string[] = [];
 
-    for await (const chunk of this.promptStream(task, signal)) {
-      chunks.push(chunk);
+    for await (const event of this.promptStream(task, signal)) {
+      if (event.type === 'text') {
+        parts.push(event.text);
+      }
     }
 
-    return chunks.join('');
+    return parts.join('');
   }
 
-  async *promptStream(task: string, signal?: AbortSignal): AsyncGenerator<string> {
+  async *promptStream(task: string, signal?: AbortSignal): AsyncGenerator<ACPStreamEvent> {
     await this.ensureConnected();
 
     const sessionId = this.session?.sessionId;
@@ -135,11 +140,10 @@ export class ACPConnection {
       throw signal.reason ?? new Error('ACP prompt aborted');
     }
 
-    const queue = createAsyncQueue<string>();
+    const queue = createAsyncQueue<ACPStreamEvent>();
     const state: PromptState = {
       sessionId,
-      chunks: [],
-      onChunk: chunk => queue.push(chunk),
+      onEvent: event => queue.push(event),
     };
     this.currentPrompt = state;
 
@@ -303,19 +307,6 @@ export class ACPConnection {
 
     return new Error(stderr ? `${String(error)}\n\nACP agent stderr:\n${stderr}` : String(error));
   }
-}
-
-function appendContentChunk(chunks: string[], chunk: ContentChunk): string | undefined {
-  return appendContentBlock(chunks, chunk.content);
-}
-
-function appendContentBlock(chunks: string[], content: ContentBlock): string | undefined {
-  if (content.type === 'text') {
-    chunks.push(content.text);
-    return content.text;
-  }
-
-  return undefined;
 }
 
 type AsyncQueue<T> = AsyncIterable<T> & {

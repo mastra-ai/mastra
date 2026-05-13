@@ -200,9 +200,15 @@ describe('ACPConnection', () => {
 
     const iterator = connection.promptStream('stream feature')[Symbol.asyncIterator]();
 
-    await expect(iterator.next()).resolves.toEqual({ value: 'hello ', done: false });
+    await expect(iterator.next()).resolves.toEqual({
+      value: { type: 'text', text: 'hello ' },
+      done: false,
+    });
     finishPrompt();
-    await expect(iterator.next()).resolves.toEqual({ value: 'world', done: false });
+    await expect(iterator.next()).resolves.toEqual({
+      value: { type: 'text', text: 'world' },
+      done: false,
+    });
     await expect(iterator.next()).resolves.toEqual({ value: undefined, done: true });
   });
 
@@ -368,5 +374,85 @@ describe('AcpAgent', () => {
       'output',
     ]);
     expect(result.messageList.get.response.db()[0]?.role).toBe('assistant');
+  });
+
+  it('emits tool call session updates as Mastra tool chunks', async () => {
+    const { AcpAgent } = await import('../agent');
+
+    mocks.onPrompt = async acpConnection => {
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'tool_call',
+          toolCallId: 'tc-1',
+          title: 'Read file',
+          kind: 'read',
+          status: 'in_progress',
+          rawInput: { path: 'src/index.ts' },
+          locations: [{ path: 'src/index.ts', line: 10 }],
+        },
+      });
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'tc-1',
+          status: 'completed',
+          rawOutput: { content: 'export const value = 1;' },
+        },
+      });
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'result' },
+        },
+      });
+    };
+
+    const agent = new AcpAgent({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    const result = await agent.stream('read file', { runId: 'run-3' });
+    const chunks: any[] = [];
+    for await (const chunk of result.fullStream) {
+      chunks.push(chunk);
+    }
+
+    await expect(result.text).resolves.toBe('result');
+
+    const toolCallChunk = chunks.find(c => c.type === 'tool-call');
+    expect(toolCallChunk).toMatchObject({
+      type: 'tool-call',
+      from: 'AGENT',
+      runId: 'run-3',
+      payload: {
+        toolCallId: 'tc-1',
+        toolName: 'Read file',
+        args: { path: 'src/index.ts' },
+      },
+    });
+
+    const toolResultChunk = chunks.find(c => c.type === 'tool-result');
+    expect(toolResultChunk).toMatchObject({
+      type: 'tool-result',
+      from: 'AGENT',
+      runId: 'run-3',
+      payload: {
+        toolCallId: 'tc-1',
+        toolName: 'Read file',
+        result: { content: 'export const value = 1;' },
+        isError: false,
+      },
+    });
+
+    expect(chunks.some(c => c.type === 'data-acp-session-update')).toBe(false);
+
+    const textDeltas = chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text);
+    expect(textDeltas).toEqual(['result']);
   });
 });

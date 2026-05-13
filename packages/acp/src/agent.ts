@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
+import type { SessionUpdate } from '@agentclientprotocol/sdk';
 import type {
   AgentGenerateOptions,
   AgentInstructions,
@@ -131,18 +132,25 @@ export class AcpAgent<
       start: async controller => {
         const textId = randomUUID();
         const chunks: string[] = [];
+        const toolNames = new Map<string, string>();
 
         try {
           controller.enqueue({ type: 'text-start', runId, from: CHUNK_FROM_AGENT, payload: { id: textId } });
 
-          for await (const chunk of this.connection.promptStream(prompt, signal)) {
-            chunks.push(chunk);
-            controller.enqueue({
-              type: 'text-delta',
-              runId,
-              from: CHUNK_FROM_AGENT,
-              payload: { id: textId, text: chunk },
-            });
+          for await (const event of this.connection.promptStream(prompt, signal)) {
+            if (event.type === 'text') {
+              chunks.push(event.text);
+              controller.enqueue({
+                type: 'text-delta',
+                runId,
+                from: CHUNK_FROM_AGENT,
+                payload: { id: textId, text: event.text },
+              });
+            } else if (event.type === 'session-update') {
+              for (const chunk of getMastraChunksFromACPUpdate(event.update, runId, toolNames)) {
+                controller.enqueue(chunk);
+              }
+            }
           }
 
           const text = chunks.join('');
@@ -217,6 +225,85 @@ function extractInstructions(instructions: AgentInstructions): string {
   }
 
   return coreContentToString(instructions.content);
+}
+
+function getMastraChunksFromACPUpdate(
+  update: SessionUpdate,
+  runId: string,
+  toolNames: Map<string, string>,
+): ChunkType[] {
+  switch (update.sessionUpdate) {
+    case 'tool_call': {
+      const toolName = getToolName(update, toolNames);
+      toolNames.set(update.toolCallId, toolName);
+
+      return [
+        {
+          type: 'tool-call',
+          runId,
+          from: CHUNK_FROM_AGENT,
+          payload: {
+            toolCallId: update.toolCallId,
+            toolName,
+            args: toRecord(update.rawInput),
+          },
+        },
+      ];
+    }
+    case 'tool_call_update': {
+      const toolName = getToolName(update, toolNames);
+
+      if (update.status === 'completed' || update.status === 'failed') {
+        return [
+          {
+            type: 'tool-result',
+            runId,
+            from: CHUNK_FROM_AGENT,
+            payload: {
+              toolCallId: update.toolCallId,
+              toolName,
+              result: update.rawOutput ?? update.content ?? { status: update.status, title: update.title },
+              isError: update.status === 'failed',
+            },
+          },
+        ];
+      }
+
+      return [
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: CHUNK_FROM_AGENT,
+          payload: {
+            toolCallId: update.toolCallId,
+            toolName,
+            argsTextDelta: update.title ?? update.status ?? '',
+          },
+        },
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
+function getToolName(
+  update: Extract<SessionUpdate, { sessionUpdate: 'tool_call' | 'tool_call_update' }>,
+  toolNames: Map<string, string>,
+): string {
+  return update.title ?? toolNames.get(update.toolCallId) ?? update.kind ?? 'acp_tool';
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (value === undefined) {
+    return {};
+  }
+
+  return { input: value };
 }
 
 function createFinishChunk(type: 'step-finish' | 'finish', runId: string): ChunkType {
