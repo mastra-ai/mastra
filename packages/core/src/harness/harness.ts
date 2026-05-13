@@ -2793,7 +2793,7 @@ export class Harness<TState = {}> {
    * to avoid the new signal being queued onto the dying run, which would then
    * be drained with the previous run's already-aborted abortSignal.
    */
-  async waitForCurrentThreadStreamIdle(): Promise<void> {
+  private async waitForCurrentThreadStreamIdle(): Promise<void> {
     while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
