@@ -213,4 +213,47 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
       expect(screen.queryByTestId('agent-builder-visibility-confirm-dialog')).toBeNull();
     });
   });
+
+  it('keeps the configure detail pane mounted after an autosave round-trip', async () => {
+    let patchCount = 0;
+    server.use(
+      ...baseHandlers(),
+      http.patch(`${BASE_URL}/api/stored/agents/agent-123`, async ({ request }) => {
+        patchCount += 1;
+        const body = (await request.json()) as Partial<typeof storedAgent>;
+        return HttpResponse.json({ ...storedAgent, ...body });
+      }),
+    );
+
+    renderPage();
+
+    // Open the instructions detail pane.
+    const openInstructions = await screen.findByTestId('agent-preview-edit-system-prompt');
+    fireEvent.click(openInstructions);
+
+    // Detail pane must be mounted before we trigger the autosave.
+    expect(await screen.findByTestId('instructions-detail-close')).toBeTruthy();
+
+    // Edit the name to trigger autosave (debounced 600ms).
+    const nameInput = (await screen.findByTestId('agent-configure-name')) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'MSW Agent Renamed' } });
+
+    // Autosave fires after debounce and PATCHes the stored agent. The success path
+    // invalidates ['stored-agent', id] and friends, causing background refetches.
+    await waitFor(
+      () => {
+        expect(patchCount).toBeGreaterThan(0);
+      },
+      { timeout: 3000 },
+    );
+
+    // Let the invalidation-triggered refetches settle.
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-builder-autosave-saved')).toBeTruthy();
+    });
+
+    // Regression guard: the ready gate must not flip back to the skeleton on
+    // refetch, so the configure detail pane must remain mounted.
+    expect(screen.queryByTestId('instructions-detail-close')).toBeTruthy();
+  });
 });

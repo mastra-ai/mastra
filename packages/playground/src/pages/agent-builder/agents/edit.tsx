@@ -46,10 +46,10 @@ export default function AgentBuilderAgentEdit() {
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
-  const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
-  const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
-  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, {
+  const { data: toolsData, isLoading: isToolsLoading } = useTools({ enabled: features.tools });
+  const { data: agentsData, isLoading: isAgentsLoading } = useAgents({ enabled: features.agents });
+  const { data: workflowsData, isLoading: isWorkflowsLoading } = useWorkflows({ enabled: features.workflows });
+  const { data: storedSkillsResponse, isLoading: isSkillsLoading } = useStoredSkills(undefined, {
     enabled: features.skills,
   });
   const { data: workspacesData } = useStoredWorkspaces();
@@ -60,10 +60,10 @@ export default function AgentBuilderAgentEdit() {
     Boolean(id) &&
     !isStoredAgentLoading &&
     !isOwnershipLoading &&
-    (!features.tools || !isToolsPending) &&
-    (!features.skills || !isSkillsPending) &&
-    (!features.agents || !isAgentsPending) &&
-    (!features.workflows || !isWorkflowsPending);
+    (!features.tools || !isToolsLoading) &&
+    (!features.skills || !isSkillsLoading) &&
+    (!features.agents || !isAgentsLoading) &&
+    (!features.workflows || !isWorkflowsLoading);
 
   const availableWorkspaces = useMemo<AvailableWorkspace[]>(
     () =>
