@@ -726,7 +726,12 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
     try {
       const file = loadRecordingFile(recordingPath, options.name);
       existingMeta = file.meta;
-      savedRecordings = file.recordings;
+      savedRecordings = options.transformRequest
+        ? file.recordings.map(recording => {
+            const transformed = options.transformRequest!({ url: recording.request.url, body: recording.request.body });
+            return { ...recording, hash: hashRequest(transformed.url, transformed.body) };
+          })
+        : file.recordings;
     } catch (err) {
       if (!willRecord) {
         throw err;

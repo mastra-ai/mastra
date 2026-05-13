@@ -121,6 +121,78 @@ describe('transformRequest', () => {
       recorder.stop();
     }
   });
+
+  it('uses transformed hashes for existing recordings in exact replay mode', async () => {
+    const originalMode = process.env.LLM_TEST_MODE;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-recorder-transform-'));
+    const name = 'transformed-hash-replay';
+    const filePath = path.join(tempDir, `${name}.json`);
+
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          meta: { name, createdAt: '2026-03-26T00:00:00.000Z' },
+          recordings: [
+            {
+              hash: 'stale-before-transform',
+              request: {
+                url: 'https://api.openai.com/v1/responses',
+                method: 'POST',
+                body: { model: 'gpt-4o', input: 'hello', timestamp: 'old' },
+                timestamp: 1,
+              },
+              response: {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'application/json' },
+                body: { id: 'transformed-match', output: [] },
+                isStreaming: false,
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    process.env.LLM_TEST_MODE = 'replay';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const recorder = setupLLMRecording({
+      name,
+      recordingsDir: tempDir,
+      exactMatch: true,
+      transformRequest: ({ url, body }) => {
+        const nextBody = { ...(body as Record<string, unknown>) };
+        delete nextBody.timestamp;
+        return { url, body: nextBody };
+      },
+    });
+    recorder.start();
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o', input: 'hello', timestamp: 'new' }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ id: 'transformed-match', output: [] });
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('No exact match for hash'));
+    } finally {
+      recorder.stop();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      if (originalMode === undefined) {
+        delete process.env.LLM_TEST_MODE;
+      } else {
+        process.env.LLM_TEST_MODE = originalMode;
+      }
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 /**
