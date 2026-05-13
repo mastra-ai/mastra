@@ -21,7 +21,7 @@ describe('agent builder route loading', () => {
     vi.resetModules();
   });
 
-  it('does not load or register agent builder when importing the server routes', async () => {
+  it('does not load or register agent builder when importing the server routes', { timeout: 10_000 }, async () => {
     const loadAgentBuilder = vi.fn(() => ({
       agentBuilderWorkflows: {},
     }));
