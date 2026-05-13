@@ -612,12 +612,13 @@ It accepts [common flags][common-flags].
 
 ## `mastra api`
 
-Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, or self-hosted Mastra servers.
+Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
 
 ```bash
 mastra api agent list --pretty
 mastra api agent run weather-agent '{"messages":"What is the weather in London?"}'
 mastra api tool execute get-weather '{"location":"San Francisco"}'
+mastra api trace list '{"page":0,"perPage":20}' --pretty
 ```
 
 Use `mastra api <resource> <action> --help` to see examples for a command.
@@ -650,13 +651,22 @@ Errors are written to `stderr` as JSON and return a non-zero exit code:
 
 ### Target resolution
 
-The command resolves the target server in this order:
+For runtime commands, the command resolves the target server in this order:
 
 1. `--url <url>` for an explicit remote or self-hosted server.
 1. `http://localhost:4111` for a local `mastra dev` server.
 1. `.mastra-project.json` for a Mastra platform project.
 
 Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
+
+For observability commands (`trace`, `log`, and `score`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. It resolves credentials in this order:
+
+1. Explicit `Authorization` and `X-Mastra-Project-Id` headers passed with `--header`.
+1. `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your environment.
+1. Project metadata from `.mastra-project.json` for the project ID.
+1. Your Mastra CLI login token as an auth fallback.
+
+Use `--url` and `--header` when you need to override the default hosted observability target or credentials.
 
 ### Flags
 
@@ -713,6 +723,13 @@ List commands accept `page` and `perPage` in the JSON input when the target rout
 
 ```bash
 mastra api score list '{"page":0,"perPage":50}'
+mastra api trace list '{"page":0,"perPage":20}'
+```
+
+Routes that support filters accept them in the same JSON input. For example, observability trace listing supports pagination and route-supported filters:
+
+```bash
+mastra api trace list '{"page":0,"perPage":20,"filters":{"spanType":"agent"}}' --pretty
 ```
 
 ### Get command-specific help
@@ -968,14 +985,33 @@ Lists observability traces. Pass optional JSON input for route-supported filters
 
 ```bash
 mastra api trace list [input]
+mastra api trace list '{"page":0,"perPage":20}' --pretty
 ```
+
+`trace list` returns full root span records. For debugging large traces without overfetching, use `trace light` first and then fetch a specific span with `trace span` only when you need full span payloads.
 
 #### `mastra api trace get`
 
-Gets one observability trace by ID.
+Gets one observability trace by ID, including its spans.
 
 ```bash
 mastra api trace get <traceId>
+```
+
+#### `mastra api trace light`
+
+Gets a lightweight timeline for one observability trace without fetching full span input, output, attributes, or metadata payloads.
+
+```bash
+mastra api trace light <traceId>
+```
+
+#### `mastra api trace span`
+
+Gets one full span from an observability trace. Use this after `trace light` when you know which span you need to inspect.
+
+```bash
+mastra api trace span <traceId> <spanId>
 ```
 
 #### `mastra api log list`
@@ -984,6 +1020,32 @@ Lists observability logs. Pass optional JSON input for route-supported filters o
 
 ```bash
 mastra api log list [input]
+```
+
+#### Observability with `curl`
+
+You can call the hosted observability API directly with your platform access token and project ID:
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
+```
+
+Get a lightweight trace timeline:
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/light" \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
+```
+
+Get a specific span:
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/spans/<span-id>" \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
 ```
 
 #### `mastra api score create`

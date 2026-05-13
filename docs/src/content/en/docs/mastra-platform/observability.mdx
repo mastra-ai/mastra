@@ -62,3 +62,13 @@ export const mastra = new Mastra({
 ```
 
 See [Mastra platform configuration](/docs/mastra-platform/configuration#observability) for the environment variables used by platform observability.
+
+## Query observability data
+
+After your project is publishing traces, logs, or scores to Mastra Platform Observability, you can query that data from your terminal with the Mastra CLI or with `curl`.
+
+```bash npm2yarn
+npx mastra api trace list --pretty
+```
+
+For observability commands, the CLI targets the hosted observability API and can infer credentials from your project environment. See the [`mastra api` CLI reference](/reference/cli/mastra#mastra-api) for available observability commands, filtering, pagination, credential resolution, and direct `curl` examples.

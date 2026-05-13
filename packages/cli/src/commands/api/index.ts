@@ -223,6 +223,15 @@ export function registerApiCommand(program: CommanderCommand): void {
   const trace = api.command('trace').description('Inspect observability traces');
   addAction(trace, 'list', 'GET /observability/traces', { description: 'List observability traces', list: true });
   addAction(trace, 'get', 'GET /observability/traces/:traceId', { description: 'Get trace details' });
+  addAction(trace, 'light', 'GET /observability/traces/:traceId/light', {
+    description: 'Get lightweight trace details',
+    list: true,
+    examples: [{ description: 'Get lightweight trace details', command: 'mastra api trace light trace_123' }],
+  });
+  addAction(trace, 'span', 'GET /observability/traces/:traceId/spans/:spanId', {
+    description: 'Get a trace span',
+    examples: [{ description: 'Get a specific trace span', command: 'mastra api trace span trace_123 span_456' }],
+  });
 
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
@@ -471,6 +480,10 @@ function parseCommandName(name: string): string {
  *
  * @param analytics - Lazily-created analytics client, if telemetry is enabled.
  */
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiCliError && error.code === 'HTTP_ERROR' && error.details.status === 401;
+}
+
 async function shutdownApiAnalytics(analytics: ReturnType<typeof getAnalytics>): Promise<void> {
   if (!analytics) {
     return;
@@ -503,7 +516,7 @@ export async function executeDescriptor(
   options: ApiGlobalOptions,
 ): Promise<void> {
   try {
-    const target = await resolveTarget(options);
+    const target = await resolveTarget(options, fetch, descriptor.path);
 
     if (options.schema) {
       // Schema output is a discovery path, so it intentionally skips required argument validation.
@@ -516,14 +529,21 @@ export async function executeDescriptor(
     // Do not send IDs twice when a route path param was supplied through JSON input.
     const requestInput = stripPathParamsFromInput(input, pathParams);
 
-    const response = await requestApi({
+    const requestOptions = {
       baseUrl: target.baseUrl,
       headers: target.headers,
       timeoutMs: descriptor.defaultTimeoutMs && !options.timeout ? descriptor.defaultTimeoutMs : target.timeoutMs,
       descriptor,
       pathParams,
       input: requestInput,
-    });
+    };
+    let response: unknown;
+    try {
+      response = await requestApi(requestOptions);
+    } catch (error) {
+      if (!target.fallbackHeaders || !isUnauthorizedError(error)) throw error;
+      response = await requestApi({ ...requestOptions, headers: target.fallbackHeaders });
+    }
     const normalized = normalizeData(descriptor, normalizeResponse(response));
     writeJson(normalizeSuccess(normalized, descriptor.list, descriptor.responseShape), options.pretty);
   } catch (error) {
