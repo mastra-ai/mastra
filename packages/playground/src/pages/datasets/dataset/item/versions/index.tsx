@@ -15,7 +15,7 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { format } from 'date-fns';
-import { ArrowLeft, HistoryIcon, GitCompareIcon, ArrowLeftIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
+import { ArrowLeft, HistoryIcon, GitCompareIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetItemContent } from '@/domains/datasets';
@@ -133,10 +133,6 @@ function DatasetItemVersionsComparePage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <ButtonsGroup>
-                <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
-                  <ArrowLeftIcon />
-                  Back to Item
-                </Button>
                 <Button variant="primary" onClick={() => setIsDiffView(v => !v)}>
                   {isDiffView ? (
                     <>

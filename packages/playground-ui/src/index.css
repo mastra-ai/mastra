@@ -19,12 +19,12 @@
   --geist-mono: 'GeistMonoVF', monospace;
 
   /* Dark theme (default) */
-  --surface1: oklch(0 0 0);
-  --surface2: oklch(0.1684 0 0);
-  --surface3: oklch(0.1913 0 0);
-  --surface4: oklch(0.2178 0 0);
-  --surface5: oklch(0.2435 0 0 / 0.9);
-  --surface6: oklch(0.3092 0 0);
+  --surface1: oklch(0% 0 0deg);
+  --surface2: oklch(16.84% 0 0deg);
+  --surface3: oklch(19.13% 0 0deg);
+  --surface4: oklch(21.78% 0 0deg);
+  --surface5: oklch(24.35% 0 0deg / 90%);
+  --surface6: oklch(30.92% 0 0deg);
 
   --accent1: oklch(0.723 0.219 149.579);
   --accent2: oklch(0.637 0.237 25.331);
@@ -52,15 +52,15 @@
   --neutral6: oklch(0.985 0 0);
 
   --error: oklch(0.637 0.237 25.331);
-  --overlay: oklch(0 0 0 / 0.75);
-  --border1: oklch(1 0 0 / 0.06);
-  --border2: oklch(1 0 0 / 0.1);
-  --shadow-main-frame: 0 14px 48px -36px oklch(0 0 0 / 0.85);
-  --sidebar-nav-hover: oklch(1 0 0 / 0.07);
-  --sidebar-nav-active: oklch(1 0 0 / 0.11);
-  --section-card-bg: oklch(1 0 0 / 0.014);
-  --section-card-header: oklch(1 0 0 / 0.035);
-  --section-card-border: oklch(1 0 0 / 0.045);
+  --overlay: oklch(0% 0 0deg / 75%);
+  --border1: oklch(100% 0 0deg / 6%);
+  --border2: oklch(100% 0 0deg / 10%);
+  --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
+  --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
+  --sidebar-nav-active: oklch(100% 0 0deg / 11%);
+  --section-card-bg: oklch(100% 0 0deg / 1.4%);
+  --section-card-header: oklch(100% 0 0deg / 3.5%);
+  --section-card-border: oklch(100% 0 0deg / 4.5%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -82,12 +82,12 @@
 }
 
 html.light {
-  --surface1: oklch(0.956 0 0);
-  --surface2: oklch(0.985 0 0);
-  --surface3: oklch(1 0 0);
-  --surface4: oklch(0.965 0 0);
-  --surface5: oklch(0.944 0 0 / 0.94);
-  --surface6: oklch(0.895 0 0);
+  --surface1: oklch(95.6% 0 0deg);
+  --surface2: oklch(98.5% 0 0deg);
+  --surface3: oklch(100% 0 0deg);
+  --surface4: oklch(96.5% 0 0deg);
+  --surface5: oklch(94.4% 0 0deg / 94%);
+  --surface6: oklch(89.5% 0 0deg);
 
   --accent1: oklch(0.627 0.194 149.214);
   --accent2: oklch(0.577 0.245 27.325);
@@ -115,15 +115,15 @@ html.light {
   --neutral6: oklch(0.13 0 0);
 
   --error: oklch(0.577 0.245 27.325);
-  --overlay: oklch(0.208 0 0 / 0.45);
-  --border1: oklch(0.208 0 0 / 0.1);
-  --border2: oklch(0.208 0 0 / 0.16);
-  --shadow-main-frame: 0 1px 2px oklch(0.24 0 0 / 0.04), 0 18px 48px -34px oklch(0.24 0 0 / 0.22);
-  --sidebar-nav-hover: oklch(0.208 0 0 / 0.055);
-  --sidebar-nav-active: oklch(0.208 0 0 / 0.085);
-  --section-card-bg: oklch(0.208 0 0 / 0.014);
-  --section-card-header: oklch(0.208 0 0 / 0.035);
-  --section-card-border: oklch(0.208 0 0 / 0.06);
+  --overlay: oklch(20.8% 0 0deg / 45%);
+  --border1: oklch(20.8% 0 0deg / 10%);
+  --border2: oklch(20.8% 0 0deg / 16%);
+  --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
+  --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
+  --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
+  --section-card-bg: oklch(20.8% 0 0deg / 1.4%);
+  --section-card-header: oklch(20.8% 0 0deg / 3.5%);
+  --section-card-border: oklch(20.8% 0 0deg / 6%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -391,11 +391,12 @@ html.light {
   --shadow-inner: inset 0 2px 4px oklch(0 0 0 / 0.3);
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
-  /* Drop-shadow only. A previous version added `inset 0 1px 0 0 oklch(1 0 0 / 0.04)` for
+
+  /* Drop-shadow only. A previous version added `inset 0 1px 0 0 oklch(100% 0 0deg / 4%)` for
      a 1px gloss highlight on top, but Tailwind v4 inlines @theme values into utility
      classes so it can't be themed per-mode via a CSS var override — and the white inset
      reads as a dirty band on dark surfaces and is invisible on white-ish light surfaces. */
-  --shadow-dialog: 0 8px 24px -8px oklch(0 0 0 / 0.28), 0 24px 56px -16px oklch(0 0 0 / 0.36);
+  --shadow-dialog: 0 8px 24px -8px oklch(0% 0 0deg / 28%), 0 24px 56px -16px oklch(0% 0 0deg / 36%);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
