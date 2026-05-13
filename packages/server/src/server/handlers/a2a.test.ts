@@ -373,6 +373,92 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('should accept file parts (FileWithUri + FileWithBytes) and pass them through to the converter', async () => {
+      // Regression test for the handler-level schema rejecting non-text parts.
+      // Pre-fix, params.message.parts was validated as `kind: z.enum(['text'])`
+      // which rejected `kind: 'file'` and `kind: 'data'` before convertToCoreMessage
+      // (which already handles all three) could see them.
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [
+            { kind: 'text', text: 'Please summarize the attached invoice.' },
+            {
+              kind: 'file',
+              file: { uri: 'https://example.com/invoice.pdf', mimeType: 'application/pdf', name: 'invoice.pdf' },
+            },
+            { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/png', name: 'screenshot.png' } },
+          ],
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Summary attached.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      // Validation passes — no JSON-RPC error returned.
+      expect('error' in result).toBe(false);
+
+      // convertToCoreMessage forwarded the file parts as CoreMessage `file` parts.
+      const generateArgs = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0];
+      const coreMessages = generateArgs[0] as Array<{ role: string; content: Array<unknown> }>;
+      expect(coreMessages).toHaveLength(1);
+      expect(coreMessages[0].role).toBe('user');
+      expect(coreMessages[0].content).toEqual([
+        { type: 'text', text: 'Please summarize the attached invoice.' },
+        { type: 'file', data: new URL('https://example.com/invoice.pdf'), mimeType: 'application/pdf' },
+        { type: 'file', data: 'AAAA', mimeType: 'image/png' },
+      ]);
+    });
+
+    it('should reject parts with an unknown discriminator', async () => {
+      // The widened schema is still strict on the part kind — discriminatedUnion
+      // rejects anything other than text | file | data, matching the @a2a-js/sdk
+      // Part union exactly.
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+
+      const params = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'bogus', text: 'nope' }],
+        },
+      } as unknown as MessageSendParams;
+
+      const result = await getAgentExecutionHandler({
+        requestId,
+        mastra: mockMastra,
+        method: 'message/send',
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect('error' in result).toBe(true);
+      // -32602 is the JSON-RPC "invalid params" code that MastraA2AError.invalidParams produces.
+      // @ts-expect-error - error is present in the failure branch
+      expect(result.error.code).toBe(-32602);
+    });
+
     it('should handle errors from agent.generate and save failed state', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';

@@ -71,29 +71,32 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'TEXT');
 
-    // T3.24 — SCD-2 indexes on dataset_items
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_version ON "${TABLE_DATASET_ITEMS}" ("datasetId", "datasetVersion")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto_deleted ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo", "isDeleted")`,
-      args: [],
-    });
-
-    // T3.25 — indexes on dataset_versions
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version_unique ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
-      args: [],
-    });
+    // T3.24/T3.25 — idempotent indexes
+    await this.#client.batch(
+      [
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_version ON "${TABLE_DATASET_ITEMS}" ("datasetId", "datasetVersion")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_validto_deleted ON "${TABLE_DATASET_ITEMS}" ("datasetId", "validTo", "isDeleted")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
+          args: [],
+        },
+        {
+          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version_unique ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
+          args: [],
+        },
+      ],
+      'write',
+    );
   }
 
   async #addColumnIfNotExists(table: string, column: string, sqlType: string): Promise<void> {

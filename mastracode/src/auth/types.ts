@@ -22,12 +22,27 @@ export interface OAuthPrompt {
   allowEmpty?: boolean;
 }
 
+/**
+ * A selectable authentication mode for an OAuth provider.
+ * Providers that support multiple flows (e.g. browser callback vs. device code)
+ * advertise them via `OAuthProviderInterface.authModes`. The TUI shows a
+ * sub-selector when more than one mode is available so users don't need to
+ * discover the flow through environment variables.
+ */
+export interface AuthMode {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface OAuthLoginCallbacks {
   onAuth: (info: OAuthAuthInfo) => void;
   onPrompt: (prompt: OAuthPrompt) => Promise<string>;
   onProgress?: (message: string) => void;
   onManualCodeInput?: () => Promise<string>;
   signal?: AbortSignal;
+  /** Selected authentication mode id (matches one of `OAuthProviderInterface.authModes`). */
+  authMode?: string;
 }
 
 export interface OAuthProviderInterface {
@@ -36,6 +51,13 @@ export interface OAuthProviderInterface {
 
   /** Whether this provider uses a local callback server (vs manual code paste) */
   readonly usesCallbackServer?: boolean;
+
+  /**
+   * Optional list of selectable auth flows. When set with two or more entries,
+   * the TUI prompts the user to pick a mode before starting the login flow and
+   * forwards the choice via `OAuthLoginCallbacks.authMode`.
+   */
+  readonly authModes?: ReadonlyArray<AuthMode>;
 
   /** Run the login flow, return credentials to persist */
   login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials>;
