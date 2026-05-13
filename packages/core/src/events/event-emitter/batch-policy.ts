@@ -1,4 +1,4 @@
-import type { Event, SubscribeBatchOptions } from './types';
+import type { Event, SubscribeBatchOptions } from '../types';
 
 /**
  * Opaque timer handle. We don't care whether the runtime returns a number
@@ -32,11 +32,11 @@ export const DEFAULT_MAX_BUFFER_SIZE = 256;
 export const DEFAULT_OVERFLOW: NonNullable<SubscribeBatchOptions['overflow']> = 'coalesce-or-drop-oldest';
 
 /**
- * Pure policy engine that decides when a per-subscriber batch should flush.
+ * Internal to `EventEmitterPubSub`. Embedded by `AckHandleBuffer` to decide
+ * when a batched subscription should flush (size, time, coalesce, overflow).
  *
- * Knows nothing about where events live — works on counts and timestamps.
- * Both `AckHandleBuffer` (native adapters) and `CachingPubSub` (cache-backed)
- * embed an instance.
+ * Not part of the public API — users configure batching via
+ * `SubscribeBatchOptions` on `subscribe`.
  */
 export class BatchPolicy {
   private readonly opts: SubscribeBatchOptions;

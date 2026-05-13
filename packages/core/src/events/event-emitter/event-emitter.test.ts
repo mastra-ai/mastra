@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventEmitterPubSub } from './event-emitter';
-import type { Event } from './types';
+import type { Event } from '../types';
+import { EventEmitterPubSub } from './index';
 
 function makeEvent(overrides: Partial<Omit<Event, 'id' | 'createdAt'>> = {}): Omit<Event, 'id' | 'createdAt'> {
   return {

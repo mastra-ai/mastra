@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { Event } from '../types';
 import { AckHandleBuffer } from './ack-handle-buffer';
 import type { BatchPolicyDeps, BatchPolicyTimerHandle } from './batch-policy';
-import type { Event } from './types';
 
 function makeFakeClock(): { deps: BatchPolicyDeps; advance: (ms: number) => Promise<void> } {
   let now = 1000;

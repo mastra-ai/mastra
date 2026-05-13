@@ -52,9 +52,6 @@ export abstract class PubSub {
    * Implementations that integrate batching internally (e.g. against their
    * own broker retention or via an `AckHandleBuffer`) override this getter
    * and return `true`.
-   *
-   * When `false`, callers needing batching wrap the adapter with
-   * `CachingPubSub`, which provides cache-backed batching via cursors.
    */
   get supportsNativeBatching(): boolean {
     return false;

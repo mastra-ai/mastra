@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { Event } from '../types';
 import type { BatchPolicyDeps, BatchPolicyTimerHandle } from './batch-policy';
 import { BatchPolicy } from './batch-policy';
-import type { Event } from './types';
 
 /**
  * Manual fake clock — avoids vi.useFakeTimers global state and gives us

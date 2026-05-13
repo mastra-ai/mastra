@@ -1,6 +1,6 @@
+import type { Event, EventCallback, SubscribeBatchOptions } from '../types';
 import type { BatchPolicyDeps } from './batch-policy';
 import { BatchPolicy } from './batch-policy';
-import type { Event, EventCallback, SubscribeBatchOptions } from './types';
 
 interface Entry {
   event: Event;
