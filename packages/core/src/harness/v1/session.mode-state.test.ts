@@ -1,5 +1,5 @@
 /**
- * Harness v1 — Session.getCurrentMode/getCurrentModel/switchMode/switchModel +
+ * Harness v1 — Session.getCurrentMode/switchMode + Session.models.* +
  * getDisplayState. Mode/model setters CAS-write through storage, so we
  * verify both the in-memory state and the stored record.
  */
@@ -30,7 +30,7 @@ function setup() {
   return { harness, storage };
 }
 
-describe('Session.getCurrentMode / getCurrentModel', () => {
+describe('Session.getCurrentMode / models.current', () => {
   it('returns the mode object resolved from the session record', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
@@ -45,7 +45,7 @@ describe('Session.getCurrentMode / getCurrentModel', () => {
       threadId: { fresh: true },
       modelId: 'gpt-5-mini',
     });
-    expect(session.getCurrentModel()).toBe('gpt-5-mini');
+    expect(session.models.current()).toBe('gpt-5-mini');
   });
 });
 
@@ -75,12 +75,12 @@ describe('Session.switchMode', () => {
   });
 });
 
-describe('Session.switchModel', () => {
+describe('Session.models.switch', () => {
   it('persists the new model id', async () => {
     const { harness, storage } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await session.switchModel({ model: 'gpt-5' });
-    expect(session.getCurrentModel()).toBe('gpt-5');
+    await session.models.switch({ model: 'gpt-5' });
+    expect(session.models.current()).toBe('gpt-5');
 
     const stored = await storage.loadSession({ sessionId: session.id });
     expect(stored?.modelId).toBe('gpt-5');

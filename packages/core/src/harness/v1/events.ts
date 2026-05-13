@@ -86,6 +86,13 @@ export interface ModelChangedEvent extends HarnessEventBase {
   previousModelId: string;
 }
 
+export interface ModelOverrideSetEvent extends HarnessEventBase {
+  type: 'model_override_set';
+  agentType: string;
+  modelId: string;
+  previousModelId: string | null;
+}
+
 export interface StateChangedEvent extends HarnessEventBase {
   type: 'state_changed';
   changedKeys: string[];
@@ -515,6 +522,7 @@ export type HarnessEvent =
   | SessionEvictedEvent
   | ModeChangedEvent
   | ModelChangedEvent
+  | ModelOverrideSetEvent
   | StateChangedEvent
   | PermissionGrantedEvent
   | PermissionRevokedEvent
@@ -710,6 +718,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_pin_overflow',
   'mode_changed',
   'model_changed',
+  'model_override_set',
   'state_changed',
   'agent_start',
   'agent_end',

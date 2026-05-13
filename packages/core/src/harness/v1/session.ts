@@ -79,6 +79,7 @@ import type {
   MessageOptionsDefault,
   MessageOptionsStream,
   MessageOptionsStructured,
+  ModelAuthStatus,
   PermissionPolicy,
   QueueOptions,
   SessionInjectSystemReminderOptions,
@@ -148,6 +149,18 @@ function assertToolCategory(method: string, value: unknown): asserts value is To
 function assertToolName(method: string, value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new HarnessValidationError(method, 'toolName must be a non-empty string');
+  }
+}
+
+function assertAgentType(method: string, value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HarnessValidationError(method, 'agentType must be a non-empty string');
+  }
+}
+
+function assertModelId(method: string, value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HarnessValidationError(method, 'model must be a non-empty string');
   }
 }
 
@@ -1715,12 +1728,6 @@ export class Session {
     return this._harness._getMode(this._record.modeId);
   }
 
-  /** Active model id for the session. */
-  getCurrentModel(): string {
-    this._assertLive('getCurrentModel()');
-    return this._record.modelId;
-  }
-
   /**
    * Switch the active mode for subsequent turns. The backing agent flips
    * with the next `message()`/`queue()` call. Throws if the mode id is
@@ -1736,13 +1743,97 @@ export class Session {
     this._emitter.emit({ type: 'mode_changed', modeId: opts.mode, previousModeId });
   }
 
-  /** Switch the active model id. Free-form string — validated by the agent layer. */
-  async switchModel(opts: { model: string }): Promise<void> {
-    this._assertLive('switchModel()');
+  /**
+   * Session model namespace (§4.2a). Surfaced as a namespace for symmetry
+   * with `harness.models.*` (§9). Mutators write under the session lease
+   * and resolve only after the durable transition commits.
+   */
+  readonly models = Object.freeze({
+    current: (): string => this._modelsCurrent(),
+    hasSelected: (): boolean => this._modelsHasSelected(),
+    currentAuthStatus: (): Promise<ModelAuthStatus> => this._modelsCurrentAuthStatus(),
+    switch: (opts: { model: string }): Promise<void> => this._modelsSwitch(opts),
+    setSubagent: (opts: { agentType: string; model: string }): Promise<void> => this._modelsSetSubagent(opts),
+    getSubagent: (opts: { agentType: string }): string | null => this._modelsGetSubagent(opts),
+  });
+
+  /** Resolved model id for the next turn. Falls back to `''` when nothing has been selected. */
+  private _modelsCurrent(): string {
+    this._assertLive('models.current()');
+    return this._record.modelId;
+  }
+
+  /**
+   * True once any model has been chosen for this session — either an
+   * explicit `models.switch()` call or a `models.setSubagent()` pin. Useful
+   * for boot flows that want to gate UI on "has the user picked yet?"
+   * without inspecting raw record fields.
+   */
+  private _modelsHasSelected(): boolean {
+    this._assertLive('models.hasSelected()');
+    if (this._record.modelId && this._record.modelId.length > 0) return true;
+    if (Object.keys(this._record.subagentModelOverrides ?? {}).length > 0) return true;
+    return false;
+  }
+
+  /**
+   * Auth status for the currently resolved model. Routed through
+   * `harness.models.getAuthStatus()` when the current model is in the
+   * catalog; returns `'unknown'` when no model is selected or the model
+   * isn't registered (we don't want the auth-status check to throw on a
+   * free-form id the agent layer will accept anyway).
+   */
+  private async _modelsCurrentAuthStatus(): Promise<ModelAuthStatus> {
+    this._assertLive('models.currentAuthStatus()');
+    const modelId = this._record.modelId;
+    if (!modelId) return 'unknown';
+    const entry = await this._harness.models.get(modelId);
+    if (!entry) return 'unknown';
+    return this._harness.models.getAuthStatus(modelId);
+  }
+
+  /** Switch the session's default model id. Free-form string — validated by the agent layer. */
+  private async _modelsSwitch(opts: { model: string }): Promise<void> {
+    this._assertLive('models.switch()');
+    assertModelId('models.switch', opts.model);
     const previousModelId = this._record.modelId;
     if (previousModelId === opts.model) return;
     await this._flushUpdate(prev => ({ ...prev, modelId: opts.model }));
     this._emitter.emit({ type: 'model_changed', modelId: opts.model, previousModelId });
+  }
+
+  /**
+   * Pin a model for spawned subagents of a given `agentType`. Override is
+   * persisted in `SessionRecord.subagentModelOverrides` and read back by
+   * the spawn machinery via `models.getSubagent()`. Emits
+   * `model_override_set`. No-op when the same mapping is already set.
+   */
+  private async _modelsSetSubagent(opts: { agentType: string; model: string }): Promise<void> {
+    this._assertLive('models.setSubagent()');
+    assertAgentType('models.setSubagent', opts.agentType);
+    assertModelId('models.setSubagent', opts.model);
+    const previousModelId = this._record.subagentModelOverrides?.[opts.agentType] ?? null;
+    if (previousModelId === opts.model) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      subagentModelOverrides: {
+        ...(prev.subagentModelOverrides ?? {}),
+        [opts.agentType]: opts.model,
+      },
+    }));
+    this._emitter.emit({
+      type: 'model_override_set',
+      agentType: opts.agentType,
+      modelId: opts.model,
+      previousModelId,
+    });
+  }
+
+  /** Read the pinned subagent model for an `agentType`, or `null` when unset. */
+  private _modelsGetSubagent(opts: { agentType: string }): string | null {
+    this._assertLive('models.getSubagent()');
+    assertAgentType('models.getSubagent', opts.agentType);
+    return this._record.subagentModelOverrides?.[opts.agentType] ?? null;
   }
 
   // -------------------------------------------------------------------------
@@ -3049,7 +3140,11 @@ export class Session {
       subagentDepth: this._record.subagentDepth ?? 0,
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       parentSessionId: this._record.parentSessionId,
-      getSubagentModel: () => null,
+      getSubagentModel: params => {
+        const agentType = params?.agentType;
+        if (!agentType) return null;
+        return this._record.subagentModelOverrides?.[agentType] ?? null;
+      },
       ...(workspace ? { workspace } : {}),
     };
     return new RequestContext([['harness', harnessSlot]]);

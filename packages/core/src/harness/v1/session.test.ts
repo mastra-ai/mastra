@@ -220,9 +220,13 @@ describe('Session — surface area (M1)', () => {
         'signal',
         'injectSystemReminder',
         'getCurrentMode',
-        'getCurrentModel',
         'switchMode',
-        'switchModel',
+        '_modelsCurrent',
+        '_modelsHasSelected',
+        '_modelsCurrentAuthStatus',
+        '_modelsSwitch',
+        '_modelsSetSubagent',
+        '_modelsGetSubagent',
         'getState',
         'setState',
         'getDisplayState',
@@ -307,6 +311,15 @@ describe('Session — surface area (M1)', () => {
     expect(Object.isFrozen(session.permissions)).toBe(true);
     expect(Object.keys(session.permissions).sort()).toEqual(
       ['getGrants', 'getRules', 'grantCategory', 'grantTool', 'revokeCategory', 'revokeTool', 'setPolicy'].sort(),
+    );
+  });
+
+  it('exposes a frozen `models` namespace with the §4.2a methods', () => {
+    const { session } = makeStandaloneSession();
+    expect(typeof session.models).toBe('object');
+    expect(Object.isFrozen(session.models)).toBe(true);
+    expect(Object.keys(session.models).sort()).toEqual(
+      ['current', 'currentAuthStatus', 'getSubagent', 'hasSelected', 'setSubagent', 'switch'].sort(),
     );
   });
 });

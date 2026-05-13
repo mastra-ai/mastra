@@ -156,7 +156,7 @@ describe('Session.subscribe()', () => {
     });
 
     await session.switchMode({ mode: 'other' });
-    await session.switchModel({ model: 'gpt-5' });
+    await session.models.switch({ model: 'gpt-5' });
 
     const mode = events.find(e => e.type === 'mode_changed');
     const model = events.find(e => e.type === 'model_changed');

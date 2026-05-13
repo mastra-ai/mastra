@@ -30,12 +30,22 @@ class Session<TState = Record<string, unknown>> {
   // does not mutate any already committed run surface.
   switchMode(opts: { mode: string }): Promise<void>;
 
-  // Model
-  getCurrentModelId(): string;
-  hasModelSelected(): boolean;
-  getCurrentModelAuthStatus(): Promise<ModelAuthStatus>;
-  switchModel(opts: { model: string }): Promise<void>;
-  setSubagentModel(opts: { agentType: string; model: string }): Promise<void>;
-  getSubagentModel(opts: { agentType: string }): string | null;
+  // Model. Surfaced as a namespace for symmetry with `harness.models.*`
+  // (§9) and the rest of the v1 session surface (`session.permissions.*`,
+  // `session.attachments.*`).
+  readonly models: {
+    /** Resolved model id for the next turn (after subagent overrides + session default). */
+    current(): string;
+    /** True once any model has been chosen for this session (either explicit `switch` or a subagent override). */
+    hasSelected(): boolean;
+    /** Auth status for `current()`. Routed through `harness.models.getAuthStatus()`. */
+    currentAuthStatus(): Promise<ModelAuthStatus>;
+    /** Switch the session's default model id. Free-form string — validated by the agent layer. */
+    switch(opts: { model: string }): Promise<void>;
+    /** Pin a model for spawned subagents of a given `agentType`. Emits `model_override_set`. */
+    setSubagent(opts: { agentType: string; model: string }): Promise<void>;
+    /** Read the pinned subagent model for an `agentType`, or `null` when unset. */
+    getSubagent(opts: { agentType: string }): string | null;
+  };
 
 ```
