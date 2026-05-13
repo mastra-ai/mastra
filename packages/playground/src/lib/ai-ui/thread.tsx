@@ -207,7 +207,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                 name=""
                 id=""
                 onChange={e => setThreadInput?.(e.target.value)}
-                onKeyDown={e => {
+                onKeyDownCapture={e => {
                   if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     e.stopPropagation();
