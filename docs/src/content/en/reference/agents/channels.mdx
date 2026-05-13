@@ -178,7 +178,7 @@ const agent = new Agent({
 
 Override built-in event handlers. Each handler can be:
 
-- **Omitted**: uses the default Mastra handler (routes to `agent.stream` and posts the response)
+- **Omitted**: uses the default Mastra handler (routes the message through the agent and posts the response)
 - **`false`**: disables the handler entirely
 - **A function** `(thread, message, defaultHandler) => Promise<void>`: wraps or replaces the default
 
