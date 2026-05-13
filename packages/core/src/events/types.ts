@@ -71,12 +71,6 @@ export interface SubscribeBatchOptions {
    * `coalesce` first (if provided) and then drops oldest if still over budget.
    */
   overflow?: 'drop-oldest' | 'drop-newest' | 'coalesce-or-drop-oldest';
-  /**
-   * Stable subscriber identifier. Required when batching is used with a
-   * cache-backed adapter (CachingPubSub wrapping a non-native inner) so
-   * cursors can be reattached after a restart.
-   */
-  subscriberId?: string;
 }
 
 export interface SubscribeOptions {

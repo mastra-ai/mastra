@@ -29,6 +29,21 @@ export interface CachingPubSubOptions {
  * This enables resumable streams - clients can disconnect and reconnect
  * without missing events.
  *
+ * ## Batching
+ *
+ * `CachingPubSub` is transparent to `options.batch`: `subscribe()` forwards
+ * the option to the inner PubSub, and `supportsNativeBatching` mirrors the
+ * inner's value. There is no cache-backed batching layer here.
+ *
+ * That means wrapping a non-native inner adapter with `{ batch: {...} }`
+ * results in the batch policy being passed to an adapter that ignores it —
+ * delivery will be unbatched. Use a PubSub that returns
+ * `supportsNativeBatching === true` (e.g. `EventEmitterPubSub`) if you need
+ * batched delivery. A previous iteration of this class implemented
+ * cache-backed batching directly but was removed: the in-process
+ * `BatchPolicy` would split-brain across replicas sharing a subscriber id,
+ * so it would need a real distributed design before re-introducing.
+ *
  * @example
  * ```typescript
  * import { EventEmitterPubSub, CachingPubSub } from '@mastra/core/events';
