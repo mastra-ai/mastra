@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MockAgent } from './__test-utils__/mock-agent';
 import { setupHarness } from './__test-utils__/setup';
-import { HarnessConfigError, HarnessOverrideConflictError } from './errors';
+import { HarnessOverrideConflictError, HarnessSessionClosedError } from './errors';
 import type { HarnessEvent } from './events';
 
 /**
@@ -195,7 +195,7 @@ describe('Session.signal()', () => {
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     await session.close();
 
-    await expect(session.signal({ content: 'hi' })).rejects.toBeInstanceOf(HarnessConfigError);
+    await expect(session.signal({ content: 'hi' })).rejects.toBeInstanceOf(HarnessSessionClosedError);
   });
 
   it('rejects non-string content', async () => {

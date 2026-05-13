@@ -190,6 +190,6 @@ describe('Session.listMessages', () => {
     const session = await harness.session({ resourceId: 'r1', threadId: 'thread-closed' });
     await session.close();
 
-    await expect(session.listMessages()).rejects.toThrow(/listMessages/);
+    await expect(session.listMessages()).rejects.toThrow(/is closed/);
   });
 });

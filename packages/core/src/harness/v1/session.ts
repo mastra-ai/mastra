@@ -74,6 +74,7 @@ import type {
   GoalOptions,
   HarnessMode,
   HarnessRequestContext,
+  HarnessSkill,
   ListMessagesOptions,
   MessageOptions,
   MessageOptionsDefault,
@@ -391,6 +392,22 @@ export class Session {
    * can drop the marker and reprovision by calling `clearWorkspaceLost()`.
    */
   private _workspaceLost = false;
+
+  // -------------------------------------------------------------------------
+  // Skill discovery cache (§4.6).
+  //
+  // Workspace skill discovery is async and lazy. We cache the resolved
+  // catalog for the lifetime of this in-memory Session instance. Concurrent
+  // `listSkills` / `getSkill` calls during a generation build share the
+  // same in-flight promise (single-flight), avoiding duplicate discovery
+  // work. `refreshSkills()` clears the cache so the next read re-runs
+  // discovery through the workspace skill source.
+  //
+  // Phase 1 caches workspace-only generations. Phase 2 will layer the
+  // code-registered ∪ workspace merge on top.
+  // -------------------------------------------------------------------------
+  private _skillsCache?: HarnessSkill[];
+  private _skillsResolving?: Promise<HarnessSkill[]>;
 
   // -------------------------------------------------------------------------
   // Thread subscription — §4.2 signal routing.
@@ -876,6 +893,122 @@ export class Session {
       ...record,
       workspace: { providerId, state },
     }));
+  }
+
+  // -------------------------------------------------------------------------
+  // Skill discovery / inspection — §4.6.
+  //
+  // Workspace-discovered skills are projected from the configured
+  // `WorkspaceSkills` source into `HarnessSkill` descriptors with
+  // `source: 'workspace'`. Discovery runs asynchronously on the first
+  // `listSkills` / `getSkill` call per in-memory Session instance and the
+  // result is cached for the session's lifetime. Concurrent calls during a
+  // generation build share a single-flight promise. `refreshSkills()`
+  // drops the cache so the next call re-runs discovery.
+  //
+  // Phase 1 ships workspace-only discovery; code-registered skills and
+  // `useSkill` execution land in a follow-up slice.
+  // -------------------------------------------------------------------------
+
+  /**
+   * List skills available to this session. See §4.6.
+   *
+   * Returns an empty array when the session has no workspace configured.
+   * Otherwise delegates to the resolved workspace's `WorkspaceSkills`
+   * surface and projects each entry into a `HarnessSkill` with
+   * `source: 'workspace'`. Workspace skills omit `argsSchema`,
+   * `outputSchema`, and `defaultMode` unless the configured workspace
+   * skill source supplies equivalent metadata (the core
+   * `WorkspaceSkills.list()` projection does not today).
+   */
+  async listSkills(): Promise<HarnessSkill[]> {
+    this._assertLive('listSkills()');
+    return this._resolveSkills();
+  }
+
+  /**
+   * Look up a skill by name. See §4.6.
+   *
+   * Returns `undefined` when the name does not resolve. In Phase 1 the only
+   * source consulted is the session's workspace; `session.useSkill()` and
+   * code-registered skills land in a follow-up slice.
+   */
+  async getSkill(name: string): Promise<HarnessSkill | undefined> {
+    this._assertLive('getSkill()');
+    if (typeof name !== 'string' || name.length === 0) {
+      throw new HarnessValidationError('getSkill()', 'name must be a non-empty string');
+    }
+    const skills = await this._resolveSkills();
+    return skills.find(s => s.name === name);
+  }
+
+  /**
+   * Drop the cached workspace-discovery result. The next `listSkills` /
+   * `getSkill` call re-runs discovery through the configured workspace
+   * skill source. Local-only — workspace discovery requires server-side
+   * access to the skill source, so the method is absent from
+   * `RemoteSession` (§13.5).
+   */
+  async refreshSkills(): Promise<void> {
+    this._assertLive('refreshSkills()');
+    // Drop cached generation. Any in-flight discovery promise is allowed to
+    // run to completion (its result will not repopulate the cache because
+    // `_resolveSkills` always writes through `_skillsCache` after the
+    // promise it awaits, and the next caller is guaranteed to enter the
+    // `_skillsResolving === undefined` branch and start a fresh build).
+    this._skillsCache = undefined;
+    this._skillsResolving = undefined;
+  }
+
+  /**
+   * Internal: resolve the skill catalog for this session, sharing a
+   * single-flight promise across concurrent callers.
+   */
+  private async _resolveSkills(): Promise<HarnessSkill[]> {
+    if (this._skillsCache) return this._skillsCache;
+    if (this._skillsResolving) return this._skillsResolving;
+
+    const build = async (): Promise<HarnessSkill[]> => {
+      const workspace = await this.getWorkspace();
+      const workspaceSkills = workspace?.skills;
+      if (!workspaceSkills) {
+        // No workspace, or workspace has no skill source configured.
+        // Phase 2 will union this with code-registered skills.
+        return [];
+      }
+      const entries = await workspaceSkills.list();
+      const projected: HarnessSkill[] = entries.map(meta => ({
+        name: meta.name,
+        description: meta.description,
+        // `list()` returns metadata only; the instructions body lives in the
+        // skill's SKILL.md and is fetched via `workspace.skills.get(name)`.
+        // Phase 2 (`useSkill`) materializes instructions lazily; for the
+        // inspection surface we surface an empty string so the descriptor
+        // shape stays uniform.
+        instructions: '',
+        source: 'workspace',
+        ...(meta.path ? { filePath: meta.path } : {}),
+      }));
+      return projected;
+    };
+
+    const pending = build();
+    this._skillsResolving = pending;
+    try {
+      const result = await pending;
+      // Only populate the cache when our own promise is still the
+      // session-tracked one. If `refreshSkills()` ran while we were
+      // resolving, `_skillsResolving` was cleared (or replaced by a
+      // newer build) and we must not stomp it.
+      if (this._skillsResolving === pending) {
+        this._skillsCache = result;
+      }
+      return result;
+    } finally {
+      if (this._skillsResolving === pending) {
+        this._skillsResolving = undefined;
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -3033,9 +3166,9 @@ export class Session {
   // Internal helpers.
   // -------------------------------------------------------------------------
 
-  private _assertLive(method: string): void {
+  private _assertLive(_method: string): void {
     if (this._state !== 'live') {
-      throw new HarnessConfigError(method, `session is ${this._state}`);
+      throw new HarnessSessionClosedError(this.id);
     }
   }
 

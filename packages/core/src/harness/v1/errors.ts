@@ -157,6 +157,23 @@ export class HarnessModelNotFoundError extends Error {
 }
 
 /**
+ * `session.useSkill(name)` could not resolve `name` from either source in the
+ * resolution chain (code-registered skills, then workspace-discovered skills).
+ * `searchedSources` reports which sources were consulted before giving up so
+ * callers can distinguish "no workspace configured" from "workspace consulted
+ * but nothing matched". See spec §4.6.
+ */
+export class HarnessSkillNotFoundError extends Error {
+  readonly name = 'HarnessSkillNotFoundError';
+  constructor(
+    public readonly skillName: string,
+    public readonly searchedSources: ReadonlyArray<'config' | 'workspace'>,
+  ) {
+    super(`Skill "${skillName}" not found (searched: ${searchedSources.join(', ') || 'none'})`);
+  }
+}
+
+/**
  * A per-turn override (e.g. `mode`, `additionalTools`) was supplied on a
  * signal that drains into an already-active run. The active run's surface
  * (model/mode/toolset) was committed when the run started and cannot be

@@ -147,6 +147,75 @@ export interface ModelInfo {
 export type ModelAuthStatus = 'authenticated' | 'needs_auth' | 'unknown';
 
 // ---------------------------------------------------------------------------
+// HarnessSkill (§4.6).
+//
+// A skill is a named, parameterised prompt invoked via
+// `session.useSkill(name, opts)`. Two sources feed the resolution chain:
+//   - Code-registered skills (`HarnessConfig.skills`, `source: 'config'`)
+//   - Workspace-discovered skills (resolved from the session workspace's
+//     configured `WorkspaceSkills` source, `source: 'workspace'`)
+//
+// Phase 1 (this slice) ships workspace-discovered skills only: code-registered
+// skills, programmatic `session.useSkill()` execution, args injection, and
+// admission idempotency land in a follow-up slice.
+// ---------------------------------------------------------------------------
+
+/**
+ * Public skill descriptor. See §4.6.
+ *
+ * Workspace-discovered skills are projected from the configured
+ * `WorkspaceSkills` source into this shape. Their core `Skill.source` values
+ * (`local`, `external`, `managed`) all collapse to `source: 'workspace'`;
+ * those are not public source enum members.
+ *
+ * Code-registered skills declared on `HarnessConfig.skills` carry
+ * `source: 'config'` and may supply `argsSchema`, `outputSchema`, and
+ * `defaultMode` directly. Workspace skills omit those fields unless the
+ * configured workspace skill source supplies equivalent metadata.
+ */
+export interface HarnessSkill {
+  /** Lookup key for `session.useSkill(name, ...)`. */
+  name: string;
+
+  /** Shown in tool catalogues / UIs. */
+  description: string;
+
+  /**
+   * Prompt body. When invoked with `args`, the harness appends a JSON code
+   * block carrying the validated arguments to this body before delegating to
+   * the agent — skill authors reference the args naturally in Markdown.
+   */
+  instructions: string;
+
+  /**
+   * Optional Zod schema validating `useSkill({ args })`. Currently only
+   * code-registered skills can carry one; workspace skills omit this unless
+   * the configured workspace skill source surfaces equivalent metadata.
+   */
+  argsSchema?: z.ZodTypeAny;
+
+  /**
+   * Optional default output schema. The per-call `opts.output` still wins.
+   */
+  outputSchema?: z.ZodTypeAny;
+
+  /**
+   * Optional mode override applied when `useSkill` runs. Lower precedence than
+   * the per-call mode override; selects that mode's bound agent for the run.
+   */
+  defaultMode?: string;
+
+  /** Origin of this skill. Set by the harness, not the author. */
+  source: 'config' | 'workspace';
+
+  /**
+   * Optional path-like locator (e.g. `skills/my-skill/SKILL.md`). Present when
+   * the workspace skill source exposes one; otherwise omitted.
+   */
+  filePath?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Placeholders.
 //
 // These are intentionally empty/loose. Each gets filled in as we work
