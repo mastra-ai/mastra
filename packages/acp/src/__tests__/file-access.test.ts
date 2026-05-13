@@ -55,9 +55,7 @@ describe('workspace path scoping', () => {
   it('rejects paths that escape the workspace root', () => {
     expect(() => resolveWithinWorkspace('/workspace', '/etc/passwd')).toThrow('path escapes workspace root');
     expect(() => resolveWithinWorkspace('/workspace', '../secret')).toThrow('path escapes workspace root');
-    expect(() => resolveWithinWorkspace('/workspace', '/workspace-other/file')).toThrow(
-      'path escapes workspace root',
-    );
+    expect(() => resolveWithinWorkspace('/workspace', '/workspace-other/file')).toThrow('path escapes workspace root');
   });
 });
 
@@ -96,8 +94,6 @@ describe('file read/write integration', () => {
   });
 
   it('rejects writing files outside workspace', async () => {
-    await expect(writeTextFile(tmpDir, '../../tmp/evil.txt', 'pwned')).rejects.toThrow(
-      'path escapes workspace root',
-    );
+    await expect(writeTextFile(tmpDir, '../../tmp/evil.txt', 'pwned')).rejects.toThrow('path escapes workspace root');
   });
 });

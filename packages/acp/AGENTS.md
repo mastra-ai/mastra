@@ -15,6 +15,7 @@ const claudeTool = createACPTool({
 ```
 
 Implementation notes:
+
 - `ACPConnection` owns process lifecycle, lazy ACP initialization, prompt execution, cancellation, and cleanup.
 - `createACPTool` should stay small and only adapt Mastra tool input/output to `ACPConnection.prompt()`.
 - Keep tests colocated under `src/**/__tests__` or `src/**/*.test.ts`.
