@@ -157,6 +157,24 @@ export class HarnessModelNotFoundError extends Error {
 }
 
 /**
+ * A per-turn override (e.g. `mode`, `additionalTools`) was supplied on a
+ * signal that drains into an already-active run. The active run's surface
+ * (model/mode/toolset) was committed when the run started and cannot be
+ * changed mid-flight; silently ignoring the override would be a footgun,
+ * so the harness rejects at admission. See spec §4.2.
+ */
+export class HarnessOverrideConflictError extends Error {
+  readonly name = 'HarnessOverrideConflictError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly field: 'mode' | 'additionalTools' | 'model',
+    public readonly reason: string,
+  ) {
+    super(`HarnessOverrideConflictError on session "${sessionId}" for "${field}": ${reason}`);
+  }
+}
+
+/**
  * A harness-event publish path received a payload that is not
  * JSON-serializable. The check runs synchronously before any subscriber
  * observes the event, so in-process listeners and remote/SSE subscribers

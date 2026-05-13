@@ -217,6 +217,8 @@ describe('Session — surface area (M1)', () => {
         'listMessages',
         'message',
         'queue',
+        'signal',
+        'injectSystemReminder',
         'getCurrentMode',
         'getCurrentModel',
         'switchMode',

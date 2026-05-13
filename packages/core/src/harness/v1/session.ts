@@ -47,6 +47,7 @@ import type { HarnessMessage } from '../types';
 
 import {
   HarnessConfigError,
+  HarnessOverrideConflictError,
   HarnessQueueFullError,
   HarnessSessionClosedError,
   HarnessValidationError,
@@ -80,6 +81,10 @@ import type {
   MessageOptionsStructured,
   PermissionPolicy,
   QueueOptions,
+  SessionInjectSystemReminderOptions,
+  SessionInjectSystemReminderResult,
+  SessionSignalOptions,
+  SessionSignalResult,
   ToolCategory,
 } from './types';
 
@@ -407,7 +412,11 @@ export class Session {
    */
   private readonly _runCompletionPromises = new Map<
     string,
-    { resolve: (full: FullOutput<unknown>) => void; reject: (err: unknown) => void }
+    {
+      promise: Promise<FullOutput<unknown>>;
+      resolve: (full: FullOutput<unknown>) => void;
+      reject: (err: unknown) => void;
+    }
   >();
   /**
    * Cache of run completion results that landed before any caller had a chance
@@ -917,23 +926,18 @@ export class Session {
       this._completedRuns.delete(runId);
       return cached.ok ? Promise.resolve(cached.full) : Promise.reject(cached.err);
     }
+    // Multiple callers can await the same run (e.g. `message()` followed by
+    // an active-delivery `signal()` that drains into the same run). Memoize
+    // the promise so they all see the same resolution.
     const existing = this._runCompletionPromises.get(runId);
-    if (existing) {
-      return new Promise<FullOutput<unknown>>((_resolve, reject) => {
-        // Replace the resolver to chain a second waiter — but our normal
-        // usage only ever awaits once per `runId`, so this is a defensive
-        // path. Forbid for clarity.
-        reject(
-          new HarnessValidationError(
-            '_awaitRunCompletion()',
-            `Run ${runId} already has an outstanding completion waiter`,
-          ),
-        );
-      });
-    }
-    const promise = new Promise<FullOutput<unknown>>((resolve, reject) => {
-      this._runCompletionPromises.set(runId, { resolve, reject });
+    if (existing) return existing.promise;
+    let resolve!: (full: FullOutput<unknown>) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<FullOutput<unknown>>((res, rej) => {
+      resolve = res;
+      reject = rej;
     });
+    this._runCompletionPromises.set(runId, { promise, resolve, reject });
     // Single canonical settler: wait for the runtime to register the run's
     // `MastraModelOutput`, then await its `_waitUntilFinished()`. The drain
     // loop emits events from chunks; it does NOT settle completion. This
@@ -1345,6 +1349,269 @@ export class Session {
       // the queue drain so any item that was admitted mid-turn can run.
       void this._maybeDrainQueue();
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // signal() — §4.2.
+  //
+  // Optimistic user-message primitive. Resolves with the routing decision
+  // (`id`, `runId`, `willInterleave`) on the first await tick so callers
+  // can render an optimistic transcript row before the turn completes,
+  // then await `result` for the eventual `AgentResult`.
+  //
+  // Two delivery shapes:
+  //
+  //   * Idle thread → wakes a fresh run. This call owns the turn:
+  //     `_beginTurn`, `agent_start`, await completion in a background
+  //     continuation, `agent_end` + judge + `_endTurn` + drain.
+  //
+  //   * Active-delivery → an existing run is in flight on this thread.
+  //     The signal drains mid-flight into the running execution loop;
+  //     no new turn boundary, no `agent_start`/`agent_end`. `result`
+  //     resolves with the existing run's `AgentResult`.
+  //
+  // Per-turn overrides (`mode`, `additionalTools`) on an active-delivery
+  // dispatch reject at admission with `HarnessOverrideConflictError` —
+  // the in-flight run's surface was committed when it started and cannot
+  // be changed mid-flight.
+  // -------------------------------------------------------------------------
+  async signal(opts: SessionSignalOptions): Promise<SessionSignalResult> {
+    this._assertLive('signal()');
+    if (typeof opts.content !== 'string') {
+      throw new HarnessValidationError('signal()', '`content` must be a string');
+    }
+
+    // Resolve effective mode + backing agent.
+    const effectiveModeId = opts.mode ?? this._record.modeId;
+    const mode = this._harness._getMode(effectiveModeId);
+    const agent = this._harness.getAgentForMode(effectiveModeId);
+
+    // Open the thread subscription before reading `activeRunId()` so the
+    // routing decision sees the live runtime state.
+    const sub = await this._ensureThreadSubscription(agent);
+
+    const activeRunId = sub.activeRunId();
+    const willInterleave = activeRunId !== null;
+
+    // Active-delivery + per-turn overrides → reject at admission.
+    if (willInterleave) {
+      if (effectiveModeId !== this._record.modeId) {
+        throw new HarnessOverrideConflictError(
+          this.id,
+          'mode',
+          `cannot override mode on a signal that drains into an active run (run ${activeRunId})`,
+        );
+      }
+      if (opts.additionalTools !== undefined) {
+        throw new HarnessOverrideConflictError(
+          this.id,
+          'additionalTools',
+          `cannot supply additionalTools on a signal that drains into an active run (run ${activeRunId})`,
+        );
+      }
+    }
+
+    if (!willInterleave) {
+      // Owned-turn path: same bookkeeping as the message() default path.
+      const turnAbortController = this._beginTurn(opts.abortSignal);
+      const turnAbortSignal = turnAbortController.signal;
+      const toolsets = this._buildToolsets(mode, opts.additionalTools);
+      const requestContext = await this._buildRequestContext({
+        modeId: effectiveModeId,
+        abortSignal: turnAbortSignal,
+      });
+      const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
+        memory: { thread: this.threadId, resource: this.resourceId },
+        abortSignal: turnAbortSignal,
+        requestContext,
+        ...(toolsets ? { toolsets } : {}),
+        ...(mode.instructions ? { instructions: mode.instructions } : {}),
+      };
+      this._emitTurnEvent({ type: 'agent_start' });
+
+      const dispatched = agent.sendSignal(
+        { type: 'user-message', contents: opts.content as never },
+        {
+          resourceId: this.resourceId,
+          threadId: this.threadId,
+          ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
+        },
+      );
+
+      // Register the completion waiter before any terminal chunks land.
+      const completion = this._awaitRunCompletion(dispatched.runId);
+
+      // Background continuation runs the post-turn bookkeeping so the
+      // caller's `result` promise resolves with the final AgentResult.
+      const result: Promise<AgentResult> = completion
+        .then(async full => {
+          this._recordTurnCompletion(full);
+          await this._maybeCaptureSuspend(full);
+          this._emitTurnEvent({
+            type: 'agent_end',
+            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            runId: full.runId,
+          });
+          await this._runGoalJudge(full, false);
+          return full as AgentResult;
+        })
+        .finally(() => {
+          this._endTurn(turnAbortController);
+          void this._maybeDrainQueue();
+        });
+
+      // Swallow `result` rejections at the inner level so the
+      // background continuation doesn't surface as an unhandled
+      // rejection if the caller never awaits `result`. The caller's
+      // copy still rejects.
+      void result.catch(() => {});
+
+      return {
+        id: dispatched.signal.id,
+        runId: dispatched.runId,
+        willInterleave: false,
+        accepted: true,
+        signal: dispatched.signal,
+        result,
+      };
+    }
+
+    // Active-delivery path: signal drains into the existing run. No turn
+    // bookkeeping owned here; the in-flight run owns its own completion.
+    // Pass empty streamOptions — the runtime ignores them when active.
+    const dispatched = agent.sendSignal(
+      { type: 'user-message', contents: opts.content as never },
+      {
+        resourceId: this.resourceId,
+        threadId: this.threadId,
+        ifIdle: { behavior: 'wake', streamOptions: {} as never },
+      },
+    );
+
+    // Shared completion promise with whichever caller owns the run.
+    const completion = this._awaitRunCompletion(dispatched.runId);
+    void completion.catch(() => {});
+
+    return {
+      id: dispatched.signal.id,
+      runId: dispatched.runId,
+      willInterleave: true,
+      accepted: true,
+      signal: dispatched.signal,
+      result: completion as Promise<AgentResult>,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // injectSystemReminder() — §4.2.
+  //
+  // System-reminder injection primitive used by goal-judge continuations
+  // and other harness-internal nudges. Behaves like `signal()` but with
+  // signal type `'system-reminder'` and no exposed `result` promise — the
+  // caller doesn't await the run's `AgentResult`. When the reminder wakes
+  // an idle thread, full turn bookkeeping still runs in the background
+  // (`agent_start`/`agent_end` are emitted, the judge runs, etc.). When
+  // it drains into an active run, the active run's lifecycle absorbs it.
+  // -------------------------------------------------------------------------
+  async injectSystemReminder(
+    content: string,
+    opts?: SessionInjectSystemReminderOptions,
+  ): Promise<SessionInjectSystemReminderResult> {
+    this._assertLive('injectSystemReminder()');
+    if (typeof content !== 'string' || content.length === 0) {
+      throw new HarnessValidationError('injectSystemReminder()', '`content` must be a non-empty string');
+    }
+
+    const effectiveModeId = this._record.modeId;
+    const mode = this._harness._getMode(effectiveModeId);
+    const agent = this._harness.getAgentForMode(effectiveModeId);
+
+    const sub = await this._ensureThreadSubscription(agent);
+    const activeRunId = sub.activeRunId();
+    const willInterleave = activeRunId !== null;
+
+    if (!willInterleave) {
+      // Owned-turn path: full turn bookkeeping in a background
+      // continuation. Caller doesn't get a result handle.
+      const turnAbortController = this._beginTurn(undefined);
+      const turnAbortSignal = turnAbortController.signal;
+      const toolsets = this._buildToolsets(mode, undefined);
+      const requestContext = await this._buildRequestContext({
+        modeId: effectiveModeId,
+        abortSignal: turnAbortSignal,
+      });
+      const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
+        memory: { thread: this.threadId, resource: this.resourceId },
+        abortSignal: turnAbortSignal,
+        requestContext,
+        ...(toolsets ? { toolsets } : {}),
+        ...(mode.instructions ? { instructions: mode.instructions } : {}),
+      };
+      this._emitTurnEvent({ type: 'agent_start' });
+
+      const dispatched = agent.sendSignal(
+        {
+          type: 'system-reminder',
+          contents: content,
+          ...(opts?.attributes ? { attributes: opts.attributes } : {}),
+          ...(opts?.metadata ? { metadata: opts.metadata } : {}),
+        },
+        {
+          resourceId: this.resourceId,
+          threadId: this.threadId,
+          ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
+        },
+      );
+
+      const completion = this._awaitRunCompletion(dispatched.runId);
+      const result = completion
+        .then(async full => {
+          this._recordTurnCompletion(full);
+          await this._maybeCaptureSuspend(full);
+          this._emitTurnEvent({
+            type: 'agent_end',
+            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            runId: full.runId,
+          });
+          await this._runGoalJudge(full, false);
+        })
+        .finally(() => {
+          this._endTurn(turnAbortController);
+          void this._maybeDrainQueue();
+        });
+      void result.catch(() => {});
+
+      return {
+        id: dispatched.signal.id,
+        runId: dispatched.runId,
+        willInterleave: false,
+        accepted: true,
+        signal: dispatched.signal,
+      };
+    }
+
+    // Active-delivery path: drain into the live run.
+    const dispatched = agent.sendSignal(
+      {
+        type: 'system-reminder',
+        contents: content,
+        ...(opts?.attributes ? { attributes: opts.attributes } : {}),
+        ...(opts?.metadata ? { metadata: opts.metadata } : {}),
+      },
+      {
+        resourceId: this.resourceId,
+        threadId: this.threadId,
+        ifIdle: { behavior: 'wake', streamOptions: {} as never },
+      },
+    );
+
+    return {
+      id: dispatched.signal.id,
+      runId: dispatched.runId,
+      willInterleave: true,
+      accepted: true,
+      signal: dispatched.signal,
+    };
   }
 
   /**

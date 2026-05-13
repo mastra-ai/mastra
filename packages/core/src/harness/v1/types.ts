@@ -11,6 +11,7 @@ import type { z } from 'zod';
 
 import type { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
+import type { CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
@@ -812,6 +813,98 @@ export interface QueueOptions extends QueueOverrides {
  */
 export interface ListMessagesOptions {
   limit?: number;
+}
+
+// ---------------------------------------------------------------------------
+// session.signal() / session.injectSystemReminder() — spec §4.2.
+//
+// `signal()` is the optimistic user-message primitive: it resolves with
+// the routing decision (runId + willInterleave) on the first await tick
+// so callers can render an optimistic transcript row before the turn
+// completes, then await `result` for the eventual `AgentResult`.
+//
+// `injectSystemReminder()` is the system-reminder injection primitive used
+// by goal-judge continuations and other harness-internal nudges. System
+// reminders don't get their own `agent_start`/`agent_end` — if they drain
+// into an active run they're absorbed into that run's events, if they wake
+// a new run the new run's lifecycle events cover them.
+// ---------------------------------------------------------------------------
+
+/** Options accepted by `Session.signal(...)`. */
+export interface SessionSignalOptions {
+  /** Free-form user content. Matches `message().content`. */
+  content: string;
+
+  /** Per-turn mode override (same semantics as `message().mode`). */
+  mode?: string;
+
+  /**
+   * Tools layered on top of the session's effective tool surface for this
+   * turn. Mirrors `message().additionalTools` semantics.
+   */
+  additionalTools?: ToolsInput;
+
+  /**
+   * Forwarded to the underlying agent run when the signal wakes a fresh
+   * idle run. Ignored on active-delivery (the in-flight run already has
+   * its own abort controller).
+   */
+  abortSignal?: AbortSignal;
+}
+
+/** Result returned by `Session.signal(...)` (resolved on the first await tick). */
+export interface SessionSignalResult {
+  /** Stable signal id — keys the optimistic transcript row. */
+  id: string;
+
+  /** Run id the signal landed on (existing run on active-delivery, fresh run on idle-wake). */
+  runId: string;
+
+  /**
+   * `true` iff dispatched into an already-active run on this thread. UIs
+   * use this to decide pending-row vs regular-row rendering.
+   */
+  willInterleave: boolean;
+
+  /** Always `true` — admission is synchronous on the agent layer. */
+  accepted: true;
+
+  /** Raw signal envelope (carries `id`, `createdAt`, etc.). */
+  signal: CreatedAgentSignal;
+
+  /**
+   * Resolves when the containing run completes. On active-delivery this is
+   * the existing run's completion promise (shared across all signals on
+   * the run); on idle-wake it's the freshly-woken run.
+   */
+  result: Promise<AgentResult>;
+}
+
+/** Options accepted by `Session.injectSystemReminder(...)`. */
+export interface SessionInjectSystemReminderOptions {
+  /** Optional structured attributes carried on the signal envelope. */
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+
+  /** Optional opaque metadata carried on the signal envelope. */
+  metadata?: Record<string, unknown>;
+}
+
+/** Result returned by `Session.injectSystemReminder(...)` (resolved on the first await tick). */
+export interface SessionInjectSystemReminderResult {
+  /** Stable signal id. */
+  id: string;
+
+  /** Run id the reminder landed on (existing or freshly-woken). */
+  runId: string;
+
+  /** `true` iff dispatched into an already-active run on this thread. */
+  willInterleave: boolean;
+
+  /** Always `true` — admission is synchronous on the agent layer. */
+  accepted: true;
+
+  /** Raw signal envelope. */
+  signal: CreatedAgentSignal;
 }
 
 /**

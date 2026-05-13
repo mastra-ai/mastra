@@ -235,6 +235,26 @@ export class MockAgent extends Agent<any, any, any> {
     let status: 'running' | 'finished' = 'running';
     const fullStream = (async function* () {
       for (const chunk of chunks) yield chunk;
+      // If a test asked us to hold the run mid-flight, keep the stream
+      // suspended before the terminal chunk so the runtime continues to
+      // report this run as active (e.g. `subscription.activeRunId()` stays
+      // truthy). The hold loses to abort: an aborted per-turn signal
+      // unblocks immediately.
+      if (spec.holdUntil) {
+        await new Promise<void>(resolve => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+          };
+          if (abortSignal) {
+            if (abortSignal.aborted) return finish();
+            abortSignal.addEventListener('abort', finish, { once: true });
+          }
+          spec.holdUntil!.then(finish, finish);
+        });
+      }
       // Emit a synthetic finish chunk so subscription drain loops see a run
       // boundary. Real MastraModelOutput emits 'finish' / 'error' / 'abort' /
       // 'tool-call-suspended' at the tail of fullStream; MockAgent stages
