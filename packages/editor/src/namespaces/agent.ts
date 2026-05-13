@@ -235,7 +235,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
-        const originalTools = fork.listTools.bind(fork);
+        const originalTools = agent.listTools.bind(agent);
         const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
           const codeTools = await originalTools({ requestContext });
           const ctx = requestContext.toJSON();

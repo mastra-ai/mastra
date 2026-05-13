@@ -41,6 +41,7 @@ async function mockSystemPackages(page: Page, observabilityEnabled: boolean) {
 }
 
 async function mockTraceLists(page: Page, onRequest?: (url: URL) => void) {
+  // The Traces page can request either branches or traces depending on list mode.
   await page.route('**/api/observability/branches?**', async route => {
     onRequest?.(new URL(route.request().url()));
     await route.fulfill({
