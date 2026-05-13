@@ -18,8 +18,8 @@ export async function makeAuthCapabilitiesRequest(client: MastraClient): Promise
   const response = await fetch(`${baseUrl}${prefix}/auth/capabilities`, {
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
       ...clientHeaders,
+      'Content-Type': 'application/json',
     },
   });
 

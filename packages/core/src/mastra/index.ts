@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { AgentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import { BackgroundTaskManager } from '../background-tasks';
@@ -150,6 +151,25 @@ function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string
     }
   }
   return undefined;
+}
+
+/**
+ * Decodes the owning workflow id directly from a `wf_<encoded>` /
+ * `wf_<encoded>__<...>` row id without needing the workflow to be in the
+ * current registry. Used to identify rows whose workflow has been deleted
+ * from code so we can clean them up on startup.
+ */
+function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
+  if (!rowId.startsWith('wf_')) return undefined;
+  const rest = rowId.slice('wf_'.length);
+  const sep = rest.indexOf('__');
+  const encoded = sep === -1 ? rest : rest.slice(0, sep);
+  if (!encoded) return undefined;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
 }
 
 /** See {@link targetsEqual}. Same approach for free-form metadata. */
@@ -535,6 +555,7 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #agentThreadStreamRuntime = new AgentThreadStreamRuntime();
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
@@ -588,6 +609,10 @@ export class Mastra<
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get agentThreadStreamRuntime() {
+    return this.#agentThreadStreamRuntime;
   }
 
   get workers(): readonly MastraWorker[] {
@@ -1442,27 +1467,30 @@ export class Mastra<
       }
     }
 
-    // Orphan deletion: drop any storage rows owned by a registered workflow
-    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) but not
-    // present in the current declared set. This keeps the storage in sync
-    // when array-form entries are removed across deploys. We only consider
-    // workflows we actually have registered — schedules belonging to a
-    // removed workflow are left alone (the workflow may be coming back).
-    if (declaredIdsByWorkflow.size > 0) {
-      const allRows = await schedulesStore.listSchedules();
-      for (const row of allRows) {
-        if (declaredIds.has(row.id)) continue;
-        const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow);
-        if (!ownerWorkflowId) continue;
-        try {
-          await schedulesStore.deleteSchedule(row.id);
-        } catch (error) {
-          this.#logger?.error('Failed to delete orphaned declarative schedule', {
-            scheduleId: row.id,
-            workflowId: ownerWorkflowId,
-            error,
-          });
-        }
+    // Orphan deletion: drop any Mastra-managed declarative schedule rows
+    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) that are no
+    // longer declared in code. This covers two cases:
+    //   1. A registered workflow's array-form entries shrunk across deploys.
+    //   2. The owning workflow itself was deleted from code. Leaving these
+    //      rows behind would have the scheduler keep firing for a workflow
+    //      the processor can't resolve, producing infinite event-redelivery
+    //      loops (see WorkflowEventProcessor#dispatch).
+    // User-created schedules (via the schedules API) don't use the `wf_`
+    // prefix, so they're untouched.
+    const allRows = await schedulesStore.listSchedules();
+    for (const row of allRows) {
+      if (declaredIds.has(row.id)) continue;
+      if (!row.id.startsWith('wf_')) continue;
+      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
+      if (!ownerWorkflowId) continue;
+      try {
+        await schedulesStore.deleteSchedule(row.id);
+      } catch (error) {
+        this.#logger?.error('Failed to delete orphaned declarative schedule', {
+          scheduleId: row.id,
+          workflowId: ownerWorkflowId,
+          error,
+        });
       }
     }
   }

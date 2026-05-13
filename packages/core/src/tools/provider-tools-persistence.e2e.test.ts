@@ -1,10 +1,13 @@
 import { anthropic } from '@ai-sdk/anthropic-v5';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
 import { createTool } from '../tools';
+
+setupDummyApiKeys(getLLMTestMode(), ['anthropic']);
 
 // Anthropic only defers provider tool execution non-deterministically, so this
 // test must always run against the recorded response.
