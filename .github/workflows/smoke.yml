@@ -1,4 +1,4 @@
-# Smoke tests — runs after npm publish (or on manual dispatch) to verify core features.
+# Smoke tests — manual-dispatch run that verifies core features against a given npm dist-tag.
 #
 # All GitHub-managed config is prefixed `SMOKE_*` so it groups together in repo
 # Settings → Secrets and variables → Actions.
@@ -12,18 +12,15 @@
 #                            The bot must be invited to this channel.
 #
 # Triggers:
-#   workflow_run     – fires automatically when "Publish to npm" completes on main.
-#                      The resolve job inspects which publish job succeeded:
-#                        prerelease → tag=alpha    stable → tag=latest    snapshot → skip
 #   workflow_dispatch – manual run with a tag input (default "alpha").
+#
+# NOTE: The automatic workflow_run trigger (fires after "Publish to npm") is
+# temporarily disabled — re-enable by restoring the `workflow_run:` block below
+# once we're confident in the channel reporting flow.
 
 name: Smoke Tests
 
 on:
-  workflow_run:
-    workflows: ['Publish to npm']
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
@@ -36,7 +33,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ── Resolve which npm tag to smoke and whether to run at all ────────────
+  # ── Resolve which npm tag to smoke ──────────────────────────────────────
+  # Only workflow_dispatch is wired up right now; this job exists so we can
+  # re-introduce the workflow_run trigger later without restructuring the matrix job.
   resolve:
     runs-on: ubuntu-latest
     outputs:
@@ -48,43 +47,13 @@ jobs:
       - name: Resolve tag and run flag
         id: resolve
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
-          REPO: ${{ github.repository }}
-          PUBLISH_RUN_ID: ${{ github.event.workflow_run.id }}
-          PUBLISH_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "tag=${INPUT_TAG:-alpha}" >> "$GITHUB_OUTPUT"
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "publish_run_url=" >> "$GITHUB_OUTPUT"
-            echo "trigger=manual" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # workflow_run path: inspect the upstream publish jobs.
-          echo "Fetching jobs for publish run $PUBLISH_RUN_ID"
-          jobs_json=$(gh api "/repos/$REPO/actions/runs/$PUBLISH_RUN_ID/jobs" --paginate)
-          echo "$jobs_json" | jq -r '.jobs[] | "\(.name)\t\(.conclusion)"'
-
-          stable=$(echo "$jobs_json" | jq -r '[.jobs[] | select(.name=="stable")     | .conclusion] | .[0] // ""')
-          prerelease=$(echo "$jobs_json" | jq -r '[.jobs[] | select(.name=="prerelease") | .conclusion] | .[0] // ""')
-
-          if [ "$stable" = "success" ]; then
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          elif [ "$prerelease" = "success" ]; then
-            echo "tag=alpha" >> "$GITHUB_OUTPUT"
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No main-line publish job succeeded; skipping smoke."
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          fi
-          echo "publish_run_url=$PUBLISH_RUN_URL" >> "$GITHUB_OUTPUT"
-          echo "trigger=publish" >> "$GITHUB_OUTPUT"
+          echo "tag=${INPUT_TAG:-alpha}" >> "$GITHUB_OUTPUT"
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "publish_run_url=" >> "$GITHUB_OUTPUT"
+          echo "trigger=manual" >> "$GITHUB_OUTPUT"
 
   smoke:
     needs: resolve
