@@ -1,5 +1,7 @@
 import { PassThrough } from 'node:stream';
 
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -454,5 +456,73 @@ describe('AcpAgent', () => {
 
     const textDeltas = chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text);
     expect(textDeltas).toEqual(['result']);
+  });
+
+  it('can be delegated to by a supervisor agent', async () => {
+    const { AcpAgent } = await import('../agent');
+
+    mocks.onPrompt = async acpConnection => {
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'delegated result' },
+        },
+      });
+    };
+
+    let callCount = 0;
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'Delegate coding work.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'agent-claudeCode',
+                  input: JSON.stringify({ prompt: 'fix the bug' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+            text: 'supervisor done',
+            content: [{ type: 'text', text: 'supervisor done' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: {
+        claudeCode: new AcpAgent({
+          id: 'claude-code',
+          description: 'Build anything with Claude Code',
+          command: 'claude',
+          persistSession: true,
+        }),
+      },
+    });
+
+    const result = await supervisor.generate('delegate this', { maxSteps: 3 });
+
+    expect(result.text).toBe('supervisor done');
+    expect(mocks.connectionInstances[0]?.prompt).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      prompt: [{ type: 'text', text: 'fix the bug' }],
+    });
   });
 });
