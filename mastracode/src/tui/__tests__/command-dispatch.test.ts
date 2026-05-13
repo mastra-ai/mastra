@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
+  handleDebugChatExportCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock('../commands/index.js', () => ({
   handleObservabilityCommand: vi.fn(),
   handleGoalCommand: mocks.handleGoalCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
+  handleDebugChatExportCommand: mocks.handleDebugChatExportCommand,
 }));
 
 vi.mock('../display.js', () => ({
@@ -73,6 +75,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleCustomProvidersCommand.mockClear();
     mocks.handleGoalCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
+    mocks.handleDebugChatExportCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -120,6 +123,17 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
+  });
+
+  it('routes /debug-chat-export to handleDebugChatExportCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/debug-chat-export', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleDebugChatExportCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleDebugChatExportCommand).toHaveBeenCalledWith(ctx);
   });
 
   it('routes multiline /goal objectives as a single goal argument', async () => {
