@@ -107,6 +107,32 @@ describe('ObservabilityStorageDuckDB', () => {
     }
   });
 
+  it('reports delta list capabilities through the lazy store facade before init', async () => {
+    const originalFeatures = new Set(coreFeatures);
+    const lazyStore = new DuckDBStore({ path: ':memory:' });
+
+    try {
+      coreFeatures.add('observability-delta-polling');
+
+      expect(lazyStore.observability.getListCapabilities()).toEqual({
+        delta: {
+          traces: true,
+          branches: true,
+          logs: true,
+          metrics: true,
+          scores: true,
+          feedback: true,
+        },
+      });
+    } finally {
+      coreFeatures.clear();
+      for (const feature of originalFeatures) {
+        coreFeatures.add(feature);
+      }
+      await lazyStore.db.close();
+    }
+  });
+
   it('batches schema DDL and migrations during initialization', async () => {
     const db = {
       // Empty migration-status query results mean no legacy signal tables need migrating.
