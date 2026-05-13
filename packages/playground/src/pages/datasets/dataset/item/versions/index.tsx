@@ -1,15 +1,10 @@
 import {
-  Breadcrumb,
   Button,
   ButtonsGroup,
   Chip,
   CodeDiff,
   Column,
   Columns,
-  Crumb,
-  Header,
-  HeaderAction,
-  Icon,
   MainContentContent,
   MainContentLayout,
   MainHeader,
@@ -20,15 +15,7 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { format } from 'date-fns';
-import {
-  Database,
-  ArrowLeft,
-  HistoryIcon,
-  GitCompareIcon,
-  ArrowLeftIcon,
-  ColumnsIcon,
-  GitCompareArrowsIcon,
-} from 'lucide-react';
+import { ArrowLeft, HistoryIcon, GitCompareIcon, ArrowLeftIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetItemContent } from '@/domains/datasets';
@@ -37,6 +24,7 @@ import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-it
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { SelectField } from '@/lib/form/components/select-field';
 import { useLinkComponent } from '@/lib/framework';
+import { RouteHeaderActions } from '@/lib/route-header';
 import { cn } from '@/lib/utils';
 
 function versionToText(version: DatasetItemVersion): string {
@@ -104,19 +92,6 @@ function DatasetItemVersionsComparePage() {
   if (!datasetId || !itemId || versionNumbers.length < 2) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
-              <Icon>
-                <Database />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Compare Versions
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
             <p>Select at least two versions to compare.</p>
@@ -128,33 +103,12 @@ function DatasetItemVersionsComparePage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name}
-          </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
-            Item
-          </Crumb>
-          <Crumb isCurrent as="span">
-            Compare Versions
-          </Crumb>
-        </Breadcrumb>
-        <HeaderAction>
-          <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`} variant="outline">
-            <Icon>
-              <ArrowLeft />
-            </Icon>
-            Back to Item
-          </Button>
-        </HeaderAction>
-      </Header>
+      <RouteHeaderActions>
+        <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`} variant="outline">
+          <ArrowLeft />
+          Back to Item
+        </Button>
+      </RouteHeaderActions>
 
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div

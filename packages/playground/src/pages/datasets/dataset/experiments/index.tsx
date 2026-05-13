@@ -1,9 +1,5 @@
 import {
-  Breadcrumb,
   Button,
-  Crumb,
-  Header,
-  Icon,
   MainContentContent,
   MainContentLayout,
   MainHeader,
@@ -12,7 +8,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { Database, GitCompare, ArrowLeft } from 'lucide-react';
+import { GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetExperimentsComparison } from '@/domains/datasets';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -20,7 +16,7 @@ import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 function CompareDatasetExperimentsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: dataset, error } = useDataset(datasetId ?? '');
+  const { error } = useDataset(datasetId ?? '');
   const experimentIdA = searchParams.get('baseline') ?? '';
   const experimentIdB = searchParams.get('contender') ?? '';
 
@@ -47,22 +43,6 @@ function CompareDatasetExperimentsPage() {
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
-              <Icon>
-                <Database />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb isCurrent as="span">
-              <Icon>
-                <GitCompare />
-              </Icon>
-              Compare Experiments
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
             <p>Select two experiments to compare.</p>
@@ -78,26 +58,6 @@ function CompareDatasetExperimentsPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name ?? datasetId?.slice(0, 8)}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            <Icon>
-              <GitCompare />
-            </Icon>
-            Experiments Comparison
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <MainContentContent>
         <div className="max-w-[100rem] w-full px-12 mx-auto grid content-start ">
           <MainHeader>

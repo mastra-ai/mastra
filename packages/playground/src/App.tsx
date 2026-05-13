@@ -5,6 +5,7 @@ import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { RouteObject } from 'react-router';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
@@ -418,7 +419,7 @@ export const routes: RouteObject[] = [
               path: '/datasets/:datasetId',
               element: <DatasetPage />,
               handle: {
-                crumbs: ({ params }) => [navCrumb('/datasets'), { node: decodeRouteParam(params.datasetId) }],
+                crumbs: () => [navCrumb('/datasets'), { node: <DatasetCrumb /> }],
               },
             },
             {
@@ -427,10 +428,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
-                  {
-                    node: decodeRouteParam(params.datasetId),
-                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
-                  },
+                  { node: <DatasetCrumb /> },
                   { node: decodeRouteParam(params.itemId) },
                 ],
               },
@@ -441,10 +439,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
-                  {
-                    node: decodeRouteParam(params.datasetId),
-                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
-                  },
+                  { node: <DatasetCrumb /> },
                   {
                     node: decodeRouteParam(params.itemId),
                     to:
@@ -462,10 +457,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
-                  {
-                    node: decodeRouteParam(params.datasetId),
-                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
-                  },
+                  { node: <DatasetCrumb /> },
                   { node: decodeRouteParam(params.experimentId) },
                 ],
               },
@@ -482,42 +474,21 @@ export const routes: RouteObject[] = [
               path: '/datasets/:datasetId/experiments',
               element: <CompareDatasetExperimentsPage />,
               handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  {
-                    node: decodeRouteParam(params.datasetId),
-                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
-                  },
-                  { node: 'Experiments' },
-                ],
+                crumbs: () => [navCrumb('/datasets'), { node: <DatasetCrumb /> }, { node: 'Experiments' }],
               },
             },
             {
               path: '/datasets/:datasetId/items',
               element: <DatasetItemsComparePage />,
               handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  {
-                    node: decodeRouteParam(params.datasetId),
-                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
-                  },
-                  { node: 'Items' },
-                ],
+                crumbs: () => [navCrumb('/datasets'), { node: <DatasetCrumb /> }, { node: 'Items' }],
               },
             },
             {
               path: '/datasets/:datasetId/versions',
               element: <DatasetCompareDatasetVersions />,
               handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  {
-                    node: decodeRouteParam(params.datasetId),
-                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
-                  },
-                  { node: 'Versions' },
-                ],
+                crumbs: () => [navCrumb('/datasets'), { node: <DatasetCrumb /> }, { node: 'Versions' }],
               },
             },
           ]

@@ -24,42 +24,44 @@ export function MainSidebarNavHeader({
 }: MainSidebarNavHeaderProps) {
   const ctx = useMaybeSidebar();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
+  const isMobile = ctx?.isMobile ?? false;
   const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
-  const isDefaultState = state === 'default';
-
-  if (!isDefaultState) {
-    return (
-      <VisuallyHidden asChild>
-        {/* Keep `...props` on the slotted <header> so consumers' `id` reaches the
-            DOM — `MainSidebarSections` uses it as the section's `aria-labelledby`. */}
-        <header {...props}>{children}</header>
-      </VisuallyHidden>
-    );
-  }
+  const showTitle = state === 'default' && !isMobile;
 
   return (
     <div className={cn('min-w-0 min-h-8 flex items-center mt-2 mb-0.5', className)}>
-      <header
-        {...props}
-        className={cn('min-w-0 max-w-full truncate text-ui-sm font-medium pl-3', {
-          'text-neutral5': isActive,
-          'text-neutral3/70': !isActive,
-        })}
-      >
-        {href ? (
-          <Link
-            href={href}
-            className={cn('block min-w-0 truncate transition-colors duration-normal', {
-              'hover:text-neutral5': !isActive,
-              'text-neutral5': isActive,
-            })}
-          >
-            {children}
-          </Link>
-        ) : (
-          children
-        )}
-      </header>
+      {showTitle ? (
+        <header
+          {...props}
+          className={cn('min-w-0 max-w-full truncate text-ui-sm font-medium pl-3', {
+            'text-neutral5': isActive,
+            'text-neutral3/70': !isActive,
+          })}
+        >
+          {href ? (
+            <Link
+              href={href}
+              className={cn('block min-w-0 truncate transition-colors duration-normal', {
+                'hover:text-neutral5': !isActive,
+                'text-neutral5': isActive,
+              })}
+            >
+              {children}
+            </Link>
+          ) : (
+            children
+          )}
+        </header>
+      ) : (
+        <>
+          {/* Keep header in DOM (visually hidden) so consumers' `id` still resolves
+              for `MainSidebarSections`' `aria-labelledby`. */}
+          <VisuallyHidden asChild>
+            <header {...props}>{children}</header>
+          </VisuallyHidden>
+          <div aria-hidden="true" className="mx-3 h-px flex-1 bg-border1" />
+        </>
+      )}
     </div>
   );
 }

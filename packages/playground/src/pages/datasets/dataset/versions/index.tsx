@@ -1,11 +1,7 @@
 import {
-  Breadcrumb,
   Button,
   Column,
   Columns,
-  Crumb,
-  Header,
-  Icon,
   MainContentContent,
   MainContentLayout,
   MainHeader,
@@ -15,7 +11,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
+import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
@@ -78,19 +74,6 @@ function DatasetCompareVersionsPage() {
   if (!datasetId || versionNumbers.length < 2) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
-              <Icon>
-                <Database />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Compare Versions
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
             <p>Select at least two versions to compare.</p>
@@ -114,26 +97,6 @@ function DatasetCompareVersionsPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name || datasetId?.slice(0, 8)}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            <Icon>
-              <ScaleIcon />
-            </Icon>
-            Compare Versions
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <MainHeader>
