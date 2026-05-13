@@ -198,7 +198,7 @@ curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.files'
 
 Requires `--auth on`. See `references/auth.md`.
 
-> **Precondition.** A visibility flip only auto-publishes when the skill has source on disk — meaning it was created with a `skillPath` *or* a prior `POST /stored/skills/:id/publish` set one. Without a registered path, `visibility: "public"` is accepted (200), the row is now listed as public, but `activeVersionId` stays `null` and no new version is created. Visibility and publication are **independent fields by design**.
+> **Precondition.** A visibility flip only auto-publishes when the skill has source on disk — meaning it was created with a `skillPath` _or_ a prior `POST /stored/skills/:id/publish` set one. Without a registered path, `visibility: "public"` is accepted (200), the row is now listed as public, but `activeVersionId` stays `null` and no new version is created. Visibility and publication are **independent fields by design**.
 >
 > Run this step against a skill you created from a real on-disk directory under `SKILLS_BASE_DIR`. If you flipped visibility on a "plain create" skill (no `skillPath`), expect 200 + unchanged `activeVersionId`, not a new version.
 
