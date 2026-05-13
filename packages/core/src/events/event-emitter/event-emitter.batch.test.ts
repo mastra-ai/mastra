@@ -319,4 +319,39 @@ describe('EventEmitterPubSub — batching', () => {
       await local.close();
     }
   });
+
+  // Regression: the fan-out path schedules `buffer.push` fire-and-forget
+  // off the EventEmitter's synchronous emit. If push rejects (e.g. user
+  // `coalesce` throws inside an inline flush-now), the rejection used to
+  // escape as an UnhandledPromiseRejection. It must be surfaced through
+  // the configured logger instead.
+  it('surfaces buffer.push rejections through the logger (fan-out path)', async () => {
+    const error = vi.fn();
+    const local = new EventEmitterPubSub(undefined, {
+      logger: { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any,
+    });
+    try {
+      const cb = vi.fn();
+      await local.subscribe('topic-push-reject', cb, {
+        batch: {
+          maxSize: 1,
+          // maxSize=1 forces flush-now on every push; a throwing coalesce
+          // makes prepareBatch (and therefore push) reject.
+          coalesce: () => {
+            throw new Error('coalesce-boom');
+          },
+        },
+      });
+
+      await local.publish('topic-push-reject', makeEvent({ type: 'x' }));
+      // Give the fire-and-forget catch a tick to log.
+      await new Promise<void>(r => setImmediate(r));
+
+      expect(error).toHaveBeenCalled();
+      const firstCallArgs = error.mock.calls[0];
+      expect(firstCallArgs?.[0]).toEqual(expect.stringContaining('batched cb failed'));
+    } finally {
+      await local.close();
+    }
+  });
 });

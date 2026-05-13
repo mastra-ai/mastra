@@ -118,7 +118,13 @@ export class EventEmitterPubSub extends PubSub {
         this.subscribeWithGroup(topic, cb, options.group);
       } else {
         const wrapper = (event: Event) => {
-          void buffer.push(event, NOOP_ACK, NOOP_ACK);
+          // Fire-and-forget — buffer.push can reject if the user-supplied
+          // `coalesce` throws or any other policy step fails during an
+          // inline flush-now. Surface those through the logger rather
+          // than letting them become unhandled rejections.
+          void buffer.push(event, NOOP_ACK, NOOP_ACK).catch(err => {
+            this.logBufferError(topic, err, { phase: 'cb' });
+          });
         };
         let byCbFanout = this.fanoutWrappers.get(topic);
         if (!byCbFanout) {
@@ -335,7 +341,11 @@ export class EventEmitterPubSub extends PubSub {
     // If this member opted into batching, route through its buffer.
     const buffer = this.batchBuffers.get(topic)?.get(member);
     if (buffer) {
-      void buffer.push(eventWithAttempt, ack, nack);
+      // Same rationale as the fan-out push above: surface rejections
+      // through the logger so they don't escape as unhandled.
+      void buffer.push(eventWithAttempt, ack, nack).catch(err => {
+        this.logBufferError(topic, err, { phase: 'cb' });
+      });
     } else {
       member(eventWithAttempt, ack, nack);
     }
