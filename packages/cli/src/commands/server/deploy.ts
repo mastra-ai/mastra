@@ -233,11 +233,27 @@ async function resolveProject(
 
   if (flagProject) {
     const projects = await fetchServerProjects(token, orgId);
-    const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
+    const match = projects.find(
+      proj => proj.name === flagProject || proj.slug === flagProject || proj.id === flagProject,
+    );
     if (match) {
       return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
-    return { projectId: flagProject, projectName: flagProject, projectSlug: flagProject };
+
+    // No match — create a new project with the flag value as its name.
+    if (!autoAccept) {
+      const confirmed = await p.confirm({
+        message: `No project named "${flagProject}" found. Create it?`,
+      });
+      if (p.isCancel(confirmed) || !confirmed) {
+        p.cancel('Deploy cancelled.');
+        process.exit(0);
+      }
+    }
+
+    const created = await createServerProject(token, orgId, flagProject);
+    p.log.success(`Created project "${created.name}"`);
+    return { projectId: created.id, projectName: created.name, projectSlug: created.slug ?? created.name };
   }
 
   if (projectConfig?.projectId && projectConfig.organizationId === orgId) {

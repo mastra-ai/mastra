@@ -722,6 +722,29 @@ describe('resolveProject (studio)', () => {
     exitSpy.mockRestore();
   });
 
+  it('--project <name> bypasses the selector when it matches an existing project by name', async () => {
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'My App', slug: 'my-app-slug' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other' } as never,
+    ]);
+
+    const prompts = await import('@clack/prompts');
+    vi.mocked(prompts.confirm).mockResolvedValueOnce(false as never);
+
+    const { deployAction } = await import('./deploy.js');
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('__exit__');
+    });
+
+    await expect(deployAction(undefined, { project: 'My App' })).rejects.toThrow();
+
+    expect(prompts.select).not.toHaveBeenCalled();
+    expect(platform.createProject).not.toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+  });
+
   it('auto-accept with multiple projects and no name match throws a helpful error', async () => {
     const platform = await import('./platform-api.js');
     vi.mocked(platform.fetchProjects).mockResolvedValue([

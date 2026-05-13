@@ -271,10 +271,12 @@ async function resolveProject(
     return { existing: true, projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
   }
 
-  // 1. CLI flag — match by slug first, then id
+  // 1. CLI flag — match by name, slug, or id
   if (flagProject) {
     const projects = await fetchProjects(token, orgId);
-    const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
+    const match = projects.find(
+      proj => proj.name === flagProject || proj.slug === flagProject || proj.id === flagProject,
+    );
     if (match) {
       return { existing: true, projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
