@@ -422,6 +422,7 @@ export function MastraRuntimeProvider({
   const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
+  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS === 'true';
 
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
@@ -470,7 +471,7 @@ export function MastraRuntimeProvider({
     threadId,
     initialMessages,
     requestContext: chatRequestContext,
-    enableThreadSignals: window.MASTRA_AGENT_SIGNALS === 'true',
+    enableThreadSignals: threadSignalsEnabled,
     onSignalSent: addPendingSignal,
     onSignalEcho: removePendingSignal,
     onThreadSignalsUnsupported: () => {
@@ -1362,7 +1363,8 @@ export function MastraRuntimeProvider({
     <ThreadRuntimeStateProvider
       value={{
         isStreaming: isLegacyRunning || isRunningStream,
-        canSendWhileStreaming: isSupportedModel && !threadSignalsUnsupported,
+        canSendWhileStreaming:
+          isSupportedModel && threadSignalsEnabled && Boolean(threadId) && !threadSignalsUnsupported,
         cancelStream: onCancel,
         pendingSignals,
         hasPendingMessages: pendingSignals.length > 0,
