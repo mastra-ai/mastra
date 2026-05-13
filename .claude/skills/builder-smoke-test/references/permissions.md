@@ -44,7 +44,7 @@ Pass criteria per role for representative endpoints. The agent uses this to set 
 | `PATCH /stored/skills/:id` `visibility` | 200   | 200   | 403    | 403    |
 | `POST /stored/skills/:id/publish`       | 200   | 200   | 403    | 403    |
 | `POST /agents/:id/chat` (execute)       | 200   | 200   | 200    | 403    |
-| `GET /editor/builder/infrastructure`    | 200   | 200   | 403    | 403    |
+| `GET /editor/builder/infrastructure`    | 200   | 200   | 200    | 200    |
 | `PUT /stored/agents/:id/star`           | 200   | 200   | 200    | 200    |
 
 \* The `admin` **role definition** has no `*:delete` grant; deletes are gated to `owner` (or explicit `:delete` grant). If you see `admin` succeeding at DELETE, first check `/auth/me` — WorkOS-mapped admins frequently carry `permissions: ["*"]` (owner-equivalent), in which case the success is expected. Only file a regression when an admin with `permissions` matching the default `admin` row (no `*` wildcard) still passes a DELETE.

@@ -1,6 +1,6 @@
 # Infrastructure
 
-The `/editor/builder/infrastructure` endpoint reports configured channels, browser, workspace, and registries. The Agent Builder Infrastructure page (admin-only in the UI) renders this.
+The `/editor/builder/infrastructure` endpoint reports configured channels, browser, workspace, and registries. The Agent Builder Infrastructure page renders this. The payload is deployment-shape only — provider names and enabled/disabled flags, no secrets — so all default roles can read it (`*:read` matches `infrastructure:read`).
 
 ## Source-of-truth
 
@@ -26,7 +26,7 @@ Notes:
 
 ## Steps
 
-### 1. Admin can read
+### 1. Any signed-in role can read
 
 ```bash
 curl -s -H "$SESSION" "$BASE/editor/builder/infrastructure" | jq .
@@ -34,16 +34,17 @@ curl -s -H "$SESSION" "$BASE/editor/builder/infrastructure" | jq .
 
 - [ ] HTTP 200
 - [ ] Top-level keys present: `channels`, `browser`, `workspace`, `registries`
+- [ ] Works for `admin`, `member`, and `viewer` — the gate is `infrastructure:read`, and every default role has `*:read`
 
-### 2. Non-admin cannot read
+### 2. Unauthenticated cannot read
 
-Use a session whose user has only `*:read` (member or viewer per default-role grants in `roles.ts`). `infrastructure:read` is not granted by default; only `admin`/`owner` get it.
+With auth on and no session cookie:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -H "$SESSION" "$BASE/editor/builder/infrastructure"
+curl -s -o /dev/null -w '%{http_code}\n' "$BASE/editor/builder/infrastructure"
 ```
 
-- [ ] HTTP 403 (or 404 if route-hidden — both acceptable)
+- [ ] HTTP 401 (no session)
 
 ### 3. Browser block
 
@@ -110,4 +111,4 @@ Navigate to `http://localhost:4111/agent-builder/infrastructure`.
 - [ ] Workspace block: `type`, `workspaceId`, `filesystemProvider`, `sandboxProvider`, `config`
 - [ ] Channels block: `{ providers: [...] }` shape; only configured providers listed
 - [ ] Registries block: `{ skillsSh: { enabled } }` object shape (not array)
-- [ ] UI page renders Browser / Workspace / Channels sections; sidebar + mobile bottom-bar link gated by `infrastructure:read`
+- [ ] UI page renders Browser / Workspace / Channels / Registries sections; sidebar + mobile bottom-bar link gated by `infrastructure:read` (visible to every default role under auth-on)

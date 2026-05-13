@@ -489,7 +489,7 @@ Some flows are documented in `references/` but are not driven by the smoke-test 
 - `references/picker-allowlist.md` — tools/agents/workflows pickers respect allowlists
 - `references/stars.md` — star/unstar agents and skills, idempotency
 - `references/permissions.md` — viewer/member/admin/owner gating, role expectation matrix, UI impersonation, auth-off bypass
-- `references/infrastructure.md` — `/editor/builder/infrastructure` payload + admin UI
+- `references/infrastructure.md` — `/editor/builder/infrastructure` payload + UI
 - `references/channels.md` — Slack provider visibility, connectChannel tool
 - `references/ui.md` — browser checklist across Builder routes
 - `references/auth.md` — WorkOS on/off, 401 behavior, authorId, mode-toggle via `.env`
