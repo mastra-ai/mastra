@@ -174,11 +174,14 @@ export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
  * Only applies when the caller doesn't pass an explicit `encoding` (since an
  * explicit encoding is a clear request for raw bytes/text).
  *
- * @default `['image/*', 'application/pdf']`
+ * The default is the cross-provider-safe intersection of image formats
+ * (`image/png`, `image/jpeg`, `image/webp`, `image/gif`) plus
+ * `application/pdf`. Use `['image/*']` (or a function) if you want to
+ * surface exotic subtypes like SVG/BMP/HEIC.
  *
  * @example
  * ```ts
- * // Only return images as media parts (skip PDFs)
+ * // Surface any image (including SVG, BMP, HEIC) — may fail on some providers
  * mastra_workspace_read_file: { mediaTypes: ['image/*'] }
  *
  * // Disable media parts entirely
@@ -186,16 +189,27 @@ export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
  *
  * // Custom predicate
  * mastra_workspace_read_file: { mediaTypes: (mime) => mime.startsWith('image/') }
+ *
+ * // Raise the inline-media size cap to 25 MiB
+ * mastra_workspace_read_file: { maxMediaBytes: 25 * 1024 * 1024 }
  * ```
  */
 export interface ReadFileToolConfig extends WorkspaceToolConfig {
   /**
    * Which mime types to surface to the model as media parts (file/image
-   * parts) rather than as text. Defaults to `['image/*', 'application/pdf']`.
+   * parts) rather than as text. Defaults to the cross-provider-safe set
+   * `['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf']`.
    * Pass `false` to disable media detection; non-text binaries then fall
    * back to metadata-only output unless an explicit `encoding` is provided.
    */
   mediaTypes?: string[] | ((mimeType: string) => boolean) | false;
+  /**
+   * Maximum file size (in bytes) to read inline as a media part. Files
+   * larger than this fall back to metadata-only output rather than being
+   * fully base64-encoded into the model context and persisted in storage.
+   * Defaults to 10 MiB (10 * 1024 * 1024).
+   */
+  maxMediaBytes?: number;
 }
 
 // =============================================================================

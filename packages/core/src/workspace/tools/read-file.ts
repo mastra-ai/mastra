@@ -35,11 +35,21 @@ function isMediaToolResult(value: unknown): value is MediaToolResult {
 }
 
 /**
- * Default mime types surfaced to the model as media parts. Images become
- * image parts the model can natively see; `application/pdf` becomes a file
- * part for providers that accept native PDFs.
+ * Default mime types surfaced to the model as media parts. The list is
+ * intentionally the intersection of image formats supported by the major
+ * model providers (Anthropic, OpenAI, Gemini) plus `application/pdf`.
+ * `image/*` is *not* used so we don't surface exotic subtypes like SVG/BMP
+ * that some providers reject. Override `mediaTypes` to broaden this.
  */
-const DEFAULT_MEDIA_TYPES: string[] = ['image/*', 'application/pdf'];
+const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'];
+
+/**
+ * Default cap (in bytes) on inline media reads. Files larger than this fall
+ * back to metadata-only output instead of being fully base64-encoded into
+ * the model context (and persisted in storage on rehydration). 10 MiB is
+ * roughly aligned with provider per-image/per-pdf limits.
+ */
+const DEFAULT_MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 
 /**
  * `application/*` mime types that are actually text content and safe to read
@@ -176,6 +186,14 @@ export const readFileTool = createTool({
       // return a MediaToolResult so `toModelOutput` can surface it as a
       // file/image part the model can natively consume.
       if (!encoding && shouldReturnAsMedia(stat.mimeType)) {
+        const maxMediaBytes = readFileConfig?.maxMediaBytes ?? DEFAULT_MAX_MEDIA_BYTES;
+        // Avoid materializing huge media files (and persisting their base64
+        // string through storage on rehydration). Fall back to metadata-only
+        // when the file exceeds the configured size cap.
+        if (stat.size > maxMediaBytes) {
+          span.end({ success: true }, { bytesTransferred: 0 });
+          return `${stat.path} (${stat.size} bytes, ${stat.mimeType}) — exceeds maxMediaBytes (${maxMediaBytes}). Returning metadata only; configure \`maxMediaBytes\` on the read_file tool to raise this cap.`;
+        }
         const base64 = (await filesystem.readFile(path, { encoding: 'base64' })) as string;
         const header = `${stat.path} (${stat.size} bytes, ${stat.mimeType})`;
         span.end({ success: true }, { bytesTransferred: stat.size });

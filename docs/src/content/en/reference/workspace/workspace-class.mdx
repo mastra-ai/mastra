@@ -473,7 +473,7 @@ Added when a filesystem is configured:
 
 With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
 
-The `read_file` tool accepts a `mediaTypes` option to control which mime types are surfaced to the model as native media parts:
+The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 
 <PropertiesTable
   content={[
@@ -481,9 +481,17 @@ The `read_file` tool accepts a `mediaTypes` option to control which mime types a
     name: 'mediaTypes',
     type: 'string[] | ((mimeType: string) => boolean) | false',
     description:
-      "Which mime types to surface to the model as media parts (file/image parts) rather than as text. Accepts an array of globs (e.g. `['image/*']`), a custom predicate function, or `false` to disable media detection. Only applies when the caller doesn't pass an explicit `encoding`.",
+      "Which mime types to surface to the model as media parts (file/image parts) rather than as text. Accepts an array of globs (e.g. `['image/*']`), a custom predicate function, or `false` to disable media detection. Defaults to the cross-provider-safe intersection of image formats plus PDF. Only applies when the caller doesn't pass an explicit `encoding`.",
     isOptional: true,
-    defaultValue: "['image/*', 'application/pdf']",
+    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf']",
+  },
+  {
+    name: 'maxMediaBytes',
+    type: 'number',
+    description:
+      'Maximum file size (in bytes) to inline as a media part. Files larger than this fall back to metadata-only output rather than being fully base64-encoded into context and persisted in storage on rehydration.',
+    isOptional: true,
+    defaultValue: '10 * 1024 * 1024 (10 MiB)',
   },
 ]}
 />
@@ -493,8 +501,10 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   tools: {
     [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
-      // Only inline images; PDFs fall back to metadata-only
+      // Broaden to any image (including SVG, BMP, HEIC) — may fail on some providers
       mediaTypes: ['image/*'],
+      // Raise the inline-media cap to 25 MiB
+      maxMediaBytes: 25 * 1024 * 1024,
     },
   },
 })

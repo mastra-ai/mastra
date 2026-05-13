@@ -417,6 +417,92 @@ describe('workspace_read_file', () => {
     expect(result).toContain(png.toString('base64'));
   });
 
+  it('should not surface SVG as a media part by default', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>', 'utf-8');
+    await fs.writeFile(path.join(tempDir, 'icon.svg'), svg);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'icon.svg' }, { workspace });
+
+    // SVG is not in the default cross-provider-safe set. It's also a text
+    // format, so it should be returned as text rather than a media part.
+    expect(typeof result).toBe('string');
+    expect(result).not.toMatchObject({ __workspaceMedia: true });
+    expect(result).toContain('<svg');
+  });
+
+  it('should surface SVG as media when mediaTypes is broadened to image/*', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>', 'utf-8');
+    await fs.writeFile(path.join(tempDir, 'icon.svg'), svg);
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+          mediaTypes: ['image/*'],
+        },
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'icon.svg' },
+      { workspace },
+    )) as any;
+
+    expect(result).toMatchObject({
+      __workspaceMedia: true,
+      mediaType: 'image/svg+xml',
+    });
+  });
+
+  it('should fall back to metadata when media file exceeds maxMediaBytes', async () => {
+    // 2 KiB PNG-like blob (header valid; bytes are fine for size check)
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(2048)]);
+    await fs.writeFile(path.join(tempDir, 'big.png'), png);
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+          maxMediaBytes: 1024,
+        },
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'big.png' }, { workspace });
+
+    expect(typeof result).toBe('string');
+    expect(result).not.toMatchObject({ __workspaceMedia: true });
+    expect(result).toContain('exceeds maxMediaBytes');
+    expect(result).toContain('big.png');
+    expect(result).toContain('image/png');
+  });
+
+  it('should still inline media within the maxMediaBytes cap', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await fs.writeFile(path.join(tempDir, 'small.png'), png);
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+          maxMediaBytes: 1024,
+        },
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'small.png' },
+      { workspace },
+    )) as any;
+
+    expect(result).toMatchObject({
+      __workspaceMedia: true,
+      mediaType: 'image/png',
+    });
+  });
+
   it('should reject offset that is not a positive integer', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
