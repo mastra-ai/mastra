@@ -178,6 +178,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/claudinio',
+          label: 'Claudinio',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },
@@ -205,6 +210,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/databricks',
+          label: 'Databricks',
         },
         {
           type: 'doc',
@@ -485,6 +495,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sarvam',
+          label: 'Sarvam AI',
         },
         {
           type: 'doc',

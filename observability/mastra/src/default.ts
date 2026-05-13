@@ -20,7 +20,7 @@ import type { ObservabilityStorage } from '@mastra/core/storage';
 import { routeToHandler } from './bus/route-event';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
-import { CloudExporter, DefaultExporter } from './exporters';
+import { MastraPlatformExporter, MastraStorageExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import {
   buildFeedbackEvent,
@@ -126,7 +126,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     if (config.default?.enabled) {
       console.warn(
         '[Mastra Observability] The "default: { enabled: true }" configuration is deprecated and will be removed in a future version. ' +
-          'Please use explicit configs with DefaultExporter and CloudExporter instead. ' +
+          'Please use explicit configs with MastraStorageExporter and MastraPlatformExporter instead. ' +
           'Sensitive data filtering is applied by default and can be controlled via the top-level "sensitiveDataFilter" option. ' +
           'See https://mastra.ai/docs/observability/tracing/overview for the recommended configuration.',
       );
@@ -136,7 +136,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
         serviceName: 'mastra',
         name: 'default',
         sampling: { type: SamplingStrategyType.ALWAYS },
-        exporters: [new DefaultExporter(), new CloudExporter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
         spanOutputProcessors: autoFilter ? [autoFilter] : [],
       });
 

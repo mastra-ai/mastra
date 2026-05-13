@@ -102,4 +102,90 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
       expect(url).toBe('http://localhost:4000/api/auth/logout');
     });
   });
+
+  describe('Client header forwarding', () => {
+    it('should forward client.options.headers on SSO login request', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com/login' }));
+
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+          headers: {
+            'x-tenant-id': 'tenant-123',
+            Authorization: 'Bearer dev-token',
+          },
+        },
+      };
+
+      await makeSSOLoginRequest(mockClient as any, {});
+
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(init.headers).toMatchObject({
+        'x-tenant-id': 'tenant-123',
+        Authorization: 'Bearer dev-token',
+      });
+    });
+
+    it('should forward client.options.headers on logout request', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ success: true }));
+
+      const { makeLogoutRequest } = await import('../use-auth-actions');
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+          headers: {
+            'x-tenant-id': 'tenant-123',
+            Authorization: 'Bearer dev-token',
+          },
+        },
+      };
+
+      await makeLogoutRequest(mockClient as any);
+
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(init.headers).toMatchObject({
+        'x-tenant-id': 'tenant-123',
+        Authorization: 'Bearer dev-token',
+      });
+    });
+
+    it('should not allow client headers to override Content-Type on SSO login', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com/login' }));
+
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+          headers: {
+            'Content-Type': 'text/plain',
+          },
+        },
+      };
+
+      await makeSSOLoginRequest(mockClient as any, {});
+
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    });
+
+    it('should not allow client headers to override Content-Type on logout', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ success: true }));
+
+      const { makeLogoutRequest } = await import('../use-auth-actions');
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+          headers: {
+            'Content-Type': 'text/plain',
+          },
+        },
+      };
+
+      await makeLogoutRequest(mockClient as any);
+
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    });
+  });
 });

@@ -13,6 +13,7 @@ test-outputs/
 
 # Dev artifacts
 .dev/db/*
+.pr-review/
 
 .env
 .env.local

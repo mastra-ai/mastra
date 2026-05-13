@@ -1,8 +1,5 @@
 import './index.css';
 
-// DS Components - Threads
-export * from './ds/components/Threads';
-
 // DS Components - Existing
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
@@ -34,6 +31,7 @@ export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
 export * from './ds/components/Input';
+export * from './ds/components/InputGroup';
 export * from './ds/components/Kbd';
 export * from './ds/components/Label';
 export * from './ds/components/MarkdownRenderer';
