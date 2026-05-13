@@ -31,7 +31,16 @@ import type {
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_BRANCHES_DELTA, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
-import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import {
+  assertCursorKind,
+  assertDeltaPollingSupported,
+  buildTupleCursorFilter,
+  decodeLiveCursor,
+  deltaPollingFeatureEnabled,
+  encodeLiveCursor,
+  invalidLiveCursorError,
+} from './polling';
 
 const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 
@@ -253,7 +262,11 @@ export async function dangerouslyClearSpanEvents(client: ClickHouseClient): Prom
  * Filters apply to the anchor span itself (not to a containing trace root) --
  * which is the whole point of this surface.
  */
-export async function listBranches(client: ClickHouseClient, args: ListBranchesArgs): Promise<ListBranchesResponse> {
+export async function listBranches(
+  client: ClickHouseClient,
+  args: ListBranchesArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListBranchesResponse> {
   const { mode, filters, pagination, orderBy, after, limit } = listBranchesArgsSchema.parse(args);
   const page = pagination?.page ?? 0;
   const perPage = pagination?.perPage ?? 10;
@@ -379,12 +392,12 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const liveCursorEnabled = deltaPollingFeatureEnabled();
+  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
 
   if (mode === 'delta') {
-    assertDeltaPollingEnabled();
+    assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getBranchLiveCursor(client, whereClause, params);
+    const currentLiveCursor = await getBranchLiveCursor(client, whereClause, params, strategy);
     if (after === undefined) {
       return {
         branches: [],
@@ -393,37 +406,17 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       };
     }
 
-    const rows = (await (
-      await client.query({
-        query: `
-          SELECT
-            b.* EXCEPT(spanType, startedAt, traceId, spanId, dedupeKey),
-            b.spanType AS spanType,
-            b.startedAt AS startedAt,
-            b.traceId AS traceId,
-            b.spanId AS spanId,
-            b.dedupeKey AS dedupeKey,
-            toString(d.cursorId) AS cursorId
-          FROM ${TABLE_TRACE_BRANCHES_DELTA} d
-          INNER JOIN ${TABLE_TRACE_BRANCHES} b
-            ON b.spanType = d.spanType
-           AND b.startedAt = d.startedAt
-           AND b.traceId = d.traceId
-           AND b.spanId = d.spanId
-           AND b.dedupeKey = d.dedupeKey
-          ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
-          ORDER BY d.cursorId ASC, b.dedupeKey ASC
-          LIMIT {fetchLimit:UInt32}
-        `,
-        query_params: {
-          ...params,
-          afterCursor: decodeLiveCursor(after),
-          fetchLimit: limit + 1,
-        },
-        format: 'JSONEachRow',
-        clickhouse_settings: CH_SETTINGS,
-      })
-    ).json()) as Array<Record<string, any> & { cursorId?: string }>;
+    const afterCursor = decodeLiveCursor(after);
+    const rows =
+      afterCursor.kind === 'serial'
+        ? await queryBranchesAfterSerialCursor(client, whereClause, params, limit, strategy, afterCursor.cursorId)
+        : await queryBranchesAfterTupleCursor(
+            client,
+            whereClause,
+            params,
+            limit,
+            assertCursorKind(afterCursor, 'branch'),
+          );
 
     const visibleRows = rows.slice(0, limit);
 
@@ -431,9 +424,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       branches: toTraceSpans(visibleRows.map(rowToSpanRecord)),
       delta: { limit, hasMore: rows.length > limit },
       liveCursor:
-        visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+        visibleRows.length > 0 ? buildBranchCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
     };
   }
 
@@ -498,19 +489,155 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       hasMore: (page + 1) * perPage < total,
     },
     branches: toTraceSpans(spans),
-    ...(liveCursorEnabled ? { liveCursor: await getBranchLiveCursor(client, whereClause, params) } : {}),
+    ...(liveCursorEnabled ? { liveCursor: await getBranchLiveCursor(client, whereClause, params, strategy) } : {}),
   };
+}
+
+type BranchDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  cursorIngestedAt?: string;
+  spanType: string;
+  startedAt: string;
+  traceId: string;
+  spanId: string;
+  dedupeKey: string;
+};
+
+async function queryBranchesAfterSerialCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  strategy: ClickHouseDeltaCursorStrategy,
+  cursorId: string,
+): Promise<BranchDeltaRow[]> {
+  if (strategy !== 'serial') {
+    throw invalidLiveCursorError();
+  }
+
+  return (await (
+    await client.query({
+      query: `
+        SELECT
+          b.* EXCEPT(spanType, startedAt, traceId, spanId, dedupeKey),
+          b.spanType AS spanType,
+          b.startedAt AS startedAt,
+          b.traceId AS traceId,
+          b.spanId AS spanId,
+          b.dedupeKey AS dedupeKey,
+          toString(d.cursorId) AS cursorId,
+          toString(d.ingestedAt) AS cursorIngestedAt
+        FROM ${TABLE_TRACE_BRANCHES_DELTA} d
+        INNER JOIN ${TABLE_TRACE_BRANCHES} b
+          ON b.spanType = d.spanType
+         AND b.startedAt = d.startedAt
+         AND b.traceId = d.traceId
+         AND b.spanId = d.spanId
+         AND b.dedupeKey = d.dedupeKey
+        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ORDER BY d.cursorId ASC, b.dedupeKey ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        afterCursor: cursorId,
+        fetchLimit: limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as BranchDeltaRow[];
+}
+
+async function queryBranchesAfterTupleCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'branch' }>,
+): Promise<BranchDeltaRow[]> {
+  const tupleFilter = buildTupleCursorFilter([
+    { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
+    { expr: 'd.spanType', param: 'afterSpanType', type: 'String', value: afterCursor.spanType },
+    { expr: 'd.startedAt', param: 'afterStartedAt', type: `DateTime64(3, 'UTC')`, value: afterCursor.startedAt },
+    { expr: 'd.traceId', param: 'afterTraceId', type: 'String', value: afterCursor.traceId },
+    { expr: 'd.spanId', param: 'afterSpanId', type: 'String', value: afterCursor.spanId },
+    { expr: 'd.dedupeKey', param: 'afterDedupeKey', type: 'String', value: afterCursor.dedupeKey },
+  ]);
+
+  return (await (
+    await client.query({
+      query: `
+        SELECT
+          b.* EXCEPT(spanType, startedAt, traceId, spanId, dedupeKey),
+          b.spanType AS spanType,
+          b.startedAt AS startedAt,
+          b.traceId AS traceId,
+          b.spanId AS spanId,
+          b.dedupeKey AS dedupeKey,
+          toString(d.ingestedAt) AS cursorIngestedAt
+        FROM ${TABLE_TRACE_BRANCHES_DELTA} d
+        INNER JOIN ${TABLE_TRACE_BRANCHES} b
+          ON b.spanType = d.spanType
+         AND b.startedAt = d.startedAt
+         AND b.traceId = d.traceId
+         AND b.spanId = d.spanId
+         AND b.dedupeKey = d.dedupeKey
+        ${whereClause ? `${whereClause} AND ${tupleFilter.clause}` : `WHERE ${tupleFilter.clause}`}
+        ORDER BY d.ingestedAt ASC, d.spanType ASC, d.startedAt ASC, d.traceId ASC, d.spanId ASC, d.dedupeKey ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        ...tupleFilter.params,
+        fetchLimit: limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as BranchDeltaRow[];
 }
 
 async function getBranchLiveCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
+  strategy: ClickHouseDeltaCursorStrategy,
 ): Promise<string | null> {
+  if (strategy === 'serial') {
+    const rows = (await (
+      await client.query({
+        query: `
+          SELECT toString(max(d.cursorId)) AS cursorId
+          FROM ${TABLE_TRACE_BRANCHES_DELTA} d
+          INNER JOIN ${TABLE_TRACE_BRANCHES} b
+            ON b.spanType = d.spanType
+           AND b.startedAt = d.startedAt
+           AND b.traceId = d.traceId
+           AND b.spanId = d.spanId
+           AND b.dedupeKey = d.dedupeKey
+          ${whereClause}
+        `,
+        query_params: params,
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<{ cursorId?: string | null }>;
+
+    const cursorId = rows[0]?.cursorId ?? null;
+    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+  }
+
   const rows = (await (
     await client.query({
       query: `
-        SELECT toString(max(d.cursorId)) AS cursorId
+        SELECT
+          toString(d.ingestedAt) AS cursorIngestedAt,
+          d.spanType AS spanType,
+          toString(d.startedAt) AS startedAt,
+          d.traceId AS traceId,
+          d.spanId AS spanId,
+          d.dedupeKey AS dedupeKey
         FROM ${TABLE_TRACE_BRANCHES_DELTA} d
         INNER JOIN ${TABLE_TRACE_BRANCHES} b
           ON b.spanType = d.spanType
@@ -519,12 +646,54 @@ async function getBranchLiveCursor(
          AND b.spanId = d.spanId
          AND b.dedupeKey = d.dedupeKey
         ${whereClause}
+        ORDER BY d.ingestedAt DESC, d.spanType DESC, d.startedAt DESC, d.traceId DESC, d.spanId DESC, d.dedupeKey DESC
+        LIMIT 1
       `,
       query_params: params,
       format: 'JSONEachRow',
       clickhouse_settings: CH_SETTINGS,
     })
-  ).json()) as Array<{ cursorId?: string | null }>;
+  ).json()) as Array<{
+    cursorIngestedAt?: string;
+    spanType?: string;
+    startedAt?: string;
+    traceId?: string;
+    spanId?: string;
+    dedupeKey?: string;
+  }>;
 
-  return encodeLiveCursor(rows[0]?.cursorId ?? null);
+  const row = rows[0];
+  if (!row?.cursorIngestedAt || !row.spanType || !row.startedAt || !row.traceId || !row.spanId || !row.dedupeKey) {
+    return null;
+  }
+
+  return encodeLiveCursor({
+    version: 1,
+    kind: 'branch',
+    ingestedAt: row.cursorIngestedAt,
+    spanType: row.spanType,
+    startedAt: row.startedAt,
+    traceId: row.traceId,
+    spanId: row.spanId,
+    dedupeKey: row.dedupeKey,
+  });
+}
+
+function buildBranchCursor(row: BranchDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
+  if (strategy === 'serial') {
+    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+  }
+
+  return row.cursorIngestedAt
+    ? encodeLiveCursor({
+        version: 1,
+        kind: 'branch',
+        ingestedAt: row.cursorIngestedAt,
+        spanType: row.spanType,
+        startedAt: row.startedAt,
+        traceId: row.traceId,
+        spanId: row.spanId,
+        dedupeKey: row.dedupeKey,
+      })
+    : null;
 }

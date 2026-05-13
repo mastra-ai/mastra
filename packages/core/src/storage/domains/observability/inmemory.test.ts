@@ -705,6 +705,7 @@ describe('ObservabilityInMemory', () => {
     }
 
     it('hides delta behavior when the feature flag is absent', async () => {
+      const hadFlag = coreFeatures.has('observability-delta-polling');
       coreFeatures.delete('observability-delta-polling');
 
       try {
@@ -717,7 +718,11 @@ describe('ObservabilityInMemory', () => {
           'does not support observability delta polling',
         );
       } finally {
-        coreFeatures.add('observability-delta-polling');
+        if (hadFlag) {
+          coreFeatures.add('observability-delta-polling');
+        } else {
+          coreFeatures.delete('observability-delta-polling');
+        }
       }
     });
 

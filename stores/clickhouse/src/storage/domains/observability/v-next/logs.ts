@@ -5,7 +5,16 @@ import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastr
 import { TABLE_LOG_EVENTS, TABLE_LOG_EVENTS_DELTA } from './ddl';
 import { buildLogsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, logRecordToRow, rowToLogRecord } from './helpers';
-import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import {
+  assertCursorKind,
+  assertDeltaPollingSupported,
+  buildTupleCursorFilter,
+  decodeLiveCursor,
+  deltaPollingFeatureEnabled,
+  encodeLiveCursor,
+  invalidLiveCursorError,
+} from './polling';
 
 export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreateLogsArgs): Promise<void> {
   if (args.logs.length === 0) return;
@@ -18,18 +27,22 @@ export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreat
   });
 }
 
-export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Promise<ListLogsResponse> {
+export async function listLogs(
+  client: ClickHouseClient,
+  args: ListLogsArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListLogsResponse> {
   const parsed = listLogsArgsSchema.parse(args);
-  const liveCursorEnabled = deltaPollingFeatureEnabled();
+  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
   const filter = buildLogsFilterConditions(parsed.filters, 'l');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'l');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 
   if (parsed.mode === 'delta') {
-    assertDeltaPollingEnabled();
+    assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getLogsLiveCursor(client, whereClause, filter.params);
+    const currentLiveCursor = await getLogsLiveCursor(client, whereClause, filter.params, strategy);
     if (parsed.after === undefined) {
       return {
         logs: [],
@@ -38,31 +51,24 @@ export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Pr
       };
     }
 
-    const rows = (await (
-      await client.query({
-        query: `
-          SELECT
-            l.* EXCEPT(timestamp, logId),
-            l.timestamp AS timestamp,
-            l.logId AS logId,
-            toString(d.cursorId) AS cursorId
-          FROM ${TABLE_LOG_EVENTS_DELTA} d
-          INNER JOIN ${TABLE_LOG_EVENTS} l
-            ON l.timestamp = d.timestamp
-           AND l.logId = d.logId
-          ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
-          ORDER BY d.cursorId ASC, l.logId ASC
-          LIMIT {fetchLimit:UInt32}
-        `,
-        query_params: {
-          ...filter.params,
-          afterCursor: decodeLiveCursor(parsed.after),
-          fetchLimit: parsed.limit + 1,
-        },
-        format: 'JSONEachRow',
-        clickhouse_settings: CH_SETTINGS,
-      })
-    ).json()) as Array<Record<string, any> & { cursorId?: string }>;
+    const afterCursor = decodeLiveCursor(parsed.after);
+    const rows =
+      afterCursor.kind === 'serial'
+        ? await queryLogsAfterSerialCursor(
+            client,
+            whereClause,
+            filter.params,
+            parsed.limit,
+            strategy,
+            afterCursor.cursorId,
+          )
+        : await queryLogsAfterTupleCursor(
+            client,
+            whereClause,
+            filter.params,
+            parsed.limit,
+            assertCursorKind(afterCursor, 'log'),
+          );
 
     const visibleRows = rows.slice(0, parsed.limit);
 
@@ -70,9 +76,7 @@ export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Pr
       logs: visibleRows.map(rowToLogRecord),
       delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
       liveCursor:
-        visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+        visibleRows.length > 0 ? buildLogsCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
     };
   }
 
@@ -114,30 +118,171 @@ export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Pr
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     logs: rows.map(rowToLogRecord),
-    ...(liveCursorEnabled ? { liveCursor: await getLogsLiveCursor(client, whereClause, filter.params) } : {}),
+    ...(liveCursorEnabled ? { liveCursor: await getLogsLiveCursor(client, whereClause, filter.params, strategy) } : {}),
   };
+}
+
+type LogDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  cursorIngestedAt?: string;
+  timestamp: string;
+  logId: string;
+};
+
+async function queryLogsAfterSerialCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  strategy: ClickHouseDeltaCursorStrategy,
+  cursorId: string,
+): Promise<LogDeltaRow[]> {
+  if (strategy !== 'serial') {
+    throw invalidLiveCursorError();
+  }
+
+  return (await (
+    await client.query({
+      query: `
+        SELECT
+          l.* EXCEPT(timestamp, logId),
+          l.timestamp AS timestamp,
+          l.logId AS logId,
+          toString(d.cursorId) AS cursorId,
+          toString(d.ingestedAt) AS cursorIngestedAt
+        FROM ${TABLE_LOG_EVENTS_DELTA} d
+        INNER JOIN ${TABLE_LOG_EVENTS} l
+          ON l.timestamp = d.timestamp
+         AND l.logId = d.logId
+        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ORDER BY d.cursorId ASC, l.logId ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        afterCursor: cursorId,
+        fetchLimit: limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as LogDeltaRow[];
+}
+
+async function queryLogsAfterTupleCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'log' }>,
+): Promise<LogDeltaRow[]> {
+  const tupleFilter = buildTupleCursorFilter([
+    { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
+    { expr: 'd.timestamp', param: 'afterTimestamp', type: `DateTime64(3, 'UTC')`, value: afterCursor.timestamp },
+    { expr: 'd.logId', param: 'afterLogId', type: 'String', value: afterCursor.logId },
+  ]);
+
+  return (await (
+    await client.query({
+      query: `
+        SELECT
+          l.* EXCEPT(timestamp, logId),
+          l.timestamp AS timestamp,
+          l.logId AS logId,
+          toString(d.ingestedAt) AS cursorIngestedAt
+        FROM ${TABLE_LOG_EVENTS_DELTA} d
+        INNER JOIN ${TABLE_LOG_EVENTS} l
+          ON l.timestamp = d.timestamp
+         AND l.logId = d.logId
+        ${whereClause ? `${whereClause} AND ${tupleFilter.clause}` : `WHERE ${tupleFilter.clause}`}
+        ORDER BY d.ingestedAt ASC, d.timestamp ASC, d.logId ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        ...tupleFilter.params,
+        fetchLimit: limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as LogDeltaRow[];
 }
 
 async function getLogsLiveCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
+  strategy: ClickHouseDeltaCursorStrategy,
 ): Promise<string | null> {
+  if (strategy === 'serial') {
+    const rows = (await (
+      await client.query({
+        query: `
+          SELECT toString(max(d.cursorId)) AS cursorId
+          FROM ${TABLE_LOG_EVENTS_DELTA} d
+          INNER JOIN ${TABLE_LOG_EVENTS} l
+            ON l.timestamp = d.timestamp
+           AND l.logId = d.logId
+          ${whereClause}
+        `,
+        query_params: params,
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<{ cursorId?: string | null }>;
+
+    const cursorId = rows[0]?.cursorId ?? null;
+    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+  }
+
   const rows = (await (
     await client.query({
       query: `
-        SELECT toString(max(d.cursorId)) AS cursorId
+        SELECT
+          toString(d.ingestedAt) AS cursorIngestedAt,
+          toString(d.timestamp) AS timestamp,
+          d.logId AS logId
         FROM ${TABLE_LOG_EVENTS_DELTA} d
         INNER JOIN ${TABLE_LOG_EVENTS} l
           ON l.timestamp = d.timestamp
          AND l.logId = d.logId
         ${whereClause}
+        ORDER BY d.ingestedAt DESC, d.timestamp DESC, d.logId DESC
+        LIMIT 1
       `,
       query_params: params,
       format: 'JSONEachRow',
       clickhouse_settings: CH_SETTINGS,
     })
-  ).json()) as Array<{ cursorId?: string | null }>;
+  ).json()) as Array<{ cursorIngestedAt?: string; timestamp?: string; logId?: string }>;
 
-  return encodeLiveCursor(rows[0]?.cursorId ?? null);
+  const row = rows[0];
+  if (!row?.cursorIngestedAt || !row.timestamp || !row.logId) {
+    return null;
+  }
+
+  return encodeLiveCursor({
+    version: 1,
+    kind: 'log',
+    ingestedAt: row.cursorIngestedAt,
+    timestamp: row.timestamp,
+    logId: row.logId,
+  });
+}
+
+function buildLogsCursor(row: LogDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
+  if (strategy === 'serial') {
+    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+  }
+
+  return row.cursorIngestedAt
+    ? encodeLiveCursor({
+        version: 1,
+        kind: 'log',
+        ingestedAt: row.cursorIngestedAt,
+        timestamp: row.timestamp,
+        logId: row.logId,
+      })
+    : null;
 }

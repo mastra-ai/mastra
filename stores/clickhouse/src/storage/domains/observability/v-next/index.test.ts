@@ -14,7 +14,7 @@ import { createClient } from '@clickhouse/client';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALL_MIGRATIONS, buildRetentionDDL, buildRetentionEntries, parseTtlExpression } from './ddl';
+import { ALL_MIGRATIONS, buildAllTableDDL, buildRetentionDDL, buildRetentionEntries, parseTtlExpression } from './ddl';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -51,6 +51,26 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   describe('delta polling', () => {
+    async function withTupleStorage<T>(
+      run: (tupleStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,
+    ): Promise<T> {
+      const tupleStorage = new ObservabilityStorageClickhouseVNext({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        deltaCursorStrategy: 'tuple',
+      });
+
+      await tupleStorage.init();
+      await tupleStorage.dangerouslyClearAll();
+
+      try {
+        return await run(tupleStorage);
+      } finally {
+        await tupleStorage.dangerouslyClearAll();
+      }
+    }
+
     it('advertises delta list capabilities when the feature is enabled', () => {
       expect(storage.getListCapabilities()).toEqual({
         delta: {
@@ -530,6 +550,395 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       );
       expect(delta.feedback.map(feedback => feedback.feedbackId)).toEqual(['delta-feedback-2']);
       expect(delta.liveCursor).toBeTruthy();
+    });
+
+    it('uses serial-backed delta tables when generateSerialID is available at runtime', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const result = await client.query({
+        query: `
+          SELECT create_table_query
+          FROM system.tables
+          WHERE database = currentDatabase()
+            AND name = 'mastra_log_events_delta'
+        `,
+        format: 'JSONEachRow',
+      });
+      const rows = (await result.json()) as Array<{ create_table_query?: string }>;
+      const ddl = rows[0]?.create_table_query ?? '';
+      await client.close();
+
+      expect(ddl).toContain(`generateSerialID('mastra_log_events_delta_cursor')`);
+      expect(ddl).toContain(`DateTime64(9, 'UTC') DEFAULT now64(9, 'UTC')`);
+      expect(ddl).toContain('ORDER BY (cursorId, timestamp, logId)');
+    });
+
+    it('builds serial-backed delta DDL when explicitly requested', () => {
+      const serialDdl = buildAllTableDDL('serial').join('\n');
+      const tupleDdl = buildAllTableDDL('tuple').join('\n');
+
+      expect(serialDdl).toContain(`generateSerialID('mastra_log_events_delta_cursor')`);
+      expect(serialDdl).toContain(`generateSerialID('mastra_trace_roots_delta_cursor')`);
+      expect(tupleDdl).not.toContain('generateSerialID(');
+    });
+
+    it('supports tuple-mode delta polling for traces when forced', async () => {
+      await withTupleStorage(async tupleStorage => {
+        await tupleStorage.createSpan({
+          span: {
+            traceId: 'tuple-trace-1',
+            spanId: 'tuple-trace-root-1',
+            parentSpanId: null,
+            name: 'tuple-trace-root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'tuple-trace-agent',
+            entityName: 'tuple-trace-agent',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'tuple',
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-08T00:00:00Z'),
+            endedAt: new Date('2026-05-08T00:00:01Z'),
+          },
+        });
+
+        const page = await waitForValue(
+          () => tupleStorage.listTraces({ filters: { entityName: 'tuple-trace-agent' } }),
+          result => result.spans.length === 1 && typeof result.liveCursor === 'string',
+        );
+
+        await tupleStorage.createSpan({
+          span: {
+            traceId: 'tuple-trace-2',
+            spanId: 'tuple-trace-root-2',
+            parentSpanId: null,
+            name: 'tuple-trace-root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'tuple-trace-agent',
+            entityName: 'tuple-trace-agent',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'tuple',
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-08T00:00:02Z'),
+            endedAt: new Date('2026-05-08T00:00:03Z'),
+          },
+        });
+
+        const delta = await waitForValue(
+          () =>
+            tupleStorage.listTraces({
+              mode: 'delta',
+              after: page.liveCursor!,
+              filters: { entityName: 'tuple-trace-agent' },
+            }),
+          result => result.spans.length === 1,
+        );
+        expect(delta.spans.map(span => span.traceId)).toEqual(['tuple-trace-2']);
+      });
+    });
+
+    it('supports tuple-mode delta polling for branches when forced', async () => {
+      await withTupleStorage(async tupleStorage => {
+        await tupleStorage.batchCreateSpans({
+          records: [
+            {
+              traceId: 'tuple-branch-trace-1',
+              spanId: 'tuple-branch-root-1',
+              parentSpanId: null,
+              name: 'root',
+              spanType: SpanType.WORKFLOW_RUN,
+              isEvent: false,
+              entityType: EntityType.WORKFLOW_RUN,
+              entityId: 'tuple-wf',
+              entityName: 'tuple-wf',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:00Z'),
+              endedAt: new Date('2026-05-09T00:00:01Z'),
+            },
+            {
+              traceId: 'tuple-branch-trace-1',
+              spanId: 'tuple-branch-anchor-1',
+              parentSpanId: 'tuple-branch-root-1',
+              name: 'observer',
+              spanType: SpanType.AGENT_RUN,
+              isEvent: false,
+              entityType: EntityType.AGENT,
+              entityId: 'tuple-branch-agent',
+              entityName: 'tuple-branch-agent',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:00.500Z'),
+              endedAt: new Date('2026-05-09T00:00:00.800Z'),
+            },
+          ],
+        });
+
+        const page = await waitForValue(
+          () => tupleStorage.listBranches({ filters: { entityName: 'tuple-branch-agent' } }),
+          result => result.branches.length === 1 && typeof result.liveCursor === 'string',
+        );
+
+        await tupleStorage.batchCreateSpans({
+          records: [
+            {
+              traceId: 'tuple-branch-trace-2',
+              spanId: 'tuple-branch-root-2',
+              parentSpanId: null,
+              name: 'root',
+              spanType: SpanType.WORKFLOW_RUN,
+              isEvent: false,
+              entityType: EntityType.WORKFLOW_RUN,
+              entityId: 'tuple-wf',
+              entityName: 'tuple-wf',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:02Z'),
+              endedAt: new Date('2026-05-09T00:00:03Z'),
+            },
+            {
+              traceId: 'tuple-branch-trace-2',
+              spanId: 'tuple-branch-anchor-2',
+              parentSpanId: 'tuple-branch-root-2',
+              name: 'observer',
+              spanType: SpanType.AGENT_RUN,
+              isEvent: false,
+              entityType: EntityType.AGENT,
+              entityId: 'tuple-branch-agent',
+              entityName: 'tuple-branch-agent',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:02.500Z'),
+              endedAt: new Date('2026-05-09T00:00:02.800Z'),
+            },
+          ],
+        });
+
+        const delta = await waitForValue(
+          () =>
+            tupleStorage.listBranches({
+              mode: 'delta',
+              after: page.liveCursor!,
+              filters: { entityName: 'tuple-branch-agent' },
+            }),
+          result => result.branches.length === 1,
+        );
+        expect(delta.branches.map(branch => branch.traceId)).toEqual(['tuple-branch-trace-2']);
+      });
+    });
+
+    it('supports tuple-mode delta polling for logs when forced', async () => {
+      await withTupleStorage(async tupleStorage => {
+        await tupleStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'tuple-log-1',
+              timestamp: new Date('2026-05-10T00:00:00Z'),
+              level: 'info',
+              message: 'tuple log 1',
+              data: null,
+              traceId: 'tuple-log-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const page = await waitForValue(
+          () => tupleStorage.listLogs({ filters: { traceId: 'tuple-log-trace' } }),
+          result => result.logs.length === 1 && typeof result.liveCursor === 'string',
+        );
+
+        await tupleStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'tuple-log-2',
+              timestamp: new Date('2026-05-10T00:00:01Z'),
+              level: 'info',
+              message: 'tuple log 2',
+              data: null,
+              traceId: 'tuple-log-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const delta = await waitForValue(
+          () =>
+            tupleStorage.listLogs({
+              mode: 'delta',
+              after: page.liveCursor!,
+              filters: { traceId: 'tuple-log-trace' },
+            }),
+          result => result.logs.length === 1,
+        );
+        expect(delta.logs.map(log => log.logId)).toEqual(['tuple-log-2']);
+      });
+    });
+
+    it('keeps using tuple mode after reinit on a Keeper-enabled server when tuple delta tables already exist', async () => {
+      const tupleStorage = new ObservabilityStorageClickhouseVNext({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        deltaCursorStrategy: 'tuple',
+      });
+      await tupleStorage.init();
+      await tupleStorage.dangerouslyClearAll();
+
+      try {
+        await tupleStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'tuple-upgrade-log-1',
+              timestamp: new Date('2026-05-11T00:00:00Z'),
+              level: 'info',
+              message: 'tuple upgrade log 1',
+              data: null,
+              traceId: 'tuple-upgrade-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const page = await waitForValue(
+          () => tupleStorage.listLogs({ filters: { traceId: 'tuple-upgrade-trace' } }),
+          result => result.logs.length === 1 && typeof result.liveCursor === 'string',
+        );
+
+        const defaultStorage = new ObservabilityStorageClickhouseVNext({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        await defaultStorage.init();
+
+        await defaultStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'tuple-upgrade-log-2',
+              timestamp: new Date('2026-05-11T00:00:01Z'),
+              level: 'info',
+              message: 'tuple upgrade log 2',
+              data: null,
+              traceId: 'tuple-upgrade-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const delta = await waitForValue(
+          () =>
+            defaultStorage.listLogs({
+              mode: 'delta',
+              after: page.liveCursor!,
+              filters: { traceId: 'tuple-upgrade-trace' },
+            }),
+          result => result.logs.length === 1,
+        );
+        expect(delta.logs.map(log => log.logId)).toEqual(['tuple-upgrade-log-2']);
+      } finally {
+        await tupleStorage.dangerouslyClearAll();
+      }
     });
   });
 

@@ -12,7 +12,16 @@ import type { GetRootSpanArgs, GetRootSpanResponse, ListTracesArgs, ListTracesRe
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from './ddl';
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
 import { CH_SETTINGS, rowToSpanRecord } from './helpers';
-import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import {
+  assertCursorKind,
+  assertDeltaPollingSupported,
+  buildTupleCursorFilter,
+  decodeLiveCursor,
+  deltaPollingFeatureEnabled,
+  encodeLiveCursor,
+  invalidLiveCursorError,
+} from './polling';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -58,7 +67,11 @@ export async function getRootSpan(
  *
  * hasChildError is handled via EXISTS subquery against span_events.
  */
-export async function listTraces(client: ClickHouseClient, args: ListTracesArgs): Promise<ListTracesResponse> {
+export async function listTraces(
+  client: ClickHouseClient,
+  args: ListTracesArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListTracesResponse> {
   // Parse args through schema to apply defaults
   const { mode, filters, pagination, orderBy, after, limit } = listTracesArgsSchema.parse(args);
   const page = pagination?.page ?? 0;
@@ -87,12 +100,12 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const liveCursorEnabled = deltaPollingFeatureEnabled();
+  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
 
   if (mode === 'delta') {
-    assertDeltaPollingEnabled();
+    assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getTraceLiveCursor(client, whereClause, params);
+    const currentLiveCursor = await getTraceLiveCursor(client, whereClause, params, strategy);
     if (after === undefined) {
       return {
         spans: [],
@@ -101,33 +114,11 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
       };
     }
 
-    const rows = (await (
-      await client.query({
-        query: `
-          SELECT
-            r.* EXCEPT(startedAt, traceId, dedupeKey),
-            r.startedAt AS startedAt,
-            r.traceId AS traceId,
-            r.dedupeKey AS dedupeKey,
-            toString(d.cursorId) AS cursorId
-          FROM ${TABLE_TRACE_ROOTS_DELTA} d
-          INNER JOIN ${TABLE_TRACE_ROOTS} r
-            ON r.startedAt = d.startedAt
-           AND r.traceId = d.traceId
-           AND r.dedupeKey = d.dedupeKey
-          ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
-          ORDER BY d.cursorId ASC, r.dedupeKey ASC
-          LIMIT {fetchLimit:UInt32}
-        `,
-        query_params: {
-          ...params,
-          afterCursor: decodeLiveCursor(after),
-          fetchLimit: limit + 1,
-        },
-        format: 'JSONEachRow',
-        clickhouse_settings: CH_SETTINGS,
-      })
-    ).json()) as Array<Record<string, any> & { cursorId?: string }>;
+    const afterCursor = decodeLiveCursor(after);
+    const rows =
+      afterCursor.kind === 'serial'
+        ? await queryTracesAfterSerialCursor(client, whereClause, params, limit, strategy, afterCursor.cursorId)
+        : await queryTracesAfterTupleCursor(client, whereClause, params, limit, assertCursorKind(afterCursor, 'trace'));
 
     const visibleRows = rows.slice(0, limit);
 
@@ -135,9 +126,7 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
       spans: toTraceSpans(visibleRows.map(rowToSpanRecord)),
       delta: { limit, hasMore: rows.length > limit },
       liveCursor:
-        visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+        visibleRows.length > 0 ? buildTraceCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
     };
   }
 
@@ -205,31 +194,182 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
       hasMore: (page + 1) * perPage < total,
     },
     spans: toTraceSpans(spans),
-    ...(liveCursorEnabled ? { liveCursor: await getTraceLiveCursor(client, whereClause, params) } : {}),
+    ...(liveCursorEnabled ? { liveCursor: await getTraceLiveCursor(client, whereClause, params, strategy) } : {}),
   };
+}
+
+type TraceDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  cursorIngestedAt?: string;
+  startedAt: string;
+  traceId: string;
+  dedupeKey: string;
+};
+
+async function queryTracesAfterSerialCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  strategy: ClickHouseDeltaCursorStrategy,
+  cursorId: string,
+): Promise<TraceDeltaRow[]> {
+  if (strategy !== 'serial') {
+    throw invalidLiveCursorError();
+  }
+
+  return (await (
+    await client.query({
+      query: `
+        SELECT
+          r.* EXCEPT(startedAt, traceId, dedupeKey),
+          r.startedAt AS startedAt,
+          r.traceId AS traceId,
+          r.dedupeKey AS dedupeKey,
+          toString(d.cursorId) AS cursorId,
+          toString(d.ingestedAt) AS cursorIngestedAt
+        FROM ${TABLE_TRACE_ROOTS_DELTA} d
+        INNER JOIN ${TABLE_TRACE_ROOTS} r
+          ON r.startedAt = d.startedAt
+         AND r.traceId = d.traceId
+         AND r.dedupeKey = d.dedupeKey
+        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ORDER BY d.cursorId ASC, r.dedupeKey ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        afterCursor: cursorId,
+        fetchLimit: limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as TraceDeltaRow[];
+}
+
+async function queryTracesAfterTupleCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'trace' }>,
+): Promise<TraceDeltaRow[]> {
+  const tupleFilter = buildTupleCursorFilter([
+    { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
+    { expr: 'd.startedAt', param: 'afterStartedAt', type: `DateTime64(3, 'UTC')`, value: afterCursor.startedAt },
+    { expr: 'd.traceId', param: 'afterTraceId', type: 'String', value: afterCursor.traceId },
+    { expr: 'd.dedupeKey', param: 'afterDedupeKey', type: 'String', value: afterCursor.dedupeKey },
+  ]);
+
+  return (await (
+    await client.query({
+      query: `
+        SELECT
+          r.* EXCEPT(startedAt, traceId, dedupeKey),
+          r.startedAt AS startedAt,
+          r.traceId AS traceId,
+          r.dedupeKey AS dedupeKey,
+          toString(d.ingestedAt) AS cursorIngestedAt
+        FROM ${TABLE_TRACE_ROOTS_DELTA} d
+        INNER JOIN ${TABLE_TRACE_ROOTS} r
+          ON r.startedAt = d.startedAt
+         AND r.traceId = d.traceId
+         AND r.dedupeKey = d.dedupeKey
+        ${whereClause ? `${whereClause} AND ${tupleFilter.clause}` : `WHERE ${tupleFilter.clause}`}
+        ORDER BY d.ingestedAt ASC, d.startedAt ASC, d.traceId ASC, d.dedupeKey ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        ...tupleFilter.params,
+        fetchLimit: limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as TraceDeltaRow[];
 }
 
 async function getTraceLiveCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
+  strategy: ClickHouseDeltaCursorStrategy,
 ): Promise<string | null> {
+  if (strategy === 'serial') {
+    const rows = (await (
+      await client.query({
+        query: `
+          SELECT toString(max(d.cursorId)) AS cursorId
+          FROM ${TABLE_TRACE_ROOTS_DELTA} d
+          INNER JOIN ${TABLE_TRACE_ROOTS} r
+            ON r.startedAt = d.startedAt
+           AND r.traceId = d.traceId
+           AND r.dedupeKey = d.dedupeKey
+          ${whereClause}
+        `,
+        query_params: params,
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<{ cursorId?: string | null }>;
+
+    const cursorId = rows[0]?.cursorId ?? null;
+    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+  }
+
   const rows = (await (
     await client.query({
       query: `
-        SELECT toString(max(d.cursorId)) AS cursorId
+        SELECT
+          toString(d.ingestedAt) AS cursorIngestedAt,
+          toString(d.startedAt) AS startedAt,
+          d.traceId AS traceId,
+          d.dedupeKey AS dedupeKey
         FROM ${TABLE_TRACE_ROOTS_DELTA} d
         INNER JOIN ${TABLE_TRACE_ROOTS} r
           ON r.startedAt = d.startedAt
          AND r.traceId = d.traceId
          AND r.dedupeKey = d.dedupeKey
         ${whereClause}
+        ORDER BY d.ingestedAt DESC, d.startedAt DESC, d.traceId DESC, d.dedupeKey DESC
+        LIMIT 1
       `,
       query_params: params,
       format: 'JSONEachRow',
       clickhouse_settings: CH_SETTINGS,
     })
-  ).json()) as Array<{ cursorId?: string | null }>;
+  ).json()) as Array<{ cursorIngestedAt?: string; startedAt?: string; traceId?: string; dedupeKey?: string }>;
 
-  return encodeLiveCursor(rows[0]?.cursorId ?? null);
+  const row = rows[0];
+  if (!row?.cursorIngestedAt || !row.startedAt || !row.traceId || !row.dedupeKey) {
+    return null;
+  }
+
+  return encodeLiveCursor({
+    version: 1,
+    kind: 'trace',
+    ingestedAt: row.cursorIngestedAt,
+    startedAt: row.startedAt,
+    traceId: row.traceId,
+    dedupeKey: row.dedupeKey,
+  });
+}
+
+function buildTraceCursor(row: TraceDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
+  if (strategy === 'serial') {
+    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+  }
+
+  return row.cursorIngestedAt
+    ? encodeLiveCursor({
+        version: 1,
+        kind: 'trace',
+        ingestedAt: row.cursorIngestedAt,
+        startedAt: row.startedAt,
+        traceId: row.traceId,
+        dedupeKey: row.dedupeKey,
+      })
+    : null;
 }

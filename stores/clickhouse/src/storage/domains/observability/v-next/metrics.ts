@@ -28,7 +28,16 @@ import { TABLE_METRIC_EVENTS, TABLE_METRIC_EVENTS_DELTA, TABLE_DISCOVERY_VALUES,
 import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
-import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
+import type { ClickHouseDeltaCursorStrategy, ClickHouseLiveCursor } from './polling';
+import {
+  assertCursorKind,
+  assertDeltaPollingSupported,
+  buildTupleCursorFilter,
+  decodeLiveCursor,
+  deltaPollingFeatureEnabled,
+  encodeLiveCursor,
+  invalidLiveCursorError,
+} from './polling';
 
 // ============================================================================
 // Helpers
@@ -258,18 +267,22 @@ export async function batchCreateMetrics(client: ClickHouseClient, args: BatchCr
 // List
 // ============================================================================
 
-export async function listMetrics(client: ClickHouseClient, args: ListMetricsArgs): Promise<ListMetricsResponse> {
+export async function listMetrics(
+  client: ClickHouseClient,
+  args: ListMetricsArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListMetricsResponse> {
   const parsed = listMetricsArgsSchema.parse(args);
-  const liveCursorEnabled = deltaPollingFeatureEnabled();
+  const liveCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
   const filter = buildMetricsFilterConditions(parsed.filters, 'm');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'm');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 
   if (parsed.mode === 'delta') {
-    assertDeltaPollingEnabled();
+    assertDeltaPollingSupported(strategy);
 
-    const currentLiveCursor = await getMetricsLiveCursor(client, whereClause, filter.params);
+    const currentLiveCursor = await getMetricsLiveCursor(client, whereClause, filter.params, strategy);
     if (parsed.after === undefined) {
       return {
         metrics: [],
@@ -278,30 +291,24 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
       };
     }
 
-    const rows = await queryJson<Record<string, any> & { cursorId?: string }>(
-      client,
-      `
-        SELECT
-          m.* EXCEPT(name, timestamp, metricId),
-          m.name AS name,
-          m.timestamp AS timestamp,
-          m.metricId AS metricId,
-          toString(d.cursorId) AS cursorId
-        FROM ${TABLE_METRIC_EVENTS_DELTA} d
-        INNER JOIN ${TABLE_METRIC_EVENTS} m
-          ON m.name = d.name
-         AND m.timestamp = d.timestamp
-         AND m.metricId = d.metricId
-        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
-        ORDER BY d.cursorId ASC, m.metricId ASC
-        LIMIT {fetchLimit:UInt32}
-      `,
-      {
-        ...filter.params,
-        afterCursor: decodeLiveCursor(parsed.after),
-        fetchLimit: parsed.limit + 1,
-      },
-    );
+    const afterCursor = decodeLiveCursor(parsed.after);
+    const rows =
+      afterCursor.kind === 'serial'
+        ? await queryMetricsAfterSerialCursor(
+            client,
+            whereClause,
+            filter.params,
+            parsed.limit,
+            strategy,
+            afterCursor.cursorId,
+          )
+        : await queryMetricsAfterTupleCursor(
+            client,
+            whereClause,
+            filter.params,
+            parsed.limit,
+            assertCursorKind(afterCursor, 'metric'),
+          );
 
     const visibleRows = rows.slice(0, parsed.limit);
 
@@ -309,9 +316,7 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
       metrics: visibleRows.map(rowToMetricRecord),
       delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
       liveCursor:
-        visibleRows.length > 0
-          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
-          : currentLiveCursor,
+        visibleRows.length > 0 ? buildMetricsCursor(visibleRows[visibleRows.length - 1]!, strategy) : currentLiveCursor,
     };
   }
 
@@ -337,30 +342,166 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     metrics: rows.map(rowToMetricRecord),
-    ...(liveCursorEnabled ? { liveCursor: await getMetricsLiveCursor(client, whereClause, filter.params) } : {}),
+    ...(liveCursorEnabled
+      ? { liveCursor: await getMetricsLiveCursor(client, whereClause, filter.params, strategy) }
+      : {}),
   };
+}
+
+type MetricDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  cursorIngestedAt?: string;
+  name: string;
+  timestamp: string;
+  metricId: string;
+};
+
+async function queryMetricsAfterSerialCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  strategy: ClickHouseDeltaCursorStrategy,
+  cursorId: string,
+): Promise<MetricDeltaRow[]> {
+  if (strategy !== 'serial') {
+    throw invalidLiveCursorError();
+  }
+
+  return await queryJson<MetricDeltaRow>(
+    client,
+    `
+      SELECT
+        m.* EXCEPT(name, timestamp, metricId),
+        m.name AS name,
+        m.timestamp AS timestamp,
+        m.metricId AS metricId,
+        toString(d.cursorId) AS cursorId,
+        toString(d.ingestedAt) AS cursorIngestedAt
+      FROM ${TABLE_METRIC_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_METRIC_EVENTS} m
+        ON m.name = d.name
+       AND m.timestamp = d.timestamp
+       AND m.metricId = d.metricId
+      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ORDER BY d.cursorId ASC, m.metricId ASC
+      LIMIT {fetchLimit:UInt32}
+    `,
+    { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
+  );
+}
+
+async function queryMetricsAfterTupleCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  afterCursor: Extract<ClickHouseLiveCursor, { kind: 'metric' }>,
+): Promise<MetricDeltaRow[]> {
+  const tupleFilter = buildTupleCursorFilter([
+    { expr: 'd.ingestedAt', param: 'afterIngestedAt', type: `DateTime64(9, 'UTC')`, value: afterCursor.ingestedAt },
+    { expr: 'd.name', param: 'afterName', type: 'String', value: afterCursor.name },
+    { expr: 'd.timestamp', param: 'afterTimestamp', type: `DateTime64(3, 'UTC')`, value: afterCursor.timestamp },
+    { expr: 'd.metricId', param: 'afterMetricId', type: 'String', value: afterCursor.metricId },
+  ]);
+
+  return await queryJson<MetricDeltaRow>(
+    client,
+    `
+      SELECT
+        m.* EXCEPT(name, timestamp, metricId),
+        m.name AS name,
+        m.timestamp AS timestamp,
+        m.metricId AS metricId,
+        toString(d.ingestedAt) AS cursorIngestedAt
+      FROM ${TABLE_METRIC_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_METRIC_EVENTS} m
+        ON m.name = d.name
+       AND m.timestamp = d.timestamp
+       AND m.metricId = d.metricId
+      ${whereClause ? `${whereClause} AND ${tupleFilter.clause}` : `WHERE ${tupleFilter.clause}`}
+      ORDER BY d.ingestedAt ASC, d.name ASC, d.timestamp ASC, d.metricId ASC
+      LIMIT {fetchLimit:UInt32}
+    `,
+    { ...params, ...tupleFilter.params, fetchLimit: limit + 1 },
+  );
 }
 
 async function getMetricsLiveCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
+  strategy: ClickHouseDeltaCursorStrategy,
 ): Promise<string | null> {
-  const rows = await queryJson<{ cursorId?: string | null }>(
+  if (strategy === 'serial') {
+    const rows = await queryJson<{ cursorId?: string | null }>(
+      client,
+      `
+        SELECT toString(max(d.cursorId)) AS cursorId
+        FROM ${TABLE_METRIC_EVENTS_DELTA} d
+        INNER JOIN ${TABLE_METRIC_EVENTS} m
+          ON m.name = d.name
+         AND m.timestamp = d.timestamp
+         AND m.metricId = d.metricId
+        ${whereClause}
+      `,
+      params,
+    );
+
+    const cursorId = rows[0]?.cursorId ?? null;
+    return cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId }) : null;
+  }
+
+  const rows = await queryJson<{ cursorIngestedAt?: string; name?: string; timestamp?: string; metricId?: string }>(
     client,
     `
-      SELECT toString(max(d.cursorId)) AS cursorId
+      SELECT
+        toString(d.ingestedAt) AS cursorIngestedAt,
+        d.name AS name,
+        toString(d.timestamp) AS timestamp,
+        d.metricId AS metricId
       FROM ${TABLE_METRIC_EVENTS_DELTA} d
       INNER JOIN ${TABLE_METRIC_EVENTS} m
         ON m.name = d.name
        AND m.timestamp = d.timestamp
        AND m.metricId = d.metricId
       ${whereClause}
+      ORDER BY d.ingestedAt DESC, d.name DESC, d.timestamp DESC, d.metricId DESC
+      LIMIT 1
     `,
     params,
   );
 
-  return encodeLiveCursor(rows[0]?.cursorId ?? null);
+  const row = rows[0];
+  if (!row?.cursorIngestedAt || !row.name || !row.timestamp || !row.metricId) {
+    return null;
+  }
+
+  return encodeLiveCursor({
+    version: 1,
+    kind: 'metric',
+    ingestedAt: row.cursorIngestedAt,
+    name: row.name,
+    timestamp: row.timestamp,
+    metricId: row.metricId,
+  });
+}
+
+function buildMetricsCursor(row: MetricDeltaRow, strategy: ClickHouseDeltaCursorStrategy): string | null {
+  if (strategy === 'serial') {
+    return row.cursorId ? encodeLiveCursor({ version: 1, kind: 'serial', cursorId: row.cursorId }) : null;
+  }
+
+  return row.cursorIngestedAt
+    ? encodeLiveCursor({
+        version: 1,
+        kind: 'metric',
+        ingestedAt: row.cursorIngestedAt,
+        name: row.name,
+        timestamp: row.timestamp,
+        metricId: row.metricId,
+      })
+    : null;
 }
 
 // ============================================================================

@@ -993,6 +993,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
       return {
         pagination: { total: 0, page, perPage, hasMore: false },
         branches: [],
+        ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
       };
     }
 
@@ -1049,6 +1050,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
+      ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
     };
   }
 

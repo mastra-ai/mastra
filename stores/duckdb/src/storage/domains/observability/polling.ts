@@ -28,6 +28,9 @@ export function normalizeCursorId(value: unknown): bigint | null {
   }
 
   if (typeof value === 'bigint') {
+    if (value < 0n) {
+      return null;
+    }
     return value;
   }
 
