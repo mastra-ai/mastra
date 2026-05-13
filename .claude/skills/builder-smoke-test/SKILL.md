@@ -315,6 +315,8 @@ route gated by an env var:
 
 The route is **only registered when `SMOKE_TEST_COOKIE_LEAK=1`** and is intentionally insecure — never enable it in a real project. The `WORKOS_COOKIE_PASSWORD` written by the scaffold is derived from `$PROJECT_DIR`, so the cookie value stays valid across `mastra dev` restarts within the same scaffold; you only need to repeat step 4 if you re-scaffold to a new directory.
 
+> **`/smoke-test/cookie` returns 404? Always an env-ordering issue.** The `apiRoutes` list is built once when `mastra dev` boots from `process.env.SMOKE_TEST_COOKIE_LEAK`. The flag has to be in `.env` **before** the boot — adding it after start has no effect until you restart. If you see a 404, run `grep SMOKE_TEST_COOKIE_LEAK "$PROJECT_DIR/.env"`, then stop and restart `mastra dev`. Don't pivot to "UI only" because of this.
+
 ### Seeding non-owner skills (Library Copy / non-owner flows)
 
 A fresh scaffold has zero skills, and everything created through the API

@@ -6,6 +6,8 @@ Star endpoints are documented in `packages/server/src/server/schemas/stars.ts` (
 
 Both star and unstar are idempotent — calling them twice returns the same body the second time. Stars are gated by the `stars` builder feature (404 if disabled).
 
+> **Field-name asymmetry.** The toggle endpoint (`PUT|DELETE /stored/{type}/:id/star`) returns `{ starred, starCount }`. The GET endpoint (`/stored/{type}/:id`) exposes the caller's star state as `isStarred` (alongside `starCount`). When asserting "is starred" on GET, check `isStarred`, not `starred`.
+
 ## Auth requirement
 
 **This section requires `--auth on`.** Stars are scoped per caller (the row in `stored_stars` is keyed on `(entityId, authorId)`). With `--auth off`, there is no caller to attach the star to and the route rejects with `401 Unauthorized`.
@@ -80,7 +82,7 @@ curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
 curl -s $BASE/stored/agents/$AGENT_ID -H "$SESSION" | jq .
 ```
 
-- [ ] GET response reflects the starred state for the caller (check whichever field the response schema exposes; record the actual JSON in the run report if you're unsure)
+- [ ] `isStarred` is `true` on the GET response
 - [ ] `starCount` matches the value from step 1
 
 ### 3. Unstar the agent
@@ -108,7 +110,7 @@ curl -s -X PUT $BASE/stored/skills/$SKILL_ID/star -H "$SESSION" | jq .
 curl -s $BASE/stored/skills/$SKILL_ID -H "$SESSION" | jq .
 ```
 
-- [ ] GET response reflects the starred state for the caller
+- [ ] `isStarred` is `true` on the GET response
 - [ ] `starCount` matches step 4
 
 ### 6. Unstar the skill

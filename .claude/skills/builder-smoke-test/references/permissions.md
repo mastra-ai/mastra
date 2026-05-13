@@ -42,7 +42,7 @@ Pass criteria per role for representative endpoints. The agent uses this to set 
 | `POST /stored/agents` (create)          | 200   | 200   | 200    | 403    |
 | `POST /stored/skills` (create)          | 200   | 200   | 200    | 403    |
 | `PATCH /stored/agents/:id` (own)        | 200   | 200   | 200    | 403    |
-| `PATCH /stored/agents/:id` (other's)    | 200   | 200   | 403    | 403    |
+| `PATCH /stored/agents/:id` (other's)    | 200   | 200   | 404    | 404    |
 | `DELETE /stored/agents/:id` (own)       | 200   | 200   | 403    | 403    |
 | `PATCH /stored/skills/:id` `visibility` | 200   | 200   | 200    | 403    |
 | `POST /stored/skills/:id/publish`       | 200   | 200   | 403    | 403    |
@@ -50,7 +50,7 @@ Pass criteria per role for representative endpoints. The agent uses this to set 
 | `GET /editor/builder/infrastructure`    | 200   | 200   | 200    | 200    |
 | `PUT /stored/agents/:id/star`           | 200   | 200   | 200    | 200    |
 
-Member create/PATCH on own works because the scaffold grants `stored-{agents,skills,workspaces}:write`. Publish/delete/share remain admin-only. Member PATCH on another author's record returns 403 via the ownership check, not the permission check.
+Member create/PATCH on own works because the scaffold grants `stored-{agents,skills,workspaces}:write`. Publish/delete/share remain admin-only. **Member PATCH on another author's record returns `404 Not Found`** — the visibility/ownership filter hides the row before the handler runs, so non-owners can't tell the difference between "doesn't exist" and "forbidden". This is the standard REST "don't reveal existence" pattern.
 
 ## Steps
 

@@ -76,13 +76,13 @@ curl -s -X PATCH $BASE/stored/workspaces/smoke-test-workspace \
 ### 5. Delete the Test Workspace
 
 ```bash
-curl -s -X DELETE $BASE/stored/workspaces/smoke-test-workspace | jq .
+curl -s -X DELETE $BASE/stored/workspaces/smoke-test-workspace -H "$SESSION" -o /dev/null -w "%{http_code}\n"
 ```
 
 **Verify:**
 
-- [ ] HTTP `200` or `204`
-- [ ] `GET /stored/workspaces/smoke-test-workspace` returns `404`
+- [ ] HTTP `200` or `204` for owner/admin; HTTP `403` for member/viewer (`stored-workspaces:delete` is admin-only — see `references/permissions.md`). On 403, mark "delete blocked by RBAC (expected)" and leave the test workspace in place; subsequent steps should accept its presence.
+- [ ] When delete succeeds, `GET /stored/workspaces/smoke-test-workspace` returns `404`
 
 ### 6. Verify Builder Workspace is Untouched
 

@@ -7,6 +7,8 @@ Test stored skill create, read, update, delete, visibility, publish, and filesys
 > **Pagination is 0-indexed.** `page=0` is the first page.
 
 > **Capability gate.** Steps 1, 3, 5, 7, 8 require `stored-skills:write`. The scaffold grants this to owner, admin, and member; viewer does not have it. Under `--role viewer`, mark those steps `n/a — role lacks stored-skills:write` and run only the read-side steps (2, 4 GET, 6, 9).
+>
+> **Member is narrower than admin for skills.** `stored-skills:publish` and `stored-skills:delete` are **not** granted to member in the scaffold — only owner/admin have them. Under `--role member`, any `POST /stored/skills/:id/publish` or `DELETE /stored/skills/:id` step should return `403 Missing required permission: stored-skills:{publish,delete}`. Treat that 403 as the expected outcome for member; don't file it. Member PATCH on a **different** author's row returns `404 Not Found` (ownership filter hides the row before the handler — see `references/permissions.md`).
 
 ## Endpoints
 
