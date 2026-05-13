@@ -232,7 +232,6 @@ jobs:
           path: e2e-tests/smoke/reports/api-junit.xml
           reporter: jest-junit
           fail-on-error: false
-          working-directory: e2e-tests/smoke
 
       - name: Publish UI test annotations
         if: always()
@@ -242,10 +241,10 @@ jobs:
           path: e2e-tests/smoke/reports/ui-junit.xml
           reporter: java-junit
           fail-on-error: false
-          working-directory: e2e-tests/smoke
 
       # ── Report to Slack ────────────────────────────────────────────────
       - name: Report to Slack
+        if: always()
         run: pnpm report:slack
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SMOKE_SLACK_BOT_TOKEN }}
