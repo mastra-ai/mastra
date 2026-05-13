@@ -15,8 +15,7 @@ import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai', 'openrouter']);
 
 const mock = createGatewayMock({ exactMatch: true });
 beforeAll(() => mock.start());

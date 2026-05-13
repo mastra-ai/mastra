@@ -34,17 +34,13 @@ export class MCPTool extends BaseResource {
    * @returns Promise containing the result of the tool execution.
    */
   execute(params: { data?: any; requestContext?: RequestContext }): Promise<any> {
-    const body: any = {};
+    const body: { data?: any; requestContext?: RequestContext } = {};
     if (params.data !== undefined) body.data = params.data;
-    // If data is not provided, the body might be empty or contain only requestContext.
-
-    if (params.requestContext !== undefined) {
-      body.requestContext = params.requestContext;
-    }
+    if (params.requestContext !== undefined) body.requestContext = params.requestContext;
 
     return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute`, {
       method: 'POST',
-      body: Object.keys(body).length > 0 ? body : undefined,
+      body,
     });
   }
 }

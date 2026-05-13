@@ -7,6 +7,8 @@ import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
 import { createTool } from '../tools';
 
+setupDummyApiKeys(getLLMTestMode(), ['anthropic']);
+
 // Anthropic only defers provider tool execution non-deterministically, so this
 // test must always run against the recorded response.
 const MODE = getLLMTestMode();

@@ -9,8 +9,7 @@ import { Agent } from '../../agent';
 import { createTool } from '../../tools';
 import type { Processor } from '../index';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

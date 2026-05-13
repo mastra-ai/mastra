@@ -11,16 +11,12 @@ import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
-config();
-
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['anthropic', 'google', 'openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

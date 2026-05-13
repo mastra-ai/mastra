@@ -1,5 +1,206 @@
 # @mastra/client-js
 
+## 1.18.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1)]:
+  - @mastra/core@1.33.1-alpha.0
+
+## 1.18.0
+
+### Minor Changes
+
+- Added experimental A2A Agent Card signature verification to `getAgentCard`. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
+
+  **Example**
+
+  ```ts
+  const card = await a2a.getAgentCard({
+    verifySignature: {
+      algorithms: ['ES256'],
+      keyProvider: async ({ kid, jku }) => {
+        return fetchTrustedPublicJwk({ kid, jku });
+      },
+    },
+  });
+  ```
+
+  When verification is configured, `client-js` now verifies signed Agent Cards when the server includes `signatures`. Unsigned cards are still returned unchanged.
+
+  This also adds the new exported types `GetAgentCardOptions`, `VerifyAgentCardSignatureOptions`, `AgentCardVerificationKey`, and `AgentCardSignatureKeyProviderInput`.
+
+- Added client, React, and Studio support for Agent signals in threaded chat. Threaded user messages now send through Agent signals, stream output is consumed from the thread subscription, echoed user messages are deduped by signal ID, file and image message contents are preserved, Studio can send follow-ups while a response is streaming, Studio subscribes to open threads so additional tabs can observe active streams, and the Studio stop button aborts the active thread subscription. React chat also falls back to legacy threaded streaming when it connects to a server or core version that does not support signal routes yet. ([#16338](https://github.com/mastra-ai/mastra/pull/16338))
+
+  ```ts
+  const { sendMessage } = useChat({ agentId, resourceId, threadId });
+  await sendMessage({ message: 'Follow up while streaming', threadId });
+  ```
+
+- Added streamed function-call argument events to `@mastra/client-js` Responses streams. You can now read finalized tool arguments directly from the stream: ([#16285](https://github.com/mastra-ai/mastra/pull/16285))
+
+  ```ts
+  for await (const event of stream) {
+    if (event.type === 'response.function_call_arguments.done') {
+      console.log(event.arguments);
+    }
+  }
+  ```
+
+- Added Agent signals for sending contextual messages into agent thread loops and subscribing to thread activity. ([#16229](https://github.com/mastra-ai/mastra/pull/16229))
+
+  Call `agent.sendSignal()` to inject context into a running agent loop. When the thread is idle, that same signal becomes the prompt that starts the next loop by default. Use `ifActive.behavior` and `ifIdle.behavior` to deliver, persist, discard, or wake from a signal.
+
+  Use `agent.subscribeToThread()` to follow the raw stream chunks for a memory thread, observe signal echoes with stable IDs, and abort the active stream for that thread.
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ resourceId, threadId });
+
+  void (async () => {
+    for await (const part of subscription.stream) {
+      if (part.type === 'finish') {
+        subscription.unsubscribe();
+      }
+    }
+  })();
+
+  agent.sendSignal({ type: 'user-message', contents: 'Use the latest answer' }, { resourceId, threadId });
+  ```
+
+- Fix `orderBy` shape mismatch for paginated list methods. ([#16323](https://github.com/mastra-ai/mastra/pull/16323))
+
+  The server expects `orderBy` as a structured object (`{ field, direction }`),
+  but several SDK methods were sending `orderBy` and `sortDirection` as flat
+  strings, which caused server-side schema validation to fail.
+
+  Affected methods:
+  - `MastraClient.listMemoryThreads`
+  - `Agent.listVersions`
+  - `StoredAgent.listVersions`
+  - `StoredPromptBlock.listVersions`
+  - `StoredScorer.listVersions`
+
+  Before:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: 'createdAt', sortDirection: 'DESC' });
+  ```
+
+  After:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: { field: 'createdAt', direction: 'DESC' } });
+  ```
+
+  The flat `sortDirection` parameter has been removed from the affected param
+  types in favor of the nested `orderBy.direction` field.
+
+- Fix client-js bugs surfaced by the SDK ↔ server contract audit. ([#16439](https://github.com/mastra-ai/mastra/pull/16439))
+  - `MastraClient.getAgentBuilderActions()` previously requested `/agent-builder/` (trailing slash) and 404'd. Now hits `/agent-builder`.
+  - `AgentBuilder.stream(params, runId)` now requires `runId`. The server route requires it; calls without it failed with a server-side validation error. The SDK now both types `runId` as required and guards at runtime.
+  - `MastraClient.createStoredSkill(...)` now requires `description` in its parameter type. The server schema has always required it; the SDK type used to mark it optional, so omitting it produced a runtime 400 instead of a compile error.
+
+  Migration:
+
+  ```ts
+  // Before
+  await agentBuilder.stream({ inputData });
+
+  // After
+  await agentBuilder.stream({ inputData }, runId);
+  ```
+
+  ```ts
+  // Before
+  await client.createStoredSkill({ name, instructions });
+
+  // After
+  await client.createStoredSkill({ name, description, instructions });
+  ```
+
+- Add `agent.resumeStreamUntilIdle()` to resume a suspended agent stream and keep the SSE connection open through the follow-up turn. ([#16260](https://github.com/mastra-ai/mastra/pull/16260))
+
+### Patch Changes
+
+- Fixed memory thread write methods (`update`, `delete`, `deleteMessages`, `clone`) silently sending requests without the required `agentId`. The methods now resolve `agentId` from a per-call argument first, then the constructor, and throw a clear error if neither is set — before any HTTP request is issued. Reads are unchanged. ([#16310](https://github.com/mastra-ai/mastra/pull/16310))
+
+  ```ts
+  // Either set agentId on the thread once...
+  const thread = client.getMemoryThread({ threadId: 't1', agentId: 'a1' });
+  await thread.update({ title: 'Renamed' });
+  await thread.delete();
+
+  // ...or pass it per call.
+  const thread = client.getMemoryThread({ threadId: 't1' });
+  await thread.update({ agentId: 'a1', title: 'Renamed' });
+  await thread.delete({ agentId: 'a1' });
+  ```
+
+  Fixed `MastraClient.deleteThread()` issuing `DELETE /api` (an empty URL) when called without `agentId` or `networkId`. The method now requires exactly one of the two, enforced both at runtime and in the type signature.
+
+  ```ts
+  await client.deleteThread('t1', { agentId: 'a1' });
+  await client.deleteThread('t1', { networkId: 'n1' });
+  ```
+
+- Regenerate route types to include `TRAJECTORY` and `STEP` entityType variants on the score response (follow-up to #16249). ([#16288](https://github.com/mastra-ai/mastra/pull/16288))
+
+- Fix `MCPTool.execute` sending an empty/undefined request body when called without `data` or `requestContext`. The server's tool-execute endpoint expects an object body (with optional `data`), so calls like `client.getMcpServerTool(serverId, toolId).execute({})` would fail with `Invalid request body`. The SDK now always POSTs a JSON object body, defaulting to `{}` when no parameters are provided. ([#16488](https://github.com/mastra-ai/mastra/pull/16488))
+
+- Removed Agent Builder routes from the default generated API route contracts. ([#16499](https://github.com/mastra-ai/mastra/pull/16499))
+
+- Updated dependencies [[`9f17410`](https://github.com/mastra-ai/mastra/commit/9f1741080def23d42ee50b39887a385ae316a3c6), [`7ad5585`](https://github.com/mastra-ai/mastra/commit/7ad55856406f1de398dc713f6a9eaa78b2784bb6), [`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60), [`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7), [`d1fdbd0`](https://github.com/mastra-ai/mastra/commit/d1fdbd012add5623cb7e6b7f882b605ab358bbb4), [`210ea7a`](https://github.com/mastra-ai/mastra/commit/210ea7af559791b73a44fc9c12179908aaa3183f), [`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`bae019e`](https://github.com/mastra-ai/mastra/commit/bae019ecb6694da96909f7ec7b9eb3a0a33aa887), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`6742347`](https://github.com/mastra-ai/mastra/commit/6742347d71955d7639adc9ddf6ff8282de7ee3ba), [`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`37c0dc5`](https://github.com/mastra-ai/mastra/commit/37c0dc5697d343db98628bf867bf71ce6deec6d7), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`83218c8`](https://github.com/mastra-ai/mastra/commit/83218c88b37773c9424fbe733b37be556e55e94d), [`ef6b584`](https://github.com/mastra-ai/mastra/commit/ef6b5847ac33c0a7e80af3a86e8801e2933dd3ee), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`7b0ad1f`](https://github.com/mastra-ai/mastra/commit/7b0ad1f5c53dc118c6da12ae82ae2587037dc2b8), [`d91ebe2`](https://github.com/mastra-ai/mastra/commit/d91ebe28ee065d8f2ed6df741c3c07f58d359529), [`62666c3`](https://github.com/mastra-ai/mastra/commit/62666c367eaeac3941ead454b1d38810cc855721), [`33f5061`](https://github.com/mastra-ai/mastra/commit/33f5061cd1c0335020c3faae61ce96de822854fa), [`4af2160`](https://github.com/mastra-ai/mastra/commit/4af2160322f4718cac421930cce85641e9512389), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`265ec9f`](https://github.com/mastra-ai/mastra/commit/265ec9f887b5c81255c873a76ff7796f16e4f99b), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`6ce80bf`](https://github.com/mastra-ai/mastra/commit/6ce80bf4872a891e0bddf8b80561a80584efb14b), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`136c959`](https://github.com/mastra-ai/mastra/commit/136c9592fb0eeb0cd212f28629d8a29b7557a2fc), [`9268531`](https://github.com/mastra-ai/mastra/commit/9268531e7ec4be98beeba3b3ae8be0a7ea380662), [`13ead79`](https://github.com/mastra-ai/mastra/commit/13ead79149486b88144db7e11e6ff551caef5be1), [`dccd8f1`](https://github.com/mastra-ai/mastra/commit/dccd8f1f8b8f1ad203b77556207e5529567c616d), [`4df7cc7`](https://github.com/mastra-ai/mastra/commit/4df7cc79342fd065fe7fdeef93c094db14b12bcd), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`aca3121`](https://github.com/mastra-ai/mastra/commit/aca31211233dac25459f140ea4fcfb3a5af64c18), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`4dd900d`](https://github.com/mastra-ai/mastra/commit/4dd900d75dfe9be89f8c15188b368a8622aa1e18), [`b560d6f`](https://github.com/mastra-ai/mastra/commit/b560d6f88b9b904b15c10f75c949eb145bc27684), [`99869ec`](https://github.com/mastra-ai/mastra/commit/99869ecb1f2aa6dfcc44fa4e843e5ee0344efa64), [`900d086`](https://github.com/mastra-ai/mastra/commit/900d086bb737b9cf2fcf68f11b0389b801a2738c), [`c50ebc3`](https://github.com/mastra-ai/mastra/commit/c50ebc34da71044558315735e69bfb94fcfb74bf), [`4c0e286`](https://github.com/mastra-ai/mastra/commit/4c0e28637c9cfb4f416549b55e97ebfa13319dfc), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`4ff5bdf`](https://github.com/mastra-ai/mastra/commit/4ff5bdfe170cba6dfb5260c6af0f4ba668430772), [`9cdf38e`](https://github.com/mastra-ai/mastra/commit/9cdf38e58506e1109c8b38f97cd7770978a4218e), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4), [`990851e`](https://github.com/mastra-ai/mastra/commit/990851edcb0e30be5c2c18b6532f1a876cc2d335), [`bbcd93c`](https://github.com/mastra-ai/mastra/commit/bbcd93cf7d8aa1007d6d84bfd033b8015c912087), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a), [`308bd07`](https://github.com/mastra-ai/mastra/commit/308bd074f35cef0c75d82fc1eb19382fe04ecf6f), [`6068a6c`](https://github.com/mastra-ai/mastra/commit/6068a6c42950fad3ebfc92346417896ba60803d2), [`36b3bbf`](https://github.com/mastra-ai/mastra/commit/36b3bbf5a8d59f7e23d47e29340e76c681b4929c), [`d86f031`](https://github.com/mastra-ai/mastra/commit/d86f031eb6b0b2570145afafea664e59bf688962), [`b275631`](https://github.com/mastra-ai/mastra/commit/b275631dc10541a482b2e2d4a3e3cfa843bd5fa1), [`00106be`](https://github.com/mastra-ai/mastra/commit/00106bede59b81e5b0e9cd6aad8d3b5dbc336387), [`bd36d8e`](https://github.com/mastra-ai/mastra/commit/bd36d8eb6de8c9a0310352649dbd4b06703c2299), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e), [`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd), [`e2a079c`](https://github.com/mastra-ai/mastra/commit/e2a079cc3755b1895f7bd5dc36e9be81b11c7c22), [`8ac9141`](https://github.com/mastra-ai/mastra/commit/8ac9141439caa8fdd674944c4d84f29b3c730296), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`534a456`](https://github.com/mastra-ai/mastra/commit/534a456a25e4df1e5407e7e632f4cb3b1fa14f9d), [`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7), [`aebde9c`](https://github.com/mastra-ai/mastra/commit/aebde9cfacf56592c6b6350cae721740fe090b8a), [`36bae07`](https://github.com/mastra-ai/mastra/commit/36bae07c0e70b1b3006f2fd20830e8883dcbd066), [`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/core@1.33.0
+  - @mastra/schema-compat@1.2.10
+
+## 1.18.0-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [[`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd)]:
+  - @mastra/core@1.33.0-alpha.17
+
+## 1.18.0-alpha.17
+
+### Patch Changes
+
+- Fix `MCPTool.execute` sending an empty/undefined request body when called without `data` or `requestContext`. The server's tool-execute endpoint expects an object body (with optional `data`), so calls like `client.getMcpServerTool(serverId, toolId).execute({})` would fail with `Invalid request body`. The SDK now always POSTs a JSON object body, defaulting to `{}` when no parameters are provided. ([#16488](https://github.com/mastra-ai/mastra/pull/16488))
+
+- Removed Agent Builder routes from the default generated API route contracts. ([#16499](https://github.com/mastra-ai/mastra/pull/16499))
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7)]:
+  - @mastra/core@1.33.0-alpha.16
+
+## 1.18.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/core@1.33.0-alpha.15
+
+## 1.18.0-alpha.15
+
+### Minor Changes
+
+- Added client, React, and Studio support for Agent signals in threaded chat. Threaded user messages now send through Agent signals, stream output is consumed from the thread subscription, echoed user messages are deduped by signal ID, file and image message contents are preserved, Studio can send follow-ups while a response is streaming, Studio subscribes to open threads so additional tabs can observe active streams, and the Studio stop button aborts the active thread subscription. React chat also falls back to legacy threaded streaming when it connects to a server or core version that does not support signal routes yet. ([#16338](https://github.com/mastra-ai/mastra/pull/16338))
+
+  ```ts
+  const { sendMessage } = useChat({ agentId, resourceId, threadId });
+  await sendMessage({ message: 'Follow up while streaming', threadId });
+  ```
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.33.0-alpha.14
+
+## 1.18.0-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+
 ## 1.18.0-alpha.13
 
 ### Minor Changes

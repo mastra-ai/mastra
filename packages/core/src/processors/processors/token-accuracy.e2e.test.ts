@@ -12,6 +12,8 @@ import { createTool } from '../../tools';
 import { TokenLimiterProcessor } from './token-limiter';
 import { ToolCallFilter } from './tool-call-filter';
 
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
+
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
 const MODE = getLLMTestMode();

@@ -13,8 +13,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { assertNoDuplicateParts } from '../test-utils';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

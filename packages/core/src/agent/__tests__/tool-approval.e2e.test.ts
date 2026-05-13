@@ -11,8 +11,7 @@ import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import { getOpenAIModel } from './mock-model';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock({
   transformRequest: ({ url, body }) => {

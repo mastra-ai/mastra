@@ -957,6 +957,15 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
     },
+    "claudinio": {
+      "url": "https://api.claudin.io/v1",
+      "apiKeyEnvVar": "CLAUDINIO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Claudinio",
+      "models": ["claudinio"],
+      "docUrl": "https://claudin.io",
+      "gateway": "models.dev"
+    },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
@@ -1952,6 +1961,8 @@
         "moonshotai/Kimi-K2.6",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
+        "xiaomi/mimo-v2.5",
+        "xiaomi/mimo-v2.5-pro",
         "zai-org/GLM-4.6",
         "zai-org/GLM-4.6V",
         "zai-org/GLM-4.7",
@@ -2429,6 +2440,31 @@
         "~openai/gpt-mini-latest"
       ],
       "docUrl": "https://kilo.ai",
+      "gateway": "models.dev"
+    },
+    "auriko": {
+      "url": "https://api.auriko.ai/v1",
+      "apiKeyEnvVar": "AURIKO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Auriko",
+      "models": [
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-sonnet-4-6",
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-3.1-pro-preview",
+        "glm-5.1",
+        "grok-4.3",
+        "kimi-k2.5",
+        "kimi-k2.6",
+        "minimax-m2-7",
+        "minimax-m2-7-highspeed",
+        "qwen-3.6-plus"
+      ],
+      "docUrl": "https://docs.auriko.ai",
       "gateway": "models.dev"
     },
     "morph": {
@@ -3031,7 +3067,7 @@
       "apiKeyEnvVar": "WAFER_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Wafer",
-      "models": ["DeepSeek-V4-Pro", "GLM-5.1", "MiniMax-M2.7", "Qwen3.5-397B-A17B"],
+      "models": ["GLM-5.1", "Qwen3.5-397B-A17B"],
       "docUrl": "https://docs.wafer.ai/wafer-pass",
       "gateway": "models.dev"
     },
@@ -4526,6 +4562,15 @@
       "docUrl": "https://portal.neuralwatt.com/docs",
       "gateway": "models.dev"
     },
+    "sarvam": {
+      "url": "https://api.sarvam.ai/v1",
+      "apiKeyEnvVar": "SARVAM_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Sarvam AI",
+      "models": ["sarvam-105b", "sarvam-30b"],
+      "docUrl": "https://docs.sarvam.ai/api-reference-docs/getting-started/models",
+      "gateway": "models.dev"
+    },
     "togetherai": {
       "apiKeyEnvVar": "TOGETHER_API_KEY",
       "name": "Together AI",
@@ -5712,6 +5757,7 @@
       "MiniMax-M2.7",
       "MiniMax-M2.7-highspeed"
     ],
+    "claudinio": ["claudinio"],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
     "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
     "llama": [
@@ -6510,6 +6556,8 @@
       "moonshotai/Kimi-K2.6",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
+      "xiaomi/mimo-v2.5",
+      "xiaomi/mimo-v2.5-pro",
       "zai-org/GLM-4.6",
       "zai-org/GLM-4.6V",
       "zai-org/GLM-4.7",
@@ -6969,6 +7017,23 @@
       "~openai/gpt-latest",
       "~openai/gpt-mini-latest"
     ],
+    "auriko": [
+      "claude-opus-4-6",
+      "claude-opus-4-7",
+      "claude-sonnet-4-6",
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-pro",
+      "gemini-3.1-pro-preview",
+      "glm-5.1",
+      "grok-4.3",
+      "kimi-k2.5",
+      "kimi-k2.6",
+      "minimax-m2-7",
+      "minimax-m2-7-highspeed",
+      "qwen-3.6-plus"
+    ],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
     "mixlayer": [
       "qwen/qwen3.5-122b-a10b",
@@ -7403,7 +7468,7 @@
       "kimi-k2.6"
     ],
     "abliteration-ai": ["abliterated-model"],
-    "wafer.ai": ["DeepSeek-V4-Pro", "GLM-5.1", "MiniMax-M2.7", "Qwen3.5-397B-A17B"],
+    "wafer.ai": ["GLM-5.1", "Qwen3.5-397B-A17B"],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
       "meta-llama/Llama-3.3-70B-Instruct",
@@ -8626,6 +8691,7 @@
       "qwen3.6-35b-fast",
       "zai-org/GLM-5.1-FP8"
     ],
+    "sarvam": ["sarvam-105b", "sarvam-30b"],
     "togetherai": [
       "MiniMaxAI/MiniMax-M2.5",
       "MiniMaxAI/MiniMax-M2.7",

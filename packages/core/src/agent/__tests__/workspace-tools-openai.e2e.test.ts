@@ -17,8 +17,7 @@ import { LocalFilesystem } from '../../workspace/filesystem';
 import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../agent';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 

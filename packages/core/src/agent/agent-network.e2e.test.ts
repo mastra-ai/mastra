@@ -12,8 +12,7 @@ import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

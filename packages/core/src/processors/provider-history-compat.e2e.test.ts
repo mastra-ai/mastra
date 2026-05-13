@@ -14,6 +14,8 @@ import { ProviderHistoryCompat } from './provider-history-compat';
 
 config();
 
+setupDummyApiKeys(getLLMTestMode(), ['anthropic', 'openrouter']);
+
 const requestBodies: any[] = [];
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY ?? 'test-openrouter-api-key',

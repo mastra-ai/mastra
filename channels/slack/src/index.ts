@@ -54,6 +54,7 @@ export {
 
 export type {
   SlackProviderConfig,
+  SlackAdapterChannelConfig,
   SlackConnectOptions,
   SlackAppManifest,
   SlashCommandConfig,

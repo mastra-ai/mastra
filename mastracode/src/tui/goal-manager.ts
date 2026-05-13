@@ -375,13 +375,8 @@ export class GoalManager {
   private buildContinuationPrompt(judgeReason: string): string {
     const turn = this.goal!.turnsUsed;
     const max = this.goal!.maxTurns;
-    const message = `[Goal attempt ${turn}/${max}] The goal is not yet complete. Judge feedback: ${judgeReason}\n\nContinue working toward the goal: ${this.goal!.objective}`;
-    return `<system-reminder type="goal-judge">${escapeXml(message)}</system-reminder>`;
+    return `[Goal attempt ${turn}/${max}] The goal is not yet complete. Judge feedback: ${judgeReason}\n\nContinue working toward the goal: ${this.goal!.objective}`;
   }
-}
-
-function escapeXml(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 function truncateForJudge(value: string): string {

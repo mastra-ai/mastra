@@ -4,8 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

@@ -7,8 +7,7 @@ import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
 import { createTool } from '../tools';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['anthropic']);
 
 const mock = createGatewayMock({ mode: 'replay' });
 beforeAll(() => mock.start());

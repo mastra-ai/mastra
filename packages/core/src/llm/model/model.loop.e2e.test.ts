@@ -9,8 +9,7 @@ import { RequestContext } from '../../request-context';
 import { MastraLLMVNext } from './model.loop';
 import type { MastraLanguageModelV2 } from './shared.types';
 
-const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE);
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
