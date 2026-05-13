@@ -1,4 +1,5 @@
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '..';
@@ -9,6 +10,9 @@ import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE);
 
 const mock = createGatewayMock({
   transformRequest: ({ url, body }) => {

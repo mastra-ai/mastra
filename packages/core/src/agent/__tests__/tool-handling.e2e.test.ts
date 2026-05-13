@@ -1,7 +1,11 @@
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

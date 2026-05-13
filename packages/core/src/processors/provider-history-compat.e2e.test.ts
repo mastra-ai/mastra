@@ -4,7 +4,8 @@
  * provider boundary.
  */
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -30,6 +31,9 @@ const reasoningModel = openrouter('minimax/minimax-m2.5', {
   reasoning: { effort: 'low', exclude: false },
 });
 const anthropicModel = anthropic('claude-haiku-4-5-20251001');
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE);
+
 const mock = createGatewayMock({
   name: 'core-src-processors-provider-history-compat-native-anthropic-foreign-reasoning.e2e',
   exactMatch: true,

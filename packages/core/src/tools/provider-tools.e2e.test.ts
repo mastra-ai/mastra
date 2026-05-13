@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 
 const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE, ['openai']);
+setupDummyApiKeys(MODE);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

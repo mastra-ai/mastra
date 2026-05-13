@@ -1,10 +1,14 @@
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 
 config();
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE);
 
 const mock = createGatewayMock();
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
