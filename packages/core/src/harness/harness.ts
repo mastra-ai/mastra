@@ -105,27 +105,33 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
 
 function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
-  if (!contents || typeof contents !== 'object') return [];
-
-  const content = (contents as { content?: unknown }).content;
-  if (typeof content === 'string') return [{ type: 'text', text: content }];
-  if (Array.isArray(content)) {
-    return content.flatMap((part): HarnessMessageContent[] => {
+  if (Array.isArray(contents)) {
+    return contents.flatMap((part): HarnessMessageContent[] => {
       const record = getRecordValue(part);
-      if (!record) return [];
+      if (!record) {
+        if (typeof part === 'string') return [{ type: 'text', text: part }];
+        return [];
+      }
       if (record.type === 'text' && typeof record.text === 'string') {
         return [{ type: 'text', text: record.text }];
       }
-      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
-        if (record.mediaType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
+      if (record.type === 'file' && typeof record.data === 'string') {
+        // Accept both mimeType (v4/internal) and mediaType (v5 wire shape).
+        const mimeType =
+          typeof record.mimeType === 'string'
+            ? record.mimeType
+            : typeof record.mediaType === 'string'
+              ? record.mediaType
+              : undefined;
+        if (mimeType === undefined) return [];
+        if (mimeType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType }];
         }
         return [
           {
             type: 'file',
             data: record.data,
-            mediaType: record.mediaType,
+            mediaType: mimeType,
             filename: typeof record.filename === 'string' ? record.filename : undefined,
           },
         ];
@@ -133,7 +139,6 @@ function signalContentsToHarnessContent(contents: unknown): HarnessMessageConten
       return [];
     });
   }
-
   return [];
 }
 
@@ -1786,14 +1791,11 @@ export class Harness<TState = {}> {
         return {
           type: 'file' as const,
           data: f.data,
-          mediaType: f.mediaType,
+          mimeType: f.mediaType,
           filename: f.filename,
         };
       });
-      messageInput = {
-        role: 'user',
-        content: [{ type: 'text', text: content }, ...fileParts],
-      } as AgentSignalContents;
+      messageInput = [{ type: 'text', text: content }, ...fileParts];
     }
 
     const wasActive = this.isCurrentThreadStreamActive();
@@ -1962,8 +1964,11 @@ export class Harness<TState = {}> {
     }
 
     const signalMetadata = getRecordValue(msg.content.metadata?.signal);
+    // Prefer content.parts (canonical source post stash-drop). Fall back to legacy
+    // metadata.signal.contents stash for old rows, then to plain content.content.
+    const signalSourceContents = signalMetadata?.contents ?? msg.content.parts ?? msg.content.content;
     if (signalMetadata?.type === 'user-message') {
-      const signalContent = signalContentsToHarnessContent(signalMetadata.contents ?? msg.content.content);
+      const signalContent = signalContentsToHarnessContent(signalSourceContents);
       if (signalContent.length > 0) {
         return {
           id: msg.id,
@@ -1977,7 +1982,18 @@ export class Harness<TState = {}> {
     if (signalMetadata?.type === 'system-reminder') {
       const reminder = toSystemReminderContent({
         type: signalMetadata.type,
-        contents: signalMetadata.contents ?? msg.content.content,
+        contents:
+          typeof signalSourceContents === 'string'
+            ? signalSourceContents
+            : Array.isArray(signalSourceContents)
+              ? signalSourceContents
+                  .filter((p): p is { type: 'text'; text: string } => {
+                    const r = getRecordValue(p);
+                    return r?.type === 'text' && typeof r.text === 'string';
+                  })
+                  .map(p => p.text)
+                  .join('\n')
+              : msg.content.content,
         attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
         metadata: getRecordValue(signalMetadata.metadata),
       });
