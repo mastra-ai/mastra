@@ -1,4 +1,4 @@
-import type { CoreMessage, FilePart, TextPart } from '@internal/ai-sdk-v4';
+import type { CoreMessage, DataContent, FilePart, TextPart } from '@internal/ai-sdk-v4';
 
 import type { BaseMessageListInput } from './message-list';
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
@@ -10,13 +10,36 @@ import type { MastraDBMessage, MastraMessagePart } from './message-list/state/ty
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
 /**
+ * A text part in signal contents.
+ */
+export type AgentSignalTextPart = {
+  type: 'text';
+  text: string;
+};
+
+/**
+ * A file part in signal contents.
+ *
+ * - `data`: file content as a base64 string, a data URL, a hosted URL, a `URL`
+ *   instance, or a `DataContent` value (binary buffers are normalized to base64
+ *   at the signal boundary).
+ * - `mediaType`: IANA media type (e.g. `image/png`, `application/pdf`).
+ * - `filename`: optional original filename, preserved for display/metadata.
+ */
+export type AgentSignalFilePart = {
+  type: 'file';
+  data: DataContent | URL;
+  mediaType: string;
+  filename?: string;
+};
+
+/**
  * Canonical input shape for `signal.contents`. Signals represent a single user
  * turn, so the contents are either a plain text string or a parts array of
- * text + file parts (mirrors AI SDK v4 `TextPart` / `FilePart`). Anything
- * richer (tool calls, reasoning, multiple turns) is not a signal and should go
- * through the agent stream directly.
+ * text + file parts. Anything richer (tool calls, reasoning, multiple turns)
+ * is not a signal and should go through the agent stream directly.
  */
-export type AgentSignalContents = string | Array<TextPart | FilePart>;
+export type AgentSignalContents = string | Array<AgentSignalTextPart | AgentSignalFilePart>;
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -131,11 +154,13 @@ export function signalToXmlMarkup(signal: {
   return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
 }
 
-// Convert the narrow signal-contents input (string OR v4 TextPart/FilePart) into the canonical
-// MastraMessagePart[] used by storage. createSignal runs this once at the boundary so every
-// downstream projection (LLM, DB, data part) reads from the same walked representation.
-// FilePart's `data` is `DataContent | URL` at the input boundary; storage stores it as a
-// string (base64 for binary, stringified URL for URL instances) so DB rows stay JSON-safe.
+// Convert the narrow signal-contents input (string OR AgentSignalTextPart/AgentSignalFilePart)
+// into the canonical MastraMessagePart[] used by storage. createSignal runs this once at the
+// boundary so every downstream projection (LLM, DB, data part) reads from the same walked
+// representation. FilePart's `data` is `DataContent | URL` at the input boundary; storage stores
+// it as a string (base64 for binary, stringified URL for URL instances) so DB rows stay JSON-safe.
+// The signal public API uses `mediaType` (aligns with v5 SDK and harness sendMessage({files}))
+// while storage uses `mimeType` (v4 convention) — this helper translates at the boundary.
 function contentsToMessageParts(contents: AgentSignalContents): MastraMessagePart[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
   return contents.map(part => {
@@ -144,7 +169,7 @@ function contentsToMessageParts(contents: AgentSignalContents): MastraMessagePar
       return {
         type: 'file',
         data,
-        mimeType: part.mimeType,
+        mimeType: part.mediaType,
         ...(part.filename ? { filename: part.filename } : {}),
       };
     }
@@ -163,11 +188,11 @@ function partsToText(parts: MastraMessagePart[]): string {
 }
 
 // Reverse of contentsToMessageParts: project canonical storage parts back into the public
-// AgentSignalContents shape. Storage and the public FilePart both use `mimeType`, so this is
-// purely a filter + structural narrowing — non-text/file parts (shouldn't exist on a signal
-// row, but the storage type permits richer parts) are dropped.
+// AgentSignalContents shape. Storage uses `mimeType` (v4); the public signal API uses
+// `mediaType` (v5-aligned) — this helper translates at the boundary. Non-text/file parts
+// (shouldn't exist on a signal row, but the storage type permits richer parts) are dropped.
 function partsToSignalContents(parts: MastraMessagePart[]): AgentSignalContents {
-  const out: Array<TextPart | FilePart> = [];
+  const out: Array<AgentSignalTextPart | AgentSignalFilePart> = [];
   for (const part of parts) {
     if (part.type === 'text' && typeof part.text === 'string') {
       out.push({ type: 'text', text: part.text });
@@ -176,7 +201,7 @@ function partsToSignalContents(parts: MastraMessagePart[]): AgentSignalContents 
       out.push({
         type: 'file',
         data: file.data,
-        mimeType: typeof file.mimeType === 'string' ? file.mimeType : '',
+        mediaType: typeof file.mimeType === 'string' ? file.mimeType : '',
         ...(typeof file.filename === 'string' ? { filename: file.filename } : {}),
       });
     }

@@ -161,7 +161,7 @@ describe('Agent signals', () => {
       {
         type: 'file' as const,
         data: 'data:text/plain;base64,aGVsbG8=',
-        mimeType: 'text/plain',
+        mediaType: 'text/plain',
         filename: 'note.txt',
       },
     ];
@@ -172,7 +172,7 @@ describe('Agent signals', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
-    // toLLMMessage translates mimeType (matches v4 SDK shape) for the v4 CoreMessage handed to the model.
+    // toLLMMessage emits the v4 CoreMessage shape (uses mimeType for FilePart).
     expect(fileSignal.toLLMMessage()).toEqual([
       {
         role: 'user',
@@ -215,7 +215,7 @@ describe('Agent signals', () => {
       {
         type: 'file' as const,
         data: 'data:image/png;base64,aGVsbG8=',
-        mimeType: 'image/png',
+        mediaType: 'image/png',
       },
     ];
     const multimodalSignal = createSignal({
@@ -241,7 +241,9 @@ describe('Agent signals', () => {
     );
 
     // file-only: no text part exists, so the marker is prepended as its own message.
-    const fileOnlyContents = [{ type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' }];
+    const fileOnlyContents = [
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+    ];
     const fileOnlySignal = createSignal({
       type: 'user-message',
       contents: fileOnlyContents,
@@ -284,7 +286,7 @@ describe('Agent signals', () => {
       {
         type: 'file' as const,
         data: 'data:image/png;base64,aGVsbG8=',
-        mimeType: 'image/png',
+        mediaType: 'image/png',
       },
     ];
     const screenshotReminder = createSignal({
@@ -311,7 +313,7 @@ describe('Agent signals', () => {
     // System-reminder with only file parts has no text to inline-wrap, so the marker is
     // prepended as its own self-closing message.
     const fileOnlyReminderContents = [
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
     ];
     const fileOnlyReminder = createSignal({
       type: 'system-reminder',
@@ -329,7 +331,7 @@ describe('Agent signals', () => {
     const mixedReminderContents = [
       { type: 'text' as const, text: 'Step one of the screen.' },
       { type: 'text' as const, text: 'Step two has this attachment.' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
     ];
     const mixedReminder = createSignal({
       type: 'system-reminder',
@@ -351,7 +353,7 @@ describe('Agent signals', () => {
   it('persists multimodal signal contents as faithful DB parts so UIs can render them', () => {
     const fileContents = [
       { type: 'text' as const, text: 'Look at this' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
     ];
 
     const userMessage = createSignal({
@@ -388,7 +390,7 @@ describe('Agent signals', () => {
   it('round-trips multimodal non-user-message signals through DB without dropping file parts', () => {
     const screenshotContents = [
       { type: 'text' as const, text: 'The user is looking at this screen.' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
     ];
     const reminder = createSignal({
       type: 'system-reminder',

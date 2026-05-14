@@ -1791,7 +1791,7 @@ export class Harness<TState = {}> {
         return {
           type: 'file' as const,
           data: f.data,
-          mimeType: f.mediaType,
+          mediaType: f.mediaType,
           filename: f.filename,
         };
       });
