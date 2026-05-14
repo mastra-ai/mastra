@@ -1,7 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
-import { builderAgent } from '@mastra/editor/ee';
 import { ComposioToolProvider } from '@mastra/editor/composio';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -85,9 +84,6 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
-import { DaytonaSandbox } from '@mastra/daytona';
-import { StagehandBrowser } from '@mastra/stagehand';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -103,16 +99,8 @@ const storage = new MastraCompositeStore({
   },
 });
 
-const builderWorkspace = new Workspace({
-  id: 'builder-workspace',
-  name: 'Builder Workspace',
-  filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
-  sandbox: new DaytonaSandbox(),
-});
-
 export const mastra = new Mastra({
   agents: {
-    builderAgent,
     gatewayAgent,
     chefAgent,
     chefAgentResponses,
@@ -145,7 +133,6 @@ export const mastra = new Mastra({
     sensitiveTopicBlocker,
     stepLoggerProcessor,
   },
-  workspace: builderWorkspace,
   storage,
   mcpServers: {
     myMcpServer,
@@ -167,79 +154,9 @@ export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
   },
-
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
-    },
-    sandboxes: {
-      daytona: {
-        id: 'daytona',
-        name: 'Daytona Sandbox',
-        description: 'Remote sandbox powered by Daytona',
-        createSandbox: () => new DaytonaSandbox(),
-      },
-    },
-    browsers: {
-      stagehand: {
-        id: 'stagehand',
-        name: 'Stagehand Browser',
-        createBrowser: config =>
-          new StagehandBrowser({
-            ...config,
-            apiKey: process.env.BROWSERBASE_API_KEY ?? '',
-            env: 'BROWSERBASE',
-            projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
-          }),
-      },
-    },
-    builder: {
-      enabled: true,
-      features: {
-        agent: {
-          tools: true,
-          agents: true,
-          workflows: true,
-          stars: true,
-          skills: true,
-          model: true,
-          browser: true,
-        },
-        skill: {
-          stars: true,
-        },
-      },
-      configuration: {
-        agent: {
-          workspace: { type: 'id', workspaceId: 'builder-workspace' },
-          // workspace: {
-          //   type: 'inline',
-          //   config: {
-          //     name: 'builder-workspace',
-          //     filesystem: { provider: 'local', config: { basePath: '.mastra/workspace' } },
-          //     sandbox: { provider: 'daytona', config: {} },
-          //   },
-          // },
-          memory: {
-            options: {
-              lastMessages: 10,
-            },
-          },
-          browser: {
-            type: 'inline',
-            config: {
-              provider: 'stagehand',
-            },
-          },
-          models: {
-            allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
-            default: {
-              provider: 'openai',
-              modelId: 'gpt-5.4',
-            },
-          },
-        },
-      },
     },
   }),
   channels: {
