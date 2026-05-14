@@ -68,10 +68,46 @@ export function useAgentBuilderTool({
             formMethods.setValue('instructions', inputData.instructions);
           }
           if (toolsEnabled && Array.isArray(inputData?.tools)) {
-            const { tools, agents, workflows } = routeToolInputToFormKeys(availableAgentTools, inputData.tools);
+            const { tools, agents, workflows, integrationTools } = routeToolInputToFormKeys(
+              availableAgentTools,
+              inputData.tools,
+            );
             formMethods.setValue('tools', tools);
             formMethods.setValue('agents', agents);
             formMethods.setValue('workflows', workflows);
+
+            // Merge integration tools into toolIntegrations, preserving existing connections.
+            // The LLM-facing schema never exposes connections/labels/credentials — those are owned
+            // exclusively by the human-driven Tools panel.
+            const currentIntegrations = formMethods.getValues('toolIntegrations') ?? {};
+            const nextIntegrations: AgentBuilderEditFormValues['toolIntegrations'] = {};
+            const selectedByProvider = new Map<string, typeof integrationTools>();
+            for (const entry of integrationTools) {
+              const list = selectedByProvider.get(entry.providerId) ?? [];
+              list.push(entry);
+              selectedByProvider.set(entry.providerId, list);
+            }
+
+            // Carry every provider that already has connections, even if the LLM selected nothing
+            // from it on this turn — keeps connections intact across edits.
+            const providerIds = new Set<string>([...Object.keys(currentIntegrations), ...selectedByProvider.keys()]);
+
+            for (const providerId of providerIds) {
+              const existing = currentIntegrations[providerId];
+              const selected = selectedByProvider.get(providerId) ?? [];
+              const nextTools: Record<string, { toolService: string; description?: string }> = {};
+              for (const entry of selected) {
+                nextTools[entry.slug] = entry.description
+                  ? { toolService: entry.toolService, description: entry.description }
+                  : { toolService: entry.toolService };
+              }
+              nextIntegrations[providerId] = {
+                tools: nextTools,
+                connections: existing?.connections ?? {},
+              };
+            }
+
+            formMethods.setValue('toolIntegrations', nextIntegrations, { shouldDirty: true });
           }
           if (skillsEnabled && Array.isArray(inputData?.skills)) {
             const validSkillIds = new Set(availableSkills.map(s => s.id));

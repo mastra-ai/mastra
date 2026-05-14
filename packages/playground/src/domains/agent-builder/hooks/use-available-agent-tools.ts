@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { useBuilderPickerVisibility } from '../../builder';
 import { buildAvailableToolRecords } from '../mappers/build-available-tool-records';
+import type { AgentBuilderEditFormValues } from '../schemas';
 import { buildAgentTools } from '../types/agent-tool';
-import type { AgentTool } from '../types/agent-tool';
+import type { AgentTool, SelectedIntegrationTool } from '../types/agent-tool';
 
 interface UseAvailableAgentToolsArgs {
   toolsData: Record<string, unknown>;
@@ -11,6 +12,7 @@ interface UseAvailableAgentToolsArgs {
   selectedTools: Record<string, boolean> | undefined;
   selectedAgents: Record<string, boolean> | undefined;
   selectedWorkflows?: Record<string, boolean> | undefined;
+  toolIntegrations?: AgentBuilderEditFormValues['toolIntegrations'];
   excludeAgentId?: string;
 }
 
@@ -33,6 +35,7 @@ export function useAvailableAgentTools({
   selectedTools,
   selectedAgents,
   selectedWorkflows,
+  toolIntegrations,
   excludeAgentId,
 }: UseAvailableAgentToolsArgs): AgentTool[] {
   const resolvedWorkflowsData = workflowsData ?? EMPTY_RECORD;
@@ -46,12 +49,29 @@ export function useAvailableAgentTools({
         ? resolvedWorkflowsData
         : filterByAllowlist(resolvedWorkflowsData, picker.visibleWorkflows);
 
+    const selectedIntegrationTools: SelectedIntegrationTool[] = [];
+    if (toolIntegrations) {
+      for (const [providerId, config] of Object.entries(toolIntegrations)) {
+        if (!config?.tools) continue;
+        for (const [slug, entry] of Object.entries(config.tools)) {
+          if (!entry) continue;
+          selectedIntegrationTools.push({
+            providerId,
+            toolService: entry.toolService,
+            slug,
+            description: entry.description,
+          });
+        }
+      }
+    }
+
     const records = buildAvailableToolRecords(filteredTools, filteredAgents, filteredWorkflows, excludeAgentId);
     return buildAgentTools({
       tools: records.tools,
       agents: records.agents,
       workflows: records.workflows,
       selected: { tools: selectedTools, agents: selectedAgents, workflows: selectedWorkflows },
+      selectedIntegrationTools,
     });
   }, [
     toolsData,
@@ -60,6 +80,7 @@ export function useAvailableAgentTools({
     selectedTools,
     selectedAgents,
     selectedWorkflows,
+    toolIntegrations,
     excludeAgentId,
     picker,
   ]);

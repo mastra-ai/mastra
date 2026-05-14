@@ -206,4 +206,48 @@ describe('useAvailableAgentTools', () => {
     expect(result.current).toHaveLength(1);
     expect(result.current[0].id).toBe('tool-a');
   });
+
+  it('surfaces selected integration tools from form state with providerId/toolService', () => {
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: {},
+        agentsData: {},
+        selectedTools: {},
+        selectedAgents: {},
+        toolIntegrations: {
+          composio: {
+            tools: {
+              GMAIL_FETCH_EMAILS: { toolService: 'gmail', description: 'Fetch emails' },
+            },
+            connections: {
+              gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: 'WORK' }],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0]).toMatchObject({
+      id: 'integration:composio:GMAIL_FETCH_EMAILS',
+      name: 'GMAIL_FETCH_EMAILS',
+      description: 'Fetch emails',
+      type: 'integration',
+      providerId: 'composio',
+      toolService: 'gmail',
+      isChecked: true,
+    });
+  });
+
+  it('omits integration tools when toolIntegrations is absent', () => {
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: {},
+        agentsData: {},
+        selectedTools: {},
+        selectedAgents: {},
+      }),
+    );
+    expect(result.current).toHaveLength(0);
+  });
 });

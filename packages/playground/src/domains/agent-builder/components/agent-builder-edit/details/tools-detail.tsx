@@ -56,6 +56,23 @@ export const ToolsDetail = ({
   const activeCount = availableAgentTools.filter(item => item.isChecked).length;
 
   const toggle = (item: AgentTool, next: boolean) => {
+    if (item.type === 'integration') {
+      // Integration tools are toggled by removing them from toolIntegrations[providerId].tools
+      // when unchecked. Checking them back on requires re-picking from AddToolsDialog, so the
+      // checkbox is effectively a "remove" affordance here.
+      if (next) return;
+      if (!item.providerId) return;
+      const current = getValues('toolIntegrations') ?? {};
+      const config = current[item.providerId];
+      if (!config) return;
+      const { [item.name]: _removed, ...remainingTools } = config.tools ?? {};
+      setValue(
+        'toolIntegrations',
+        { ...current, [item.providerId]: { ...config, tools: remainingTools } },
+        { shouldDirty: true },
+      );
+      return;
+    }
     const fieldName = item.type === 'agent' ? 'agents' : item.type === 'workflow' ? 'workflows' : 'tools';
     const current = getValues(fieldName) ?? {};
     setValue(fieldName, { ...current, [item.id]: next }, { shouldDirty: true });
