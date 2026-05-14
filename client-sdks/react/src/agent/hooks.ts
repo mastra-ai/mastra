@@ -120,13 +120,40 @@ export const useChat = ({
   }, [propsRequestContext]);
 
   type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
+  type SignalContentPart = Exclude<UserMessageSignalContents, string>[number];
 
   const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
-    if (coreUserMessages.length === 1) {
-      return coreUserMessages[0] as UserMessageSignalContents;
+    const parts: SignalContentPart[] = [];
+    for (const message of coreUserMessages) {
+      if (typeof message.content === 'string') {
+        parts.push({ type: 'text', text: message.content });
+        continue;
+      }
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          parts.push({ type: 'text', text: part.text });
+        } else if (part.type === 'file') {
+          parts.push({
+            type: 'file',
+            data: typeof part.data === 'string' ? part.data : '',
+            mimeType: part.mimeType,
+            ...(part.filename ? { filename: part.filename } : {}),
+          } as SignalContentPart);
+        } else if (part.type === 'image') {
+          parts.push({
+            type: 'file',
+            data: typeof part.image === 'string' ? part.image : '',
+            mimeType: part.mimeType ?? 'image/png',
+          } as SignalContentPart);
+        }
+      }
     }
 
-    return coreUserMessages as UserMessageSignalContents;
+    if (parts.length === 1 && parts[0]?.type === 'text') {
+      return parts[0].text;
+    }
+
+    return parts;
   };
 
   const markThreadSignalsUnsupported = useCallback(() => {

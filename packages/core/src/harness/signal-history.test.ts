@@ -37,13 +37,10 @@ describe('Harness signal history rendering', () => {
           {
             id: 'signal-user-1',
             type: 'user-message',
-            contents: {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'hello from signal' },
-                { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
-              ],
-            },
+            contents: [
+              { type: 'text', text: 'hello from signal' },
+              { type: 'file', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
+            ],
             createdAt: new Date('2024-01-01T00:00:00.000Z'),
           },
           { threadId: thread.id, resourceId: 'test-harness' },

@@ -1,6 +1,5 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 
-import { MessageList } from './message-list';
 import type { BaseMessageListInput } from './message-list';
 import type { MastraDBMessage, MastraMessagePart } from './message-list/state/types';
 
@@ -10,9 +9,39 @@ import type { MastraDBMessage, MastraMessagePart } from './message-list/state/ty
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
 /**
+ * Text part of a signal's contents.
+ *
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export type AgentSignalContents = BaseMessageListInput;
+export type AgentSignalTextPart = {
+  type: 'text';
+  text: string;
+};
+
+/**
+ * File/image part of a signal's contents. Mirrors the canonical
+ * `MastraMessagePart` file shape (AI SDK v4 naming with `mimeType`).
+ * `data` is a string (base64-encoded payload or URL) to keep the part
+ * round-trippable through DB storage and UI rendering without re-encoding.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalFilePart = {
+  type: 'file';
+  data: string;
+  mimeType: string;
+  filename?: string;
+};
+
+/**
+ * Canonical input shape for `signal.contents`. Signals represent a single user
+ * turn, so the contents are either a plain text string or a parts array of
+ * text + file/image parts. Anything richer (tool calls, reasoning, multiple
+ * turns) is not a signal and should go through the agent stream directly.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalContents = string | Array<AgentSignalTextPart | AgentSignalFilePart>;
 
 type AgentSignalInputBase = {
   id?: string;
@@ -129,14 +158,20 @@ export function signalToXmlMarkup(signal: {
   return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
 }
 
-// Normalize the loose BaseMessageListInput surface (string / CoreMessage / arrays / etc.) into
-// a single canonical MastraDBMessage[] shape using MessageList's own input pipeline. Once we
-// have this, the LLM and DB projections both read from the same walked representation instead
-// of each re-walking the raw input with its own duck-typing logic.
+// Normalize the narrow signal-contents input (string OR text/file parts array) into a single
+// canonical MastraDBMessage. Once we have this, the LLM and DB projections both read from the
+// same walked representation instead of each re-walking the raw input with its own duck-typing.
 function normalizeContents(contents: AgentSignalContents): MastraDBMessage[] {
-  const list = new MessageList();
-  list.add(contents, 'input');
-  return list.get.all.db();
+  const parts: MastraMessagePart[] =
+    typeof contents === 'string' ? [{ type: 'text', text: contents }] : contents.map(part => ({ ...part }));
+  return [
+    {
+      id: crypto.randomUUID(),
+      role: 'user',
+      createdAt: new Date(),
+      content: { format: 2, parts },
+    },
+  ];
 }
 
 // Flatten the canonical normalized form back into the text-only parts a UI would render.
@@ -217,11 +252,11 @@ function signalToLLMMessage(
   const isUserMessage = signal.type === 'user-message';
   const hasAttrs = hasMeaningfulAttributes(signal.attributes);
 
-  // user-message is the model's natural input language; pass through untouched unless attributes
-  // need surfacing. Non-user-message signals always wrap — the XML wrapper is what tells the
-  // model "this is framework context, not a user/assistant turn".
+  // user-message is the model's natural input language; pass through as a CoreMessage unless
+  // attributes need surfacing. Non-user-message signals always wrap — the XML wrapper is what
+  // tells the model "this is framework context, not a user/assistant turn".
   if (isUserMessage && !hasAttrs) {
-    return signal.contents;
+    return [{ role: 'user', content: signal.contents } satisfies CoreMessage];
   }
 
   // Text-only fast path: emit a single wrapped user message. user role because providers reject

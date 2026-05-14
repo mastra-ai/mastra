@@ -105,27 +105,32 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
 
 function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
-  if (!contents || typeof contents !== 'object') return [];
-
-  const content = (contents as { content?: unknown }).content;
-  if (typeof content === 'string') return [{ type: 'text', text: content }];
-  if (Array.isArray(content)) {
-    return content.flatMap((part): HarnessMessageContent[] => {
+  if (Array.isArray(contents)) {
+    return contents.flatMap((part): HarnessMessageContent[] => {
       const record = getRecordValue(part);
-      if (!record) return [];
+      if (!record) {
+        if (typeof part === 'string') return [{ type: 'text', text: part }];
+        return [];
+      }
       if (record.type === 'text' && typeof record.text === 'string') {
         return [{ type: 'text', text: record.text }];
       }
-      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
-        if (record.mediaType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
+      if (record.type === 'file' && typeof record.data === 'string') {
+        const mimeType =
+          typeof record.mimeType === 'string'
+            ? record.mimeType
+            : typeof record.mediaType === 'string'
+              ? record.mediaType
+              : undefined;
+        if (!mimeType) return [];
+        if (mimeType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType }];
         }
         return [
           {
             type: 'file',
             data: record.data,
-            mediaType: record.mediaType,
+            mediaType: mimeType,
             filename: typeof record.filename === 'string' ? record.filename : undefined,
           },
         ];
@@ -133,7 +138,6 @@ function signalContentsToHarnessContent(contents: unknown): HarnessMessageConten
       return [];
     });
   }
-
   return [];
 }
 
@@ -1786,14 +1790,11 @@ export class Harness<TState = {}> {
         return {
           type: 'file' as const,
           data: f.data,
-          mediaType: f.mediaType,
+          mimeType: f.mediaType,
           filename: f.filename,
         };
       });
-      messageInput = {
-        role: 'user',
-        content: [{ type: 'text', text: content }, ...fileParts],
-      } as AgentSignalContents;
+      messageInput = [{ type: 'text', text: content }, ...fileParts];
     }
 
     const wasActive = this.isCurrentThreadStreamActive();
