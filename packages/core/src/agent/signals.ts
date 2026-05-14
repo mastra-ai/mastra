@@ -18,33 +18,31 @@ export type AgentSignalType = 'user-message' | 'system-reminder' | string;
  */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 
-type AgentSignalInputBase = {
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalInput = {
   id?: string;
   createdAt?: Date | string;
+  type: AgentSignalType;
+  contents: AgentSignalContents;
   attributes?: Record<string, string | number | boolean | null | undefined>;
   metadata?: Record<string, unknown>;
 };
 
 /**
- * @experimental Agent signals are experimental and may change in a future release.
+ * @deprecated Use {@link AgentSignalInput} directly. The split between user-message
+ * and other signal types was a vestige of an older design — both accept the same
+ * `contents` shape.
  */
-export type UserMessageAgentSignalInput = AgentSignalInputBase & {
-  type: 'user-message';
-  contents: AgentSignalContents;
-};
+export type UserMessageAgentSignalInput = AgentSignalInput;
 
 /**
- * @experimental Agent signals are experimental and may change in a future release.
+ * @deprecated Use {@link AgentSignalInput} directly. The split between user-message
+ * and other signal types was a vestige of an older design — both accept the same
+ * `contents` shape.
  */
-export type ContextAgentSignalInput = AgentSignalInputBase & {
-  type: Exclude<AgentSignalType, 'user-message'>;
-  contents: AgentSignalContents;
-};
-
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
-export type AgentSignalInput = UserMessageAgentSignalInput | ContextAgentSignalInput;
+export type ContextAgentSignalInput = AgentSignalInput;
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -397,22 +395,9 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
         : undefined,
   };
 
-  // Non-user-message signals flatten to a string — their original contents were never
-  // multimodal-shaped on the wire (system reminders etc).
-  const finalContents =
-    type === 'user-message' ? contents : typeof contents === 'string' ? contents : partsToText(message.content.parts);
-
-  return createSignal({ ...base, type, contents: finalContents } as AgentSignalInput);
+  return createSignal({ ...base, type, contents });
 }
 
 export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal {
-  if (part.data.type === 'user-message') {
-    return createSignal({ ...part.data, type: 'user-message' });
-  }
-  // Non-user-message signals flatten to a string on rehydration.
-  const contents =
-    typeof part.data.contents === 'string'
-      ? part.data.contents
-      : partsToText(contentsToMessageParts(part.data.contents));
-  return createSignal({ ...part.data, contents });
+  return createSignal(part.data);
 }

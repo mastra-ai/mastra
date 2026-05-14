@@ -385,6 +385,26 @@ describe('Agent signals', () => {
     expect(emptyReminder.toDBMessage().content.parts).toEqual([{ type: 'text', text: '' }]);
   });
 
+  it('round-trips multimodal non-user-message signals through DB without dropping file parts', () => {
+    const screenshotContents = [
+      { type: 'text' as const, text: 'The user is looking at this screen.' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
+    ];
+    const reminder = createSignal({
+      type: 'system-reminder',
+      contents: screenshotContents,
+      attributes: { kind: 'screenshot' },
+    });
+    const rehydrated = mastraDBMessageToSignal(reminder.toDBMessage());
+    expect(rehydrated.type).toBe('system-reminder');
+    expect(rehydrated.contents).toEqual(screenshotContents);
+    expect(rehydrated.attributes).toEqual({ kind: 'screenshot' });
+
+    // dataPart round-trip preserves the multimodal shape too.
+    const fromDataPart = dataPartToSignal(reminder.toDataPart());
+    expect(fromDataPart.contents).toEqual(screenshotContents);
+  });
+
   it('rejects invalid XML names for contextual signal markup', () => {
     expect(() =>
       createSignal({
