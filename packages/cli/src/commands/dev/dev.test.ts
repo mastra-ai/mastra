@@ -423,6 +423,54 @@ describe('dev command - inspect flag behavior', () => {
     });
   });
 
+  describe('source mode', () => {
+    it('should enable mastra-source conditions for the dev server process', async () => {
+      const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
+      const originalNodeOptions = process.env.NODE_OPTIONS;
+      delete process.env.MASTRA_SOURCE_MODE;
+      process.env.NODE_OPTIONS = '--max-old-space-size=4096';
+
+      try {
+        const { dev } = await import('./dev');
+
+        await dev({
+          dir: undefined,
+          root: process.cwd(),
+          tools: undefined,
+          env: undefined,
+          inspect: false,
+          inspectBrk: false,
+          customArgs: undefined,
+          https: false,
+          sourceMode: true,
+          debug: false,
+        });
+
+        expect(process.env.MASTRA_SOURCE_MODE).toBe('1');
+        expect(process.env.NODE_OPTIONS).toBe('--max-old-space-size=4096 --conditions=mastra-source');
+        expect(execaMock).toHaveBeenCalled();
+        expect(execaMock.mock.calls[0][1]).toContain('--import');
+        expect(execaMock.mock.calls[0][1]).toContain('tsx');
+        expect(execaMock.mock.calls[0][2].env).toMatchObject({
+          MASTRA_SOURCE_MODE: '1',
+          NODE_OPTIONS: '--max-old-space-size=4096 --conditions=mastra-source',
+        });
+      } finally {
+        if (originalSourceMode === undefined) {
+          delete process.env.MASTRA_SOURCE_MODE;
+        } else {
+          process.env.MASTRA_SOURCE_MODE = originalSourceMode;
+        }
+
+        if (originalNodeOptions === undefined) {
+          delete process.env.NODE_OPTIONS;
+        } else {
+          process.env.NODE_OPTIONS = originalNodeOptions;
+        }
+      }
+    });
+  });
+
   describe('empty string edge case', () => {
     it('should use default --inspect when inspect is empty string', async () => {
       const { dev } = await import('./dev');

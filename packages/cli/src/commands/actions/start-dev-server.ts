@@ -12,6 +12,7 @@ interface DevArgs {
   customArgs?: string;
   https?: boolean;
   requestContextPresets?: string;
+  sourceMode?: boolean;
   debug: boolean;
 }
 
@@ -31,6 +32,7 @@ export const startDevServer = async (args: DevArgs) => {
     customArgs: args?.customArgs ? args.customArgs.split(',') : [],
     https: args?.https,
     requestContextPresets: args?.requestContextPresets,
+    sourceMode: args?.sourceMode,
     debug: args.debug,
   }).catch(err => {
     logger.error(err.message);

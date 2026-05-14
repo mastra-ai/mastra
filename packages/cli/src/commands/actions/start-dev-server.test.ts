@@ -112,6 +112,23 @@ describe('startDevServer - inspect flag integration', () => {
     });
   });
 
+  describe('source mode', () => {
+    it('should pass sourceMode to dev function', async () => {
+      const { startDevServer } = await import('./start-dev-server');
+
+      await startDevServer({
+        sourceMode: true,
+        debug: false,
+      });
+
+      expect(devMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceMode: true,
+        }),
+      );
+    });
+  });
+
   describe('mutual exclusivity with string values', () => {
     it('should disable inspect when inspectBrk is provided (string value)', async () => {
       const { startDevServer } = await import('./start-dev-server');

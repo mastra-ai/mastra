@@ -24,6 +24,24 @@ let isRestarting = false;
 let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
+const SOURCE_MODE_CONDITION = '--conditions=mastra-source';
+
+function withSourceModeCondition(nodeOptions?: string) {
+  if (nodeOptions?.split(/\s+/).includes(SOURCE_MODE_CONDITION)) {
+    return nodeOptions;
+  }
+
+  return [nodeOptions, SOURCE_MODE_CONDITION].filter(Boolean).join(' ');
+}
+
+function applySourceModeEnv(env?: Map<string, string>) {
+  const nodeOptions = withSourceModeCondition(env?.get('NODE_OPTIONS') ?? process.env.NODE_OPTIONS);
+
+  process.env.MASTRA_SOURCE_MODE = '1';
+  process.env.NODE_OPTIONS = nodeOptions;
+  env?.set('MASTRA_SOURCE_MODE', '1');
+  env?.set('NODE_OPTIONS', nodeOptions);
+}
 
 function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
   if (child.exitCode !== null) {
@@ -60,6 +78,7 @@ interface StartOptions {
   inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
+  sourceMode?: boolean;
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
 }
@@ -377,6 +396,9 @@ async function rebundleAndRestart(
     }
 
     const env = await bundler.loadEnvVars();
+    if (startOptions.sourceMode) {
+      applySourceModeEnv(env);
+    }
 
     // Add request context presets to env if available
     if (requestContextPresetsJson) {
@@ -415,6 +437,7 @@ export async function dev({
   customArgs,
   https,
   requestContextPresets,
+  sourceMode,
   debug,
 }: {
   dir?: string;
@@ -426,8 +449,14 @@ export async function dev({
   customArgs?: string[];
   https?: boolean;
   requestContextPresets?: string;
+  sourceMode?: boolean;
   debug: boolean;
 }) {
+  if (sourceMode) {
+    applySourceModeEnv();
+    devLogger.info('Source mode enabled; resolving Mastra packages with the mastra-source condition.');
+  }
+
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
@@ -442,6 +471,9 @@ export async function dev({
   const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ?? []);
 
   const loadedEnv = await bundler.loadEnvVars();
+  if (sourceMode) {
+    applySourceModeEnv(loadedEnv);
+  }
 
   // Clear any prior presets to avoid cross-run leakage
   requestContextPresetsJson = undefined;
@@ -511,6 +543,7 @@ export async function dev({
     inspectBrk,
     customArgs,
     https: httpsOptions,
+    sourceMode,
     mastraPackages,
     peerDepMismatches,
   };
