@@ -4,7 +4,7 @@ import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 
 export * from './nav-items';
 
-type NavCrumbOverrides = Partial<Pick<CrumbDef, 'id' | 'label' | 'to' | 'icon'>>;
+type NavCrumbOverrides = Partial<Pick<CrumbDef, 'id' | 'label' | 'heading' | 'to' | 'icon'>>;
 
 /** Crumb derived from the nav registry — guarantees icon/label parity with the sidebar. */
 export function navCrumb(url: string, overrides?: NavCrumbOverrides): CrumbDef {

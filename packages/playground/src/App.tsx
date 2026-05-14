@@ -265,7 +265,7 @@ export const routes: RouteObject[] = [
       {
         path: '/scorers/:scorerId',
         element: <Scorer />,
-        handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb }]),
+        handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
       {
@@ -277,7 +277,7 @@ export const routes: RouteObject[] = [
       {
         path: '/traces/:traceId',
         element: <TraceDetails />,
-        handle: navHandleWithChildren('/observability', [{ id: 'trace', Component: TraceCrumb }]),
+        handle: navHandleWithChildren('/observability', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
       },
       { path: '/resources', element: <Resources />, handle: navHandle('/resources') },
       { path: '/agents', element: <Agents />, handle: navHandle('/agents') },
@@ -290,7 +290,7 @@ export const routes: RouteObject[] = [
       {
         path: '/cms/agents/:agentId/edit',
         element: <EditLayoutWrapper />,
-        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb }]),
+        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb, heading: 'Agent' }]),
         children: agentCmsChildRoutes,
       },
       {
@@ -301,7 +301,7 @@ export const routes: RouteObject[] = [
       {
         path: '/cms/scorers/:scorerId/edit',
         element: <CmsScorersEditPage />,
-        handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: StoredScorerCrumb }]),
+        handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: StoredScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/prompts', element: <PromptBlocks />, handle: navHandle('/prompts') },
       {
@@ -312,14 +312,16 @@ export const routes: RouteObject[] = [
       {
         path: '/cms/prompts/:promptBlockId/edit',
         element: <CmsPromptBlocksEditPage />,
-        handle: navHandleWithChildren('/prompts', [{ id: 'prompt-block', Component: PromptBlockCrumb }]),
+        handle: navHandleWithChildren('/prompts', [
+          { id: 'prompt-block', Component: PromptBlockCrumb, heading: 'Prompt block' },
+        ]),
       },
       {
         path: '/agents/:agentId/tools/:toolId',
         element: <AgentTool />,
         handle: navHandleWithChildren('/agents', [
-          { id: 'agent', Component: AgentCrumb },
-          { id: 'agent-tool', Component: AgentToolCrumb },
+          { id: 'agent', Component: AgentCrumb, heading: 'Agent' },
+          { id: 'agent-tool', Component: AgentToolCrumb, heading: 'Agent tool' },
         ]),
       },
       {
@@ -329,7 +331,7 @@ export const routes: RouteObject[] = [
             <Outlet />
           </AgentLayout>
         ),
-        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb }]),
+        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb, heading: 'Agent' }]),
         children: [
           {
             index: true,
@@ -352,28 +354,32 @@ export const routes: RouteObject[] = [
       {
         path: '/tools/:toolId',
         element: <Tool />,
-        handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb }]),
+        handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb, heading: 'Tool' }]),
       },
 
       { path: '/processors', element: <Processors />, handle: navHandle('/processors') },
       {
         path: '/processors/:processorId',
         element: <Processor />,
-        handle: navHandleWithChildren('/processors', [{ id: 'processor', Component: ProcessorCrumb }]),
+        handle: navHandleWithChildren('/processors', [
+          { id: 'processor', Component: ProcessorCrumb, heading: 'Processor' },
+        ]),
       },
 
       { path: '/mcps', element: <MCPs />, handle: navHandle('/mcps') },
       {
         path: '/mcps/:serverId',
         element: <McpServerPage />,
-        handle: navHandleWithChildren('/mcps', [{ id: 'mcp-server', Component: McpServerCrumb }]),
+        handle: navHandleWithChildren('/mcps', [
+          { id: 'mcp-server', Component: McpServerCrumb, heading: 'MCP server' },
+        ]),
       },
       {
         path: '/mcps/:serverId/tools/:toolId',
         element: <MCPServerToolExecutor />,
         handle: navHandleWithChildren('/mcps', [
-          { id: 'mcp-server', Component: McpServerCrumb },
-          { id: 'mcp-server-tool', Component: McpServerToolCrumb },
+          { id: 'mcp-server', Component: McpServerCrumb, heading: 'MCP server' },
+          { id: 'mcp-server-tool', Component: McpServerToolCrumb, heading: 'MCP server tool' },
         ]),
       },
 
@@ -419,7 +425,9 @@ export const routes: RouteObject[] = [
             <Outlet />
           </WorkflowLayout>
         ),
-        handle: navHandleWithChildren('/workflows', [{ id: 'workflow', Component: WorkflowCrumb }]),
+        handle: navHandleWithChildren('/workflows', [
+          { id: 'workflow', Component: WorkflowCrumb, heading: 'Workflow' },
+        ]),
         children: [
           {
             index: true,
@@ -429,7 +437,9 @@ export const routes: RouteObject[] = [
           {
             path: 'graph/:runId',
             element: <Workflow />,
-            handle: { crumbs: [{ id: 'workflow-run', Component: WorkflowRunCrumb }] } satisfies RouteHeaderHandle,
+            handle: {
+              crumbs: [{ id: 'workflow-run', Component: WorkflowRunCrumb, heading: 'Workflow run' }],
+            } satisfies RouteHeaderHandle,
           },
         ],
       },
@@ -441,7 +451,7 @@ export const routes: RouteObject[] = [
               path: '/datasets/:datasetId',
               element: <DatasetPage />,
               handle: {
-                crumbs: () => [navCrumb('/datasets'), { id: 'dataset', Component: DatasetCrumb }],
+                crumbs: () => [navCrumb('/datasets'), { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' }],
               } satisfies RouteHeaderHandle,
             },
             {
@@ -450,7 +460,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb },
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-item', label: decodeRouteParam(params.itemId) },
                 ],
               } satisfies RouteHeaderHandle,
@@ -461,7 +471,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb },
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   {
                     id: 'dataset-item',
                     label: decodeRouteParam(params.itemId),
@@ -480,7 +490,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb },
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-experiment', label: decodeRouteParam(params.experimentId) },
                 ],
               } satisfies RouteHeaderHandle,
@@ -502,7 +512,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: () => [
                   navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb },
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-experiments', label: 'Experiments' },
                 ],
               },
@@ -513,7 +523,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: () => [
                   navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb },
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-items', label: 'Items' },
                 ],
               },
@@ -524,7 +534,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: () => [
                   navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb },
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-versions', label: 'Versions' },
                 ],
               },

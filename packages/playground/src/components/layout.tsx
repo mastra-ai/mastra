@@ -3,6 +3,7 @@ import {
   LogoWithoutText,
   MainSidebar,
   MainSidebarProvider,
+  PageHeadingContext,
   ThemeProvider,
   Toaster,
   TooltipProvider,
@@ -16,7 +17,14 @@ import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-u
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { NavigationCommand } from '@/lib/command';
-import { RouteHeader, RouteHeaderActionsProvider, RouteHeaderCrumbsProvider } from '@/lib/route-header';
+import {
+  RouteHeader,
+  RouteHeaderActionsProvider,
+  RouteHeaderCrumbsProvider,
+  getRouteHeaderHeading,
+  useRouteHeader,
+  useRouteHeaderCrumbsOverride,
+} from '@/lib/route-header';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
@@ -34,6 +42,9 @@ function MobileNavbar() {
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
+  const { crumbs: handleCrumbs } = useRouteHeader();
+  const overrideCrumbs = useRouteHeaderCrumbsOverride();
+  const pageHeading = getRouteHeaderHeading(overrideCrumbs ?? handleCrumbs);
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
   const shouldReserveRouteHeader = shouldShowSidebar;
@@ -50,20 +61,22 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               <RouteHeader />
             </div>
           )}
-          <div
-            className={cn(
-              'ml-0 mx-1.5 mb-1.5 flex-1 min-h-0 overflow-y-auto [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:mb-2 lg:ml-0',
-              {
-                'mt-0': shouldReserveRouteHeader,
-                'mt-1.5 lg:mt-2': !shouldReserveRouteHeader,
-                'h-[calc(100%-1.5rem)]': !shouldShowSidebar && shouldHideSidebar,
-              },
-            )}
-          >
-            <AuthRequired>
-              <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-            </AuthRequired>
-          </div>
+          <PageHeadingContext.Provider value={pageHeading}>
+            <div
+              className={cn(
+                'ml-0 mx-1.5 mb-1.5 flex-1 min-h-0 overflow-y-auto [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:mb-2 lg:ml-0',
+                {
+                  'mt-0': shouldReserveRouteHeader,
+                  'mt-1.5 lg:mt-2': !shouldReserveRouteHeader,
+                  'h-[calc(100%-1.5rem)]': !shouldShowSidebar && shouldHideSidebar,
+                },
+              )}
+            >
+              <AuthRequired>
+                <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+              </AuthRequired>
+            </div>
+          </PageHeadingContext.Provider>
         </div>
       </div>
     </>

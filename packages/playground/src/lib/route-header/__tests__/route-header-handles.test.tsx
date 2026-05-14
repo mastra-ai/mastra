@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { RouteHeader } from '../route-header';
 import { RouteHeaderActions, RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '../route-header-actions';
 import { RouteHeaderCrumbs, RouteHeaderCrumbsProvider } from '../route-header-crumbs';
+import { getRouteHeaderHeading } from '../route-heading';
 import type { CrumbDef, RouteHeaderHandle } from '../types';
 import { useRouteHeader } from '../use-route-header';
 import { routes } from '@/App';
@@ -132,6 +133,20 @@ describe('route header handles', () => {
     const invalidHandles = collectRouteHandles(getAppRoutes()).flatMap(({ path, handle }) => {
       const crumbs = resolveCrumbs(path, handle);
       if (crumbs.length === 0 || crumbs.some(crumb => !hasRenderableNode(crumb))) {
+        return [path];
+      }
+
+      return [];
+    });
+
+    expect(invalidHandles).toEqual([]);
+  });
+
+  it('resolves declared breadcrumb handles to accessible page headings', () => {
+    const invalidHandles = collectRouteHandles(getAppRoutes()).flatMap(({ path, handle }) => {
+      const crumbs = resolveCrumbs(path, handle);
+      const hasUntitledComponentCrumb = crumbs.some(crumb => 'Component' in crumb && !crumb.heading?.trim());
+      if (hasUntitledComponentCrumb || !getRouteHeaderHeading(crumbs)) {
         return [path];
       }
 

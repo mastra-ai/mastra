@@ -14,6 +14,8 @@ interface CrumbBase {
    * `schedules` over labels that may change.
    */
   id: string;
+  /** Accessible page heading fallback when the visual crumb content is custom. */
+  heading?: string;
   to?: string;
   icon?: RouteHeaderIcon;
 }
