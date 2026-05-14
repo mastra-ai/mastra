@@ -151,7 +151,10 @@ const sidebars = {
         {
           type: 'doc',
           id: 'agents/response-caching',
-          label: 'Response caching',
+          label: 'Response Caching',
+          customProps: {
+            tags: ['experimental'],
+          },
         },
         {
           type: 'doc',
@@ -187,9 +190,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/observational-memory',
           label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -267,9 +267,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Editor',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -336,6 +333,9 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
+          customProps: {
+            tags: ['new'],
+          },
         },
       ],
     },

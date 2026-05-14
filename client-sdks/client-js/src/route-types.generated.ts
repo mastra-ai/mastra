@@ -18,6 +18,11 @@ export type GetAgents_Response = {
   [key: string]: {
     name: string;
     description?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
     instructions?: (string | string[] | any | any[]) | undefined;
     tools: {
       [key: string]: {
@@ -198,6 +203,11 @@ export type GetAgentsAgentId_QueryParams = {
 export type GetAgentsAgentId_Response = {
   name: string;
   description?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   instructions?: (string | string[] | any | any[]) | undefined;
   tools: {
     [key: string]: {
