@@ -104,6 +104,15 @@ describe('handleSkillCommand', () => {
     expect(ctx.showError).toHaveBeenCalledWith('Skill not found: missing. Available skills: review, browse');
   });
 
+  it('shows an error when no skills are configured', async () => {
+    const { ctx, harness } = createCtx({ workspace: {} });
+
+    await handleSkillCommand(ctx, 'any', []);
+
+    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith('No skills configured.');
+  });
+
   it('rejects empty skill names', async () => {
     const { ctx, harness } = createCtx();
 
