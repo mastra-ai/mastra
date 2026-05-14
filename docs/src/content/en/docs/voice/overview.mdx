@@ -1063,9 +1063,12 @@ Each voice provider can be configured with different models and options. Below a
       apiKey: process.env.INWORLD_API_KEY,
       model: 'anthropic/claude-sonnet-4-6',
       speaker: 'Dennis',
-      // Inworld-specific session knobs (MCP tool routing, playback speed, ...)
-      providerData: {
-        audio: { output: { speed: 1.1 } },
+      // Typed Inworld realtime knobs (semantic VAD, playback speed, MCP tool routing, ...)
+      session: {
+        audio: {
+          output: { speed: 1.1 },
+          input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+        },
       },
     })
     ```

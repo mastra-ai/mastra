@@ -4,11 +4,12 @@ Inworld Realtime API integration for Mastra. Full-duplex, websocket-based voice 
 
 Inworld's wire protocol is the OpenAI Realtime GA spec — same client/server event names (`conversation.item.added`, `conversation.item.done`, `response.output_audio.delta`, etc.). The provider-level differences are:
 
-- Endpoint: `wss://api.inworld.ai/api/v1/realtime/session`
-- Auth: `Authorization: Basic <key>` (Inworld keys ship pre-encoded; pass verbatim)
-- Inworld extensions surfaced through `providerData`: curated voice catalog (`Dennis`, …), `inworld-tts` models, playback speed (0.25–1.5×), semantic-VAD eagerness, and `tool_choice: "mcp"` for MCP routing
+- Endpoint: `wss://api.inworld.ai/api/v1/realtime/session?key=<sessionId>&protocol=realtime`. The model is configured via the initial `session.update`, not the URL.
+- Auth: `Authorization: Basic <key>` (Inworld keys ship pre-encoded; pass verbatim).
+- Typed first-class session knobs (`audio.output.speed`, `audio.output.model`, `audio.input.turn_detection`, `audio.input.transcription`, `output_modalities`, `tool_choice`, …) via the `session` constructor field.
+- An untyped `providerData` escape hatch for fields Inworld may add ahead of typed support. Both are deep-merged into every `session.update`.
 
-Sibling to [`@mastra/voice-openai-realtime`](../openai-realtime-api) and [`@mastra/voice-inworld`](../inworld) (TTS-only).
+Sibling to [`@mastra/voice-openai-realtime`](https://github.com/mastra-ai/mastra/tree/main/voice/openai-realtime-api) and [`@mastra/voice-inworld`](https://github.com/mastra-ai/mastra/tree/main/voice/inworld) (TTS + STT).
 
 ## Installation
 
@@ -33,12 +34,23 @@ const voice = new InworldRealtimeVoice({
   apiKey: process.env.INWORLD_API_KEY,
   model: 'anthropic/claude-sonnet-4-6',
   speaker: 'Dennis',
+  instructions: 'You are a helpful voice assistant.',
+  // Typed first-class session knobs:
+  session: {
+    audio: {
+      output: { speed: 1.1 },
+      input: {
+        transcription: { model: 'inworld/inworld-stt-1' },
+        turn_detection: { type: 'semantic_vad', eagerness: 'high' },
+      },
+    },
+  },
 });
 
 await voice.connect();
 
-voice.on('speaking', ({ audio }) => {
-  // PCM16 @ 24kHz audio buffer
+voice.on('speaker', stream => {
+  // PCM16 @ 24kHz stream — pipe to your audio output
 });
 
 voice.on('writing', ({ text, role }) => {
@@ -65,24 +77,49 @@ voice.close();
 
 ## Options
 
-| Option         | Type                | Default                                        | Description                                                     |
-| -------------- | ------------------- | ---------------------------------------------- | --------------------------------------------------------------- |
-| `apiKey`       | `string`            | `process.env.INWORLD_API_KEY`                  | Inworld API key (Basic-encoded, passed verbatim).               |
-| `url`          | `string`            | `wss://api.inworld.ai/api/v1/realtime/session` | Realtime websocket endpoint.                                    |
-| `model`        | `string`            | `anthropic/claude-sonnet-4-6`                  | LLM Router model ID.                                            |
-| `speaker`      | `string`            | `Dennis`                                       | Voice ID. Pass any voice from Inworld's catalog.                |
-| `debug`        | `boolean`           | `false`                                        | Log raw server events.                                          |
-| `providerData` | `Record<string, …>` | `undefined`                                    | Inworld-specific session knobs, shallow-merged on every update. |
+| Option         | Type                            | Default                                        | Description                                                                                |
+| -------------- | ------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `apiKey`       | `string`                        | `process.env.INWORLD_API_KEY`                  | Inworld API key (Basic-encoded, passed verbatim).                                          |
+| `url`          | `string`                        | `wss://api.inworld.ai/api/v1/realtime/session` | Realtime websocket endpoint.                                                               |
+| `model`        | `string`                        | `anthropic/claude-sonnet-4-6`                  | LLM Router model ID.                                                                       |
+| `speaker`      | `string`                        | `Dennis`                                       | Default voice ID. Any catalog voice is accepted.                                           |
+| `sessionId`    | `string`                        | `voice-{Date.now()}`                           | Client-generated session key surfaced as the URL `?key=` parameter.                        |
+| `instructions` | `string`                        | `undefined`                                    | System prompt sent with the initial `session.update`.                                      |
+| `session`      | `Partial<InworldSessionConfig>` | `undefined`                                    | Typed first-class session knobs (see below). Deep-merged into every `session.update`.      |
+| `debug`        | `boolean`                       | `false`                                        | Log raw server events.                                                                     |
+| `providerData` | `Record<string, unknown>`       | `undefined`                                    | Untyped escape hatch for fields Inworld adds before typed support lands. Also deep-merged. |
 
-### `providerData`
+### `session` (typed knobs)
 
-Inworld-specific knobs that don't map to the OpenAI shape live here:
+Use the typed `session` field for known Inworld realtime options. Fields compose with the connect-time defaults (e.g. `audio.output.voice` set from `speaker`):
+
+```typescript
+new InworldRealtimeVoice({
+  speaker: 'Dennis',
+  session: {
+    output_modalities: ['audio', 'text'],
+    audio: {
+      output: { speed: 1.15, model: 'inworld-tts-2' },
+      input: {
+        transcription: { model: 'inworld/inworld-stt-1', language: 'en-US' },
+        turn_detection: { type: 'semantic_vad', eagerness: 'medium' },
+      },
+    },
+    tool_choice: { type: 'mcp', server_label: 'my-mcp' },
+    temperature: 0.6,
+  },
+});
+```
+
+### `providerData` (untyped escape hatch)
+
+Use `providerData` for fields not yet covered by the typed `session` interface — Inworld can roll out new realtime knobs faster than this package picks them up. Anything you put here is deep-merged into every `session.update`, and overrides `session` on key collisions.
 
 ```typescript
 new InworldRealtimeVoice({
   providerData: {
-    tool_choice: { type: 'mcp', server_label: 'my-mcp' }, // Inworld MCP routing
-    audio: { output: { speed: 1.15 } }, // playback speed
+    // Hypothetical forward-compat fields:
+    some_new_realtime_feature: true,
   },
 });
 ```

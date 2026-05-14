@@ -1,7 +1,28 @@
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { transformTools } from './utils';
+import { deepMerge, transformTools } from './utils';
+
+describe('deepMerge', () => {
+  it('composes nested plain-object fields', () => {
+    expect(deepMerge({ audio: { output: { voice: 'Dennis' } } }, { audio: { output: { speed: 1.1 } } })).toEqual({
+      audio: { output: { voice: 'Dennis', speed: 1.1 } },
+    });
+  });
+
+  it('replaces arrays rather than merging them', () => {
+    expect(deepMerge({ tools: [1, 2, 3] }, { tools: [9] })).toEqual({ tools: [9] });
+  });
+
+  it('lets source override scalars', () => {
+    expect(deepMerge({ temperature: 0.2 }, { temperature: 0.9 })).toEqual({ temperature: 0.9 });
+  });
+
+  it('leaves target untouched when source omits the key', () => {
+    const target = { audio: { output: { voice: 'Dennis' } }, model: 'foo' };
+    expect(deepMerge(target, { temperature: 0.5 })).toEqual({ ...target, temperature: 0.5 });
+  });
+});
 
 describe('transformTools', () => {
   describe('Basic Tool Transformation', () => {

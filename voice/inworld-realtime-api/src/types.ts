@@ -63,32 +63,78 @@ export type InworldToolChoice =
   | { type: 'function'; name: string }
   | { type: 'mcp'; server_label: string };
 
+/**
+ * Transcription configuration for incoming user audio.
+ */
+export interface InworldInputTranscription {
+  model?: string;
+  language?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Voice activity detection / turn detection configuration. Inworld supports
+ * both server-side VAD and a semantic-VAD mode with an "eagerness" knob.
+ */
+export interface InworldTurnDetection {
+  type?: 'server_vad' | 'semantic_vad';
+  threshold?: number;
+  prefix_padding_ms?: number;
+  silence_duration_ms?: number;
+  /** Semantic-VAD only: how eagerly to end a user turn. */
+  eagerness?: 'low' | 'medium' | 'high' | 'auto';
+  create_response?: boolean;
+  interrupt_response?: boolean;
+  [key: string]: unknown;
+}
+
 export interface InworldAudioInput {
   format?: 'audio/pcm' | 'audio/pcmu' | 'audio/pcma';
+  transcription?: InworldInputTranscription;
+  turn_detection?: InworldTurnDetection | null;
   [key: string]: unknown;
 }
 
 export interface InworldAudioOutput {
   format?: 'audio/pcm' | 'audio/pcmu' | 'audio/pcma';
+  /** Voice catalog ID (e.g. "Dennis", "Hades"). */
   voice?: string;
+  /** Inworld TTS model (e.g. "inworld-tts-2"). */
+  model?: string;
+  /** Playback speed multiplier (0.25 to 1.5). */
   speed?: number;
   [key: string]: unknown;
+}
+
+export interface InworldAudioConfig {
+  input?: InworldAudioInput;
+  output?: InworldAudioOutput;
 }
 
 export interface InworldSessionConfig {
   model?: string;
   instructions?: string;
   output_modalities?: Array<'text' | 'audio'>;
-  audio?: {
-    input?: InworldAudioInput;
-    output?: InworldAudioOutput;
-  };
+  audio?: InworldAudioConfig;
   tools?: InworldTool[];
   tool_choice?: InworldToolChoice;
   temperature?: number;
   max_output_tokens?: number | 'inf';
   truncation?: 'auto' | 'disabled' | { type: 'retention_ratio'; retention_ratio: number };
-  providerData?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * Per-response override for `response.create`. Inworld accepts the same audio
+ * config nesting as the OpenAI Realtime GA spec.
+ */
+export interface InworldResponseConfig {
+  instructions?: string;
+  output_modalities?: Array<'text' | 'audio'>;
+  audio?: InworldAudioConfig;
+  tool_choice?: InworldToolChoice;
+  temperature?: number;
+  max_output_tokens?: number | 'inf';
   [key: string]: unknown;
 }
 

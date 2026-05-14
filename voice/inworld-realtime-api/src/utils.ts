@@ -53,6 +53,32 @@ export const transformTools = (tools?: TTools): ToolDefinition[] => {
   return inworldTools;
 };
 
+/**
+ * Recursively merge `source` into `target`. Plain objects compose; arrays and
+ * primitives in `source` replace whatever's in `target`. Used to merge the
+ * typed `session` field and the untyped `providerData` escape hatch into
+ * per-call `session.update` payloads without clobbering nested fields like
+ * `audio.output.voice`.
+ */
+export function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    const existing = out[key];
+    if (isPlainObject(existing) && isPlainObject(value)) {
+      out[key] = deepMerge(existing as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 export const isReadableStream = (obj: unknown) => {
   return (
     obj &&

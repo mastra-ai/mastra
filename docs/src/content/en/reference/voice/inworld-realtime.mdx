@@ -8,9 +8,9 @@ packages:
 
 # Inworld Realtime voice
 
-The `InworldRealtimeVoice` class provides real-time, full-duplex voice interaction using [Inworld AI's Realtime API](https://docs.inworld.ai/realtime/quickstart-websocket) over WebSockets. It supports speech-to-speech, tool calling, and Inworld-specific session knobs such as MCP tool routing and playback speed.
+The `InworldRealtimeVoice` class provides real-time, full-duplex voice interaction using [Inworld AI's Realtime API](https://docs.inworld.ai/realtime/quickstart-websocket) over WebSockets. It supports speech-to-speech, tool calling, and Inworld-specific session knobs such as semantic voice activity detection, MCP tool routing, and playback speed.
 
-Inworld's wire protocol is the OpenAI Realtime GA spec, so client and server event names match `@mastra/voice-openai-realtime`. The differences are the endpoint, the `Authorization: Basic <key>` header, and Inworld-specific session options exposed through `providerData`.
+Inworld's wire protocol is the OpenAI Realtime GA spec, so client and server event names match `@mastra/voice-openai-realtime`. The provider-level differences are the endpoint (which uses a client-generated session key in the URL), the `Authorization: Basic <key>` header, the typed `session` constructor field for Inworld-specific knobs, and an untyped `providerData` escape hatch for fields not yet covered by the typed interface.
 
 For batch text-to-speech and speech-to-text, see [`@mastra/voice-inworld`](/reference/voice/inworld).
 
@@ -28,8 +28,12 @@ const voiceWithConfig = new InworldRealtimeVoice({
   apiKey: 'your-inworld-api-key',
   model: 'anthropic/claude-sonnet-4-6',
   speaker: 'Dennis',
-  providerData: {
-    audio: { output: { speed: 1.1 } },
+  instructions: 'You are a helpful voice assistant.',
+  session: {
+    audio: {
+      output: { speed: 1.1 },
+      input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+    },
   },
 })
 
@@ -74,14 +78,16 @@ voice.close()
   {
     name: 'url',
     type: 'string',
-    description: 'Realtime WebSocket endpoint.',
+    description:
+      'Realtime WebSocket endpoint. A client-generated session key and protocol parameter are appended automatically.',
     isOptional: true,
     defaultValue: "'wss://api.inworld.ai/api/v1/realtime/session'",
   },
   {
     name: 'model',
     type: 'string',
-    description: "LLM Router model ID. Any model supported by Inworld's router is accepted.",
+    description:
+      "LLM Router model ID. Sent via the initial session.update, not in the URL. Any model supported by Inworld's router is accepted.",
     isOptional: true,
     defaultValue: "'anthropic/claude-sonnet-4-6'",
   },
@@ -91,6 +97,27 @@ voice.close()
     description: "Default voice ID for speech synthesis. Any voice from Inworld's catalog is accepted.",
     isOptional: true,
     defaultValue: "'Dennis'",
+  },
+  {
+    name: 'sessionId',
+    type: 'string',
+    description:
+      'Client-generated session key surfaced as the URL `key` parameter. A timestamp-based key is generated automatically when omitted.',
+    isOptional: true,
+    defaultValue: "'voice-{Date.now()}'",
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'System prompt sent with the initial session.update.',
+    isOptional: true,
+  },
+  {
+    name: 'session',
+    type: 'Partial<InworldSessionConfig>',
+    description:
+      'Typed first-class session options (audio, tool_choice, output_modalities, temperature, ...). Deep-merged into every session.update so nested fields like audio.output.voice and audio.output.speed compose rather than overwrite each other. See the session field below.',
+    isOptional: true,
   },
   {
     name: 'debug',
@@ -103,29 +130,40 @@ voice.close()
     name: 'providerData',
     type: 'Record<string, unknown>',
     description:
-      'Inworld-specific session options, shallow-merged into every session.update sent by the client. See providerData below.',
+      'Untyped escape hatch for realtime fields not yet covered by the typed `session` interface. Deep-merged into every session.update and overrides `session` on key collisions. Use this for forward-compatibility with new Inworld features.',
     isOptional: true,
   },
 ]}
 />
 
-### `providerData`
+### `session` (typed knobs)
 
-Inworld-specific session knobs that are not part of the OpenAI Realtime shape are passed through `providerData`. Values are shallow-merged into the `session` object on every `session.update`.
+Use the typed `session` field for documented Inworld realtime options. Fields compose with the connect-time defaults (e.g. `audio.output.voice` set from `speaker`):
 
 <PropertiesTable
   content={[
   {
-    name: 'tool_choice',
-    type: 'string | { type: "function"; name: string } | { type: "mcp"; server_label: string }',
-    description:
-      'Tool selection strategy. Use the mcp variant to route tool calls through a configured Inworld MCP server.',
+    name: 'output_modalities',
+    type: 'Array<"text" | "audio">',
+    description: 'Modalities the model should produce.',
+    isOptional: true,
+  },
+  {
+    name: 'audio.output.voice',
+    type: 'string',
+    description: 'Voice catalog ID. When omitted, the constructor `speaker` is used.',
     isOptional: true,
   },
   {
     name: 'audio.output.speed',
     type: 'number',
     description: 'Playback speed multiplier for synthesized audio (0.25 to 1.5).',
+    isOptional: true,
+  },
+  {
+    name: 'audio.output.model',
+    type: 'string',
+    description: 'Inworld TTS model (e.g. "inworld-tts-2").',
     isOptional: true,
   },
   {
@@ -140,10 +178,52 @@ Inworld-specific session knobs that are not part of the OpenAI Realtime shape ar
     description: 'Input audio encoding sent to the server.',
     isOptional: true,
   },
+  {
+    name: 'audio.input.transcription',
+    type: '{ model?: string; language?: string }',
+    description: 'Server-side transcription for incoming user audio (e.g. `{ model: "inworld/inworld-stt-1" }`).',
+    isOptional: true,
+  },
+  {
+    name: 'audio.input.turn_detection',
+    type: 'InworldTurnDetection',
+    description:
+      'Voice activity / turn detection. Supports server VAD and semantic VAD with an `eagerness` knob (low / medium / high / auto).',
+    isOptional: true,
+  },
+  {
+    name: 'tool_choice',
+    type: 'string | { type: "function"; name: string } | { type: "mcp"; server_label: string }',
+    description:
+      'Tool selection strategy. Use the mcp variant to route tool calls through a configured Inworld MCP server.',
+    isOptional: true,
+  },
+  {
+    name: 'temperature',
+    type: 'number',
+    description: 'Sampling temperature for the model.',
+    isOptional: true,
+  },
+  {
+    name: 'max_output_tokens',
+    type: 'number | "inf"',
+    description: 'Maximum tokens generated per response.',
+    isOptional: true,
+  },
+  {
+    name: 'truncation',
+    type: '"auto" | "disabled" | { type: "retention_ratio"; retention_ratio: number }',
+    description: 'Conversation truncation strategy.',
+    isOptional: true,
+  },
 ]}
 />
 
-Any other field accepted by Inworld's `session.update` can be passed through `providerData`.
+### `providerData` (untyped escape hatch)
+
+`providerData` is intentionally untyped. Inworld can roll out new realtime knobs faster than this package picks them up, and `providerData` lets you forward any field straight through to the server. Its contents are deep-merged into every `session.update`, and override the typed `session` field on key collisions.
+
+Prefer the typed `session` field for documented options. Reach for `providerData` only when sending fields the typed interface does not yet cover.
 
 ## Methods
 
@@ -410,6 +490,8 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 ## Notes
 
 - API keys can be provided via constructor options or the `INWORLD_API_KEY` environment variable. Keys are pre-Basic-encoded; do not re-encode them.
-- Audio output defaults to PCM16 at 24 kHz. `audio/pcmu` and `audio/pcma` at 8 kHz are also supported via `providerData.audio.output.format`.
+- The WebSocket URL appends `?key=<sessionId>&protocol=realtime`. The model is configured via the initial `session.update`, not the URL.
+- Per-call `speak(input, { speaker })` scopes the voice override to a single response (via `response.audio.output.voice`) and does NOT mutate the session.
+- Audio output defaults to PCM16 at 24 kHz. `audio/pcmu` and `audio/pcma` at 8 kHz are also supported via `session.audio.output.format`.
 - Use `connect()` before any send, speak, or listen call. Events sent before the WebSocket is open are queued and flushed once the server acknowledges `session.updated`.
 - The voice instance must be closed with `close()` or `disconnect()` to release the WebSocket.

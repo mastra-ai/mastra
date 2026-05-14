@@ -4,8 +4,8 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import { MastraVoice } from '@mastra/core/voice';
 import { WebSocket } from 'ws';
-import type { InworldSessionConfig } from './types';
-import { isReadableStream, transformTools } from './utils';
+import type { InworldResponseConfig, InworldSessionConfig } from './types';
+import { deepMerge, isReadableStream, transformTools } from './utils';
 
 type EventCallback = (...args: any[]) => void;
 
@@ -45,16 +45,50 @@ const VOICES = ['Dennis', 'Hades', 'Wendy', 'Edward', 'Olivia', 'Sarah', 'Timoth
 
 type TTools = ToolsInput;
 
+export interface InworldRealtimeVoiceOptions {
+  /** Inworld API key. Pre-Basic-encoded; passed verbatim. Falls back to `INWORLD_API_KEY`. */
+  apiKey?: string;
+  /** Override the realtime WebSocket endpoint. */
+  url?: string;
+  /** Default LLM Router model (e.g. `anthropic/claude-sonnet-4-6`). */
+  model?: string;
+  /** Default voice catalog ID (e.g. `Dennis`). */
+  speaker?: string;
+  /**
+   * Optional client-generated session ID surfaced as the `key` URL parameter.
+   * Inworld requires a per-session key; one is generated automatically if
+   * omitted. Set this for replayable/observable sessions.
+   */
+  sessionId?: string;
+  /** System prompt forwarded with the initial `session.update`. */
+  instructions?: string;
+  /**
+   * First-class typed session config merged into every `session.update`. Use
+   * this for Inworld-specific knobs (audio output speed/model, input
+   * transcription, semantic-VAD eagerness, tool_choice, etc.). Deep-merged
+   * with the per-call session payload — nested fields compose rather than
+   * replace.
+   */
+  session?: Partial<InworldSessionConfig>;
+  debug?: boolean;
+  /**
+   * Untyped escape hatch for fields that don't yet have first-class support.
+   * Deep-merged into the `session` object on every `session.update`.
+   * Prefer `session` for documented fields.
+   */
+  providerData?: Record<string, unknown>;
+}
+
 /**
  * InworldRealtimeVoice provides real-time voice interaction over Inworld's
- * Realtime API. Wire protocol is the OpenAI Realtime GA spec — same event
+ * Realtime API. The wire protocol is the OpenAI Realtime GA spec — same event
  * names on both sides (`conversation.item.added`, `conversation.item.done`,
  * `response.output_audio.delta`, etc.). Provider-level differences are the
- * endpoint, Basic auth, and Inworld-specific knobs surfaced via
- * `providerData`.
+ * endpoint, Basic auth, the URL session-key handshake, and Inworld-specific
+ * session knobs surfaced through typed `session` + escape-hatch `providerData`.
  *
- * Auth: Inworld API keys are already Basic-encoded — they are passed
- * verbatim in the `Authorization: Basic ...` header (do NOT re-encode).
+ * Auth: Inworld API keys are already Basic-encoded — they are passed verbatim
+ * in the `Authorization: Basic ...` header (do NOT re-encode).
  *
  * @example
  * ```typescript
@@ -62,10 +96,16 @@ type TTools = ToolsInput;
  *   apiKey: process.env.INWORLD_API_KEY,
  *   model: 'anthropic/claude-sonnet-4-6',
  *   speaker: 'Dennis',
+ *   session: {
+ *     audio: {
+ *       output: { speed: 1.1 },
+ *       input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+ *     },
+ *   },
  * });
  *
  * await voice.connect();
- * voice.on('speaking', ({ audio }) => { /* play audio *\/ });
+ * voice.on('speaker', stream => { /* pipe to audio out *\/ });
  * await voice.speak('Hello from Mastra!');
  * ```
  */
@@ -79,23 +119,11 @@ export class InworldRealtimeVoice extends MastraVoice {
   private debug: boolean;
   private queue: unknown[] = [];
   private requestContext?: RequestContext;
+  private session?: Partial<InworldSessionConfig>;
   private providerData?: Record<string, unknown>;
+  private sessionId: string;
 
-  constructor(
-    private options: {
-      model?: string;
-      url?: string;
-      apiKey?: string;
-      speaker?: string;
-      debug?: boolean;
-      /**
-       * Inworld-specific extensions (voice presets, semantic-VAD eagerness,
-       * MCP tool_choice, etc.). Shallow-merged into the `session` object on
-       * every `session.update` sent by this client.
-       */
-      providerData?: Record<string, unknown>;
-    } = {},
-  ) {
+  constructor(private options: InworldRealtimeVoiceOptions = {}) {
     super();
 
     this.client = new EventEmitter();
@@ -103,7 +131,10 @@ export class InworldRealtimeVoice extends MastraVoice {
     this.events = {} as EventMap;
     this.speaker = options.speaker || DEFAULT_VOICE;
     this.debug = options.debug || false;
+    this.session = options.session;
     this.providerData = options.providerData;
+    this.instructions = options.instructions;
+    this.sessionId = options.sessionId ?? `voice-${Date.now()}`;
   }
 
   /**
@@ -131,6 +162,8 @@ export class InworldRealtimeVoice extends MastraVoice {
   /**
    * Generate speech from text. The model is asked to repeat the input
    * verbatim — this mirrors the behavior of @mastra/voice-openai-realtime.
+   * A per-call `speaker` is scoped to this response only (sent via
+   * `response.audio.output.voice`); it does NOT mutate session state.
    */
   async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<void> {
     if (typeof input !== 'string') {
@@ -145,10 +178,6 @@ export class InworldRealtimeVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-    if (options?.speaker) {
-      this.updateConfig({ audio: { output: { voice: options.speaker } } });
-    }
-
     this.sendEvent('conversation.item.create', {
       item: {
         type: 'message',
@@ -156,19 +185,26 @@ export class InworldRealtimeVoice extends MastraVoice {
         content: [{ type: 'input_text', text: input }],
       },
     });
-    this.sendEvent('response.create', {
-      response: {
-        instructions: `Repeat the following text: ${input}`,
-      },
-    });
+
+    const response: InworldResponseConfig = {
+      instructions: `Repeat the following text: ${input}`,
+    };
+    if (options?.speaker) {
+      response.audio = { output: { voice: options.speaker } };
+    }
+    this.sendEvent('response.create', { response });
   }
 
   /**
-   * Apply a new session config. Inworld-specific knobs travel through
-   * `providerData`, which is shallow-merged from the constructor option.
+   * Apply a new session config. The typed `session` constructor field and the
+   * untyped `providerData` escape hatch are deep-merged into the per-call
+   * payload, so nested fields (e.g. `audio.output.voice` + `audio.output.speed`)
+   * compose rather than overwrite each other.
    */
-  updateConfig(sessionConfig: InworldSessionConfig | Record<string, unknown>): void {
-    const merged = this.providerData ? { ...sessionConfig, ...this.providerData } : sessionConfig;
+  updateConfig(sessionConfig: Partial<InworldSessionConfig> | Record<string, unknown>): void {
+    let merged: Record<string, unknown> = { ...sessionConfig } as Record<string, unknown>;
+    if (this.session) merged = deepMerge(merged, this.session as Record<string, unknown>);
+    if (this.providerData) merged = deepMerge(merged, this.providerData);
     this.sendEvent('session.update', { session: merged });
   }
 
@@ -231,11 +267,15 @@ export class InworldRealtimeVoice extends MastraVoice {
 
   /**
    * Open the websocket, send the initial `session.update`, and wait for
-   * `session.updated`. Inworld accepts Basic-encoded API keys verbatim.
+   * `session.updated`.
+   *
+   * URL contract: Inworld's Realtime WebSocket requires a client-generated
+   * session ID (`?key=...`) and `&protocol=realtime`. The model is configured
+   * via the initial `session.update`, NOT the URL.
    */
   async connect({ requestContext }: { requestContext?: RequestContext } = {}) {
     const baseUrl = this.options.url || DEFAULT_URL;
-    const url = `${baseUrl}?model=${encodeURIComponent(this.options.model ?? DEFAULT_MODEL)}`;
+    const url = `${baseUrl}?key=${encodeURIComponent(this.sessionId)}&protocol=realtime`;
     const apiKey = this.options.apiKey || process.env.INWORLD_API_KEY;
     if (!apiKey) {
       throw new Error(
@@ -526,4 +566,13 @@ export class InworldRealtimeVoice extends MastraVoice {
   }
 }
 
-export type { InworldSessionConfig } from './types';
+export type {
+  InworldAudioConfig,
+  InworldAudioInput,
+  InworldAudioOutput,
+  InworldInputTranscription,
+  InworldResponseConfig,
+  InworldSessionConfig,
+  InworldToolChoice,
+  InworldTurnDetection,
+} from './types';
