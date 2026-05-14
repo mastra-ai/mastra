@@ -208,9 +208,8 @@ function injectMarkerInline(
 // Build the LLM-facing projection from the pre-normalized canonical form. Three shapes:
 //   1. user-message with no attributes → pass original contents through unchanged
 //   2. text-only → single wrapped CoreMessage
-//   3. multimodal → user-message inlines the marker into the first text part; other signal
-//      types prefix a self-closing marker so framework context stays distinct from the
-//      preserved original contents
+//   3. multimodal → inline the marker into the first text part so the wrapper stays
+//      adjacent to its payload (file/image parts ride along on the same turn)
 function signalToLLMMessage(
   signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>,
   normalized: MastraDBMessage[],

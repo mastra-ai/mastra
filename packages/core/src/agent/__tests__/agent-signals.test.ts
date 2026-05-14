@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list/state/types';
 import {
   createSignal,
   dataPartToSignal,
@@ -331,6 +332,43 @@ describe('Agent signals', () => {
     expect(fileOnlyResult[0]).toEqual({ role: 'user', content: '<system-reminder kind="reference-image" />' });
     expect((fileOnlyResult[1] as MastraDBMessage)?.content.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' })]),
+    );
+
+    // System-reminder with array-valued contents (multiple CoreMessages, mixed text + file)
+    // gets the marker inlined into the very first text part — no nested arrays, no
+    // dropped messages.
+    const arrayReminderContents = [
+      { role: 'user' as const, content: 'Step one of the screen.' },
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'text' as const, text: 'Step two has this attachment.' },
+          { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+        ],
+      },
+    ];
+    const arrayReminder = createSignal({
+      type: 'system-reminder',
+      contents: arrayReminderContents,
+      attributes: { kind: 'walkthrough' },
+    });
+    const arrayResult = arrayReminder.toLLMMessage() as MastraDBMessage[];
+    expect(arrayResult).toHaveLength(2);
+    // Only the first text part across all messages gets wrapped.
+    expect(arrayResult[0]?.content.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'text',
+          text: '<system-reminder kind="walkthrough">Step one of the screen.</system-reminder>',
+        }),
+      ]),
+    );
+    // Subsequent text parts pass through untouched.
+    expect(arrayResult[1]?.content.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'text', text: 'Step two has this attachment.' }),
+        expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+      ]),
     );
   });
 
