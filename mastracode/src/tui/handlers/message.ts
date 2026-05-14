@@ -57,6 +57,7 @@ type StreamedSystemReminderPart = {
   kind?: string;
   title?: string;
   checkCount?: number;
+  count?: number;
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
@@ -90,6 +91,7 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
     kind: typeof reminder.kind === 'string' ? reminder.kind : undefined,
     title: typeof reminder.title === 'string' ? reminder.title : undefined,
     checkCount: typeof reminder.checkCount === 'number' ? reminder.checkCount : undefined,
+    count: typeof reminder.count === 'number' ? reminder.count : undefined,
   };
 }
 
@@ -115,6 +117,7 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     kind: reminder.kind,
     title: reminder.title,
     checkCount: reminder.checkCount,
+    count: reminder.count,
   });
 }
 

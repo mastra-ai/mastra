@@ -195,6 +195,7 @@ function toSystemReminderContent(
       getNumberValue(payload.checkCount) ??
       getNumberValue(attributes?.checkCount) ??
       getNumberValue(metadata?.checkCount),
+    count: getNumberValue(payload.count) ?? getNumberValue(attributes?.count) ?? getNumberValue(metadata?.count),
   };
 }
 

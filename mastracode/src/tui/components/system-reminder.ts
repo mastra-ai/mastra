@@ -27,6 +27,7 @@ export interface SystemReminderOptions {
   kind?: string;
   title?: string;
   checkCount?: number;
+  count?: number;
 }
 
 export class SystemReminderComponent extends Container {
@@ -42,6 +43,7 @@ export class SystemReminderComponent extends Container {
   private readonly url?: string;
   private readonly title?: string;
   private readonly checkCount?: number;
+  private readonly count?: number;
   private expanded = false;
 
   isExpanded(): boolean {
@@ -69,6 +71,7 @@ export class SystemReminderComponent extends Container {
     this.url = options.url;
     this.title = options.title;
     this.checkCount = options.checkCount;
+    this.count = options.count;
 
     this.rebuild();
   }
@@ -114,6 +117,7 @@ export class SystemReminderComponent extends Container {
         reviewState: this.reviewState,
         url: this.url,
         checkCount: this.checkCount,
+        count: this.count,
       }),
     ].filter((line): line is string => Boolean(line));
 
@@ -133,7 +137,7 @@ export class SystemReminderComponent extends Container {
       this.addChild(new Text(renderRow('', innerWidth, border), BOX_INDENT, 0));
     }
 
-    for (const line of visibleMessageLines) {
+    for (const line of getDisplayMessageLines(this.reminderType, visibleMessageLines, { count: this.count })) {
       this.addChild(new Text(renderRow(bodyColor(line), innerWidth, border), BOX_INDENT, 0));
     }
 
@@ -203,7 +207,8 @@ function isGithubReminderType(reminderType: string | undefined): boolean {
     reminderType === 'github-ci-failure' ||
     reminderType === 'github-comment' ||
     reminderType === 'github-review' ||
-    reminderType === 'github-command-error'
+    reminderType === 'github-command-error' ||
+    reminderType === 'github-pending-notifications'
   );
 }
 
@@ -212,6 +217,7 @@ function getGithubReminderTitle(reminderType: string | undefined): string {
   if (reminderType === 'github-comment') return 'GitHub comment';
   if (reminderType === 'github-review') return 'GitHub review';
   if (reminderType === 'github-command-error') return 'GitHub polling error';
+  if (reminderType === 'github-pending-notifications') return 'GitHub notifications pending';
   return 'GitHub notification';
 }
 
@@ -223,6 +229,7 @@ function getGithubMetadataLines(metadata: {
   reviewState?: string;
   url?: string;
   checkCount?: number;
+  count?: number;
 }): string[] {
   if (!isGithubReminderType(metadata.reminderType)) return [];
 
@@ -233,6 +240,16 @@ function getGithubMetadataLines(metadata: {
     typeof metadata.checkCount === 'number' ? `failed checks: ${metadata.checkCount}` : undefined,
     metadata.url,
   ].filter((line): line is string => Boolean(line));
+}
+
+function getDisplayMessageLines(
+  reminderType: string | undefined,
+  messageLines: string[],
+  metadata: { count?: number },
+): string[] {
+  if (reminderType !== 'github-pending-notifications') return messageLines;
+  const count = metadata.count ?? 0;
+  return [`${count} pending GitHub ${count === 1 ? 'notification' : 'notifications'}`];
 }
 
 function getLoadingMessage(reminderType: string | undefined, path: string | undefined): string {

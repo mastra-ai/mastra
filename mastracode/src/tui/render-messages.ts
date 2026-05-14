@@ -142,6 +142,7 @@ function createReminderComponent(
     kind?: string;
     title?: string;
     checkCount?: number;
+    count?: number;
   },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
@@ -165,6 +166,7 @@ function createReminderComponent(
     kind: options.kind,
     title: options.title,
     checkCount: options.checkCount,
+    count: options.count,
   });
 }
 
@@ -311,6 +313,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
       kind?: string;
       title?: string;
       checkCount?: number;
+      count?: number;
     };
     if (goalMetadata.prNumber && reminderPart.reminderType === 'github-pr-subscribe') {
       state.activeGithubPrSubscriptions = addGithubPrSubscriptionBadge(state.activeGithubPrSubscriptions ?? [], {
@@ -340,6 +343,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
       kind: goalMetadata.kind,
       title: goalMetadata.title,
       checkCount: goalMetadata.checkCount,
+      count: goalMetadata.count,
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);

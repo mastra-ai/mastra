@@ -168,6 +168,31 @@ describe('addUserMessage', () => {
     expect(rendered).not.toContain('Goal set');
   });
 
+  it('renders pending GitHub notices with compact user-facing text', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createReminderMessage({
+        type: 'system_reminder',
+        reminderType: 'github-pending-notifications',
+        message: '2 new GitHub notifications are pending. Call the github tool with action: "pending" to deliver them.',
+        repo: 'mastra-ai/mastra',
+        prNumber: 16515,
+        count: 2,
+      } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    const rendered = state.allSystemReminderComponents[0]!.render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('GitHub notifications pending');
+    expect(rendered).toContain('mastra-ai/mastra #16515');
+    expect(rendered).toContain('2 pending GitHub notifications');
+    expect(rendered).not.toContain('Call the github tool');
+  });
+
   it('inserts a goal reminder before an active streaming response', () => {
     const state = createState();
     const streamingComponent = new AssistantMessageComponent();

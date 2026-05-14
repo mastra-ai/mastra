@@ -969,6 +969,7 @@ export type HarnessMessageContent =
       kind?: string;
       title?: string;
       checkCount?: number;
+      count?: number;
     }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
