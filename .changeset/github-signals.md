@@ -1,9 +1,9 @@
 ---
-"@mastra/core": minor
-"mastracode": minor
+'@mastra/core': minor
+'mastracode': minor
 ---
 
-Added `GithubSignals`, a signal controller exported from `@mastra/core/signals`, for subscribing agent threads to GitHub pull request notifications. New subscriptions establish a silent baseline before polling, idle-time polling uses lightweight `gh api` REST endpoints and runs once when the agent becomes idle, comment/review notifications are gated to authorized repository contributors or configured bots, and notifications use compact GitHub-specific system reminder types so agents receive token-efficient context.
+Added `GithubSignals`, a signal controller exported from `@mastra/core/signals`, for subscribing agent threads to GitHub pull request notifications. New subscriptions establish a silent baseline before polling, polling uses lightweight `gh api` REST endpoints, active-run notifications are queued behind a compact pending reminder and can be delivered with `github({ action: 'pending' })` or by the five-minute pending flush, comment/review notifications are gated to authorized repository contributors or configured bots, and notifications use compact GitHub-specific system reminder types so agents receive token-efficient context.
 
 ```ts
 import { Agent } from '@mastra/core/agent';

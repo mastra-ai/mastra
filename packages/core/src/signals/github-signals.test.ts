@@ -244,7 +244,7 @@ describe('GithubSignals', () => {
     vi.useRealTimers();
   });
 
-  it('skips active threads during interval polling and polls once when they become idle', async () => {
+  it('polls active threads on the interval and queues full notifications behind a pending reminder', async () => {
     vi.useFakeTimers();
     const commandRunner = createSnapshotCommandRunner(
       [
@@ -252,7 +252,7 @@ describe('GithubSignals', () => {
           comments: [
             {
               id: 'comment-1',
-              body: 'idle comment',
+              body: 'active comment',
               createdAt: '2026-01-02T00:01:00.000Z',
               author: { login: 'reviewer' },
             },
@@ -276,12 +276,223 @@ describe('GithubSignals', () => {
     github.markActive(context);
 
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(sendSignal).not.toHaveBeenCalled();
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    const [pendingReminder, target] = sendSignal.mock.calls[0] as any[];
+    expect(pendingReminder).toMatchObject({
+      type: 'system-reminder',
+      contents: '1 new GitHub notification is pending. Call the github tool with action: "pending" to deliver them.',
+      attributes: { type: 'github-pending-notifications', count: 1, pr: 123 },
+    });
+    expect(target).toMatchObject({ ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'persist' } });
 
     await github.markIdle(context);
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    const [notification] = sendSignal.mock.calls[0] as any[];
-    expect(notification).toMatchObject({ contents: 'idle comment' });
+    github.destroy();
+    vi.useRealTimers();
+  });
+
+  it('delivers queued notifications from the github pending tool', async () => {
+    vi.useFakeTimers();
+    const commandRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'queued comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    const harness = createHarness();
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    const result = await processSignals(github, harness, []);
+    const toolResult = await (result?.tools?.github as any).execute({ action: 'pending' });
+
+    expect(toolResult).toEqual({ success: true, message: 'notifications will now be delivered' });
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    const [notification] = sendSignal.mock.calls[1] as any[];
+    expect(notification).toMatchObject({
+      contents: 'queued comment',
+      attributes: { type: 'github-comment', user: 'reviewer', pr: 123 },
+    });
+    github.destroy();
+    vi.useRealTimers();
+  });
+
+  it('filters pending delivery by PR number', async () => {
+    vi.useFakeTimers();
+    const commandRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'first queued comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-2',
+              body: 'second queued comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    const harness = createHarness();
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    for (const prNumber of [123, 456]) {
+      github.addSubscription({
+        ...context,
+        repo: 'mastra-ai/mastra',
+        prNumber,
+        lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+    }
+    github.markActive(context);
+
+    await github.poll();
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+
+    const result = await processSignals(github, harness, []);
+    const toolResult = await (result?.tools?.github as any).execute({ action: 'pending', prNumber: 456 });
+
+    expect(toolResult).toEqual({ success: true, message: 'notifications will now be delivered' });
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sendSignal).toHaveBeenCalledTimes(3);
+    const [notification] = sendSignal.mock.calls[2] as any[];
+    expect(notification).toMatchObject({ contents: 'second queued comment', attributes: { pr: 456 } });
+    github.destroy();
+    vi.useRealTimers();
+  });
+
+  it('flushes pending notifications after the pending flush timeout', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-02T00:00:00.000Z'));
+    const commandRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'flushed comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      pendingFlushMs: 5 * 60_000,
+      repo: 'mastra-ai/mastra',
+      commandRunner,
+    });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    const [notification] = sendSignal.mock.calls[1] as any[];
+    expect(notification).toMatchObject({ contents: 'flushed comment', attributes: { type: 'github-comment' } });
+    github.destroy();
+    vi.useRealTimers();
+  });
+
+  it('clears queued pending notifications when unsubscribing', async () => {
+    vi.useFakeTimers();
+    const commandRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'cleared comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    const harness = createHarness();
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    github.removeSubscription({ ...context, repo: 'mastra-ai/mastra', prNumber: 123 });
+
+    const result = await processSignals(github, harness, []);
+    await (result?.tools?.github as any).execute({ action: 'pending' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
     github.destroy();
     vi.useRealTimers();
   });
@@ -677,15 +888,31 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
-  it('skips polling active threads and polls once when they become idle', async () => {
+  it('persists watermarks after queueing active-thread notifications', async () => {
     const commandRunner = createSnapshotCommandRunner(
       [
         createSnapshot({
           comments: [
             {
               id: 'comment-1',
-              body: 'new comment',
+              body: 'old comment',
               createdAt: '2026-01-02T00:00:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'old comment',
+              createdAt: '2026-01-02T00:00:00.000Z',
+              author: { login: 'reviewer' },
+            },
+            {
+              id: 'comment-2',
+              body: 'new comment',
+              createdAt: '2026-01-02T00:02:00.000Z',
               author: { login: 'reviewer' },
             },
           ],
@@ -693,28 +920,25 @@ describe('GithubSignals', () => {
       ],
       { reviewer: 'write' },
     );
+    const harness = createHarness();
     const github = new GithubSignals({ repo: 'mastra-ai/mastra', commandRunner });
     const sendSignal = createSendSignalMock();
-    github.addAgent({ id: 'agent-1', sendSignal } as any);
-    github.addSubscription({
-      agentId: 'agent-1',
+    const signal = ghSignals.prSubscribe({ prNumber: 123 }).toDBMessage({
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      repo: 'mastra-ai/mastra',
-      prNumber: 123,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
     });
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    await processSignals(github, harness, [signal]);
 
     github.markActive({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
     await github.poll();
-
-    expect(commandRunner).not.toHaveBeenCalled();
-
-    await github.markIdle({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
+    await github.poll();
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(commandRunner).toHaveBeenCalledWith(['api', 'repos/mastra-ai/mastra/pulls/123']);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({ attributes: { type: 'github-pending-notifications' } });
+    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
+      lastCommentTimestamp: '2026-01-02T00:02:00.000Z',
+    });
     github.destroy();
   });
 

@@ -20,7 +20,9 @@ const GITHUB_COMMENT_SIGNAL = 'github-comment';
 const GITHUB_REVIEW_SIGNAL = 'github-review';
 const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
 const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
+const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
+const DEFAULT_PENDING_FLUSH_MS = 5 * 60_000;
 const MAX_PROCESSED_SIGNAL_IDS = 200;
 const DEFAULT_AUTHORIZED_PERMISSIONS = ['admin', 'maintain', 'write'] as const;
 
@@ -51,6 +53,7 @@ export type GithubSignalStreamOptionsGetter = (
 export interface GithubSignalsOptions {
   repo?: string;
   pollIntervalMs?: number;
+  pendingFlushMs?: number;
   includeTool?: boolean;
   commandRunner?: GithubCommandRunner;
   now?: () => Date;
@@ -62,7 +65,13 @@ export interface GithubSignalsOptions {
 type NormalizedGithubSignalsOptions = Required<
   Pick<
     GithubSignalsOptions,
-    'pollIntervalMs' | 'includeTool' | 'commandRunner' | 'now' | 'authorizedPermissions' | 'authorizedBots'
+    | 'pollIntervalMs'
+    | 'pendingFlushMs'
+    | 'includeTool'
+    | 'commandRunner'
+    | 'now'
+    | 'authorizedPermissions'
+    | 'authorizedBots'
   >
 > &
   Pick<GithubSignalsOptions, 'repo' | 'getStreamOptions'>;
@@ -153,6 +162,19 @@ interface ActiveSubscription extends GithubPRSubscriptionMetadata {
 interface RegisteredGithubAgent {
   agent: Agent<any, any, any, any>;
   getStreamOptions?: GithubSignalStreamOptionsGetter;
+}
+
+interface PendingGithubNotification {
+  notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>;
+  queuedAt: string;
+}
+
+interface PendingGithubNotificationBucket {
+  subscription: ActiveSubscription;
+  notifications: PendingGithubNotification[];
+  firstQueuedAt: string;
+  lastQueuedAt: string;
+  noticeSent: boolean;
 }
 
 interface GithubPRSnapshot {
@@ -389,12 +411,14 @@ export class GithubSignals {
   #timer?: ReturnType<typeof setInterval>;
   #polling = false;
   #options: NormalizedGithubSignalsOptions;
+  #pendingNotifications = new Map<string, PendingGithubNotificationBucket>();
   #permissionCache = new Map<string, GithubPermission | undefined>();
 
   constructor(options: GithubSignalsOptions = {}) {
     this.#options = {
       repo: options.repo,
       pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+      pendingFlushMs: options.pendingFlushMs ?? DEFAULT_PENDING_FLUSH_MS,
       includeTool: options.includeTool ?? true,
       commandRunner: options.commandRunner ?? defaultCommandRunner,
       now: options.now ?? (() => new Date()),
@@ -553,6 +577,7 @@ export class GithubSignals {
   removeSubscription(
     subscription: Pick<GithubPRSubscriptionMetadata, 'agentId' | 'resourceId' | 'threadId' | 'repo' | 'prNumber'>,
   ) {
+    this.#pendingNotifications.delete(subscriptionKey(subscription));
     this.#activeSubscriptions.delete(subscriptionKey(subscription));
     this.#ensureTimer();
   }
@@ -572,9 +597,9 @@ export class GithubSignals {
     try {
       for (const subscription of this.#activeSubscriptions.values()) {
         if (context && activeThreadKey(subscription) !== activeThreadKey(context)) continue;
-        if (this.#activeThreads.has(activeThreadKey(subscription))) continue;
         await this.#pollSubscription(subscription);
       }
+      await this.#flushExpiredPendingNotifications();
     } finally {
       this.#polling = false;
     }
@@ -586,6 +611,7 @@ export class GithubSignals {
       this.#timer = undefined;
     }
     this.#activeSubscriptions.clear();
+    this.#pendingNotifications.clear();
     this.#activeThreads.clear();
     this.#agents.clear();
   }
@@ -674,7 +700,7 @@ export class GithubSignals {
     const failedChecks = snapshot.failedChecks.sort((a, b) => a.name.localeCompare(b.name));
     const checkFingerprint = getFailedChecksFingerprint(failedChecks);
     if (failedChecks.length > 0 && checkFingerprint !== subscription.lastCheckFingerprint) {
-      await this.#sendNotification(registeredAgent, subscription, {
+      await this.#handleNotification(registeredAgent, subscription, {
         kind: 'ci-failure',
         title: `GitHub CI failure`,
         details: failedChecks
@@ -692,7 +718,7 @@ export class GithubSignals {
     );
     for (const comment of newComments) {
       if (!(await this.#isAuthorizedAuthor(subscription, comment.author))) continue;
-      await this.#sendNotification(registeredAgent, subscription, {
+      await this.#handleNotification(registeredAgent, subscription, {
         kind: 'comment',
         title: `GitHub comment`,
         details: summarizeText(comment.body, 'No comment body.'),
@@ -708,7 +734,7 @@ export class GithubSignals {
     );
     for (const review of newReviews) {
       if (!(await this.#isAuthorizedAuthor(subscription, review.author))) continue;
-      await this.#sendNotification(registeredAgent, subscription, {
+      await this.#handleNotification(registeredAgent, subscription, {
         kind: 'review',
         title: `GitHub review`,
         details: summarizeText(review.body, 'No review body.'),
@@ -730,7 +756,7 @@ export class GithubSignals {
     const fingerprint = stableFingerprint({ message });
     if (fingerprint === subscription.lastErrorFingerprint) return;
 
-    await this.#sendNotification(registeredAgent, subscription, {
+    await this.#handleNotification(registeredAgent, subscription, {
       kind: 'command-error',
       title: `GitHub polling error`,
       details: message,
@@ -768,6 +794,113 @@ export class GithubSignals {
     } catch {
       this.#permissionCache.set(cacheKey, undefined);
       return undefined;
+    }
+  }
+
+  async #handleNotification(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: ActiveSubscription,
+    notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
+  ) {
+    if (!this.#activeThreads.has(activeThreadKey(subscription))) {
+      await this.#sendNotification(registeredAgent, subscription, notification);
+      return;
+    }
+
+    await this.#queuePendingNotification(registeredAgent, subscription, notification);
+  }
+
+  async #queuePendingNotification(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: ActiveSubscription,
+    notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
+  ) {
+    const key = subscription.key;
+    const queuedAt = this.#options.now().toISOString();
+    const existing = this.#pendingNotifications.get(key);
+    const bucket: PendingGithubNotificationBucket = existing ?? {
+      subscription: { ...subscription },
+      notifications: [],
+      firstQueuedAt: queuedAt,
+      lastQueuedAt: queuedAt,
+      noticeSent: false,
+    };
+
+    bucket.subscription = { ...subscription };
+    bucket.notifications.push({ notification, queuedAt });
+    bucket.lastQueuedAt = queuedAt;
+    this.#pendingNotifications.set(key, bucket);
+
+    if (!bucket.noticeSent) {
+      bucket.noticeSent = true;
+      await this.#sendPendingNotice(registeredAgent, subscription, bucket.notifications.length);
+    }
+  }
+
+  async #sendPendingNotice(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: GithubPRSubscriptionMetadata,
+    count: number,
+  ) {
+    const result = registeredAgent.agent.sendSignal(
+      createSignal({
+        type: 'system-reminder',
+        contents: `${count} new GitHub ${count === 1 ? 'notification is' : 'notifications are'} pending. Call the github tool with action: "pending" to deliver them.`,
+        attributes: {
+          type: GITHUB_PENDING_NOTIFICATIONS_SIGNAL,
+          pr: subscription.prNumber,
+          repo: subscription.repo,
+          count,
+        },
+        metadata: {
+          prNumber: subscription.prNumber,
+          repo: subscription.repo,
+          count,
+        },
+      }),
+      {
+        resourceId: subscription.resourceId,
+        threadId: subscription.threadId,
+        ifIdle: { behavior: 'persist' },
+        ifActive: { behavior: 'deliver' },
+      },
+    );
+    await result.persisted;
+    await result.started;
+  }
+
+  async deliverPendingNotifications(filter: ActiveThreadContext & { repo?: string; prNumber?: number }) {
+    const buckets = [...this.#pendingNotifications.entries()].filter(([, bucket]) => {
+      const subscription = bucket.subscription;
+      if (activeThreadKey(subscription) !== activeThreadKey(filter)) return false;
+      if (filter.repo && subscription.repo !== filter.repo) return false;
+      if (filter.prNumber && subscription.prNumber !== filter.prNumber) return false;
+      return bucket.notifications.length > 0;
+    });
+
+    for (const [key, bucket] of buckets) {
+      const registeredAgent = this.#agents.get(bucket.subscription.agentId);
+      if (!registeredAgent) continue;
+      for (const pending of bucket.notifications) {
+        await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
+      }
+      this.#pendingNotifications.delete(key);
+    }
+  }
+
+  async #flushExpiredPendingNotifications() {
+    const now = this.#options.now().getTime();
+    const expired = [...this.#pendingNotifications.entries()].filter(([, bucket]) => {
+      return now - new Date(bucket.firstQueuedAt).getTime() >= this.#options.pendingFlushMs;
+    });
+
+    for (const [key, bucket] of expired) {
+      const registeredAgent = this.#agents.get(bucket.subscription.agentId);
+      if (!registeredAgent) continue;
+      for (const pending of bucket.notifications) {
+        await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
+      }
+      this.#pendingNotifications.delete(key);
     }
   }
 
@@ -972,8 +1105,8 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
           description:
             'Subscribe or unsubscribe this thread from Github PR CI failure and review/comment notifications.',
           inputSchema: z.object({
-            action: z.enum(['subscribe', 'unsubscribe']),
-            prNumber: z.number().int().positive(),
+            action: z.enum(['subscribe', 'unsubscribe', 'pending']),
+            prNumber: z.number().int().positive().optional(),
             repo: z.string().optional(),
           }),
           outputSchema: z.object({
@@ -981,6 +1114,21 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
             message: z.string(),
           }),
           execute: async ({ action, prNumber, repo }) => {
+            const context = this.#getThreadContext(args);
+            if (action === 'pending') {
+              if (context) {
+                const timeout = setTimeout(() => {
+                  void this.#owner.deliverPendingNotifications({ ...context, repo, prNumber });
+                }, 0);
+                timeout.unref?.();
+              }
+              return { success: true, message: 'notifications will now be delivered' };
+            }
+
+            if (!prNumber) {
+              return { success: false, message: 'prNumber is required.' };
+            }
+
             const signal =
               action === 'subscribe'
                 ? ghSignals.prSubscribe({ prNumber, repo })
