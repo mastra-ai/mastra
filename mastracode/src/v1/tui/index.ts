@@ -1,18 +1,16 @@
 /**
- * v1 TUI — milestone 2: render with pi-tui.
+ * v1 TUI — milestone 3: input → session.message() + assistant streaming.
  *
- * Builds a real pi-tui layout (banner + chat container + editor container +
- * footer), bootstraps a Session, and streams Harness events into the chat
- * container as `Text` lines. No input handling or commands yet — that lands
- * in the next milestone.
+ * Builds a pi-tui layout (banner + chat container + editor + footer),
+ * bootstraps a Session, wires Enter in the editor to `session.message()`,
+ * and renders streaming assistant text by accumulating `message_update`
+ * deltas into a single chat line keyed by `messageId`.
  *
- * The legacy TUI's bootstrap pattern lives in `src/tui/state.ts` +
- * `src/tui/setup.ts`. This file deliberately re-derives the minimum slice
- * we need from scratch so v1 doesn't import anything from `src/tui/`.
+ * No commands yet — that lands next.
  */
 import { Container, Editor, ProcessTerminal, Spacer, Text, TUI } from '@mariozechner/pi-tui';
 import type { EditorTheme } from '@mariozechner/pi-tui';
-import type { Harness, HarnessEvent } from '@mastra/core/harness/v1';
+import type { Harness, HarnessEvent, Session } from '@mastra/core/harness/v1';
 
 const identity = (s: string) => s;
 const PLAIN_EDITOR_THEME: EditorTheme = {
@@ -27,7 +25,7 @@ const PLAIN_EDITOR_THEME: EditorTheme = {
 };
 
 const RESOURCE_ID = 'mastracode-v1-local';
-const TERM_WIDTH_BUFFER = 1; // matches legacy TUI's safety margin
+const TERM_WIDTH_BUFFER = 1;
 
 export interface MastraTUIV1Options {
   harness: Harness;
@@ -47,12 +45,17 @@ export class MastraTUIV1 {
   private readonly editor: Editor;
   private readonly statusLine: Text;
 
+  // Active session (set in run()).
+  private session?: Session;
+
+  // Streaming assistant message slots: messageId → { textNode, buffer }.
+  private readonly assistantSlots = new Map<string, { node: Text; buffer: string }>();
+
   constructor(opts: MastraTUIV1Options) {
     this.harness = opts.harness;
     this.projectRoot = opts.projectRoot;
 
     this.terminal = new ProcessTerminal();
-    // Match legacy: cap width to avoid wrap glitches in nested emulators.
     Object.defineProperty(this.terminal, 'columns', {
       get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
     });
@@ -67,7 +70,7 @@ export class MastraTUIV1 {
   async run(): Promise<void> {
     // 1) Build layout.
     this.ui.addChild(new Spacer(1));
-    this.ui.addChild(new Text('  MastraCode v1 — milestone 2 (pi-tui render)', 1, 0));
+    this.ui.addChild(new Text('  MastraCode v1 — milestone 3 (input + streaming)', 1, 0));
     this.ui.addChild(new Text(`  project: ${this.projectRoot}`, 1, 0));
     this.ui.addChild(new Text(`  resource: ${RESOURCE_ID}`, 1, 0));
     this.ui.addChild(new Spacer(1));
@@ -78,34 +81,45 @@ export class MastraTUIV1 {
     this.ui.addChild(this.footer);
     this.ui.setFocus(this.editor);
 
-    // 2) Subscribe to events BEFORE opening the session so we capture
-    //    session_created etc.
-    const unsubscribe = this.harness.subscribe(event => this.appendEvent(event));
+    // 2) Subscribe to events BEFORE opening the session.
+    const unsubscribe = this.harness.subscribe(event => this.handleEvent(event));
 
     // 3) Resolve thread + open session.
     const thread = await this.harness.threads.selectOrCreate({
       resourceId: RESOURCE_ID,
       title: 'mastracode v1 — default',
     });
-    const session = await this.harness.session({
+    this.session = await this.harness.session({
       resourceId: RESOURCE_ID,
       threadId: thread.id,
     });
 
-    // 4) Seed the chat container + status line with current identity.
+    // 4) Seed chat + status line.
     this.appendLine(`thread:  ${thread.id}`);
-    this.appendLine(`session: ${session.id}`);
-    this.appendLine(`mode:    ${session.getCurrentMode().id}`);
-    this.appendLine(`model:   ${session.models.current() || '<none>'}`);
-    this.appendLine('--- live event stream below ---');
+    this.appendLine(`session: ${this.session.id}`);
+    this.appendLine(`mode:    ${this.session.getCurrentMode().id}`);
+    this.appendLine(`model:   ${this.session.models.current() || '<none>'}`);
+    this.appendLine('--- type a message and press Enter ---');
     this.statusLine.setText(
-      `  session=${session.id.slice(0, 12)}…  mode=${session.getCurrentMode().id}  (Ctrl+C to exit)`,
+      `  session=${this.session.id.slice(0, 12)}…  mode=${this.session.getCurrentMode().id}  (Ctrl+C to exit)`,
     );
 
-    // 5) Start the UI. This takes over the terminal.
+    // 5) Wire Enter → session.message().
+    this.editor.onSubmit = (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      this.editor.addToHistory(trimmed);
+      // Editor clears its own buffer after onSubmit completes synchronously
+      // for plain text input. Kick off the send in the background; render
+      // user line first.
+      this.appendLine(`> ${trimmed}`);
+      void this.sendMessage(trimmed);
+    };
+
+    // 6) Start UI.
     this.ui.start();
 
-    // 6) Wire Ctrl+C → graceful shutdown.
+    // 7) Wait for Ctrl+C.
     await new Promise<void>(resolve => {
       const onSignal = () => {
         process.removeListener('SIGINT', onSignal);
@@ -114,23 +128,66 @@ export class MastraTUIV1 {
       process.once('SIGINT', onSignal);
     });
 
-    // 7) Tear down.
+    // 8) Teardown.
     unsubscribe();
     this.ui.stop();
     await this.harness.shutdown();
     process.stdout.write('\n  shutdown clean.\n\n');
   }
 
-  /** Append a plain line to the chat container. */
+  private async sendMessage(content: string): Promise<void> {
+    if (!this.session) return;
+    try {
+      const result = await this.session.message({ content });
+      // Streaming deltas already painted the assistant line. If the final
+      // text differs (e.g. result aggregated tool output), append a note.
+      if (!this.assistantSlots.size && result.text) {
+        this.appendLine(`assistant: ${result.text}`);
+      }
+    } catch (err) {
+      this.appendLine(`error: ${(err as Error).message ?? String(err)}`);
+    }
+  }
+
   private appendLine(text: string): void {
     this.chatContainer.addChild(new Text(text, 1, 0));
     this.ui.requestRender();
   }
 
-  /** Render an event as a single chat line. */
-  private appendEvent(event: HarnessEvent): void {
-    const { type, sessionId } = event as { type: string; sessionId?: string };
-    const tag = sessionId ? `${type} (sess=${sessionId.slice(0, 12)}…)` : type;
-    this.appendLine(`[event] ${tag}`);
+  /** Dispatch a Harness event to the right renderer. */
+  private handleEvent(event: HarnessEvent): void {
+    const e = event as { type: string; sessionId?: string; messageId?: string; delta?: string };
+    switch (e.type) {
+      case 'message_start': {
+        if (!e.messageId) return;
+        const node = new Text('', 1, 0);
+        this.assistantSlots.set(e.messageId, { node, buffer: '' });
+        this.chatContainer.addChild(node);
+        this.ui.requestRender();
+        return;
+      }
+      case 'message_update': {
+        if (!e.messageId || typeof e.delta !== 'string') return;
+        const slot = this.assistantSlots.get(e.messageId);
+        if (!slot) return;
+        slot.buffer += e.delta;
+        slot.node.setText(slot.buffer);
+        this.ui.requestRender();
+        return;
+      }
+      case 'message_end': {
+        if (!e.messageId) return;
+        // Keep the line in place; just stop tracking it for future deltas.
+        this.assistantSlots.delete(e.messageId);
+        this.ui.requestRender();
+        return;
+      }
+      default: {
+        // Surface every other event as a faint debug line so we can see
+        // the lifecycle while we wire things up.
+        const tag = e.sessionId ? `${e.type} (sess=${e.sessionId.slice(0, 12)}…)` : e.type;
+        this.appendLine(`[event] ${tag}`);
+      }
+    }
   }
 }
