@@ -1,6 +1,5 @@
-import type { CoreMessage, DataContent, FilePart, TextPart } from '@internal/ai-sdk-v4';
+import type { CoreMessage, FilePart, TextPart } from '@internal/ai-sdk-v4';
 
-import type { BaseMessageListInput } from './message-list';
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart } from './message-list/state/types';
 
@@ -10,36 +9,16 @@ import type { MastraDBMessage, MastraMessagePart } from './message-list/state/ty
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
 /**
- * A text part in signal contents.
- */
-export type AgentSignalTextPart = {
-  type: 'text';
-  text: string;
-};
-
-/**
- * A file part in signal contents.
- *
- * - `data`: file content as a base64 string, a data URL, a hosted URL, a `URL`
- *   instance, or a `DataContent` value (binary buffers are normalized to base64
- *   at the signal boundary).
- * - `mediaType`: IANA media type (e.g. `image/png`, `application/pdf`).
- * - `filename`: optional original filename, preserved for display/metadata.
- */
-export type AgentSignalFilePart = {
-  type: 'file';
-  data: DataContent | URL;
-  mediaType: string;
-  filename?: string;
-};
-
-/**
  * Canonical input shape for `signal.contents`. Signals represent a single user
  * turn, so the contents are either a plain text string or a parts array of
  * text + file parts. Anything richer (tool calls, reasoning, multiple turns)
  * is not a signal and should go through the agent stream directly.
+ *
+ * Field naming matches AI SDK v4 (`mimeType`) which is also the storage
+ * convention (`MastraMessagePart`) — so there's no field translation between
+ * what callers pass in and what gets persisted.
  */
-export type AgentSignalContents = string | Array<AgentSignalTextPart | AgentSignalFilePart>;
+export type AgentSignalContents = string | Array<TextPart | FilePart>;
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -90,7 +69,7 @@ export type CreatedAgentSignal = AgentSignalInput & {
   id: string;
   createdAt: Date;
   toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
-  toLLMMessage: () => BaseMessageListInput;
+  toLLMMessage: () => CoreMessage;
   toDataPart: () => AgentSignalDataPart;
 };
 
@@ -154,13 +133,13 @@ export function signalToXmlMarkup(signal: {
   return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
 }
 
-// Convert the narrow signal-contents input (string OR AgentSignalTextPart/AgentSignalFilePart)
-// into the canonical MastraMessagePart[] used by storage. createSignal runs this once at the
-// boundary so every downstream projection (LLM, DB, data part) reads from the same walked
-// representation. FilePart's `data` is `DataContent | URL` at the input boundary; storage stores
-// it as a string (base64 for binary, stringified URL for URL instances) so DB rows stay JSON-safe.
-// The signal public API uses `mediaType` (aligns with v5 SDK and harness sendMessage({files}))
-// while storage uses `mimeType` (v4 convention) — this helper translates at the boundary.
+// Convert the narrow signal-contents input (string OR v4 TextPart/FilePart) into the canonical
+// MastraMessagePart[] used by storage. createSignal runs this once at the boundary so every
+// downstream projection (LLM, DB, data part) reads from the same walked representation. FilePart's
+// `data` is `DataContent | URL` at the input boundary; storage stores it as a string (base64 for
+// binary, stringified URL for URL instances) so DB rows stay JSON-safe. Public input naming
+// (`mimeType`) matches storage (`mimeType`), so no field rename is needed — just a structural
+// narrowing plus the `data` normalization.
 function contentsToMessageParts(contents: AgentSignalContents): MastraMessagePart[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
   return contents.map(part => {
@@ -169,7 +148,7 @@ function contentsToMessageParts(contents: AgentSignalContents): MastraMessagePar
       return {
         type: 'file',
         data,
-        mimeType: part.mediaType,
+        mimeType: part.mimeType,
         ...(part.filename ? { filename: part.filename } : {}),
       };
     }
@@ -188,36 +167,10 @@ function partsToText(parts: MastraMessagePart[]): string {
 }
 
 // Reverse of contentsToMessageParts: project canonical storage parts back into the public
-// AgentSignalContents shape. Storage uses `mimeType` (v4); the public signal API uses
-// `mediaType` (v5-aligned) — this helper translates at the boundary. Non-text/file parts
-// (shouldn't exist on a signal row, but the storage type permits richer parts) are dropped.
+// AgentSignalContents shape. Both shapes use `mimeType`, so this is pure structural narrowing.
+// Non-text/file parts (shouldn't exist on a signal row, but the storage type permits richer
+// parts) are dropped.
 function partsToSignalContents(parts: MastraMessagePart[]): AgentSignalContents {
-  const out: Array<AgentSignalTextPart | AgentSignalFilePart> = [];
-  for (const part of parts) {
-    if (part.type === 'text' && typeof part.text === 'string') {
-      out.push({ type: 'text', text: part.text });
-    } else if (part.type === 'file' && typeof (part as { data?: unknown }).data === 'string') {
-      const file = part as { data: string; mimeType?: string; filename?: string };
-      out.push({
-        type: 'file',
-        data: file.data,
-        mediaType: typeof file.mimeType === 'string' ? file.mimeType : '',
-        ...(typeof file.filename === 'string' ? { filename: file.filename } : {}),
-      });
-    }
-  }
-  // String fast path: a single text part round-trips back to a bare string. Anything richer
-  // stays as a parts array.
-  if (out.length === 1 && out[0]?.type === 'text') return out[0].text;
-  return out;
-}
-
-// Build the v4 UserContent shape expected on a CoreMessage from canonical parts. Both the
-// storage parts and v4 UserContent's FilePart use `mimeType`, so this is mostly a filter +
-// structural narrowing.
-function partsToUserContent(parts: MastraMessagePart[]): string | Array<TextPart | FilePart> {
-  // Single text part → bare string (provider-natural).
-  if (parts.length === 1 && parts[0]?.type === 'text') return parts[0].text;
   const out: Array<TextPart | FilePart> = [];
   for (const part of parts) {
     if (part.type === 'text' && typeof part.text === 'string') {
@@ -232,6 +185,9 @@ function partsToUserContent(parts: MastraMessagePart[]): string | Array<TextPart
       });
     }
   }
+  // String fast path: a single text part round-trips back to a bare string. Anything richer
+  // stays as a parts array.
+  if (out.length === 1 && out[0]?.type === 'text') return out[0].text;
   return out;
 }
 
@@ -243,68 +199,54 @@ function hasMeaningfulAttributes(attributes?: AgentSignalInput['attributes']): b
   });
 }
 
-// Inline-wrap the first text part with the signal's XML tag, or prefix a self-closing marker
-// message when no text part exists. Keeps the wrapper adjacent to its payload so the model
-// sees the marker and its text/file parts as one turn.
+// Inline-wrap the first text part with the signal's XML tag. If there's no text part, prepend
+// a self-closing marker as a synthetic first part so attributes still surface alongside the
+// file/image payload on the same turn.
 function injectMarkerInline(
   signal: Pick<AgentSignalInput, 'type' | 'attributes'>,
   parts: MastraMessagePart[],
-): BaseMessageListInput {
+): MastraMessagePart[] {
   let wrapped = false;
-  const wrappedParts: MastraMessagePart[] = [];
+  const out: MastraMessagePart[] = [];
   for (const part of parts) {
     if (!wrapped && part.type === 'text' && typeof part.text === 'string') {
       wrapped = true;
-      wrappedParts.push({ ...part, text: signalToXmlMarkup({ ...signal, contents: part.text }) });
+      out.push({ ...part, text: signalToXmlMarkup({ ...signal, contents: part.text }) });
     } else {
-      wrappedParts.push(part);
+      out.push(part);
     }
   }
-
-  if (wrapped) {
-    return [{ role: 'user', content: partsToUserContent(wrappedParts) } satisfies CoreMessage];
+  if (!wrapped) {
+    const markerText = signalToXmlMarkup({ type: signal.type, attributes: signal.attributes });
+    out.unshift({ type: 'text', text: markerText });
   }
-
-  // No text part anywhere — emit a self-closing marker then the payload as a second user
-  // message, so attributes still surface alongside the file/image parts.
-  const prefixMessage = {
-    role: 'user',
-    content: signalToXmlMarkup({ type: signal.type, attributes: signal.attributes }),
-  } satisfies CoreMessage;
-  return [prefixMessage, { role: 'user', content: partsToUserContent(parts) } satisfies CoreMessage];
+  return out;
 }
 
-// Build the LLM-facing projection from the canonical parts. Three shapes:
-//   1. user-message with no attributes → pass parts through as a CoreMessage (no wrapper)
-//   2. text-only with attrs (or non-user-message text-only) → single wrapped CoreMessage
-//   3. multimodal with attrs/non-user-message → inline-inject the marker into the first text
-//      part so the wrapper stays adjacent to its payload (file/image parts ride along)
+// Build the LLM-facing projection from the canonical parts. Returns a v4 CoreMessage with
+// role: 'user' (a prompt turn the model sees, not a signal row). The XML wrapper carries the
+// attributes inline so there's no metadata.signal here.
 function signalToLLMMessage(
   signal: Pick<AgentSignalInput, 'type' | 'attributes'>,
   parts: MastraMessagePart[],
-): BaseMessageListInput {
+): CoreMessage {
   const isUserMessage = signal.type === 'user-message';
   const hasAttrs = hasMeaningfulAttributes(signal.attributes);
 
-  // user-message is the model's natural input language; pass through as a CoreMessage unless
-  // attributes need surfacing. Non-user-message signals always wrap — the XML wrapper is what
-  // tells the model "this is framework context, not a user/assistant turn".
+  let content: string | MastraMessagePart[];
   if (isUserMessage && !hasAttrs) {
-    return [{ role: 'user', content: partsToUserContent(parts) } satisfies CoreMessage];
+    // user-message with no attributes — pass parts through unchanged. Collapse a single text
+    // part to a bare string so providers get their natural prompt shape.
+    content = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
+  } else if (parts.every(part => part.type === 'text')) {
+    // Text-only: flatten to one wrapped string.
+    content = signalToXmlMarkup({ ...signal, contents: partsToText(parts) });
+  } else {
+    // Multimodal: inline-wrap the marker alongside the file/image payload.
+    content = injectMarkerInline(signal, parts);
   }
 
-  // Text-only fast path: emit a single wrapped user message. user role because providers reject
-  // system role mid-conversation, and assistant role would confuse the model about who spoke.
-  if (parts.every(part => part.type === 'text')) {
-    const content = signalToXmlMarkup({ ...signal, contents: partsToText(parts) });
-    return [{ role: 'user', content } satisfies CoreMessage];
-  }
-
-  // Multimodal: inline-inject the marker into the first text part so the wrapper stays
-  // adjacent to its payload. Works for both user-message (attributes like messageId tie to
-  // the user's text) and framework signals (the reminder text becomes the wrapper's body
-  // alongside the file/image part).
-  return injectMarkerInline(signal, parts);
+  return { role: 'user', content } as CoreMessage;
 }
 
 function signalToDataPart(signal: ReturnType<typeof normalizeSignal>): AgentSignalDataPart {
@@ -375,7 +317,7 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   };
 }
 
-export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): BaseMessageListInput {
+export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): CoreMessage {
   return createSignal(signal).toLLMMessage();
 }
 

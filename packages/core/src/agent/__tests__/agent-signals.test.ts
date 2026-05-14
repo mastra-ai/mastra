@@ -1,4 +1,3 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -96,9 +95,10 @@ describe('Agent signals', () => {
       metadata: { source: 'test', signal: { userProvided: true } },
     });
 
-    expect(signal.toLLMMessage()).toEqual([
-      { role: 'user', content: '<user-message priority="high">Signal contents</user-message>' },
-    ]);
+    expect(signal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<user-message priority="high">Signal contents</user-message>',
+    });
     expect(signal.toDataPart()).toEqual({
       type: 'data-user-message',
       data: {
@@ -136,13 +136,11 @@ describe('Agent signals', () => {
       attributes: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md', enabled: true, ignored: null },
     });
 
-    expect(reminderSignal.toLLMMessage()).toEqual([
-      {
-        role: 'user',
-        content:
-          '<system-reminder type="dynamic-agents-md" path="/tmp/AGENTS.md" enabled="true">Use &lt;safe&gt; content &amp; continue</system-reminder>',
-      },
-    ]);
+    expect(reminderSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content:
+        '<system-reminder type="dynamic-agents-md" path="/tmp/AGENTS.md" enabled="true">Use &lt;safe&gt; content &amp; continue</system-reminder>',
+    });
     expect(reminderSignal.toDataPart().data.attributes).toEqual({
       type: 'dynamic-agents-md',
       path: '/tmp/AGENTS.md',
@@ -161,7 +159,7 @@ describe('Agent signals', () => {
       {
         type: 'file' as const,
         data: 'data:text/plain;base64,aGVsbG8=',
-        mediaType: 'text/plain',
+        mimeType: 'text/plain',
         filename: 'note.txt',
       },
     ];
@@ -173,20 +171,18 @@ describe('Agent signals', () => {
     });
 
     // toLLMMessage emits the v4 CoreMessage shape (uses mimeType for FilePart).
-    expect(fileSignal.toLLMMessage()).toEqual([
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Review this file' },
-          {
-            type: 'file',
-            data: 'data:text/plain;base64,aGVsbG8=',
-            mimeType: 'text/plain',
-            filename: 'note.txt',
-          },
-        ],
-      },
-    ]);
+    expect(fileSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Review this file' },
+        {
+          type: 'file',
+          data: 'data:text/plain;base64,aGVsbG8=',
+          mimeType: 'text/plain',
+          filename: 'note.txt',
+        },
+      ],
+    });
     expect(fileSignal.toDataPart().data.contents).toEqual(fileContents);
     expect(mastraDBMessageToSignal(fileSignal.toDBMessage()).contents).toEqual(fileContents);
   });
@@ -197,25 +193,27 @@ describe('Agent signals', () => {
       contents: 'Hello',
       attributes: { messageId: 'm-1', userId: 'u-1' },
     });
-    expect(stringSignal.toLLMMessage()).toEqual([
-      { role: 'user', content: '<user-message messageId="m-1" userId="u-1">Hello</user-message>' },
-    ]);
+    expect(stringSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<user-message messageId="m-1" userId="u-1">Hello</user-message>',
+    });
 
     const partsTextSignal = createSignal({
       type: 'user-message',
       contents: [{ type: 'text', text: 'Hello again' }],
       attributes: { messageId: 'm-1b' },
     });
-    expect(partsTextSignal.toLLMMessage()).toEqual([
-      { role: 'user', content: '<user-message messageId="m-1b">Hello again</user-message>' },
-    ]);
+    expect(partsTextSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<user-message messageId="m-1b">Hello again</user-message>',
+    });
 
     const fileContents = [
       { type: 'text' as const, text: 'Look at this' },
       {
         type: 'file' as const,
         data: 'data:image/png;base64,aGVsbG8=',
-        mediaType: 'image/png',
+        mimeType: 'image/png',
       },
     ];
     const multimodalSignal = createSignal({
@@ -224,10 +222,9 @@ describe('Agent signals', () => {
       attributes: { messageId: 'm-2' },
     });
     // Multimodal: text part is inline-wrapped, file part is preserved.
-    const multimodalResult = multimodalSignal.toLLMMessage() as CoreMessage[];
-    expect(multimodalResult).toHaveLength(1);
-    expect(multimodalResult[0]?.role).toBe('user');
-    expect(multimodalResult[0]?.content).toEqual(
+    const multimodalResult = multimodalSignal.toLLMMessage();
+    expect(multimodalResult.role).toBe('user');
+    expect(multimodalResult.content).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'text',
@@ -240,33 +237,33 @@ describe('Agent signals', () => {
       ]),
     );
 
-    // file-only: no text part exists, so the marker is prepended as its own message.
-    const fileOnlyContents = [
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
-    ];
+    // file-only: no text part exists, so the marker is prepended as a synthetic text part on
+    // the same message so the attributes still surface alongside the file payload.
+    const fileOnlyContents = [{ type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' }];
     const fileOnlySignal = createSignal({
       type: 'user-message',
       contents: fileOnlyContents,
       attributes: { messageId: 'm-2d' },
     });
-    const fileOnlyResult = fileOnlySignal.toLLMMessage() as CoreMessage[];
-    expect(fileOnlyResult[0]).toEqual({ role: 'user', content: '<user-message messageId="m-2d" />' });
-    expect(fileOnlyResult[1]?.content).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' })]),
-    );
+    const fileOnlyResult = fileOnlySignal.toLLMMessage();
+    expect(fileOnlyResult.role).toBe('user');
+    expect(fileOnlyResult.content).toEqual([
+      expect.objectContaining({ type: 'text', text: '<user-message messageId="m-2d" />' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
 
     const noAttributeSignal = createSignal({
       type: 'user-message',
       contents: 'Plain message',
     });
-    expect(noAttributeSignal.toLLMMessage()).toEqual([{ role: 'user', content: 'Plain message' }]);
+    expect(noAttributeSignal.toLLMMessage()).toEqual({ role: 'user', content: 'Plain message' });
 
     const onlyNullAttributesSignal = createSignal({
       type: 'user-message',
       contents: 'Plain message',
       attributes: { ignored: null, alsoIgnored: undefined },
     });
-    expect(onlyNullAttributesSignal.toLLMMessage()).toEqual([{ role: 'user', content: 'Plain message' }]);
+    expect(onlyNullAttributesSignal.toLLMMessage()).toEqual({ role: 'user', content: 'Plain message' });
   });
 
   it('renders system-reminder signals with multimodal contents the same way as user-message attributes', () => {
@@ -275,9 +272,10 @@ describe('Agent signals', () => {
       type: 'system-reminder',
       contents: 'Be concise.',
     });
-    expect(plainReminder.toLLMMessage()).toEqual([
-      { role: 'user', content: '<system-reminder>Be concise.</system-reminder>' },
-    ]);
+    expect(plainReminder.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<system-reminder>Be concise.</system-reminder>',
+    });
 
     // System-reminder with multimodal contents: text part is inline-wrapped with the marker,
     // file part is preserved alongside it on the same logical turn.
@@ -286,7 +284,7 @@ describe('Agent signals', () => {
       {
         type: 'file' as const,
         data: 'data:image/png;base64,aGVsbG8=',
-        mediaType: 'image/png',
+        mimeType: 'image/png',
       },
     ];
     const screenshotReminder = createSignal({
@@ -294,10 +292,9 @@ describe('Agent signals', () => {
       contents: screenshotContents,
       attributes: { kind: 'screenshot' },
     });
-    const screenshotResult = screenshotReminder.toLLMMessage() as CoreMessage[];
-    expect(screenshotResult).toHaveLength(1);
-    expect(screenshotResult[0]?.role).toBe('user');
-    expect(screenshotResult[0]?.content).toEqual(
+    const screenshotResult = screenshotReminder.toLLMMessage();
+    expect(screenshotResult.role).toBe('user');
+    expect(screenshotResult.content).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'text',
@@ -311,36 +308,36 @@ describe('Agent signals', () => {
     );
 
     // System-reminder with only file parts has no text to inline-wrap, so the marker is
-    // prepended as its own self-closing message.
+    // prepended as a synthetic text part on the same message.
     const fileOnlyReminderContents = [
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
     ];
     const fileOnlyReminder = createSignal({
       type: 'system-reminder',
       contents: fileOnlyReminderContents,
       attributes: { kind: 'reference-image' },
     });
-    const fileOnlyResult = fileOnlyReminder.toLLMMessage() as CoreMessage[];
-    expect(fileOnlyResult[0]).toEqual({ role: 'user', content: '<system-reminder kind="reference-image" />' });
-    expect(fileOnlyResult[1]?.content).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' })]),
-    );
+    const fileOnlyResult = fileOnlyReminder.toLLMMessage();
+    expect(fileOnlyResult.role).toBe('user');
+    expect(fileOnlyResult.content).toEqual([
+      expect.objectContaining({ type: 'text', text: '<system-reminder kind="reference-image" />' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
 
     // System-reminder with mixed text + file parts: the marker is inlined into the very first
     // text part, subsequent parts pass through untouched on the same logical turn.
     const mixedReminderContents = [
       { type: 'text' as const, text: 'Step one of the screen.' },
       { type: 'text' as const, text: 'Step two has this attachment.' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
     ];
     const mixedReminder = createSignal({
       type: 'system-reminder',
       contents: mixedReminderContents,
       attributes: { kind: 'walkthrough' },
     });
-    const mixedResult = mixedReminder.toLLMMessage() as CoreMessage[];
-    expect(mixedResult).toHaveLength(1);
-    expect(mixedResult[0]?.content).toEqual([
+    const mixedResult = mixedReminder.toLLMMessage();
+    expect(mixedResult.content).toEqual([
       expect.objectContaining({
         type: 'text',
         text: '<system-reminder kind="walkthrough">Step one of the screen.</system-reminder>',
@@ -353,7 +350,7 @@ describe('Agent signals', () => {
   it('persists multimodal signal contents as faithful DB parts so UIs can render them', () => {
     const fileContents = [
       { type: 'text' as const, text: 'Look at this' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
     ];
 
     const userMessage = createSignal({
@@ -390,7 +387,7 @@ describe('Agent signals', () => {
   it('round-trips multimodal non-user-message signals through DB without dropping file parts', () => {
     const screenshotContents = [
       { type: 'text' as const, text: 'The user is looking at this screen.' },
-      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
     ];
     const reminder = createSignal({
       type: 'system-reminder',
