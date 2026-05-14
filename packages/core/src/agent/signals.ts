@@ -43,20 +43,6 @@ export type AgentSignalInput = {
 };
 
 /**
- * @deprecated Use {@link AgentSignalInput} directly. The split between user-message
- * and other signal types was a vestige of an older design — both accept the same
- * `contents` shape.
- */
-export type UserMessageAgentSignalInput = AgentSignalInput;
-
-/**
- * @deprecated Use {@link AgentSignalInput} directly. The split between user-message
- * and other signal types was a vestige of an older design — both accept the same
- * `contents` shape.
- */
-export type ContextAgentSignalInput = AgentSignalInput;
-
-/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalDataPart = {
