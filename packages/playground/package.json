@@ -40,7 +40,7 @@
     "test:e2e:setup": "node ./e2e/scripts/info.js && pnpm install --ignore-workspace --dir ./e2e/kitchen-sink && playwright install chromium"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.12.26",
+    "@assistant-ui/react": "^0.14.0",
     "@assistant-ui/react-markdown": "^0.12.11",
     "@assistant-ui/react-syntax-highlighter": "^0.12.9",
     "@assistant-ui/react-ui": "^0.2.1",
@@ -76,8 +76,8 @@
     "papaparse": "^5.5.3",
     "posthog-js": "^1.369.3",
     "prism-react-renderer": "^2.4.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "react-hook-form": "^7.71.2",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.7.3",
