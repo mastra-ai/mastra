@@ -78,7 +78,14 @@ export class FavoritesPG extends FavoritesStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     const fullTableName = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
-    await this.#db.client.none(`DELETE FROM ${fullTableName}`);
+    const fullAgentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+    const fullSkillsTable = getTableName({ indexName: TABLE_SKILLS, schemaName: getSchemaName(this.#schema) });
+    await this.#db.client.tx(async t => {
+      await t.none(`DELETE FROM ${fullTableName}`);
+      // Reset denormalized counters on parent entities so reads don't return stale counts.
+      await t.none(`UPDATE ${fullAgentsTable} SET "favoriteCount" = 0 WHERE "favoriteCount" > 0`);
+      await t.none(`UPDATE ${fullSkillsTable} SET "favoriteCount" = 0 WHERE "favoriteCount" > 0`);
+    });
   }
 
   async favorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {

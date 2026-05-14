@@ -295,6 +295,18 @@ describe('InMemoryFavoritesStorage', () => {
       const agent = await agents.getById('a1');
       expect(agent?.favoriteCount).toBe(0);
     });
+
+    it('resets skill counters in addition to agent counters', async () => {
+      await seedAgent(agents, 'a1');
+      await seedSkill(skills, 's1');
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a1' });
+      await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: 's1' });
+
+      await favorites.dangerouslyClearAll();
+      expect(await favorites.isFavorited({ userId: 'u1', entityType: 'skill', entityId: 's1' })).toBe(false);
+      const skill = await skills.getById('s1');
+      expect(skill?.favoriteCount).toBe(0);
+    });
   });
 
   describe('deleteFavoritesForEntity', () => {
@@ -308,6 +320,18 @@ describe('InMemoryFavoritesStorage', () => {
       expect(await favorites.isFavorited({ userId: 'u1', entityType: 'agent', entityId: 'a1' })).toBe(false);
       const agent = await agents.getById('a1');
       expect(agent?.favoriteCount).toBe(0);
+    });
+
+    it('deletes all favorites for a skill and resets its favoriteCount when it still exists', async () => {
+      await seedSkill(skills, 's1');
+      await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: 's1' });
+      await favorites.favorite({ userId: 'u2', entityType: 'skill', entityId: 's1' });
+
+      const removed = await favorites.deleteFavoritesForEntity({ entityType: 'skill', entityId: 's1' });
+      expect(removed).toBe(2);
+      expect(await favorites.isFavorited({ userId: 'u1', entityType: 'skill', entityId: 's1' })).toBe(false);
+      const skill = await skills.getById('s1');
+      expect(skill?.favoriteCount).toBe(0);
     });
   });
 });

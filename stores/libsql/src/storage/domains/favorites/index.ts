@@ -53,7 +53,17 @@ export class FavoritesLibSQL extends FavoritesStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#db.deleteData({ tableName: TABLE_FAVORITES });
+    const tx = await this.#client.transaction('write');
+    try {
+      await tx.execute(`DELETE FROM "${TABLE_FAVORITES}"`);
+      // Reset denormalized counters on parent entities so reads don't return stale counts.
+      await tx.execute(`UPDATE "${TABLE_AGENTS}" SET "favoriteCount" = 0 WHERE "favoriteCount" > 0`);
+      await tx.execute(`UPDATE "${TABLE_SKILLS}" SET "favoriteCount" = 0 WHERE "favoriteCount" > 0`);
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback();
+      throw error;
+    }
   }
 
   async favorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {

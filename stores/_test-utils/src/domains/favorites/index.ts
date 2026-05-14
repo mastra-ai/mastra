@@ -213,6 +213,48 @@ export function createFavoritesTests({ storage }: { storage: MastraStorage }) {
 
         expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: a2.id })).toBe(true);
       });
+
+      it('resets favoriteCount on the parent agent when it still exists', async () => {
+        const agent = createSampleAgent();
+        await agentsStorage.create({ agent });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: agent.id });
+        await favoritesStorage.favorite({ userId: 'u2', entityType: 'agent', entityId: agent.id });
+
+        await favoritesStorage.deleteFavoritesForEntity({ entityType: 'agent', entityId: agent.id });
+
+        const refreshed = await agentsStorage.getById(agent.id);
+        expect(refreshed?.favoriteCount).toBe(0);
+      });
+
+      it('resets favoriteCount on the parent skill when it still exists', async () => {
+        const skill = createSampleSkill();
+        await skillsStorage.create({ skill });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'skill', entityId: skill.id });
+        await favoritesStorage.favorite({ userId: 'u2', entityType: 'skill', entityId: skill.id });
+
+        await favoritesStorage.deleteFavoritesForEntity({ entityType: 'skill', entityId: skill.id });
+
+        const refreshed = await skillsStorage.getById(skill.id);
+        expect(refreshed?.favoriteCount).toBe(0);
+      });
+    });
+
+    describe('dangerouslyClearAll (cleanup)', () => {
+      it('resets favoriteCount on agents and skills after wiping favorites', async () => {
+        const agent = createSampleAgent();
+        const skill = createSampleSkill();
+        await agentsStorage.create({ agent });
+        await skillsStorage.create({ skill });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: agent.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'skill', entityId: skill.id });
+
+        await favoritesStorage.dangerouslyClearAll();
+
+        const refreshedAgent = await agentsStorage.getById(agent.id);
+        const refreshedSkill = await skillsStorage.getById(skill.id);
+        expect(refreshedAgent?.favoriteCount).toBe(0);
+        expect(refreshedSkill?.favoriteCount).toBe(0);
+      });
     });
 
     describe('agents.list integration', () => {
