@@ -26,12 +26,19 @@ Public docs cover the `ToolIntegration` / `BaseToolIntegration` / registry API. 
 - `docs/.../agent-builder/integrations.mdx` — link from existing agent-builder docs.
 
 ### Changeset
-- `.changeset/<auto-name>.md` — major bump for `@mastra/core`, `@mastra/editor`, `@mastra/server`, `@mastra/client-js`. Body explains:
-  - New `@mastra/core/tool-integration` module replaces old `ToolProvider` interface.
-  - **Compat window (Phase 2 → Phase 10)**: For one release cycle, `MastraEditorConfig.toolProviders` accepted both the legacy `Record<string, ToolProvider>` shape and the new `readonly ToolIntegration[]` shape, `getToolProvider` returned `undefined` on miss, and `ToolProvider` was a deprecated type alias for `ToolIntegration`. v1 removes all of these — consumers MUST migrate to the array shape and the throwing `getToolProvider`.
+- `.changeset/<auto-name>.md` — **minor** bump for `@mastra/core`, `@mastra/editor`, `@mastra/server`, `@mastra/client-js`. (Not major: the public `ComposioToolProvider` class and `ToolProvider` interface are preserved as deprecated thin shims; no public TypeScript symbol is removed in v1.) Body explains:
+  - New `@mastra/core/tool-integration` module is the canonical API. Recommend new code use `ComposioToolIntegration` + `readonly ToolIntegration[]` config shape.
+  - **Deprecated, kept working in v1**:
+    - `ComposioToolProvider` class — refactored into a thin wrapper around `ComposioToolIntegration`. Continues to work. `@deprecated` JSDoc says `Scheduled for removal in @mastra/editor v3.0 (next coordinated breaking-change cycle).`
+    - `ToolProvider` interface (`@mastra/core/tool-provider`) — kept as `type ToolProvider = ToolIntegration` alias.
+    - `MastraEditorConfig.toolProviders` accepts both `Record<string, ToolProvider>` and `readonly ToolIntegration[]`.
+    - `editor.getToolProvider(id)` returns `undefined` on miss (legacy semantics). New code should use `editor.getToolProviderOrThrow(id)`.
+  - **Removed in v1** (prototype-only, never publicly exported): `connectionsByToolkit`, `bindings`, `ConnectionPin`, `ConnectionBinding`, `authMode`, `authIdentity` references; Composio-named EE files; `/tool-providers/*` routes replaced by `/tool-integrations/*`; `getToolProviders()` plural method.
+  - **Scheduled for removal in `@mastra/editor` v3.0** (next coordinated team-wide major, see Phase 10b in the v1 plan): every deprecated surface above. Consumers should migrate during the v1.x release line.
   - `StorageMCPClientToolsConfig` → `integrationTools[providerId] = { tools, connections }`.
   - Prototype agents must be re-saved (no auto-migration).
   - OSS / no-auth fallback `userId = 'default'`.
+- Migration guide (linked from the changeset body, lives in `docs/.../tool-providers.mdx` migration section): side-by-side before/after for the four common patterns (config shape, class name, `getToolProvider` semantics, server routes). Audience is users who want to migrate now or before v3.0.
 
 ### Tests
 - `pnpm --filter ./docs build` — docs site builds clean.
@@ -41,8 +48,9 @@ Public docs cover the `ToolIntegration` / `BaseToolIntegration` / registry API. 
 ## Acceptance truths
 
 - [ ] `docs/.../tool-providers.mdx` exists and renders.
-- [ ] Changeset entry exists with major bump for the four packages.
-- [ ] Changeset body includes the migration note.
+- [ ] Changeset entry exists with **minor** bump for the four packages.
+- [ ] Changeset body includes the deprecation-with-scheduled-removal note and migration guide link.
+- [ ] Migration guide section in `docs/.../tool-providers.mdx` covers config shape, class name, `getToolProvider` semantics, and server routes.
 - [ ] Docs site builds clean.
 - [ ] Changeset passes `pnpm changeset status`.
 

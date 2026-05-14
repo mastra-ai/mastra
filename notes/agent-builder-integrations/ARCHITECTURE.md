@@ -560,27 +560,38 @@ authorId =
 
 ---
 
-## 14a. Backwards-compatibility window (Phase 2 → Phase 10)
+## 14a. Backwards-compatibility window (Phase 2 → Phase 10 → Phase 10b)
 
-v1 lands behind a one-release compat window so that pre-GA consumers of `@mastra/editor` do not break on a single PR. Phase 2 introduces the shims; Phase 10 removes them. The window is **internal only** — public docs (Phase 11) describe the post-Phase-10 surface as the canonical v1 contract.
+v1 introduces compat shims in two tiers:
+
+- **Prototype-only shims** — internal-only, no public consumer. Live Phase 2 → Phase 10. Removed when Phase 10 ships.
+- **Public-surface shims** — `ComposioToolProvider` class, `ToolProvider` interface, Record-shape config, undefined-on-miss `getToolProvider`. Live Phase 2 → Phase 10b (next coordinated `@mastra/editor` major bump, typically once per year). Phase 10 **refactors** these into thin wrappers around the new types; it does not delete them.
+
+The public-surface survivors are deprecated in v1 with `@deprecated` JSDoc naming the target removal version (`@mastra/editor v3.0`). v1's changeset (Phase 11) is a **minor** bump, not major — no public TypeScript symbol is removed in the v1 release.
 
 **Phase 2 shims (Option B+):**
 
-| Surface | Legacy behaviour | v1-window behaviour | Phase 10 |
-|---|---|---|---|
-| `MastraEditorConfig.toolProviders` | `Record<string, ToolProvider>` | accepts `Record \| readonly ToolIntegration[]`; Record path logs a one-shot `console.warn` | array only |
-| `ToolProvider` interface | own interface in `@mastra/core/tool-provider` | `type ToolProvider = ToolIntegration` alias (`@deprecated`) | deleted, file removed |
-| `editor.getToolProvider(id)` | returns `undefined` on miss | returns `undefined` on miss (unchanged) | renamed from `getToolProviderOrThrow`; throws `UnknownProviderError` on miss |
-| `editor.getToolProviderOrThrow(id)` | did not exist | throws `UnknownProviderError`; type-narrows to the concrete subclass | renamed to `getToolProvider` |
-| `editor.getToolProviders()` | returned `Record` | returns `readonly ToolIntegration[]` (`@deprecated`) | deleted; consumers iterate `editor.toolProviders` directly |
-| `storedAgent.integrationTools` (legacy) | prototype `connectionsByToolkit` shape | still read by `editor/namespaces/agent.ts` | deleted |
-| `storedAgent.toolIntegrations` (new) | did not exist | added in Phase 1, written by new mappers | renamed to `integrationTools` |
+| Surface | Legacy behaviour | v1-window behaviour | Phase 10 outcome | Phase 10b (next major) |
+|---|---|---|---|---|
+| `MastraEditorConfig.toolProviders` | `Record<string, ToolProvider>` | accepts `Record \| readonly ToolIntegration[]`; Record path logs a one-shot `console.warn` | warning removed; both shapes still accepted | narrowed to `readonly ToolIntegration[]` only |
+| `ToolProvider` interface | own interface in `@mastra/core/tool-provider` | `type ToolProvider = ToolIntegration` alias (`@deprecated`) | unchanged (still alias, still deprecated) | deleted, `tool-provider/` directory removed |
+| `editor.getToolProvider(id)` | returns `undefined` on miss | returns `undefined` on miss (unchanged) | unchanged (legacy semantics retained) | renamed from `getToolProviderOrThrow`; throws on miss |
+| `editor.getToolProviderOrThrow(id)` | did not exist | throws `UnknownProviderError`; type-narrows to the concrete subclass | unchanged | renamed to `getToolProvider` |
+| `editor.getToolProviders()` plural | returned `Record` | returns `readonly ToolIntegration[]` (`@deprecated`) | **deleted** (no public consumer surface) | n/a (gone since Phase 10) |
+| `ComposioToolProvider` class | full Composio adapter | full Composio adapter | **refactored** into thin wrapper around `ComposioToolIntegration` (~< 100 lines); still exported, `@deprecated` | deleted; `providers/composio.ts` removed |
+| `storedAgent.integrationTools` (legacy prototype shape) | `connectionsByToolkit` etc. | still read by `editor/namespaces/agent.ts` | **deleted** (prototype-only, never publicly stable) | n/a |
+| `storedAgent.toolIntegrations` (new) | did not exist | added in Phase 1, written by new mappers | renamed to `integrationTools` (the canonical name reclaimed) | unchanged |
 
-**Marker convention:** every shim line carries a `// PHASE-10-REMOVE` comment so `grep -r 'PHASE-10-REMOVE'` lists the deletion checklist. Phase 10's acceptance is "grep returns zero hits."
+**Marker convention:** every shim line carries one of two comments:
+- `// PHASE-10-REMOVE` — comes out in Phase 10. Acceptance: `grep -r 'PHASE-10-REMOVE'` returns zero hits after Phase 10.
+- `// PHASE-10B-REMOVE` — comes out in Phase 10b (next major). Acceptance after Phase 10: `grep -r 'PHASE-10B-REMOVE'` lists exactly the audited public-shim surface (≤ ~10 lines).
+
+Phase 10 re-classifies the markers from Phase 2 — the public-surface ones get renamed from `PHASE-10-REMOVE` to `PHASE-10B-REMOVE`.
 
 **What consumers see:**
 - Phase 2 release: existing code keeps compiling and running. Deprecation warnings appear in dev logs.
-- Phase 10 release: hard break. Changeset (Phase 11) calls this out as the major-version bump.
+- Phase 10 release (v1 ship): prototype shapes gone; legacy public surface still works, now via thin wrappers. `@deprecated` JSDoc names the target removal version. Minor version bump.
+- Phase 10b release (next major, ~1 release cycle later): public shims removed. Major version bump.
 
 ---
 

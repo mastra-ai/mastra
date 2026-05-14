@@ -11,6 +11,9 @@ export type {
   ToolMeta,
   ToolIntegrationHealth,
   AuthFlowStatus,
+  ListToolsOpts,
+  ListToolsResult,
+  ListToolServicesResult,
 } from './tool-integration';
 
 export { BaseToolIntegration } from './base';

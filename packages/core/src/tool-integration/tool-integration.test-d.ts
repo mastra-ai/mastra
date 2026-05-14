@@ -3,15 +3,16 @@ import type {
   AuthFlowStatus,
   AuthorizeOpts,
   Connection,
+  ListToolServicesResult,
+  ListToolsOpts,
+  ListToolsResult,
   ResolveToolsOpts,
-  ToolDescriptor,
   ToolIntegration,
   ToolIntegrationCapabilities,
   ToolIntegrationConfig,
   ToolIntegrationHealth,
   ToolIntegrations,
   ToolMeta,
-  ToolService,
 } from './tool-integration';
 
 describe('ToolIntegration — type contracts', () => {
@@ -47,13 +48,13 @@ describe('ToolIntegration — type contracts', () => {
     expectTypeOf<CapsField>().toEqualTypeOf<ToolIntegrationCapabilities>();
   });
 
-  it('listToolServices returns ToolService[]', () => {
-    expectTypeOf<ReturnType<ToolIntegration['listToolServices']>>().toEqualTypeOf<Promise<ToolService[]>>();
+  it('listToolServices returns a wrapped ListToolServicesResult', () => {
+    expectTypeOf<ReturnType<ToolIntegration['listToolServices']>>().toEqualTypeOf<Promise<ListToolServicesResult>>();
   });
 
-  it('listTools takes a toolService slug and returns ToolDescriptor[]', () => {
-    expectTypeOf<Parameters<ToolIntegration['listTools']>>().toEqualTypeOf<[string]>();
-    expectTypeOf<ReturnType<ToolIntegration['listTools']>>().toEqualTypeOf<Promise<ToolDescriptor[]>>();
+  it('listTools takes an optional ListToolsOpts and returns ListToolsResult', () => {
+    expectTypeOf<Parameters<ToolIntegration['listTools']>>().toEqualTypeOf<[ListToolsOpts?]>();
+    expectTypeOf<ReturnType<ToolIntegration['listTools']>>().toEqualTypeOf<Promise<ListToolsResult>>();
   });
 
   it('resolveTools takes ResolveToolsOpts', () => {

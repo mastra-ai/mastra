@@ -2,6 +2,9 @@ import type { ToolAction } from '../tools/types';
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
+  ListToolServicesResult,
+  ListToolsOpts,
+  ListToolsResult,
   ResolveToolsOpts,
   ToolDescriptor,
   ToolIntegration,
@@ -14,7 +17,7 @@ import type {
  * Constructor options shared by every {@link BaseToolIntegration} subclass.
  *
  * Allowlists are matched against the **provider-opaque slugs** returned by
- * `fetchToolServices()` / `fetchTools()`. Two forms are supported:
+ * `listAllToolServices()` / `listAllTools()`. Two forms are supported:
  *
  * - exact slug match: `'gmail'`
  * - suffix wildcard:  `'gmail.*'` (matches `gmail.fetch_emails`, `gmail.send`, ...)
@@ -31,9 +34,14 @@ export interface BaseToolIntegrationOptions {
 /**
  * Shared base class for concrete {@link ToolIntegration} implementations.
  *
- * Subclasses implement the SDK-specific `fetchToolServices` and `fetchTools`
- * methods (and the runtime / auth methods); the base class layers admin
- * allowlist filtering on top so every adapter behaves the same way.
+ * Subclasses implement the SDK-specific `listAllToolServices` and
+ * `listAllTools` methods (and the runtime / auth methods); the base class
+ * layers admin allowlist filtering on top so every adapter behaves the
+ * same way.
+ *
+ * Server-side pagination / search support is the **adapter's**
+ * responsibility — the base class forwards `ListToolsOpts` verbatim and
+ * only filters the resulting slugs against the admin allowlist.
  */
 export abstract class BaseToolIntegration implements ToolIntegration {
   abstract readonly id: string;
@@ -50,26 +58,39 @@ export abstract class BaseToolIntegration implements ToolIntegration {
 
   // ── catalog (filtered) ────────────────────────────────────────────────
 
-  async listToolServices(): Promise<ToolService[]> {
-    const all = await this.fetchToolServices();
-    if (this.allowedToolServices.length === 0) return all;
-    return all.filter(service => matchesAny(service.slug, this.allowedToolServices));
+  async listToolServices(): Promise<ListToolServicesResult> {
+    const all = await this.listAllToolServices();
+    const data =
+      this.allowedToolServices.length === 0
+        ? all
+        : all.filter(service => matchesAny(service.slug, this.allowedToolServices));
+    return { data };
   }
 
-  async listTools(toolService: string): Promise<ToolDescriptor[]> {
+  async listTools(opts: ListToolsOpts = {}): Promise<ListToolsResult> {
     // Deny tool services that aren't in the allowlist before touching the SDK.
-    if (this.allowedToolServices.length > 0 && !matchesAny(toolService, this.allowedToolServices)) {
-      return [];
+    if (
+      opts.toolService !== undefined &&
+      this.allowedToolServices.length > 0 &&
+      !matchesAny(opts.toolService, this.allowedToolServices)
+    ) {
+      return {
+        data: [],
+        pagination: { page: opts.page ?? 1, perPage: opts.perPage, hasMore: false },
+      };
     }
-    const all = await this.fetchTools(toolService);
-    if (this.allowedTools.length === 0) return all;
-    return all.filter(tool => matchesAny(tool.slug, this.allowedTools));
+    const result = await this.listAllTools(opts);
+    if (this.allowedTools.length === 0) return result;
+    return {
+      ...result,
+      data: result.data.filter(tool => matchesAny(tool.slug, this.allowedTools)),
+    };
   }
 
   // ── SDK hooks subclasses implement ────────────────────────────────────
 
-  protected abstract fetchToolServices(): Promise<ToolService[]>;
-  protected abstract fetchTools(toolService: string): Promise<ToolDescriptor[]>;
+  protected abstract listAllToolServices(): Promise<ToolService[]>;
+  protected abstract listAllTools(opts: ListToolsOpts): Promise<ListToolsResult>;
 
   abstract resolveTools(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>>;
 
@@ -102,3 +123,6 @@ function matchesAny(slug: string, patterns: readonly string[]): boolean {
   }
   return false;
 }
+
+// Keep ToolDescriptor reachable for callers that import via this module path.
+export type { ToolDescriptor };

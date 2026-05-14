@@ -157,6 +157,41 @@ export interface ToolIntegrationHealth {
 export type AuthFlowStatus = 'pending' | 'completed' | 'failed';
 
 /**
+ * Options for `ToolIntegration.listTools`. All fields are optional —
+ * omitting `toolService` lists tools across every service the integration
+ * exposes (subject to the admin allowlist).
+ */
+export interface ListToolsOpts {
+  /** Restrict results to one tool service slug. */
+  toolService?: string;
+  /** Free-text search across tool slugs / names / descriptions. */
+  search?: string;
+  /** 1-indexed page number for paginated listings. */
+  page?: number;
+  /** Page size. Adapters may clamp to a sane upper bound. */
+  perPage?: number;
+}
+
+/**
+ * Wrapped pagination envelope returned by `listTools`. `hasMore` is the
+ * only forward-progress signal — adapters are not required to surface a
+ * total count.
+ */
+export interface ListToolsResult {
+  data: ToolDescriptor[];
+  pagination: {
+    page: number;
+    perPage?: number;
+    hasMore: boolean;
+  };
+}
+
+/** Wrapped result returned by `listToolServices`. */
+export interface ListToolServicesResult {
+  data: ToolService[];
+}
+
+/**
  * Provider-agnostic tool integration interface.
  *
  * Implementations live in `@mastra/editor`. Core only depends on the
@@ -171,10 +206,14 @@ export interface ToolIntegration {
   readonly capabilities: ToolIntegrationCapabilities;
 
   /** List allowed tool services (after admin allowlist). */
-  listToolServices(): Promise<ToolService[]>;
+  listToolServices(): Promise<ListToolServicesResult>;
 
-  /** List allowed tools for one tool service. */
-  listTools(toolService: string): Promise<ToolDescriptor[]>;
+  /**
+   * List allowed tools. With no options, lists across every service.
+   * Pass `toolService` to scope; pass `search` to filter; pass `page` /
+   * `perPage` to paginate.
+   */
+  listTools(opts?: ListToolsOpts): Promise<ListToolsResult>;
 
   /**
    * Materialise executable Mastra tools for one (toolSlugs × connection)

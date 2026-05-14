@@ -33,9 +33,10 @@ The clean cut-over path therefore runs **per surface**, not as a single type ali
 - **Phase 2** (this phase): legacy surface untouched but `@deprecated`. New surface lives next to it.
 - **Phase 3**: rewrite Composio adapter against `BaseToolIntegration` and register on the new surface.
 - **Phase 5**: introduce `/tool-integrations/*` REST routes that consume the new surface.
-- **Phase 10**: delete the legacy `ToolProvider` interface, `MastraEditor.getToolProvider*`, `/tool-providers/*` routes, the legacy hydration code path in `agent.ts`, and the legacy storage shape — all in one PR.
+- **Phase 10**: delete prototype-only surfaces (legacy hydration in `agent.ts`, legacy storage shape, `/tool-providers/*` routes, `getToolProviders()` plural). **Refactor** the public-surface shims (`ToolProvider` interface, `ComposioToolProvider` class, Record-shape config, undefined-on-miss `getToolProvider`) into thin wrappers — they survive as `@deprecated`.
+- **Phase 10b** (next coordinated `@mastra/editor` major bump, post-v1): delete the public-surface shims. See ARCHITECTURE §14a and `phase-10-cleanup.md` for the full table.
 
-Every shim or deprecation tag added in Phase 2 carries a `// PHASE-10-REMOVE` comment for grep-ability.
+Phase 2 shim markers split in two: `// PHASE-10-REMOVE` for shims that come out in Phase 10, `// PHASE-10B-REMOVE` for shims that survive to the next major. Phase 10 re-classifies markers from Phase 2 as needed.
 
 ## Background
 
@@ -62,7 +63,7 @@ Every shim or deprecation tag added in Phase 2 carries a `// PHASE-10-REMOVE` co
 | `MastraEditor.getToolIntegrations()` | did not exist | new, returns `readonly ToolIntegration[]` | — |
 | `BaseToolIntegration` abstract class | did not exist | new, in `@mastra/core/tool-integration` | — |
 
-Old and new registries are **independent**: a `MastraEditor` instance can have both `toolProviders: { composio: legacy }` and `toolIntegrations: [newIntegration]` populated at the same time during the migration window. Phase 3 swaps the example app over to the new shape; Phase 10 deletes the old shape.
+Old and new registries are **independent**: a `MastraEditor` instance can have both `toolProviders: { composio: legacy }` and `toolIntegrations: [newIntegration]` populated at the same time during the migration window. Phase 3 swaps the example app over to the new shape; Phase 10 deletes the prototype-only storage hydration; the Record-shape config branch survives Phase 10 and is dropped in Phase 10b.
 
 ## Scope
 
@@ -190,4 +191,4 @@ All builds clean. `PHASE-10-REMOVE` grep returns the expected shim sites (legacy
 - `BaseToolIntegration` exists and Phase 3 (Composio adapter) can extend it.
 - `MastraEditor` exposes both registries; Phase 3 swaps the example app from `toolProviders` to `toolIntegrations`.
 - Phase 5 (server routes) can rely on `getToolIntegrationOrThrow` for 404 mapping on the new `/tool-integrations/*` routes.
-- Phase 10 deletes everything tagged `PHASE-10-REMOVE`: legacy interface, legacy methods, legacy config field, legacy hydration branch, legacy server routes, legacy storage field.
+- Phase 10 deletes everything tagged `PHASE-10-REMOVE` (prototype-only: legacy hydration branch, legacy server routes, legacy storage field, plural `getToolProviders` method) and re-classifies the public-shim markers to `PHASE-10B-REMOVE` (legacy interface, undefined-on-miss `getToolProvider`, Record-shape config, `ComposioToolProvider` class). Phase 10b deletes the `PHASE-10B-REMOVE` set at the next major.

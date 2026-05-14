@@ -3,8 +3,8 @@ import { BaseToolIntegration, DuplicateIntegrationError, UnknownIntegrationError
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
+  ListToolsResult,
   ResolveToolsOpts,
-  ToolDescriptor,
   ToolIntegrationCapabilities,
   ToolService,
 } from '@mastra/core/tool-integration';
@@ -25,11 +25,11 @@ class StubIntegration extends BaseToolIntegration {
     this.displayName = displayName;
   }
 
-  protected async fetchToolServices(): Promise<ToolService[]> {
+  protected async listAllToolServices(): Promise<ToolService[]> {
     return [];
   }
-  protected async fetchTools(): Promise<ToolDescriptor[]> {
-    return [];
+  protected async listAllTools(): Promise<ListToolsResult> {
+    return { data: [], pagination: { page: 1, hasMore: false } };
   }
   async resolveTools(_opts: ResolveToolsOpts) {
     return {};
