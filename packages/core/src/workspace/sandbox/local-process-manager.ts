@@ -6,6 +6,7 @@
  */
 
 import * as path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
@@ -52,9 +53,30 @@ class LocalProcessHandle extends ProcessHandle {
         }, options.timeout)
       : undefined;
 
+    const stdoutDecoder = new StringDecoder();
+    const stderrDecoder = new StringDecoder();
+    let stdoutDecoderEnded = false;
+    let stderrDecoderEnded = false;
+
+    const flushStdoutDecoder = () => {
+      if (stdoutDecoderEnded) return;
+      stdoutDecoderEnded = true;
+      const data = stdoutDecoder.end();
+      if (data) this.emitStdout(data);
+    };
+
+    const flushStderrDecoder = () => {
+      if (stderrDecoderEnded) return;
+      stderrDecoderEnded = true;
+      const data = stderrDecoder.end();
+      if (data) this.emitStderr(data);
+    };
+
     this.waitPromise = new Promise<CommandResult>(resolve => {
       subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
         if (timeoutId) clearTimeout(timeoutId);
+        flushStdoutDecoder();
+        flushStderrDecoder();
         if (timedOut) {
           const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
           this.emitStderr(timeoutMsg);
@@ -75,6 +97,8 @@ class LocalProcessHandle extends ProcessHandle {
 
       subprocess.on('error', (err: Error) => {
         if (timeoutId) clearTimeout(timeoutId);
+        flushStdoutDecoder();
+        flushStderrDecoder();
         this.emitStderr(err.message);
         this.exitCode = 1;
         resolve({
@@ -88,12 +112,16 @@ class LocalProcessHandle extends ProcessHandle {
     });
 
     subprocess.stdout?.on('data', (data: Buffer) => {
-      this.emitStdout(data.toString());
+      const decoded = stdoutDecoder.write(data);
+      if (decoded) this.emitStdout(decoded);
     });
+    subprocess.stdout?.on('end', flushStdoutDecoder);
 
     subprocess.stderr?.on('data', (data: Buffer) => {
-      this.emitStderr(data.toString());
+      const decoded = stderrDecoder.write(data);
+      if (decoded) this.emitStderr(decoded);
     });
+    subprocess.stderr?.on('end', flushStderrDecoder);
   }
 
   async wait(): Promise<CommandResult> {
