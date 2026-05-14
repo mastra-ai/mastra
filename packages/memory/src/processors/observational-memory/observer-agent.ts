@@ -296,7 +296,7 @@ A short, noun-phrase title for this conversation (2-5 words). Examples:
 Only update when the topic meaningfully changes.
 </thread-title>`
     : '';
-  const customSectionsSpec = buildExtractorOutputSections(additionalExtractors);
+  const extractorSectionsSpec = buildExtractorOutputSections(additionalExtractors);
 
   return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
@@ -336,7 +336,7 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>${threadTitleSection}${customSectionsSpec}`;
+</suggested-response>${threadTitleSection}${extractorSectionsSpec}`;
 }
 
 /**
