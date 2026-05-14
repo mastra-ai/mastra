@@ -1,5 +1,74 @@
 # @mastra/playground-ui
 
+## 27.1.0-alpha.2
+
+### Minor Changes
+
+- Added a List mode filter to the Observability traces page for switching between Traces and Branches mode, and changed the default to Traces mode. Previously, the page opened in Branches mode; now it opens in Traces mode, and users can switch modes via the new "List mode" property in the Add filter menu. For example: open Observability → Traces (now defaults to Traces) → Add filter → List mode → pick Branches or Traces. ([#16587](https://github.com/mastra-ai/mastra/pull/16587))
+
+### Patch Changes
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+  - @mastra/client-js@1.18.2-alpha.2
+  - @mastra/react@0.3.2-alpha.2
+
+## 27.0.2-alpha.1
+
+### Patch Changes
+
+- Removed the inset top gloss from the `shadow-dialog` token. The gloss read as a faint highlight band along the top edge of dropdown menus, popovers, selects, comboboxes, dialogs, tooltips, side dialogs and the main app container in dark mode. The token now applies a drop-shadow only and is consistent across light and dark themes. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Restyled `MainSidebar` and swapped sidebar icons to the new Figma design system set. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+  - Section titles are larger and medium-weight (`text-ui-sm`, `font-medium`), lowercase, muted — replacing the previous uppercase + wide-tracking treatment. Underline divider beneath the title removed in both expanded and collapsed states. Active indicator bar on the left edge removed.
+  - Nav items render flush: icons align horizontally with the section title, hover/active state now uses theme-aware sidebar surface tokens without item borders or shadows. The legacy `indent` option is still accepted but no longer changes layout.
+  - New sidebar icons: `WorkspacesIcon`, `RequestContextIcon`, `ScorersIcon`, `DatasetsIcon`, `ExperimentsIcon`, `MetricsIcon`. Existing icons `AgentIcon`, `PromptIcon`, `WorkflowIcon`, `ProcessorIcon`, `McpServerIcon`, `ToolsIcon`, `LogsIcon`, `TraceIcon` updated to match the Figma artwork. All icons accept `React.SVGProps<SVGSVGElement>` and inherit color via `currentColor`.
+
+- Improved Studio main content framing, persistent page breadcrumbs, accessible page headings, panel layering, and theme-aware navigation/card contrast. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Fixed a React/React DOM version mismatch that prevented Storybook from rendering in `@mastra/playground-ui`. ([#16529](https://github.com/mastra-ai/mastra/pull/16529))
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/client-js@1.18.2-alpha.1
+  - @mastra/react@0.3.2-alpha.1
+
+## 27.0.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6)]:
+  - @mastra/core@1.34.0-alpha.0
+  - @mastra/client-js@1.18.2-alpha.0
+  - @mastra/react@0.3.2-alpha.0
+
+## 27.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1), [`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb), [`fd1d852`](https://github.com/mastra-ai/mastra/commit/fd1d85248ccf197d138ebfed2f71a25319102919)]:
+  - @mastra/core@1.33.1
+  - @mastra/react@0.3.1
+  - @mastra/client-js@1.18.1
+
+## 27.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb), [`fd1d852`](https://github.com/mastra-ai/mastra/commit/fd1d85248ccf197d138ebfed2f71a25319102919)]:
+  - @mastra/core@1.33.1-alpha.1
+  - @mastra/react@0.3.1-alpha.1
+  - @mastra/client-js@1.18.1-alpha.1
+
+## 27.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1)]:
+  - @mastra/core@1.33.1-alpha.0
+  - @mastra/client-js@1.18.1-alpha.0
+  - @mastra/react@0.3.1-alpha.0
+
 ## 27.0.0
 
 ### Minor Changes

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
+import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { TracingContext, TracingOptions } from '../observability';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
@@ -39,6 +40,7 @@ describe('Harness tracing propagation', () => {
   let streamSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    agentThreadStreamRuntime.resetForTests();
     agent = createAgent();
     harness = new Harness({
       id: 'test-harness',
