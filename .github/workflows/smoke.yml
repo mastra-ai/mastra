@@ -123,6 +123,13 @@ jobs:
           "
           echo "Set Mastra deps to $TAG"
 
+      # Delete the committed lockfile so pnpm re-resolves the "alpha" (or other)
+      # dist-tag fresh on every run. With the lockfile present, pnpm reuses the
+      # locked versions even with --no-frozen-lockfile, which pinned us to the
+      # alphas that were current when the lockfile was committed.
+      - name: Remove committed lockfile (force fresh tag resolution)
+        run: rm -f pnpm-lock.yaml
+
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-workspace
 
