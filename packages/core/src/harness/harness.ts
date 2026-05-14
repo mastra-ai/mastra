@@ -316,6 +316,20 @@ export class Harness<TState = {}> {
     return this.#internalMastra;
   }
 
+  /**
+   * Sets or updates the harness-level browser and propagates it to static mode agents.
+   */
+  setBrowser(browser: MastraBrowser | undefined): void {
+    this.browser = browser;
+    this.browserFn = undefined;
+
+    for (const mode of this.config.modes) {
+      const agent = typeof mode.agent === 'function' ? null : mode.agent;
+      if (!agent || agent.hasOwnBrowser()) continue;
+      agent.setBrowser(browser);
+    }
+  }
+
   // ===========================================================================
   // Initialization
   // ===========================================================================
@@ -2769,6 +2783,16 @@ export class Harness<TState = {}> {
     );
   }
 
+  /**
+   * Resolve once the current thread's stream is fully idle.
+   *
+   * After `abort()` is called the run's status can still be `'running'` for a
+   * few microtasks while the underlying model stream finalizes. Callers that
+   * need to send a fresh signal after an abort (e.g. plan approval → mode
+   * switch → trigger reminder) should await this before calling `sendSignal`
+   * to avoid the new signal being queued onto the dying run, which would then
+   * be drained with the previous run's already-aborted abortSignal.
+   */
   private async waitForCurrentThreadStreamIdle(): Promise<void> {
     while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -2947,6 +2971,15 @@ export class Harness<TState = {}> {
       if (defaultMode && defaultMode.id !== this.currentModeId) {
         await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
         await this.switchMode({ modeId: defaultMode.id });
+        // switchMode aborts the in-flight run but does not wait for it to
+        // finalize. If the caller (e.g. mastracode's plan-approval handler)
+        // immediately fires a system-reminder signal, that signal can land in
+        // the dying run's pending queue and later get drained with the run's
+        // already-aborted abortSignal — manifesting as a hang where the agent
+        // never resumes after "The user has approved the plan, begin
+        // executing.". Waiting for the stream to be fully idle here ensures
+        // the next sendSignal() always starts a fresh run.
+        await this.waitForCurrentThreadStreamIdle();
       }
     }
   }

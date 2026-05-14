@@ -1,15 +1,12 @@
 import {
-  ButtonWithTooltip,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
@@ -22,7 +19,7 @@ export default function Scorers() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -30,7 +27,7 @@ export default function Scorers() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="scorers" />
       </NoDataPageLayout>
     );
@@ -38,7 +35,7 @@ export default function Scorers() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load scorers" message={error.message} />
       </NoDataPageLayout>
     );
@@ -46,7 +43,7 @@ export default function Scorers() {
 
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <NoScorersInfo />
       </NoDataPageLayout>
     );
@@ -62,26 +59,6 @@ export default function Scorers() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <GaugeIcon /> Scorers
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/evals/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Scorers documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
         <ScorersToolbar
           search={search}
           onSearchChange={setSearch}
