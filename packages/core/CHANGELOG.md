@@ -1,5 +1,78 @@
 # @mastra/core
 
+## 1.34.0-alpha.0
+
+### Minor Changes
+
+- You can now run ACP-compatible coding agents as Mastra tools or lightweight subagents. ACP agents support incremental response streaming and can be used anywhere Mastra accepts a `SubAgent`, including supervisor delegation and workflow steps. ([#16423](https://github.com/mastra-ai/mastra/pull/16423))
+
+  ```ts
+  import { createACPTool, AcpAgent } from '@mastra/acp';
+
+  export const codingTool = createACPTool({
+    id: 'coding-agent',
+    command: 'my-acp-agent',
+  });
+
+  export const codingAgent = new AcpAgent({
+    id: 'coding-agent',
+    command: 'my-acp-agent',
+  });
+  ```
+
+  You can also wire an `AcpAgent` into a supervisor or workflow as a `SubAgent`-compatible implementation:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  export const supervisor = new Agent({
+    name: 'supervisor',
+    instructions: 'Delegate coding tasks to the ACP agent.',
+    model,
+    agents: {
+      codingAgent,
+    },
+  });
+  ```
+
+  Workflows and the Inngest workflow adapter now recognize `SubAgent`-compatible implementations when creating agent-backed workflow steps.
+
+- Improved how the workspace `read_file` tool returns files to the model. Reads now branch on file type: ([#16570](https://github.com/mastra-ai/mastra/pull/16570))
+  1. **Media files** (default: `image/png`, `image/jpeg`, `image/webp`, `application/pdf`) are surfaced as native file/image parts the model can directly view, instead of being dumped as base64 text. Capped at 10 MiB by default so large media don't get base64-encoded into context and persisted in storage — configurable via `maxMediaBytes`.
+  2. **Text-readable files** (anything `text/*`, common code/config mime types, or unknown extensions) are returned as text content as before.
+  3. **Unsupported binaries** (e.g. `image/png` when `mediaTypes` is disabled, `application/zip`, oversized media, etc.) now return a short metadata description (`path`, size, mime type) instead of dumping useless base64 into the conversation. Pass an explicit `encoding` to opt back into the raw base64/hex dump.
+
+  The set of mime types treated as native media parts and the inline size cap are configurable per workspace:
+
+  ```ts
+  import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+  const workspace = new Workspace({
+    filesystem,
+    tools: {
+      [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+        // Broaden to any image (e.g. SVG, BMP, HEIC) — may fail on some providers
+        mediaTypes: ['image/*', 'application/pdf'],
+
+        // Raise the inline-media cap to 25 MiB
+        maxMediaBytes: 25 * 1024 * 1024,
+
+        // Or a custom predicate
+        // mediaTypes: (mime) => mime.startsWith('image/'),
+
+        // Or disable media parts entirely
+        // mediaTypes: false,
+      },
+    },
+  });
+  ```
+
+  The default `mediaTypes` is intentionally the cross-provider-safe intersection — formats universally supported across Anthropic, OpenAI, and Gemini.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e))
+
 ## 1.33.1
 
 ### Patch Changes

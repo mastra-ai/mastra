@@ -35,6 +35,7 @@ import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
+import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
@@ -917,6 +918,12 @@ export class MastraTUI {
       return;
     }
 
+    const authMode = await promptAuthMode(this.state.ui, providerName, provider?.authModes);
+    if (authMode === null) {
+      // User cancelled at the mode-selection step.
+      return;
+    }
+
     return new Promise(resolve => {
       const dialog = new LoginDialogComponent(this.state.ui, providerId, (success, message) => {
         this.state.ui.hideOverlay();
@@ -943,6 +950,7 @@ export class MastraTUI {
             dialog.showProgress(message);
           },
           signal: dialog.signal,
+          authMode,
         })
         .then(async () => {
           this.state.ui.hideOverlay();

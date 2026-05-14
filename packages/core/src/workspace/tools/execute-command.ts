@@ -182,6 +182,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
           exitCode: result.exitCode,
           stdout: result.stdout,
           stderr: result.stderr,
+          stdoutTruncated: result.stdoutTruncated,
+          stderrTruncated: result.stderrTruncated,
+          stdoutDroppedBytes: result.stdoutDroppedBytes,
+          stderrDroppedBytes: result.stderrDroppedBytes,
           toolCallId,
         });
       });
