@@ -96,11 +96,14 @@ export function derivePermissionData(): PermissionData {
   for (const route of SERVER_ROUTES) {
     const permission = getEffectivePermission(route);
     if (permission) {
-      const [resource, action] = permission.split(':');
-      if (resource && action) {
-        resourceSet.add(resource);
-        actionSet.add(action);
-        permissionSet.add(permission);
+      const perms = Array.isArray(permission) ? permission : [permission];
+      for (const perm of perms) {
+        const [resource, action] = perm.split(':');
+        if (resource && action) {
+          resourceSet.add(resource);
+          actionSet.add(action);
+          permissionSet.add(perm);
+        }
       }
     }
   }
