@@ -1,5 +1,19 @@
 # mastra
 
+## 1.9.2-alpha.2
+
+### Patch Changes
+
+- Observability API commands now target the hosted Mastra Platform Observability API by default and can infer credentials from project environment variables, project metadata, or the CLI login token. ([#16563](https://github.com/mastra-ai/mastra/pull/16563))
+
+  `mastra api trace get <traceId>` now fetches lightweight trace details by default, `--verbose` fetches the full trace payload, and `mastra api trace span <traceId> <spanId>` fetches one full span after identifying it from the lightweight trace.
+
+- Added named `mastra api metric` commands for querying hosted observability metrics, including aggregate, breakdown, timeseries, percentiles, metric name discovery, and metric label discovery. ([#16563](https://github.com/mastra-ai/mastra/pull/16563))
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+  - @mastra/deployer@1.34.0-alpha.2
+
 ## 1.9.2-alpha.1
 
 ### Patch Changes
