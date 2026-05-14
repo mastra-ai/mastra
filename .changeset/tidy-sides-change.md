@@ -2,4 +2,4 @@
 '@mastra/hono': patch
 ---
 
-Fixed SSE streams so clients can connect before the first stream event is available.
+Fixed SSE streams so browser clients can connect to long-lived subscriptions before the first stream event is available.
