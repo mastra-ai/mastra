@@ -2,16 +2,21 @@
  * Harness v1 — top-level entry point.
  *
  * See HARNESS_V1_SPEC.md §4 for the full surface. This module currently
- * implements the "resolver + lifecycle" slice (M1):
+ * implements the local Harness shell:
  *
  *   - `new Harness(config)` validates modes/agents and binds storage.
  *   - `harness.session(opts)` finds-or-creates sessions per §5.3, acquiring
  *     the durable lease and hydrating from `HarnessStorage`.
- *   - `harness.closeSession`, `harness.listSessions`, `harness.shutdown`
- *     handle the lifecycle paths needed for that slice.
+ *   - `harness.closeSession`, `harness.deleteSession`, `harness.listSessions`,
+ *     and `harness.shutdown` handle local lifecycle paths.
+ *   - `harness.threads.*` composes with MemoryStorage for thread CRUD/settings.
+ *   - `harness.models.*` exposes the static model catalog and auth-status
+ *     resolver.
  *
- * Everything else (message, queue, attachments, threads, intervals, …) is
- * still a stub and throws "not implemented".
+ * Known remaining gaps are deliberately visible here: `attachments.upload` and
+ * `attachments.delete` still throw, and production server routes, remote SDKs,
+ * durable admission/result rows, channels, wakeups, and worker recovery live in
+ * follow-up Harness v1 lanes.
  */
 
 import { randomUUID } from 'node:crypto';

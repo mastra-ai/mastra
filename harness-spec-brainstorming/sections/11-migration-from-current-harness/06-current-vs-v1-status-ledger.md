@@ -33,6 +33,40 @@ records (§5.1, §5.2) stay with their owning sections and are not re-exported
 through the v1 runtime entry; clients reach them via the §13.3 wire surface
 or §5.2 `HarnessStorageDomain` instead.
 
+#### PF-342 source-alignment snapshot
+
+This ledger still classifies spec names against legacy/current Mastra collision
+risk. It is not a claim that `@mastra/core/harness/v1` is empty: as of
+`9770d5c86efcd3533008a650ae266393828b0e0b`, the v1 subpath has a local
+implementation in `packages/core/src/harness/v1/**`.
+
+Source-confirmed local surfaces now present:
+
+- `Harness` and `Session` classes under `packages/core/src/harness/v1`.
+- Mastra registry support through `harnesses?: Record<string, HarnessV1>`,
+  `getHarness(name)`, and `getHarnesses()` in
+  `packages/core/src/mastra/index.ts`.
+- Local session resolver/lifecycle, thread CRUD/settings, model catalog reads,
+  event subscription, message/signal/queue execution, inbox response methods,
+  display state, message listing, mode/model/state mutation, permissions,
+  workspace-backed skills, subagents, goals, abort, and idle waiting.
+- Harness storage for session records, leases, and attachments in core
+  in-memory storage and the LibSQL adapter.
+
+Source-confirmed gaps that remain missing or intentionally throwing:
+
+- `Harness.attachments.upload(...)` and `Harness.attachments.delete(...)` throw
+  in `packages/core/src/harness/v1/harness.ts`.
+- `ctx.registerQuestion(...)` and `ctx.registerPlanApproval(...)` throw in
+  `packages/core/src/harness/v1/session.ts`.
+- The Harness storage domain has no durable operation admission/result/
+  tombstone rows, channel ledger rows, wakeup rows, or worker claim/receipt
+  rows.
+- No `/harness/...` server route family exists under `packages/server/src`.
+- No `RemoteHarness` / `RemoteSession` client-js or React SDK surface exists.
+- No Harness channel registry/bridge ledgers/workers or `HarnessWakeupItem`
+  worker implementation exists.
+
 #### 11.6a Names that overlap with current Mastra code
 
 These 20 names appear under the exact same identifier in both the v1 spec
@@ -82,10 +116,10 @@ entries are not Notes blocks and are exempt.
   `BackgroundTaskRowStatus` (§5.1b.2); no independent literals live at the
   projection site. Current code declares an independent union missing the
   `'dead'` terminal status. The alias commits the public name to the 7-literal
-  storage taxonomy (`pending | running | completed | failed | cancelled |
-  timed_out | dead`); current code must reach literal parity with §5.1b.2
-  before the alias ships. Any future literal-set change is a public-API
-  change governed by §11.6.
+  storage taxonomy of seven literals (`pending`, `running`, `completed`,
+  `failed`, `cancelled`, `timed_out`, `dead`); current code must reach literal
+  parity with §5.1b.2 before the alias ships. Any future literal-set change is
+  a public-API change governed by §11.6.
 
 **`Harness`**
 

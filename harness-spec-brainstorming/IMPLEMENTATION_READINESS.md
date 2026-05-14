@@ -170,14 +170,36 @@ classDiagram
   `sendMessage(...)`, process-local heartbeat timers, `currentThreadId`, and
   in-memory pending resolvers. It is not the v1 stateless `Harness` plus
   durable `Session` model.
-- Current `Mastra` has `agents`, `workflows`, `channels`, storage, pubsub,
-  background tasks, and scheduler config, but no `harness` config slot, no
-  `getHarness(...)`, no awaited Harness boot barrier, and no
-  `mastra.harnessChannels` operator surface. Channel and background task
-  initialization are currently fire-and-forget from construction time.
+- Current `packages/core/src/harness/v1` now provides a local Harness/Session
+  baseline: `Harness.session(...)`, `closeSession`, `deleteSession`,
+  `listSessions`, `shutdown`, thread CRUD/settings through MemoryStorage,
+  model catalog/auth-status reads, event subscription, `Session.message(...)`,
+  `signal(...)`, `queue(...)`, `respondToToolApproval`,
+  `respondToToolSuspension`, `respondToQuestion`, `respondToPlanApproval`,
+  mode/model/state mutation, display snapshots, `listMessages`, skills,
+  permissions, subagents, goals, abort, idle waiting, and workspace lifecycle.
+- Current `Mastra` has `harnesses?: Record<string, HarnessV1>`,
+  `getHarness(name)`, and `getHarnesses()`. Harnesses bind after agents are
+  registered. It still has no awaited Harness boot/readiness barrier, no
+  Harness-owned worker startup/shutdown semantics, no singular/default
+  `harness` config sugar, and no `mastra.harnessChannels` operator surface.
+  Channel and background task initialization are currently fire-and-forget from
+  construction time.
 - Current channel support is split between platform `ChannelProvider` routes and
   legacy `AgentChannels`. It does not have the Harness v1 `ChannelBinding`,
   `ChannelInboxItem`, `ChannelActionReceipt`, or `ChannelOutboxItem` ledgers.
+- Current Harness storage owns `SessionRecord` rows, session leases, and
+  attachment metadata/bytes through core in-memory storage and the LibSQL
+  adapter. It does not yet own durable operation admission/result/tombstone
+  rows, channel ledgers, wakeup rows, or worker claim/receipt rows.
+- Current `Harness.attachments.upload(...)` and `Harness.attachments.delete(...)`
+  still throw even though the storage domain has attachment primitives.
+- Current per-turn `HarnessRequestContext` exposes identity, state,
+  workspace, subagent, and `useSkill(...)` helpers, but `ctx.registerQuestion`
+  and `ctx.registerPlanApproval` still throw.
+- Current server packages expose `/channels/...` and other existing route
+  families, but no `/harness/...` route family. Current `client-js` and React
+  packages have no `RemoteHarness` / `RemoteSession` resource or hooks.
 - Current `WorkflowScheduler` claims schedule fires by advancing `nextFireAt`
   before publishing `workflow.start`; Harness v1 needs `HarnessWakeupItem` as
   the durable recovery boundary before session queue admission.
@@ -197,19 +219,19 @@ classDiagram
 
 ## Missing Implementation Capabilities
 
-1. **V1 Harness and Session surface.** Add a new v1 surface with stateless
-   `Harness`, durable `Session`, `harness.session(...)`, `listSessions`,
-   `closeSession`, `deleteSession`, `Session.message(...)`, `Session.queue(...)`,
-   inbox response methods, display state, attachments, goals, and local/remote
-   type separation. Keep legacy Harness behavior isolated until migration is
-   intentional.
-2. **Harness storage domain.** Add storage interfaces and adapters for
-   `SessionRecord`, session leases/version CAS, `QueuedItem`,
-   `QueueAdmissionReceipt`, pending inbox fields, `InboxResponseReceipt`,
-   `HarnessRunOperationalState`, child-session lookup, `HarnessWakeupItem`, and
-   channel ledgers by extending Mastra's storage-domain pattern. Thread/message
-   reads and writes must stay on the configured MemoryStorage-backed message log
-   or an equivalent shared adapter, not a Harness-only duplicate log.
+1. **Local v1 parity gaps.** Complete the local surface that still throws or is
+   intentionally narrow: `Harness.attachments.upload/delete`,
+   request-context `registerQuestion` / `registerPlanApproval`, code-registered
+   skills plus stronger skill-schema validation, and close/delete fences that
+   rely on the durable row families below. Keep legacy Harness behavior isolated
+   until migration is intentional.
+2. **Harness storage domain.** Extend the current session/lease/attachment
+   domain with storage interfaces and adapters for `QueueAdmissionReceipt`,
+   operation tombstones/results, pending inbox response receipts,
+   `HarnessRunOperationalState`, `HarnessWakeupItem`, channel ledgers, and
+   worker claim/receipt rows. Thread/message reads and writes must stay on the
+   configured MemoryStorage-backed message log or an equivalent shared adapter,
+   not a Harness-only duplicate log.
 3. **Admission idempotency and result correlation.** Implement `admissionId`
    plus stable admission hash handling for `message(...)` accepted signals and
    `queue(...)` durable appends. Accepted signals must expose terminal status by
@@ -231,9 +253,9 @@ classDiagram
    `addTools` where storage must replay, persist subagent sessions with
    `parentSessionId`, and fail closed when agents, models, tools, MCP bindings,
    or workspace providers drift.
-6. **Mastra harness registration.** Add `new Mastra({ harness })` and
-   `new Mastra({ harness: { name: harness } })`, normalize default sugar, expose
-   `getHarness(name?)`, and wire Harness readiness into the Mastra/server
+6. **Mastra harness lifecycle.** Extend the existing
+   `new Mastra({ harnesses })` / `getHarness(name)` registry with any accepted
+   default/singular sugar, then wire Harness readiness into the Mastra/server
    bootstrap and shutdown lifecycle before server routes accept Harness traffic.
 7. **Harness channel registry.** Build an init-time registry for
    `(harnessName, channelId, providerId)`, provider-owned callback bindings,

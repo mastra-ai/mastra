@@ -3,9 +3,15 @@
  *
  * This is the in-memory authority for a single SessionRecord (§5.4). The
  * Harness creates one instance per live session and routes all writes to
- * the underlying record through it. The full surface is described in §4.2;
- * the M1 slice ships only identity + lifecycle. Everything else still throws
- * `Not implemented`.
+ * the underlying record through it. The full surface is described in §4.2.
+ *
+ * The current local surface includes message/signal/queue turns, mode/model
+ * and state mutation, display snapshots, message listing, pending inbox
+ * responses, permissions, workspace-backed skills, subagents, goals, event
+ * forwarding, abort, and idle waiting. It is not yet the production remote or
+ * recovery surface: durable admission/result rows, server routes, remote SDKs,
+ * channels, wakeups, and request-context `registerQuestion` /
+ * `registerPlanApproval` support remain follow-up lanes.
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.
