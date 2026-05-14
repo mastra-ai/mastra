@@ -12,4 +12,4 @@ if (isProviderRegistered('openai')) {
 }
 ```
 
-Improved client tool schema handling in the tool builder by normalizing raw JSON Schema objects passed as `inputSchema` / `outputSchema` into a `StandardSchemaWithJSON` shape. Tools defined with plain JSON Schema now convert correctly to AI SDK and provider tool formats, matching the behavior of tools defined with Zod.
+Improved client tool schema handling in the tool builder by normalizing raw JSON Schema objects passed as `inputSchema` into a `StandardSchemaWithJSON` shape. Client tools whose `inputSchema` arrives as plain JSON (e.g. after crossing the wire from a browser SDK) now convert correctly to AI SDK and provider tool formats, matching the behavior of tools defined with Zod.

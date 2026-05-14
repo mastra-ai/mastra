@@ -100,17 +100,6 @@ export class CoreToolBuilder extends MastraBase {
         this.originalTool.inputSchema = toStandardSchema(rawInput as any) as any;
       }
 
-      const rawOutput = (this.originalTool as { outputSchema?: unknown }).outputSchema;
-      if (
-        rawOutput &&
-        typeof rawOutput === 'object' &&
-        !isZodObject(rawOutput) &&
-        !isStandardSchemaWithJSON(rawOutput) &&
-        !('jsonSchema' in (rawOutput as object))
-      ) {
-        (this.originalTool as { outputSchema?: unknown }).outputSchema = toStandardSchema(rawOutput as any) as any;
-      }
-
       if (isBackgroundEligible || isResumableTool) {
         let schema = this.originalTool.inputSchema;
         if (typeof schema === 'function') {
