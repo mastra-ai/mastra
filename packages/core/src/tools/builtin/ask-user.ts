@@ -39,11 +39,35 @@ export const askUser = createTool({
   suspendSchema: z.object({}),
   resumeSchema,
   execute: async (_input, ctx) => {
+    const input = _input as z.infer<typeof inputSchema>;
     const resumeData = ctx.agent?.resumeData as z.infer<typeof resumeSchema> | undefined;
     if (resumeData !== undefined) return resumeData;
 
     if (!ctx.agent?.suspend) {
       throw new Error(`${ASK_USER_TOOL_ID} requires an agent execution context with suspend support.`);
+    }
+
+    const harness = ctx.requestContext?.get('harness') as
+      | {
+          registerQuestion?: (params: {
+            questionId: string;
+            question: string;
+            options?: Array<{ label: string; description?: string }>;
+            selectionMode?: 'single_select' | 'multi_select';
+            runId?: string;
+            toolCallId?: string;
+          }) => Promise<void>;
+        }
+      | undefined;
+    if (harness?.registerQuestion && ctx.agent.runId) {
+      await harness.registerQuestion({
+        questionId: ctx.agent.toolCallId,
+        question: input.question,
+        ...(input.options ? { options: input.options } : {}),
+        ...(input.selectionMode ? { selectionMode: input.selectionMode } : {}),
+        runId: ctx.agent.runId,
+        toolCallId: ctx.agent.toolCallId,
+      });
     }
 
     await ctx.agent.suspend({});

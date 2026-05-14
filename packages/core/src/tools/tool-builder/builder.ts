@@ -448,11 +448,12 @@ export class CoreToolBuilder extends MastraBase {
             // Nest agent-specific properties under 'agent' key
             // Do NOT include workflow context even if workflow properties exist
             // (agents use workflows internally but tools should see agent context)
-            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, runId, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               agent: {
                 agentId: options.agentId || '',
+                runId,
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
                 suspend,

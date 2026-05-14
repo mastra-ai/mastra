@@ -1057,7 +1057,7 @@ export interface HarnessRequestContext<TState = unknown> {
   abortSignal: AbortSignal;
 
   /** Register a pending question (used by `ask_user` and custom suspending tools). */
-  registerQuestion: (params: RegisterQuestionParams) => void;
+  registerQuestion: (params: RegisterQuestionParams) => Promise<void>;
   /** Register a pending plan approval (used by `submit_plan` and custom suspending tools). */
   registerPlanApproval: (params: RegisterPlanApprovalParams) => void;
 

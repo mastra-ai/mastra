@@ -6,6 +6,7 @@ import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
+import { RequestContext } from '../../../request-context';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
@@ -44,6 +45,32 @@ type AddToolMetadataOptions = {
       suspendPayload: unknown;
     }
 );
+
+type HarnessToolContextSlot = {
+  registerQuestion?: (params: Record<string, unknown>) => Promise<void>;
+};
+
+function buildToolRequestContext(
+  requestContext: RequestContext,
+  opts: { runId: string; toolCallId: string },
+): RequestContext {
+  const harness = requestContext.get('harness') as HarnessToolContextSlot | undefined;
+  if (!harness?.registerQuestion) return requestContext;
+
+  const overlay = new RequestContext<unknown>(
+    Array.from(requestContext.entries() as IterableIterator<[string, unknown]>),
+  );
+  overlay.set('harness', {
+    ...harness,
+    registerQuestion: async (params: Record<string, unknown>) =>
+      harness.registerQuestion!({
+        ...params,
+        runId: typeof params.runId === 'string' ? params.runId : opts.runId,
+        toolCallId: typeof params.toolCallId === 'string' ? params.toolCallId : opts.toolCallId,
+      }),
+  });
+  return overlay;
+}
 
 export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
@@ -527,9 +554,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           Object.keys(resumeData).length === 1 &&
           'approved' in resumeData;
         const resumeDataToPassToToolOptions = shouldStripApprovalResumeData ? undefined : resumeData;
+        const toolRequestContext = buildToolRequestContext(requestContext, {
+          runId,
+          toolCallId: inputData.toolCallId,
+        });
 
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
+          runId,
           toolCallId: inputData.toolCallId,
           // Pass all messages (input + response + memory) so sub-agents (agent-* tools) receive
           // the full conversation context and can make better decisions. Each sub-agent invocation
@@ -541,7 +573,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
           workspace: _internal?.stepWorkspace,
           // Forward requestContext so tools receive values set by the workflow step
-          requestContext,
+          requestContext: toolRequestContext,
           // Let tools that read thread history mid-stream (e.g. forked subagents
           // cloning the parent thread) drain the save queue so the store reflects
           // the latest user/assistant messages before they read.

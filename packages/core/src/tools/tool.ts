@@ -330,6 +330,7 @@ export class Tool<
             // Reorganize agent context - nest agent-specific properties under 'agent' key
             const {
               agentId,
+              runId,
               toolCallId,
               messages,
               suspend,
@@ -343,6 +344,7 @@ export class Tool<
               ...rest,
               agent: {
                 agentId: agentId || '',
+                runId,
                 toolCallId,
                 messages,
                 suspend,

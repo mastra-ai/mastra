@@ -97,6 +97,7 @@ import type {
   ModelAuthStatus,
   PermissionPolicy,
   QueueOptions,
+  RegisterQuestionParams,
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
   SessionSignalOptions,
@@ -1920,8 +1921,18 @@ export class Session {
     if (!payload || !full.runId) return;
 
     const kind = this._classifyResumeKind(payload);
+    const existing = this._record.pendingResume;
+    if (
+      existing &&
+      existing.kind === kind &&
+      existing.runId === full.runId &&
+      existing.toolCallId === payload.toolCallId
+    ) {
+      return;
+    }
     const pending: PendingResume = {
       kind,
+      itemId: `${kind}:${payload.toolCallId}`,
       runId: full.runId,
       toolCallId: payload.toolCallId,
       toolName: payload.toolName,
@@ -3332,6 +3343,64 @@ export class Session {
     }
   }
 
+  private async _registerQuestion(
+    params: RegisterQuestionParams & { runId?: string; toolCallId?: string },
+  ): Promise<void> {
+    this._assertLive('ctx.registerQuestion');
+    if (typeof params.questionId !== 'string' || params.questionId.length === 0) {
+      throw new HarnessValidationError('ctx.registerQuestion.questionId', 'must be a non-empty string');
+    }
+    if (typeof params.question !== 'string' || params.question.length === 0) {
+      throw new HarnessValidationError('ctx.registerQuestion.question', 'must be a non-empty string');
+    }
+    if (
+      params.selectionMode !== undefined &&
+      params.selectionMode !== 'single_select' &&
+      params.selectionMode !== 'multi_select'
+    ) {
+      throw new HarnessValidationError('ctx.registerQuestion.selectionMode', 'must be single_select or multi_select');
+    }
+    const runId = params.runId ?? this._currentRunId;
+    const toolCallId = params.toolCallId ?? params.questionId;
+    if (!runId) {
+      throw new HarnessValidationError('ctx.registerQuestion.runId', 'active run id is required');
+    }
+    const pending: PendingResume = {
+      kind: 'question',
+      itemId: params.questionId,
+      runId,
+      toolCallId,
+      toolName: ASK_USER_TOOL_NAME,
+      source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      requestedAt: Date.now(),
+      payload: {
+        question: params.question,
+        ...(params.options ? { options: params.options } : {}),
+        ...(params.selectionMode ? { selectionMode: params.selectionMode } : {}),
+      },
+    };
+    let registered = false;
+    await this._flushUpdate(prev => {
+      const current = prev.pendingResume;
+      if (current) {
+        if (current.kind === 'question' && current.runId === runId && current.toolCallId === toolCallId) {
+          return prev;
+        }
+        throw new HarnessValidationError('ctx.registerQuestion', `pending resume is already "${current.kind}"`);
+      }
+      registered = true;
+      return { ...prev, pendingResume: pending };
+    });
+    if (!registered) return;
+    this._emitTurnEvent({
+      type: 'suspension_required',
+      kind: 'question',
+      toolCallId,
+      toolName: ASK_USER_TOOL_NAME,
+      runId,
+    });
+  }
+
   /**
    * Settle a queued item's resolver with success and remove it from the
    * head of `pendingQueue`. The CAS write here is the durable record that
@@ -3484,9 +3553,7 @@ export class Session {
         return session.setState(updatesOrUpdater as Partial<unknown>);
       }) as HarnessRequestContext<unknown>['setState'],
       abortSignal: turn.abortSignal,
-      registerQuestion: () => {
-        throw new HarnessConfigError('ctx.registerQuestion', 'not implemented in this milestone');
-      },
+      registerQuestion: params => session._registerQuestion(params),
       registerPlanApproval: () => {
         throw new HarnessConfigError('ctx.registerPlanApproval', 'not implemented in this milestone');
       },

@@ -107,6 +107,8 @@ export interface QueuedItem {
  */
 export interface PendingResume {
   kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  /** Stable pending interaction id used by inbox/route callers. */
+  itemId?: string;
   runId: string;
   toolCallId: string;
   /** Populated for tool-approval / tool-suspension; omitted otherwise. */

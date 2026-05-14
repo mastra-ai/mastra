@@ -63,6 +63,50 @@ describe('askUser tool (standalone)', () => {
     expect(suspendPayload).toEqual({});
   });
 
+  it('registers a Harness question before suspending when the harness slot is present', async () => {
+    const requestContext = new RequestContext();
+    const registrations: unknown[] = [];
+    requestContext.set('harness', {
+      registerQuestion: async (params: unknown) => {
+        registrations.push(params);
+      },
+    });
+
+    await expect(
+      askUser.execute!(
+        { question: 'Pick one', options: [{ label: 'a' }], selectionMode: 'single_select' },
+        {
+          ...makeAgentCtx({
+            suspend: async () => {
+              throw new Error('SUSPEND_MARKER');
+            },
+          }),
+          requestContext,
+          agent: {
+            agentId: 'test-agent',
+            runId: 'run-1',
+            toolCallId: 'call-1',
+            messages: [],
+            suspend: async () => {
+              throw new Error('SUSPEND_MARKER');
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow('SUSPEND_MARKER');
+
+    expect(registrations).toEqual([
+      {
+        questionId: 'call-1',
+        question: 'Pick one',
+        options: [{ label: 'a' }],
+        selectionMode: 'single_select',
+        runId: 'run-1',
+        toolCallId: 'call-1',
+      },
+    ]);
+  });
+
   it('returns resumeData when present (acts as identity on second pass)', async () => {
     const result = await askUser.execute!(
       { question: 'Pick one', options: [{ label: 'a' }, { label: 'b' }], selectionMode: 'single_select' },

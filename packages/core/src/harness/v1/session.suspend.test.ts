@@ -210,6 +210,7 @@ describe('Session — suspend capture on message()', () => {
 
     const pending = session.getRecord().pendingResume!;
     expect(pending.kind).toBe('question');
+    expect(pending.itemId).toBe('question:tc-3');
     expect(pending.payload).toEqual({
       question: 'pick a color',
       options: [{ label: 'red' }, { label: 'blue' }],
@@ -252,6 +253,38 @@ describe('Session — suspend capture on message()', () => {
     await session.message({ content: 'hi' });
 
     expect(session.getRecord().pendingResume).toBeUndefined();
+  });
+
+  it('keeps a question registered by the tool before suspend capture', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await (session as any)._registerQuestion({
+      questionId: 'tc-registered',
+      question: 'registered prompt',
+      options: [{ label: 'yes' }],
+      selectionMode: 'single_select',
+      runId: 'run-registered',
+      toolCallId: 'tc-registered',
+    });
+    await (session as any)._maybeCaptureSuspend({
+      runId: 'run-registered',
+      finishReason: 'suspended',
+      suspendPayload: {
+        toolCallId: 'tc-registered',
+        toolName: 'ask_user',
+        args: { question: 'stale prompt' },
+      },
+    });
+
+    const pending = session.getRecord().pendingResume!;
+    expect(pending.kind).toBe('question');
+    expect(pending.itemId).toBe('tc-registered');
+    expect(pending.payload).toEqual({
+      question: 'registered prompt',
+      options: [{ label: 'yes' }],
+      selectionMode: 'single_select',
+    });
   });
 });
 
