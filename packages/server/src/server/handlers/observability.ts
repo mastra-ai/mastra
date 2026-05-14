@@ -1,4 +1,3 @@
-import { deltaCursorSchema } from '@internal/core/storage';
 import type { Mastra } from '@mastra/core';
 import { extractTrajectoryFromTrace, listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
@@ -6,7 +5,6 @@ import type { ScoresStorage } from '@mastra/core/storage';
 import {
   tracesFilterSchema,
   tracesOrderBySchema,
-  paginationArgsSchema,
   spanIdsSchema,
   listTracesResponseSchema,
   scoreTracesRequestSchema,
@@ -25,6 +23,7 @@ import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import { deltaCursorSchema, paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   createObservabilityListQuerySchema,

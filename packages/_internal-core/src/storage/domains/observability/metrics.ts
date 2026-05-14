@@ -158,10 +158,7 @@ export const metricsFilterSchema = z
     ...commonFilterFields,
 
     // Metric identification
-    name: z
-      .preprocess(value => (typeof value === 'string' ? [value] : value), z.array(z.string()).nonempty())
-      .optional()
-      .describe('Filter by metric name(s)'),
+    name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),
 
     /**
      * @deprecated Use `executionSource` instead.

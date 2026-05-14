@@ -1,4 +1,3 @@
-import { deltaLimitSchema, deltaCursorSchema, listModeSchema, paginationArgsSchema } from '@internal/core/storage';
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
@@ -6,6 +5,12 @@ import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
+import {
+  deltaCursorSchema,
+  deltaLimitSchema,
+  listModeSchema,
+  paginationArgsSchema,
+} from './observability-list-query-schemas';
 
 export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =

@@ -59,14 +59,15 @@ import {
   getEnvironmentsResponseSchema,
   getTagsArgsSchema,
   getTagsResponseSchema,
-  deltaCursorSchema,
-  paginationArgsSchema,
 } from '@internal/core/storage';
+import { coreFeatures } from '@mastra/core/features';
 import { generateSignalId } from '@mastra/core/observability';
 import { z } from 'zod/v4';
+import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import { deltaCursorSchema, paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   createObservabilityListQuerySchema,
@@ -99,6 +100,12 @@ function createNewRoute<
     requiresAuth: true,
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
       try {
+        if (!coreFeatures.has('observability:v1.13.2')) {
+          throw new HTTPException(501, {
+            message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
+          });
+        }
+
         return await handler(params);
       } catch (error) {
         return handleError(error, `Error calling: '${def.summary.toLocaleLowerCase()}'`);
