@@ -1,5 +1,50 @@
 # @mastra/editor
 
+## 0.8.0
+
+### Minor Changes
+
+- Added optional `metadata` to code-defined agents. Pass a `metadata` record to `new Agent({...})`, read it back with `agent.getMetadata()`, and clients can filter on it from the existing `/agents` and `/agents/:agentId` responses without encoding the data into IDs or names. ([#16603](https://github.com/mastra-ai/mastra/pull/16603))
+
+  Metadata supports the same `DynamicArgument` form as other agent config fields, so it can also be resolved per request from the request context.
+
+  Stored agents loaded via the editor also expose their metadata through `agent.getMetadata()`, so clients can filter these agents as well. Cloning a runtime agent via `editor.agent.clone()` now carries the source agent's metadata over to the stored clone when the caller does not provide one explicitly.
+
+  ```ts
+  // Static
+  const supportAgent = new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    instructions: 'You help customers with support requests.',
+    model: 'openai/gpt-5',
+    metadata: { type: 'support' },
+  });
+
+  supportAgent.getMetadata(); // { type: 'support' }
+
+  // Dynamic
+  const tenantAgent = new Agent({
+    id: 'tenant-agent',
+    name: 'Tenant Agent',
+    instructions: 'You help customers with tenant-specific tasks.',
+    model: 'openai/gpt-5',
+    metadata: ({ requestContext }) => ({
+      type: 'support',
+      tenant: requestContext.get('tenant'),
+    }),
+  });
+
+  await tenantAgent.getMetadata({ requestContext }); // { type: 'support', tenant: 'acme' }
+  ```
+
+### Patch Changes
+
+- Fixed stored agent tool overrides so conditional tool configuration no longer recursively calls the forked agent when merging code-defined tools. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`97fe629`](https://github.com/mastra-ai/mastra/commit/97fe629d07b0a9952e6657b1e6334ca4d9aa15ce), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0
+  - @mastra/memory@1.18.1
+
 ## 0.8.0-alpha.1
 
 ### Minor Changes
