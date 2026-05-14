@@ -286,6 +286,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
+    { name: 'skill:', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
@@ -351,6 +352,13 @@ export function setupAutocomplete(state: TUIState): void {
     }
   }
 
+  for (const skill of state.skillCommands) {
+    slashCommands.push({
+      name: `skill:${skill.name}`,
+      description: skill.description ? `Skill: ${skill.description}` : `Skill: ${skill.name}`,
+    });
+  }
+
   for (const skill of state.goalSkillCommands) {
     slashCommands.push({
       name: `goal/${skill.name}`,
@@ -394,12 +402,15 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
     const workspace = state.harness.getWorkspace() ?? state.workspace;
     if (!workspace?.skills) {
+      state.skillCommands = [];
       state.goalSkillCommands = [];
       return;
     }
     const skills = await workspace.skills.list();
+    state.skillCommands = skills;
     state.goalSkillCommands = skills.filter(skill => skill.metadata?.goal === true);
   } catch {
+    state.skillCommands = [];
     state.goalSkillCommands = [];
   }
 }

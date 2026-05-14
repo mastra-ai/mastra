@@ -14,6 +14,7 @@ import {
   handleHooksCommand,
   handleMcpCommand,
   handleModeCommand,
+  handleSkillCommand,
   handleSkillsCommand,
   handleNewCommand,
   handleCloneCommand,
@@ -102,6 +103,11 @@ export async function dispatchSlashCommand(
 
   if (command.startsWith('goal/')) {
     await handleGoalSourceCommand(state, command.slice('goal/'.length), args, buildCtx());
+    return true;
+  }
+
+  if (command.startsWith('skill:')) {
+    await handleSkillCommand(buildCtx(), command.slice('skill:'.length), args);
     return true;
   }
 
