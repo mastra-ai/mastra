@@ -58,6 +58,49 @@ describe('submitPlan tool (standalone)', () => {
     expect(suspended).toBe(true);
   });
 
+  it('registers a Harness plan approval before suspending when the harness slot is present', async () => {
+    const requestContext = new RequestContext();
+    const registrations: unknown[] = [];
+    requestContext.set('harness', {
+      registerPlanApproval: async (params: unknown) => {
+        registrations.push(params);
+      },
+    });
+
+    await expect(
+      submitPlan.execute!(
+        { title: 'Add darkmode', plan: '# Overview\nSteps...' },
+        {
+          ...makeAgentCtx({
+            suspend: async () => {
+              throw new Error('SUSPEND_MARKER');
+            },
+          }),
+          requestContext,
+          agent: {
+            agentId: 'test-agent',
+            runId: 'run-1',
+            toolCallId: 'call-1',
+            messages: [],
+            suspend: async () => {
+              throw new Error('SUSPEND_MARKER');
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow('SUSPEND_MARKER');
+
+    expect(registrations).toEqual([
+      {
+        planId: 'call-1',
+        title: 'Add darkmode',
+        plan: '# Overview\nSteps...',
+        runId: 'run-1',
+        toolCallId: 'call-1',
+      },
+    ]);
+  });
+
   it('returns the resume payload on second pass (approval path)', async () => {
     const result = await submitPlan.execute!({ plan: '...' }, makeAgentCtx({ resumeData: { approved: true } }));
     expect(result).toEqual({ approved: true });

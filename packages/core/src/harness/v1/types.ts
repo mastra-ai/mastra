@@ -1021,7 +1021,7 @@ export interface RegisterQuestionParams {
 /** Parameters accepted by `ctx.registerPlanApproval(...)` from a suspending tool. */
 export interface RegisterPlanApprovalParams {
   planId: string;
-  title: string;
+  title?: string;
   plan: string;
 }
 
@@ -1059,7 +1059,7 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Register a pending question (used by `ask_user` and custom suspending tools). */
   registerQuestion: (params: RegisterQuestionParams) => Promise<void>;
   /** Register a pending plan approval (used by `submit_plan` and custom suspending tools). */
-  registerPlanApproval: (params: RegisterPlanApprovalParams) => void;
+  registerPlanApproval: (params: RegisterPlanApprovalParams) => Promise<void>;
 
   /** Depth of the session in the subagent tree. `0` for the parent. */
   subagentDepth: number;

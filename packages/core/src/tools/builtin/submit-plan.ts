@@ -41,11 +41,33 @@ export const submitPlan = createTool({
   suspendSchema: z.object({}),
   resumeSchema,
   execute: async (_input, ctx) => {
+    const input = _input as z.infer<typeof inputSchema>;
     const resumeData = ctx.agent?.resumeData as z.infer<typeof resumeSchema> | undefined;
     if (resumeData !== undefined) return resumeData;
 
     if (!ctx.agent?.suspend) {
       throw new Error(`${SUBMIT_PLAN_TOOL_ID} requires an agent execution context with suspend support.`);
+    }
+
+    const harness = ctx.requestContext?.get('harness') as
+      | {
+          registerPlanApproval?: (params: {
+            planId: string;
+            title?: string;
+            plan: string;
+            runId?: string;
+            toolCallId?: string;
+          }) => Promise<void>;
+        }
+      | undefined;
+    if (harness?.registerPlanApproval && ctx.agent.runId) {
+      await harness.registerPlanApproval({
+        planId: ctx.agent.toolCallId,
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        plan: input.plan,
+        runId: ctx.agent.runId,
+        toolCallId: ctx.agent.toolCallId,
+      });
     }
 
     await ctx.agent.suspend({});

@@ -48,6 +48,7 @@ type AddToolMetadataOptions = {
 
 type HarnessToolContextSlot = {
   registerQuestion?: (params: Record<string, unknown>) => Promise<void>;
+  registerPlanApproval?: (params: Record<string, unknown>) => Promise<void>;
 };
 
 function buildToolRequestContext(
@@ -55,19 +56,33 @@ function buildToolRequestContext(
   opts: { runId: string; toolCallId: string },
 ): RequestContext {
   const harness = requestContext.get('harness') as HarnessToolContextSlot | undefined;
-  if (!harness?.registerQuestion) return requestContext;
+  if (!harness?.registerQuestion && !harness?.registerPlanApproval) return requestContext;
 
   const overlay = new RequestContext<unknown>(
     Array.from(requestContext.entries() as IterableIterator<[string, unknown]>),
   );
   overlay.set('harness', {
     ...harness,
-    registerQuestion: async (params: Record<string, unknown>) =>
-      harness.registerQuestion!({
-        ...params,
-        runId: typeof params.runId === 'string' ? params.runId : opts.runId,
-        toolCallId: typeof params.toolCallId === 'string' ? params.toolCallId : opts.toolCallId,
-      }),
+    ...(harness.registerQuestion
+      ? {
+          registerQuestion: async (params: Record<string, unknown>) =>
+            harness.registerQuestion!({
+              ...params,
+              runId: typeof params.runId === 'string' ? params.runId : opts.runId,
+              toolCallId: typeof params.toolCallId === 'string' ? params.toolCallId : opts.toolCallId,
+            }),
+        }
+      : {}),
+    ...(harness.registerPlanApproval
+      ? {
+          registerPlanApproval: async (params: Record<string, unknown>) =>
+            harness.registerPlanApproval!({
+              ...params,
+              runId: typeof params.runId === 'string' ? params.runId : opts.runId,
+              toolCallId: typeof params.toolCallId === 'string' ? params.toolCallId : opts.toolCallId,
+            }),
+        }
+      : {}),
   });
   return overlay;
 }

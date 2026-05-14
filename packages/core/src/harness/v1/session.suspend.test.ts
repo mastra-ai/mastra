@@ -240,6 +240,7 @@ describe('Session — suspend capture on message()', () => {
 
     const pending = session.getRecord().pendingResume!;
     expect(pending.kind).toBe('plan-approval');
+    expect(pending.itemId).toBe('plan-approval:tc-4');
     expect(pending.payload).toEqual({ title: 'Refactor X', plan: 'do A then B' });
     expect(pending.transitionModeId).toBe('builder');
     expect(session.getDisplayState().pending?.kind).toBe('plan-approval');
@@ -285,6 +286,39 @@ describe('Session — suspend capture on message()', () => {
       options: [{ label: 'yes' }],
       selectionMode: 'single_select',
     });
+  });
+
+  it('keeps a plan approval registered by the tool before suspend capture', async () => {
+    const { harness } = setup([
+      { id: 'planner', agentId: 'default', transitionsTo: 'builder' },
+      { id: 'builder', agentId: 'default' },
+    ]);
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.switchMode({ mode: 'planner' });
+
+    await (session as any)._registerPlanApproval({
+      planId: 'tc-plan',
+      title: 'registered title',
+      plan: 'registered plan',
+      runId: 'run-plan',
+      toolCallId: 'tc-plan',
+      modeId: 'planner',
+    });
+    await (session as any)._maybeCaptureSuspend({
+      runId: 'run-plan',
+      finishReason: 'suspended',
+      suspendPayload: {
+        toolCallId: 'tc-plan',
+        toolName: 'submit_plan',
+        args: { title: 'stale title', plan: 'stale plan' },
+      },
+    });
+
+    const pending = session.getRecord().pendingResume!;
+    expect(pending.kind).toBe('plan-approval');
+    expect(pending.itemId).toBe('tc-plan');
+    expect(pending.payload).toEqual({ title: 'registered title', plan: 'registered plan' });
+    expect(pending.transitionModeId).toBe('builder');
   });
 });
 

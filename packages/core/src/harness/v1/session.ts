@@ -97,6 +97,7 @@ import type {
   ModelAuthStatus,
   PermissionPolicy,
   QueueOptions,
+  RegisterPlanApprovalParams,
   RegisterQuestionParams,
   SessionInjectSystemReminderOptions,
   SessionInjectSystemReminderResult,
@@ -3401,6 +3402,62 @@ export class Session {
     });
   }
 
+  private async _registerPlanApproval(
+    params: RegisterPlanApprovalParams & { runId?: string; toolCallId?: string; modeId?: string },
+  ): Promise<void> {
+    this._assertLive('ctx.registerPlanApproval');
+    if (typeof params.planId !== 'string' || params.planId.length === 0) {
+      throw new HarnessValidationError('ctx.registerPlanApproval.planId', 'must be a non-empty string');
+    }
+    if (params.title !== undefined && typeof params.title !== 'string') {
+      throw new HarnessValidationError('ctx.registerPlanApproval.title', 'must be a string when provided');
+    }
+    if (typeof params.plan !== 'string' || params.plan.length === 0) {
+      throw new HarnessValidationError('ctx.registerPlanApproval.plan', 'must be a non-empty string');
+    }
+    const runId = params.runId ?? this._currentRunId;
+    const toolCallId = params.toolCallId ?? params.planId;
+    if (!runId) {
+      throw new HarnessValidationError('ctx.registerPlanApproval.runId', 'active run id is required');
+    }
+    const submittingModeId = params.modeId ?? this._record.modeId;
+    const submittingMode = this._harness._getMode(submittingModeId);
+    const pending: PendingResume = {
+      kind: 'plan-approval',
+      itemId: params.planId,
+      runId,
+      toolCallId,
+      toolName: SUBMIT_PLAN_TOOL_NAME,
+      source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      requestedAt: Date.now(),
+      payload: {
+        ...(params.title !== undefined ? { title: params.title } : {}),
+        plan: params.plan,
+      },
+      ...(submittingMode.transitionsTo ? { transitionModeId: submittingMode.transitionsTo } : {}),
+    };
+    let registered = false;
+    await this._flushUpdate(prev => {
+      const current = prev.pendingResume;
+      if (current) {
+        if (current.kind === 'plan-approval' && current.runId === runId && current.toolCallId === toolCallId) {
+          return prev;
+        }
+        throw new HarnessValidationError('ctx.registerPlanApproval', `pending resume is already "${current.kind}"`);
+      }
+      registered = true;
+      return { ...prev, pendingResume: pending };
+    });
+    if (!registered) return;
+    this._emitTurnEvent({
+      type: 'suspension_required',
+      kind: 'plan-approval',
+      toolCallId,
+      toolName: SUBMIT_PLAN_TOOL_NAME,
+      runId,
+    });
+  }
+
   /**
    * Settle a queued item's resolver with success and remove it from the
    * head of `pendingQueue`. The CAS write here is the durable record that
@@ -3554,9 +3611,7 @@ export class Session {
       }) as HarnessRequestContext<unknown>['setState'],
       abortSignal: turn.abortSignal,
       registerQuestion: params => session._registerQuestion(params),
-      registerPlanApproval: () => {
-        throw new HarnessConfigError('ctx.registerPlanApproval', 'not implemented in this milestone');
-      },
+      registerPlanApproval: params => session._registerPlanApproval({ ...params, modeId: turn.modeId }),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
       subagentDepth: this._record.subagentDepth ?? 0,
