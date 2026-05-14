@@ -146,6 +146,34 @@ export type ValidationErrorResponse = {
   body: unknown;
 };
 
+export type A2AAgentCardSigningConfig = {
+  /**
+   * Private signing key used to sign the Agent Card.
+   * Supports PKCS#8 PEM strings or JsonWebKey.
+   */
+  privateKey: string | JsonWebKey;
+  /**
+   * Protected JWS header values. `alg` is required.
+   * Optional fields like `kid` and `jku` can be supplied here.
+   */
+  protectedHeader: {
+    alg: string;
+    [key: string]: unknown;
+  };
+  /**
+   * Optional unprotected JWS header values.
+   */
+  header?: Record<string, unknown>;
+};
+
+export type A2AConfig = {
+  /**
+   * Optional Agent Card signing configuration.
+   * When provided, Mastra signs the served Agent Card and includes `signatures`.
+   */
+  agentCardSigning?: A2AAgentCardSigningConfig;
+};
+
 export type ValidationErrorHook = (
   error: ZodError,
   context: ValidationErrorContext,
@@ -265,6 +293,11 @@ export type ServerConfig = {
      */
     sessionIdGenerator?: () => string;
   };
+
+  /**
+   * A2A-specific server configuration.
+   */
+  a2a?: A2AConfig;
 
   /**
    * Authentication configuration for the server.

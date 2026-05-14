@@ -33,7 +33,6 @@ export const executeSubagent: HarnessSubagent = {
 . For complex tasks (3+ steps): use task_write to create tasks, then task_update or task_complete for individual task changes
 . Make changes incrementally — verify each change before moving on
 . Run tests or type-check to verify
-. If you created tasks: ALWAYS call task_check before finishing
 
 ## Efficiency
 Your output returns to the parent agent. Be concise:

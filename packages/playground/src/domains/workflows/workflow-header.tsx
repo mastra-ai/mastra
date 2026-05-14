@@ -34,12 +34,12 @@ export function WorkflowHeader({
   const isLeafCombobox = !runId;
 
   return (
-    <div className="shrink-0">
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to={`/workflows`}>
+    <RouteHeaderActions owner="workflow-detail">
+      <div className="flex items-center gap-2">
+        {scheduleCount > 0 && (
+          <Button as={Link} to={schedulesHref} size="sm">
             <Icon>
-              <WorkflowIcon />
+              <CalendarClockIcon />
             </Icon>
             Workflows
           </Crumb>
@@ -70,20 +70,18 @@ export function WorkflowHeader({
             </Icon>
             Traces
           </Button>
-        </HeaderGroup>
-
-        <HeaderAction>
-          <Button as="a" target="_blank" href="/swagger-ui" variant="ghost" size="md">
-            <ApiIcon />
-            API endpoints
-          </Button>
-
-          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" variant="ghost" size="md">
-            <DocsIcon />
-            Workflows documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-    </div>
+        )}
+        <Button as={Link} to={`/observability?entity=${encodeURIComponent(workflowName)}`} size="sm">
+          <Icon>
+            <EyeIcon />
+          </Icon>
+          Traces
+        </Button>
+        <Button as="a" target="_blank" rel="noopener noreferrer" href="/swagger-ui" variant="ghost" size="sm">
+          <ApiIcon />
+          API endpoints
+        </Button>
+      </div>
+    </RouteHeaderActions>
   );
 }

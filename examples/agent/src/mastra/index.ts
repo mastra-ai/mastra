@@ -178,7 +178,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },

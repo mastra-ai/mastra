@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Agent } from '../agent';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
+import { ChunkFrom } from '../stream/types';
 import { Harness } from './harness';
 import type { HarnessEvent, HarnessSubagent, HarnessSubagentHistoryEntry } from './types';
 import { defaultDisplayState } from './types';
@@ -30,7 +32,7 @@ describe('defaultDisplayState', () => {
     const ds = defaultDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
-    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools).toBeInstanceOf(Map);
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
@@ -70,7 +72,7 @@ describe('Harness.getDisplayState()', () => {
     const ds = harness.getDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
-    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
     expect(ds.pendingQuestion).toBeNull();
@@ -544,6 +546,173 @@ describe('tool lifecycle', () => {
       emit(harness, { type: 'tool_input_delta', toolCallId: 'unknown', argsTextDelta: 'x' });
       expect(harness.getDisplayState().toolInputBuffers.has('unknown')).toBe(false);
     });
+  });
+
+  it('uses display transforms while processing tool stream chunks', async () => {
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const result = await (harness as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-result',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                result: { displayName: 'Acme', apiKey: 'secret-output' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'output-available': { transformed: { displayName: 'Acme' } },
+                    },
+                  },
+                },
+              },
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(result.message.content).toEqual([
+      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: { customerId: 'cus_123' } },
+      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: { displayName: 'Acme' }, isError: false },
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_start',
+        args: { customerId: 'cus_123' },
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_end',
+        result: { displayName: 'Acme' },
+      }),
+    );
+  });
+
+  it('preserves explicit null display transforms', async () => {
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const result = await (harness as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call-delta',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                argsTextDelta: '{"internalPath":"/workspace/private',
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-delta': { transformed: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-call',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-result',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                result: { displayName: 'Acme', apiKey: 'secret-output' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'output-available': { transformed: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(result.message.content).toEqual([
+      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: null },
+      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: null, isError: false },
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_input_delta',
+        argsTextDelta: null,
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_start',
+        args: null,
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_end',
+        result: null,
+      }),
+    );
   });
 
   describe('tool_approval_required', () => {
@@ -1528,7 +1697,7 @@ describe('resetThreadDisplayState', () => {
     expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(150);
 
     emit(harness, { type: 'thread_created', thread: { id: 'new', title: 'New' } } as any);
-    expect(harness.getDisplayState().tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(harness.getDisplayState().tokenUsage).toEqual(createEmptyTokenUsage());
   });
 
   it('preserves isRunning across thread_created', () => {

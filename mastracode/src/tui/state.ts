@@ -7,7 +7,7 @@
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
-import type { Workspace } from '@mastra/core/workspace';
+import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
@@ -18,7 +18,6 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
-
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
@@ -31,7 +30,14 @@ import type { TaskProgressComponent } from './components/task-progress.js';
 import type { TemporalGapComponent } from './components/temporal-gap.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
-import { getEditorTheme, TERM_WIDTH_BUFFER } from './theme.js';
+
+import { GoalManager } from './goal-manager.js';
+import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+
+export interface PendingSignalMessage {
+  component: Component;
+  text: string;
+}
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -124,6 +130,8 @@ export interface TUIState {
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
   quietMode: boolean;
+  /** Active goal judge status-line override while evaluating the last turn. */
+  activeGoalJudge?: { modelId: string };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
@@ -154,6 +162,8 @@ export interface TUIState {
   pendingQueuedActions: Array<'message' | 'slash'>;
   /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
+  /** Pending signal messages waiting for the stream echo */
+  pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
@@ -176,9 +186,13 @@ export interface TUIState {
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
 
+  // ── Goal loop ─────────────────────────────────────────────────────────
+  goalManager: GoalManager;
+
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
 
@@ -214,7 +228,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
-  editor.getModeColor = () => options.harness.getCurrentMode()?.color;
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
@@ -263,6 +276,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     followUpComponents: [],
+    pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,
 
@@ -270,13 +284,23 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
 
+    // Goal loop
+    goalManager: new GoalManager(),
+
     // Input
     customSlashCommands: [],
+    goalSkillCommands: [],
     pendingImages: [],
 
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
+  };
+  editor.getModeColor = () => {
+    if (result.activeGoalJudge) {
+      return mastra.blue;
+    }
+    return options.harness.getCurrentMode()?.color;
   };
   return result;
 }

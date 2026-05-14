@@ -17,6 +17,8 @@ export type TraceAttributes = {
 
 export type TracesListViewTrace = {
   traceId: string;
+  /** Required for branch rows; absent on plain trace rows (which are root-rooted). */
+  spanId?: string | null;
   name: string;
   entityType?: string | null;
   entityId?: string | null;
@@ -28,7 +30,15 @@ export type TracesListViewTrace = {
   threadId?: string | null;
 };
 
-const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) auto auto';
+// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
+const COLUMNS = '7rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
+
+const ROW_HEIGHT = 36;
+const OVERSCAN = 8;
+
+type ListItem =
+  | { kind: 'subheader'; key: string; node: ReactNode }
+  | { kind: 'row'; key: string; trace: TracesListViewTrace };
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -46,6 +56,11 @@ export type TracesListViewProps = {
   filtersApplied?: boolean;
   /** Currently featured/selected trace — its row gets the highlighted background. */
   featuredTraceId?: string | null;
+  /**
+   * Required in branches mode to disambiguate rows sharing a `traceId`. When set,
+   * a row is featured only when both `traceId` and `spanId` match.
+   */
+  featuredSpanId?: string | null;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
   groupByThread?: boolean;
@@ -65,6 +80,7 @@ export function TracesListView({
   setEndOfListElement,
   filtersApplied,
   featuredTraceId,
+  featuredSpanId,
   onTraceClick,
   groupByThread,
   threadTitles,

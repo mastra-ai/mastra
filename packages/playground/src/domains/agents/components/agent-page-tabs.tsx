@@ -23,7 +23,7 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
       className="inline-flex items-center gap-1 underline text-inherit hover:text-white"
     >
       {children}
-      <ExternalLink className="h-3 w-3" />
+      <ExternalLink className="size-3" />
     </a>
   );
 }

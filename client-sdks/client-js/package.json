@@ -47,6 +47,8 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "canonicalize": "^1.0.8",
+    "jose": "^6.2.1",
     "json-schema": "^0.4.0"
   },
   "peerDependencies": {

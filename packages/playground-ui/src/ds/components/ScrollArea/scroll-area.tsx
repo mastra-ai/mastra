@@ -1,8 +1,28 @@
-import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
+import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import * as React from 'react';
 
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { cn } from '@/lib/utils';
+
+type Orientation = 'vertical' | 'horizontal' | 'both';
+
+export type MaskSides = {
+  top?: boolean;
+  bottom?: boolean;
+  left?: boolean;
+  right?: boolean;
+  /** Shorthand: sets both `left` and `right`. Per-side keys override. */
+  x?: boolean;
+  /** Shorthand: sets both `top` and `bottom`. Per-side keys override. */
+  y?: boolean;
+};
+
+/**
+ * - `true` / omitted: fade the edges that match `orientation`.
+ * - `false`: no fade.
+ * - object: per-side override on top of the orientation default.
+ */
+export type ScrollAreaMask = boolean | MaskSides;
 
 export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
   viewPortClassName?: string;
@@ -60,6 +80,30 @@ const ScrollArea = React.forwardRef<React.ElementRef<typeof ScrollAreaPrimitive.
     useAutoscroll(areaRef, { enabled: autoScroll });
     useScrollOverflowAttrs(areaRef);
 
+    const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
+    const sides = resolveMask(effectiveMask, orientation);
+
+    const viewportStyle: React.CSSProperties = {};
+    if (maxHeight) viewportStyle.maxHeight = maxHeight;
+    if (orientation === 'vertical') {
+      viewportStyle.overflowX = 'hidden';
+      viewportStyle.overflowY = 'scroll';
+    } else if (orientation === 'horizontal') {
+      viewportStyle.overflowX = 'scroll';
+      viewportStyle.overflowY = 'hidden';
+    }
+
+    // Base UI's ScrollAreaContent forces `min-width: fit-content` so the
+    // content can grow wider than the viewport (required for horizontal scroll
+    // measurement). For vertical-only scroll we override it so children shrink
+    // to the viewport width instead of forcing horizontal scroll.
+    const contentStyle: React.CSSProperties | undefined =
+      orientation === 'vertical'
+        ? { minWidth: '0px' }
+        : orientation === 'horizontal'
+          ? { minHeight: '0px' }
+          : undefined;
+
     return (
       <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
         <ScrollAreaPrimitive.Viewport
@@ -67,7 +111,7 @@ const ScrollArea = React.forwardRef<React.ElementRef<typeof ScrollAreaPrimitive.
           className={cn('h-full w-full rounded-[inherit] [&>div]:block!', showMask && MASK_CLASSES, viewPortClassName)}
           style={maxHeight ? { maxHeight } : undefined}
         >
-          {children}
+          <ScrollAreaPrimitive.Content style={contentStyle}>{children}</ScrollAreaPrimitive.Content>
         </ScrollAreaPrimitive.Viewport>
         {(orientation === 'vertical' || orientation === 'both') && <ScrollBar orientation="vertical" />}
         {(orientation === 'horizontal' || orientation === 'both') && <ScrollBar orientation="horizontal" />}
@@ -76,13 +120,13 @@ const ScrollArea = React.forwardRef<React.ElementRef<typeof ScrollAreaPrimitive.
     );
   },
 );
-ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;
+ScrollArea.displayName = 'ScrollArea';
 
 const ScrollBar = React.forwardRef<
-  React.ElementRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Scrollbar>
 >(({ className, orientation = 'vertical', ...props }, ref) => (
-  <ScrollAreaPrimitive.ScrollAreaScrollbar
+  <ScrollAreaPrimitive.Scrollbar
     ref={ref}
     orientation={orientation}
     className={cn(
@@ -97,6 +141,6 @@ const ScrollBar = React.forwardRef<
     <ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-neutral4/30 hover:bg-neutral4/60 transition-colors duration-normal" />
   </ScrollAreaPrimitive.ScrollAreaScrollbar>
 ));
-ScrollBar.displayName = ScrollAreaPrimitive.ScrollAreaScrollbar.displayName;
+ScrollBar.displayName = 'ScrollBar';
 
 export { ScrollArea, ScrollBar };

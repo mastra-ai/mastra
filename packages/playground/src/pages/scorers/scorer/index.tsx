@@ -1,10 +1,6 @@
 import {
-  Breadcrumb,
   Button,
-  ButtonWithTooltip,
-  Crumb,
   ErrorState,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -12,17 +8,17 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
-import { BookIcon, GaugeIcon, PencilIcon } from 'lucide-react';
+import { PencilIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
-import { ScorerCombobox } from '@/domains/scores/components/scorer-combobox';
 import { ScoresList } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
 import { useScorer, useScoresByScorerId } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -35,7 +31,7 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, isLoading: isScorerLoading, error: scorerError } = useScorer(scorerId!);
+  const { scorer, error: scorerError } = useScorer(scorerId!);
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
   const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
@@ -214,7 +210,7 @@ export default function Scorer() {
 
     return (
       <PageLayout width="wide" height="full">
-        <PageLayout.TopArea>{scorerTopAreaSharedContent}</PageLayout.TopArea>
+        {scorerHeaderActions}
         <PageLayout.MainArea isCentered>
           {isUnauthorized ? (
             <SessionExpired />
@@ -232,8 +228,8 @@ export default function Scorer() {
 
   return (
     <PageLayout width="wide">
+      {scorerHeaderActions}
       <PageLayout.TopArea>
-        {scorerTopAreaSharedContent}
         <ScoresTools
           selectedEntity={selectedEntityOption}
           entityOptions={entityOptions}

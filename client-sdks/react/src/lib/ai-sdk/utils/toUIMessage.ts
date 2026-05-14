@@ -10,6 +10,43 @@ type StreamChunk = {
   from: 'AGENT' | 'WORKFLOW';
 };
 
+export const markStreamingPartsDone = (message: MastraUIMessage): MastraUIMessage => ({
+  ...message,
+  parts: message.parts.map(part => {
+    if (
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      'state' in part &&
+      part.state === 'streaming' &&
+      (part.type === 'text' || part.type === 'reasoning')
+    ) {
+      return { ...part, state: 'done' as const };
+    }
+    return part;
+  }),
+});
+
+export const finishStreamingAssistantMessage = (conversation: MastraUIMessage[]) => {
+  const lastMessage = conversation[conversation.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+
+  return [...conversation.slice(0, -1), markStreamingPartsDone(lastMessage)];
+};
+
+const appendAssistantMessage = (
+  conversation: MastraUIMessage[],
+  message: Omit<MastraUIMessage, 'role' | 'metadata'>,
+  metadata: MastraUIMessageMetadata,
+): MastraUIMessage[] => [
+  ...conversation,
+  {
+    ...message,
+    role: 'assistant',
+    metadata,
+  },
+];
+
 // Helper function to map workflow stream chunks to watch result format
 // Based on the pattern from packages/playground-ui/src/domains/workflows/utils.ts
 
@@ -124,6 +161,103 @@ export const mapWorkflowStreamChunkToWatchResult = (
   return prev;
 };
 
+function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessageMetadata): MastraUIMessage[] {
+  if (typeof contents === 'string') {
+    return [
+      {
+        id: `signal-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', text: contents }],
+        metadata,
+      },
+    ];
+  }
+
+  if (Array.isArray(contents)) {
+    return contents.flatMap(content => signalContentsToUserMessages(content, metadata));
+  }
+
+  if (!contents || typeof contents !== 'object') {
+    return [];
+  }
+
+  const message = contents as { role?: unknown; content?: unknown };
+  if (message.role && message.role !== 'user') {
+    return [];
+  }
+
+  const content = message.content;
+  if (typeof content === 'string') {
+    return [
+      {
+        id: `signal-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', text: content }],
+        metadata,
+      },
+    ];
+  }
+
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  const parts = content.flatMap((part): MastraUIMessage['parts'] => {
+    if (!part || typeof part !== 'object') return [];
+    const typedPart = part as Record<string, unknown>;
+
+    if (typedPart.type === 'text' && typeof typedPart.text === 'string') {
+      return [{ type: 'text', text: typedPart.text }];
+    }
+
+    if (typedPart.type === 'image') {
+      const image = typedPart.image;
+      return [
+        {
+          type: 'file',
+          mediaType:
+            typeof typedPart.mediaType === 'string'
+              ? typedPart.mediaType
+              : typeof typedPart.mimeType === 'string'
+                ? typedPart.mimeType
+                : 'image/*',
+          url: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
+        },
+      ];
+    }
+
+    if (typedPart.type === 'file') {
+      const data = typedPart.data;
+      return [
+        {
+          type: 'file',
+          mediaType:
+            typeof typedPart.mediaType === 'string'
+              ? typedPart.mediaType
+              : typeof typedPart.mimeType === 'string'
+                ? typedPart.mimeType
+                : 'application/octet-stream',
+          url: typeof data === 'string' ? data : data instanceof URL ? data.toString() : '',
+          ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
+        },
+      ];
+    }
+
+    return [];
+  });
+
+  return parts.length
+    ? [
+        {
+          id: `signal-${Date.now()}`,
+          role: 'user',
+          parts,
+          metadata,
+        },
+      ]
+    : [];
+}
+
 export interface ToUIMessageArgs {
   chunk: ChunkType;
   conversation: MastraUIMessage[];
@@ -133,6 +267,27 @@ export interface ToUIMessageArgs {
 export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs): MastraUIMessage[] => {
   // Always return a new array reference for React
   const result = [...conversation];
+
+  if (
+    chunk.type === 'data-user-message' &&
+    'data' in chunk &&
+    chunk.data &&
+    typeof chunk.data === 'object' &&
+    (chunk.data as { type?: unknown }).type === 'user-message'
+  ) {
+    const signalData = chunk.data as { id?: unknown; contents?: unknown };
+    const signalMessages = signalContentsToUserMessages(signalData.contents, metadata);
+    if (!signalMessages.length) return result;
+
+    const finalized = finishStreamingAssistantMessage(result);
+    const baseId = typeof signalData.id === 'string' ? signalData.id : undefined;
+    const withIds = signalMessages.map((message, index) => ({
+      ...message,
+      id: baseId ? `${baseId}${index > 0 ? `-${index}` : ''}` : message.id,
+    }));
+    const deduped = withIds.filter(message => !finalized.some(existing => existing.id === message.id));
+    return deduped.length ? [...finalized, ...deduped] : finalized;
+  }
 
   // Handle data-* chunks (custom data chunks from writer.custom())
   if (chunk.type.startsWith('data-')) {
@@ -190,8 +345,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     case 'start': {
       // Create a new assistant message
       // Use the server-provided messageId if available, otherwise fall back to generated ID
+      const messageId = typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : undefined;
+      if (messageId && result.some(message => message.id === messageId)) return result;
+
       const newMessage: MastraUIMessage = {
-        id: typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : `start-${chunk.runId + Date.now()}`,
+        id: messageId ?? `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
         metadata,
@@ -202,9 +360,14 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'text-start': {
       const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
       const textId = chunk.payload.id || `text-${Date.now()}`;
+      if (
+        chunk.payload.id &&
+        lastMessage?.role === 'assistant' &&
+        lastMessage.parts.some(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
+      ) {
+        return result;
+      }
 
       const newTextPart: MastraExtendedTextPart = {
         type: 'text',
@@ -214,15 +377,21 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         providerMetadata: chunk.payload.providerMetadata,
       };
 
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(
+          result,
+          { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] },
+          metadata,
+        );
+      }
+
       // If the last message is a completion/isTaskComplete result message, start a new assistant message
       if (lastMessage.metadata?.completionResult) {
-        const newMessage: MastraUIMessage = {
-          id: `start-${chunk.runId}-${Date.now()}`,
-          role: 'assistant',
-          parts: [newTextPart],
+        return appendAssistantMessage(
+          result,
+          { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] },
           metadata,
-        };
-        return [...result, newMessage];
+        );
       }
 
       const parts = [...lastMessage.parts];
@@ -256,10 +425,24 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'text-delta': {
       const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+      const textId = chunk.payload.id;
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        const newTextPart: MastraExtendedTextPart = {
+          type: 'text',
+          text: chunk.payload.text,
+          state: 'streaming',
+          textId: textId,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        return appendAssistantMessage(
+          result,
+          { id: `text-${chunk.runId}-${Date.now()}`, parts: [newTextPart] },
+          metadata,
+        );
+      }
 
       const parts = [...lastMessage.parts];
-      const textId = chunk.payload.id;
 
       let textPartIndex = textId
         ? parts.findLastIndex(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
@@ -322,26 +505,25 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         return [...result, newMessage];
       }
 
-      // Find or create reasoning part
+      // Continue the current reasoning part only while reasoning chunks are contiguous.
+      // Interleaved tool calls/text should keep their own reasoning blocks in order.
       const parts = [...lastMessage.parts];
-      let reasoningPartIndex = parts.findIndex(part => part.type === 'reasoning');
+      const lastPartIndex = parts.length - 1;
+      const lastPart = parts[lastPartIndex];
 
-      if (reasoningPartIndex === -1) {
+      if (lastPart?.type === 'reasoning') {
+        parts[lastPartIndex] = {
+          ...lastPart,
+          text: lastPart.text + chunk.payload.text,
+          state: 'streaming',
+        };
+      } else {
         parts.push({
           type: 'reasoning',
           text: chunk.payload.text,
           state: 'streaming',
           providerMetadata: chunk.payload.providerMetadata,
         });
-      } else {
-        const reasoningPart = parts[reasoningPartIndex];
-        if (reasoningPart.type === 'reasoning') {
-          parts[reasoningPartIndex] = {
-            ...reasoningPart,
-            text: reasoningPart.text + chunk.payload.text,
-            state: 'streaming',
-          };
-        }
       }
 
       return [
@@ -729,21 +911,39 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
-    case 'tool-call-suspended': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+    case 'tool-call-suspended':
+    case 'background-task-suspended': {
+      const isBgTaskEvent = chunk.type === 'background-task-suspended';
+
+      const location = isBgTaskEvent
+        ? locateToolPart(result, chunk.payload.toolCallId, isBgTaskEvent)
+        : { messageIndex: result.length - 1 };
+      if (!location) return result;
+      const { messageIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
 
       // Find and update the corresponding tool call
 
-      const lastSuspendedTools = lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.suspendedTools : {};
+      const lastSuspendedTools =
+        targetMessage.metadata?.mode === 'stream' ? targetMessage.metadata?.suspendedTools : {};
 
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          metadata: {
-            ...lastMessage.metadata,
-            mode: 'stream',
+      const nextMessage = {
+        ...targetMessage,
+        metadata: mergeBgTaskMetadata(
+          targetMessage.metadata,
+          'stream',
+          {
+            resetRunningCount: isBgTaskEvent,
+            perTaskEntry: isBgTaskEvent
+              ? {
+                  toolCallId: chunk.payload.toolCallId,
+                  suspendedAt: chunk.payload.suspendedAt,
+                  taskId: chunk.payload.taskId,
+                }
+              : undefined,
+          },
+          {
             suspendedTools: {
               ...lastSuspendedTools,
               [chunk.payload.toolName]: {
@@ -754,38 +954,16 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
                 runId: chunk.runId,
               },
             },
-          },
-        },
-      ];
+          } as MastraUIMessageMetadata,
+        ),
+      };
+
+      return [...result.slice(0, messageIndex), nextMessage, ...result.slice(messageIndex + 1)];
     }
 
-    case 'finish': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
-      // Mark streaming parts as done
-      const parts = lastMessage.parts.map(part => {
-        if (
-          typeof part === 'object' &&
-          part !== null &&
-          'type' in part &&
-          'state' in part &&
-          part.state === 'streaming'
-        ) {
-          if (part.type === 'text' || part.type === 'reasoning') {
-            return { ...part, state: 'done' as const };
-          }
-        }
-        return part;
-      });
-
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          parts,
-        },
-      ];
+    case 'finish':
+    case 'abort': {
+      return finishStreamingAssistantMessage(result);
     }
 
     case 'error': {
@@ -1045,9 +1223,11 @@ const mergeBgTaskMetadata = (
       toolCallId: string;
       startedAt?: Date;
       completedAt?: Date;
+      suspendedAt?: Date;
       taskId: string;
     };
   },
+  otherMetadata?: MastraUIMessageMetadata,
 ): MastraUIMessageMetadata => {
   const existingAny = (existing ?? {}) as Record<string, unknown>;
   const existingBgTasks = (existingAny.backgroundTasks ?? {}) as Record<
@@ -1057,18 +1237,20 @@ const mergeBgTaskMetadata = (
 
   const nextBgTasks = { ...existingBgTasks };
   if (args.perTaskEntry) {
-    const { toolCallId, startedAt, completedAt, taskId } = args.perTaskEntry;
+    const { toolCallId, startedAt, completedAt, taskId, suspendedAt } = args.perTaskEntry;
     const prev = existingBgTasks[toolCallId] ?? { taskId };
     nextBgTasks[toolCallId] = {
       ...prev,
       taskId,
       ...(startedAt !== undefined ? { startedAt } : {}),
       ...(completedAt !== undefined ? { completedAt } : {}),
+      ...(suspendedAt !== undefined ? { suspendedAt } : {}),
     };
   }
 
   return {
     ...existingAny,
+    ...(otherMetadata ?? {}),
     mode,
     ...(args.resetRunningCount ? { runningBackgroundTasksCount: undefined } : {}),
     backgroundTasks: nextBgTasks,

@@ -1,11 +1,17 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
-import { createObservabilityContext } from '../../../observability';
+import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import {
+  transformToolPayloadForTargets,
+  withToolPayloadTransformMetadata,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../tools/payload-transform';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -108,9 +114,40 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        *
        * Looks up the tool from dynamically loaded tools (`_internal.stepTools`, e.g. via
        * ToolSearchProcessor) first, then falls back to the agent's static tool definitions.
+       *
+       * When toModelOutput is defined, the transform runs under a MAPPING child span so
+       * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
+      /**
+       * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
+       * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
+       * providers expect. AI SDK does this internally in `mapToolResultOutput`,
+       * but Mastra calls toModelOutput directly and stores the result, bypassing
+       * that normalization.
+       */
+      function normalizeModelOutput(output: unknown): unknown {
+        if (output == null || typeof output !== 'object') return output;
+
+        const obj = output as Record<string, unknown>;
+        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
+
+        return {
+          ...obj,
+          value: (obj.value as unknown[]).map(item => {
+            if (item == null || typeof item !== 'object') return item;
+            const part = item as Record<string, unknown>;
+            if (part.type !== 'media') return part;
+            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
+              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
+            }
+            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
+          }),
+        };
+      }
+
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
+        toolCallId?: string;
         result?: unknown;
         providerMetadata?: Record<string, unknown>;
       }) {
@@ -121,7 +158,28 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           | undefined;
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
-          modelOutput = await tool.toModelOutput(toolCall.result);
+          const parentSpan = observabilityContext?.tracingContext?.currentSpan;
+          const mappingSpan = parentSpan?.createChildSpan({
+            type: SpanType.MAPPING,
+            name: `tool output mapping: '${toolCall.toolName}'`,
+            entityType: EntityType.TOOL,
+            entityId: toolCall.toolName,
+            entityName: toolCall.toolName,
+            input: toolCall.result,
+            attributes: {
+              mappingType: 'toModelOutput',
+              toolCallId: toolCall.toolCallId,
+            },
+          });
+          try {
+            modelOutput = await tool.toModelOutput(toolCall.result);
+            // Normalize media parts to image-data/file-data as AI SDK expects
+            modelOutput = normalizeModelOutput(modelOutput);
+            mappingSpan?.end({ output: modelOutput });
+          } catch (err) {
+            mappingSpan?.error({ error: err as Error, endSpan: true });
+            throw err;
+          }
         }
 
         const existingMastra = (toolCall.providerMetadata as any)?.mastra;
@@ -151,18 +209,22 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
         if (errorResults?.length) {
           for (const toolCall of errorResults) {
-            const chunk: ChunkType<OUTPUT> = {
-              type: 'tool-error',
-              runId: rest.runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                error: toolCall.error,
-                args: toolCall.args,
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+            const chunk = await transformToolChunk(
+              {
+                type: 'tool-error',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  error: toolCall.error,
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                },
               },
-            };
+              toolCall,
+              'error',
+            );
             const processed = await processAndEnqueueChunk(chunk);
             if (processed) await rest.options?.onChunk?.(processed);
 
@@ -175,7 +237,17 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 args: toolCall.args,
                 result: toolCall.error?.message ?? toolCall.error,
               },
-              ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata as ProviderMetadata } : {}),
+              ...(withToolPayloadTransformProviderMetadata(
+                toolCall.providerMetadata as ProviderMetadata,
+                chunk.metadata,
+              )
+                ? {
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      toolCall.providerMetadata as ProviderMetadata,
+                      chunk.metadata,
+                    ) as ProviderMetadata,
+                  }
+                : {}),
             });
           }
         }
@@ -212,7 +284,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   providerMetadata: toolCall.providerMetadata,
                   providerExecuted: toolCall.providerExecuted,
                 },
-              };
+                toolCall,
+                'output-available',
+              );
               const processed = await processAndEnqueueChunk(chunk);
               if (processed) await rest.options?.onChunk?.(processed);
 
@@ -230,7 +304,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     result: toolCall.result,
                     ...(toolCall.denied === true ? { denied: true, deniedReason: toolCall.deniedReason } : {}),
                   },
-                  ...(providerMetadata ? { providerMetadata } : {}),
+                  ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
+                    ? {
+                        providerMetadata: withToolPayloadTransformProviderMetadata(
+                          providerMetadata,
+                          chunk.metadata,
+                        ) as ProviderMetadata,
+                      }
+                    : {}),
                 });
               }
             }
@@ -289,7 +370,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               providerExecuted: toolCall.providerExecuted,
             },
-          };
+            toolCall,
+            'output-available',
+          );
 
           const processed = await processAndEnqueueChunk(chunk);
           if (processed) await rest.options?.onChunk?.(processed);
@@ -308,7 +391,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 result: toolCall.result,
                 ...(toolCall.denied === true ? { denied: true, deniedReason: toolCall.deniedReason } : {}),
               },
-              ...(providerMetadata ? { providerMetadata } : {}),
+              ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
+                ? {
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      providerMetadata,
+                      chunk.metadata,
+                    ) as ProviderMetadata,
+                  }
+                : {}),
             });
           }
         }

@@ -2,6 +2,7 @@ import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/sett
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
 import type { NotificationMode } from '../notify.js';
+import { showModalOverlay } from '../overlay.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -72,11 +73,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       },
     });
 
-    ctx.state.ui.showOverlay(settings, {
-      width: '60%',
-      maxHeight: '50%',
-      anchor: 'center',
-    });
+    showModalOverlay(ctx.state.ui, settings, { maxHeight: '75%' });
     settings.focused = true;
   });
 }

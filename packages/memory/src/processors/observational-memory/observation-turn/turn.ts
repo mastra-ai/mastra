@@ -8,6 +8,7 @@ import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
 
+import { loadMemoryContextMessages } from './load-memory-context';
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
@@ -120,14 +121,12 @@ export class ObservationTurn {
     this.memory = memory;
 
     if (memory) {
-      const ctx = await memory.getContext({ threadId: this.threadId, resourceId: this.resourceId });
-
-      // Add historical messages to the MessageList, filtering out system messages
-      for (const msg of ctx.messages) {
-        if (msg.role !== 'system') {
-          this.messageList.add(msg, 'memory');
-        }
-      }
+      const ctx = await loadMemoryContextMessages({
+        memory,
+        messageList: this.messageList,
+        threadId: this.threadId,
+        resourceId: this.resourceId,
+      });
 
       this._context = {
         messages: ctx.messages,

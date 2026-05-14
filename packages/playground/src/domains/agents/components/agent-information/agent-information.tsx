@@ -34,15 +34,19 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
 
   return (
     <AgentInformationLayout>
-      <AgentEntityHeader agentId={agentId} />
-
-      <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col relative">
-        {/* Browser sidebar overlay - takes over when in sidebar mode */}
-        {hasSession && isInSidebar && (
-          <div className="absolute inset-0 z-10 bg-surface1">
-            <BrowserSidebarTab />
+      <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
+        <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange} className="overflow-y-visible">
+          <div className="sticky top-0 z-10 bg-surface3">
+            <AgentEntityHeader agentId={agentId} />
+            <TabList>
+              <Tab value="overview">Overview</Tab>
+              <Tab value="model-settings">Model Settings</Tab>
+              {hasMemory && <Tab value="memory">Memory</Tab>}
+              {hasChannels && <Tab value="channels">Channels</Tab>}
+              {agent?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
+              <Tab value="tracing-options">Tracing Options</Tab>
+            </TabList>
           </div>
-        )}
 
         {/* Normal tabs - always rendered but hidden when browser overlay is active */}
         <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
@@ -66,14 +70,14 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
               <div className="p-5">
                 <RequestContextSchemaForm requestContextSchema={agent.requestContextSchema} />
               </div>
-            </TabContent>
-          )}
+            )}
 
-          {hasMemory && (
-            <TabContent value="memory">
-              <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
+            <TabContent value="overview">
+              <AgentMetadata agentId={agentId} />
             </TabContent>
-          )}
+            <TabContent value="model-settings">
+              <AgentSettings agentId={agentId} />
+            </TabContent>
 
           {hasChannels && (
             <TabContent value="channels">
@@ -85,7 +89,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
             <TracingRunOptions />
           </TabContent>
         </Tabs>
-      </div>
+      </ScrollArea>
     </AgentInformationLayout>
   );
 }
@@ -96,8 +100,10 @@ export interface AgentInformationLayoutProps {
 
 export const AgentInformationLayout = ({ children }: AgentInformationLayoutProps) => {
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto overflow-x-hidden min-w-0 w-full">
-      {children}
+    <div className="h-full w-full pb-2 pr-2">
+      <div className="h-full min-w-0 w-full bg-surface3 rounded-studio-panel border border-border1 overflow-hidden">
+        {children}
+      </div>
     </div>
   );
 };

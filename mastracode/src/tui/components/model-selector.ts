@@ -100,7 +100,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
   constructor(options: ModelSelectorOptions) {
     // Box with padding and background
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super(4, 2, text => theme.bg('overlayBg', text));
 
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';

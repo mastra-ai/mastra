@@ -708,28 +708,51 @@ export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL
  * Additive migrations for existing ClickHouse databases.
  * ClickHouse's `CREATE TABLE IF NOT EXISTS` skips if the table already exists,
  * so new columns must be added explicitly via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+ *
+ * Entries are structured so init() can skip ones whose target column/index
+ * already exists. On Replicated/Shared MergeTree, every issued ALTER bumps the
+ * metadata version regardless of `IF NOT EXISTS`, causing replica catch-up
+ * races on every boot. Skipping no-op ALTERs eliminates that churn.
  */
-export const ALL_MIGRATIONS = [
+export type MigrationEntry =
+  | { kind: 'column'; table: string; name: string; sql: string }
+  | { kind: 'index'; table: string; name: string; sql: string };
+
+const addColumn = (table: string, name: string, type: string): MigrationEntry => ({
+  kind: 'column',
+  table,
+  name,
+  sql: `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${name} ${type}`,
+});
+
+const addBloomIndex = (table: string, name: string, column: string): MigrationEntry => ({
+  kind: 'index',
+  table,
+  name,
+  sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY 2`,
+});
+
+export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   // Span events
-  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Trace roots
-  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_TRACE_ROOTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Metrics
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_METRIC_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_METRIC_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_METRIC_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Logs
-  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_LOG_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_LOG_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_LOG_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Scores
-  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_SCORE_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Feedback
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
@@ -826,13 +849,19 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
 };
 
 /**
- * Generates `ALTER TABLE ... MODIFY TTL` statements for the given retention config.
- * Returns empty array if no retention is configured.
- *
- * Uses `MODIFY TTL` so re-running init is idempotent (overwrites any previous TTL).
+ * Structured retention plan entry. Init uses these to skip `MODIFY TTL`
+ * statements whose effect is already in place (avoiding metadata churn on
+ * Replicated/Shared MergeTree tables).
  */
-export function buildRetentionDDL(retention: RetentionConfig): string[] {
-  const statements: string[] = [];
+export interface RetentionEntry {
+  table: string;
+  column: string;
+  days: number;
+  sql: string;
+}
+
+export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
+  const entries: RetentionEntry[] = [];
 
   for (const [signal, days] of Object.entries(retention)) {
     const safeDays = Math.floor(Number(days));
@@ -844,9 +873,42 @@ export function buildRetentionDDL(retention: RetentionConfig): string[] {
     for (const table of tables) {
       const col = SIGNAL_TTL_COLUMNS[table];
       if (!col) continue;
-      statements.push(`ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`);
+      entries.push({
+        table,
+        column: col,
+        days: safeDays,
+        sql: `ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`,
+      });
     }
   }
 
-  return statements;
+  return entries;
+}
+
+/**
+ * Generates `ALTER TABLE ... MODIFY TTL` statements for the given retention config.
+ * Returns empty array if no retention is configured.
+ *
+ * Uses `MODIFY TTL` so re-running init is idempotent (overwrites any previous TTL).
+ */
+export function buildRetentionDDL(retention: RetentionConfig): string[] {
+  return buildRetentionEntries(retention).map(e => e.sql);
+}
+
+/**
+ * Parses a ClickHouse `TTL` expression of the form
+ *   `TTL <col> + INTERVAL <N> DAY`     (input form)
+ *   `TTL <col> + toIntervalDay(<N>)`   (normalized form in system.tables)
+ * The column may appear as `\`col\`` (backtick-quoted, common in
+ * system.tables.create_table_query) or as a plain identifier.
+ * Returns `{ column, days }` if matched, otherwise null.
+ */
+export function parseTtlExpression(expr: string): { column: string; days: number } | null {
+  const match = expr.match(/TTL\s+(?:`([^`]+)`|(\w+))\s*\+\s*(?:toIntervalDay\((\d+)\)|INTERVAL\s+(\d+)\s+DAY)/i);
+  if (!match) return null;
+  const column = match[1] ?? match[2];
+  if (!column) return null;
+  const days = Number(match[3] ?? match[4]);
+  if (!Number.isFinite(days)) return null;
+  return { column, days };
 }

@@ -16,6 +16,7 @@ export type NavLink = {
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
   isExperimental?: boolean;
+  /** @deprecated Sidebar nav items now render flush; this option is accepted but ignored. */
   indent?: boolean;
 };
 

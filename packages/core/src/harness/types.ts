@@ -679,7 +679,7 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
@@ -973,6 +973,8 @@ export type HarnessMessageContent =
       gapText?: string;
       gapMs?: number;
       timestamp?: string;
+      goalMaxTurns?: number;
+      judgeModelId?: string;
     }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }

@@ -15,6 +15,15 @@ type V2ToolInvocationPart = {
     result?: unknown;
     state: 'call' | 'result';
   };
+  providerMetadata?: {
+    mastra?: Record<string, unknown>;
+  };
+};
+
+export type ToolCallFilterOptions = {
+  exclude?: string[];
+  filterAfterToolSteps?: number;
+  preserveModelOutput?: boolean;
 };
 
 /**

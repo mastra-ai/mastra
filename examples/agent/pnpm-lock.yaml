@@ -120,6 +120,9 @@ importers:
       msw:
         specifier: ^2.12.2
         version: 2.12.8(typescript@5.9.3)
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.1
 
 packages:
 
@@ -922,6 +925,11 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  tsx@4.21.1:
+    resolution: {integrity: sha512-5QE2Q04cN1u0993w0LT5rPw3faZqZU1fFn1mGE0pV53N1Dn7c+QFFxQu1mBeSgeOXwFyTicZw02wVgp3Tb5cAQ==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
   type-fest@5.4.3:
     resolution: {integrity: sha512-AXSAQJu79WGc79/3e9/CR77I/KQgeY1AhNvcShIH4PTcGYyC4xv6H4R4AUOwkPS5799KlVDAu8zExeCrkGquiA==}
     engines: {node: '>=20'}
@@ -1722,6 +1730,12 @@ snapshots:
   tree-kill@1.2.2: {}
 
   tslib@2.8.1: {}
+
+  tsx@4.21.1:
+    dependencies:
+      esbuild: 0.27.7
+    optionalDependencies:
+      fsevents: 2.3.3
 
   type-fest@5.4.3:
     dependencies:

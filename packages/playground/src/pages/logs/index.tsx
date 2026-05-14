@@ -1,5 +1,4 @@
 import {
-  ButtonWithTooltip,
   DateTimeRangePicker,
   LogDetailsView,
   LogsErrorContent,
@@ -7,7 +6,6 @@ import {
   LogsListView,
   LogsToolbar,
   NoLogsInfo,
-  PageHeader,
   PageLayout,
   PropertyFilterCreator,
   SpanDetailsView,
@@ -26,7 +24,6 @@ import {
   useTags,
   useTraceLightSpans,
 } from '@mastra/playground-ui';
-import { BookIcon, LogsIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 

@@ -458,6 +458,29 @@ export interface BackgroundTaskOutputPayload {
   payload: Extract<AgentChunkType, { type: 'tool-output' }>;
 }
 
+export interface BackgroundTaskSuspendedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  args: Record<string, unknown>;
+  /** Whatever the tool passed to `suspend(data)`. */
+  suspendPayload?: unknown;
+  /** When the task suspended. */
+  suspendedAt?: Date;
+}
+
+export interface BackgroundTaskResumedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -795,6 +818,14 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & {
       type: 'background-task-output';
       payload: BackgroundTaskOutputPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-suspended';
+      payload: BackgroundTaskSuspendedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-resumed';
+      payload: BackgroundTaskResumedPayload;
     });
 
 export type WorkflowStreamEvent =
@@ -907,6 +938,7 @@ export type TypedChunkType<OUTPUT = undefined> =
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
+export type StreamChunkType<OUTPUT = undefined> = ChunkType<OUTPUT> | DataChunkType;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;

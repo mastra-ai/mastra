@@ -45,8 +45,8 @@ export const mastra = new Mastra({
 import { Mastra } from '@mastra/core'
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 
@@ -56,8 +56,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Studio
-          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new MastraStorageExporter(), // Persists observability events to Mastra Storage
+          new MastraPlatformExporter(), // Sends observability events to Mastra platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -68,7 +68,7 @@ export const mastra = new Mastra({
 })
 ```
 
-This configuration includes `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter` processor. See the [observability tracing documentation](/docs/observability/tracing/overview) for full configuration options.
+This configuration includes `MastraStorageExporter`, `MastraPlatformExporter`, and `SensitiveDataFilter` processor. See the [observability tracing documentation](/docs/observability/tracing/overview) for full configuration options.
 
 #### After (v1 with custom configuration)
 
@@ -109,7 +109,7 @@ Key changes:
 
 1. Install `@mastra/observability` package
 1. Replace `telemetry:` with `observability: new Observability()`
-1. Use explicit `configs:` with `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter`
+1. Use explicit `configs:` with `MastraStorageExporter`, `MastraPlatformExporter`, and `SensitiveDataFilter`
 1. Export types change from string literals (`'otlp'`) to exporter class instances (`new OtelExporter()`)
 
 See the [exporters documentation](/docs/observability/tracing/overview#exporters) for all available exporters.
@@ -136,8 +136,8 @@ export const mastra = new Mastra({
 import { Mastra } from '@mastra/core'
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 
@@ -146,7 +146,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter(), new CloudExporter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
@@ -158,7 +158,7 @@ Key changes:
 
 1. Install `@mastra/observability` package
 1. Import `Observability`, exporters, and processors from `@mastra/observability`
-1. Use explicit `configs` with `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter`
+1. Use explicit `configs` with `MastraStorageExporter`, `MastraPlatformExporter`, and `SensitiveDataFilter`
 
 ## Changed
 
@@ -186,8 +186,8 @@ To migrate, use `new Observability()` with explicit exporters and processors.
 ```diff
 + import {
 +   Observability,
-+   DefaultExporter,
-+   CloudExporter,
++   MastraStorageExporter,
++   MastraPlatformExporter,
 +   SensitiveDataFilter,
 + } from '@mastra/observability';
 
@@ -199,7 +199,7 @@ To migrate, use `new Observability()` with explicit exporters and processors.
 +     configs: {
 +       default: {
 +         serviceName: 'mastra',
-+         exporters: [new DefaultExporter(), new CloudExporter()],
++         exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
 +         spanOutputProcessors: [new SensitiveDataFilter()],
 +       },
 +     },
@@ -287,8 +287,8 @@ Simply remove the `instrumentation.mjs` file and configure observability in your
 // src/mastra/index.ts
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 
@@ -297,7 +297,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter(), new CloudExporter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },

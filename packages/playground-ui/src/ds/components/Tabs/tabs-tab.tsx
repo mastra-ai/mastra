@@ -1,4 +1,4 @@
-import * as RadixTabs from '@radix-ui/react-tabs';
+import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { X } from 'lucide-react';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -14,7 +14,7 @@ export type TabProps = {
 
 export const Tab = ({ children, value, onClick, onClose, disabled, className }: TabProps) => {
   return (
-    <RadixTabs.Trigger
+    <BaseTabs.Tab
       value={value}
       disabled={disabled}
       className={cn(
@@ -42,6 +42,6 @@ export const Tab = ({ children, value, onClick, onClose, disabled, className }: 
           <X className="w-3 h-3" />
         </button>
       )}
-    </RadixTabs.Trigger>
+    </BaseTabs.Tab>
   );
 };

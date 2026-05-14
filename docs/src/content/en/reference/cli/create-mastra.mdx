@@ -121,6 +121,25 @@ Instead of an interactive prompt you can also define these CLI flags.
     isOptional: true,
   },
   {
+    name: '--observability',
+    type: 'boolean',
+    description:
+      'Enable Observability on the Mastra platform during project creation. This opens browser login when needed, prompts for an organization, provisions a platform project, and configures the observability exporters.',
+    isOptional: true,
+  },
+  {
+    name: '--no-observability',
+    type: 'boolean',
+    description: 'Skip the Observability prompt during project creation.',
+    isOptional: true,
+  },
+  {
+    name: '--observability-project',
+    type: 'string',
+    description: 'Set the platform project name to use when Mastra Observability is enabled.',
+    isOptional: true,
+  },
+  {
     name: '--help',
     type: 'boolean',
     description: 'Display help for command',

@@ -196,6 +196,32 @@ describe('Agent vNext', () => {
     expect(executeSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('resumeStreamUntilIdle: omits local seed messages from initial request', async () => {
+    const seedMessages = [{ role: 'user', content: 'Original prompt before suspension' }];
+
+    (global.fetch as any).mockResolvedValueOnce(sseResponse([{ type: 'finish', payload: { reason: 'stop' } }]));
+
+    await agent.resumeStreamUntilIdle(
+      { approved: true },
+      {
+        runId: 'run-1',
+        messages: seedMessages,
+      } as any,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as any).mock.calls[0][0]).toBe(
+      'http://localhost:4111/api/agents/agent-1/resume-stream-until-idle',
+    );
+
+    const requestBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect(requestBody).toMatchObject({
+      runId: 'run-1',
+      resumeData: { approved: true },
+    });
+    expect(requestBody).not.toHaveProperty('messages');
+  });
+
   it('stream: receives chunks from both initial and recursive requests', async () => {
     const toolCallId = 'call_1';
 

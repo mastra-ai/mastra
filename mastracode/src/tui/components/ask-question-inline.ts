@@ -483,11 +483,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 
   private handleAnswer(answer: string): void {
     if (this.answered) return;
-    this.answered = true;
-
     const isNegative = this.isNegativeAnswer?.(answer) ?? false;
-
-    this.borderedBox.setAnswered(answer, isNegative);
+    this.answer(answer, isNegative);
 
     this.onSubmit?.(answer);
   }

@@ -16,6 +16,14 @@ import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-u
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { NavigationCommand } from '@/lib/command';
+import {
+  RouteHeader,
+  RouteHeaderActionsProvider,
+  RouteHeaderCrumbsProvider,
+  getRouteHeaderHeading,
+  useRouteHeader,
+  useRouteHeaderCrumbsOverride,
+} from '@/lib/route-header';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
@@ -33,8 +41,12 @@ function MobileNavbar() {
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
+  const { crumbs: handleCrumbs } = useRouteHeader();
+  const overrideCrumbs = useRouteHeaderCrumbsOverride();
+  const pageHeading = getRouteHeaderHeading(overrideCrumbs ?? handleCrumbs);
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
+  const shouldReserveRouteHeader = shouldShowSidebar;
 
   const content = (
     <AuthRequired>
@@ -76,7 +88,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
-              <LayoutContent>{children}</LayoutContent>
+              <RouteHeaderActionsProvider>
+                <RouteHeaderCrumbsProvider>
+                  <LayoutContent>{children}</LayoutContent>
+                </RouteHeaderCrumbsProvider>
+              </RouteHeaderActionsProvider>
             </MainSidebarProvider>
           </ExperimentalUIProvider>
         </TooltipProvider>

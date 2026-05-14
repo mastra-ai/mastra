@@ -6,11 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
+import './composer-sending.css';
 import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
+import { useThreadRuntimeState } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
-import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
@@ -43,10 +45,18 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
 
   return (
     <ThreadWrapper>
-      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+      <ThreadPrimitive.Viewport
+        ref={areaRef}
+        autoScroll={false}
+        className="overflow-y-scroll h-full"
+        style={{ overflowAnchor: 'none' }}
+      >
         <ThreadWelcome agentName={agentName} />
 
-        <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
+        <div
+          ref={messagesContainerRef}
+          className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+        >
           <BracketOverlay containerRef={messagesContainerRef} />
           <ThreadPrimitive.Messages
             components={{
@@ -67,7 +77,7 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
 
       {/* Browser thumbnail - shown above composer when in collapsed/expanded mode */}
       {showThumbnailInChat && agentId && threadId && (
-        <div className="mx-4 mb-2 max-w-3xl w-full mx-auto">
+        <div className="mb-2 max-w-3xl w-full mx-auto px-4">
           <BrowserThumbnail agentName={agentName} />
         </div>
       )}
@@ -85,7 +95,10 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
 
 const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+    <ThreadPrimitive.Root
+      className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto"
+      data-testid="thread-wrapper"
+    >
       {children}
     </ThreadPrimitive.Root>
   );
@@ -131,7 +144,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
   // });
 
   return (
-    <div className="mx-4">
+    <div className="relative px-2 pb-2">
       {/* <div className="flex gap-2 items-center">
         {runningTasks.length > 0 ? (
           <div className="pt-2">
@@ -157,9 +170,22 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
         ) : null}
       </div> */}
       {/* <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}> */}
-      <ComposerPrimitive.Root>
+      <ComposerPrimitive.Root onSubmit={() => setSendPulseKey(k => k + 1)}>
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
+          {hasPendingMessages ? (
+            <div
+              className="mt-2 flex flex-col gap-1 text-icon-xs leading-icon-xs text-neutral3"
+              data-testid="pending-signal-message"
+            >
+              {pendingSignals.map(signal => (
+                <div key={signal.id} className="flex min-w-0 items-center gap-1 animate-pulse">
+                  <span className="shrink-0">pending:</span>
+                  <span className="truncate">{signal.preview}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline-solid focus-within:outline-accent1 -outline-offset-2">
@@ -192,16 +218,33 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
               }}
               disabled={!canExecuteAgent}
             />
-          </ComposerPrimitive.Input>
-          <div className="flex items-center justify-between gap-2">
-            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
-            <div className="flex items-center gap-2 ml-auto">
-              {canExecuteAgent && <SpeechInput agentId={agentId} />}
-              <ComposerAction canExecute={canExecuteAgent} />
-            </div>
           </div>
         </div>
       </ComposerPrimitive.Root>
+    </div>
+  );
+};
+
+const ComposerGradientColumn = ({ className }: { className?: string }) => (
+  <div className={cn('flex h-full w-full flex-col -space-y-3', className)}>
+    <div className="w-full flex-1 bg-accent1 blur-xl" />
+    <div className="w-full flex-1 bg-accent1Dark blur-xl" />
+    <div className="w-full flex-1 bg-accent1 blur-xl" />
+    <div className="w-full flex-1 bg-accent1Darker blur-xl" />
+  </div>
+);
+
+const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
+  if (pulseKey === 0) return null;
+  return (
+    <div
+      key={pulseKey}
+      aria-hidden
+      className="composer-sending pointer-events-none absolute -left-[10%] top-0 z-0 flex h-10 w-[120%] transform-gpu"
+    >
+      <ComposerGradientColumn />
+      <ComposerGradientColumn className="-translate-y-2" />
+      <ComposerGradientColumn />
     </div>
   );
 };
@@ -222,7 +265,6 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
       size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
       {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
@@ -234,7 +276,12 @@ interface ComposerActionProps {
   canExecute?: boolean;
 }
 
-const ComposerAction = ({ canExecute = true }: ComposerActionProps) => {
+interface ComposerActionRowProps extends ComposerActionProps {
+  agentId?: string;
+  showModelSwitcher?: boolean;
+}
+
+const ComposerActionRow = ({ canExecute = true, agentId, showModelSwitcher }: ComposerActionRowProps) => {
   const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
 
   return (
@@ -253,8 +300,38 @@ const ComposerAction = ({ canExecute = true }: ComposerActionProps) => {
       )}
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
+    </>
+  );
+};
 
-      <ThreadPrimitive.If running={false}>
+const ComposerSendButton = ({ canExecute = true }: ComposerActionProps) => {
+  const { isStreaming, canSendWhileStreaming, cancelStream } = useThreadRuntimeState();
+  const composerRuntime = useComposerRuntime();
+  const isComposerEmpty = useComposer(state => state.isEmpty);
+
+  if (isStreaming && !canSendWhileStreaming) {
+    return (
+      <Button variant="default" size="icon-md" tooltip="Cancel" onClick={() => void cancelStream()}>
+        <CircleStopIcon />
+      </Button>
+    );
+  }
+
+  return (
+    <>
+      {isStreaming ? (
+        <Button
+          variant="default"
+          size="icon-md"
+          type="button"
+          tooltip={canExecute ? 'Send' : 'No permission to execute'}
+          className="rounded-full border border-border1 bg-surface5"
+          disabled={!canExecute || isComposerEmpty}
+          onClick={() => composerRuntime.send()}
+        >
+          <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        </Button>
+      ) : (
         <ComposerPrimitive.Send asChild disabled={!canExecute}>
           <Button
             variant="default"

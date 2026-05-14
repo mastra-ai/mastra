@@ -118,6 +118,10 @@ const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
 
+function formatProviderUrl(url: string): string {
+  return /\$\{[^}]+\}/.test(url) ? `\`${url}\`` : `"${url}"`;
+}
+
 interface ProviderInfo {
   id: string;
   name: string;
@@ -369,7 +373,7 @@ const agent = new Agent({
   model: {${
     provider.url
       ? `
-    url: "${provider.url}",`
+    url: ${formatProviderUrl(provider.url)},`
       : ''
   }
     id: "${provider.id}/${provider.models[0]}",

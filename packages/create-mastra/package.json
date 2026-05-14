@@ -38,7 +38,7 @@
     "commander": "^14.0.3",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
-    "posthog-node": "^5.28.2",
+    "posthog-node": "^5.30.6",
     "tinyexec": "^1.1.1"
   },
   "devDependencies": {

@@ -1,8 +1,18 @@
+import type { ElementType, ReactNode } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 type Segment = { label: string; color: string };
+
+type HorizontalBarRow = {
+  name: string;
+  values: number[];
+  /** If present, the whole row is rendered as a link to this URL. */
+  href?: string;
+  /** If present, an individual segment becomes its own link. Indices align with `segments`. */
+  hrefs?: Array<string | undefined>;
+};
 
 export function HorizontalBars({
   data,
@@ -10,12 +20,18 @@ export function HorizontalBars({
   maxVal,
   fmt,
   className,
+  LinkComponent = 'a',
 }: {
-  data: Array<{ name: string; values: number[] }>;
+  data: Array<HorizontalBarRow>;
   segments: Segment[];
   maxVal: number;
   fmt: (v: number) => string;
   className?: string;
+  /** Override how links produced by `href` / `hrefs` are rendered. Receives `href`,
+   *  `className`, `aria-label`, and `children`. Defaults to a plain `<a>` element;
+   *  consumers using a router should pass an adapter that maps `href` to their
+   *  navigation primitive (e.g. react-router `<Link to={href} />`). */
+  LinkComponent?: ElementType;
 }) {
   const sorted = [...data].sort((a, b) => {
     const totalB = b.values.reduce((s, v) => s + v, 0);
@@ -41,14 +57,13 @@ export function HorizontalBars({
       <div className="grid gap-3.5">
         {sorted.map(d => {
           const total = d.values.reduce((s, v) => s + v, 0);
-
-          return (
-            <div key={d.name} className="flex items-center gap-14 h-6 ">
+          const rowBody = (
+            <>
               <div className="relative h-full flex-1 min-w-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
-                      className="absolute inset-y-0 left-0 cursor-default"
+                      className={cn('absolute inset-y-0 left-0', d.href ? 'cursor-pointer' : 'cursor-default')}
                       style={{ width: `${maxVal > 0 ? (total / maxVal) * 100 : 0}%` }}
                     >
                       {segments.map((seg, si) => {
@@ -56,32 +71,40 @@ export function HorizontalBars({
                         const pct = total > 0 ? (val / total) * 100 : 0;
                         const left = d.values.slice(0, si).reduce((s, v) => s + (total > 0 ? (v / total) * 100 : 0), 0);
                         const isLastWithValue = d.values.slice(si + 1).every(v => !v);
+                        // Only honor segment-level links when the row itself is not an anchor.
+                        // Otherwise we'd render <a> nested inside <a>, which is invalid HTML.
+                        const segHref = d.href ? undefined : d.hrefs?.[si];
 
-                        if (isStacked) {
-                          return (
-                            <div
-                              key={seg.label}
-                              className={cn(
-                                'absolute inset-y-0 opacity-40 dark:opacity-100',
-                                si === 0 && 'rounded-l',
-                                isLastWithValue && 'rounded-r',
-                              )}
-                              style={{
-                                left: `${left}%`,
-                                width: `${pct}%`,
-                                backgroundColor: seg.color,
-                              }}
-                            />
-                          );
-                        }
-
-                        return (
+                        const segmentNode = (
                           <div
-                            key={seg.label}
-                            className="absolute inset-y-0 left-0 rounded opacity-40 dark:opacity-100"
-                            style={{ width: `${pct}%`, backgroundColor: seg.color }}
+                            className={cn(
+                              'absolute inset-y-0 opacity-40 dark:opacity-100',
+                              isStacked && si === 0 && 'rounded-l',
+                              isStacked && isLastWithValue && 'rounded-r',
+                              !isStacked && 'rounded',
+                              segHref && 'cursor-pointer hover:opacity-70 transition-opacity',
+                            )}
+                            style={{
+                              left: isStacked ? `${left}%` : 0,
+                              width: isStacked ? `${pct}%` : `${pct}%`,
+                              backgroundColor: seg.color,
+                            }}
                           />
                         );
+
+                        if (segHref) {
+                          return (
+                            <LinkComponent
+                              key={seg.label}
+                              href={segHref}
+                              aria-label={`${d.name} — ${seg.label}`}
+                              className="contents"
+                            >
+                              {segmentNode}
+                            </LinkComponent>
+                          );
+                        }
+                        return <Wrapper key={seg.label}>{segmentNode}</Wrapper>;
                       })}
                     </div>
                   </TooltipTrigger>
@@ -101,10 +124,31 @@ export function HorizontalBars({
                 </span>
               </div>
               <span className="text-ui-md text-neutral4 tabular-nums shrink-0 pr-3">{fmt(total)}</span>
+            </>
+          );
+
+          if (d.href) {
+            return (
+              <LinkComponent
+                key={d.name}
+                href={d.href}
+                className="flex items-center gap-14 h-6 rounded outline-none cursor-pointer hover:bg-surface3 focus-visible:bg-surface3 transition-colors"
+              >
+                {rowBody}
+              </LinkComponent>
+            );
+          }
+          return (
+            <div key={d.name} className="flex items-center gap-14 h-6 ">
+              {rowBody}
             </div>
           );
         })}
       </div>
     </ScrollArea>
   );
+}
+
+function Wrapper({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }

@@ -60,7 +60,7 @@ Enabling the manager doesn't run anything in the background by itself as every t
 
 ### Tool-level
 
-Set `backgroundTasks.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
+Set `background.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
 
 ```typescript title="src/mastra/tools/research.ts"
 import { createTool } from '@mastra/core/tools'
@@ -71,7 +71,7 @@ export const researchTool = createTool({
   description: 'Run a long research job',
   inputSchema: z.object({ topic: z.string() }),
   // highlight-start
-  backgroundTasks: {
+  background: {
     enabled: true,
     timeoutMs: 600_000,
     maxRetries: 1,
@@ -125,7 +125,7 @@ When a tool call is dispatched, the resolved background config is computed in th
 
 1. LLM `_background` override (if present in the call's arguments).
 1. Agent-level `backgroundTasks.tools` entry for the tool.
-1. Tool-level `backgroundTasks` config.
+1. Tool-level `background` config.
 1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
@@ -143,10 +143,12 @@ When a tool call dispatches as a background task, two streams may surface lifecy
 | `background-task-completed` | The task finished successfully. The `payload.result` matches the eventual tool result. | Manager stream |
 | `background-task-failed` | The task threw or timed out. | Manager stream |
 | `background-task-cancelled` | The task was cancelled before completing. | Manager stream |
+| `background-task-suspended` | The tool called `suspend()` from inside its execute. | Manager stream |
+| `background-task-resumed` | A suspended task was resumed via `manager.resume(taskId, resumeData)`. | Manager stream |
 
-`agent.stream().fullStream` only emits the agent-loop chunks (`background-task-started`, `background-task-progress`) on its own. `agent.streamUntilIdle()` emits the same two chunks and additionally subscribes to the manager pubsub for the run's memory scope and pipes the five manager chunks (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`) into the same `fullStream`, so consumers of `streamUntilIdle().fullStream` see all seven types.
+`agent.stream().fullStream` only emits the agent-loop chunks (`background-task-started`, `background-task-progress`) on its own. `agent.streamUntilIdle()` emits the same two chunks and additionally subscribes to the manager pubsub for the run's memory scope and pipes the seven manager chunks (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`, `background-task-suspended`, `background-task-resumed`) into the same `fullStream`.
 
-`backgroundTaskManager.stream()` only emits the five manager chunks.
+`backgroundTaskManager.stream()` only emits the seven manager chunks.
 
 The full payload shapes are documented in the [background task chunks reference](/reference/streaming/ChunkType#background-task-chunks).
 
@@ -209,7 +211,7 @@ const stream = await supervisor.streamUntilIdle('Research AI in education and wr
 
 ### Inheriting from the subagent
 
-If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `backgroundTasks.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire subagent invocation as a background task. The supervisor inherits the subagent's intent: the subagent itself becomes the background task, and its inner tools run in the foreground inside the subagent's loop.
+If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `background.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire subagent invocation as a background task. The supervisor inherits the subagent's intent: the subagent itself becomes the background task, and its inner tools run in the foreground inside the subagent's loop.
 
 The background config used for the inherited dispatch (for example `waitTimeoutMs`) is derived from the subagent's own `backgroundTasks` config.
 
@@ -234,11 +236,69 @@ When this `researchAgent` is delegated to from a supervisor that has no backgrou
 
 Use this pattern when you want a subagent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
 
+## Suspending and resuming
+
+A background task can pause itself mid-execution and wait for an external signal before continuing. This is useful for human approvals, webhooks, or any flow where the next step depends on data that arrives later.
+
+A tool calls `suspend(data)` from inside its `execute`, which:
+
+- Persists `status: 'suspended'` and the `data` payload on the task record.
+- Saves the workflow snapshot so the run survives process restarts.
+- Emits a `background-task-suspended` chunk on the manager stream.
+- Releases the concurrency slot so other tasks can run.
+
+Resume the task with `mastra.backgroundTaskManager.resume(taskId, resumeData)`. The `resumeData` arrives in the tool's `execute` options on the resumed run, and the task transitions back to `running`.
+
+```typescript title="src/mastra/tools/approval.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const reviewTool = createTool({
+  id: 'review',
+  description: 'Submit a draft for human review.',
+  inputSchema: z.object({ draft: z.string() }),
+  outputSchema: z.object({ approvedBy: z.string(), edits: z.string().optional() }),
+  background: { enabled: true },
+  execute: async ({ draft }, context) => {
+    const { suspend, resumeData } = context.agent
+    if (!resumeData) {
+      await suspend?.({ awaiting: 'approval', draft })
+      return { approvedBy: '', edits: undefined }
+    }
+    const { reviewer, edits } = resumeData as { reviewer: string; edits?: string }
+    return { approvedBy: reviewer, edits }
+  },
+})
+```
+
+The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated; the `if` branch falls through and the tool returns its real result.
+
+To resume the task once an approval arrives:
+
+```typescript title="src/server/approvals.ts"
+await mastra.backgroundTaskManager?.resume(taskId, {
+  reviewer: 'alice@example.com',
+  edits: 'Reworded paragraph 3.',
+})
+```
+
+### What happens to the agent loop
+
+When a task suspends mid-`streamUntilIdle()`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStreamUntilIdle(resumeData, { runId, toolCallId, memory })`: the resumed bg task runs to completion, its result lands in the message list, and the agent runs a follow-up turn — all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
+
+### Re-registering the executor on resume
+
+The manager keeps tool executors in process memory. If the process restarts while a task is suspended, the executor closure is gone — the caller of `resume()` must re-register it first via `manager.registerTaskContext(taskId, ...)`. Tasks dispatched and resumed inside the same process don't need this.
+
+### Cancelling a suspended task
+
+`manager.cancel(taskId)` works against suspended tasks the same way it works for running ones: the row flips to `cancelled`, the workflow snapshot is cleaned up, and a `task.cancelled` event fires.
+
 ## Lifecycle callbacks
 
 Each layer can register terminal-state callbacks. They don't replace one another, and success/failure hooks fire for their respective outcomes:
 
-- Tool-level `backgroundTasks.onComplete` / `onFailed`: scoped to one tool.
+- Tool-level `background.onComplete` / `onFailed`: scoped to one tool.
 - Agent-level `backgroundTasks.onTaskComplete` / `onTaskFailed`: scoped to all tasks dispatched by this agent.
 - Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally.
 

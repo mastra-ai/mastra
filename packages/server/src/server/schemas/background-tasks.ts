@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const backgroundTaskStatusSchema = z.enum([
   'pending',
   'running',
+  'suspended',
   'completed',
   'failed',
   'cancelled',
@@ -17,7 +18,7 @@ export const backgroundTaskStreamQuerySchema = z.object({
   taskId: z.string().optional(),
 });
 
-export const backgroundTaskDateColumnSchema = z.enum(['createdAt', 'startedAt', 'completedAt']);
+export const backgroundTaskDateColumnSchema = z.enum(['createdAt', 'startedAt', 'suspendedAt', 'completedAt']);
 
 export const listBackgroundTasksQuerySchema = z.object({
   agentId: z.string().optional(),
@@ -25,6 +26,8 @@ export const listBackgroundTasksQuerySchema = z.object({
   runId: z.string().optional(),
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
+  toolName: z.string().optional(),
+  toolCallId: z.string().optional(),
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
   dateFilterBy: backgroundTaskDateColumnSchema.optional(),
@@ -56,6 +59,7 @@ export const backgroundTaskResponseSchema = z.object({
   retryCount: z.number(),
   maxRetries: z.number(),
   timeoutMs: z.number(),
+  suspendPayload: z.unknown().optional(),
 });
 
 export const listBackgroundTaskResponseSchema = z.object({

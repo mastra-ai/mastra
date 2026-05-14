@@ -43,7 +43,7 @@ export const comboboxStyles = {
   searchContainer: cn('flex items-center border-b border-border1 px-2.5 py-2', transitions.colors),
 
   /** Search icon */
-  searchIcon: cn('mr-2 h-4 w-4 shrink-0 text-neutral3', transitions.colors),
+  searchIcon: cn('mr-2 h-3.5 w-3.5 shrink-0 text-neutral3', transitions.colors),
 
   /** Search input */
   searchInput: cn(
@@ -101,8 +101,8 @@ export const comboboxStyles = {
   /** Option description */
   optionDescription: 'text-ui-sm text-neutral3 truncate',
 
-  /** Option end slot */
-  optionEnd: 'ml-auto',
+  /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
+  optionEnd: 'ml-auto flex items-center shrink-0',
 
   /** Error message */
   error: 'text-ui-sm text-accent2',

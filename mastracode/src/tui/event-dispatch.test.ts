@@ -39,6 +39,12 @@ function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIS
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
     editor: { escapeEnabled: false },
+    goalManager: {
+      getGoal: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+      loadFromThreadMetadata: vi.fn(),
+      consumePersistOnNextThreadCreate: vi.fn(() => false),
+    },
   } as unknown as TUIState;
 }
 
