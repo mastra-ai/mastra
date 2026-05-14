@@ -95,44 +95,71 @@ permissionMapping: {
 
 If no mapping exists for a permission, the original string is passed through.
 
-Providers can implement `validatePermissions()` to validate the full set of permissions Mastra may emit at startup. Use this when a provider requires every Mastra permission to have an explicit provider permission slug.
+Use `validatePermissions()` to validate the full set of permissions Mastra may emit at startup. Use this when a provider requires every Mastra permission to have an explicit provider permission slug.
 
 ### Route policy coverage
 
 Mastra includes route-level FGA metadata for built-in resource routes, including agents, workflows, tools, MCP tools, memory threads, responses, and conversations. A route is checked when it has route-level `fga` metadata, when Mastra can derive built-in metadata for that route, or when the provider supplies metadata with `resolveRouteFGA()`.
 
-To deny protected routes that do not resolve FGA metadata, set `requireForProtectedRoutes` on the provider object:
+To deny protected routes that do not resolve FGA metadata, configure route policy coverage on the FGA provider:
 
 ```typescript prettier: false
-import type { IFGAProvider } from '@mastra/core/auth/ee';
-
-const fga: IFGAProvider = Object.assign(new MastraFGAWorkos({
-  /* ... */
-}), {
+const fga = new MastraFGAWorkos({
+  resourceMapping: {
+    project: { fgaResourceType: 'project' },
+  },
+  permissionMapping: {
+    'projects:read': 'read',
+  },
   requireForProtectedRoutes: true,
-  auditProtectedRoutes: 'warn' as const,
+  auditProtectedRoutes: 'warn',
+  validatePermissions: async permissions => {
+    // Throw if a Mastra permission is missing from permissionMapping.
+  },
 });
 ```
 
 Set `auditProtectedRoutes: 'error'` to fail startup when protected routes are missing built-in FGA metadata. If `requireForProtectedRoutes` is enabled, Mastra logs this audit as a warning by default.
 
-Use `resolveRouteFGA()` when route-level metadata is too static for your app. The resolver receives the route, parsed params, and request context, then returns the resource type, resource ID, and permission for the check:
+For custom routes, prefer route-level `fga` metadata. This keeps authorization policy next to the route:
 
 ```typescript prettier: false
-const fga: IFGAProvider = Object.assign(new MastraFGAWorkos({
-  /* ... */
-}), {
-  requireForProtectedRoutes: true,
-  resolveRouteFGA: ({ route, params, requestContext }) => {
-    const teamId = requestContext?.get('teamId');
-    if (!teamId) return null;
+import { createRoute } from '@mastra/server/server-adapter';
 
-    return {
-      resourceType: 'team',
-      resourceId: String(teamId),
-      permission: route.requiresPermission,
-    };
+export const getProjectRoute = createRoute({
+  method: 'GET',
+  path: '/projects/:projectId',
+  responseType: 'json',
+  requiresAuth: true,
+  fga: {
+    resourceType: 'project',
+    resourceIdParam: 'projectId',
+    permission: 'projects:read',
   },
+  handler: async () => {
+    return { project: null };
+  },
+});
+```
+
+Use `resolveRouteFGA()` only when route metadata must be derived centrally from route, params, or request context. A route map scales better than string-prefix checks:
+
+```typescript prettier: false
+import type { FGARouteConfig, FGARouteResolver } from '@mastra/core/auth/ee';
+
+const routeFGA = {
+  'GET /billing/:accountId': {
+    resourceType: 'account',
+    resourceIdParam: 'accountId',
+    permission: 'billing:read',
+  },
+} satisfies Record<string, FGARouteConfig>;
+
+const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+const fga = new MastraFGAWorkos({
+  /* ... */
+  resolveRouteFGA,
 });
 ```
 

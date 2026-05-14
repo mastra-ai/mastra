@@ -107,6 +107,10 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   private organizationId?: string;
   private resourceMapping: Record<string, FGAResourceMappingEntry>;
   private permissionMapping: Record<string, string>;
+  readonly requireForProtectedRoutes?: boolean;
+  readonly auditProtectedRoutes?: boolean | 'warn' | 'error';
+  readonly resolveRouteFGA?: MastraFGAWorkosOptions['resolveRouteFGA'];
+  readonly validatePermissions?: MastraFGAWorkosOptions['validatePermissions'];
 
   constructor(options: MastraFGAWorkosOptions) {
     const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY;
@@ -123,6 +127,10 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     this.organizationId = options.organizationId;
     this.resourceMapping = options.resourceMapping ?? {};
     this.permissionMapping = options.permissionMapping ?? {};
+    this.requireForProtectedRoutes = options.requireForProtectedRoutes;
+    this.auditProtectedRoutes = options.auditProtectedRoutes;
+    this.resolveRouteFGA = options.resolveRouteFGA;
+    this.validatePermissions = options.validatePermissions;
   }
 
   // ──────────────────────────────────────────────────────────────
