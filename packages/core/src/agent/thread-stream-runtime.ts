@@ -502,3 +502,5 @@ export class AgentThreadStreamRuntime {
     return { accepted: true, runId, signal };
   }
 }
+
+export const agentThreadStreamRuntime = new AgentThreadStreamRuntime();
