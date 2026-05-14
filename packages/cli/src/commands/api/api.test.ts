@@ -46,18 +46,17 @@ describe('api command registration', () => {
     expect(agentGet?.helpInformation()).not.toContain('--schema');
   });
 
-  it('exposes light trace and span trace commands', () => {
+  it('exposes verbose trace and span trace commands', () => {
     const program = new Command();
     registerApiCommand(program);
 
     const api = program.commands.find(command => command.name() === 'api');
     const trace = api?.commands.find(command => command.name() === 'trace');
+    const traceGet = trace?.commands.find(command => command.name() === 'get');
 
-    expect(trace?.commands.find(command => command.name() === 'light')?.description()).toBe(
-      'Get lightweight trace details',
-    );
+    expect(traceGet?.helpInformation()).toContain('--verbose');
     expect(trace?.commands.find(command => command.name() === 'span')?.description()).toBe('Get a trace span');
-    expect(API_COMMANDS.traceLight).toMatchObject({ method: 'GET', path: '/observability/traces/:traceId/light' });
+    expect(API_COMMANDS.traceGet).toMatchObject({ method: 'GET', path: '/observability/traces/:traceId/light' });
     expect(API_COMMANDS.traceSpan).toMatchObject({
       method: 'GET',
       path: '/observability/traces/:traceId/spans/:spanId',
@@ -212,12 +211,20 @@ describe('api command executor', () => {
     });
   });
 
-  it('gets lightweight trace details and a specific trace span', async () => {
+  it('gets lightweight trace details by default, full trace details with --verbose, and a specific trace span', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ spans: [{ traceId: 'trace-1', spanId: 'span-1', name: 'agent' }] }))
+      .mockResolvedValueOnce(
+        jsonResponse({ traceId: 'trace-1', spans: [{ traceId: 'trace-1', spanId: 'span-1', name: 'agent' }] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          traceId: 'trace-1',
+          spans: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }],
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse({ traceId: 'trace-1', spanId: 'span-2', input: { value: 'hello' } }));
 
-    await executeDescriptor(API_COMMANDS.traceLight, ['trace-1'], undefined, {
+    await executeDescriptor(API_COMMANDS.traceGet, ['trace-1'], undefined, {
       url: 'https://observability.mastra.ai',
       header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
       pretty: false,
@@ -233,8 +240,25 @@ describe('api command executor', () => {
       },
     );
     expect(JSON.parse(stdout)).toEqual({
-      data: [{ traceId: 'trace-1', spanId: 'span-1', name: 'agent' }],
-      page: { total: 1, page: 0, perPage: 1, hasMore: false },
+      data: { traceId: 'trace-1', spans: [{ traceId: 'trace-1', spanId: 'span-1', name: 'agent' }] },
+    });
+
+    stdout = '';
+
+    await executeDescriptor(API_COMMANDS.traceGet, ['trace-1'], undefined, {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+      verbose: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://observability.mastra.ai/api/observability/traces/trace-1', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer token', 'X-Mastra-Project-Id': 'project-1' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(JSON.parse(stdout)).toEqual({
+      data: { traceId: 'trace-1', spans: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }] },
     });
 
     stdout = '';
@@ -246,7 +270,7 @@ describe('api command executor', () => {
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+      3,
       'https://observability.mastra.ai/api/observability/traces/trace-1/spans/span-2',
       {
         method: 'GET',

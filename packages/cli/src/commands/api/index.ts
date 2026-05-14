@@ -222,11 +222,13 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const trace = api.command('trace').description('Inspect observability traces');
   addAction(trace, 'list', 'GET /observability/traces', { description: 'List observability traces', list: true });
-  addAction(trace, 'get', 'GET /observability/traces/:traceId', { description: 'Get trace details' });
-  addAction(trace, 'light', 'GET /observability/traces/:traceId/light', {
-    description: 'Get lightweight trace details',
-    list: true,
-    examples: [{ description: 'Get lightweight trace details', command: 'mastra api trace light trace_123' }],
+  addAction(trace, 'get', 'GET /observability/traces/:traceId/light', {
+    description: 'Get trace details',
+    verboseRouteKey: 'GET /observability/traces/:traceId',
+    examples: [
+      { description: 'Get lightweight trace details', command: 'mastra api trace get trace_123' },
+      { description: 'Get full trace details', command: 'mastra api trace get trace_123 --verbose' },
+    ],
   });
   addAction(trace, 'span', 'GET /observability/traces/:traceId/spans/:spanId', {
     description: 'Get a trace span',
@@ -433,6 +435,9 @@ function addAction(
   if (descriptor.acceptsInput) {
     command.option('--schema', 'print request schema for this command');
   }
+  if (descriptor.verbose) {
+    command.option('--verbose', 'return the full response instead of the lightweight default');
+  }
 
   command.action(async (...args: unknown[]) => {
     const command = args.at(-1) as CommanderCommand;
@@ -498,6 +503,9 @@ function buildDescriptor(
   options: ApiCommandActionOptions,
 ): ApiCommandDescriptor {
   const route = API_ROUTE_METADATA[routeKey];
+  const verboseRoute = options.verboseRouteKey
+    ? API_ROUTE_METADATA[options.verboseRouteKey as keyof typeof API_ROUTE_METADATA]
+    : undefined;
   const commandName = [...commandPath(parent), parseCommandName(name)].join(' ');
   const pathParamsFromInput = new Set(options.pathParamsFromInput ?? []);
   // Most path params become positional CLI args; a few commands intentionally read IDs from JSON input.
@@ -520,6 +528,14 @@ function buildDescriptor(
     bodyParams: [...route.bodyParams],
     defaultTimeoutMs: options.defaultTimeoutMs,
     examples: options.examples,
+    verbose: verboseRoute
+      ? {
+          path: verboseRoute.path,
+          responseShape: verboseRoute.responseShape,
+          queryParams: [...verboseRoute.queryParams],
+          bodyParams: [...verboseRoute.bodyParams],
+        }
+      : undefined,
   };
 }
 
@@ -588,10 +604,12 @@ export async function executeDescriptor(
   descriptor: ApiCommandDescriptor,
   positionalValues: string[],
   inputText: string | undefined,
-  options: ApiGlobalOptions,
+  options: ApiGlobalOptions & { verbose?: boolean },
 ): Promise<void> {
   try {
-    const target = await resolveTarget(options, fetch, descriptor.path);
+    const requestDescriptor =
+      options.verbose && descriptor.verbose ? { ...descriptor, ...descriptor.verbose } : descriptor;
+    const target = await resolveTarget(options, fetch, requestDescriptor.path);
 
     if (options.schema) {
       // Schema output is a discovery path, so it intentionally skips required argument validation.
@@ -599,16 +617,17 @@ export async function executeDescriptor(
       return;
     }
 
-    const input = parseInput(descriptor, inputText);
-    const pathParams = resolvePathParams(descriptor, positionalValues, input);
+    const input = parseInput(requestDescriptor, inputText);
+    const pathParams = resolvePathParams(requestDescriptor, positionalValues, input);
     // Do not send IDs twice when a route path param was supplied through JSON input.
     const requestInput = stripPathParamsFromInput(input, pathParams);
 
     const requestOptions = {
       baseUrl: target.baseUrl,
       headers: target.headers,
-      timeoutMs: descriptor.defaultTimeoutMs && !options.timeout ? descriptor.defaultTimeoutMs : target.timeoutMs,
-      descriptor,
+      timeoutMs:
+        requestDescriptor.defaultTimeoutMs && !options.timeout ? requestDescriptor.defaultTimeoutMs : target.timeoutMs,
+      descriptor: requestDescriptor,
       pathParams,
       input: requestInput,
     };
@@ -619,8 +638,8 @@ export async function executeDescriptor(
       if (!target.fallbackHeaders || !isUnauthorizedError(error)) throw error;
       response = await requestApi({ ...requestOptions, headers: target.fallbackHeaders });
     }
-    const normalized = normalizeData(descriptor, normalizeResponse(response));
-    writeJson(normalizeSuccess(normalized, descriptor.list, descriptor.responseShape), options.pretty);
+    const normalized = normalizeData(requestDescriptor, normalizeResponse(response));
+    writeJson(normalizeSuccess(normalized, requestDescriptor.list, requestDescriptor.responseShape), options.pretty);
   } catch (error) {
     const apiError = error instanceof ApiCliError ? error : toApiCliError(error);
     writeJson(errorEnvelope(apiError), options.pretty, process.stderr);

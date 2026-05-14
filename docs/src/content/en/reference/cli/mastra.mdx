@@ -988,27 +988,20 @@ mastra api trace list [input]
 mastra api trace list '{"page":0,"perPage":20}' --pretty
 ```
 
-`trace list` returns full root span records. For debugging large traces without overfetching, use `trace light` first and then fetch a specific span with `trace span` only when you need full span payloads.
+`trace list` returns full root span records. For debugging large traces without overfetching, use `trace get` first and then fetch a specific span with `trace span` only when you need full span payloads.
 
 #### `mastra api trace get`
 
-Gets one observability trace by ID, including its spans.
+Gets a lightweight timeline for one observability trace without fetching full span input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full trace payload.
 
 ```bash
 mastra api trace get <traceId>
-```
-
-#### `mastra api trace light`
-
-Gets a lightweight timeline for one observability trace without fetching full span input, output, attributes, or metadata payloads.
-
-```bash
-mastra api trace light <traceId>
+mastra api trace get <traceId> --verbose
 ```
 
 #### `mastra api trace span`
 
-Gets one full span from an observability trace. Use this after `trace light` when you know which span you need to inspect.
+Gets one full span from an observability trace. Use this after `trace get` when you know which span you need to inspect.
 
 ```bash
 mastra api trace span <traceId> <spanId>
