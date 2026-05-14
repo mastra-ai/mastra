@@ -21,6 +21,7 @@ const PERSISTED_SNAPSHOT_FIELDS = new Set([
   'model',
   'tools',
   'integrationTools',
+  'toolIntegrations',
   'mcpClients',
   'requestContextSchema',
 ]);
