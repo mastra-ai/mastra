@@ -146,19 +146,34 @@ const EXCLUDED_DIRS = new Set([
     : []),
 ]);
 
+const REQUESTED_PROJECTS = new Set(
+  process.argv.flatMap((arg, index, args) => {
+    if (arg === '--project') return args[index + 1] ? [args[index + 1]] : [];
+    if (arg.startsWith('--project=')) return [arg.slice('--project='.length)];
+    return [];
+  }),
+);
+
+function shouldScanProjectGroup(projectGroup: string) {
+  if (!SOURCE_MODE || REQUESTED_PROJECTS.size === 0) return true;
+  return [...REQUESTED_PROJECTS].some(
+    project => project === `unit:${projectGroup}/*` || project === `e2e:${projectGroup}/*`,
+  );
+}
+
 // Directories to scan for vitest configs
 const PROJECT_GLOBS = [
-  'packages/*/vitest.config.ts',
-  ...(SOURCE_MODE ? [] : ['stores/*/vitest.config.ts']),
-  'deployers/*/vitest.config.ts',
-  'voice/*/vitest.config.ts',
-  'server-adapters/*/vitest.config.ts',
-  'client-sdks/*/vitest.config.ts',
-  'auth/*/vitest.config.ts',
-  'observability/*/vitest.config.ts',
-  'pubsub/*/vitest.config.ts',
-  'workflows/*/vitest.config.ts',
-  'workspaces/*/vitest.config.ts',
+  ...(shouldScanProjectGroup('packages') ? ['packages/*/vitest.config.ts'] : []),
+  ...(SOURCE_MODE || !shouldScanProjectGroup('stores') ? [] : ['stores/*/vitest.config.ts']),
+  ...(shouldScanProjectGroup('deployers') ? ['deployers/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('voice') ? ['voice/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('server-adapters') ? ['server-adapters/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('client-sdks') ? ['client-sdks/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('auth') ? ['auth/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('observability') ? ['observability/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('pubsub') ? ['pubsub/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('workflows') ? ['workflows/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('workspaces') ? ['workspaces/*/vitest.config.ts'] : []),
 ];
 
 /**
