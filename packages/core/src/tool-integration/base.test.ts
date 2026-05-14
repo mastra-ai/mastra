@@ -1,0 +1,133 @@
+import { describe, it, expect } from 'vitest';
+import type { ToolAction } from '../tools/types';
+import { BaseToolIntegration } from './base';
+import type {
+  AuthFlowStatus,
+  AuthorizeOpts,
+  ResolveToolsOpts,
+  ToolDescriptor,
+  ToolIntegrationCapabilities,
+  ToolService,
+} from './tool-integration';
+
+class FakeIntegration extends BaseToolIntegration {
+  readonly id = 'fake';
+  readonly displayName = 'Fake';
+  readonly capabilities: ToolIntegrationCapabilities = {
+    multipleConnectionsPerService: false,
+    batchConnectionStatus: false,
+    reauthorizeReusesConnectionId: true,
+  };
+
+  constructor(
+    private readonly services: ToolService[],
+    private readonly toolsByService: Record<string, ToolDescriptor[]>,
+    opts: ConstructorParameters<typeof BaseToolIntegration>[0] = {},
+  ) {
+    super(opts);
+  }
+
+  protected async fetchToolServices(): Promise<ToolService[]> {
+    return this.services;
+  }
+
+  protected async fetchTools(toolService: string): Promise<ToolDescriptor[]> {
+    return this.toolsByService[toolService] ?? [];
+  }
+
+  async resolveTools(_opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> {
+    return {};
+  }
+
+  async authorize(_opts: AuthorizeOpts) {
+    return { url: 'about:blank', authId: 'a' };
+  }
+
+  async getAuthStatus(_authId: string): Promise<AuthFlowStatus> {
+    return 'pending';
+  }
+
+  async getConnectionStatus(_opts: { items: Array<{ connectionId: string; toolService: string }> }) {
+    return {};
+  }
+}
+
+const services: ToolService[] = [
+  { slug: 'gmail', name: 'Gmail' },
+  { slug: 'slack', name: 'Slack' },
+  { slug: 'github', name: 'GitHub' },
+];
+
+const tools: Record<string, ToolDescriptor[]> = {
+  gmail: [
+    { slug: 'gmail.fetch_emails', name: 'Fetch emails', toolService: 'gmail' },
+    { slug: 'gmail.send', name: 'Send email', toolService: 'gmail' },
+  ],
+  slack: [{ slug: 'slack.post_message', name: 'Post message', toolService: 'slack' }],
+  github: [{ slug: 'github.create_issue', name: 'Create issue', toolService: 'github' }],
+};
+
+describe('BaseToolIntegration', () => {
+  describe('listToolServices', () => {
+    it('returns all services when no allowlist is set', async () => {
+      const integration = new FakeIntegration(services, tools);
+      expect(await integration.listToolServices()).toEqual(services);
+    });
+
+    it('filters by exact slug match', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedToolServices: ['gmail', 'slack'],
+      });
+      const result = await integration.listToolServices();
+      expect(result.map(s => s.slug)).toEqual(['gmail', 'slack']);
+    });
+
+    it('returns nothing when allowlist excludes everything', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedToolServices: ['nope'],
+      });
+      expect(await integration.listToolServices()).toEqual([]);
+    });
+  });
+
+  describe('listTools', () => {
+    it('returns all tools for a service when no allowlist is set', async () => {
+      const integration = new FakeIntegration(services, tools);
+      expect((await integration.listTools('gmail')).map(t => t.slug)).toEqual(['gmail.fetch_emails', 'gmail.send']);
+    });
+
+    it('returns empty when the toolService itself is not allowed', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedToolServices: ['slack'],
+      });
+      expect(await integration.listTools('gmail')).toEqual([]);
+    });
+
+    it('filters individual tools by exact slug', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedTools: ['gmail.send'],
+      });
+      expect((await integration.listTools('gmail')).map(t => t.slug)).toEqual(['gmail.send']);
+    });
+
+    it('supports suffix wildcards on tool slugs', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedTools: ['gmail.*'],
+      });
+      expect((await integration.listTools('gmail')).map(t => t.slug)).toEqual(['gmail.fetch_emails', 'gmail.send']);
+    });
+
+    it('supports suffix wildcards on tool services', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedToolServices: ['g*'],
+      });
+      const matched = await integration.listToolServices();
+      expect(matched.map(s => s.slug)).toEqual(['gmail', 'github']);
+    });
+  });
+
+  it('returns ok health by default', async () => {
+    const integration = new FakeIntegration(services, tools);
+    expect(await integration.getHealth()).toEqual({ ok: true });
+  });
+});

@@ -12,3 +12,8 @@ export type {
   ToolIntegrationHealth,
   AuthFlowStatus,
 } from './tool-integration';
+
+export { BaseToolIntegration } from './base';
+export type { BaseToolIntegrationOptions } from './base';
+
+export { DuplicateIntegrationError, UnknownIntegrationError } from './errors';
