@@ -244,10 +244,12 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
       }
 
-      // Update the workspace with both metadata-level and config-level fields
-      // The storage layer handles separating these into record updates vs new-version creation
-      await workspaceStore.update({
-        id: storedWorkspaceId,
+      // Update the workspace with both metadata-level and config-level fields.
+      // The storage layer handles separating these into record updates vs
+      // new-version creation. Strip undefined keys so omitted fields don't
+      // overwrite persisted values (same pattern as stored-skills PATCH).
+      const updateInput: Record<string, unknown> = { id: storedWorkspaceId };
+      const candidate: Record<string, unknown> = {
         authorId,
         metadata,
         name,
@@ -260,7 +262,11 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
         tools,
         autoSync,
         operationTimeout,
-      });
+      };
+      for (const [key, value] of Object.entries(candidate)) {
+        if (value !== undefined) updateInput[key] = value;
+      }
+      await workspaceStore.update(updateInput as Parameters<typeof workspaceStore.update>[0]);
 
       // Return the resolved workspace with the updated config
       const resolved = await workspaceStore.getByIdResolved(storedWorkspaceId);

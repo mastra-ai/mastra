@@ -635,6 +635,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         }
 
         const runId = `restart-nested-${Date.now()}`;
+        const nestedRunId = `nested-wflow-rstart-nested-${Date.now()}`;
 
         // Simulate a workflow where step1 completed and nested workflow is running step3
         await workflowsStore.persistWorkflowSnapshot({
@@ -659,6 +660,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
                 payload: { step1Result: 2 },
                 startedAt: Date.now(),
                 status: 'running',
+                metadata: { nestedRunId },
               },
             },
             serializedStepGraph: (workflow as any).serializedStepGraph,
@@ -672,9 +674,9 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         // Also simulate the nested workflow state
         await workflowsStore.persistWorkflowSnapshot({
           workflowName: 'restart-nestedWorkflow',
-          runId,
+          runId: nestedRunId,
           snapshot: {
-            runId,
+            runId: nestedRunId,
             status: 'running',
             activePaths: [1],
             activeStepsPath: { step3: [1] },
@@ -735,6 +737,13 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         expect(mocks.step1).toHaveBeenCalledTimes(0);
         // step2 was already completed in the nested snapshot, should not be re-executed
         expect(mocks.step2).toHaveBeenCalledTimes(0);
+
+        const nestedWorkflowStoreResult = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: 'restart-nestedWorkflow',
+          runId: nestedRunId,
+        });
+
+        expect(nestedWorkflowStoreResult?.status).toBe('success');
       },
     );
 
@@ -888,7 +897,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
           runId,
           status: 'running',
           activePaths: [0, 0], // Both parallel paths active
-          activeStepsPath: { step1: [0], step2: [0] },
+          activeStepsPath: { step1: [0], step2: [1] },
           value: {},
           context: {
             input: { value: 5 },

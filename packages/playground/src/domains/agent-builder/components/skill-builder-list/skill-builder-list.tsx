@@ -1,29 +1,9 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
-import { CopyIcon, DownloadIcon, LockIcon, SearchIcon, SparklesIcon } from 'lucide-react';
+import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
 import { getSkillOrigin } from '@/domains/agents/utils/skill-origin';
-
-function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const diff = Date.now() - then;
-  if (diff < 0) return 'just now';
-  const minute = 60 * 1000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  const week = 7 * day;
-  const month = 30 * day;
-  const year = 365 * day;
-  if (diff < minute) return 'just now';
-  if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
-  if (diff < day) return `${Math.floor(diff / hour)}h ago`;
-  if (diff < week) return `${Math.floor(diff / day)}d ago`;
-  if (diff < month) return `${Math.floor(diff / week)}w ago`;
-  if (diff < year) return `${Math.floor(diff / month)}mo ago`;
-  return `${Math.floor(diff / year)}y ago`;
-}
 
 export type SkillBuilderListProps = {
   skills: StoredSkillResponse[];
@@ -60,9 +40,6 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
       {filtered.map(skill => {
         const row = (
           <>
-            <div className="bg-surface3 p-2 rounded-md text-neutral5 flex items-center justify-center">
-              <SparklesIcon className="h-5 w-5" />
-            </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="text-ui-md text-neutral6 truncate">{skill.name}</div>
@@ -112,9 +89,16 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>
               </div>
-            </div>
-            <div className="hidden sm:inline-flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
-              <span className="hidden lg:inline-flex">Updated {formatRelativeTime(skill.updatedAt)}</span>
+              {showStars && (
+                <div className="mt-2 md:hidden">
+                  <SkillStarButton
+                    skillId={skill.id}
+                    isStarred={skill.isStarred}
+                    starCount={skill.starCount}
+                    size="sm"
+                  />
+                </div>
+              )}
             </div>
             {showStars && (
               <SkillStarButton
@@ -122,7 +106,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
                 isStarred={skill.isStarred}
                 starCount={skill.starCount}
                 size="sm"
-                className="shrink-0"
+                className="shrink-0 hidden md:inline-flex"
               />
             )}
           </>
@@ -131,13 +115,13 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
         return onSkillClick ? (
           <button
             key={skill.id}
-            className="px-6 py-5 flex items-center gap-4 w-full text-left hover:bg-surface3/50 transition-colors"
+            className="px-6 py-5 flex items-start gap-4 w-full text-left hover:bg-surface3/50 transition-colors md:items-center"
             onClick={() => onSkillClick(skill)}
           >
             {row}
           </button>
         ) : (
-          <div key={skill.id} className="px-6 py-5 flex items-center gap-4">
+          <div key={skill.id} className="px-6 py-5 flex items-start gap-4 md:items-center">
             {row}
           </div>
         );

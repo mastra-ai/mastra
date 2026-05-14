@@ -165,6 +165,33 @@ export const AgentBuilderInfrastructure = () => {
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
                   <Txt variant="ui-md" className="font-medium">
+                    Registries
+                  </Txt>
+                  <Txt variant="ui-xs" className="text-neutral3">
+                    External skill registries available to import skills into the workspace.
+                  </Txt>
+                </div>
+                <div className="rounded-md border border-border1 px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1">
+                      <Txt variant="ui-sm" className="font-medium">
+                        skills.sh
+                      </Txt>
+                      <Txt variant="ui-xs" className="text-neutral3">
+                        GitHub-backed public skills registry.
+                      </Txt>
+                    </div>
+                    <StatusBadge
+                      ok={data.registries?.skillsSh?.enabled ?? false}
+                      label={data.registries?.skillsSh?.enabled ? 'Enabled' : 'Disabled'}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
+                  <Txt variant="ui-md" className="font-medium">
                     Workspace
                   </Txt>
                   <Txt variant="ui-xs" className="text-neutral3">

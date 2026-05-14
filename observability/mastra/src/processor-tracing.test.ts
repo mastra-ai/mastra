@@ -13,7 +13,7 @@ import type {
   TracingContext,
 } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
-import { ProcessorStepSchema } from '@mastra/core/processors';
+import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -389,12 +389,13 @@ function createProcessorWorkflow(id: string) {
 let testExporter: ProcessorTestExporter;
 let observability: Observability;
 
-function getBaseMastraConfig(exporter: ProcessorTestExporter) {
+function getBaseMastraConfig(exporter: ProcessorTestExporter, options: Record<string, unknown> = {}) {
   observability = new Observability({
     configs: {
       test: {
         serviceName: 'processor-tracing-tests',
         exporters: [exporter],
+        ...options,
       },
     },
   });
@@ -1155,6 +1156,147 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(processorSpan, mainAgentModelSpan);
       // Internal agent completes within processor span
       testExporter.expectStartedBefore(internalAgentSpan, mainAgentModelSpan);
+
+      testExporter.finalExpectations();
+    });
+  });
+
+  // ==========================================================================
+  // Mastra-Owned Processor Internal Span Hiding
+  // ==========================================================================
+
+  describe('Mastra-owned processors hide internal spans', () => {
+    /**
+     * Mastra-owned processors (Moderation, PII detector, etc.) build internal
+     * agents to do their work. Those agents create AGENT_RUN/MODEL_GENERATION
+     * spans, but users don't control that code, so those spans are marked
+     * internal and filtered from exported traces by default.
+     *
+     * The PROCESSOR_RUN span itself should still be visible.
+     */
+    function createModerationMockModel() {
+      // Always return a JSON body matching the moderation schema so the
+      // moderation processor's structured-output parse succeeds cleanly.
+      const moderationJson = JSON.stringify({ category_scores: null, reason: null });
+      return new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: moderationJson }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: moderationJson },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+    }
+
+    it("does not export the internal moderation agent's spans by default", async () => {
+      const model = createModerationMockModel();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      const processorSpans = testExporter.getProcessorSpans();
+
+      // Exactly one user-visible AGENT_RUN — the main agent. The internal
+      // 'content-moderator' agent run is internal and must not be exported.
+      expect(agentSpans.length).toBe(1);
+      expect(agentSpans[0]?.entityId).toBe('test-agent');
+      expect(agentSpans.some(s => s.entityId === 'content-moderator')).toBe(false);
+
+      // PROCESSOR_RUN is still visible.
+      expect(processorSpans.length).toBe(1);
+      expect(processorSpans[0]?.name).toBe('input processor: moderation');
+      expect(processorSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+
+      // Model spans created inside the moderation agent must not leak — this
+      // covers MODEL_GENERATION and its descendants (MODEL_STEP,
+      // MODEL_INFERENCE, MODEL_CHUNK), which inherit the agent's tracingPolicy
+      // via the model tracker.
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+      expect(modelSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+      // Only the main agent's MODEL_STEP/INFERENCE/CHUNK should be present;
+      // each must be a descendant of the main agent's MODEL_GENERATION.
+      const mainModelId = modelSpans[0]?.id;
+      const modelStepSpans = testExporter.getModelStepSpans();
+      expect(modelStepSpans.every(s => s.parentSpanId === mainModelId)).toBe(true);
+      const modelChunkSpans = testExporter.getModelChunkSpans();
+      // chunks parent to inference or step; just assert none belong to the
+      // moderation agent by walking up to the closest model_generation.
+      const visibleIds = new Set(testExporter.getAllSpans().map(s => s.id));
+      for (const chunk of modelChunkSpans) {
+        // every chunk's parent must be a visible span (no orphans into hidden
+        // inference/step spans).
+        expect(chunk.parentSpanId && visibleIds.has(chunk.parentSpanId)).toBe(true);
+      }
+
+      // No orphan spans: every non-root exported span's parentSpanId must
+      // resolve to another exported span. This guards against an internal
+      // ancestor being filtered without its visible descendants getting
+      // re-parented to the closest external ancestor.
+      const allSpans = testExporter.getAllSpans();
+      const exportedIds = new Set(allSpans.map(s => s.id));
+      const orphans = allSpans.filter(s => s.parentSpanId && !exportedIds.has(s.parentSpanId));
+      expect(
+        orphans,
+        `Found orphan spans pointing at filtered parents: ${orphans
+          .map(s => `${s.type}/${s.name} -> ${s.parentSpanId}`)
+          .join(', ')}`,
+      ).toHaveLength(0);
+
+      testExporter.finalExpectations();
+    });
+
+    it("exports the internal moderation agent's spans when includeInternalSpans is true", async () => {
+      // Sanity check: the internal spans really are being created — they're
+      // just filtered. Flipping includeInternalSpans on must surface them
+      // again, otherwise the assertion above could pass trivially (e.g., if
+      // the moderation agent simply wasn't running).
+      const model = createModerationMockModel();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter, { includeInternalSpans: true }),
+        agents: { agent },
+      });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      const moderationAgentSpan = agentSpans.find(s => s.entityId === 'content-moderator');
+
+      // With internal spans included, the moderation agent's AGENT_RUN
+      // appears, parented to the PROCESSOR_RUN span. The contrast with the
+      // previous test (where the same setup hides this span) is what proves
+      // the span is created internally and merely filtered by default.
+      expect(moderationAgentSpan).toBeDefined();
+
+      const processorSpan = testExporter.getProcessorSpans()[0];
+      expect(moderationAgentSpan?.parentSpanId).toBe(processorSpan?.id);
 
       testExporter.finalExpectations();
     });

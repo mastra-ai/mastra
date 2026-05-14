@@ -1,5 +1,28 @@
 # @mastra/docker
 
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Docker sandbox containers now support resource limits and security hardening through Docker HostConfig options. Configure memory, CPU quota, process IDs, capabilities, security options, read-only root filesystems, and tmpfs mounts. ([#16577](https://github.com/mastra-ai/mastra/pull/16577))
+
+  ```typescript
+  const sandbox = new DockerSandbox({
+    memory: 512 * 1024 * 1024,
+    memorySwap: 512 * 1024 * 1024,
+    cpuQuota: 100_000,
+    pidsLimit: 256,
+    readonlyRootfs: true,
+    capDrop: ['ALL'],
+    securityOpt: ['no-new-privileges:true'],
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+
 ## 0.1.0
 
 ### Minor Changes

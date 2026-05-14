@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderLibraryPage from '..';
 import { LinkComponentProvider } from '@/lib/framework';
@@ -57,7 +58,9 @@ function renderPage() {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
-          <AgentBuilderLibraryPage />
+          <MemoryRouter>
+            <AgentBuilderLibraryPage />
+          </MemoryRouter>
         </LinkComponentProvider>
       </QueryClientProvider>
     </MastraReactProvider>,

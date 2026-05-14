@@ -399,6 +399,7 @@ export class ModelSpanTracker {
         ...(payload?.warnings?.length ? { warnings: payload.warnings } : {}),
       },
       input,
+      tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
     this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
     // Reset chunk sequence for new step
@@ -472,6 +473,7 @@ export class ModelSpanTracker {
         ...(ctx?.responseFormat !== undefined ? { responseFormat: ctx.responseFormat } : {}),
       },
       input,
+      tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
   }
 
@@ -594,6 +596,7 @@ export class ModelSpanTracker {
         chunkType,
         sequenceNumber: this.#chunkSequence,
       },
+      tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
     this.#currentChunkType = chunkType;
     this.#accumulator = initialData || {};
@@ -646,6 +649,7 @@ export class ModelSpanTracker {
       },
       metadata: options?.metadata,
       output,
+      tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
 
     if (span) {
@@ -796,6 +800,7 @@ export class ModelSpanTracker {
         sequenceNumber: this.#chunkSequence,
       },
       output: payload,
+      tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
 
     if (span) {

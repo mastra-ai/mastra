@@ -5,6 +5,7 @@ import type {
   SkillVersionTree,
   SkillVersionTreeEntry,
   StorageBlobEntry,
+  StorageSkillFileNode,
   StorageSkillSnapshotType,
 } from '../../storage/types';
 import type { SkillSource, SkillSourceEntry } from './skill-source';
@@ -20,6 +21,8 @@ export interface SkillPublishResult {
   tree: SkillVersionTree;
   /** Blob entries to store (already deduplicated by hash) */
   blobs: StorageBlobEntry[];
+  /** UI-facing nested file tree (folders + files with content) for the stored skill record */
+  files: StorageSkillFileNode[];
 }
 
 // =============================================================================
@@ -142,6 +145,40 @@ function joinPath(...segments: string[]): string {
 function collectSubdirPaths(allPaths: string[], subdir: string): string[] {
   const prefix = subdir + '/';
   return allPaths.filter(p => p.startsWith(prefix)).map(p => p.substring(prefix.length));
+}
+
+/**
+ * Build a nested folder/file tree from a flat list of walked files for the
+ * UI-facing `files` column on the stored skill record. Binary file content is
+ * base64-encoded so it can round-trip through the string-typed `content` field.
+ */
+function buildSkillFileNodes(files: WalkedFile[]): StorageSkillFileNode[] {
+  const root: StorageSkillFileNode[] = [];
+
+  for (const file of files) {
+    const segments = file.path.split('/').filter(Boolean);
+    if (segments.length === 0) continue;
+
+    let cursor = root;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const segment = segments[i]!;
+      let folder = cursor.find(node => node.type === 'folder' && node.name === segment);
+      if (!folder) {
+        folder = { name: segment, type: 'folder', children: [] };
+        cursor.push(folder);
+      }
+      if (!folder.children) folder.children = [];
+      cursor = folder.children;
+    }
+
+    const fileName = segments[segments.length - 1]!;
+    const content = file.isBinary
+      ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string)).toString('base64')
+      : (file.content as string);
+    cursor.push({ name: fileName, type: 'file', content });
+  }
+
+  return root;
 }
 
 // =============================================================================
@@ -271,6 +308,7 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
 
   const tree: SkillVersionTree = { entries: treeEntries };
   const blobs = Array.from(blobMap.values());
+  const fileNodes = buildSkillFileNodes(files);
 
   // 3. Parse SKILL.md frontmatter and discover references/scripts/assets paths
   let snapshot: Omit<StorageSkillSnapshotType, 'tree'>;
@@ -284,7 +322,7 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
     throw err;
   }
 
-  return { snapshot, tree, blobs };
+  return { snapshot, tree, blobs, files: fileNodes };
 }
 
 /**

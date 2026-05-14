@@ -276,6 +276,29 @@ describe('processMastraStream', () => {
     expect(mockOnChunk).not.toHaveBeenCalled();
   });
 
+  it('should stop reading when the abort signal is aborted', async () => {
+    const abortController = new AbortController();
+    const cancel = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise(() => {});
+      },
+      cancel,
+    });
+
+    const processing = processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+      signal: abortController.signal,
+    });
+
+    abortController.abort();
+
+    await processing;
+    expect(cancel).toHaveBeenCalled();
+    expect(mockOnChunk).not.toHaveBeenCalled();
+  });
+
   it('should handle mixed valid and invalid data lines', async () => {
     const validChunk1: ChunkType = {
       type: 'message',

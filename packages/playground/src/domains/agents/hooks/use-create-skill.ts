@@ -9,8 +9,11 @@ import { usePermissions } from '@/domains/auth/hooks';
 import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 
 interface CreateSkillParams {
+  /** Optional client-generated id. When omitted, the server derives one from the name. */
+  id?: string;
   name: string;
   description: string;
+  instructions?: string;
   visibility?: 'private' | 'public';
   workspaceId?: string;
   files: InMemoryFileNode[];
@@ -38,7 +41,7 @@ export function useCreateSkill() {
 
   return useMutation({
     mutationFn: async (params: CreateSkillParams): Promise<StoredSkillResponse> => {
-      const { name, description, workspaceId, files } = params;
+      const { id, name, description, instructions, workspaceId, files } = params;
 
       // Write files to workspace filesystem (best-effort — DB is the source of truth)
       if (workspaceId && canWriteWorkspace) {
@@ -61,10 +64,11 @@ export function useCreateSkill() {
 
       // Create stored skill via API (DB record always created)
       return client.createStoredSkill({
+        ...(id ? { id } : {}),
         name,
         description,
         visibility: params.visibility,
-        instructions: extractSkillInstructions(files),
+        instructions: instructions ?? extractSkillInstructions(files),
         license: extractSkillLicense(files),
         files,
       });
@@ -74,7 +78,6 @@ export function useCreateSkill() {
       if (variables.workspaceId) {
         void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
       }
-      toast.success('Skill created');
     },
     onError: error => {
       toast.error(`Failed to create skill: ${error instanceof Error ? error.message : 'Unknown error'}`);

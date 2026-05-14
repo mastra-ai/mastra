@@ -13,26 +13,28 @@ import {
 } from '@mastra/playground-ui';
 import { DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
   SkillBuilderList,
   SkillBuilderListSkeleton,
 } from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
 import { BuilderAddSkillDialog } from '@/domains/agents/components/agent-cms-pages/builder-add-skill-dialog';
-import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
 import { useBuilderRegistries } from '@/domains/agents/hooks/use-builder-registries';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsPage() {
+  const navigate = useNavigate();
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const { hasPermission, rbacEnabled } = usePermissions();
   const canWriteSkills = !rbacEnabled || hasPermission('stored-skills:write');
   const canReadSkills = !rbacEnabled || hasPermission('stored-skills:read');
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [registryDialog, setRegistryDialog] = useState<{ id: string; label: string } | null>(null);
-  const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
+
+  const goToCreate = () => navigate('/agent-builder/skills/create', { viewTransition: true });
+  const goToEdit = (skillId: string) => navigate(`/agent-builder/skills/${skillId}/edit`, { viewTransition: true });
 
   const listParams = useMemo<ListStoredSkillsParams>(() => {
     const params: ListStoredSkillsParams = {};
@@ -55,7 +57,7 @@ export default function AgentBuilderSkillsPage() {
   const enabledRegistry = useMemo(() => registriesData?.registries.find(r => r.enabled) ?? null, [registriesData]);
 
   const handleSkillClick = (skill: StoredSkillResponse) => {
-    setSelectedSkill(skill);
+    void goToEdit(skill.id);
   };
 
   const body = (() => {
@@ -95,7 +97,7 @@ export default function AgentBuilderSkillsPage() {
             actionSlot={
               canWriteSkills ? (
                 <div className="flex items-center gap-2">
-                  <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+                  <Button variant="primary" onClick={goToCreate}>
                     <PlusIcon /> New skill
                   </Button>
                   {enabledRegistry && (
@@ -119,9 +121,9 @@ export default function AgentBuilderSkillsPage() {
 
   return (
     <>
-      <PageLayout>
+      <PageLayout className="px-4 md:px-10">
         <PageLayout.TopArea>
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
             <PageHeader>
               <PageHeader.Title>
                 <SparklesIcon /> My skills
@@ -129,16 +131,17 @@ export default function AgentBuilderSkillsPage() {
               <PageHeader.Description>Skills you've created.</PageHeader.Description>
             </PageHeader>
             {skills.length > 0 && canWriteSkills && (
-              <div className="shrink-0 flex items-center gap-2">
+              <div className="w-full shrink-0 flex flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
                 {enabledRegistry && (
                   <Button
                     variant="default"
+                    className="w-full justify-center md:w-auto"
                     onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
                   >
                     <DownloadIcon /> Browse registry
                   </Button>
                 )}
-                <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+                <Button variant="primary" className="w-full justify-center md:w-auto" onClick={goToCreate}>
                   <PlusIcon /> New skill
                 </Button>
               </div>
@@ -151,23 +154,6 @@ export default function AgentBuilderSkillsPage() {
 
         {body}
       </PageLayout>
-
-      <SkillEditDialog
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-        onSkillCreated={() => setIsCreateDialogOpen(false)}
-        currentUserId={currentUser?.id}
-        isAdmin={canWriteSkills}
-      />
-
-      <SkillEditDialog
-        isOpen={!!selectedSkill}
-        onClose={() => setSelectedSkill(null)}
-        skill={selectedSkill ?? undefined}
-        onSkillUpdated={() => setSelectedSkill(null)}
-        currentUserId={currentUser?.id}
-        isAdmin={canWriteSkills}
-      />
 
       {registryDialog && (
         <BuilderAddSkillDialog
@@ -188,7 +174,7 @@ export default function AgentBuilderSkillsPage() {
               toast.error(`"${existing.name}" is already in your library`, {
                 action: {
                   label: 'Open existing',
-                  onClick: () => setSelectedSkill(existing),
+                  onClick: () => goToEdit(existing.id),
                 },
               });
             } else {

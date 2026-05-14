@@ -18,7 +18,7 @@ You can use individual [`Processor`](/reference/processors/processor-interface) 
 
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
-Some built-in processors also persist hidden system reminder messages using `<system-reminder>...</system-reminder>` text plus `metadata.systemReminder`. These reminders stay available in raw memory history and retry/prompt reconstruction paths, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in.
+Some built-in processors also send hidden system reminder signals. These signals are persisted in raw memory history and converted to `<system-reminder>...</system-reminder>` context before the next model call, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in.
 
 ## When to use processors
 

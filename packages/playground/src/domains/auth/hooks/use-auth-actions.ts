@@ -41,7 +41,7 @@ export async function makeSSOLoginRequest(
   client: { options: any },
   { redirectUri }: { redirectUri?: string },
 ): Promise<SSOLoginResponse> {
-  const { baseUrl = '', apiPrefix } = client.options || {};
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
@@ -55,6 +55,7 @@ export async function makeSSOLoginRequest(
   const response = await fetch(url, {
     credentials: 'include',
     headers: {
+      ...clientHeaders,
       'Content-Type': 'application/json',
     },
   });
@@ -116,7 +117,7 @@ export function useSSOLogin() {
  * @internal
  */
 export async function makeLogoutRequest(client: { options: any }): Promise<LogoutResponse> {
-  const { baseUrl = '', apiPrefix } = client.options || {};
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
@@ -124,6 +125,7 @@ export async function makeLogoutRequest(client: { options: any }): Promise<Logou
     method: 'POST',
     credentials: 'include',
     headers: {
+      ...clientHeaders,
       'Content-Type': 'application/json',
     },
   });
