@@ -321,8 +321,10 @@ export async function buildCapabilities(
         } else {
           availableRoles = allRoles;
         }
-      } catch {
-        // Ignore errors
+      } catch (error) {
+        // Degrade gracefully: omit availableRoles so the "View as role" feature
+        // simply doesn't show options. Log so operators can diagnose RBAC issues.
+        console.warn('[auth/ee] failed to list available roles for admin user:', error);
       }
     }
   }

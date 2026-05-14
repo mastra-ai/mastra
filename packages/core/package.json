@@ -712,16 +712,6 @@
         "default": "./dist/storage/domains/skills/index.cjs"
       }
     },
-    "./storage/domains/stars": {
-      "import": {
-        "types": "./dist/storage/domains/stars/index.d.ts",
-        "default": "./dist/storage/domains/stars/index.js"
-      },
-      "require": {
-        "types": "./dist/storage/domains/stars/index.d.ts",
-        "default": "./dist/storage/domains/stars/index.cjs"
-      }
-    },
     "./storage/domains/workspaces": {
       "import": {
         "types": "./dist/storage/domains/workspaces/index.d.ts",
