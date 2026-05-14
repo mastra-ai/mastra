@@ -1,7 +1,15 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { createClient } from '@libsql/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
+
 import { GithubSignals, ghSignals } from './github-signals';
+import { GithubNotificationPoller } from './notification-poller.js';
+import { GithubNotificationStore } from './notification-store.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -185,6 +193,125 @@ describe('GithubSignals', () => {
       user: 'TylerBarnes',
       reviewState: 'COMMENTED',
     });
+  });
+
+  it('reads PR notifications from the shared LibSQL inbox cache without per-PR REST calls', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const commandRunner = vi.fn(async (_args: string[]) => ({
+      stdout: `HTTP/2.0 200 OK\netag: \"etag-1\"\n\n${JSON.stringify([
+        {
+          id: 'thread-1',
+          reason: 'comment',
+          updated_at: '2026-01-02T00:00:00.000Z',
+          repository: { full_name: 'mastra-ai/mastra' },
+          subject: {
+            title: 'Fresh PR comment',
+            type: 'PullRequest',
+            url: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+          },
+        },
+      ])}`,
+    }));
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: poller,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+
+    expect(commandRunner).toHaveBeenCalledTimes(1);
+    expect(commandRunner.mock.calls[0]?.[0]).toContain('/notifications');
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: expect.objectContaining({ type: 'github-comment', title: 'Fresh PR comment' }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('polls the shared inbox once while multiple subscriptions read cached PR rows', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const commandRunner = vi.fn(async (_args: string[]) => ({
+      stdout: `HTTP/2.0 200 OK\netag: "etag-1"\n\n${JSON.stringify([
+        {
+          id: 'thread-123',
+          reason: 'comment',
+          updated_at: '2026-01-02T00:00:00.000Z',
+          repository: { full_name: 'mastra-ai/mastra' },
+          subject: {
+            title: 'PR 123 comment',
+            type: 'PullRequest',
+            url: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+          },
+        },
+        {
+          id: 'thread-456',
+          reason: 'comment',
+          updated_at: '2026-01-02T00:00:00.000Z',
+          repository: { full_name: 'mastra-ai/mastra' },
+          subject: {
+            title: 'PR 456 comment',
+            type: 'PullRequest',
+            url: 'https://api.github.com/repos/mastra-ai/mastra/issues/456',
+          },
+        },
+      ])}`,
+    }));
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: poller,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 456,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+
+    expect(commandRunner).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect(sendSignal.mock.calls.map(call => (call[0] as any).attributes.title)).toEqual([
+      'PR 123 comment',
+      'PR 456 comment',
+    ]);
+    github.destroy();
   });
 
   it('persists a subscription, baselines existing activity, and starts idle polling', async () => {

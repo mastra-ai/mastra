@@ -3,18 +3,21 @@ import { promisify } from 'node:util';
 
 import { z } from 'zod/v4';
 
-import type { Agent } from '../agent';
-import { createSignal, isMastraSignalMessage, mastraDBMessageToSignal } from '../agent/signals';
-import type { CreatedAgentSignal } from '../agent/signals';
-import { BaseProcessor } from '../processors';
+import type { Agent } from '@mastra/core/agent';
+import { createSignal, isMastraSignalMessage, mastraDBMessageToSignal } from '@mastra/core/signals';
+import type { CreatedAgentSignal } from '@mastra/core/signals';
+import { BaseProcessor } from '@mastra/core/processors';
 import type {
   ProcessInputStepArgs,
   ProcessInputStepResult,
   ProcessOutputResultArgs,
   ProcessOutputStepArgs,
-} from '../processors';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
-import { createTool } from '../tools';
+} from '@mastra/core/processors';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
+import { createTool } from '@mastra/core/tools';
+
+import type { GithubNotificationPoller } from './notification-poller.js';
+import type { GithubInboxNotification } from './notification-store.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -66,6 +69,7 @@ export interface GithubSignalsOptions {
   getStreamOptions?: GithubSignalStreamOptionsGetter;
   authorizedPermissions?: GithubPermission[];
   authorizedBots?: string[];
+  notificationPoller?: GithubNotificationPoller;
 }
 
 type NormalizedGithubSignalsOptions = Required<
@@ -145,6 +149,8 @@ export interface GithubPRSubscriptionMetadata {
   lastCheckFingerprint?: string;
   lastCommentTimestamp?: string;
   lastReviewTimestamp?: string;
+  lastNotificationUpdatedAt?: string;
+  seenNotificationIds?: string[];
   lastErrorFingerprint?: string;
   nextPollAt?: string;
 }
@@ -240,7 +246,7 @@ function createGithubSignal(type: string, input: GithubPRSignalInput, contents: 
   });
 }
 
-function defaultCommandRunner(args: string[]): Promise<GithubCommandResult> {
+export function defaultGithubCommandRunner(args: string[]): Promise<GithubCommandResult> {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', CLICOLOR: '0' };
   delete env.GH_FORCE_TTY;
   return execFileAsync('gh', args, {
@@ -430,6 +436,7 @@ export class GithubSignals {
   #timer?: ReturnType<typeof setInterval>;
   #polling = false;
   #options: NormalizedGithubSignalsOptions;
+  #notificationPoller?: GithubNotificationPoller;
   #pendingNotifications = new Map<string, PendingGithubNotificationBucket>();
   #permissionCache = new Map<string, GithubPermission | undefined>();
 
@@ -439,12 +446,13 @@ export class GithubSignals {
       pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
       pendingFlushMs: options.pendingFlushMs ?? DEFAULT_PENDING_FLUSH_MS,
       includeTool: options.includeTool ?? true,
-      commandRunner: options.commandRunner ?? defaultCommandRunner,
+      commandRunner: options.commandRunner ?? defaultGithubCommandRunner,
       now: options.now ?? (() => new Date()),
       getStreamOptions: options.getStreamOptions,
       authorizedPermissions: options.authorizedPermissions ?? [...DEFAULT_AUTHORIZED_PERMISSIONS],
       authorizedBots: options.authorizedBots ?? [],
     };
+    this.#notificationPoller = options.notificationPoller;
     this.processor = new GithubSignalsProcessor(this, this.#options);
   }
 
@@ -579,6 +587,22 @@ export class GithubSignals {
     }
 
     try {
+      if (this.#notificationPoller && subscription.repo) {
+        await this.#notificationPoller.poll();
+        const notifications = await this.#notificationPoller.store.readPrNotifications(
+          this.#notificationPoller.accountKey,
+          subscription.repo,
+          subscription.prNumber,
+        );
+        return {
+          ...subscription,
+          lastNotificationUpdatedAt: getLatestTimestamp(notifications, notification => notification.updatedAt),
+          seenNotificationIds: notifications.map(notification => notification.id).slice(-MAX_PROCESSED_SIGNAL_IDS),
+          lastErrorFingerprint: undefined,
+          updatedAt: this.#options.now().toISOString(),
+        };
+      }
+
       const snapshot = await this.#loadPullRequestSnapshot(subscription);
       return {
         ...subscription,
@@ -614,8 +638,22 @@ export class GithubSignals {
     if (this.#polling) return;
     this.#polling = true;
     try {
+      let sharedInboxError: unknown;
+      if (this.#notificationPoller) {
+        try {
+          await this.#notificationPoller.poll();
+        } catch (error) {
+          sharedInboxError = error;
+        }
+      }
+
       for (const subscription of this.#activeSubscriptions.values()) {
         if (context && activeThreadKey(subscription) !== activeThreadKey(context)) continue;
+        if (sharedInboxError) {
+          const registeredAgent = this.#agents.get(subscription.agentId);
+          if (registeredAgent) await this.#emitCommandError(registeredAgent, subscription, sharedInboxError);
+          continue;
+        }
         await this.#pollSubscription(subscription);
       }
       await this.#flushExpiredPendingNotifications();
@@ -658,6 +696,16 @@ export class GithubSignals {
     if (subscription.nextPollAt && new Date(subscription.nextPollAt).getTime() > this.#options.now().getTime()) return;
 
     try {
+      if (this.#notificationPoller && subscription.repo) {
+        const notifications = await this.#notificationPoller.store.readPrNotifications(
+          this.#notificationPoller.accountKey,
+          subscription.repo,
+          subscription.prNumber,
+        );
+        await this.#emitCachedNotifications(registeredAgent, subscription, notifications);
+        return;
+      }
+
       const snapshot = await this.#loadPullRequestSnapshot(subscription);
       await this.#emitSnapshotNotifications(registeredAgent, subscription, snapshot);
     } catch (error) {
@@ -711,6 +759,45 @@ export class GithubSignals {
   async #loadPaginatedJsonArray(args: string[]): Promise<unknown[]> {
     const { stdout } = await this.#options.commandRunner([...args, '--slurp']);
     return parseGithubJsonArray(stdout);
+  }
+
+  async #emitCachedNotifications(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: ActiveSubscription,
+    notifications: GithubInboxNotification[],
+  ) {
+    const seenIds = new Set(subscription.seenNotificationIds ?? []);
+    const unseen = notifications.filter(notification => {
+      if (seenIds.has(notification.id)) return false;
+      if (!subscription.lastNotificationUpdatedAt) return true;
+      return new Date(notification.updatedAt).getTime() > new Date(subscription.lastNotificationUpdatedAt).getTime();
+    });
+
+    for (const notification of unseen) {
+      await this.#handleNotification(registeredAgent, subscription, {
+        kind: 'comment',
+        title: notification.title,
+        details: notification.reason
+          ? `GitHub notification (${notification.reason}): ${notification.title}`
+          : `GitHub notification: ${notification.title}`,
+        url: notification.latestCommentUrl ?? notification.subjectUrl ?? notification.url,
+      });
+    }
+
+    if (notifications.length > 0) {
+      subscription.lastNotificationUpdatedAt = getLatestTimestamp(
+        notifications,
+        notification => notification.updatedAt,
+      );
+      subscription.seenNotificationIds = [...seenIds, ...notifications.map(notification => notification.id)].slice(
+        -MAX_PROCESSED_SIGNAL_IDS,
+      );
+      subscription.lastErrorFingerprint = undefined;
+      subscription.nextPollAt = undefined;
+      subscription.updatedAt = this.#options.now().toISOString();
+      this.#activeSubscriptions.set(subscription.key, subscription);
+      await subscription.persistence?.update(subscription);
+    }
   }
 
   async #emitSnapshotNotifications(

@@ -1,47 +1,38 @@
 ---
-title: "Reference: GithubSignals | Signals"
-description: "API reference for GithubSignals, which subscribes agent threads to GitHub pull request notifications."
+title: "Reference: MastraCode GitHub signals | Signals"
+description: "Reference for MastraCode GitHub PR signal subscriptions and shared notification polling."
 packages:
-  - "@mastra/core"
+  - "mastracode"
 ---
 
-# GithubSignals
+# MastraCode GitHub signals
 
-`GithubSignals` connects Mastra agent threads to GitHub pull request events. It exposes a `processor` for agent configuration, helper signals for subscribe and unsubscribe actions, and a poller that sends PR notifications back to the subscribed thread.
+MastraCode GitHub signals connect code-agent threads to GitHub pull request events. The controller is local to MastraCode and powers the built-in `github` tool, PR subscription badge, pending-notification reminders, and shared notification polling.
 
-Use it when an agent needs CI failure, PR comment, or review notifications while it continues working in a thread.
+Use it when the MastraCode agent needs CI failure, PR comment, or review notifications while it continues working in a thread.
 
-## Usage example
+## Usage
 
-Create one `GithubSignals` controller, add its processor to the agent, then register the agent with the controller.
+Use the built-in MastraCode `github` tool to subscribe or unsubscribe the current thread.
 
-```typescript title="src/mastra/index.ts"
-import { Agent } from '@mastra/core/agent'
-import { GithubSignals, ghSignals } from '@mastra/core/signals'
-
-const github = new GithubSignals({
-  repo: 'mastra-ai/mastra',
-})
-
-const agent = new Agent({
-  id: 'code-agent',
-  name: 'Code agent',
-  instructions: 'Help with code review and CI failures.',
-  model,
-  inputProcessors: [github.processor],
-})
-
-github.addAgent(agent)
-
-await github.init({ memory, resourceId: 'user_123' })
-
-await agent.sendSignal(ghSignals.prSubscribe({ prNumber: 1234 }), {
-  resourceId: 'user_123',
-  threadId: 'thread_456',
-})
+```ts
+await github({ action: 'subscribe', prNumber: 1234 })
+await github({ action: 'pending', prNumber: 1234 })
+await github({ action: 'unsubscribe', prNumber: 1234 })
 ```
 
-Call `init()` during application startup to explicitly rehydrate persisted subscriptions. The subscribe signal tells the model that the thread is subscribed to the PR. On the next input step, the processor records the subscription in thread metadata and snapshots the current PR state as a silent baseline. It polls GitHub on the configured interval with lightweight `gh api` REST calls. Existing checks, comments, and reviews are not replayed when the subscription starts.
+MastraCode rehydrates persisted subscriptions during startup. New subscriptions establish a silent baseline so existing activity is not replayed. After that, MastraCode polls GitHub notifications on the configured interval and filters shared inbox notifications down to the subscribed PR.
+
+## Shared notification cache
+
+MastraCode stores GitHub notification state in its local LibSQL database (`mastra.db`). This intentionally replaces the earlier filesystem-cache design for MastraCode: LibSQL already provides the shared local disk file, atomic writes, indexed per-PR reads, and cross-process lease updates without a separate JSON cache directory or lockfile parser. The cache has two parts:
+
+- `github_notification_accounts` stores the account ETag, last check time, shared rate-limit backoff, and a master lease.
+- `github_notifications` stores bounded per-PR notification rows keyed by account, repository, and PR number.
+
+Only the process that owns the lease polls `gh api /notifications`. Other MastraCode instances read the cached PR rows and do not issue their own GitHub API calls. Polling uses `If-None-Match` when an ETag is available, treats `304 Not Modified` as unchanged, and writes shared `rateLimitedUntil` state when GitHub returns a rate-limit error. The LibSQL lease is the correctness mechanism; there is no Unix socket layer in this implementation, so clients observe updates on the normal polling cadence instead of receiving socket broadcasts.
+
+The cache keeps at most 50 notifications per PR, drops notifications older than 7 days, and prunes rows not touched for 14 days. GitHub inbox notifications are matched locally by repository plus `subject.url` or `latest_comment_url` ending in `/pulls/{number}` or `/issues/{number}`.
 
 ## Constructor parameters
 
@@ -130,7 +121,7 @@ Call `init()` during application startup to explicitly rehydrate persisted subsc
 
 ## Signal helpers
 
-Import `ghSignals` from `@mastra/core/signals`.
+MastraCode uses `ghSignals` internally to record subscribe, unsubscribe, and notification reminders.
 
 ### `ghSignals.prSubscribe(input)`
 

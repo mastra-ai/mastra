@@ -28,8 +28,18 @@ vi.mock('@mastra/core/agent', () => ({
 const agentConstructorMock = vi.fn();
 const githubSignalsAddAgentMock = vi.fn();
 const githubSignalsInitMock = vi.fn();
+const githubNotificationPollerConstructorMock = vi.fn();
 
-vi.mock('@mastra/core/signals', () => ({
+vi.mock('../github-signals/notification-poller.js', () => ({
+  GithubNotificationPoller: class {
+    constructor(options: unknown) {
+      githubNotificationPollerConstructorMock(options);
+    }
+  },
+}));
+
+vi.mock('../github-signals/index.js', () => ({
+  defaultGithubCommandRunner: vi.fn(),
   GithubSignals: class {
     readonly processor = { id: 'github-signals' };
 

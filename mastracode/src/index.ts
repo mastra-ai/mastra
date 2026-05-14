@@ -18,7 +18,8 @@ import {
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import { GithubSignals } from '@mastra/core/signals';
+import { defaultGithubCommandRunner, GithubSignals } from './github-signals/index.js';
+import { GithubNotificationPoller } from './github-signals/notification-poller.js';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -336,7 +337,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const efficiencyScorer = createEfficiencyScorer();
 
   // Agent
-  const githubSignals = new GithubSignals();
+  const githubNotificationPoller = new GithubNotificationPoller({ commandRunner: defaultGithubCommandRunner });
+  const githubSignals = new GithubSignals({ notificationPoller: githubNotificationPoller });
   const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
