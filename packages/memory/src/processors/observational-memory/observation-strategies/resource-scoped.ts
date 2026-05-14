@@ -329,7 +329,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     let cycleObservationTokens = 0;
     const threadMetadataUpdates: ProcessedObservation['threadMetadataUpdates'] = [];
 
-    for (const obsResult of this.observationResults) {
+    for (const [index, obsResult] of this.observationResults.entries()) {
       const { threadId, threadMessages, result } = obsResult;
 
       cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
@@ -356,7 +356,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         newObservations: result.observations,
       });
 
-      const isFirstThread = this.observationResults.indexOf(obsResult) === 0;
+      const isFirstThread = index === 0;
       this.deps.emitDebugEvent({
         type: 'observation_complete',
         timestamp: new Date(),

@@ -765,6 +765,7 @@ export class ProcessorRunner {
       start: async controller => {
         const reader = streamResult.fullStream.getReader();
         const processorStates = new Map<string, ProcessorState<OUTPUT>>();
+        const requestContext = new RequestContext();
 
         // Use provided writer, or create one from the controller
         const streamWriter = writer ?? {
@@ -791,7 +792,7 @@ export class ProcessorRunner {
               value,
               processorStates,
               observabilityContext,
-              undefined,
+              requestContext,
               undefined,
               0,
               streamWriter,

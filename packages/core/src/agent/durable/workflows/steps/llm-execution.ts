@@ -374,7 +374,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 runId,
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 requestContext,
-                agent: registryEntry!.agent,
+                agent: registryEntry?.agent,
               },
             });
 
