@@ -50,7 +50,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   });
 
   const handleToolCall = useCallback(
-    async (toolName: string, args: Record<string, unknown>) => {
+    async (_toolName: string, args: Record<string, unknown>) => {
       const response = await executeTool(args);
       return response;
     },
