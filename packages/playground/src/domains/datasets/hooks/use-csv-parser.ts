@@ -36,13 +36,13 @@ export function useCSVParser() {
           skipEmptyLines: 'greedy',
           dynamicTyping: false,
           worker: useWorker,
-          complete: results => {
+          complete: (results: Papa.ParseResult<Record<string, string>>) => {
             // Extract headers from first row fields or meta
             const headers = results.meta.fields ?? [];
 
             // Process each row through JSON cell parser
             const allWarnings: string[] = [];
-            const processedData = results.data.map((row, index) => {
+            const processedData = results.data.map((row: Record<string, string>, index: number) => {
               const parsed = parseRow(row);
 
               // Prefix warnings with row number
@@ -60,7 +60,7 @@ export function useCSVParser() {
               warnings: allWarnings,
             });
           },
-          error: err => {
+          error: (err: Error) => {
             reject(new Error(err.message));
           },
         });

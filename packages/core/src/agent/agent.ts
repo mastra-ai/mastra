@@ -102,7 +102,7 @@ import { SaveQueueManager } from './save-queue';
 import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
-import { AgentThreadStreamRuntime } from './thread-stream-runtime';
+import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -285,14 +285,6 @@ export class Agent<
    * close if they're still the active one.
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
-  /**
-   * Local fallback for standalone Agents that are not registered on a Mastra
-   * instance. Agents registered on the same Mastra instance coordinate through
-   * `mastra.agentThreadStreamRuntime` instead, so cross-agent thread locks and
-   * subscriptions are scoped to that Mastra runtime rather than process-global
-   * Agent state.
-   */
-  #threadStreamRuntime = new AgentThreadStreamRuntime();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -5969,7 +5961,7 @@ export class Agent<
   }
 
   #getThreadStreamRuntime() {
-    return this.#mastra?.agentThreadStreamRuntime ?? this.#threadStreamRuntime;
+    return agentThreadStreamRuntime;
   }
 
   /**

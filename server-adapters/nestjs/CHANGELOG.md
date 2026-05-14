@@ -1,5 +1,27 @@
 # @mastra/nestjs
 
+## 0.1.5-alpha.1
+
+### Patch Changes
+
+- Fixed `@mastra/nestjs` coercing query parameter values to booleans, `null`, numbers, and parsed JSON objects/arrays before route schema validation. A route declaring `queryParamSchema: z.object({ filter: z.string() })` could reject a valid request like `?filter={"a":1}` because the adapter had already turned the string into an object. NestJS now forwards query values as the raw strings (or string arrays) the HTTP layer delivered — matching `@mastra/hono`, `@mastra/express`, `@mastra/fastify`, and `@mastra/koa`. ([#16268](https://github.com/mastra-ai/mastra/pull/16268))
+
+  Routes that want type coercion should opt in via the schema, e.g. `z.coerce.boolean()`, `z.coerce.number()`, or a JSON preprocessor on the field.
+
+  Fixes #16114.
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/server@1.34.0-alpha.1
+
+## 0.1.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6), [`8dd8859`](https://github.com/mastra-ai/mastra/commit/8dd8859020a7b90113e5ccd19dcb936d33d05395)]:
+  - @mastra/core@1.34.0-alpha.0
+  - @mastra/server@1.34.0-alpha.0
+
 ## 0.1.4
 
 ### Patch Changes

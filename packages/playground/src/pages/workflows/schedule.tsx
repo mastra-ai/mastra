@@ -2,7 +2,6 @@ import {
   Button,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -10,7 +9,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
+import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
 import { ScheduleTriggersList } from '@/domains/schedules/components/schedule-triggers-list';
@@ -34,7 +33,7 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
 export default function SchedulePage() {
   const { scheduleId } = useParams<{ scheduleId: string }>();
   const { paths } = useLinkComponent();
-  const { data: schedule, isLoading, error } = useSchedule(scheduleId);
+  const { data: schedule, error } = useSchedule(scheduleId);
   const {
     data: triggers,
     isLoading: triggersLoading,
@@ -47,7 +46,7 @@ export default function SchedulePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Schedule" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -55,7 +54,7 @@ export default function SchedulePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Schedule" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="schedules" />
       </NoDataPageLayout>
     );
@@ -63,7 +62,7 @@ export default function SchedulePage() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Schedule" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load schedule" message={error.message} />
       </NoDataPageLayout>
     );
@@ -74,15 +73,7 @@ export default function SchedulePage() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <CalendarClockIcon />
-                <span className="font-mono">{schedule?.id ?? scheduleId}</span>
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
+        <PageLayout.Row className="justify-end">
           <PageLayout.Column className="flex justify-end gap-2">
             <Button as={Link} to={paths.schedulesLink()} variant="ghost">
               <ArrowLeftIcon />

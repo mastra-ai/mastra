@@ -140,7 +140,34 @@
     "@mastra/google-drive": "0.1.0",
     "@mastra/modal": "0.2.0",
     "@mastra/s3": "0.5.1",
-    "@mastra/vercel": "0.1.0"
+    "@mastra/vercel": "0.1.0",
+    "@mastra/acp": "0.0.0",
+    "@mastra/voice-xai-realtime": "0.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "acp-agent-subagents",
+    "automated-provider-registry-20260514-010929",
+    "bold-mails-hide",
+    "bright-loops-attempt",
+    "chatty-lamps-invent",
+    "client-token-estimate",
+    "create-mastra-telemetry",
+    "cute-clouds-grin",
+    "dim-dialog-gloss",
+    "durable-object-instructions",
+    "floppy-emus-change",
+    "fresh-badges-appear",
+    "green-birds-knock",
+    "itchy-forks-beg",
+    "nestjs-no-pre-schema-query-coercion",
+    "shared-signals-runtime",
+    "sidebar-flush-restyle",
+    "slow-signs-teach",
+    "small-groups-admire",
+    "studio-main-frame",
+    "tiny-points-enter",
+    "tough-ants-greet",
+    "two-waves-wink",
+    "wise-planes-chew"
+  ]
 }
