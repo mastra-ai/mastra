@@ -77,4 +77,3 @@ jobs:
           cd e2e-tests/pkg-outputs
           pnpm install --ignore-workspace
           pnpm test
-

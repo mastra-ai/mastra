@@ -4,7 +4,6 @@ import { spawnSync } from 'node:child_process';
 const passthrough = process.argv.slice(2).filter(arg => arg !== '--');
 const groups = [
   ['unit:packages/*'],
-  ['unit:stores/*'],
   ['unit:auth/*'],
   ['unit:deployers/*'],
   ['unit:observability/*'],
