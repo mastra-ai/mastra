@@ -7,6 +7,7 @@
  */
 
 import type {
+  LightSpanRecord,
   SpanRecord,
   CreateSpanRecord,
   LogRecord,
@@ -198,6 +199,28 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
 
 export function rowsToSpanRecords(rows: Record<string, any>[]): SpanRecord[] {
   return rows.map(rowToSpanRecord);
+}
+
+export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord {
+  const startedAt = toDate(row.startedAt);
+  const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
+
+  return {
+    traceId: row.traceId,
+    spanId: row.spanId,
+    parentSpanId: nullableString(row.parentSpanId),
+    name: row.name,
+    spanType: row.spanType,
+    isEvent: Boolean(row.isEvent),
+    startedAt,
+    endedAt,
+    entityType: nullableEntityType(row.entityType),
+    entityId: nullableString(row.entityId),
+    entityName: nullableString(row.entityName),
+    error: parseJson(row.error) ?? undefined,
+    createdAt: startedAt,
+    updatedAt: null,
+  };
 }
 
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {

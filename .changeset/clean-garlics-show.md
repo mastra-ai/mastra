@@ -2,7 +2,7 @@
 '@mastra/auth-workos': minor
 ---
 
-Added optional `getAvailableRoles` and `getPermissionsForRole` methods to the WorkOS RBAC provider, so consumers can list configured roles and inspect each role's permissions through `@mastra/auth-workos`.
+Added optional `getAvailableRoles` and `getPermissionsForRole` methods to the WorkOS RBAC provider, so consumers can list configured roles and inspect their permissions through `@mastra/auth-workos`.
 
 ```typescript
 import { MastraRBACWorkos } from '@mastra/auth-workos';
