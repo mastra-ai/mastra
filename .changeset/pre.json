@@ -140,7 +140,15 @@
     "@mastra/google-drive": "0.1.0",
     "@mastra/modal": "0.2.0",
     "@mastra/s3": "0.5.1",
-    "@mastra/vercel": "0.1.0"
+    "@mastra/vercel": "0.1.0",
+    "@mastra/acp": "0.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "acp-agent-subagents",
+    "automated-provider-registry-20260514-010929",
+    "green-birds-knock",
+    "slow-signs-teach",
+    "tiny-points-enter",
+    "tough-ants-greet"
+  ]
 }

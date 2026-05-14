@@ -613,6 +613,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/xpersona',
+          label: 'Xpersona',
+        },
+        {
+          type: 'doc',
           id: 'providers/zai',
           label: 'Z.AI',
         },

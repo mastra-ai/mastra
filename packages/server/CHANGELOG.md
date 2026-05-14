@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.34.0-alpha.0
+
+### Patch Changes
+
+- Fixed agent signal wakeups so idle runs receive request context values while preserving server-owned resource identifiers. ([#16557](https://github.com/mastra-ai/mastra/pull/16557))
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6)]:
+  - @mastra/core@1.34.0-alpha.0
+
 ## 1.33.1
 
 ### Patch Changes

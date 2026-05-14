@@ -1,23 +1,20 @@
 import {
-  AgentIcon,
-  ButtonWithTooltip,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useLinkComponent } from '@/lib/framework';
+import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
@@ -28,7 +25,7 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -36,7 +33,7 @@ function Agents() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="agents" />
       </NoDataPageLayout>
     );
@@ -44,7 +41,7 @@ function Agents() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load agents" message={error.message} />
       </NoDataPageLayout>
     );
@@ -52,7 +49,7 @@ function Agents() {
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <NoAgentsInfo />
       </NoDataPageLayout>
     );
@@ -60,6 +57,7 @@ function Agents() {
 
   return (
     <PageLayout>
+      <AgentHeaderCreateAction />
       <PageLayout.TopArea>
         <PageLayout.Row>
           <PageLayout.Column>
