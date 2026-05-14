@@ -705,6 +705,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           const currentStep: {
             messageId: string;
+            createdAt: Date;
             model: MastraLanguageModel;
             tools?: TOOLS | undefined;
             toolChoice?: ToolChoice<TOOLS> | undefined;
@@ -715,6 +716,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             workspace?: Workspace;
           } = {
             messageId: currentMessageId,
+            createdAt: new Date(),
             model,
             tools,
             toolChoice,
@@ -1229,6 +1231,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
               tools: currentStep.tools,
+              createdAt: currentStep.createdAt,
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');
@@ -1238,8 +1241,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageList.markResponseMessageBoundary(currentStep.messageId);
               outputStream.messageId = rotateResponseMessageId();
               for (const signal of interjectedSignals) {
-                messageList.add(signal, 'input');
-                safeEnqueue(controller, signal.toDataPart());
+                const signalForTranscript = messageList.addInterjectedSignal(signal);
+                safeEnqueue(controller, signalForTranscript.toDataPart());
               }
               runState.setState({
                 stepResult: {

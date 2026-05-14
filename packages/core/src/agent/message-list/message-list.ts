@@ -7,7 +7,8 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
-import { isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
+import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
+import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
@@ -172,6 +173,35 @@ export class MessageList {
     return events;
   }
 
+  public addInterjectedSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
+    const createdAt = this.generateCreatedAt(options?.source ?? 'input', new Date());
+    const acceptedAt = signal.acceptedAt ?? signal.createdAt;
+    const signalForTranscript = createSignal(
+      signal.type === 'user-message'
+        ? {
+            id: signal.id,
+            type: 'user-message',
+            contents: signal.contents,
+            attributes: signal.attributes,
+            metadata: signal.metadata,
+            createdAt,
+            acceptedAt,
+          }
+        : {
+            id: signal.id,
+            type: signal.type,
+            contents: String(signal.contents),
+            attributes: signal.attributes,
+            metadata: signal.metadata,
+            createdAt,
+            acceptedAt,
+          },
+    );
+
+    this.add(signalForTranscript, options?.source ?? 'input');
+    return signalForTranscript;
+  }
+
   public add(messages: MessageListInput, messageSource: MessageSource) {
     if (messageSource === `user`) messageSource = `input`;
 
@@ -281,23 +311,48 @@ export class MessageList {
         return [message];
       }
 
-      // Signals are persisted losslessly as DB signal messages, but model providers
-      // only understand normal prompt messages. Project the signal into its
-      // LLM-facing message content here so the existing MessageList converters
-      // keep handling strings, arrays, files/images, and provider-specific shapes.
-      const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
-      return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map(signalMessage =>
-        convertInputToMastraDBMessage(
-          typeof signalMessage === `string`
-            ? {
-                role: 'user' as const,
-                content: signalMessage,
-              }
-            : signalMessage,
-          'input',
-          this.createAdapterContext(),
-        ),
-      );
+      return this.convertSignalForModelPrompt(message);
+    });
+  }
+
+  private convertSignalForModelPrompt(message: MastraDBMessage): MastraDBMessage[] {
+    // Signals are persisted losslessly as DB signal messages, but model providers
+    // only understand normal prompt messages. Convert the signal into its
+    // LLM-facing message content without mutating MessageList timestamp/id
+    // bookkeeping or changing the signal's chronological position.
+    const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
+    return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map((signalMessage, index) => {
+      const createdAt = message.createdAt;
+      const id = index === 0 ? message.id : `${message.id}:prompt:${index}`;
+      const promptMessage =
+        typeof signalMessage === `string`
+          ? {
+              id,
+              role: 'user' as const,
+              content: signalMessage,
+              metadata: { createdAt },
+            }
+          : {
+              ...signalMessage,
+              id: 'id' in signalMessage && typeof signalMessage.id === 'string' ? signalMessage.id : id,
+              metadata: {
+                ...('metadata' in signalMessage && signalMessage.metadata && typeof signalMessage.metadata === 'object'
+                  ? signalMessage.metadata
+                  : {}),
+                createdAt,
+              },
+            };
+
+      return convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+        memoryInfo: this.memoryInfo,
+        newMessageId: () => id,
+        generateCreatedAt: (_messageSource, start) => {
+          if (start instanceof Date) return start;
+          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+          return createdAt;
+        },
+        dbMessages: this.messages,
+      });
     });
   }
 
@@ -1352,7 +1407,11 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
-    if (messageSource === 'input' && messageV2.role === 'signal') {
+    const signalMetadata =
+      messageV2.role === 'signal'
+        ? (messageV2.content.metadata?.signal as { acceptedAt?: string } | undefined)
+        : undefined;
+    if (messageSource === 'input' && messageV2.role === 'signal' && !signalMetadata?.acceptedAt) {
       messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
     }
 

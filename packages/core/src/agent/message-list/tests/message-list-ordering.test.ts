@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createSignal } from '../../signals';
 import type { MastraDBMessage } from '../../types';
 import type { MessageListInput } from '../index';
 import { MessageList } from '../index';
@@ -408,6 +409,69 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
 
       // Order should be preserved since messages without timestamps get incrementing timestamps
       expect(texts).toEqual(['Message with timestamp', 'Message without timestamp 1', 'Message without timestamp 2']);
+    });
+
+    it('should not let signal prompt conversion advance generated timestamp state', () => {
+      const signalTime = new Date('2999-01-01T09:00:00.000Z');
+      const latestTime = new Date('2999-01-01T10:00:00.000Z');
+      const list = new MessageList();
+
+      list.add(
+        [
+          createSignal({
+            id: 'signal-1',
+            type: 'user-message',
+            contents: 'Signal message',
+            createdAt: signalTime,
+          }).toDBMessage(),
+          {
+            id: 'assistant-latest',
+            role: 'assistant' as const,
+            content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Latest assistant' }] },
+            createdAt: latestTime,
+          },
+        ],
+        'memory',
+      );
+
+      list.get.all.aiV5.prompt();
+      list.add({ role: 'user', content: 'Generated timestamp after prompt conversion' }, 'input');
+
+      const generatedMessage = list.get.all.db().at(-1);
+      expect(generatedMessage?.createdAt.getTime()).toBe(latestTime.getTime() + 1);
+    });
+
+    it('should add interjected signals after the current response while preserving acceptedAt', () => {
+      const responseTime = new Date('2024-01-01T10:00:00.000Z');
+      const signalTime = new Date('2024-01-01T09:00:00.000Z');
+      const list = new MessageList();
+      const signal = createSignal({
+        id: 'signal-1',
+        type: 'user-message',
+        contents: 'Signal message',
+        createdAt: signalTime,
+      });
+
+      list.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Response' }] },
+          createdAt: responseTime,
+        },
+        'response',
+      );
+
+      const signalForTranscript = list.addInterjectedSignal(signal);
+
+      const storedSignal = list.get.all.db().at(-1)!;
+      expect(signalForTranscript.createdAt.getTime()).toBeGreaterThan(responseTime.getTime());
+      expect(signalForTranscript.acceptedAt).toEqual(signalTime);
+      expect(storedSignal.createdAt).toEqual(signalForTranscript.createdAt);
+      expect(storedSignal.content.metadata?.signal).toMatchObject({
+        createdAt: signalForTranscript.createdAt.toISOString(),
+        acceptedAt: signalTime.toISOString(),
+      });
     });
 
     it('should preserve createdAt for V5 UI messages', () => {
