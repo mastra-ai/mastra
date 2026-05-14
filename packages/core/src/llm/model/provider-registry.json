@@ -3080,6 +3080,15 @@
       "docUrl": "https://docs.wafer.ai/wafer-pass",
       "gateway": "models.dev"
     },
+    "xpersona": {
+      "url": "https://xpersona.co/v1",
+      "apiKeyEnvVar": "XPERSONA_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Xpersona",
+      "models": ["xpersona-frieren-coder"],
+      "docUrl": "https://xpersona.co/docs",
+      "gateway": "models.dev"
+    },
     "cloudferro-sherlock": {
       "url": "https://api-sherlock.cloudferro.com/openai/v1/",
       "apiKeyEnvVar": "CLOUDFERRO_SHERLOCK_API_KEY",
@@ -7479,6 +7488,7 @@
     ],
     "abliteration-ai": ["abliterated-model"],
     "wafer.ai": ["GLM-5.1", "Qwen3.5-397B-A17B"],
+    "xpersona": ["xpersona-frieren-coder"],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
       "meta-llama/Llama-3.3-70B-Instruct",

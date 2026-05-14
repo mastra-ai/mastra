@@ -16,7 +16,7 @@ interface SubAgentToolResult {
 
 interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;
-  result: {
+  result?: {
     childMessages?: AgentMessage[];
     subAgentResourceId?: string;
     subAgentThreadId?: string;
@@ -41,8 +41,11 @@ export const AgentBadgeWrapper = ({
   toolCalled,
   isComplete,
 }: AgentBadgeWrapperProps) => {
+  const shouldFetchAgentMessages = Boolean(
+    result?.subAgentThreadId && !result.text && !result.subAgentToolResults?.length,
+  );
   const { data, isLoading } = useAgentMessages({
-    threadId: result?.subAgentThreadId,
+    threadId: shouldFetchAgentMessages ? result?.subAgentThreadId : undefined,
     agentId,
     memory: true,
   });
@@ -73,11 +76,15 @@ export const AgentBadgeWrapper = ({
     childMessages = toolMessages;
   }
 
+  if (!childMessages && result?.text) {
+    childMessages = [{ type: 'text' as const, content: result.text }];
+  }
+
   if (!childMessages) {
     childMessages = resolveToChildMessages(convertedMessages) as AgentMessage[];
   }
 
-  const hasStreamingChildMessages = Object.prototype.hasOwnProperty.call(result, 'childMessages');
+  const hasStreamingChildMessages = Boolean(result && Object.prototype.hasOwnProperty.call(result, 'childMessages'));
 
   return (
     <AgentBadge
