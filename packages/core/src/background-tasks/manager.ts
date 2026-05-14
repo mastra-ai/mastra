@@ -198,7 +198,7 @@ export class BackgroundTaskManager {
 
   /**
    * Look up an executor by tool name. Read by the workflow-step body in
-   * `workflow.ts:executeStep` as a fallback when no per-task `TaskContext`
+   * `workflow.ts:runAttemptStep` as a fallback when no per-task `TaskContext`
    * is registered (cross-process path).
    */
   getStaticExecutor(toolName: string): ToolExecutor | undefined {
