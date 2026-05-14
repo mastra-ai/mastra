@@ -333,7 +333,7 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(85);
     });
 
-    it('counts URL-only non-image file parts from descriptor metadata', () => {
+    it('keeps URL-only non-image files on descriptor-only local counting', () => {
       const counter = new TokenCounter();
       const pdfUrlMessage = createMessage({
         format: 2,
@@ -355,12 +355,14 @@ describe('TokenCounter', () => {
       expect(pdfUrlTokens).toBeLessThan(50);
     });
 
-    // Large file bodies (e.g. an uploaded PDF) used to count only the
-    // descriptor JSON (~8 tokens), so the Observational Memory threshold
-    // never tripped. TokenCounter now auto-estimates token cost from the
-    // attachment's byte size and mime type so large attachments are reflected
-    // in OM and context budgets.
-    it('auto-estimates non-image file part tokens from byte size for uploaded files', () => {
+    // The local/sync counting path used to count only the descriptor JSON
+    // (~8 tokens) for inline file bodies, so the Observational Memory
+    // threshold never tripped on large attachments. Local counting now
+    // estimates token cost from the attachment's byte size and mime type
+    // so large inline files are reflected in OM and context budgets.
+    // (countMessagesAsync() can still use provider token-count endpoints
+    // for supported providers; this only improves the local fallback.)
+    it('counts inline PDF file bytes instead of only the file descriptor', () => {
       const counter = new TokenCounter();
       const uploadedPdfMessage = createMessage({
         format: 2,
@@ -382,7 +384,7 @@ describe('TokenCounter', () => {
       expect(uploadedPdfTokens).toBeGreaterThan(10_000);
     });
 
-    it('scales non-image file part tokens with byte size for text mime types', () => {
+    it('scales local non-image file estimates with byte size for text mime types', () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -450,7 +452,7 @@ describe('TokenCounter', () => {
       expect(parameterized).toBe(canonical);
     });
 
-    it('reuses cached non-image file estimates across fresh TokenCounter instances', () => {
+    it('reuses cached local non-image file estimates across fresh TokenCounter instances', () => {
       const part: Record<string, any> = {
         type: 'file',
         data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
