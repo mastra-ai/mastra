@@ -13,6 +13,7 @@ const SOURCE_MODE_ALIASES = {
 };
 const SOURCE_MODE_PACKAGE_GLOBS = [
   'packages/*/package.json',
+  'packages/_vendored/*/package.json',
   'stores/*/package.json',
   'deployers/*/package.json',
   'client-sdks/*/package.json',
