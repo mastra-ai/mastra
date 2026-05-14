@@ -110,6 +110,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         cancelSignal,
         gracefulCancel: true,
         env: {
+          ...process.env,
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           MASTRA_PORT: port.toString(),
         },
