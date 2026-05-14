@@ -282,7 +282,8 @@ describe('Agent signals', () => {
       { role: 'user', content: '<system-reminder>Be concise.</system-reminder>' },
     ]);
 
-    // System-reminder with multimodal contents: emit a self-closing marker prefix; original contents survive.
+    // System-reminder with multimodal contents: text part is inline-wrapped with the marker,
+    // file part is preserved alongside it on the same logical turn.
     const screenshotContents = {
       role: 'user' as const,
       content: [
@@ -299,12 +300,24 @@ describe('Agent signals', () => {
       contents: screenshotContents,
       attributes: { kind: 'screenshot' },
     });
-    expect(screenshotReminder.toLLMMessage()).toEqual([
-      { role: 'user', content: '<system-reminder kind="screenshot" />' },
-      screenshotContents,
-    ]);
+    const screenshotResult = screenshotReminder.toLLMMessage() as MastraDBMessage[];
+    expect(screenshotResult).toHaveLength(1);
+    expect(screenshotResult[0]?.role).toBe('user');
+    expect(screenshotResult[0]?.content.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'text',
+          text: '<system-reminder kind="screenshot">The user is looking at this screen.</system-reminder>',
+        }),
+        expect.objectContaining({
+          type: 'file',
+          data: 'data:image/png;base64,aGVsbG8=',
+        }),
+      ]),
+    );
 
-    // System-reminder with only file parts gets the same self-closing prefix.
+    // System-reminder with only file parts has no text to inline-wrap, so the marker is
+    // prepended as its own self-closing message.
     const fileOnlyReminderContents = {
       role: 'user' as const,
       content: [{ type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' }],
@@ -314,10 +327,11 @@ describe('Agent signals', () => {
       contents: fileOnlyReminderContents,
       attributes: { kind: 'reference-image' },
     });
-    expect(fileOnlyReminder.toLLMMessage()).toEqual([
-      { role: 'user', content: '<system-reminder kind="reference-image" />' },
-      fileOnlyReminderContents,
-    ]);
+    const fileOnlyResult = fileOnlyReminder.toLLMMessage() as Array<CoreMessage | MastraDBMessage>;
+    expect(fileOnlyResult[0]).toEqual({ role: 'user', content: '<system-reminder kind="reference-image" />' });
+    expect((fileOnlyResult[1] as MastraDBMessage)?.content.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' })]),
+    );
   });
 
   it('persists multimodal signal contents as faithful DB parts so UIs can render them', () => {

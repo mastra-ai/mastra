@@ -174,8 +174,8 @@ function isTextOnlyDb(dbMessages: MastraDBMessage[]): boolean {
 }
 
 // Inline-wrap the first text part of the normalized DB messages with the signal's XML tag,
-// or prefix a self-closing marker message when no text part exists. Used by user-message
-// signals so the wrapper stays adjacent to the message it labels when possible.
+// or prefix a self-closing marker message when no text part exists. Keeps the wrapper
+// adjacent to its payload so the model sees the marker and its text/file parts as one turn.
 function injectMarkerInline(
   signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>,
   dbMessages: MastraDBMessage[],
@@ -232,20 +232,11 @@ function signalToLLMMessage(
     return [{ role: 'user', content } satisfies CoreMessage];
   }
 
-  // Multimodal user-message: inline-inject the marker into the first text part so attributes
-  // like messageId stay tied to the message they describe.
-  if (isUserMessage) {
-    return injectMarkerInline(signal, normalized);
-  }
-
-  // Multimodal non-user-message: prefix a self-closing marker and pass the original contents
-  // through untouched. Framework context (system-reminder, screenshot, etc.) should remain
-  // distinct from its reference material, not have the marker hidden inside it.
-  const prefixMessage = {
-    role: 'user',
-    content: signalToXmlMarkup({ type: signal.type, attributes: signal.attributes }),
-  } satisfies CoreMessage;
-  return [prefixMessage, signal.contents] as BaseMessageListInput;
+  // Multimodal: inline-inject the marker into the first text part so the wrapper stays
+  // adjacent to its payload. Works for both user-message (attributes like messageId tie to
+  // the user's text) and framework signals (the reminder text becomes the wrapper's body
+  // alongside the file/image part).
+  return injectMarkerInline(signal, normalized);
 }
 
 function signalToDataPart(signal: ReturnType<typeof normalizeSignal>): AgentSignalDataPart {
