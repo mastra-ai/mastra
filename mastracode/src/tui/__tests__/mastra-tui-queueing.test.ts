@@ -728,7 +728,20 @@ describe('syncInitialThreadState', () => {
       harness: {
         getCurrentThreadId: vi.fn(() => 'thread-1'),
         listThreads: vi.fn().mockResolvedValue([
-          { id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } },
+          {
+            id: 'thread-1',
+            title: 'PR triage',
+            metadata: {
+              goal: persistedGoal,
+              mastra: {
+                githubSignals: {
+                  subscriptions: {
+                    'mastra-ai/mastra#16515': { repo: 'mastra-ai/mastra', prNumber: 16515 },
+                  },
+                },
+              },
+            },
+          },
           { id: 'thread-2', title: 'Other thread', metadata: {} },
         ]),
         sendMessage: vi.fn(),
@@ -740,7 +753,17 @@ describe('syncInitialThreadState', () => {
     await syncInitialThreadState(state);
 
     expect(state.currentThreadTitle).toBe('PR triage');
-    expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
+    expect(state.activeGithubPrSubscriptions).toEqual([{ repo: 'mastra-ai/mastra', prNumber: 16515 }]);
+    expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({
+      goal: persistedGoal,
+      mastra: {
+        githubSignals: {
+          subscriptions: {
+            'mastra-ai/mastra#16515': { repo: 'mastra-ai/mastra', prNumber: 16515 },
+          },
+        },
+      },
+    });
     expect(state.harness.sendMessage).not.toHaveBeenCalled();
   });
 });
