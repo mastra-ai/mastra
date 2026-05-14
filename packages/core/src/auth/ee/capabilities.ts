@@ -309,20 +309,27 @@ export async function buildCapabilities(
         const allRoles = await rbacProvider.getAvailableRoles();
         const getPermissionsForRole = rbacProvider.getPermissionsForRole;
         if (getPermissionsForRole) {
-          const rolePermissions = await Promise.all(
+          // Use allSettled so one failing role lookup doesn't drop the whole picker.
+          const rolePermissions = await Promise.allSettled(
             allRoles.map(async role => ({
               role,
               perms: await getPermissionsForRole(role.id),
             })),
           );
-          availableRoles = rolePermissions
-            .filter(({ perms }) => !hasAdminBypassPermissions(perms))
-            .map(({ role }) => role);
+          availableRoles = rolePermissions.flatMap(result => {
+            if (result.status !== 'fulfilled') {
+              console.warn('[auth/ee] failed to list permissions for role:', result.reason);
+              return [];
+            }
+            return hasAdminBypassPermissions(result.value.perms) ? [] : [result.value.role];
+          });
         } else {
           availableRoles = allRoles;
         }
-      } catch {
-        // Ignore errors
+      } catch (error) {
+        // Degrade gracefully: omit availableRoles so the "View as role" feature
+        // simply doesn't show options. Log so operators can diagnose RBAC issues.
+        console.warn('[auth/ee] failed to list available roles for admin user:', error);
       }
     }
   }
