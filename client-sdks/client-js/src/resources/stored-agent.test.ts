@@ -305,12 +305,11 @@ describe('StoredAgent Resource', () => {
         const result = await storedAgent.listVersions({
           page: 1,
           perPage: 5,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
-          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy=createdAt&sortDirection=DESC`,
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy%5Bfield%5D=createdAt&orderBy%5Bdirection%5D=DESC`,
           expect.objectContaining({
             headers: expect.objectContaining(clientOptions.headers),
           }),

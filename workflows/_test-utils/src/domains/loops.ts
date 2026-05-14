@@ -97,6 +97,99 @@ export function createLoopsWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should run a nested until loop
+  {
+    // Register mock factories
+    mockRegistry.register('nested-loops-until-counter:increment', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        const currentValue = inputData.value;
+        const newValue = currentValue + 1;
+        return { value: newValue };
+      }),
+    );
+    mockRegistry.register('nested-loops-until-counter:final', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        return { finalValue: inputData?.value };
+      }),
+    );
+
+    const incrementStep = createStep({
+      id: 'increment',
+      description: 'Increments the current value by 1',
+      inputSchema: z.object({
+        value: z.number(),
+        target: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      execute: async ctx => mockRegistry.get('nested-loops-until-counter:increment')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step that prints the result',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      execute: async ctx => mockRegistry.get('nested-loops-until-counter:final')(ctx),
+    });
+
+    const incrementWorkflow = createWorkflow({
+      id: 'nested-loops-until-counter-increment',
+      inputSchema: z.object({
+        value: z.number(),
+        target: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      options: {
+        validateInputs: false,
+      },
+    })
+      .then(incrementStep)
+      .commit();
+
+    const counterWorkflow = createWorkflow({
+      options: {
+        validateInputs: false,
+      },
+      steps: [incrementWorkflow, finalStep],
+      id: 'nested-loops-until-counter',
+      inputSchema: z.object({
+        target: z.number(),
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+    });
+
+    counterWorkflow
+      .dountil(incrementWorkflow, async ({ inputData }) => {
+        return (inputData?.value ?? 0) >= 12;
+      })
+      .then(finalStep)
+      .commit();
+
+    workflows['nested-loops-until-counter'] = {
+      workflow: counterWorkflow,
+      mocks: {
+        get increment() {
+          return mockRegistry.get('nested-loops-until-counter:increment');
+        },
+        get final() {
+          return mockRegistry.get('nested-loops-until-counter:final');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   // Test: should run a while loop
   {
     // Register mock factories
@@ -168,6 +261,99 @@ export function createLoopsWorkflows(ctx: WorkflowCreatorContext) {
         },
         get final() {
           return mockRegistry.get('loops-while-counter:final');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should run a nested while loop
+  {
+    // Register mock factories
+    mockRegistry.register('nested-loops-while-counter:increment', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        const currentValue = inputData.value;
+        const newValue = currentValue + 1;
+        return { value: newValue };
+      }),
+    );
+    mockRegistry.register('nested-loops-while-counter:final', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        return { finalValue: inputData?.value };
+      }),
+    );
+
+    const incrementStep = createStep({
+      id: 'increment',
+      description: 'Increments the current value by 1',
+      inputSchema: z.object({
+        value: z.number(),
+        target: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      execute: async ctx => mockRegistry.get('nested-loops-while-counter:increment')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step that prints the result',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      execute: async ctx => mockRegistry.get('nested-loops-while-counter:final')(ctx),
+    });
+
+    const incrementWorkflow = createWorkflow({
+      id: 'nested-loops-while-counter-increment',
+      inputSchema: z.object({
+        value: z.number(),
+        target: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      options: {
+        validateInputs: false,
+      },
+    })
+      .then(incrementStep)
+      .commit();
+
+    const counterWorkflow = createWorkflow({
+      options: {
+        validateInputs: false,
+      },
+      steps: [incrementWorkflow, finalStep],
+      id: 'nested-loops-while-counter',
+      inputSchema: z.object({
+        target: z.number(),
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+    });
+
+    counterWorkflow
+      .dowhile(incrementWorkflow, async ({ inputData }) => {
+        return (inputData?.value ?? 0) < 12;
+      })
+      .then(finalStep)
+      .commit();
+
+    workflows['nested-loops-while-counter'] = {
+      workflow: counterWorkflow,
+      mocks: {
+        get increment() {
+          return mockRegistry.get('nested-loops-while-counter:increment');
+        },
+        get final() {
+          return mockRegistry.get('nested-loops-while-counter:final');
         },
       },
       resetMocks: () => mockRegistry.reset(),
@@ -288,6 +474,21 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       });
     });
 
+    it('should run a nested until loop', async () => {
+      const { workflow } = registry!['nested-loops-until-counter']!;
+      const result = await execute(workflow, { target: 10, value: 0 });
+
+      // Verify loop ran correct number of times via output (not mock counts - unreliable with memoization)
+      // Loop starts at 0, increments until >= 12, so final value is 12
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ finalValue: 12 });
+      expect((result.steps['nested-loops-until-counter-increment'] as any).output).toEqual({ value: 12 });
+      expect(result.steps.final).toMatchObject({
+        status: 'success',
+        output: { finalValue: 12 },
+      });
+    });
+
     it('should run a while loop', async () => {
       const { workflow } = registry!['loops-while-counter']!;
       const result = await execute(workflow, { target: 10, value: 0 });
@@ -297,6 +498,21 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(result.status).toBe('success');
       expect(result.result).toEqual({ finalValue: 12 });
       expect((result.steps.increment as any).output).toEqual({ value: 12 });
+      expect(result.steps.final).toMatchObject({
+        status: 'success',
+        output: { finalValue: 12 },
+      });
+    });
+
+    it('should run a nested while loop', async () => {
+      const { workflow } = registry!['nested-loops-while-counter']!;
+      const result = await execute(workflow, { target: 10, value: 0 });
+
+      // Verify loop ran correct number of times via output (not mock counts - unreliable with memoization)
+      // Loop starts at 0, increments while < 12, so final value is 12
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ finalValue: 12 });
+      expect((result.steps['nested-loops-while-counter-increment'] as any).output).toEqual({ value: 12 });
       expect(result.steps.final).toMatchObject({
         status: 'success',
         output: { finalValue: 12 },

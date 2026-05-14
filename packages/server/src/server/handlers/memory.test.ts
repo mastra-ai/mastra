@@ -1923,7 +1923,7 @@ describe('Memory Handlers', () => {
           perPage: 10,
         });
 
-        expect(result.threads.map(t => t.id)).toEqual(['thread-a', 'thread-c']);
+        expect(result.threads.map(t => t.id).sort()).toEqual(['thread-a', 'thread-c']);
         expect(result.total).toBe(2);
         expect(result.hasMore).toBe(false);
         expect(filterAccessible).toHaveBeenCalledWith(

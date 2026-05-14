@@ -9,11 +9,11 @@ import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
 import { storage } from './storage';
-import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
+import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
 
 export const mastra = new Mastra({
-  workflows: { complexWorkflow, lessComplexWorkflow, scheduledWorkflow, multiScheduledWorkflow },
+  workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
   agents: { weatherAgent, omAgent, omAdaptiveAgent },
   logger: new PinoLogger({
     name: 'Mastra',
@@ -72,6 +72,11 @@ export const mastra = new Mastra({
           const datasetsStore = await storage.getStore('datasets');
           if (datasetsStore) {
             clearTasks.push(datasetsStore.dangerouslyClearAll());
+          }
+
+          const mcpClientsStore = await storage.getStore('mcpClients');
+          if (mcpClientsStore) {
+            clearTasks.push(mcpClientsStore.dangerouslyClearAll());
           }
 
           // Reset schedule pause state + drop trigger history between tests.

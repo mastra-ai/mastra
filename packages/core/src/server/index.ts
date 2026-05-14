@@ -7,6 +7,8 @@ import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
 export type {
   MastraAuthConfig,
+  A2AAgentCardSigningConfig,
+  A2AConfig,
   ContextWithMastra,
   ApiRoute,
   HttpLoggingConfig,

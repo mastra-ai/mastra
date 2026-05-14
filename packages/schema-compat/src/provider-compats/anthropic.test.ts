@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod/v4';
+import { standardSchemaToJSONSchema } from '../standard-schema/standard-schema';
 import type { ModelInformation } from '../types';
 import { AnthropicSchemaCompatLayer } from './anthropic';
 import { createSuite } from './test-suite';
@@ -58,6 +60,28 @@ describe('AnthropicSchemaCompatLayer', () => {
 
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
       expect(layer.getSchemaTarget()).toBe('jsonSchema7');
+    });
+  });
+
+  describe('number bounds', () => {
+    it('should strip number bounds from JSON Schema while preserving Zod validation', async () => {
+      const schema = z.object({
+        score: z.number().min(0).max(1),
+      });
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      const compatSchema = layer.processToCompatSchema(schema);
+      const jsonSchema = standardSchemaToJSONSchema(compatSchema);
+      const schemaJson = JSON.stringify(jsonSchema);
+
+      expect(schemaJson).toContain('score');
+      expect(schemaJson).not.toContain('minimum');
+      expect(schemaJson).not.toContain('maximum');
+
+      const validResult = await compatSchema['~standard'].validate({ score: 0.5 });
+      expect(validResult).toEqual({ value: { score: 0.5 } });
+
+      const invalidResult = await compatSchema['~standard'].validate({ score: 1.2 });
+      expect('issues' in invalidResult).toBe(true);
     });
   });
 });

@@ -127,6 +127,7 @@ vi.mock('dd-trace', () => {
 });
 
 import { DatadogBridge } from './bridge';
+import { __setObservabilityFeaturesForTest } from './features';
 
 function createMockSpan(overrides: Partial<AnyExportedSpan> = {}): AnyExportedSpan {
   return {
@@ -166,10 +167,12 @@ describe('DatadogBridge', () => {
     delete process.env.DD_LLMOBS_ML_APP;
     delete process.env.DD_SITE;
     delete process.env.DD_LLMOBS_AGENTLESS_ENABLED;
+    __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
   });
 
   describe('configuration', () => {
@@ -364,7 +367,35 @@ describe('DatadogBridge', () => {
       expect(llmobsRegistrations[0]?.options.parent).toBe(distributedParent);
     });
 
-    it('inherits model info for MODEL_STEP spans from a MODEL_GENERATION parent when needed', () => {
+    it('registers MODEL_INFERENCE as llm kind with its own model/provider attributes', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      bridge.createSpan(
+        createMockSpanOptions({
+          name: 'inference',
+          type: SpanType.MODEL_INFERENCE as SpanTypeGeneric,
+          attributes: { model: 'gpt-5.4', provider: 'openai' },
+          parent: {
+            id: 'step-id',
+            traceId: 'gen-trace',
+            type: SpanType.MODEL_STEP,
+            isInternal: false,
+            metadata: {},
+            attributes: {},
+            getParentSpanId: () => undefined,
+          } as any,
+        }),
+      );
+
+      expect(llmobsRegistrations[0]?.options).toMatchObject({
+        kind: 'llm',
+        modelName: 'gpt-5.4',
+        modelProvider: 'openai',
+      });
+    });
+
+    it('falls back to legacy MODEL_STEP-as-llm with inherited model info when feature is unavailable', () => {
+      __setObservabilityFeaturesForTest(undefined);
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
       bridge.createSpan(

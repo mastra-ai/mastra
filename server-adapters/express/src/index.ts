@@ -114,6 +114,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => req.get(name),
+      });
 
       // Set context in res.locals
       res.locals.requestContext = requestContext;

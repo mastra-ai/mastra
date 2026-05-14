@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-const { visibleWidthMock } = vi.hoisted(() => ({
+const { visibleWidthMock, chalkRgbMock } = vi.hoisted(() => ({
   visibleWidthMock: vi.fn((value: string) => value.length),
+  chalkRgbMock: vi.fn(),
 }));
 
 vi.mock('@mariozechner/pi-tui', () => ({
@@ -15,7 +16,13 @@ vi.mock('chalk', () => {
       get: (_target, prop) => {
         if (prop === 'call' || prop === 'apply' || prop === 'bind') return Reflect.get(_target, prop);
         // Methods that take args (hex, bgHex, rgb, bgRgb) return a new chain
-        if (['hex', 'bgHex', 'rgb', 'bgRgb'].includes(prop as string)) return () => makeChain();
+        if (prop === 'rgb') {
+          return (...args: unknown[]) => {
+            chalkRgbMock(...args);
+            return makeChain();
+          };
+        }
+        if (['hex', 'bgHex', 'bgRgb'].includes(prop as string)) return () => makeChain();
         // Properties like bold, italic, dim return a new chain
         return makeChain();
       },
@@ -92,6 +99,7 @@ describe('updateStatusLine', () => {
 
   beforeEach(() => {
     visibleWidthMock.mockClear();
+    chalkRgbMock.mockClear();
     process.stdout.columns = 200;
   });
 
@@ -180,5 +188,51 @@ describe('updateStatusLine', () => {
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('fireworks/minimax-m2.7');
     expect(rendered).not.toContain('minimax-m2p7');
+  });
+
+  it('shows judge mode and judge model while goal judge is active', () => {
+    const state = createState();
+    state.harness.listModes.mockReturnValue([
+      { id: 'build', name: 'build', color: '#00ff00' },
+      { id: 'fast', name: 'Fast', color: '#f97316' },
+    ]);
+    state.activeGoalJudge = { modelId: 'openrouter/openai/gpt-5.4-mini' };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('judge');
+    expect(rendered).toContain('openai/gpt-5.4-mini');
+    expect(rendered).not.toContain('goal');
+    expect(rendered).not.toContain('claude-sonnet-4-20250514');
+    expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
+  });
+
+  it('shows active goal attempts as 1-indexed', () => {
+    const state = createState();
+    state.goalManager = {
+      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20 })),
+    };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('goal attempt 1/20');
+    expect(rendered).not.toContain('goal attempt 0/20');
+    expect(rendered).not.toContain('judge 1/20');
+  });
+
+  it('uses a compact active goal attempt label on narrow screens', () => {
+    const state = createState();
+    state.goalManager = {
+      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20 })),
+    };
+    process.stdout.columns = 35;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('attempt 1/20');
+    expect(rendered).not.toContain('goal attempt 1/20');
   });
 });

@@ -10,6 +10,7 @@ export async function initWorkOS(): Promise<AuthResult> {
 
   const mastraAuth = new MastraAuthWorkos({
     redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+    fetchMemberships: true,
   });
 
   const rbacProvider = new MastraRBACWorkos({
@@ -28,13 +29,8 @@ export async function initWorkOS(): Promise<AuthResult> {
     },
   });
 
-  const organizationId = process.env.WORKOS_ORGANIZATION_ID;
-  if (!organizationId) {
-    throw new Error('WORKOS_ORGANIZATION_ID is required to enable WorkOS FGA');
-  }
-
   const fgaProvider = new MastraFGAWorkos({
-    organizationId,
+    organizationId: process.env.WORKOS_ORGANIZATION_ID,
     resourceMapping: {
       // Per-resource filtering: agent ID maps directly to WorkOS resource external ID
       agent: { fgaResourceType: 'agent' },

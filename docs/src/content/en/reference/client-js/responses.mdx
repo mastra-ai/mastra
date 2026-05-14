@@ -66,6 +66,8 @@ for await (const event of stream) {
 }
 ```
 
+Streaming responses can also include tool events. Tool-call streams use `response.output_item.added`, `response.function_call_arguments.delta`, `response.function_call_arguments.done`, and `response.output_item.done` events. Tool results appear as `function_call_output` items with `<toolCallId>:output` IDs.
+
 **Returns:** `Promise<ResponsesStream>`.
 
 #### `retrieve(responseId, requestContext?)`
@@ -136,6 +138,8 @@ Use [`client.conversations`](/reference/client-js/conversations) when you want t
 `response.tools` contains the configured function definitions available for the request.
 
 If the model calls a function, that activity appears in `response.output` as `function_call` and `function_call_output` items alongside the final assistant `message`.
+
+When `stream: true`, function calls are also emitted as Responses stream events. Read `response.function_call_arguments.delta` events for partial argument chunks and prefer `response.function_call_arguments.done` for the finalized arguments payload and tool name. Read `response.output_item.done` events for completed `function_call` and `function_call_output` items. Tool output items use `<toolCallId>:output` IDs.
 
 ## Structured output
 

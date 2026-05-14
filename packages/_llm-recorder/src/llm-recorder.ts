@@ -61,7 +61,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { diffJson } from 'diff';
 import { http, HttpResponse, bypass } from 'msw';
-import type { SetupServerApi } from 'msw/node';
+import type { SetupServer } from 'msw/node';
 import { setupServer } from 'msw/node';
 import stringSimilarity from 'string-similarity';
 import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
@@ -304,7 +304,7 @@ export interface LLMRecorderOptions {
 
 export interface LLMRecorderInstance {
   /** The MSW server instance (null in live mode) */
-  server: SetupServerApi | null;
+  server: SetupServer | null;
   /** Start intercepting requests (no-op in live mode) */
   start(): void;
   /** Stop intercepting requests (no-op in live mode) */

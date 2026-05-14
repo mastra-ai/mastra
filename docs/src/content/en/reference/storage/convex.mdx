@@ -11,7 +11,7 @@ The Convex storage implementation provides a serverless storage solution using [
 
 :::warning[Observability Not Supported]
 
-Convex storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to Convex, and [Studio's](/docs/studio/overview) observability features won't work with Convex as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+Convex storage **doesn't support the observability domain**. Traces from the `MastraStorageExporter` can't be persisted to Convex, and [Studio's](/docs/studio/overview) observability features won't work with Convex as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse.
 
 :::
 

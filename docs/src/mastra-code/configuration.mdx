@@ -53,6 +53,17 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
+When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/login` or during onboarding, Mastra Code asks how you want to sign in:
+
+- **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
+- **Device code (headless)**: shows a code to enter at `https://auth.openai.com/codex/device` — useful for SSH sessions, remote shells, or environments without a browser.
+
+To preselect the device-code flow (for example in scripts or remote shells where the prompt is inconvenient), set `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` before launching Mastra Code:
+
+```sh
+export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
+```
+
 ### Authentication priority for Anthropic
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
@@ -118,7 +129,45 @@ Connect to a remote MCP server via URL. Requires a `url` field. The optional `he
 }
 ```
 
-Since `headers` only supports static values, use a stdio wrapper for dynamic authentication such as token refresh.
+#### HTTP OAuth
+
+HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object with a `redirectUrl`. Mastra Code stores OAuth client data and tokens in the app data directory.
+
+Mastra Code passes this configuration to `@mastra/mcp` when connecting. The redirect URL must use HTTPS unless it is a loopback HTTP URL, and it must be handled by a callback endpoint that can complete the OAuth flow for that server.
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientName": "Remote MCP",
+        "scopes": ["mcp:read", "mcp:write"]
+      }
+    }
+  }
+}
+```
+
+Use `clientId` and `clientSecret` when the MCP server requires a pre-registered OAuth client:
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret"
+      }
+    }
+  }
+}
+```
+
+Do not commit real `clientSecret` values to a repository. Prefer a project-local or global config file that is not shared.
 
 #### Startup behavior
 

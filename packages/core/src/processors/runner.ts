@@ -1,6 +1,9 @@
+import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { createSignal } from '../agent/signals';
+import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
@@ -9,6 +12,7 @@ import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
+import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -24,6 +28,8 @@ import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
+  CachedLLMStepChunk,
+  CachedLLMStepResponse,
   ErrorProcessorOrWorkflow,
   OutputResult,
   ProcessInputStepResult,
@@ -153,6 +159,20 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
     before.length === after.length &&
     before.every((message, index) => messagesAreEqual(message as MessageInput, after[index] as MessageInput))
   );
+}
+
+function createProcessorSendSignal(args: {
+  messageList: MessageList;
+  writer?: ProcessorStreamWriter;
+  rotateResponseMessageId?: () => string;
+}): (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal> {
+  return async signalInput => {
+    const signal = createSignal(signalInput);
+    args.rotateResponseMessageId?.();
+    args.messageList.add(signal.toDBMessage(), 'input');
+    await args.writer?.custom(signal.toDataPart());
+    return signal;
+  };
 }
 
 function buildProcessInputStepSpanInput(args: {
@@ -480,6 +500,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          sendSignal: createProcessorSendSignal({ messageList, writer }),
         });
 
         // Stop recording and get mutations for this processor
@@ -874,6 +895,7 @@ export class ProcessorRunner {
           messageList,
           requestContext,
           retryCount,
+          sendSignal: createProcessorSendSignal({ messageList }),
         });
 
         // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -1163,24 +1185,25 @@ export class ProcessorRunner {
           activeTools: inputData.activeTools,
         };
 
+        const rotateResponseMessageId = args.rotateResponseMessageId
+          ? () => {
+              const nextMessageId = args.rotateResponseMessageId!();
+              stepInput.messageId = nextMessageId;
+              return nextMessageId;
+            }
+          : undefined;
+
         const processMethodArgs = {
           messageList,
           ...inputData,
           state: processorState.customState,
           abort,
-          ...(args.rotateResponseMessageId
-            ? {
-                rotateResponseMessageId: () => {
-                  const nextMessageId = args.rotateResponseMessageId!();
-                  stepInput.messageId = nextMessageId;
-                  return nextMessageId;
-                },
-              }
-            : {}),
+          ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
           ...createObservabilityContext({ currentSpan: processorSpan }),
           retryCount: args.retryCount ?? 0,
           writer,
           abortSignal: args.abortSignal,
+          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
         };
 
         const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
@@ -1240,6 +1263,156 @@ export class ProcessorRunner {
     }
 
     return stepInput;
+  }
+
+  /**
+   * Run processLLMRequest for all processors that implement it.
+   *
+   * Called *after* `MessageList` has been converted to `LanguageModelV2Prompt`
+   * and immediately *before* the prompt is forwarded to the provider.
+   * Mutations are scoped to this single call — they do not affect the
+   * persisted message list, memory, UI, or future model swaps.
+   */
+  async runProcessLLMRequest(args: {
+    prompt: LanguageModelV2Prompt;
+    model: unknown;
+    stepNumber: number;
+    steps: Array<StepResult<any>>;
+    requestContext?: RequestContext;
+    retryCount?: number;
+    abortSignal?: AbortSignal;
+    tracingContext?: TracingContext;
+    writer?: ProcessorStreamWriter;
+  }): Promise<{ prompt: LanguageModelV2Prompt; response?: CachedLLMStepResponse }> {
+    const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
+
+    let currentPrompt = args.prompt;
+    let cachedResponse: CachedLLMStepResponse | undefined;
+
+    for (const processorOrWorkflow of this.inputProcessors) {
+      // Workflows do not currently participate in processLLMRequest.
+      if (isProcessorWorkflow(processorOrWorkflow)) continue;
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processLLMRequest?.bind(processor);
+      if (!processMethod) continue;
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      try {
+        const processorState = this.getProcessorState(processor.id);
+
+        const result = await processMethod({
+          prompt: currentPrompt,
+          // The Processor interface types `model` as `MastraLanguageModel`, but
+          // the runner accepts the looser `unknown` to match other call paths
+          // (e.g. unresolved string ids or function-typed dynamic models).
+          model: args.model as never,
+          stepNumber: args.stepNumber,
+          steps: args.steps,
+          state: processorState.customState,
+          retryCount: args.retryCount ?? 0,
+          requestContext: args.requestContext,
+          abort,
+          abortSignal: args.abortSignal,
+          writer: args.writer,
+          ...createObservabilityContext(args.tracingContext),
+        });
+
+        if (result && typeof result === 'object') {
+          // Use property presence (not truthiness) so a processor can
+          // intentionally pass an empty prompt without it being silently
+          // ignored.
+          if (Object.prototype.hasOwnProperty.call(result, 'prompt')) {
+            currentPrompt = result.prompt as LanguageModelV2Prompt;
+          }
+          if (result.response && !cachedResponse) {
+            // First processor to short-circuit wins. Subsequent processors
+            // still see their `processLLMRequest` invoked so per-request side
+            // effects (telemetry, key derivation) run, but they cannot
+            // override an already-resolved cached response.
+            cachedResponse = result.response;
+          }
+        }
+      } catch (error) {
+        if (error instanceof TripWire) {
+          await invokeOnViolation(processor, error);
+        }
+        throw error;
+      }
+    }
+
+    void observabilityContext;
+    return { prompt: currentPrompt, response: cachedResponse };
+  }
+
+  /**
+   * Run processLLMResponse for all processors that implement it.
+   *
+   * Called *after* the LLM step completes (or after a cached response is
+   * replayed) and *after* output processors have collected the response
+   * chunks. The shared `state` object is the same instance passed to
+   * `processLLMRequest` for the same step, allowing processors to correlate
+   * pre- and post-call work (e.g. cache key stash, then cache write).
+   */
+  async runProcessLLMResponse(args: {
+    chunks: CachedLLMStepChunk[];
+    model: unknown;
+    stepNumber: number;
+    steps: Array<StepResult<any>>;
+    warnings?: LanguageModelV2CallWarning[];
+    request?: unknown;
+    rawResponse?: unknown;
+    fromCache: boolean;
+    requestContext?: RequestContext;
+    retryCount?: number;
+    abortSignal?: AbortSignal;
+    tracingContext?: TracingContext;
+    writer?: ProcessorStreamWriter;
+  }): Promise<void> {
+    const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
+
+    for (const processorOrWorkflow of this.inputProcessors) {
+      // Workflows do not currently participate in processLLMResponse.
+      if (isProcessorWorkflow(processorOrWorkflow)) continue;
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processLLMResponse?.bind(processor);
+      if (!processMethod) continue;
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      try {
+        const processorState = this.getProcessorState(processor.id);
+
+        await processMethod({
+          chunks: args.chunks,
+          model: args.model as never,
+          stepNumber: args.stepNumber,
+          steps: args.steps,
+          state: processorState.customState,
+          warnings: args.warnings,
+          request: args.request,
+          rawResponse: args.rawResponse,
+          fromCache: args.fromCache,
+          retryCount: args.retryCount ?? 0,
+          requestContext: args.requestContext,
+          abort,
+          abortSignal: args.abortSignal,
+          writer: args.writer,
+          ...createObservabilityContext(args.tracingContext),
+        });
+      } catch (error) {
+        if (error instanceof TripWire) {
+          await invokeOnViolation(processor, error);
+        }
+        throw error;
+      }
+    }
+
+    void observabilityContext;
   }
 
   /**
@@ -1401,6 +1574,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          sendSignal: createProcessorSendSignal({ messageList, writer }),
         });
 
         // Stop recording and get mutations for this processor
@@ -1559,6 +1733,14 @@ export class ProcessorRunner {
       const processorState = this.getProcessorState(processor.id);
 
       try {
+        const rotateResponseMessageId = args.rotateResponseMessageId
+          ? () => {
+              const nextMessageId = args.rotateResponseMessageId!();
+              messageIdAfter = nextMessageId;
+              return nextMessageId;
+            }
+          : undefined;
+
         const result = await processMethod({
           messages: processableMessages,
           messageList,
@@ -1573,15 +1755,8 @@ export class ProcessorRunner {
           writer,
           abortSignal,
           messageId: args.messageId,
-          ...(args.rotateResponseMessageId
-            ? {
-                rotateResponseMessageId: () => {
-                  const nextMessageId = args.rotateResponseMessageId!();
-                  messageIdAfter = nextMessageId;
-                  return nextMessageId;
-                },
-              }
-            : {}),
+          ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
+          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
         });
 
         // Stop recording and get mutations for this processor

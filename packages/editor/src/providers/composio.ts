@@ -9,6 +9,7 @@ import type {
 } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
 import type { StorageToolConfig } from '@mastra/core/storage';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 
 import { Composio } from '@composio/core';
 import type { Tool as ComposioTool, ToolKitItem, ToolListParams as ComposioToolListParams } from '@composio/core';
@@ -153,7 +154,8 @@ export class ComposioToolProvider implements ToolProvider {
   ): Promise<Record<string, ToolAction<unknown, unknown>>> {
     if (toolSlugs.length === 0) return {};
 
-    const userId = options?.userId ?? 'default';
+    const resourceId = options?.requestContext?.[MASTRA_RESOURCE_ID_KEY];
+    const userId = typeof resourceId === 'string' ? resourceId : (options?.userId ?? 'default');
     const composio = this.getMastraClient();
 
     // composio.tools.get returns MastraToolCollection = Record<string, MastraTool>
