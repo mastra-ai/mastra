@@ -18,6 +18,7 @@ import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
+import { StarsLibSQL } from './domains/stars';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -38,6 +39,7 @@ export {
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
   SkillsLibSQL,
+  StarsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -194,6 +196,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const mcpServers = new MCPServersLibSQL(domainConfig);
     const workspaces = new WorkspacesLibSQL(domainConfig);
     const skills = new SkillsLibSQL(domainConfig);
+    const stars = new StarsLibSQL(domainConfig);
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
     const schedules = new SchedulesLibSQL(domainConfig);
@@ -213,6 +216,7 @@ export class LibSQLStore extends MastraCompositeStore {
       mcpServers,
       workspaces,
       skills,
+      stars,
       blobs,
       backgroundTasks,
       schedules,

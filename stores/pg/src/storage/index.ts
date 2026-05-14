@@ -30,6 +30,7 @@ import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
+import { StarsPG } from './domains/stars';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
 
@@ -53,6 +54,7 @@ const ALL_DOMAINS = [
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
+  StarsPG,
   ChannelsPG,
   SchedulesPG,
 ] as const;
@@ -94,6 +96,7 @@ export {
   ScoresPG,
   SchedulesPG,
   SkillsPG,
+  StarsPG,
   WorkflowsPG,
   WorkspacesPG,
 };
@@ -169,6 +172,7 @@ export class PostgresStore extends MastraCompositeStore {
         mcpServers: new MCPServersPG(domainConfig),
         workspaces: new WorkspacesPG(domainConfig),
         skills: new SkillsPG(domainConfig),
+        stars: new StarsPG(domainConfig),
         blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),

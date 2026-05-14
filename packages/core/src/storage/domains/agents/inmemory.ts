@@ -50,12 +50,16 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     }
 
     const now = new Date();
+    // Default visibility to 'private' when an authorId is set; leave undefined for legacy unowned rows.
+    const visibility = agent.visibility ?? (agent.authorId ? 'private' : undefined);
     const newAgent: StorageAgentType = {
       id: agent.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: agent.authorId,
+      visibility,
       metadata: agent.metadata,
+      starCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -63,7 +67,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     this.db.agents.set(agent.id, newAgent);
 
     // Extract config fields from the flat input (everything except agent-record fields)
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+    const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
     // Create version 1 from the config
     const versionId = crypto.randomUUID();
@@ -88,11 +92,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error(`Agent with id ${id} not found`);
     }
 
-    const { authorId, activeVersionId, metadata, status } = updates;
+    const { authorId, visibility, activeVersionId, metadata, status } = updates;
 
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(metadata !== undefined && {
         metadata: { ...existingAgent.metadata, ...metadata },
@@ -113,7 +118,17 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      visibility,
+      metadata,
+      status,
+      entityIds,
+      pinStarredFor,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -132,6 +147,22 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
 
+    // Restrict to a set of IDs (used by ?starredOnly=true).
+    // An empty array means "no candidates" -> empty result.
+    if (entityIds !== undefined) {
+      if (entityIds.length === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageInput === false ? false : perPage,
+          hasMore: false,
+        };
+      }
+      const idSet = new Set(entityIds);
+      agents = agents.filter(agent => idSet.has(agent.id));
+    }
+
     // Filter by status
     if (status) {
       agents = agents.filter(agent => agent.status === status);
@@ -142,6 +173,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       agents = agents.filter(agent => agent.authorId === authorId);
     }
 
+    // Filter by visibility if provided
+    if (visibility !== undefined) {
+      agents = agents.filter(agent => agent.visibility === visibility);
+    }
+
     // Filter by metadata if provided (AND logic - all key-value pairs must match)
     if (metadata && Object.keys(metadata).length > 0) {
       agents = agents.filter(agent => {
@@ -150,8 +186,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       });
     }
 
-    // Sort filtered agents
-    const sortedAgents = this.sortAgents(agents, field, direction);
+    // Sort filtered agents (with optional starred-first compound sort)
+    const starredIds = pinStarredFor ? this.collectStarredIdsFor(pinStarredFor) : undefined;
+    const sortedAgents = this.sortAgents(agents, field, direction, starredIds);
 
     // Deep clone agents to avoid mutation
     const clonedAgents = sortedAgents.map(agent => this.deepCopyAgent(agent));
@@ -312,13 +349,39 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     agents: StorageAgentType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
+    starredIds?: Set<string>,
   ): StorageAgentType[] {
     return agents.sort((a, b) => {
+      // Compound sort: starred first, then existing orderBy, then id ASC for stable pagination.
+      if (starredIds) {
+        const aStar = starredIds.has(a.id) ? 1 : 0;
+        const bStar = starredIds.has(b.id) ? 1 : 0;
+        if (aStar !== bStar) return bStar - aStar;
+      }
+
       const aValue = new Date(a[field]).getTime();
       const bValue = new Date(b[field]).getTime();
+      if (aValue !== bValue) {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
 
-      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      // Stable tie-break for same `createdAt`/`updatedAt`.
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
+  }
+
+  /**
+   * Collect the set of agent IDs starred by the given user. Returns an empty
+   * Set when the stars domain is not wired or the user has no stars.
+   */
+  private collectStarredIdsFor(userId: string): Set<string> {
+    const starred = new Set<string>();
+    for (const row of this.db.stars.values()) {
+      if (row.userId === userId && row.entityType === 'agent') {
+        starred.add(row.entityId);
+      }
+    }
+    return starred;
   }
 
   private sortVersions(
