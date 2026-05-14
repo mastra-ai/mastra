@@ -34,6 +34,10 @@ Only the process that owns the lease polls `gh api /notifications`. Other Mastra
 
 The cache keeps at most 50 notifications per PR, drops notifications older than 7 days, and prunes rows not touched for 14 days. GitHub inbox notifications are matched locally by repository plus `subject.url` or `latest_comment_url` ending in `/pulls/{number}` or `/issues/{number}`.
 
+### Verification note
+
+A live two-terminal MastraCode smoke test requires two interactive TUI sessions and a real GitHub PR notification arriving during the test, so it was not run in this non-interactive verification environment. The shared-cache behavior is covered by automated smoke-style tests that create separate `GithubNotificationStore`/`GithubNotificationPoller` instances against the same LibSQL database file. Those tests verify that only one instance acquires the master lease and calls `gh api /notifications`, client instances read the cached PR notifications, stale leases recover, ETag/`304` responses avoid reprocessing, shared `rateLimitedUntil` state suppresses additional GitHub calls, and multiple PR subscriptions emit from cached rows without extra inbox polls.
+
 ## Constructor parameters
 
 <PropertiesTable
