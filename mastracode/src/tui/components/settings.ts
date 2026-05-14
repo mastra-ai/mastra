@@ -198,7 +198,7 @@ export class SettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: SettingsConfig, callbacks: SettingsCallbacks) {
-    super(2, 1, (text: string) => theme.bg('overlayBg', text));
+    super(4, 2, (text: string) => theme.bg('overlayBg', text));
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Settings')), 0, 0));

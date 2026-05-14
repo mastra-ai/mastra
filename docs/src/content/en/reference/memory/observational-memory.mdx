@@ -66,10 +66,18 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'activateAfterIdle',
-    type: 'number | string',
+    type: 'number | string | false',
     description:
-      'Time before buffered observations or buffered reflections are forced to activate after inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. When the gap between the current time and the last assistant message part timestamp exceeds this value, buffered observational memory activates before the next prompt. Useful for aligning with prompt cache TTLs.',
+      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `false` to disable inherited observation idle activation. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
     isOptional: true,
+  },
+  {
+    name: 'activateOnProviderChange',
+    type: 'boolean',
+    description:
+      'Force buffered observations to activate when the actor provider or model changes. Reflections do not inherit this setting. Use `reflection.activateOnProviderChange` to opt reflections into provider-change activation.',
+    isOptional: true,
+    defaultValue: 'false',
   },
   {
     name: 'shareTokenBudget',
@@ -187,6 +195,20 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: '0.8',
           },
           {
+            name: 'activateAfterIdle',
+            type: 'number | string | false',
+            description:
+              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, or `false`. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations.',
+            isOptional: true,
+          },
+          {
+            name: 'activateOnProviderChange',
+            type: 'boolean',
+            description:
+              'Force buffered observations to activate when the actor provider or model changes. If unset, the top-level `activateOnProviderChange` value is used for observations.',
+            isOptional: true,
+          },
+          {
             name: 'blockAfter',
             type: 'number',
             description:
@@ -272,6 +294,21 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
               'Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range.',
             isOptional: true,
             defaultValue: '0.5',
+          },
+          {
+            name: 'activateAfterIdle',
+            type: 'number | string | false',
+            description:
+              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, or `false`. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation.',
+            isOptional: true,
+          },
+          {
+            name: 'activateOnProviderChange',
+            type: 'boolean',
+            description:
+              'Force buffered reflections to activate when the actor provider or model changes. Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to opt reflections into provider-change activation.',
+            isOptional: true,
+            defaultValue: 'false',
           },
           {
             name: 'blockAfter',

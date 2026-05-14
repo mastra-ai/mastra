@@ -4,15 +4,11 @@ import type { SlashCommandContext } from '../types.js';
 
 const askQuestionMock = vi.fn();
 
-vi.mock('../../components/ask-question-inline.js', () => ({
-  AskQuestionInlineComponent: class {
-    props: any;
-
-    constructor(props: any) {
-      askQuestionMock(props);
-      this.props = props;
-    }
-  },
+vi.mock('../../modal-question.js', () => ({
+  askModalQuestion: vi.fn(async (_ui, props) => {
+    askQuestionMock(props);
+    return null;
+  }),
 }));
 
 function createContext(subagents?: Array<{ id: string; name: string; description: string }>) {
@@ -50,7 +46,7 @@ describe('handleSubagentsCommand', () => {
   it('falls back to built-in subagent types when no custom subagents are configured', async () => {
     const { ctx, chatContainer } = createContext();
 
-    const promise = handleSubagentsCommand(ctx);
+    await handleSubagentsCommand(ctx);
 
     expect(askQuestionMock).toHaveBeenCalledTimes(1);
     const question = askQuestionMock.mock.calls[0]?.[0];
@@ -60,16 +56,13 @@ describe('handleSubagentsCommand', () => {
       { label: 'Plan', description: 'Read-only analysis and planning' },
       { label: 'Execute', description: 'Task execution with write access' },
     ]);
-    expect(chatContainer.addChild).toHaveBeenCalledTimes(3);
-
-    question.onCancel();
-    await promise;
+    expect(chatContainer.addChild).not.toHaveBeenCalled();
   });
 
   it('falls back to built-in subagent types when subagents is an empty array', async () => {
     const { ctx } = createContext([]);
 
-    const promise = handleSubagentsCommand(ctx);
+    await handleSubagentsCommand(ctx);
 
     expect(askQuestionMock).toHaveBeenCalledTimes(1);
     const question = askQuestionMock.mock.calls[0]?.[0];
@@ -78,9 +71,6 @@ describe('handleSubagentsCommand', () => {
       { label: 'Plan', description: 'Read-only analysis and planning' },
       { label: 'Execute', description: 'Task execution with write access' },
     ]);
-
-    question.onCancel();
-    await promise;
   });
 
   it('renders configured subagents from the harness config', async () => {
@@ -107,7 +97,7 @@ describe('handleSubagentsCommand', () => {
       },
     ]);
 
-    const promise = handleSubagentsCommand(ctx);
+    await handleSubagentsCommand(ctx);
 
     expect(askQuestionMock).toHaveBeenCalledTimes(1);
     const question = askQuestionMock.mock.calls[0]?.[0];
@@ -117,8 +107,5 @@ describe('handleSubagentsCommand', () => {
       { label: 'Execute', description: 'Task execution with write access' },
       { label: 'Test Writer', description: 'Write tests for the specified module' },
     ]);
-
-    question.onCancel();
-    await promise;
   });
 });

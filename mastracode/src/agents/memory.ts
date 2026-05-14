@@ -47,6 +47,9 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
   });
 }
 
+const DYNAMIC_AGENTS_MD_INSTRUCTION =
+  'Messages wrapped in <system-reminder type="dynamic-agents-md" ...>...</system-reminder> are ephemeral project-context instructions injected from files on disk. Do NOT observe or extract information from these messages — they are reloaded automatically when needed and should not be stored in memory.';
+
 // Derived from https://github.com/JuliusBrussee/caveman and adapted for OM use with fixed full-level compression.
 const CAVEMAN_OM_INSTRUCTION = `Respond terse like smart caveman. All technical substance stay. Only fluff die.
 
@@ -83,15 +86,21 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
+    const caveman = state?.cavemanObservations ?? false;
 
     const observerPreviousObservationTokens = 1000;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
 
     // Async buffering is not supported with resource scope — disable it
     const isResourceScope = omScope === 'resource';
+
+    const observerInstruction = caveman
+      ? `${DYNAMIC_AGENTS_MD_INSTRUCTION}\n\n${CAVEMAN_OM_INSTRUCTION}`
+      : DYNAMIC_AGENTS_MD_INSTRUCTION;
+    const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
 
     cachedMemory = new Memory({
       storage,
@@ -113,16 +122,14 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             blockAfter: 2,
             previousObserverTokens: observerPreviousObservationTokens,
             threadTitle: true,
-            instruction:
-              'Messages wrapped in <system-reminder type="dynamic-agents-md" ...>...</system-reminder> are ephemeral project-context instructions injected from files on disk. Do NOT observe or extract information from these messages — they are reloaded automatically when needed and should not be stored in memory.\n\n' +
-              CAVEMAN_OM_INSTRUCTION,
+            instruction: observerInstruction,
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,
             blockAfter: 1.1,
             model: getReflectorModel,
             observationTokens: refThreshold,
-            instruction: CAVEMAN_OM_INSTRUCTION,
+            instruction: reflectionInstruction,
           },
         },
       },

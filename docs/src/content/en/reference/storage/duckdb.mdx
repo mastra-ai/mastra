@@ -39,7 +39,7 @@ import { Mastra } from '@mastra/core'
 import { MastraCompositeStore } from '@mastra/core/storage'
 import { LibSQLStore } from '@mastra/libsql'
 import { DuckDBStore } from '@mastra/duckdb'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
   storage: new MastraCompositeStore({
@@ -56,7 +56,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -144,7 +144,7 @@ await duckdb.observability.init()
 
 ## Observability strategy
 
-DuckDB supports the `event-sourced` strategy used by `DefaultExporter`, which buffers spans in memory and writes completed events in batches. This is appropriate for development-scale traffic. For high-volume production workloads, see [`DefaultExporter` storage provider support](/docs/observability/tracing/exporters/default#storage-provider-support).
+DuckDB supports the `event-sourced` strategy used by `MastraStorageExporter`, which buffers spans in memory and writes completed events in batches. This is appropriate for development-scale traffic. For high-volume production workloads, see [`MastraStorageExporter` storage provider support](/docs/observability/tracing/exporters/mastra-storage#storage-provider-support).
 
 ## Related
 

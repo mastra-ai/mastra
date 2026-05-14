@@ -1841,6 +1841,223 @@ describe('MessageList V5 Support', () => {
       expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
     });
 
+    it('should apply payload transforms to UI and drained transcript without mutating model messages', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-transformed-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-transformed',
+                toolName: 'lookupCustomer',
+                state: 'result',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                result: { displayName: 'Acme', apiKey: 'secret-value' },
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      'output-available': { transformed: { displayName: 'Acme' } },
+                    },
+                    transcript: {
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      'output-available': { transformed: { displayName: 'Acme' } },
+                    },
+                  },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-transformed-error',
+                toolName: 'lookupCustomer',
+                state: 'output-error',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                errorText: 'stack with /private/customer.json',
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      error: { transformed: { message: 'Tool failed' } },
+                    },
+                    transcript: {
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      error: { transformed: { message: 'Tool failed' } },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const modelToolMessage = list.get.all.aiV5.model().find(message => message.role === 'tool');
+      const modelToolResult = (modelToolMessage as any).content.find((part: any) => part.type === 'tool-result');
+      expect(modelToolResult.output).toEqual({
+        type: 'json',
+        value: { displayName: 'Acme', apiKey: 'secret-value' },
+      });
+
+      const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
+      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-transformed') as any;
+      expect(uiToolPart.input).toEqual({ customerId: 'cus_123' });
+      expect(uiToolPart.output).toEqual({ displayName: 'Acme' });
+      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-transformed-error') as any;
+      expect(uiErrorToolPart.input).toEqual({ customerId: 'cus_123' });
+      expect(uiErrorToolPart.errorText).toEqual({ message: 'Tool failed' });
+
+      const drainedParts = list.drainUnsavedMessages()[0]!.content.parts!;
+      const drainedToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed',
+      ) as any;
+      expect(drainedToolPart.toolInvocation.args).toEqual({ customerId: 'cus_123' });
+      expect(drainedToolPart.toolInvocation.result).toEqual({ displayName: 'Acme' });
+      const drainedErrorToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed-error',
+      ) as any;
+      expect(drainedErrorToolPart.toolInvocation.args).toEqual({ customerId: 'cus_123' });
+      expect(drainedErrorToolPart.toolInvocation.errorText).toEqual({ message: 'Tool failed' });
+
+      const rawParts = list.get.all.db()[0]!.content.parts!;
+      const rawToolPart = rawParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed',
+      ) as any;
+      expect(rawToolPart.toolInvocation.args).toEqual({
+        customerId: 'cus_123',
+        internalPath: '/private/customer.json',
+      });
+      expect(rawToolPart.toolInvocation.result).toEqual({ displayName: 'Acme', apiKey: 'secret-value' });
+      const rawErrorToolPart = rawParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed-error',
+      ) as any;
+      expect(rawErrorToolPart.toolInvocation.args).toEqual({
+        customerId: 'cus_123',
+        internalPath: '/private/customer.json',
+      });
+      expect(rawErrorToolPart.toolInvocation.errorText).toBe('stack with /private/customer.json');
+    });
+
+    it('should preserve explicit null payload transforms in UI and drained transcript', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-null-transformed-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-null-transformed',
+                toolName: 'lookupCustomer',
+                state: 'result',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                result: { displayName: 'Acme', apiKey: 'secret-value' },
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: null },
+                      'output-available': { transformed: null },
+                    },
+                    transcript: {
+                      'input-available': { transformed: null },
+                      'output-available': { transformed: null },
+                    },
+                  },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-null-transformed-error',
+                toolName: 'lookupCustomer',
+                state: 'output-error',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                errorText: 'stack with /private/customer.json',
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: null },
+                      error: { transformed: null },
+                    },
+                    transcript: {
+                      'input-available': { transformed: null },
+                      error: { transformed: null },
+                    },
+                  },
+                },
+              },
+            },
+            {
+              type: 'data-tool-call-approval',
+              data: {
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                metadata: {
+                  mastra: {
+                    toolPayloadTransform: {
+                      transcript: {
+                        approval: { transformed: null },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
+      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-transformed') as any;
+      expect(uiToolPart.input).toBeNull();
+      expect(uiToolPart.output).toBeNull();
+      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-transformed-error') as any;
+      expect(uiErrorToolPart.input).toBeNull();
+      expect(uiErrorToolPart.errorText).toBeNull();
+
+      const drainedParts = list.drainUnsavedMessages()[0]!.content.parts!;
+      const drainedToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-transformed',
+      ) as any;
+      expect(drainedToolPart.toolInvocation.args).toBeNull();
+      expect(drainedToolPart.toolInvocation.result).toBeNull();
+      const drainedErrorToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-transformed-error',
+      ) as any;
+      expect(drainedErrorToolPart.toolInvocation.args).toBeNull();
+      expect(drainedErrorToolPart.toolInvocation.errorText).toBeNull();
+
+      const drainedApprovalPart = drainedParts.find(part => part.type === 'data-tool-call-approval') as any;
+      expect(drainedApprovalPart.data.args).toBeNull();
+    });
+
     it('should preserve modelOutput metadata across db to model to db conversion', () => {
       const list = new MessageList({ threadId, resourceId });
       const toolResultMessage: MastraDBMessage = {

@@ -7,6 +7,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
 import type { ObservationTurn } from './observation-turn/index';
+import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
@@ -59,6 +60,42 @@ const GATEWAY_STATE_KEY = '__isGatewayModel';
 /** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
 function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
   return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
+}
+
+function injectObservationContextMessages({
+  messageList,
+  systemMessages,
+  continuationMessage,
+  threadId,
+  resourceId,
+}: {
+  messageList: MessageList;
+  systemMessages: string[] | undefined;
+  continuationMessage: MastraDBMessage | undefined;
+  threadId: string;
+  resourceId?: string;
+}): void {
+  if (!systemMessages?.length) {
+    return;
+  }
+
+  messageList.clearSystemMessages('observational-memory');
+  for (const msg of systemMessages) {
+    messageList.addSystem(msg, 'observational-memory');
+  }
+
+  const contMsg = continuationMessage ?? {
+    id: 'om-continuation',
+    role: 'user' as const,
+    createdAt: new Date(0),
+    content: {
+      format: 2 as const,
+      parts: [{ type: 'text' as const, text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>` }],
+    },
+    threadId,
+    resourceId,
+  };
+  messageList.add(contMsg, 'memory');
 }
 
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {
@@ -140,8 +177,32 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
         : null;
 
-      // ── Read-only fast path: skip turn creation and observation lifecycle ──
+      // ── Read-only path: load existing context, skip observation lifecycle ──
       if (readOnly) {
+        const ctx = await loadMemoryContextMessages({
+          memory: this.memory,
+          messageList,
+          threadId,
+          resourceId,
+        });
+        const systemMessages =
+          ctx.hasObservations && ctx.omRecord
+            ? await this.engine.buildContextSystemMessages({
+                threadId,
+                resourceId,
+                record: ctx.omRecord,
+                unobservedContextBlocks: ctx.otherThreadsContext,
+              })
+            : undefined;
+
+        injectObservationContextMessages({
+          messageList,
+          systemMessages,
+          continuationMessage: ctx.continuationMessage,
+          threadId,
+          resourceId,
+        });
+
         return messageList;
       }
 
@@ -215,27 +276,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         }
 
         // Inject system messages (one per cache-stable chunk) + continuation
-        if (ctx.systemMessage) {
-          messageList.clearSystemMessages('observational-memory');
-          for (const msg of ctx.systemMessage) {
-            messageList.addSystem(msg, 'observational-memory');
-          }
-
-          const contMsg = this.turn.context.continuation ?? {
-            id: 'om-continuation',
-            role: 'user' as const,
-            createdAt: new Date(0),
-            content: {
-              format: 2 as const,
-              parts: [
-                { type: 'text' as const, text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>` },
-              ],
-            },
-            threadId,
-            resourceId,
-          };
-          messageList.add(contMsg, 'memory');
-        }
+        injectObservationContextMessages({
+          messageList,
+          systemMessages: ctx.systemMessage,
+          continuationMessage: this.turn.context.continuation,
+          threadId,
+          resourceId,
+        });
 
         // ── Progress emission (processor-specific) ──────────
         // Fetch a fresh record from storage so buffering flags (e.g.

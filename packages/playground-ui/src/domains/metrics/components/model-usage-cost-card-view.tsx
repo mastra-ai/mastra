@@ -1,3 +1,4 @@
+import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { MetricsDataTable } from '../../../ds/components/MetricsDataTable';
 import type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
@@ -7,9 +8,22 @@ export interface ModelUsageCostCardViewProps {
   rows: ModelUsageRow[] | undefined;
   isLoading: boolean;
   isError: boolean;
+  /** Optional drilldown for a row in the table. */
+  getRowHref?: (row: ModelUsageRow) => string | undefined;
+  /** Optional slot for top-bar action buttons. */
+  actions?: ReactNode;
+  /** Override how drilldown links are rendered. Defaults to `<a>`. */
+  LinkComponent?: ElementType;
 }
 
-export function ModelUsageCostCardView({ rows, isLoading, isError }: ModelUsageCostCardViewProps) {
+export function ModelUsageCostCardView({
+  rows,
+  isLoading,
+  isError,
+  getRowHref,
+  actions,
+  LinkComponent,
+}: ModelUsageCostCardViewProps) {
   const hasData = !!rows && rows.length > 0;
 
   return (
@@ -30,6 +44,7 @@ export function ModelUsageCostCardView({ rows, isLoading, isError }: ModelUsageC
             }
             return <MetricsCard.Summary value={value} label="Total cost" />;
           })()}
+        {actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -54,6 +69,8 @@ export function ModelUsageCostCardView({ rows, isLoading, isError }: ModelUsageC
                 },
               ]}
               data={rows.map(row => ({ ...row, key: row.model }))}
+              getRowHref={getRowHref}
+              LinkComponent={LinkComponent}
             />
           )}
         </MetricsCard.Content>

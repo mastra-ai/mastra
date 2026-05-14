@@ -157,6 +157,61 @@ export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
   backgroundProcesses?: BackgroundProcessConfig;
 }
 
+/**
+ * Extended configuration for the read_file tool.
+ *
+ * Controls which mime types are surfaced to the model as media parts (image
+ * or file parts the model can natively consume). Text-like files are still
+ * read as text; non-text binaries that don't match fall back to a
+ * metadata-only result (path, size, mime type) so the agent knows about
+ * the file without dumping useless base64 into context.
+ *
+ * - **Array of globs** — e.g. `['image/*']`, `['image/*', 'application/pdf']`
+ * - **Function** — `(mimeType: string) => boolean`
+ * - **`false`** — disable media parts; non-text binaries fall back to
+ *   metadata-only output unless an explicit `encoding` is provided
+ *
+ * Only applies when the caller doesn't pass an explicit `encoding` (since an
+ * explicit encoding is a clear request for raw bytes/text).
+ *
+ * The default is the cross-provider-safe intersection of image formats
+ * (`image/png`, `image/jpeg`, `image/webp`) plus
+ * `application/pdf`. Use `['image/*']` (or a function) if you want to
+ * surface exotic subtypes like SVG/BMP/HEIC.
+ *
+ * @example
+ * ```ts
+ * // Surface any image (including SVG, BMP, HEIC) — may fail on some providers
+ * mastra_workspace_read_file: { mediaTypes: ['image/*'] }
+ *
+ * // Disable media parts entirely
+ * mastra_workspace_read_file: { mediaTypes: false }
+ *
+ * // Custom predicate
+ * mastra_workspace_read_file: { mediaTypes: (mime) => mime.startsWith('image/') }
+ *
+ * // Raise the inline-media size cap to 25 MiB
+ * mastra_workspace_read_file: { maxMediaBytes: 25 * 1024 * 1024 }
+ * ```
+ */
+export interface ReadFileToolConfig extends WorkspaceToolConfig {
+  /**
+   * Which mime types to surface to the model as media parts (file/image
+   * parts) rather than as text. Defaults to the cross-provider-safe set
+   * `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`.
+   * Pass `false` to disable media detection; non-text binaries then fall
+   * back to metadata-only output unless an explicit `encoding` is provided.
+   */
+  mediaTypes?: string[] | ((mimeType: string) => boolean) | false;
+  /**
+   * Maximum file size (in bytes) to read inline as a media part. Files
+   * larger than this fall back to metadata-only output rather than being
+   * fully base64-encoded into the model context and persisted in storage.
+   * Defaults to 10 MiB (10 * 1024 * 1024).
+   */
+  maxMediaBytes?: number;
+}
+
 // =============================================================================
 // Top-Level Tools Config
 // =============================================================================
@@ -207,4 +262,14 @@ export type WorkspaceToolsConfig = {
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
-} & Partial<Record<Exclude<WorkspaceToolName, typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND>, WorkspaceToolConfig>>;
+} & {
+  [K in typeof WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?: ReadFileToolConfig;
+} & Partial<
+    Record<
+      Exclude<
+        WorkspaceToolName,
+        typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND | typeof WORKSPACE_TOOLS.FILESYSTEM.READ_FILE
+      >,
+      WorkspaceToolConfig
+    >
+  >;

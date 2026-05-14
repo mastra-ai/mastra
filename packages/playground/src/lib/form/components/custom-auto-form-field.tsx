@@ -3,7 +3,7 @@ import { getLabel } from '@autoform/core';
 import type { AutoFormFieldProps } from '@autoform/react';
 import { getPathInObject, useAutoForm } from '@autoform/react';
 import React, { useMemo } from 'react';
-import { useFormContext } from 'react-hook-form';
+import { useFormContext, useWatch } from 'react-hook-form';
 import { CustomArrayField } from './custom-array-field';
 import { CustomObjectField } from './custom-object-field';
 
@@ -16,11 +16,13 @@ export const CustomAutoFormField: React.FC<{
     register,
     formState: { errors, defaultValues },
     getValues,
+    control,
   } = useFormContext();
 
   const fullPath = path.join('.');
   const error = getPathInObject(errors, path)?.message as string | undefined;
-  const value = getValues(fullPath);
+  const watchedValue = useWatch({ control, name: fullPath });
+  const value = watchedValue === undefined ? getValues(fullPath) : watchedValue;
 
   const fieldDefault = useMemo(() => {
     if (!defaultValues) return field.default;

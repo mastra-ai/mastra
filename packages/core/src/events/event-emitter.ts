@@ -1,8 +1,19 @@
 import EventEmitter from 'node:events';
 import { PubSub } from './pubsub';
+import type { PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 export class EventEmitterPubSub extends PubSub {
+  // EventEmitter dispatches synchronously to listeners, so it can serve both
+  // a push consumer (no worker) and a pull-style worker that simply calls
+  // `subscribe()` to register a listener. Both modes are advertised so the
+  // default in-process setup keeps using OrchestrationWorker, while
+  // genuinely push-only transports (GCP Pub/Sub push, SNS, EventBridge)
+  // declare `['push']` only and skip the worker.
+  override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
+    return ['pull', 'push'];
+  }
+
   private emitter: EventEmitter;
 
   // group → topic → callbacks[]

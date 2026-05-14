@@ -2,6 +2,12 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
+    "generate:api-cli-route-metadata": {
+      "cache": false,
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "scripts/generate-api-cli-route-metadata.ts", "package.json"],
+      "outputs": ["../cli/src/commands/api/route-metadata.generated.ts"]
+    },
     "generate:route-types": {
       "cache": false,
       "dependsOn": ["^build"],

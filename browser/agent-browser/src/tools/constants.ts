@@ -19,6 +19,8 @@ export const BROWSER_TOOLS = {
   WAIT: 'browser_wait',
   TABS: 'browser_tabs',
   DRAG: 'browser_drag',
+  // Utility
+  SCREENSHOT: 'browser_screenshot',
   // Escape hatch
   EVALUATE: 'browser_evaluate',
 } as const;

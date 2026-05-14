@@ -347,8 +347,24 @@ describe('EventBuffer', () => {
       buffer.reset();
 
       // Third re-add: retryCount goes 2→3, exceeds maxRetries=2, dropped
-      buffer.reAddCreates(creates3);
+      const dropped = buffer.reAddCreates(creates3);
       expect(buffer.creates).toHaveLength(0);
+      expect(dropped).toHaveLength(1);
+      expect(dropped[0]!.retryCount).toBe(3);
+    });
+
+    it('should return dropped create events when retries are exhausted', () => {
+      const buffer = new EventBuffer({ maxRetries: 0 });
+      buffer.init({ strategy: 'batch-with-updates' });
+
+      buffer.addEvent(createMetricEvent());
+      const creates = buffer.creates;
+      buffer.reset();
+
+      const dropped = buffer.reAddCreates(creates);
+
+      expect(buffer.creates).toHaveLength(0);
+      expect(dropped).toEqual([expect.objectContaining({ type: 'metric', retryCount: 1 })]);
     });
   });
 
@@ -365,6 +381,20 @@ describe('EventBuffer', () => {
 
       expect(buffer.updates).toHaveLength(1);
       expect(buffer.updates[0].retryCount).toBe(1);
+    });
+
+    it('should return dropped update events when retries are exhausted', () => {
+      const buffer = new EventBuffer({ maxRetries: 0 });
+      buffer.init({ strategy: 'batch-with-updates' });
+
+      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_UPDATED));
+      const updates = buffer.updates;
+      buffer.reset();
+
+      const dropped = buffer.reAddUpdates(updates);
+
+      expect(buffer.updates).toHaveLength(0);
+      expect(dropped).toEqual([expect.objectContaining({ type: TracingEventType.SPAN_UPDATED, retryCount: 1 })]);
     });
   });
 

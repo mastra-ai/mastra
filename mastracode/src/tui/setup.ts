@@ -14,6 +14,7 @@ import { ThreadLockError } from '../utils/thread-lock.js';
 import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
+import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -59,8 +60,8 @@ export function setupKeyboardShortcuts(
       const current = state.editor.getText();
       if (current.length > 0) {
         state.lastClearedText = current;
+        state.editor.setText('');
       }
-      state.editor.setText('');
       state.ui.requestRender();
     }
   });
@@ -151,22 +152,44 @@ export function setupKeyboardShortcuts(
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
-  // Enter - submit immediately when idle, queue follow-up input while streaming
+  // Enter - submit immediately. The submit handler decides whether active input
+  // should be sent as a signal or queued for cases signals cannot handle.
   state.editor.onAction('followUp', () => {
-    if (!state.harness.isRunning()) {
-      state.editor.onSubmit?.(state.editor.getExpandedText());
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      state.ui.requestRender();
       return true;
     }
 
-    const text = state.editor.getExpandedText().trim();
-    if (!text) {
+    state.editor.onSubmit?.(state.editor.getExpandedText());
+    return true;
+  });
+
+  // Ctrl+F - explicitly queue a follow-up while a run is active. Enter now sends
+  // normal messages as signals during active runs; this preserves manual FIFO
+  // queueing for slash commands, image messages, and messages the user wants to
+  // hold until the current run finishes.
+  state.editor.onAction('queueFollowUp', () => {
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      state.ui.requestRender();
+      return true;
+    }
+
+    const text = state.editor.getExpandedText();
+    if (!state.harness.isRunning()) {
+      state.editor.onSubmit?.(text);
+      return true;
+    }
+
+    const trimmedText = text.trim();
+    if (!trimmedText) {
       return true;
     }
 
     state.editor.addToHistory(text);
     state.editor.setText('');
     callbacks.queueFollowUpMessage(text);
-    state.ui.requestRender();
     return true;
   });
 }
@@ -301,6 +324,8 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'observability', description: 'Configure cloud observability' },
+    { name: 'goal', description: 'Set/manage persistent goal (Ralph loop)' },
+    { name: 'judge', description: 'Set goal judge defaults' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
@@ -317,6 +342,19 @@ export function setupAutocomplete(state: TUIState): void {
     slashCommands.push({
       name: `/${customCmd.name}`,
       description: customCmd.description || `Custom: ${customCmd.name}`,
+    });
+    if (customCmd.goal) {
+      slashCommands.push({
+        name: `goal/${customCmd.name}`,
+        description: customCmd.description ? `Goal: ${customCmd.description}` : `Goal: ${customCmd.name}`,
+      });
+    }
+  }
+
+  for (const skill of state.goalSkillCommands) {
+    slashCommands.push({
+      name: `goal/${skill.name}`,
+      description: skill.description ? `Goal skill: ${skill.description}` : `Goal skill: ${skill.name}`,
     });
   }
 
@@ -351,6 +389,18 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
     state.customSlashCommands = Array.from(commandMap.values());
   } catch {
     state.customSlashCommands = [];
+  }
+
+  try {
+    const workspace = state.harness.getWorkspace() ?? state.workspace;
+    if (!workspace?.skills) {
+      state.goalSkillCommands = [];
+      return;
+    }
+    const skills = await workspace.skills.list();
+    state.goalSkillCommands = skills.filter(skill => skill.metadata?.goal === true);
+  } catch {
+    state.goalSkillCommands = [];
   }
 }
 

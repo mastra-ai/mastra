@@ -1,5 +1,6 @@
 import type { HarnessMessage, HarnessThread } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { askModalQuestion } from '../../modal-question.js';
 import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -17,8 +18,8 @@ vi.mock('../clone.js', () => ({
   resetUIAfterClone: vi.fn(),
 }));
 
-vi.mock('../../components/ask-question-inline.js', () => ({
-  AskQuestionInlineComponent: class {},
+vi.mock('../../modal-question.js', () => ({
+  askModalQuestion: vi.fn(),
 }));
 
 vi.mock('../../components/thread-selector.js', () => ({
@@ -96,6 +97,8 @@ function createContext(threads: HarnessThread[]) {
 describe('handleThreadsCommand thread listing', () => {
   beforeEach(() => {
     selectorInstances.length = 0;
+    vi.mocked(askModalQuestion).mockReset();
+    vi.mocked(askModalQuestion).mockResolvedValue('New thread');
   });
 
   it('drops stale cached previews when a thread has a newer updatedAt', async () => {

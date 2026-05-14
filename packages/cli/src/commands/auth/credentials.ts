@@ -88,6 +88,19 @@ function openBrowser(url: string) {
   }
 }
 
+export async function verifyToken(token: string): Promise<boolean> {
+  // Use plain fetch — NOT authenticatedFetch — to avoid its 401 interceptor
+  // triggering a redundant refresh cycle.
+  try {
+    const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/verify`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function tryRefreshToken(creds: Credentials): Promise<string | null> {
   if (!creds.refreshToken) return null;
 
@@ -266,16 +279,7 @@ export async function getToken(): Promise<string> {
   }
 
   // Try a quick verify to see if the token is still valid.
-  // Use plain fetch to avoid authenticatedFetch's 401 interceptor
-  // which would trigger a redundant refresh cycle.
-  try {
-    const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/verify`, {
-      headers: { Authorization: `Bearer ${creds.token}` },
-    });
-    if (res.ok) return creds.token;
-  } catch {
-    // Network error — try refresh
-  }
+  if (await verifyToken(creds.token)) return creds.token;
 
   // Token might be expired — attempt refresh
   const refreshed = await tryRefreshToken(creds);

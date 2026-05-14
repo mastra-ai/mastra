@@ -251,12 +251,12 @@ export class PosthogAnalytics {
   }
 
   // Ensure PostHog client is shutdown properly
-  async shutdown(): Promise<void> {
+  async shutdown(timeoutMs?: number): Promise<void> {
     if (!this.client) {
       return;
     }
     try {
-      await this.client.shutdown();
+      await this.client.shutdown(timeoutMs);
     } catch {
       //swallow
     }

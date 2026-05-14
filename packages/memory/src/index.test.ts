@@ -270,6 +270,75 @@ describe('Memory', () => {
       expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
       expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
+
+    it('should not save system messages', async () => {
+      const threadId = 'thread-system-save-test';
+      const resourceId = 'resource-system-save-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'system-msg',
+          threadId,
+          resourceId,
+          role: 'system',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Runtime-only instruction' }] },
+        },
+        {
+          id: 'user-msg',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      ];
+
+      const result = await memory.saveMessages({ messages });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.id).toBe('user-msg');
+
+      const recalled = await memory.recall({ threadId, resourceId, perPage: false });
+      expect(recalled.messages).toHaveLength(1);
+      expect(recalled.messages[0]?.id).toBe('user-msg');
+    });
+
+    it('should not persist system messages through raw persistMessages', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const threadId = 'thread-system-raw-persist-test';
+      const resourceId = 'resource-system-raw-persist-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      await memory.persistMessages([
+        {
+          id: 'raw-system-msg',
+          threadId,
+          resourceId,
+          role: 'system',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Runtime-only instruction' }] },
+        },
+        {
+          id: 'raw-user-msg',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      ]);
+
+      const memoryStore = await storage.getStore('memory');
+      const stored = await memoryStore!.listMessages({ threadId, resourceId, perPage: false });
+
+      expect(stored.messages).toHaveLength(1);
+      expect(stored.messages[0]?.id).toBe('raw-user-msg');
+    });
   });
 
   describe('cloneThread', () => {

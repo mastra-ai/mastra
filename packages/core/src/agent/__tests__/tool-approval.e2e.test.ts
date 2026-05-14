@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -9,6 +10,8 @@ import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import { getOpenAIModel } from './mock-model';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock({
   transformRequest: ({ url, body }) => {

@@ -6,7 +6,7 @@
 import * as os from 'node:os';
 import { Box, Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
@@ -1141,7 +1141,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private renderTaskWriteEnhanced(): void {
-    const argsObj = this.args as { tasks?: TaskItem[] } | undefined;
+    const argsObj = this.args as { tasks?: TaskItemInput[] } | undefined;
     const tasks = argsObj?.tasks;
     const status = this.getStatusIndicator();
     const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));

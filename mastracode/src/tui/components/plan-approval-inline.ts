@@ -13,6 +13,7 @@ export interface PlanApprovalInlineOptions {
   title: string;
   plan: string;
   onApprove: () => void;
+  onGoal: () => void;
   onReject: (feedback?: string) => void;
 }
 
@@ -21,6 +22,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private selectList?: SelectList;
   private feedbackInput?: Input;
   private onApprove: () => void;
+  private onGoal: () => void;
   private onReject: (feedback?: string) => void;
   private resolved = false;
   private mode: 'select' | 'feedback' = 'select';
@@ -41,6 +43,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   constructor(options: PlanApprovalInlineOptions, _ui: TUI) {
     super();
     this.onApprove = options.onApprove;
+    this.onGoal = options.onGoal;
     this.onReject = options.onReject;
     this.planTitle = options.title;
     this.planContent = options.plan;
@@ -66,6 +69,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
       {
         value: 'approve',
         label: `  ${theme.fg('success', 'Approve')} ${theme.fg('dim', '— switch to Build mode and implement')}`,
+      },
+      {
+        value: 'goal',
+        label: `  ${theme.fg('success', 'Use as /goal')} ${theme.fg('dim', '— switch to Build mode and pursue this plan')}`,
       },
       {
         value: 'reject',
@@ -98,6 +105,9 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
       case 'approve':
         this.handleApprove();
         break;
+      case 'goal':
+        this.handleGoal();
+        break;
       case 'reject':
         this.handleReject();
         break;
@@ -112,6 +122,13 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.resolved = true;
     this.showResult('Approved', true);
     this.onApprove();
+  }
+
+  private handleGoal(): void {
+    if (this.resolved) return;
+    this.resolved = true;
+    this.showResult('Set as goal', true);
+    this.onGoal();
   }
 
   private handleReject(feedback?: string): void {

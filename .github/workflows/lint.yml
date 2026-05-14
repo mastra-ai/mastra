@@ -171,10 +171,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
         with:
           package-manager-cache: false
-          install-dependencies: false
-
-      - name: Install dependencies
-        run: pnpm --config.trust-policy=no-check add -w --no-lockfile semver
+          install-dependencies: true
 
       - name: bump versions
         run: npx changeset version
@@ -189,6 +186,9 @@ jobs:
 
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs
+
+      - name: Check @mastra/core import floor
+        run: pnpm --filter ./packages/server check:core-imports
 
       - name: Check for git changes
         run: |

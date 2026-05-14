@@ -92,6 +92,26 @@ test('running the workflow (json) - long condition', async ({ page }) => {
   await checkLongPath(page);
 });
 
+test('running a workflow with an enum input uses the selected form value', async ({ page }) => {
+  // FEATURE: Workflow enum input forms
+  // USER STORY: As a Studio user, I want enum dropdown choices to update run input so workflows execute with my selection.
+  // BEHAVIOR UNDER TEST: Selecting a non-default enum option persists in the form and reaches the workflow output.
+  await page.goto('/workflows/enumWorkflow/graph');
+
+  await page.getByRole('combobox', { name: 'Mode' }).click();
+  await page.getByRole('option', { name: 'b' }).click();
+
+  await expect(page.getByRole('combobox', { name: 'Mode' })).toContainText('b');
+
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const nodes = page.locator('[data-workflow-node]');
+  await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
+
+  await page.getByRole('button', { name: 'Open Workflow Execution (JSON)' }).click();
+  await expect(page.getByRole('dialog')).toContainText('"mode": "b"');
+});
+
 test('resuming a workflow', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Text' }).fill('A');
   await page.getByRole('button', { name: 'Run' }).click();
