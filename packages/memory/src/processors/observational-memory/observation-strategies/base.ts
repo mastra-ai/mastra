@@ -332,6 +332,10 @@ export abstract class ObservationStrategy {
    * message exists yet) so that lifecycle markers are not silently dropped
    * when observation fires on step 0.
    *
+   * Renderers must ignore data-om-* parts on user messages to avoid mapping
+   * them into user-role tool-call parts that assistant-ui refuses to render.
+   * The Mastra playground does this in convertOmPartsInMastraMessage.
+   *
    * Fetches messages directly from the DB so it works even when
    * no MessageList is available (e.g. async buffering ops).
    */
