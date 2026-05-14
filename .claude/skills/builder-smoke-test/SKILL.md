@@ -192,7 +192,7 @@ it blocks future runs.
 
 ### Project layout (scaffolded for you)
 
-```
+```text
 $PROJECT_DIR/                                    ← see "Project dir resolution" below
 ├── package.json                                 ← pnpm overrides → link:<worktree>/packages/*
 ├── tsconfig.json
@@ -288,15 +288,15 @@ If `scaffold.sh` or `preflight.sh` reports a missing `OPENAI_API_KEY` or `WORKOS
 
 6. Never write the secret value back into any rc file, never `export` it into the user's interactive shell, and never echo it back in chat in full. Refer to it as `<your-openai-key>` once you've used it.
 
-| Error code              | What it means                                                                                                                   | What the agent should do                                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `not-in-mastra-repo`    | The script can't resolve a worktree from its own location (no `pnpm-workspace.yaml` upwards).                                   | Reinstall the skill into a Mastra worktree, or copy `.claude/skills/builder-smoke-test` somewhere under your worktree.                   |
-| `scaffold-failed`       | `scripts/scaffold.sh` returned non-zero.                                                                                        | Re-run scaffold with `--no-reuse` to force a fresh install. Inspect the printed `pnpm install` output for the real error.                |
-| `project-not-installed` | `$PROJECT_DIR/node_modules/@mastra/core` missing after scaffold.                                                                | Re-run the scaffold without `--reuse`. If that still fails, delete `$PROJECT_DIR` and re-run.                                            |
-| `openai-key-missing`    | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                                             | Follow the "Resolving missing env vars" section above. Re-run preflight with `--openai-key <value>` once you have it.                    |
-| `workos-keys-missing`   | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Follow the "Resolving missing env vars" section above. Re-run preflight with all three `--workos-*` flags.                               |
-| `mode-mismatch`         | `--expect` disagrees with the auth mode detected from `$PROJECT_DIR/.env`.                                                      | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change. |
-| `bad-expect-value`      | `--expect` got something other than `off` or `on`.                                                                              | Fix the invocation.                                                                                                                      |
+| Error code                           | What it means                                                                                                                   | What the agent should do                                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `project-dir-missing`                | `$PROJECT_DIR` is unset or the directory does not exist (scaffold did not run, or was given a bad `--dir`).                     | Re-run preflight without `--skip-scaffold`, or pass an existing `--dir <path>` that scaffold has already populated.                      |
+| `scaffold-failed`                    | `scripts/scaffold.sh` returned non-zero.                                                                                        | Re-run scaffold with `--no-reuse` to force a fresh install. Inspect the printed `pnpm install` output for the real error.                |
+| `project-deps-missing`               | `$PROJECT_DIR/node_modules/@mastra/core` missing after scaffold.                                                                | Re-run scaffold without `--reuse` to force a fresh install. If that still fails, delete `$PROJECT_DIR` and re-run.                       |
+| `openai-key-missing-in-project-env`  | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                                             | Follow the "Resolving missing env vars" section above. Re-run preflight with `--openai-key <value>` once you have it.                    |
+| `workos-keys-missing-in-project-env` | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Follow the "Resolving missing env vars" section above. Re-run preflight with all three `--workos-*` flags.                               |
+| `mode-mismatch`                      | `--expect` disagrees with the auth mode detected from `$PROJECT_DIR/.env`.                                                      | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change. |
+| `bad-expect-value`                   | `--expect` got something other than `off` or `on`.                                                                              | Fix the invocation. (Parser also rejects flag-like values at parse time with exit 2.)                                                    |
 
 **`.env` policy:** the scaffold **owns** `$PROJECT_DIR/.env`. Re-running scaffold overwrites it. Do not hand-edit the scaffolded `.env`; instead, re-run scaffold with different flags. (The skill never edits `.env` files outside `$PROJECT_DIR`.)
 
@@ -390,7 +390,7 @@ run the per-section commands in `references/<section>.md`.
 | Workspace CRUD    | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                           |
 | Agent CRUD        | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                               |
 | Agent star        | `PUT / DELETE /stored/agents/:id/star`                                     |
-| Agent avatar      | `POST /stored/agents/:id/avatar` (owner-only)                              |
+| Agent avatar      | `PATCH /stored/agents/:id` with `metadata.avatarUrl` (owner-only)          |
 | Skill CRUD        | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                               |
 | Skill publish     | `POST /stored/skills/:id/publish`                                          |
 | Skill star        | `PUT / DELETE /stored/skills/:id/star`                                     |
@@ -399,16 +399,17 @@ run the per-section commands in `references/<section>.md`.
 
 ## Builder Studio routes
 
-| Feature                 | Route                           |
-| ----------------------- | ------------------------------- |
-| Agent Builder shell     | `/agent-builder`                |
-| Agents (default view)   | `/agent-builder`                |
-| Agent detail / edit     | `/agent-builder/agents/:id`     |
-| Skills                  | `/agent-builder/skills`         |
-| Library (public skills) | `/agent-builder/library`        |
-| Skill detail            | `/agent-builder/skills/:id`     |
-| Workspaces              | `/agent-builder/workspaces`     |
-| Infrastructure (admin)  | `/agent-builder/infrastructure` |
+| Feature                 | Route                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| Agent Builder shell     | `/agent-builder`                                                                           |
+| Agents (default view)   | `/agent-builder`                                                                           |
+| Agent detail (view)     | `/agent-builder/agents/:id/view` (bare `:id` redirects to `/view`)                         |
+| Agent detail (edit)     | `/agent-builder/agents/:id/edit`                                                           |
+| Skills                  | `/agent-builder/skills`                                                                    |
+| Library (public skills) | `/agent-builder/library`                                                                   |
+| Skill detail            | `/agent-builder/skills/:id/edit` (owner) or `/agent-builder/skills/:id/view` (non-owner)   |
+| Workspaces              | `/agent-builder/workspaces`                                                                |
+| Infrastructure          | `/agent-builder/infrastructure` (readable by every default role — see `infrastructure.md`) |
 
 Mobile renders a bottom-bar with the same primary entries.
 

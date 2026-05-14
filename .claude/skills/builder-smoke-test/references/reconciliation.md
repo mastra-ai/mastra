@@ -20,6 +20,8 @@ On startup, `ensureBuilderWorkspaces()`:
 
 ## Prerequisites
 
+> **Auth-on session header.** Under `--auth on`, prepend `-H "Cookie: $COOKIE"` to every `curl` below (exported from `references/auth.md` step 0). Snippets omit it for readability; an authenticated run without the cookie returns `401` before any reconciliation assertion can fire.
+
 Resolve the builder workspace ID (the rest of this file assumes `$WORKSPACE_ID` is set):
 
 ```bash
@@ -135,16 +137,17 @@ curl -s $BASE/stored/workspaces/builder-workspace-v2 | jq '{status, metadata}'
 Create a user workspace, then restart the server:
 
 ```bash
-# Create user workspace
+# Create user workspace (under --auth on, also pass -H "Cookie: $COOKIE")
 curl -s -X POST $BASE/stored/workspaces \
   -H 'Content-Type: application/json' \
+  ${COOKIE:+-H "Cookie: $COOKIE"} \
   -d '{"id": "user-workspace", "name": "User Workspace"}' | jq .
 
 # Record state
-curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
+curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
 
 # Restart server, then check again
-curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
+curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
 ```
 
 - [ ] User workspace is unchanged after restart
@@ -156,7 +159,7 @@ curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedA
 Clean up:
 
 ```bash
-curl -s -X DELETE $BASE/stored/workspaces/user-workspace
+curl -s -X DELETE ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/user-workspace
 ```
 
 ### 6. Metadata Backfill — unit-test only

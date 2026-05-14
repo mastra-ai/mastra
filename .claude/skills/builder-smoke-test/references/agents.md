@@ -14,6 +14,8 @@ The model values used below (`openai/gpt-4o-mini`, `openai/gpt-4o`) are valid un
 
 > **Capability gate.** Create / PATCH / DELETE steps require `stored-agents:write`. The scaffold grants this to owner, admin, and member; viewer does not have it. Under `--role viewer`, mark write steps `n/a — role lacks stored-agents:write` and run only the read-side steps (GET list, GET by id).
 
+> **Auth-on session header.** Under `--auth on`, prepend `-H "Cookie: $COOKIE"` to every `curl` in this file (exported from `references/auth.md` step 0). Snippets below omit it for readability so they read cleanly under `--auth off`; an authenticated run without the cookie returns `401` before the intended assertion fires.
+
 ## Steps
 
 ### 1. Create a stored agent

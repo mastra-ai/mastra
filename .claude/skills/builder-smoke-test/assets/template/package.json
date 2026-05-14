@@ -22,7 +22,8 @@
     "@mastra/editor": "beta",
     "@mastra/auth-workos": "beta",
     "@mastra/stagehand": "beta",
-    "@mastra/slack": "beta"
+    "@mastra/slack": "beta",
+    "hono": "^4.6.0"
   },
   "devDependencies": {
     "mastra": "link:__WORKTREE_ROOT__/packages/cli",
