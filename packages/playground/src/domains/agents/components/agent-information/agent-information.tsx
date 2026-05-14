@@ -36,7 +36,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
     <AgentInformationLayout>
       <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
         <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange} className="overflow-y-visible">
-          <div className="sticky top-0 z-10 bg-surface2">
+          <div className="sticky top-0 z-10 bg-surface3">
             <AgentEntityHeader agentId={agentId} />
             <TabList>
               <Tab value="overview">Overview</Tab>
@@ -51,7 +51,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
           <div className="relative">
             {/* Browser sidebar overlay - takes over when in sidebar mode */}
             {hasSession && isInSidebar && (
-              <div className="absolute inset-0 z-20 bg-surface1">
+              <div className="absolute inset-0 z-20 bg-surface3">
                 <BrowserSidebarTab />
               </div>
             )}
@@ -99,8 +99,8 @@ export interface AgentInformationLayoutProps {
 
 export const AgentInformationLayout = ({ children }: AgentInformationLayoutProps) => {
   return (
-    <div className="h-full w-full py-2 pr-2">
-      <div className="h-full min-w-0 w-full bg-surface2 rounded-3xl border border-border2/40 overflow-hidden">
+    <div className="h-full w-full pb-2 pr-2">
+      <div className="h-full min-w-0 w-full bg-surface3 rounded-studio-panel border border-border1 overflow-hidden">
         {children}
       </div>
     </div>

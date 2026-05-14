@@ -115,7 +115,7 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface2">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface3">
         <Icon size="sm" className="text-neutral3 shrink-0">
           <Clock />
         </Icon>
@@ -164,14 +164,14 @@ export function AgentPlaygroundVersionBar({
       </div>
     ),
     actionBar: (
-      <div className="flex items-center justify-end px-3 py-2 border-t border-border1 bg-surface2">
+      <div className="flex items-center justify-end px-3 py-2 border-t border-border1 bg-surface3">
         <ButtonsGroup className="flex-wrap justify-end">
           <ButtonsGroup spacing="close">
             <Button variant="default" size="md" onClick={() => onSaveDraft()} disabled={saveDisabled}>
               {isSavingDraft ? (
                 <>
-                  <Spinner className="h-3.5 w-3.5" />
-                  Saving...
+                  <Spinner className="size-3.5" />
+                  Saving&hellip;
                 </>
               ) : (
                 <>
@@ -185,7 +185,7 @@ export function AgentPlaygroundVersionBar({
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
                 <Button variant="default" size="md" disabled={saveDisabled} aria-label="More save options">
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className="size-3.5" />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end">
@@ -211,8 +211,8 @@ export function AgentPlaygroundVersionBar({
           >
             {isPublishing ? (
               <>
-                <Spinner className="h-3.5 w-3.5" />
-                Publishing...
+                <Spinner className="size-3.5" />
+                Publishing&hellip;
               </>
             ) : (
               <>
