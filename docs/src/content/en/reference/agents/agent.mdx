@@ -108,6 +108,152 @@ export const agent = new Agent({
 })
 ```
 
+## Thread signals
+
+Use Agent signals to send real-time context into a memory thread. Signals are useful when a user adds input while an agent is already streaming, or when another process needs to add structured context to the thread.
+
+A `user-message` signal represents user input. When the target thread is running, Mastra delivers the signal into the active agent loop. When the thread is idle, Mastra starts a stream with the signal as the first input by default.
+
+```typescript title="src/mastra/signals.ts"
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+
+void (async () => {
+  for await (const chunk of subscription.stream) {
+    console.log(chunk)
+  }
+})()
+
+agent.sendSignal(
+  { type: 'user-message', contents: 'Use the latest customer note too.' },
+  {
+    resourceId: 'user-123',
+    threadId: 'thread-abc',
+    ifIdle: {
+      streamOptions: {
+        maxSteps: 3,
+      },
+    },
+  },
+)
+```
+
+Use a custom signal type for contextual messages that should reach the model as XML-wrapped context instead of normal user input:
+
+```typescript
+agent.sendSignal(
+  {
+    type: 'system-reminder',
+    contents: 'Continue from the previous tool result.',
+    attributes: { reminderType: 'tool-result' },
+  },
+  { resourceId: 'user-123', threadId: 'thread-abc' },
+)
+```
+
+### `sendSignal(signal, options)`
+
+Sends a signal to an active run or memory thread.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'signal',
+    type: "{ type: 'user-message'; contents: MessageListInput } | { type: string; contents: string }",
+    description:
+      '`user-message` signals are treated as user input. Other signal types are converted to XML context before the next model call.',
+  },
+  {
+    name: 'options.runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Run ID to target directly. Use this when you already know the active run ID.',
+  },
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted signals.',
+  },
+  {
+    name: 'options.threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to target. Required with `resourceId` for thread-targeted signals.',
+  },
+  {
+    name: 'options.ifActive.behavior',
+    type: "'deliver' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+  },
+  {
+    name: 'options.ifIdle.behavior',
+    type: "'wake' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+  },
+  {
+    name: 'options.ifIdle.streamOptions',
+    type: 'AgentExecutionOptions',
+    isOptional: true,
+    description:
+      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+  },
+]}
+/>
+
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory.
+
+### `subscribeToThread(options)`
+
+Subscribes to raw stream chunks for a memory thread. Use this before calling `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread.',
+  },
+  {
+    name: 'options.threadId',
+    type: 'string',
+    description: 'Thread ID to subscribe to.',
+  },
+]}
+/>
+
+Returns an `AgentThreadSubscription` object with these members:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'stream',
+    type: 'AsyncIterable<AgentChunkType>',
+    description: 'Raw agent stream chunks for the subscribed thread.',
+  },
+  {
+    name: 'activeRunId',
+    type: '() => string | null',
+    description: 'Returns the active run ID for the thread, or `null` when no run is active.',
+  },
+  {
+    name: 'abort',
+    type: '() => boolean',
+    description: 'Aborts the active run for the thread. Returns `true` when a run was aborted.',
+  },
+  {
+    name: 'unsubscribe',
+    type: '() => void',
+    description: 'Stops the subscription without aborting the active run.',
+  },
+]}
+/>
+
 ## Constructor parameters
 
 <PropertiesTable

@@ -95,12 +95,14 @@ import type {
   DelegationConfig,
   DelegationStartContext,
   DelegationCompleteContext,
-  SubAgent,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import type { SubAgent } from './subagent';
+import { AgentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -113,8 +115,13 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentInstructions,
   AgentMethodType,
-  StructuredOutputOptions,
+  AgentSignal,
+  AgentSubscribeToThreadOptions,
+  AgentThreadSubscription,
   PublicStructuredOutputOptions,
+  SendAgentSignalOptions,
+  SendAgentSignalResult,
+  StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
@@ -234,7 +241,7 @@ export class Agent<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >
   extends MastraBase
-  implements SubAgent<TOutput, TRequestContext>
+  implements SubAgent<TAgentId, TRequestContext>
 {
   public id: TAgentId;
   public name: string;
@@ -254,7 +261,7 @@ export class Agent<
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
-  #agents: DynamicArgument<Record<string, SubAgent>, TRequestContext>;
+  #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: MastraVoice;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
@@ -278,6 +285,14 @@ export class Agent<
    * close if they're still the active one.
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
+  /**
+   * Local fallback for standalone Agents that are not registered on a Mastra
+   * instance. Agents registered on the same Mastra instance coordinate through
+   * `mastra.agentThreadStreamRuntime` instead, so cross-agent thread locks and
+   * subscriptions are scoped to that Mastra runtime rather than process-global
+   * Agent state.
+   */
+  #threadStreamRuntime = new AgentThreadStreamRuntime();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -377,7 +392,7 @@ export class Agent<
 
     this.#scorers = config.scorers || ({} as MastraScorers);
 
-    this.#agents = config.agents || ({} as Record<string, SubAgent>);
+    this.#agents = config.agents || ({} as Record<string, SubAgent<string, TRequestContext>>);
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -541,7 +556,7 @@ export class Agent<
    * @internal
    */
   private async deriveSubAgentBackgroundConfig(
-    subAgent: SubAgent,
+    subAgent: SubAgent<string, TRequestContext>,
     requestContext: RequestContext,
   ): Promise<ToolBackgroundConfig | undefined> {
     try {
@@ -723,8 +738,8 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent>
-    | Promise<Record<string, SubAgent>> {
+    | Record<string, SubAgent<string, TRequestContext>>
+    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -3650,7 +3665,10 @@ export class Agent<
             // Recompute derived values from the resolved agent (may differ from
             // code-defined agent if a stored version changed the model or defaults)
             const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
-            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedDefaultOptions =
+              'getDefaultOptions' in resolvedAgent
+                ? await (resolvedAgent as Agent).getDefaultOptions({ requestContext })
+                : {};
             const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
 
             // Propagate parent memory to the resolved agent if it doesn't have its own.
@@ -3664,7 +3682,7 @@ export class Agent<
               supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
               if (!resolvedAgent.hasOwnMemory() && this.#memory) {
-                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory, TRequestContext>);
               }
             }
 
@@ -5362,6 +5380,14 @@ export class Agent<
       llm,
     };
 
+    const initialSignalEchoes =
+      methodType === 'stream'
+        ? (Array.isArray(options.messages) ? options.messages : [options.messages]).filter(isCreatedAgentSignal)
+        : [];
+    const initialSignalEchoesForRun =
+      initialSignalEchoes.length > 0
+        ? [...initialSignalEchoes, ...(options._initialSignalEchoes ?? [])]
+        : options._initialSignalEchoes;
     const toolPayloadTransform =
       normalizeToolPayloadTransformPolicy(options.transform ?? (options as any).toolPayloadProjection) ??
       this.#toolPayloadTransform ??
@@ -5399,6 +5425,8 @@ export class Agent<
             agentBackgroundConfig: this.#backgroundTasks,
           }),
       skipBgTaskWait: options._skipBgTaskWait,
+      drainPendingSignals: this.#getThreadStreamRuntime().drainPendingSignals.bind(this.#getThreadStreamRuntime()),
+      initialSignalEchoes: initialSignalEchoesForRun,
     });
 
     const run = await executionWorkflow.createRun();
@@ -5938,6 +5966,34 @@ export class Agent<
     return fullOutput;
   }
 
+  #getThreadStreamRuntime() {
+    return this.#mastra?.agentThreadStreamRuntime ?? this.#threadStreamRuntime;
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async subscribeToThread<OUTPUT = TOutput>(
+    options: AgentSubscribeToThreadOptions,
+  ): Promise<AgentThreadSubscription<OUTPUT>> {
+    return this.#getThreadStreamRuntime().subscribeToThread<OUTPUT>(this as Agent<any, any, any, any>, options);
+  }
+
+  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+    return this.#getThreadStreamRuntime().abortThread(options);
+  }
+
+  abortRunStream(runId: string): boolean {
+    return this.#getThreadStreamRuntime().abortRun(runId);
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
+    return this.#getThreadStreamRuntime().sendSignal(this as Agent<any, any, any, any>, signal, target);
+  }
+
   async stream<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -6021,8 +6077,18 @@ export class Agent<
       });
     }
 
+    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(this as Agent<any, any, any, any>, mergedOptions);
+
+    mergedOptions.runId ??=
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+      }) ?? randomUUID();
+    const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(mergedOptions);
+
     const executeOptions = {
-      ...mergedOptions,
+      ...preparedOptions,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6058,6 +6124,12 @@ export class Agent<
         text: 'An unknown error occurred while streaming',
       });
     }
+
+    this.#getThreadStreamRuntime().registerRun(
+      this as Agent<any, any, any, any>,
+      result.result,
+      preparedOptions as AgentExecutionOptions<OUTPUT>,
+    );
 
     return result.result;
   }
@@ -6283,9 +6355,16 @@ export class Agent<
 
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+    );
+    const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(
+      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+    );
 
     const result = await this.#execute({
-      ...mergedStreamOptions,
+      ...preparedOptions,
       structuredOutput: mergedStreamOptions.structuredOutput
         ? {
             ...mergedStreamOptions.structuredOutput,
@@ -6321,6 +6400,12 @@ export class Agent<
         text: 'An unknown error occurred while streaming',
       });
     }
+
+    this.#getThreadStreamRuntime().registerRun(
+      this as Agent<any, any, any, any>,
+      result.result as unknown as MastraModelOutput<OUTPUT>,
+      preparedOptions as AgentExecutionOptions<OUTPUT>,
+    );
 
     return result.result as unknown as MastraModelOutput<OUTPUT>;
   }

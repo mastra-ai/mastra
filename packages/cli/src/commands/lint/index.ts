@@ -1,11 +1,17 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import * as p from '@clack/prompts';
 import { getDeployer } from '@mastra/deployer';
+import pc from 'picocolors';
 import { FileService } from '../../services/service.file.js';
 import { logger } from '../../utils/logger.js';
+import { runBuild } from '../../utils/run-build.js';
 import { BuildBundler } from '../build/BuildBundler.js';
+import { preflightBuildOutput } from '../deploy-preflight.js';
+import type { PreflightIssue } from '../deploy-preflight.js';
+import { readEnvVars } from '../studio/deploy.js';
 import { rules } from './rules/index.js';
-import type { LintContext } from './rules/types.js';
+import type { LintContext, LintIssue, LintIssueCode } from './rules/types.js';
 
 interface PackageJson {
   dependencies?: Record<string, string>;
@@ -16,6 +22,26 @@ interface MastraPackage {
   name: string;
   version: string;
   isAlpha: boolean;
+}
+
+export interface LintOptions {
+  dir?: string;
+  root?: string;
+  tools?: string[];
+  preflight?: boolean;
+  skipBuild?: boolean;
+  envFile?: string;
+  strict?: boolean;
+  json?: boolean;
+  debug?: boolean;
+}
+
+export interface LintResult {
+  ok: boolean;
+  issues: LintIssue[];
+  errorCount: number;
+  warningCount: number;
+  error?: string;
 }
 
 function readPackageJson(dir: string): PackageJson {
@@ -48,18 +74,35 @@ function getMastraPackages(packageJson: PackageJson): MastraPackage[] {
   }));
 }
 
-export async function lint({ dir, root, tools }: { dir?: string; root?: string; tools?: string[] }): Promise<boolean> {
-  try {
-    const rootDir = root || process.cwd();
-    const mastraDir = dir
-      ? dir.startsWith('/')
-        ? dir
-        : join(process.cwd(), dir)
-      : join(process.cwd(), 'src', 'mastra');
-    const outputDirectory = join(rootDir, '.mastra');
+function toLintIssue(issue: PreflightIssue): LintIssue {
+  return {
+    ...issue,
+    code: issue.code as LintIssueCode,
+    scope: 'bundle',
+  };
+}
 
+function createLintResult(issues: LintIssue[], error?: string): LintResult {
+  const errorCount = issues.filter(issue => issue.severity === 'error').length;
+  const warningCount = issues.filter(issue => issue.severity === 'warning').length;
+
+  return {
+    ok: error === undefined && errorCount === 0,
+    issues,
+    errorCount,
+    warningCount,
+    ...(error !== undefined ? { error } : {}),
+  };
+}
+
+export async function lint(options: LintOptions): Promise<LintResult> {
+  const rootDir = options.root || process.cwd();
+  const mastraDir = options.dir ? resolve(options.dir) : join(rootDir, 'src', 'mastra');
+  const outputDirectory = join(rootDir, '.mastra');
+
+  try {
     const defaultToolsPath = join(mastraDir, 'tools');
-    const discoveredTools = [defaultToolsPath, ...(tools ?? [])];
+    const discoveredTools = [defaultToolsPath, ...(options.tools ?? [])];
 
     const packageJson = readPackageJson(rootDir);
     const mastraPackages = getMastraPackages(packageJson);
@@ -73,12 +116,9 @@ export async function lint({ dir, root, tools }: { dir?: string; root?: string; 
       mastraPackages,
     };
 
-    // Run all rules
-    const results = await Promise.all(rules.map(rule => rule.run(context)));
-    const allRulesPassed = results.every(result => result);
+    const projectIssues = (await Promise.all(rules.map(rule => rule.run(context)))).flat();
 
-    // Run deployer lint if all rules passed
-    if (allRulesPassed) {
+    if (projectIssues.every(issue => issue.severity !== 'error')) {
       const fileService = new FileService();
       const mastraEntryFile = fileService.getFirstExistingFile([
         join(mastraDir, 'index.ts'),
@@ -93,11 +133,74 @@ export async function lint({ dir, root, tools }: { dir?: string; root?: string; 
       }
     }
 
-    return allRulesPassed;
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Lint check failed', { error: error.message });
+    const issues = [...projectIssues];
+
+    if (options.preflight) {
+      if (!options.skipBuild) {
+        await runBuild(rootDir, { debug: options.debug });
+      }
+
+      const envVars = await readEnvVars(rootDir, {
+        envFile: options.envFile,
+        autoAccept: options.json ?? false,
+      });
+      const preflightIssues = await preflightBuildOutput(rootDir, envVars);
+      issues.push(...preflightIssues.map(toLintIssue));
     }
-    return false;
+
+    return createLintResult(issues);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Lint check failed', { error: message });
+    return createLintResult([], message);
   }
+}
+
+export function printLintReport(result: LintResult, options: { strict?: boolean } = {}): void {
+  if (result.error) {
+    p.log.error(result.error);
+    return;
+  }
+
+  if (result.issues.length === 0) {
+    p.log.success('No issues found.');
+    return;
+  }
+
+  const warningsAreErrors = options.strict && result.warningCount > 0 && result.errorCount === 0;
+
+  for (const issue of result.issues) {
+    const prefix =
+      issue.severity === 'error' || warningsAreErrors ? pc.red(`[${issue.code}]`) : pc.yellow(`[${issue.code}]`);
+    const message = `${prefix} ${issue.message}\n  ${pc.dim('scope:')} ${issue.scope}\n  ${pc.dim('→')} ${issue.fix}`;
+
+    if (issue.severity === 'error' || warningsAreErrors) {
+      p.log.error(message);
+    } else {
+      p.log.warn(message);
+    }
+  }
+
+  if (warningsAreErrors) {
+    p.log.error(`Lint failed in --strict mode: ${result.warningCount} warning(s) treated as errors.`);
+  }
+}
+
+export function emitLintJson(result: LintResult, options: { strict?: boolean } = {}): void {
+  const blocked = result.error !== undefined || result.errorCount > 0 || (options.strict && result.warningCount > 0);
+
+  process.stdout.write(
+    JSON.stringify(
+      {
+        ok: !blocked,
+        strict: options.strict ?? false,
+        errorCount: result.errorCount,
+        warningCount: result.warningCount,
+        issues: result.issues,
+        ...(result.error !== undefined ? { error: result.error } : {}),
+      },
+      null,
+      2,
+    ) + '\n',
+  );
 }

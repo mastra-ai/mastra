@@ -863,4 +863,58 @@ describe('MastraClient', () => {
       });
     });
   });
+
+  describe('Agent Builder Actions', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('getAgentBuilderActions should hit /agent-builder (no trailing slash)', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.getAgentBuilderActions();
+
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:4111/api/agent-builder', expect.any(Object));
+    });
+  });
+
+  describe('Stored Skills', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('createStoredSkill should POST the required description and other fields', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.createStoredSkill({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/stored/skills');
+      expect(init.method).toBe('POST');
+      const body = JSON.parse(init.body);
+      expect(body).toMatchObject({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
+      });
+    });
+  });
 });

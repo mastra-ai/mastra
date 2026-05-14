@@ -28,6 +28,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
+import { withRetry } from './retry';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -278,65 +279,74 @@ export class ReflectorRunner {
       );
 
       let chunkCount = 0;
-      const result = await withOmTracingSpan({
-        phase: 'reflector',
-        model: resolvedModel.model,
-        inputTokens: originalTokens,
-        requestContext,
-        observabilityContext,
-        metadata: {
-          omCompressionLevel: currentLevel,
-          omCompressionAttempt: attemptNumber,
-          omTargetThreshold: targetThreshold,
-          omSkipContinuationHints: skipContinuationHints ?? false,
-          ...(resolvedModel.selectedThreshold !== undefined
-            ? { omSelectedThreshold: resolvedModel.selectedThreshold }
-            : {}),
-          ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
-          ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
-        },
-        callback: childObservabilityContext =>
-          withAbortCheck(async () => {
-            const streamResult = await agent.stream(prompt, {
-              modelSettings: {
-                ...this.reflectionConfig.modelSettings,
-              },
-              providerOptions: this.reflectionConfig.providerOptions as any,
-              ...(abortSignal ? { abortSignal } : {}),
-              ...(requestContext ? { requestContext } : {}),
-              ...childObservabilityContext,
-              ...(attemptNumber === 1
-                ? {
-                    onChunk(chunk: any) {
-                      chunkCount++;
-                      if (chunkCount === 1 || chunkCount % 50 === 0) {
-                        const preview =
-                          chunk.type === 'text-delta'
-                            ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                            : chunk.type === 'tool-call'
-                              ? ` tool=${chunk.toolName}`
-                              : '';
-                        omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                      }
-                    },
-                    onFinish(event: any) {
-                      omDebug(
-                        `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                      );
-                    },
-                    onAbort(event: any) {
-                      omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                    },
-                    onError({ error }: { error: unknown }) {
-                      omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                    },
-                  }
+      const result = await withRetry(
+        () =>
+          withOmTracingSpan({
+            phase: 'reflector',
+            model: resolvedModel.model,
+            inputTokens: originalTokens,
+            requestContext,
+            observabilityContext,
+            metadata: {
+              omCompressionLevel: currentLevel,
+              omCompressionAttempt: attemptNumber,
+              omTargetThreshold: targetThreshold,
+              omSkipContinuationHints: skipContinuationHints ?? false,
+              ...(resolvedModel.selectedThreshold !== undefined
+                ? { omSelectedThreshold: resolvedModel.selectedThreshold }
                 : {}),
-            });
+              ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
+              ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
+            },
+            callback: childObservabilityContext =>
+              withAbortCheck(async () => {
+                // Reset chunk counter per attempt so retry-after-transient-error
+                // doesn't get tagged with the previous attempt's chunk count.
+                chunkCount = 0;
+                const streamResult = await agent.stream(prompt, {
+                  modelSettings: {
+                    ...this.reflectionConfig.modelSettings,
+                  },
+                  providerOptions: this.reflectionConfig.providerOptions as any,
+                  ...(abortSignal ? { abortSignal } : {}),
+                  ...(requestContext ? { requestContext } : {}),
+                  ...childObservabilityContext,
+                  ...(attemptNumber === 1
+                    ? {
+                        onChunk(chunk: any) {
+                          chunkCount++;
+                          if (chunkCount === 1 || chunkCount % 50 === 0) {
+                            const preview =
+                              chunk.type === 'text-delta'
+                                ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                                : chunk.type === 'tool-call'
+                                  ? ` tool=${chunk.toolName}`
+                                  : '';
+                            omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                          }
+                        },
+                        onFinish(event: any) {
+                          omDebug(
+                            `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                          );
+                        },
+                        onAbort(event: any) {
+                          omDebug(
+                            `[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`,
+                          );
+                        },
+                        onError({ error }: { error: unknown }) {
+                          omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                        },
+                      }
+                    : {}),
+                });
 
-            return streamResult.getFullOutput();
-          }, abortSignal),
-      });
+                return streamResult.getFullOutput();
+              }, abortSignal),
+          }),
+        { label: 'reflector', abortSignal },
+      );
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,

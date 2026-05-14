@@ -118,6 +118,33 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * When toModelOutput is defined, the transform runs under a MAPPING child span so
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
+      /**
+       * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
+       * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
+       * providers expect. AI SDK does this internally in `mapToolResultOutput`,
+       * but Mastra calls toModelOutput directly and stores the result, bypassing
+       * that normalization.
+       */
+      function normalizeModelOutput(output: unknown): unknown {
+        if (output == null || typeof output !== 'object') return output;
+
+        const obj = output as Record<string, unknown>;
+        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
+
+        return {
+          ...obj,
+          value: (obj.value as unknown[]).map(item => {
+            if (item == null || typeof item !== 'object') return item;
+            const part = item as Record<string, unknown>;
+            if (part.type !== 'media') return part;
+            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
+              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
+            }
+            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
+          }),
+        };
+      }
+
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         toolCallId?: string;
@@ -146,6 +173,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           });
           try {
             modelOutput = await tool.toModelOutput(toolCall.result);
+            // Normalize media parts to image-data/file-data as AI SDK expects
+            modelOutput = normalizeModelOutput(modelOutput);
             mappingSpan?.end({ output: modelOutput });
           } catch (err) {
             mappingSpan?.error({ error: err as Error, endSpan: true });
@@ -280,6 +309,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           const successfulResults = inputData.filter(tc => tc.result !== undefined);
           if (successfulResults.length) {
             for (const toolCall of successfulResults) {
+              // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
+              // can access it on the chunk's providerMetadata.mastra.modelOutput.
+              // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
+              const providerMetadata = !toolCall.providerExecuted
+                ? await getProviderMetadataWithModelOutput(toolCall)
+                : undefined;
+              const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
+                | ProviderMetadata
+                | undefined;
+
               const chunk = await transformToolChunk(
                 {
                   type: 'tool-result',
@@ -290,7 +329,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolCallId: toolCall.toolCallId,
                     toolName: toolCall.toolName,
                     result: toolCall.result,
-                    providerMetadata: toolCall.providerMetadata,
+                    providerMetadata: chunkProviderMetadata,
                     providerExecuted: toolCall.providerExecuted,
                   },
                 },
@@ -303,7 +342,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               if (!toolCall.providerExecuted) {
                 // Update tool invocations from state:'call' to state:'result' for successful client tools.
                 // Provider-executed tools are handled by llm-execution-step.
-                const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
                 rest.messageList.updateToolInvocation({
                   type: 'tool-invocation' as const,
                   toolInvocation: {
@@ -365,6 +403,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // by processOutputStream's 'tool-result' case in llm-execution-step.
           if (toolCall.result === undefined) continue;
 
+          // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
+          // can access it on the chunk's providerMetadata.mastra.modelOutput.
+          // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
+          const providerMetadata = !toolCall.providerExecuted
+            ? await getProviderMetadataWithModelOutput(toolCall)
+            : undefined;
+          const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
+
           const chunk = await transformToolChunk(
             {
               type: 'tool-result',
@@ -375,7 +421,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCallId: toolCall.toolCallId,
                 toolName: toolCall.toolName,
                 result: toolCall.result,
-                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                providerMetadata: chunkProviderMetadata,
                 providerExecuted: toolCall.providerExecuted,
               },
             },
@@ -389,7 +435,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Exclude provider-executed tools — these are handled by llm-execution-step
           // (same-turn results are stored directly, deferred results are resolved via updateToolInvocation).
           if (!toolCall.providerExecuted) {
-            const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {

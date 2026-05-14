@@ -143,6 +143,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ambient',
+          label: 'Ambient',
+        },
+        {
+          type: 'doc',
+          id: 'providers/auriko',
+          label: 'Auriko',
+        },
+        {
+          type: 'doc',
           id: 'providers/azure',
           label: 'Azure',
         },
@@ -178,6 +188,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/claudinio',
+          label: 'Claudinio',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },
@@ -205,6 +220,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/databricks',
+          label: 'Databricks',
         },
         {
           type: 'doc',
@@ -488,6 +508,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sarvam',
+          label: 'Sarvam AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/scaleway',
           label: 'Scaleway',
         },
@@ -585,6 +610,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi-token-plan-sgp',
           label: 'Xiaomi Token Plan (Singapore)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xpersona',
+          label: 'Xpersona',
         },
         {
           type: 'doc',

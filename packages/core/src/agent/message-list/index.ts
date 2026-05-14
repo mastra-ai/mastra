@@ -2,7 +2,15 @@
 export { MessageList } from './message-list';
 
 // Type exports
-export type { AIV5ResponseMessage, AIV6ResponseMessage, MessageInput, MessageListInput } from './types';
+export type {
+  AIV5ResponseMessage,
+  AIV6ResponseMessage,
+  BaseMessageListInput,
+  BaseMessageListItem,
+  MessageInput,
+  MessageListInput,
+  MessageListItem,
+} from './types';
 
 // Re-export types from state/types (canonical source)
 export type {
@@ -42,6 +50,7 @@ export type { AIV4AdapterContext, AIV5AdapterContext, AdapterContext } from './a
 export {
   ensureGeminiCompatibleMessages,
   ensureAnthropicCompatibleMessages,
+  sanitizeOrphanedToolPairs,
   hasOpenAIReasoningItemId,
   getOpenAIReasoningItemId,
   hasResponseProviderItemId,

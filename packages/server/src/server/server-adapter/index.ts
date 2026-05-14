@@ -506,18 +506,23 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
   /**
    * Validate that EE features have a valid license in production.
-   * Throws if RBAC is configured without a valid license outside dev/test environments.
+   * Throws if RBAC or FGA is configured without a valid license outside dev/test environments.
    */
   async validateEELicense(): Promise<void> {
-    const rbacProvider = this.mastra.getServer()?.rbac;
-    if (!rbacProvider) return;
+    const serverConfig = this.mastra.getServer();
+    const configuredFeatures = [serverConfig?.rbac ? 'RBAC' : null, serverConfig?.fga ? 'FGA' : null].filter(
+      (feature): feature is string => feature !== null,
+    );
+
+    if (configuredFeatures.length === 0) return;
 
     try {
       const { isEEEnabled } = await import('@mastra/core/auth/ee');
       if (!isEEEnabled()) {
+        const featureList = configuredFeatures.join(' and ');
         throw new Error(
-          '[mastra/auth-ee] RBAC is configured but no valid EE license was found.\n' +
-            'RBAC requires a Mastra Enterprise License for production use.\n' +
+          `[mastra/auth-ee] ${featureList} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but no valid EE license was found.\n` +
+            `${featureList} ${configuredFeatures.length === 1 ? 'requires' : 'require'} a Mastra Enterprise License for production use.\n` +
             'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
             'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
         );
@@ -526,9 +531,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
         throw err;
       }
-      // @mastra/core/auth/ee module not available — RBAC cannot function
+      // @mastra/core/auth/ee module not available; EE authorization cannot function.
       throw new Error(
-        '[mastra/auth-ee] RBAC is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+        `[mastra/auth-ee] ${configuredFeatures.join(' and ')} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n` +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }

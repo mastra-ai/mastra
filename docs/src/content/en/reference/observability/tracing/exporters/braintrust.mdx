@@ -24,6 +24,8 @@ interface BraintrustExporterConfig extends BaseExporterConfig {
   apiKey?: string
   endpoint?: string
   projectName?: string
+  braintrustLogger?: Logger<true>
+  currentSpan?: () => Span | undefined
   tuningParameters?: Record<string, any>
 }
 ```
@@ -51,6 +53,19 @@ Extends `BaseExporterConfig`, which includes:
     name: 'projectName',
     type: 'string',
     description: "Project name (default: 'mastra-tracing')",
+    required: false,
+  },
+  {
+    name: 'braintrustLogger',
+    type: 'Logger<true>',
+    description: 'Braintrust logger instance for eval and traced span context integration.',
+    required: false,
+  },
+  {
+    name: 'currentSpan',
+    type: '() => Span | undefined',
+    description:
+      'Resolver from the app Braintrust package instance. Use this with braintrustLogger when Eval() or logger.traced() spans are created by a different installed Braintrust SDK copy.',
     required: false,
   },
   {

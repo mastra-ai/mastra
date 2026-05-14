@@ -56,6 +56,21 @@ For local launches (the default), AgentBrowser requires a Chromium binary instal
 
 :::
 
+## Screenshots
+
+When the agent uses the `browser_screenshot` tool, it captures a PNG image of the current page and returns it as image content that vision-capable models can interpret directly.
+
+Use screenshots when you need to visually inspect the page — for example, evaluating images, layout, or colors. For text or structured data, use `browser_snapshot` instead.
+
+To disable the screenshot tool for models that do not support vision, use `excludeTools`:
+
+```typescript
+const browser = new AgentBrowser({
+  headless: false,
+  excludeTools: ['browser_screenshot'],
+})
+```
+
 ## Element refs
 
 AgentBrowser uses accessibility tree refs to identify elements. When an agent calls `browser_snapshot`, it receives a text representation of the page with refs like `@e1`, `@e2`, etc. The agent then uses these refs with other tools to interact with elements.

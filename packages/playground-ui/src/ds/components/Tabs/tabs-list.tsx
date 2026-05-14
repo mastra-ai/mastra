@@ -8,6 +8,7 @@ const tabListVariants = cva('flex items-center relative text-ui-lg', {
     variant: {
       line: 'w-max min-w-full border-b border-border1',
       pill: 'w-fit gap-1 rounded-full bg-surface2 p-1',
+      'pill-ghost': 'w-fit gap-1 rounded-full p-1',
     },
   },
   defaultVariants: {
@@ -18,13 +19,14 @@ const tabListVariants = cva('flex items-center relative text-ui-lg', {
 export type TabListProps = {
   children: React.ReactNode;
   className?: string;
+  sticky?: boolean;
 } & VariantProps<typeof tabListVariants>;
 
-export const TabList = ({ children, className, variant }: TabListProps) => {
+export const TabList = ({ children, className, variant, sticky }: TabListProps) => {
   const resolvedVariant = variant ?? 'line';
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className={cn('w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-surface2')}>
       <BaseTabs.List
         data-variant={resolvedVariant}
         className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
@@ -40,7 +42,7 @@ export const TabList = ({ children, className, variant }: TabListProps) => {
             style={{ transform: 'translateX(var(--active-tab-left))' }}
           />
         )}
-        {resolvedVariant === 'pill' && (
+        {(resolvedVariant === 'pill' || resolvedVariant === 'pill-ghost') && (
           <BaseTabs.Indicator
             className={cn(
               'absolute top-1/2 left-0 z-0 rounded-full bg-surface4',

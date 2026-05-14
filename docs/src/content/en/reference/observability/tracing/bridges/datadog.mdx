@@ -236,7 +236,7 @@ The bridge can be combined with non-Datadog exporters to send traces to addition
 
 ```typescript
 import { Mastra } from '@mastra/core'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 import { DatadogBridge } from '@mastra/datadog'
 
 const mastra = new Mastra({
@@ -248,7 +248,7 @@ const mastra = new Mastra({
           mlApp: process.env.DD_LLMOBS_ML_APP!,
         }),
         exporters: [
-          new DefaultExporter(), // Studio access
+          new MastraStorageExporter(), // Studio access
         ],
       },
     },

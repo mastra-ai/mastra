@@ -17,6 +17,8 @@ export type TraceAttributes = {
 
 export type TracesListViewTrace = {
   traceId: string;
+  /** Required for branch rows; absent on plain trace rows (which are root-rooted). */
+  spanId?: string | null;
   name: string;
   entityType?: string | null;
   entityId?: string | null;
@@ -47,6 +49,11 @@ export type TracesListViewProps = {
   filtersApplied?: boolean;
   /** Currently featured/selected trace — its row gets the highlighted background. */
   featuredTraceId?: string | null;
+  /**
+   * Required in branches mode to disambiguate rows sharing a `traceId`. When set,
+   * a row is featured only when both `traceId` and `spanId` match.
+   */
+  featuredSpanId?: string | null;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
   groupByThread?: boolean;
@@ -66,6 +73,7 @@ export function TracesListView({
   setEndOfListElement,
   filtersApplied,
   featuredTraceId,
+  featuredSpanId,
   onTraceClick,
   groupByThread,
   threadTitles,
@@ -75,7 +83,7 @@ export function TracesListView({
   const items = useMemo<ListItem[]>(() => {
     if (traces.length === 0) return [];
     if (!groupByThread) {
-      return traces.map(trace => ({ kind: 'row', key: trace.traceId, trace }));
+      return traces.map(trace => ({ kind: 'row', key: `${trace.traceId}:${trace.spanId ?? ''}`, trace }));
     }
     const { groups, ungrouped } = groupTracesByThread(traces);
     const result: ListItem[] = [];
@@ -93,7 +101,7 @@ export function TracesListView({
         ),
       });
       for (const trace of group.traces) {
-        result.push({ kind: 'row', key: trace.traceId, trace });
+        result.push({ kind: 'row', key: `${trace.traceId}:${trace.spanId ?? ''}`, trace });
       }
     }
     if (ungrouped.length > 0) {
@@ -108,7 +116,7 @@ export function TracesListView({
         ),
       });
       for (const trace of ungrouped) {
-        result.push({ kind: 'row', key: trace.traceId, trace });
+        result.push({ kind: 'row', key: `${trace.traceId}:${trace.spanId ?? ''}`, trace });
       }
     }
     return result;
@@ -181,7 +189,8 @@ export function TracesListView({
             }
 
             const trace = item.trace;
-            const isFeatured = trace.traceId === featuredTraceId;
+            const isFeatured =
+              trace.traceId === featuredTraceId && (featuredSpanId == null || trace.spanId === featuredSpanId);
             const displayDate = trace.startedAt ?? trace.createdAt;
             const entityName =
               trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;

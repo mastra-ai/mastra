@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -10,6 +11,8 @@ import { generateConversationHistory } from '../../agent/test-utils';
 import { createTool } from '../../tools';
 import { TokenLimiterProcessor } from './token-limiter';
 import { ToolCallFilter } from './tool-call-filter';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 

@@ -58,55 +58,91 @@ describe('handleAskQuestion goal mode', () => {
   });
 });
 
+function createPlanApprovalCtx() {
+  const sendSignal = vi.fn().mockReturnValue({
+    id: 'sig-1',
+    type: 'system-reminder',
+    accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
+  });
+  const state = {
+    harness: {
+      setState: vi.fn().mockResolvedValue(undefined),
+      getResourceId: vi.fn(() => 'resource-1'),
+      respondToPlanApproval: vi.fn().mockResolvedValue(undefined),
+      sendSignal,
+    },
+    chatContainer: {
+      children: [] as unknown[],
+      addChild: vi.fn(function (this: any, child: unknown) {
+        this.children.push(child);
+      }),
+      invalidate: vi.fn(),
+    },
+    ui: { requestRender: vi.fn() },
+  } as any;
+  const ctx = {
+    state,
+    notify: vi.fn(),
+    showError: vi.fn(),
+    addUserMessage: vi.fn(),
+    fireMessage: vi.fn(),
+    startGoal: vi.fn().mockResolvedValue(undefined),
+  } as unknown as EventHandlerContext;
+  return { state, ctx, sendSignal };
+}
+
 describe('handlePlanApproval goal mode', () => {
-  it('approves the plan, activates goal mode, and injects the goal trigger through fireMessage', async () => {
-    vi.useFakeTimers();
-    const state = {
-      harness: {
-        setState: vi.fn().mockResolvedValue(undefined),
-        getResourceId: vi.fn(() => 'resource-1'),
-        respondToPlanApproval: vi.fn().mockResolvedValue(undefined),
-      },
-      chatContainer: {
-        children: [],
-        addChild: vi.fn(function (this: any, child: unknown) {
-          this.children.push(child);
-        }),
-        invalidate: vi.fn(),
-      },
-      ui: { requestRender: vi.fn() },
-    } as any;
-    const ctx = {
-      state,
-      notify: vi.fn(),
-      addUserMessage: vi.fn(),
-      fireMessage: vi.fn(),
-      startGoal: vi.fn().mockResolvedValue(undefined),
-    } as unknown as EventHandlerContext;
+  it('approves the plan and hands the title+plan objective off to the normal /goal flow', async () => {
+    const { state, ctx } = createPlanApprovalCtx();
 
     const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
     const component = state.chatContainer.children[0];
 
     await (component as any).onGoal();
     await promise;
-    expect(ctx.fireMessage).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(50);
 
     expect(state.harness.respondToPlanApproval).toHaveBeenCalledWith({
       planId: 'plan-1',
       response: { action: 'approved' },
     });
+    // `startGoal` is invoked with the title+plan as the objective and the
+    // default trigger — it owns sending the canonical goal-reminder signal
+    // via `harness.sendSignal`, so the handler does not also send one.
     expect(ctx.startGoal).toHaveBeenCalledTimes(1);
-    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', {
-      trigger: 'none',
-    });
+    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
-    expect(ctx.fireMessage).toHaveBeenCalledTimes(1);
-    expect(ctx.fireMessage).toHaveBeenCalledWith(
-      '<system-reminder type="goal"># Ship it\n\n1. Build\n2. Test</system-reminder>',
-    );
-    expect(ctx.fireMessage).not.toHaveBeenCalledWith(expect.stringContaining('begin executing'));
-    vi.useRealTimers();
+    expect(ctx.fireMessage).not.toHaveBeenCalled();
+    // The goal handler does not send the "begin executing" reminder — the
+    // goal judge keeps the agent driving toward the goal.
+    expect(state.harness.sendSignal).not.toHaveBeenCalled();
+  });
+});
+
+describe('handlePlanApproval regular approval', () => {
+  it('approves the plan and sends a single begin-executing system-reminder through harness.sendSignal', async () => {
+    const { state, ctx, sendSignal } = createPlanApprovalCtx();
+
+    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
+    const component = state.chatContainer.children[0];
+
+    await (component as any).onApprove();
+    await promise;
+
+    expect(state.harness.respondToPlanApproval).toHaveBeenCalledWith({
+      planId: 'plan-1',
+      response: { action: 'approved' },
+    });
+    // The trigger goes through the structured signal pathway. We do not
+    // also call `addUserMessage` or `fireMessage` — either would render
+    // the reminder a second time.
+    expect(ctx.addUserMessage).not.toHaveBeenCalled();
+    expect(ctx.fireMessage).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith({
+      type: 'system-reminder',
+      contents: 'The user has approved the plan, begin executing.',
+    });
+    // Regular approval should not enter goal mode.
+    expect(ctx.startGoal).not.toHaveBeenCalled();
   });
 });

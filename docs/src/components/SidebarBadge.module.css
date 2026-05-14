@@ -57,6 +57,17 @@
   color: rgb(192, 132, 252);
 }
 
+/* Experimental badge - Yellow */
+.badge--experimental {
+  background-color: rgba(234, 179, 8, 0.1);
+  color: rgb(161, 98, 7);
+}
+
+[data-theme='dark'] .badge--experimental {
+  background-color: rgba(234, 179, 8, 0.2);
+  color: rgb(250, 204, 21);
+}
+
 /* Deprecated badge - Gray */
 .badge--deprecated {
   background-color: #f4f4f4;
