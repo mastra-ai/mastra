@@ -1,17 +1,17 @@
 ---
-'@mastra/core': patch
-'@mastra/libsql': patch
-'@mastra/pg': patch
-'@mastra/mongodb': patch
-'@mastra/clickhouse': patch
-'@mastra/cloudflare': patch
+'@mastra/core': minor
+'@mastra/libsql': minor
+'@mastra/pg': minor
+'@mastra/mongodb': minor
+'@mastra/clickhouse': minor
+'@mastra/cloudflare': minor
 ---
 
 Added a stars storage domain plus `visibility` and `starCount` fields on stored agents and skills across the storage adapters.
 
 **`@mastra/core`** introduces:
 
-- A new `StarsStorage` abstract domain (`star` / `unstar` / `isStarred` / `listStars` / `deleteStarsForEntity`) keyed by `(userId, entityType, entityId)`, registered as `mastra_stars` via the new `TABLE_STARS` / `STARS_SCHEMA` constants.
+- A new `StarsStorage` abstract domain (`star` / `unstar` / `isStarred` / `listStars` / `deleteStarsForEntity`) keyed by `(userId, entityType, entityId)`, registered as `mastra_stars` via the new `TABLE_STARS` / `STARS_SCHEMA` constants, exposed at the new `@mastra/core/storage/domains/stars` subpath.
 - A `StorageVisibility` type (`'private' | 'public'`) plus `visibility` and `starCount` fields on `StorageAgentType` / `StorageSkillType` (and their snapshot / create / update / list-input types).
 - New list-input options on agents and skills: `entityIds`, `pinStarredFor`, `starredOnly` — used to enable starred-first ordering and starred-only filtering.
 - A `StorageSkillFileNode` type for round-tripping the full skill file tree.
@@ -23,6 +23,4 @@ Added a stars storage domain plus `visibility` and `starCount` fields on stored 
 
 **`@mastra/clickhouse`** and **`@mastra/cloudflare`** register the new `mastra_stars` table / type.
 
-Also fixes a workspace PATCH bug across the inmemory, libsql, and pg workspace adapters: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined` (same defect class as the matching agent / skill adapter fixes shipped in this PR).
-
-All additions are backward compatible: existing rows without `visibility` or `starCount` continue to work, and the new fields and domain APIs are opt-in. The HTTP handlers, editor namespace, and playground UI that consume these APIs ship in follow-up PRs.
+All additions are backward compatible at the row level: existing rows without `visibility` or `starCount` continue to work, and the new fields and domain APIs are opt-in. The storage adapters listed here now require a `@mastra/core` version that exports `@mastra/core/storage/domains/stars` — see each adapter's updated `peerDependencies` floor. The HTTP handlers, editor namespace, and playground UI that consume these APIs ship in follow-up PRs.
