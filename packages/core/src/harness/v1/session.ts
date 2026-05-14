@@ -84,6 +84,7 @@ import type {
   MessageOptionsStream,
   MessageOptionsStructured,
   ModelAuthStatus,
+  ObservationalMemorySnapshot,
   PermissionPolicy,
   QueueOptions,
   SessionInjectSystemReminderOptions,
@@ -167,6 +168,14 @@ function assertModelId(method: string, value: unknown): asserts value is string 
     throw new HarnessValidationError(method, 'model must be a non-empty string');
   }
 }
+
+/**
+ * Built-in fallbacks for the OM thresholds when neither the session
+ * override nor `HarnessConfig.omConfig` supplies one. Matches the legacy
+ * harness defaults (see `harness/harness.ts:loadOMProgress`).
+ */
+const DEFAULT_OM_OBSERVATION_THRESHOLD = 30_000;
+const DEFAULT_OM_REFLECTION_THRESHOLD = 40_000;
 
 function assertPolicy(method: string, value: unknown): asserts value is PermissionPolicy {
   if (typeof value !== 'string' || !PERMISSION_POLICIES.includes(value as PermissionPolicy)) {
@@ -2084,6 +2093,184 @@ export class Session {
     this._assertLive('models.getSubagent()');
     assertAgentType('models.getSubagent', opts.agentType);
     return this._record.subagentModelOverrides?.[opts.agentType] ?? null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Observational memory (§4.2e).
+  //
+  // OM is advisory memory context (see §1). The namespace exposes a
+  // session-scoped, redacted projection of the underlying memory-storage row
+  // plus session-config writes for swapping the observer/reflector model
+  // and tuning the observation/reflection thresholds. Mutators persist the
+  // override to `SessionRecord.observationalMemory` under the session lease
+  // and emit `om_model_changed` for subscribers. Reads compose the
+  // per-session override over the harness-wide defaults configured via
+  // `HarnessConfig.omConfig` (§9).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Observational-memory namespace (§4.2e). All methods compose the
+   * per-session override stored on `SessionRecord.observationalMemory` over
+   * the harness-wide defaults in `HarnessConfig.omConfig`. `getRecord`
+   * returns the redacted public projection described in §4.8; raw storage
+   * fields never cross this boundary.
+   */
+  readonly om = Object.freeze({
+    /** Resolved observer model id, or `null` when unset. */
+    getObserverModelId: (): string | null => this._omGetObserverModelId(),
+    /** Resolved reflector model id, or `null` when unset. */
+    getReflectorModelId: (): string | null => this._omGetReflectorModelId(),
+    /** Resolved observation threshold, in tokens. Falls back to harness/built-in defaults. */
+    getObservationThreshold: (): number => this._omGetObservationThreshold(),
+    /** Resolved reflection threshold, in tokens. Falls back to harness/built-in defaults. */
+    getReflectionThreshold: (): number => this._omGetReflectionThreshold(),
+    /** Persist a new observer model id under the session lease. Emits `om_model_changed`. */
+    switchObserverModel: (opts: { model: string }): Promise<void> => this._omSwitchObserverModel(opts),
+    /** Persist a new reflector model id under the session lease. Emits `om_model_changed`. */
+    switchReflectorModel: (opts: { model: string }): Promise<void> => this._omSwitchReflectorModel(opts),
+    /**
+     * Redacted projection of the underlying observational-memory record,
+     * keyed by `(threadId, resourceId)`. Returns `null` when no record
+     * exists or when memory storage is not configured.
+     */
+    getRecord: (): Promise<ObservationalMemorySnapshot | null> => this._omGetRecord(),
+    /**
+     * Advisory cache refresh. Currently a no-op — the redacted projection
+     * is built fresh on every `getRecord` call, so callers can drop this
+     * once the snapshot landed. Kept for spec parity with §4.2e.
+     */
+    loadProgress: (): Promise<void> => this._omLoadProgress(),
+  });
+
+  private _omGetObserverModelId(): string | null {
+    this._assertLive('om.getObserverModelId()');
+    return this._record.observationalMemory?.observerModelId ?? this._harness._omConfig.defaultObserverModelId ?? null;
+  }
+
+  private _omGetReflectorModelId(): string | null {
+    this._assertLive('om.getReflectorModelId()');
+    return (
+      this._record.observationalMemory?.reflectorModelId ?? this._harness._omConfig.defaultReflectorModelId ?? null
+    );
+  }
+
+  private _omGetObservationThreshold(): number {
+    this._assertLive('om.getObservationThreshold()');
+    return (
+      this._record.observationalMemory?.observationThreshold ??
+      this._harness._omConfig.defaultObservationThreshold ??
+      DEFAULT_OM_OBSERVATION_THRESHOLD
+    );
+  }
+
+  private _omGetReflectionThreshold(): number {
+    this._assertLive('om.getReflectionThreshold()');
+    return (
+      this._record.observationalMemory?.reflectionThreshold ??
+      this._harness._omConfig.defaultReflectionThreshold ??
+      DEFAULT_OM_REFLECTION_THRESHOLD
+    );
+  }
+
+  private async _omSwitchObserverModel(opts: { model: string }): Promise<void> {
+    this._assertLive('om.switchObserverModel()');
+    assertModelId('om.switchObserverModel', opts.model);
+    const previousModelId = this._record.observationalMemory?.observerModelId ?? null;
+    if (previousModelId === opts.model) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      observationalMemory: {
+        ...(prev.observationalMemory ?? {}),
+        observerModelId: opts.model,
+      },
+    }));
+    this._emitter.emit({ type: 'om_model_changed', role: 'observer', modelId: opts.model, previousModelId });
+  }
+
+  private async _omSwitchReflectorModel(opts: { model: string }): Promise<void> {
+    this._assertLive('om.switchReflectorModel()');
+    assertModelId('om.switchReflectorModel', opts.model);
+    const previousModelId = this._record.observationalMemory?.reflectorModelId ?? null;
+    if (previousModelId === opts.model) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      observationalMemory: {
+        ...(prev.observationalMemory ?? {}),
+        reflectorModelId: opts.model,
+      },
+    }));
+    this._emitter.emit({ type: 'om_model_changed', role: 'reflector', modelId: opts.model, previousModelId });
+  }
+
+  private async _omGetRecord(): Promise<ObservationalMemorySnapshot | null> {
+    this._assertLive('om.getRecord()');
+    const memory = await this._harness._internalTryGetMemoryStorage();
+    if (!memory) return null;
+    const raw = await memory.getObservationalMemory(this.threadId, this.resourceId);
+    if (!raw) return null;
+    return this._redactOmRecord(raw);
+  }
+
+  private async _omLoadProgress(): Promise<void> {
+    this._assertLive('om.loadProgress()');
+    // Advisory refresh — currently a no-op (no cached projection). Kept on
+    // the surface so callers can opt into an explicit refresh once we
+    // introduce a cache (and so the API stays stable in the meantime).
+  }
+
+  /**
+   * Strict allow-list projector. Only the fields named in
+   * {@link ObservationalMemorySnapshot} cross the boundary — raw config,
+   * metadata, buffered chunks, history generations, processor internals
+   * stay inside the storage row.
+   */
+  private _redactOmRecord(raw: {
+    id: string;
+    scope: 'thread' | 'resource';
+    resourceId: string;
+    threadId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    lastObservedAt?: Date;
+    originType: 'initial' | 'reflection';
+    generationCount: number;
+    activeObservations: string;
+    totalTokensObserved: number;
+    observationTokenCount: number;
+    pendingMessageTokens: number;
+    isObserving: boolean;
+    isReflecting: boolean;
+    isBufferingObservation: boolean;
+    isBufferingReflection: boolean;
+  }): ObservationalMemorySnapshot {
+    return {
+      id: raw.id,
+      scope: raw.scope,
+      resourceId: raw.resourceId,
+      threadId: raw.threadId,
+      createdAt: raw.createdAt instanceof Date ? raw.createdAt.getTime() : Number(raw.createdAt),
+      updatedAt: raw.updatedAt instanceof Date ? raw.updatedAt.getTime() : Number(raw.updatedAt),
+      ...(raw.lastObservedAt !== undefined
+        ? {
+            lastObservedAt:
+              raw.lastObservedAt instanceof Date ? raw.lastObservedAt.getTime() : Number(raw.lastObservedAt),
+          }
+        : {}),
+      originType: raw.originType,
+      generationCount: raw.generationCount,
+      activeObservations: typeof raw.activeObservations === 'string' ? raw.activeObservations : '',
+      totalTokensObserved: raw.totalTokensObserved,
+      observationTokenCount: raw.observationTokenCount,
+      pendingMessageTokens: raw.pendingMessageTokens,
+      isObserving: raw.isObserving,
+      isReflecting: raw.isReflecting,
+      isBufferingObservation: raw.isBufferingObservation,
+      isBufferingReflection: raw.isBufferingReflection,
+      observerModelId: this._omGetObserverModelId(),
+      reflectorModelId: this._omGetReflectorModelId(),
+      observationThreshold: this._omGetObservationThreshold(),
+      reflectionThreshold: this._omGetReflectionThreshold(),
+    };
   }
 
   // -------------------------------------------------------------------------

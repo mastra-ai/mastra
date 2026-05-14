@@ -231,6 +231,8 @@ export interface SessionRecord {
   observationalMemory?: {
     observerModelId?: string;
     reflectorModelId?: string;
+    observationThreshold?: number;
+    reflectionThreshold?: number;
   };
 
   // Active goal

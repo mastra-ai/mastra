@@ -93,6 +93,22 @@ export interface ModelOverrideSetEvent extends HarnessEventBase {
   previousModelId: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Observational memory events (§4.2e).
+//
+// Emitted whenever the session swaps the observer or reflector model used
+// by the observational memory subsystem. The subsystem itself is driven by
+// the agent layer; these events let subscribers (TUI, server-side dashboards)
+// reflect the model change without polling.
+// ---------------------------------------------------------------------------
+
+export interface OmModelChangedEvent extends HarnessEventBase {
+  type: 'om_model_changed';
+  role: 'observer' | 'reflector';
+  modelId: string;
+  previousModelId: string | null;
+}
+
 export interface StateChangedEvent extends HarnessEventBase {
   type: 'state_changed';
   changedKeys: string[];
@@ -523,6 +539,7 @@ export type HarnessEvent =
   | ModeChangedEvent
   | ModelChangedEvent
   | ModelOverrideSetEvent
+  | OmModelChangedEvent
   | StateChangedEvent
   | PermissionGrantedEvent
   | PermissionRevokedEvent

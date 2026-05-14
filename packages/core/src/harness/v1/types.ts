@@ -212,6 +212,94 @@ export interface UseSkillOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Observational memory (§4.2e).
+//
+// OM is advisory memory context (see §1). The harness exposes a
+// session-scoped projection of the underlying memory-storage row, plus
+// session-config writes for swapping the observer/reflector model.
+// ---------------------------------------------------------------------------
+
+/**
+ * Harness-level defaults for the observational memory subsystem. Per-session
+ * overrides stored on {@link StoredSessionRecord.observationalMemory} take
+ * precedence over these defaults; the resolved snapshot is exposed through
+ * {@link ObservationalMemorySnapshot}.
+ */
+export interface HarnessOMConfig {
+  /** Default model id for the observer agent. */
+  defaultObserverModelId?: string;
+
+  /** Default model id for the reflector agent. */
+  defaultReflectorModelId?: string;
+
+  /** Default observation threshold, in tokens. Defaults to `30_000`. */
+  defaultObservationThreshold?: number;
+
+  /** Default reflection threshold, in tokens. Defaults to `40_000`. */
+  defaultReflectionThreshold?: number;
+}
+
+/**
+ * Public, redacted projection of an observational memory record. See §4.8.
+ *
+ * This is the only shape callers should receive when inspecting OM state —
+ * the underlying `ObservationalMemoryRecord` carries raw config blobs,
+ * buffered chunks, history generations, and processor internals that must
+ * never cross the public boundary.
+ */
+export interface ObservationalMemorySnapshot {
+  id: string;
+  scope: 'thread' | 'resource';
+  resourceId: string;
+  threadId: string | null;
+  createdAt: number;
+  updatedAt: number;
+  lastObservedAt?: number;
+  originType: 'initial' | 'reflection';
+  generationCount: number;
+
+  /**
+   * Bounded, redacted public projection of the currently-active observation
+   * text. May be empty when no scoped observation exists or when policy
+   * redacts/truncates the underlying text.
+   */
+  activeObservations: string;
+
+  /** Running total of all tokens observed. Advisory; may lag the durable log. */
+  totalTokensObserved: number;
+
+  /** Current size of the active observation text, in tokens. */
+  observationTokenCount: number;
+
+  /** Accumulated tokens from pending (unobserved) messages across sessions. */
+  pendingMessageTokens: number;
+
+  /** True while observation is in progress. */
+  isObserving: boolean;
+
+  /** True while reflection is in progress. */
+  isReflecting: boolean;
+
+  /** True while an async observation buffer is being built. */
+  isBufferingObservation: boolean;
+
+  /** True while an async reflection buffer is being built. */
+  isBufferingReflection: boolean;
+
+  /** Resolved observer model id, or `null` if none is configured. */
+  observerModelId: string | null;
+
+  /** Resolved reflector model id, or `null` if none is configured. */
+  reflectorModelId: string | null;
+
+  /** Resolved observation threshold, in tokens. */
+  observationThreshold: number;
+
+  /** Resolved reflection threshold, in tokens. */
+  reflectionThreshold: number;
+}
+
+// ---------------------------------------------------------------------------
 // Placeholders.
 //
 // These are intentionally empty/loose. Each gets filled in as we work
@@ -448,8 +536,15 @@ export interface HarnessConfigCommon {
    */
   workspace?: HarnessWorkspaceConfig;
 
-  // Remaining fields (skills, files, intervals, observationalMemory) land here
-  // as we wire them up.
+  /**
+   * Defaults for the observational memory subsystem (§4.2e). Per-session
+   * overrides stored on `SessionRecord.observationalMemory` win over these
+   * values. Absent config means `session.om.getObserverModelId()` and friends
+   * return `null` / their built-in defaults.
+   */
+  omConfig?: HarnessOMConfig;
+
+  // Remaining fields (skills, files, intervals) land here as we wire them up.
 
   [key: string]: unknown;
 }

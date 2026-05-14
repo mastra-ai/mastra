@@ -36,6 +36,8 @@ export interface HarnessTestSetupOptions {
   models?: HarnessConfig['models'];
   /** Optional model auth-status resolver (§9). */
   modelAuthStatusResolver?: HarnessConfig['modelAuthStatusResolver'];
+  /** Optional observational-memory defaults (§4.2e). */
+  omConfig?: HarnessConfig['omConfig'];
 }
 
 export interface HarnessTestSetup {
@@ -66,6 +68,7 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
     ...(opts.toolCategoryResolver ? { toolCategoryResolver: opts.toolCategoryResolver } : {}),
     ...(opts.models ? { models: opts.models } : {}),
     ...(opts.modelAuthStatusResolver ? { modelAuthStatusResolver: opts.modelAuthStatusResolver } : {}),
+    ...(opts.omConfig ? { omConfig: opts.omConfig } : {}),
   });
   const firstAgent = Object.values(agents)[0]!;
   return { harness, agent: firstAgent, agents, storage };

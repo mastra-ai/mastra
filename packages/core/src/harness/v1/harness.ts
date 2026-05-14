@@ -112,6 +112,13 @@ export class Harness {
   private readonly _toolCategoryResolver?: (toolName: string) => ToolCategory | null;
   private readonly _modelCatalog: ReadonlyMap<string, ModelInfo>;
   private readonly _modelAuthStatusResolver?: (modelId: string) => ModelAuthStatus | Promise<ModelAuthStatus>;
+  /** Observational-memory defaults (§4.2e). Resolved per-session via `session.om`. */
+  readonly _omConfig: {
+    defaultObserverModelId?: string;
+    defaultReflectorModelId?: string;
+    defaultObservationThreshold?: number;
+    defaultReflectionThreshold?: number;
+  };
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -224,6 +231,28 @@ export class Harness {
     }
     this._modelCatalog = catalog;
     this._modelAuthStatusResolver = config.modelAuthStatusResolver;
+
+    // Observational-memory config (§4.2e). Optional; per-session overrides on
+    // `SessionRecord.observationalMemory` win over these defaults.
+    const om = config.omConfig;
+    if (om !== undefined) {
+      if (om.defaultObservationThreshold !== undefined && om.defaultObservationThreshold < 1) {
+        throw new HarnessConfigError('omConfig.defaultObservationThreshold', 'must be a positive integer');
+      }
+      if (om.defaultReflectionThreshold !== undefined && om.defaultReflectionThreshold < 1) {
+        throw new HarnessConfigError('omConfig.defaultReflectionThreshold', 'must be a positive integer');
+      }
+    }
+    this._omConfig = {
+      ...(om?.defaultObserverModelId !== undefined ? { defaultObserverModelId: om.defaultObserverModelId } : {}),
+      ...(om?.defaultReflectorModelId !== undefined ? { defaultReflectorModelId: om.defaultReflectorModelId } : {}),
+      ...(om?.defaultObservationThreshold !== undefined
+        ? { defaultObservationThreshold: om.defaultObservationThreshold }
+        : {}),
+      ...(om?.defaultReflectionThreshold !== undefined
+        ? { defaultReflectionThreshold: om.defaultReflectionThreshold }
+        : {}),
+    };
 
     // Workspace (§2.7). Three ownership models; registry handles lifecycle.
     // Cross-checks against the subagent registry happen below.
