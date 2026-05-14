@@ -2,12 +2,22 @@
 '@mastra/core': minor
 ---
 
-Added a favorites storage domain plus `visibility` and `favoriteCount` fields on stored agents and skills.
+Added a favorites storage domain that lets users mark stored agents and skills as favorites, plus `visibility` (`'private' | 'public'`) and `favoriteCount` fields on stored agents and skills so callers can list, filter, and order by favorite state.
 
-- New `FavoritesStorage` abstract domain (`favorite` / `unfavorite` / `isFavorited` / `listFavoritedIds` / `deleteFavoritesForEntity`) keyed by `(userId, entityType, entityId)`, registered as `mastra_favorites` via the new `TABLE_FAVORITES` / `FAVORITES_SCHEMA` constants, exposed at the new `@mastra/core/storage/domains/favorites` subpath.
-- A `StorageVisibility` type (`'private' | 'public'`) plus `visibility` and `favoriteCount` fields on `StorageAgentType` / `StorageSkillType` (and their snapshot / create / update / list-input types).
-- New list-input options on agents and skills: `entityIds`, `pinFavoritedFor`, `favoritedOnly` — used to enable favorited-first ordering and favorites-only filtering.
-- A `StorageSkillFileNode` type for round-tripping the full skill file tree.
-- An `InMemoryFavoritesStorage` implementation plus visibility / favorite plumbing on the inmemory and filesystem agent + skill adapters.
+Existing rows without `visibility` or `favoriteCount` continue to work; the new fields and APIs are opt-in.
 
-All additions are backward compatible at the row level: existing rows without `visibility` or `favoriteCount` continue to work, and the new fields and domain APIs are opt-in.
+**Example**
+
+```ts
+const favorites = await storage.getStore('favorites');
+
+await favorites?.favorite({ userId: 'u1', entityType: 'agent', entityId: 'agent-123' });
+
+const favoritedIds = await favorites?.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+
+// List agents the user has favorited, surfaced first
+const { agents } = await storage.getStore('agents').list({
+  pinFavoritedFor: 'u1',
+  favoritedOnly: true,
+});
+```

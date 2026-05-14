@@ -215,6 +215,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       metadata,
       entityIds,
       pinFavoritedFor,
+      favoritedOnly,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -274,9 +275,18 @@ export class InMemorySkillsStorage extends SkillsStorage {
       });
     }
 
-    // Sort filtered configs (with optional favorited-first compound sort)
-    const starredIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
-    const sortedConfigs = this.sortConfigs(configs, field, direction, starredIds);
+    // Optional favorited-first ordering / favorites-only filter.
+    const favoritedIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
+    if (favoritedOnly) {
+      if (favoritedIds) {
+        configs = configs.filter(config => favoritedIds.has(config.id));
+      } else {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        configs = [];
+      }
+    }
+
+    const sortedConfigs = this.sortConfigs(configs, field, direction, favoritedIds);
 
     // Deep clone to avoid mutation
     const clonedConfigs = sortedConfigs.map(config => this.deepCopyConfig(config));

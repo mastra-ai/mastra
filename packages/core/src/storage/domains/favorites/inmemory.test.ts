@@ -224,6 +224,44 @@ describe('InMemoryFavoritesStorage', () => {
       expect(result.hasMore).toBe(false);
     });
 
+    it('favoritedOnly + pinFavoritedFor narrows agents.list to the user’s favorites', async () => {
+      await seedAgent(agents, 'a1');
+      await seedAgent(agents, 'a2');
+      await seedAgent(agents, 'a3');
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a1' });
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a3' });
+
+      const result = await agents.list({ pinFavoritedFor: 'u1', favoritedOnly: true });
+      expect(result.agents.map(a => a.id).sort()).toEqual(['a1', 'a3']);
+      expect(result.total).toBe(2);
+    });
+
+    it('favoritedOnly + pinFavoritedFor narrows skills.list to the user’s favorites', async () => {
+      await seedSkill(skills, 's1');
+      await seedSkill(skills, 's2');
+      await seedSkill(skills, 's3');
+      await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: 's2' });
+
+      const result = await skills.list({ pinFavoritedFor: 'u1', favoritedOnly: true });
+      expect(result.skills.map(s => s.id)).toEqual(['s2']);
+      expect(result.total).toBe(1);
+    });
+
+    it('favoritedOnly without pinFavoritedFor returns empty (defensive)', async () => {
+      await seedAgent(agents, 'a1');
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a1' });
+
+      const agentResult = await agents.list({ favoritedOnly: true });
+      expect(agentResult.agents).toEqual([]);
+      expect(agentResult.total).toBe(0);
+
+      await seedSkill(skills, 's1');
+      await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: 's1' });
+      const skillResult = await skills.list({ favoritedOnly: true });
+      expect(skillResult.skills).toEqual([]);
+      expect(skillResult.total).toBe(0);
+    });
+
     it('paginates stably with same-createdAt + tie-break id ASC', async () => {
       const t = new Date('2026-01-01T00:00:00Z');
       const ids = ['a01', 'a02', 'a03', 'a04', 'a05', 'a06', 'a07', 'a08', 'a09', 'a10'];

@@ -2,4 +2,17 @@
 '@mastra/clickhouse': minor
 ---
 
-Registered the new `mastra_favorites` table / type so ClickHouse-backed deployments can hold favorite records.
+Added favorites support to the ClickHouse adapter so favorite records for stored agents and skills can be persisted alongside other ClickHouse-backed tables.
+
+**Example**
+
+```ts
+const storage = new ClickhouseStore({ /* config */ });
+const favorites = await storage.getStore('favorites');
+
+await favorites?.favorite({
+  userId: 'user-1',
+  entityType: 'agent',
+  entityId: 'agent-42',
+});
+```

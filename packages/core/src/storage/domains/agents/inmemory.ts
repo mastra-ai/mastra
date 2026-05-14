@@ -128,6 +128,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       status,
       entityIds,
       pinFavoritedFor,
+      favoritedOnly,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -186,9 +187,18 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       });
     }
 
-    // Sort filtered agents (with optional favorited-first compound sort)
-    const starredIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
-    const sortedAgents = this.sortAgents(agents, field, direction, starredIds);
+    // Optional favorited-first ordering / favorites-only filter.
+    const favoritedIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
+    if (favoritedOnly) {
+      if (favoritedIds) {
+        agents = agents.filter(agent => favoritedIds.has(agent.id));
+      } else {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        agents = [];
+      }
+    }
+
+    const sortedAgents = this.sortAgents(agents, field, direction, favoritedIds);
 
     // Deep clone agents to avoid mutation
     const clonedAgents = sortedAgents.map(agent => this.deepCopyAgent(agent));
