@@ -132,11 +132,6 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();
   const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
-  // Track IME composition state to prevent Enter from submitting during CJK input.
-  // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
-  // triggers form submission instead of completing the IME composition.
-  // See: https://github.com/mastra-ai/mastra/issues/16109
-  const isComposingRef = useRef(false);
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
@@ -212,32 +207,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                 name=""
                 id=""
                 onChange={e => setThreadInput?.(e.target.value)}
-                onCompositionStart={() => {
-                  isComposingRef.current = true;
-                }}
-                onCompositionEnd={() => {
-                  isComposingRef.current = false;
-                }}
                 onKeyDownCapture={e => {
-                  if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    composerRuntime.send();
-                  }
-                }}
-                onKeyDown={e => {
-                  // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
-                  // while an IME composition session is active (e.g. Chinese pinyin).
-                  // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
-                  // not prevent the primitive's onKeyDown from running on the same element —
-                  // preventDefault() is required. e.nativeEvent.isComposing is added as a
-                  // defensive fallback for browsers/timings where compositionend has already fired.
-                  if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                  }
-
                   if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     e.stopPropagation();
