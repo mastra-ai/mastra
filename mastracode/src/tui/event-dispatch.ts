@@ -44,7 +44,11 @@ import type { TUIState } from './state.js';
 /**
  * Dispatch a HarnessEvent to the appropriate handler.
  */
-function trackInteractivePrompt(ectx: EventHandlerContext, promptType: string, properties?: Record<string, unknown>): void {
+function trackInteractivePrompt(
+  ectx: EventHandlerContext,
+  promptType: string,
+  properties?: Record<string, unknown>,
+): void {
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
