@@ -86,6 +86,7 @@ import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-cr
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
+import type { RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -244,7 +245,7 @@ export const routes: RouteObject[] = [
                   { node: 'Templates', to: '/templates' },
                   { node: decodeRouteParam(params.templateSlug) },
                 ],
-              },
+              } satisfies RouteHeaderHandle,
             },
           ]),
 
@@ -320,7 +321,7 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }: { params: { agentId: string } }) => redirect(`/agents/${params.agentId}/chat`),
+            loader: ({ params }) => redirect(`/agents/${params.agentId}/chat`),
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
@@ -371,7 +372,7 @@ export const routes: RouteObject[] = [
             },
             { node: decodeRouteParam(params.skillName) },
           ],
-        },
+        } satisfies RouteHeaderHandle,
       },
 
       { path: '/workflows', element: <Workflows />, handle: navHandle('/workflows') },
@@ -389,7 +390,7 @@ export const routes: RouteObject[] = [
             schedulesCrumb,
             { node: decodeRouteParam(params.scheduleId), icon: CalendarClockIcon },
           ],
-        },
+        } satisfies RouteHeaderHandle,
       },
       {
         path: '/workflows/:workflowId',
@@ -402,11 +403,14 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }: { params: { workflowId: string } }) =>
-              redirect(`/workflows/${params.workflowId}/graph`),
+            loader: ({ params }) => redirect(`/workflows/${params.workflowId}/graph`),
           },
           { path: 'graph', element: <Workflow /> },
-          { path: 'graph/:runId', element: <Workflow />, handle: { crumbs: [{ node: <WorkflowRunCrumb /> }] } },
+          {
+            path: 'graph/:runId',
+            element: <Workflow />,
+            handle: { crumbs: [{ node: <WorkflowRunCrumb /> }] } satisfies RouteHeaderHandle,
+          },
         ],
       },
 
@@ -418,7 +422,7 @@ export const routes: RouteObject[] = [
               element: <DatasetPage />,
               handle: {
                 crumbs: () => [navCrumb('/datasets'), { node: <DatasetCrumb /> }],
-              },
+              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/items/:itemId',
@@ -429,7 +433,7 @@ export const routes: RouteObject[] = [
                   { node: <DatasetCrumb /> },
                   { node: decodeRouteParam(params.itemId) },
                 ],
-              },
+              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/items/:itemId/versions',
@@ -447,7 +451,7 @@ export const routes: RouteObject[] = [
                   },
                   { node: 'Versions' },
                 ],
-              },
+              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/experiments/:experimentId',
@@ -458,7 +462,7 @@ export const routes: RouteObject[] = [
                   { node: <DatasetCrumb /> },
                   { node: decodeRouteParam(params.experimentId) },
                 ],
-              },
+              } satisfies RouteHeaderHandle,
             },
             { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
             {
@@ -466,7 +470,7 @@ export const routes: RouteObject[] = [
               element: <ExperimentPage />,
               handle: {
                 crumbs: ({ params }) => [navCrumb('/experiments'), { node: decodeRouteParam(params.experimentId) }],
-              },
+              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/experiments',
