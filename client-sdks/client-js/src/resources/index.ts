@@ -14,6 +14,7 @@ export * from './stored-agent';
 export * from './stored-prompt-block';
 export * from './stored-mcp-client';
 export * from './stored-scorer';
+export * from './tool-integration';
 export * from './tool-provider';
 export * from './processor-provider';
 export * from './workspace';

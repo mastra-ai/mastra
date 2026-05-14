@@ -2322,6 +2322,45 @@ export type GetToolProviderToolSchemaResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
 
 // ============================================================================
+// Tool Integration Types
+// ============================================================================
+
+export type ToolIntegrationInfo = GeneratedResponse<'GET /tool-integrations'>['integrations'][number];
+
+export type ToolIntegrationCapabilities = ToolIntegrationInfo['capabilities'];
+
+export type ToolIntegrationService =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/tool-services'>['data'][number];
+
+export type ToolIntegrationToolInfo = GeneratedResponse<'GET /tool-integrations/:integrationId/tools'>['data'][number];
+
+export type ListToolIntegrationsResponse = GeneratedResponse<'GET /tool-integrations'>;
+
+export type ListToolServicesResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/tool-services'>;
+
+export type ListToolIntegrationToolsParams = GeneratedRequest<
+  QueryParams<'GET /tool-integrations/:integrationId/tools'>
+>;
+
+export type ListToolIntegrationToolsResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/tools'>;
+
+export type AuthorizeToolIntegrationParams = GeneratedRequest<Body<'POST /tool-integrations/:integrationId/authorize'>>;
+
+export type AuthorizeToolIntegrationResponse = GeneratedResponse<'POST /tool-integrations/:integrationId/authorize'>;
+
+export type ToolIntegrationAuthStatusResponse =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/auth-status/:authId'>;
+
+export type ToolIntegrationConnectionStatusParams = GeneratedRequest<
+  Body<'POST /tool-integrations/:integrationId/connection-status'>
+>;
+
+export type ToolIntegrationConnectionStatusResponse =
+  GeneratedResponse<'POST /tool-integrations/:integrationId/connection-status'>;
+
+export type ToolIntegrationHealthResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/health'>;
+
+// ============================================================================
 // Processor Provider Types
 // ============================================================================
 

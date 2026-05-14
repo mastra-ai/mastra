@@ -72,3 +72,109 @@ export const toolIntegrationConfigSchema = z
  * Full v1 tool integrations payload: keyed by integration id.
  */
 export const toolIntegrationsSchema = z.record(z.string(), toolIntegrationConfigSchema);
+
+// ============================================================================
+// HTTP route schemas — /api/tool-integrations/*
+// ============================================================================
+
+// Path Parameter Schemas
+
+export const toolIntegrationIdPathParams = z.object({
+  integrationId: z.string().describe('Unique identifier for the tool integration'),
+});
+
+export const toolIntegrationAuthStatusPathParams = toolIntegrationIdPathParams.extend({
+  authId: z.string().describe('Opaque auth handle returned by authorize'),
+});
+
+// Query Parameter Schemas
+
+export const listToolIntegrationToolsQuerySchema = z.object({
+  toolService: z.string().optional().describe('Filter tools by tool service slug'),
+  search: z.string().optional().describe('Search tools by name or description'),
+  page: z.coerce.number().optional().describe('Page number for pagination (1-indexed)'),
+  perPage: z.coerce.number().optional().describe('Number of items per page'),
+});
+
+// Body Schemas
+
+export const authorizeToolIntegrationBodySchema = z.object({
+  toolService: z.string().describe('Tool service slug being authorized'),
+  connectionId: z.string().describe('Existing or newly-minted connection bucket id'),
+  toolName: z.string().optional().describe('Optional tool slug for tool-scoped authorization'),
+});
+
+export const connectionStatusToolIntegrationBodySchema = z.object({
+  items: z
+    .array(
+      z.object({
+        connectionId: z.string(),
+        toolService: z.string(),
+      }),
+    )
+    .describe('Connection tuples to batch-check'),
+});
+
+// Response Schemas
+
+const capabilitiesSchema = z.object({
+  multipleConnectionsPerService: z.boolean(),
+  batchConnectionStatus: z.boolean(),
+  reauthorizeReusesConnectionId: z.boolean(),
+});
+
+export const listToolIntegrationsResponseSchema = z.object({
+  integrations: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      capabilities: capabilitiesSchema,
+    }),
+  ),
+});
+
+export const listToolServicesResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      slug: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+      icon: z.string().optional(),
+    }),
+  ),
+});
+
+export const listToolIntegrationToolsResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      slug: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+      toolService: z.string(),
+    }),
+  ),
+  pagination: z.object({
+    page: z.number(),
+    perPage: z.number().optional(),
+    hasMore: z.boolean(),
+  }),
+});
+
+export const authorizeToolIntegrationResponseSchema = z.object({
+  url: z.string(),
+  authId: z.string(),
+});
+
+export const authStatusToolIntegrationResponseSchema = z.object({
+  status: z.enum(['pending', 'completed', 'failed']),
+});
+
+export const connectionStatusToolIntegrationResponseSchema = z.object({
+  items: z.record(z.string(), z.object({ connected: z.boolean() })),
+});
+
+export const toolIntegrationHealthResponseSchema = z.object({
+  ok: z.boolean(),
+  message: z.string().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});

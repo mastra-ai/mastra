@@ -35,6 +35,7 @@ import { STORED_SKILLS_ROUTES } from './stored-skills';
 import { STORED_WORKSPACES_ROUTES } from './stored-workspaces';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
+import { TOOL_INTEGRATION_ROUTES } from './tool-integrations';
 import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
@@ -187,6 +188,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...STORED_SCORERS_ROUTES,
   ...STORED_WORKSPACES_ROUTES,
   ...STORED_SKILLS_ROUTES,
+  ...TOOL_INTEGRATION_ROUTES,
   ...TOOL_PROVIDER_ROUTES,
   ...PROCESSOR_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
@@ -225,6 +227,7 @@ export type ServerRoutes = readonly [
   ...typeof STORED_SCORERS_ROUTES,
   ...typeof STORED_WORKSPACES_ROUTES,
   ...typeof STORED_SKILLS_ROUTES,
+  ...typeof TOOL_INTEGRATION_ROUTES,
   ...typeof TOOL_PROVIDER_ROUTES,
   ...typeof PROCESSOR_PROVIDER_ROUTES,
   ...typeof SYSTEM_ROUTES,

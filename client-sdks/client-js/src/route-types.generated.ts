@@ -1586,7 +1586,7 @@ export type PostAgentsAgentIdClone_Response = {
           }[]
       )
     | undefined;
-  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolIntegrations?:
     | (
         | {
@@ -23692,7 +23692,7 @@ export type GetStoredAgents_Response = {
             }[]
         )
       | undefined;
-    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
     toolIntegrations?:
       | (
           | {
@@ -28179,7 +28179,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
           }[]
       )
     | undefined;
-  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolIntegrations?:
     | (
         | {
@@ -32536,7 +32536,7 @@ export type PostStoredAgents_Body = {
           }[]
       )
     | undefined;
-  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolIntegrations?:
     | (
         | {
@@ -36873,7 +36873,7 @@ export type PostStoredAgents_Response = {
           }[]
       )
     | undefined;
-  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolIntegrations?:
     | (
         | {
@@ -45619,7 +45619,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
               }[]
           )
         | undefined;
-      /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+      /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
       toolIntegrations?:
         | (
             | {
@@ -50020,7 +50020,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
             }[]
         )
       | undefined;
-    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
     toolIntegrations?:
       | (
           | {
@@ -57714,7 +57714,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
             }[]
         )
       | undefined;
-    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
     toolIntegrations?:
       | (
           | {
@@ -61508,7 +61508,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
             }[]
         )
       | undefined;
-    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
     toolIntegrations?:
       | (
           | {
@@ -65334,7 +65334,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
           }[]
       )
     | undefined;
-  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolIntegrations?:
     | (
         | {
@@ -69188,7 +69188,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
           }[]
       )
     | undefined;
-  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  /** Agent Builder integrations shape (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolIntegrations?:
     | (
         | {
@@ -77096,6 +77096,278 @@ export interface DeleteStoredSkillsStoredSkillIdStar_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /tool-integrations
+// ============================================================================
+export type GetToolIntegrations_Response = {
+  integrations: {
+    id: string;
+    displayName: string;
+    capabilities: {
+      multipleConnectionsPerService: boolean;
+      batchConnectionStatus: boolean;
+      reauthorizeReusesConnectionId: boolean;
+    };
+  }[];
+};
+
+export type GetToolIntegrations_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrations_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetToolIntegrations_Request;
+  response: GetToolIntegrations_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-integrations/:integrationId/tool-services
+// ============================================================================
+export type GetToolIntegrationsIntegrationIdToolServices_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+};
+
+export type GetToolIntegrationsIntegrationIdToolServices_Response = {
+  data: {
+    slug: string;
+    name: string;
+    description?: string | undefined;
+    icon?: string | undefined;
+  }[];
+};
+
+export type GetToolIntegrationsIntegrationIdToolServices_Request = Simplify<
+  (GetToolIntegrationsIntegrationIdToolServices_PathParams extends never
+    ? {}
+    : { params: GetToolIntegrationsIntegrationIdToolServices_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrationsIntegrationIdToolServices_RouteContract {
+  pathParams: GetToolIntegrationsIntegrationIdToolServices_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetToolIntegrationsIntegrationIdToolServices_Request;
+  response: GetToolIntegrationsIntegrationIdToolServices_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-integrations/:integrationId/tools
+// ============================================================================
+export type GetToolIntegrationsIntegrationIdTools_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+};
+
+export type GetToolIntegrationsIntegrationIdTools_QueryParams = {
+  /** Filter tools by tool service slug */
+  toolService?: string | undefined;
+  /** Search tools by name or description */
+  search?: string | undefined;
+  /** Page number for pagination (1-indexed) */
+  page?: number | undefined;
+  /** Number of items per page */
+  perPage?: number | undefined;
+};
+
+export type GetToolIntegrationsIntegrationIdTools_Response = {
+  data: {
+    slug: string;
+    name: string;
+    description?: string | undefined;
+    toolService: string;
+  }[];
+  pagination: {
+    page: number;
+    perPage?: number | undefined;
+    hasMore: boolean;
+  };
+};
+
+export type GetToolIntegrationsIntegrationIdTools_Request = Simplify<
+  (GetToolIntegrationsIntegrationIdTools_PathParams extends never
+    ? {}
+    : { params: GetToolIntegrationsIntegrationIdTools_PathParams }) &
+    (GetToolIntegrationsIntegrationIdTools_QueryParams extends never
+      ? {}
+      : {} extends GetToolIntegrationsIntegrationIdTools_QueryParams
+        ? { query?: GetToolIntegrationsIntegrationIdTools_QueryParams }
+        : { query: GetToolIntegrationsIntegrationIdTools_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrationsIntegrationIdTools_RouteContract {
+  pathParams: GetToolIntegrationsIntegrationIdTools_PathParams;
+  queryParams: GetToolIntegrationsIntegrationIdTools_QueryParams;
+  body: never;
+  request: GetToolIntegrationsIntegrationIdTools_Request;
+  response: GetToolIntegrationsIntegrationIdTools_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /tool-integrations/:integrationId/authorize
+// ============================================================================
+export type PostToolIntegrationsIntegrationIdAuthorize_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+};
+
+export type PostToolIntegrationsIntegrationIdAuthorize_Body = {
+  /** Tool service slug being authorized */
+  toolService: string;
+  /** Existing or newly-minted connection bucket id */
+  connectionId: string;
+  /** Optional tool slug for tool-scoped authorization */
+  toolName?: string | undefined;
+};
+
+export type PostToolIntegrationsIntegrationIdAuthorize_Response = {
+  url: string;
+  authId: string;
+};
+
+export type PostToolIntegrationsIntegrationIdAuthorize_Request = Simplify<
+  (PostToolIntegrationsIntegrationIdAuthorize_PathParams extends never
+    ? {}
+    : { params: PostToolIntegrationsIntegrationIdAuthorize_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostToolIntegrationsIntegrationIdAuthorize_Body extends never
+      ? {}
+      : {} extends PostToolIntegrationsIntegrationIdAuthorize_Body
+        ? { body?: PostToolIntegrationsIntegrationIdAuthorize_Body }
+        : { body: PostToolIntegrationsIntegrationIdAuthorize_Body })
+>;
+
+export interface PostToolIntegrationsIntegrationIdAuthorize_RouteContract {
+  pathParams: PostToolIntegrationsIntegrationIdAuthorize_PathParams;
+  queryParams: never;
+  body: PostToolIntegrationsIntegrationIdAuthorize_Body;
+  request: PostToolIntegrationsIntegrationIdAuthorize_Request;
+  response: PostToolIntegrationsIntegrationIdAuthorize_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-integrations/:integrationId/auth-status/:authId
+// ============================================================================
+export type GetToolIntegrationsIntegrationIdAuthStatusAuthId_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+  /** Opaque auth handle returned by authorize */
+  authId: string;
+};
+
+export type GetToolIntegrationsIntegrationIdAuthStatusAuthId_Response = {
+  status: 'pending' | 'completed' | 'failed';
+};
+
+export type GetToolIntegrationsIntegrationIdAuthStatusAuthId_Request = Simplify<
+  (GetToolIntegrationsIntegrationIdAuthStatusAuthId_PathParams extends never
+    ? {}
+    : { params: GetToolIntegrationsIntegrationIdAuthStatusAuthId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrationsIntegrationIdAuthStatusAuthId_RouteContract {
+  pathParams: GetToolIntegrationsIntegrationIdAuthStatusAuthId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetToolIntegrationsIntegrationIdAuthStatusAuthId_Request;
+  response: GetToolIntegrationsIntegrationIdAuthStatusAuthId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /tool-integrations/:integrationId/connection-status
+// ============================================================================
+export type PostToolIntegrationsIntegrationIdConnectionStatus_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+};
+
+export type PostToolIntegrationsIntegrationIdConnectionStatus_Body = {
+  /** Connection tuples to batch-check */
+  items: {
+    connectionId: string;
+    toolService: string;
+  }[];
+};
+
+export type PostToolIntegrationsIntegrationIdConnectionStatus_Response = {
+  items: {
+    [key: string]: {
+      connected: boolean;
+    };
+  };
+};
+
+export type PostToolIntegrationsIntegrationIdConnectionStatus_Request = Simplify<
+  (PostToolIntegrationsIntegrationIdConnectionStatus_PathParams extends never
+    ? {}
+    : { params: PostToolIntegrationsIntegrationIdConnectionStatus_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostToolIntegrationsIntegrationIdConnectionStatus_Body extends never
+      ? {}
+      : {} extends PostToolIntegrationsIntegrationIdConnectionStatus_Body
+        ? { body?: PostToolIntegrationsIntegrationIdConnectionStatus_Body }
+        : { body: PostToolIntegrationsIntegrationIdConnectionStatus_Body })
+>;
+
+export interface PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract {
+  pathParams: PostToolIntegrationsIntegrationIdConnectionStatus_PathParams;
+  queryParams: never;
+  body: PostToolIntegrationsIntegrationIdConnectionStatus_Body;
+  request: PostToolIntegrationsIntegrationIdConnectionStatus_Request;
+  response: PostToolIntegrationsIntegrationIdConnectionStatus_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-integrations/:integrationId/health
+// ============================================================================
+export type GetToolIntegrationsIntegrationIdHealth_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+};
+
+export type GetToolIntegrationsIntegrationIdHealth_Response = {
+  ok: boolean;
+  message?: string | undefined;
+  details?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type GetToolIntegrationsIntegrationIdHealth_Request = Simplify<
+  (GetToolIntegrationsIntegrationIdHealth_PathParams extends never
+    ? {}
+    : { params: GetToolIntegrationsIntegrationIdHealth_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrationsIntegrationIdHealth_RouteContract {
+  pathParams: GetToolIntegrationsIntegrationIdHealth_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetToolIntegrationsIntegrationIdHealth_Request;
+  response: GetToolIntegrationsIntegrationIdHealth_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /tool-providers
 // ============================================================================
 export type GetToolProviders_Response = {
@@ -81095,6 +81367,13 @@ export interface RouteTypes {
   'POST /stored/skills/:storedSkillId/publish': PostStoredSkillsStoredSkillIdPublish_RouteContract;
   'PUT /stored/skills/:storedSkillId/star': PutStoredSkillsStoredSkillIdStar_RouteContract;
   'DELETE /stored/skills/:storedSkillId/star': DeleteStoredSkillsStoredSkillIdStar_RouteContract;
+  'GET /tool-integrations': GetToolIntegrations_RouteContract;
+  'GET /tool-integrations/:integrationId/tool-services': GetToolIntegrationsIntegrationIdToolServices_RouteContract;
+  'GET /tool-integrations/:integrationId/tools': GetToolIntegrationsIntegrationIdTools_RouteContract;
+  'POST /tool-integrations/:integrationId/authorize': PostToolIntegrationsIntegrationIdAuthorize_RouteContract;
+  'GET /tool-integrations/:integrationId/auth-status/:authId': GetToolIntegrationsIntegrationIdAuthStatusAuthId_RouteContract;
+  'POST /tool-integrations/:integrationId/connection-status': PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;
+  'GET /tool-integrations/:integrationId/health': GetToolIntegrationsIntegrationIdHealth_RouteContract;
   'GET /tool-providers': GetToolProviders_RouteContract;
   'GET /tool-providers/:providerId/toolkits': GetToolProvidersProviderIdToolkits_RouteContract;
   'GET /tool-providers/:providerId/tools': GetToolProvidersProviderIdTools_RouteContract;
@@ -81811,6 +82090,27 @@ export interface Client {
   };
   '/system/packages': {
     GET: GetSystemPackages_RouteContract;
+  };
+  '/tool-integrations': {
+    GET: GetToolIntegrations_RouteContract;
+  };
+  '/tool-integrations/:integrationId/auth-status/:authId': {
+    GET: GetToolIntegrationsIntegrationIdAuthStatusAuthId_RouteContract;
+  };
+  '/tool-integrations/:integrationId/authorize': {
+    POST: PostToolIntegrationsIntegrationIdAuthorize_RouteContract;
+  };
+  '/tool-integrations/:integrationId/connection-status': {
+    POST: PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;
+  };
+  '/tool-integrations/:integrationId/health': {
+    GET: GetToolIntegrationsIntegrationIdHealth_RouteContract;
+  };
+  '/tool-integrations/:integrationId/tool-services': {
+    GET: GetToolIntegrationsIntegrationIdToolServices_RouteContract;
+  };
+  '/tool-integrations/:integrationId/tools': {
+    GET: GetToolIntegrationsIntegrationIdTools_RouteContract;
   };
   '/tool-providers': {
     GET: GetToolProviders_RouteContract;
