@@ -134,8 +134,8 @@ export function getCurrentModel(model?: { provider?: string; modelId?: string })
 
 export { didProviderChange } from './model-context';
 
-function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
-  if (value === undefined) {
+function parseActivationTTL(value: number | string | false | undefined, fieldPath: string): number | undefined {
+  if (value === undefined || value === false) {
     return undefined;
   }
 
@@ -449,6 +449,10 @@ export class ObservationalMemory {
       }
     }
 
+    const observationActivateAfterIdle = config.observation?.activateAfterIdle ?? config.activateAfterIdle;
+    const observationActivateAfterIdlePath =
+      config.observation?.activateAfterIdle !== undefined ? 'observation.activateAfterIdle' : 'activateAfterIdle';
+
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
@@ -476,8 +480,9 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
-      activateOnProviderChange: config.activateOnProviderChange ?? false,
+      activateAfterIdle: parseActivationTTL(observationActivateAfterIdle, observationActivateAfterIdlePath),
+      activateOnProviderChange:
+        config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -509,8 +514,8 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
-      activateOnProviderChange: config.activateOnProviderChange ?? false,
+      activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
+      activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(

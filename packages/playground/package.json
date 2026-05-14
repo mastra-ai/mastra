@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.9.0-alpha.6",
+  "version": "1.9.2-alpha.0",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -31,6 +31,7 @@
     "build": "vite build",
     "build:watch": "vite build --watch",
     "lint": "eslint --no-warn-ignored .",
+    "typecheck": "tsc -b --force",
     "preview": "vite preview",
     "test:e2e": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts",
     "test:e2e:ui": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts --ui",

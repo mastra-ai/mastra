@@ -1,15 +1,12 @@
 import {
-  ButtonWithTooltip,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, FlaskConical } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
@@ -41,7 +38,7 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Experiments" icon={<FlaskConical />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -49,7 +46,7 @@ export default function Experiments() {
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <NoDataPageLayout title="Experiments" icon={<FlaskConical />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="experiments" />
       </NoDataPageLayout>
     );
@@ -57,7 +54,7 @@ export default function Experiments() {
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <NoDataPageLayout title="Experiments" icon={<FlaskConical />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="datasets" />
       </NoDataPageLayout>
     );
@@ -65,7 +62,7 @@ export default function Experiments() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Experiments" icon={<FlaskConical />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load experiments" message={error.message} />
       </NoDataPageLayout>
     );
@@ -73,7 +70,7 @@ export default function Experiments() {
 
   if (experiments.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Experiments" icon={<FlaskConical />}>
+      <NoDataPageLayout>
         <NoExperimentsInfo />
       </NoDataPageLayout>
     );
@@ -90,26 +87,6 @@ export default function Experiments() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <FlaskConical /> Experiments
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/evals/datasets/running-experiments"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Experiments documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
         <ExperimentsToolbar
           search={search}
           onSearchChange={setSearch}

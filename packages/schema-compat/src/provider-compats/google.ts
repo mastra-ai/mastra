@@ -20,83 +20,74 @@ import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.
 import type { ModelInformation } from '../types';
 import { isOptional, isNullable, isNull, isObj, isArr, isUnion, isString, isNumber, isIntersection } from '../zodTypes';
 
-/**
- * Recursively converts union type arrays (e.g., `type: ["string", "null"]`) to
- * Gemini-compatible format using `nullable: true`.
- *
- * Gemini's function calling API does not support union type arrays in JSON Schema.
- * This function converts patterns like `{ type: ["string", "null"] }` to
- * `{ type: "string", nullable: true }`.
- */
-function fixNullableUnionTypes(schema: Record<string, any>): Record<string, any> {
+function fixAISDKNullableUnionTypes(schema: Record<string, any>): Record<string, any> {
   if (typeof schema !== 'object' || schema === null) {
     return schema;
   }
 
   const result = { ...schema };
 
-  // Convert type arrays with "null" to single type + nullable: true
   if (Array.isArray(result.type)) {
     const nonNullTypes = result.type.filter((t: string) => t !== 'null');
-    if (nonNullTypes.length < result.type.length) {
-      // Has "null" in the type array
+    if (nonNullTypes.length === 1) {
+      result.type = nonNullTypes[0];
       result.nullable = true;
-      if (nonNullTypes.length === 1) {
-        result.type = nonNullTypes[0];
-      } else if (nonNullTypes.length > 1) {
-        result.type = nonNullTypes;
-      } else {
-        // Only "null" type — remove type entirely
-        delete result.type;
-      }
+    } else {
+      delete result.type;
+      delete result.nullable;
     }
   }
 
-  // Convert anyOf nullable patterns directly to nullable: true
-  if (result.anyOf && Array.isArray(result.anyOf) && result.anyOf.length === 2) {
+  if (Array.isArray(result.enum) && result.enum.some((value: unknown) => typeof value !== 'string')) {
+    delete result.enum;
+  }
+
+  if ('const' in result && typeof result.const !== 'string') {
+    delete result.const;
+  }
+
+  if (result.anyOf && Array.isArray(result.anyOf)) {
     const nullSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type === 'null');
-    const otherSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type !== 'null');
+    const nonNullSchemas = result.anyOf.filter((s: any) => !(typeof s === 'object' && s !== null && s.type === 'null'));
 
-    if (nullSchema && otherSchema && typeof otherSchema === 'object') {
+    if (nullSchema) {
       const { anyOf: _, ...rest } = result;
-      const fixedOther = fixNullableUnionTypes(otherSchema);
-      return { ...rest, ...fixedOther, nullable: true };
+      if (nonNullSchemas.length === 1 && typeof nonNullSchemas[0] === 'object' && nonNullSchemas[0] !== null) {
+        const fixedOther = fixAISDKNullableUnionTypes(nonNullSchemas[0]);
+        return fixedOther.type ? { ...rest, ...fixedOther, nullable: true } : { ...rest, ...fixedOther };
+      }
+      return rest;
     }
   }
 
-  // Recursively fix properties
   if (result.properties && typeof result.properties === 'object') {
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([key, value]) => [key, fixNullableUnionTypes(value as any)]),
+      Object.entries(result.properties).map(([key, value]) => [key, fixAISDKNullableUnionTypes(value as any)]),
     );
   }
 
-  // Recursively fix items
   if (result.items) {
     if (Array.isArray(result.items)) {
-      result.items = result.items.map((item: any) => fixNullableUnionTypes(item));
+      result.items = result.items.map((item: any) => fixAISDKNullableUnionTypes(item));
     } else {
-      result.items = fixNullableUnionTypes(result.items);
+      result.items = fixAISDKNullableUnionTypes(result.items);
     }
   }
 
-  // Recursively fix additionalProperties (e.g., z.record() value schemas)
   if (result.additionalProperties && typeof result.additionalProperties === 'object') {
-    result.additionalProperties = fixNullableUnionTypes(result.additionalProperties);
+    result.additionalProperties = fixAISDKNullableUnionTypes(result.additionalProperties);
   }
 
-  // Recursively fix anyOf/oneOf/allOf
   if (result.anyOf && Array.isArray(result.anyOf)) {
-    result.anyOf = result.anyOf.map((s: any) => fixNullableUnionTypes(s));
+    result.anyOf = result.anyOf.map((s: any) => fixAISDKNullableUnionTypes(s));
   }
   if (result.oneOf && Array.isArray(result.oneOf)) {
-    result.oneOf = result.oneOf.map((s: any) => fixNullableUnionTypes(s));
+    result.oneOf = result.oneOf.map((s: any) => fixAISDKNullableUnionTypes(s));
   }
   if (result.allOf && Array.isArray(result.allOf)) {
-    result.allOf = result.allOf.map((s: any) => fixNullableUnionTypes(s));
+    result.allOf = result.allOf.map((s: any) => fixAISDKNullableUnionTypes(s));
   }
 
-  // Gemini requires anyOf to be the only field in the schema — strip all siblings
   if (result.anyOf && Array.isArray(result.anyOf)) {
     if (result.description) {
       for (const item of result.anyOf) {
@@ -167,16 +158,14 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
   }
 
-  // public processToJSONSchema(zodSchema: PublicSchema<any>, io?: 'input' | 'output'): JSONSchema7 {
-  //   const result = super.processToJSONSchema(zodSchema, io);
-  //   // Fix union type arrays that Gemini doesn't support
-  //   return fixNullableUnionTypes(result as Record<string, any>) as JSONSchema7;
-  // }
+  public processToJSONSchema(schema: PublicSchema<any>, io?: 'input' | 'output'): JSONSchema7 {
+    return super.processToJSONSchema(schema, io);
+  }
 
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
     const compat = this.processToCompatSchema(zodSchema);
     const transformedJsonSchema = standardSchemaToJSONSchema(compat);
-    const fixedJsonSchema = fixNullableUnionTypes(transformedJsonSchema as Record<string, any>) as JSONSchema7;
+    const fixedJsonSchema = fixAISDKNullableUnionTypes(transformedJsonSchema as Record<string, any>) as JSONSchema7;
 
     return jsonSchema(fixedJsonSchema, {
       validate: (value: unknown) => {

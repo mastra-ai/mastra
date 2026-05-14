@@ -36,6 +36,7 @@ export type AppAction =
   | 'toggleThinking'
   | 'expandTools'
   | 'followUp'
+  | 'queueFollowUp'
   | 'cycleMode'
   | 'toggleYolo';
 
@@ -473,6 +474,20 @@ export class CustomEditor extends Editor {
     return true;
   }
 
+  private completeAutocompleteSelection(): boolean {
+    if (!this.isShowingAutocomplete()) {
+      return false;
+    }
+
+    const wasSlashCommand = this.getText().trimStart().startsWith('/');
+    super.handleInput('\t');
+    const completedText = this.getText();
+    if (wasSlashCommand && !completedText.trimStart().startsWith('/')) {
+      this.setText(`/${completedText.trimStart()}`);
+    }
+    return wasSlashCommand;
+  }
+
   handleInput(data: string): void {
     if (this.maybeHandleBracketedPaste(data)) {
       return;
@@ -539,6 +554,15 @@ export class CustomEditor extends Editor {
       }
     }
 
+    if (matchesKey(data, 'ctrl+f')) {
+      const handler = this.actionHandlers.get('queueFollowUp');
+      if (handler) {
+        this.completeAutocompleteSelection();
+        handler();
+        return;
+      }
+    }
+
     if (matchesKey(data, 'enter')) {
       // Let pi-tui handle \+Enter newline workaround
       const lines = (this as any).state?.lines;
@@ -551,13 +575,7 @@ export class CustomEditor extends Editor {
       const handler = this.actionHandlers.get('followUp');
       if (handler) {
         if (this.isShowingAutocomplete()) {
-          const wasSlashCommand = this.getText().trimStart().startsWith('/');
-          super.handleInput('\t');
-          const completedText = this.getText();
-          if (wasSlashCommand && !completedText.trimStart().startsWith('/')) {
-            this.setText(`/${completedText.trimStart()}`);
-          }
-          if (wasSlashCommand && handler() !== false) {
+          if (this.completeAutocompleteSelection() && handler() !== false) {
             return;
           }
           return;

@@ -50,6 +50,8 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
+export type ActivationTTL = number | string | false;
+
 /**
  * Configuration for the observation step (Observer agent).
  */
@@ -137,6 +139,20 @@ export interface ObservationConfig {
    * @default 0.8 (retain ~20% of messageTokens as raw messages)
    */
   bufferActivation?: number;
+
+  /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable top-level `activateAfterIdle` for observations.
+   * If unset, top-level `activateAfterIdle` is used for observations.
+   */
+  activateAfterIdle?: ActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * If unset, top-level `activateOnProviderChange` is used for observations.
+   */
+  activateOnProviderChange?: boolean;
 
   /**
    * Token threshold above which synchronous (blocking) observation is forced.
@@ -231,6 +247,20 @@ export interface ReflectionConfig {
    * If not set, synchronous reflection is never used when async reflection is enabled.
    */
   blockAfter?: number;
+
+  /**
+   * Time before buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable idle activation for reflections.
+   * Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to enable.
+   */
+  activateAfterIdle?: ActivationTTL;
+
+  /**
+   * Force-activate buffered reflections when the actor provider/model changes.
+   * Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to enable.
+   */
+  activateOnProviderChange?: boolean;
 
   /**
    * Ratio (0-1) controlling when async reflection buffering starts.
@@ -857,17 +887,23 @@ export interface ObservationalMemoryConfig {
   temporalMarkers?: boolean;
 
   /**
-   * Time before buffered observations or buffered reflections are force-activated after inactivity.
+   * Time before buffered observations are force-activated after inactivity.
    * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
    * When the gap between the current time and the last assistant message part's `createdAt`
-   * exceeds this value, buffered observational memory activates regardless of whether the
+   * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
+   * opt reflections into idle activation.
    */
-  activateAfterIdle?: number | string;
+  activateAfterIdle?: ActivationTTL;
 
   /**
-   * Force-activate buffered observations and reflections when the actor provider/model changes.
+   * Force-activate buffered observations when the actor provider/model changes.
    * This helps flush prompt-cache-specific memory before switching to a different model.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateOnProviderChange`
+   * to opt reflections into provider-change activation.
    */
   activateOnProviderChange?: boolean;
 

@@ -19,24 +19,50 @@ export interface ResolvedProviderConfig {
   protocol: ExportProtocol;
 }
 
-export function resolveProviderConfig(config: ProviderConfig): ResolvedProviderConfig | null {
+export function resolveProviderConfig(config: ProviderConfig, debug?: boolean): ResolvedProviderConfig | null {
+  const providerName = Object.keys(config)[0];
+
+  if (debug) {
+    console.info(`[OtelExporter:debug] Resolving provider config for: ${providerName}`);
+  }
+
+  let resolved: ResolvedProviderConfig | null;
+
   if ('dash0' in config) {
-    return resolveDash0Config(config.dash0);
+    resolved = resolveDash0Config(config.dash0);
   } else if ('signoz' in config) {
-    return resolveSignozConfig(config.signoz);
+    resolved = resolveSignozConfig(config.signoz);
   } else if ('newrelic' in config) {
-    return resolveNewRelicConfig(config.newrelic);
+    resolved = resolveNewRelicConfig(config.newrelic);
   } else if ('traceloop' in config) {
-    return resolveTraceloopConfig(config.traceloop);
+    resolved = resolveTraceloopConfig(config.traceloop);
   } else if ('laminar' in config) {
-    return resolveLaminarConfig(config.laminar);
+    resolved = resolveLaminarConfig(config.laminar);
   } else if ('custom' in config) {
-    return resolveCustomConfig(config.custom);
+    resolved = resolveCustomConfig(config.custom);
   } else {
     // TypeScript exhaustiveness check
     const _exhaustive: never = config;
     return _exhaustive;
   }
+
+  if (debug && resolved) {
+    // Header values frequently carry credentials (Bearer tokens, API keys, Basic auth).
+    // Don't log any portion of the value — even prefix/suffix slices can leak.
+    const maskedHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(resolved.headers)) {
+      maskedHeaders[key] = value ? '[REDACTED]' : '[EMPTY]';
+    }
+    console.info(`[OtelExporter:debug] Provider "${providerName}" resolved:`, {
+      endpoint: resolved.endpoint,
+      protocol: resolved.protocol,
+      headers: maskedHeaders,
+    });
+  } else if (debug && !resolved) {
+    console.info(`[OtelExporter:debug] Provider "${providerName}" resolution returned null (disabled)`);
+  }
+
+  return resolved;
 }
 
 function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null {

@@ -30,6 +30,12 @@ export type PropertyFilterCreatorProps = {
    * can type the value inline instead of in this popover.
    */
   onStartTextFilter?: (fieldId: string) => void;
+  /**
+   * Field ids hidden from the Add Filter dropdown. Use to prevent users from
+   * recreating a filter that an upstream context already owns (e.g. the agent
+   * id when viewing the agent-scoped traces tab).
+   */
+  hiddenFieldIds?: readonly string[];
 };
 
 /**
@@ -48,7 +54,13 @@ export function PropertyFilterCreator({
   disabled,
   size,
   onStartTextFilter,
+  hiddenFieldIds,
 }: PropertyFilterCreatorProps) {
+  const visibleFields = useMemo(() => {
+    if (!hiddenFieldIds || hiddenFieldIds.length === 0) return fields;
+    const hidden = new Set(hiddenFieldIds);
+    return fields.filter(f => !hidden.has(f.id));
+  }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [textValue, setTextValue] = useState('');
@@ -74,7 +86,7 @@ export function PropertyFilterCreator({
     if (!open) setOpenPickMultiFieldId(undefined);
   }, [open]);
 
-  const selectedField = useMemo(() => fields.find(f => f.id === fieldId), [fields, fieldId]);
+  const selectedField = useMemo(() => visibleFields.find(f => f.id === fieldId), [visibleFields, fieldId]);
   // Only single-use kinds (text, multi-select) count as "used". `pick-multi`
   // allows multiple tokens with the same fieldId.
   const singleUseFieldIds = useMemo(() => {
@@ -216,8 +228,8 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              {fields.length > 0 ? (
-                fields.map(f => {
+              {visibleFields.length > 0 ? (
+                visibleFields.map(f => {
                   const used = singleUseFieldIds.has(f.id);
                   if (f.kind === 'pick-multi') {
                     return (

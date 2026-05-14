@@ -16,9 +16,14 @@ import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
+import type { GoalState } from '../goal-manager.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 
 import type { SlashCommandContext } from './types.js';
+
+export interface StartGoalOptions {
+  trigger?: 'send' | 'none';
+}
 
 export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state } = ctx;
@@ -123,12 +128,13 @@ export async function startGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
+  options: StartGoalOptions = {},
 ): Promise<void> {
   const defaults = getJudgeDefaults();
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
   if (!judgeDefaults) return;
 
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
+  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns, options);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
@@ -210,6 +216,7 @@ async function startGoal(
   objective: string,
   judgeModelId: string,
   maxTurns: number,
+  options: StartGoalOptions = {},
 ): Promise<void> {
   const { state } = ctx;
   const goalManager = state.goalManager;
@@ -226,15 +233,30 @@ async function startGoal(
   }
   await goalManager.saveToThread(state);
 
-  ctx.addUserMessage(createGoalReminderMessage(goal.id, objective, goal.maxTurns, judgeModelId));
+  if (options.trigger === 'none') {
+    return;
+  }
 
   try {
-    await state.harness.sendMessage({ content: toSystemReminderXml('goal', objective) });
+    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
     ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function createGoalReminderSignal(goal: GoalState) {
+  return {
+    type: 'system-reminder' as const,
+    contents: goal.objective,
+    attributes: { type: 'goal' },
+    metadata: {
+      goalId: goal.id,
+      maxTurns: goal.maxTurns,
+      judgeModelId: goal.judgeModelId,
+    },
+  };
 }
 
 export function createGoalReminderMessage(
@@ -259,8 +281,8 @@ export function createGoalReminderMessage(
   } as unknown as HarnessMessage;
 }
 
-function toSystemReminderXml(type: string, message: string): string {
-  return `<system-reminder type="${type}">${escapeXml(message)}</system-reminder>`;
+export function createGoalReminderXml(message: string): string {
+  return `<system-reminder type="goal">${escapeXml(message)}</system-reminder>`;
 }
 
 function escapeXml(value: string): string {

@@ -40,6 +40,12 @@ export class MessageStateManager {
         this.memoryMessagesPersisted.add(message);
         break;
       case 'response':
+        // Promoting from memory (e.g. OM step prepare → merge step-2 text): keep a single
+        // canonical source so clear.response.db() cannot drop merged content while the
+        // message remains only in memoryMessages.
+        if (this.memoryMessages.has(message)) {
+          this.memoryMessages.delete(message);
+        }
         this.newResponseMessages.add(message);
         this.newResponseMessagesPersisted.add(message);
         // Handle case where a client-side tool response was added as user input

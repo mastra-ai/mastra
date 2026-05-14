@@ -1550,6 +1550,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#baseStream;
   }
 
+  /** @internal */
+  _waitUntilFinished() {
+    if (this.#streamFinished) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>(resolve => {
+      this.#emitter.once('finish', resolve);
+    });
+  }
+
   #getTotalUsage(): LanguageModelUsage {
     let total = this.#usageCount.totalTokens;
 

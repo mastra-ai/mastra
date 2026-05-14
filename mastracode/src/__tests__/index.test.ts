@@ -205,6 +205,10 @@ vi.mock('./providers/openai-codex.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
+vi.mock('./providers/github-copilot.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
 vi.mock('./tools/index.js', () => ({
   defaultTools: {},
 }));
@@ -286,12 +290,19 @@ describe('createMastraCode', () => {
     expect(gatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
   }, 10_000);
 
-  it('forces a gateway sync after loading stored API keys', async () => {
+  it('starts gateway sync in the background after loading stored API keys', async () => {
+    let resolveSync: (() => void) | undefined;
+    gatewayRegistrySyncGateways.mockReturnValue(
+      new Promise<void>(resolve => {
+        resolveSync = resolve;
+      }),
+    );
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode();
+    await expect(createMastraCode()).resolves.toBeTruthy();
 
     expect(gatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
+    resolveSync?.();
   });
 
   it('always configures dynamic local memory at startup', async () => {

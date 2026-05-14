@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { AgentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import { BackgroundTaskManager } from '../background-tasks';
@@ -43,7 +44,8 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
-import type { ToolAction } from '../tools';
+import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
+import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
@@ -151,6 +153,25 @@ function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string
   return undefined;
 }
 
+/**
+ * Decodes the owning workflow id directly from a `wf_<encoded>` /
+ * `wf_<encoded>__<...>` row id without needing the workflow to be in the
+ * current registry. Used to identify rows whose workflow has been deleted
+ * from code so we can clean them up on startup.
+ */
+function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
+  if (!rowId.startsWith('wf_')) return undefined;
+  const rest = rowId.slice('wf_'.length);
+  const sep = rest.indexOf('__');
+  const encoded = sep === -1 ? rest : rest.slice(0, sep);
+  if (!encoded) return undefined;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
+}
+
 /** See {@link targetsEqual}. Same approach for free-form metadata. */
 function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | undefined): boolean {
   const aNorm = a ?? undefined;
@@ -250,14 +271,14 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
+   * import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
    *     configs: {
    *       default: {
    *         serviceName: 'mastra',
-   *         exporters: [new DefaultExporter(), new CloudExporter()],
+   *         exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
    *       },
    *     },
    *   })
@@ -444,6 +465,11 @@ export interface Config<
    */
   environment?: string;
   /**
+   * Optional central transform policy for tool payloads before they are
+   * serialized into display streams or user-visible transcripts.
+   */
+  transform?: ToolPayloadTransformPolicy;
+  /**
    * Configure which workers run in this Mastra instance.
    *
    * - `undefined` (default): Auto-creates default workers (existing behavior)
@@ -529,6 +555,7 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #agentThreadStreamRuntime = new AgentThreadStreamRuntime();
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
@@ -543,6 +570,7 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
+  #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
@@ -581,6 +609,10 @@ export class Mastra<
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get agentThreadStreamRuntime() {
+    return this.#agentThreadStreamRuntime;
   }
 
   get workers(): readonly MastraWorker[] {
@@ -698,6 +730,10 @@ export class Mastra<
     return this.#environment;
   }
 
+  public getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
+  }
+
   /**
    * Gets the stored agents cache
    * @internal
@@ -804,7 +840,7 @@ export class Mastra<
    * as default. If a real observability entrypoint already exists, the exporter
    * is added directly to the existing default instance.
    *
-   * @param exporter - The exporter to register (e.g. a CloudExporter)
+   * @param exporter - The exporter to register (e.g. a MastraPlatformExporter)
    * @param instance - An ObservabilityInstance pre-configured with the exporter, used as default when bootstrapping
    * @param entrypoint - A real ObservabilityEntrypoint to bootstrap if the current one is a no-op
    */
@@ -848,7 +884,7 @@ export class Mastra<
    *   }),
    *   logger: new PinoLogger({ name: 'MyApp' }),
    *   observability: new Observability({
-   *     configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   *     configs: { default: { serviceName: 'mastra', exporters: [new MastraStorageExporter()] } },
    *   }),
    * });
    * ```
@@ -887,6 +923,9 @@ export class Mastra<
     // Resolve deployment environment: explicit config wins, else fall back to
     // NODE_ENV. Leave undefined if neither is set rather than guessing.
     this.#environment = config?.environment ?? process.env.NODE_ENV;
+    this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
+      config?.transform ?? (config as any)?.toolPayloadProjection,
+    );
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -993,8 +1032,8 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
+            'Import and instantiate: import { Observability, MastraStorageExporter } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new MastraStorageExporter()] } } }). ' +
             'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
@@ -1428,27 +1467,30 @@ export class Mastra<
       }
     }
 
-    // Orphan deletion: drop any storage rows owned by a registered workflow
-    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) but not
-    // present in the current declared set. This keeps the storage in sync
-    // when array-form entries are removed across deploys. We only consider
-    // workflows we actually have registered — schedules belonging to a
-    // removed workflow are left alone (the workflow may be coming back).
-    if (declaredIdsByWorkflow.size > 0) {
-      const allRows = await schedulesStore.listSchedules();
-      for (const row of allRows) {
-        if (declaredIds.has(row.id)) continue;
-        const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow);
-        if (!ownerWorkflowId) continue;
-        try {
-          await schedulesStore.deleteSchedule(row.id);
-        } catch (error) {
-          this.#logger?.error('Failed to delete orphaned declarative schedule', {
-            scheduleId: row.id,
-            workflowId: ownerWorkflowId,
-            error,
-          });
-        }
+    // Orphan deletion: drop any Mastra-managed declarative schedule rows
+    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) that are no
+    // longer declared in code. This covers two cases:
+    //   1. A registered workflow's array-form entries shrunk across deploys.
+    //   2. The owning workflow itself was deleted from code. Leaving these
+    //      rows behind would have the scheduler keep firing for a workflow
+    //      the processor can't resolve, producing infinite event-redelivery
+    //      loops (see WorkflowEventProcessor#dispatch).
+    // User-created schedules (via the schedules API) don't use the `wf_`
+    // prefix, so they're untouched.
+    const allRows = await schedulesStore.listSchedules();
+    for (const row of allRows) {
+      if (declaredIds.has(row.id)) continue;
+      if (!row.id.startsWith('wf_')) continue;
+      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
+      if (!ownerWorkflowId) continue;
+      try {
+        await schedulesStore.deleteSchedule(row.id);
+      } catch (error) {
+        this.#logger?.error('Failed to delete orphaned declarative schedule', {
+          scheduleId: row.id,
+          workflowId: ownerWorkflowId,
+          error,
+        });
       }
     }
   }
@@ -2433,7 +2475,8 @@ export class Mastra<
    * This method allows dynamic registration of scorers after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a scorer with the same key already exists
+   * If a scorer with the same key already exists, this method leaves the existing
+   * scorer registered and returns.
    *
    * @example
    * ```typescript
@@ -3264,6 +3307,8 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
+    this.registerStaticWorkflowScorers(workflow);
+
     // If a schedule is declared, mark the flag and either register into the
     // running scheduler or trigger a lazy ensure.
     if (hasSchedule) {
@@ -3283,6 +3328,19 @@ export class Mastra<
         })();
       } else {
         this.#ensureScheduler();
+      }
+    }
+  }
+
+  private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
+    for (const step of Object.values(workflow.steps ?? {})) {
+      const scorers = step.scorers;
+      if (!scorers || typeof scorers === 'function') {
+        continue;
+      }
+
+      for (const [, entry] of Object.entries(scorers)) {
+        this.addScorer(entry.scorer, undefined, { source: 'code' });
       }
     }
   }

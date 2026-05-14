@@ -17,6 +17,7 @@ packages:
   - "@mastra/voice-playai"
   - "@mastra/voice-sarvam"
   - "@mastra/voice-speechify"
+  - "@mastra/voice-inworld"
 ---
 
 import { AudioPlayback } from "@site/src/components/AudioPlayback";
@@ -244,6 +245,33 @@ For detailed configuration options and advanced features, check out our [Text-to
     ```
 
     Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+  </TabItem>
+
+  <TabItem value="inworld" label="Inworld">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { InworldVoice } from '@mastra/voice-inworld'
+    import { playAudio } from '@mastra/node-audio'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: 'openai/gpt-5.4',
+      voice: new InworldVoice(),
+    })
+
+    const { text } = await voiceAgent.generate('What color is the sky?')
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: 'Dennis', // Optional: specify a speaker
+    })
+
+    playAudio(audioStream)
+    ```
+
+    Visit the [Inworld Voice Reference](/reference/voice/inworld) for more information on the Inworld voice provider.
   </TabItem>
 
   <TabItem value="speechify" label="Speechify">
@@ -506,6 +534,34 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     ```
 
     Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+  </TabItem>
+
+  <TabItem value="inworld" label="Inworld">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { InworldVoice } from '@mastra/voice-inworld'
+    import { createReadStream } from 'fs'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: 'openai/gpt-5.4',
+      voice: new InworldVoice(),
+    })
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream('./how_can_i_help_you.mp3')
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream)
+    console.log(`User said: ${transcript}`)
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript)
+    ```
+
+    Visit the [Inworld Voice Reference](/reference/voice/inworld) for more information on the Inworld voice provider.
   </TabItem>
 
   <TabItem value="sarvam" label="Sarvam">
@@ -815,6 +871,34 @@ Each voice provider can be configured with different models and options. Below a
     Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
   </TabItem>
 
+  <TabItem value="inworld" label="Inworld">
+    ```typescript
+    // Inworld Voice Configuration
+    const voice = new InworldVoice({
+      speechModel: {
+        name: 'inworld-tts-2',
+        apiKey: process.env.INWORLD_API_KEY,
+      },
+      listeningModel: {
+        name: 'groq/whisper-large-v3',
+        apiKey: process.env.INWORLD_API_KEY,
+      },
+      speaker: 'Dennis',
+      audioEncoding: 'MP3',
+      sampleRateHertz: 48000,
+      language: 'en-US',
+    })
+
+    // Per-call options: `deliveryMode` is honored only by `inworld-tts-2`.
+    const audioStream = await voice.speak('Hello!', {
+      deliveryMode: 'BALANCED', // 'STABLE' | 'BALANCED' | 'CREATIVE'
+      language: 'en-US', // BCP-47 per-call override
+    })
+    ```
+
+    Visit the [Inworld Voice Reference](/reference/voice/inworld) for more information on the Inworld voice provider.
+  </TabItem>
+
   <TabItem value="speechify" label="Speechify">
     ```typescript
     // Speechify Voice Configuration
@@ -1061,5 +1145,6 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [Google Gemini Live Voice](/reference/voice/google-gemini-live)
 - [AWS Nova Sonic Voice](/reference/voice/aws-nova-sonic)
 - [Deepgram Voice](/reference/voice/deepgram)
+- [Inworld Voice](/reference/voice/inworld)
 - [PlayAI Voice](/reference/voice/playai)
 - [Voice Examples](https://github.com/mastra-ai/voice-examples)

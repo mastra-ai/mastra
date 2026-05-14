@@ -936,6 +936,7 @@ export type TypedChunkType<OUTPUT = undefined> =
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
+export type StreamChunkType<OUTPUT = undefined> = ChunkType<OUTPUT> | DataChunkType;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;

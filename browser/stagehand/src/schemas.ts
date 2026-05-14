@@ -105,6 +105,21 @@ export const tabsInputSchema = z
 export type TabsInput = z.output<typeof tabsInputSchema>;
 
 // =============================================================================
+// Utility Tools
+// =============================================================================
+
+/**
+ * stagehand_screenshot - Capture a screenshot of the current page
+ */
+export const screenshotInputSchema = z.object({
+  fullPage: z
+    .boolean()
+    .optional()
+    .describe('Capture the full scrollable page instead of just the viewport (default: false)'),
+});
+export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
+
+// =============================================================================
 // All Schemas
 // =============================================================================
 
@@ -117,4 +132,6 @@ export const stagehandSchemas = {
   navigate: navigateInputSchema,
   tabs: tabsInputSchema,
   close: closeInputSchema,
+  // Utility
+  screenshot: screenshotInputSchema,
 } as const;

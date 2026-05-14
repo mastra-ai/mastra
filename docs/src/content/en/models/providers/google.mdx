@@ -9,7 +9,7 @@ description: "Use Google models with Mastra. 38 models available."
 
 Access 38 Google models through Mastra's model router. Authentication is handled automatically using the `GOOGLE_GENERATIVE_AI_API_KEY` environment variable.
 
-Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/pricing).
+Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/models).
 
 ```bash title=".env"
 GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
@@ -300,7 +300,7 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 32768,
-    "inputCost": 0.25,
+    "inputCost": 0.5,
     "outputCost": 60
   },
   {

@@ -9,8 +9,10 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { CreatedAgentSignal } from './signals';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -301,7 +303,6 @@ export interface DelegationConfig {
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
 }
-
 /**
  * Configuration for the routing agent's behavior.
  */
@@ -572,6 +573,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
 
+  /** Per-invocation transform policy for tool payloads in display and transcript serializers. */
+  transform?: ToolPayloadTransformPolicy;
+
   /**
    * Callback fired after each iteration (LLM call) completes.
    * Can control whether to continue and inject feedback.
@@ -630,6 +634,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * `agent.streamUntilIdle`, which drives continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * @internal
+   * Signal inputs that are already present in the initial message list and still
+   * need to be echoed as data parts to stream subscribers. Public callers should
+   * pass the signal as `agent.stream(signal, options)` instead of setting this.
+   */
+  _initialSignalEchoes?: CreatedAgentSignal[];
 } & Partial<ObservabilityContext>;
 
 /**

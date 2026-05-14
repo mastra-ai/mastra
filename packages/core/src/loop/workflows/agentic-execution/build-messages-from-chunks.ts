@@ -11,13 +11,14 @@ import type {
   ToolCallPayload,
   ToolResultPayload,
 } from '../../../stream/types';
+import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 
 /**
  * A raw chunk collected during the stream.
  * We only store the type and payload — everything needed to reconstruct messages post-stream.
  */
-export type CollectedChunk = { type: string; payload: any };
+export type CollectedChunk = { type: string; payload: any; metadata?: Record<string, any> };
 
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.
@@ -60,7 +61,7 @@ export function buildMessagesFromChunks({
       toolResults.set(p.toolCallId, {
         result: p.result,
         args: p.args,
-        providerMetadata: p.providerMetadata,
+        providerMetadata: withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata),
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
       });
@@ -235,6 +236,7 @@ export function buildMessagesFromChunks({
         const p = chunk.payload as ToolCallPayload;
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
+        const providerMetadata = withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata);
 
         // Check if we have a matching result from a provider-executed tool
         const result = toolResults.get(p.toolCallId);
@@ -251,7 +253,7 @@ export function buildMessagesFromChunks({
               args: p.args,
               result: result.result,
             },
-            providerMetadata: result.providerMetadata ?? p.providerMetadata,
+            providerMetadata: result.providerMetadata ?? providerMetadata,
             providerExecuted: resultProviderExecuted,
           } as MastraMessagePart);
         } else {
@@ -264,7 +266,7 @@ export function buildMessagesFromChunks({
               toolName: p.toolName,
               args: p.args,
             },
-            providerMetadata: p.providerMetadata,
+            providerMetadata,
             providerExecuted,
           } as MastraMessagePart);
         }

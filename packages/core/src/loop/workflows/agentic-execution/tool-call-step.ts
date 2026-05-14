@@ -9,7 +9,14 @@ import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
-import type { ProviderMetadata } from '../../../stream/types';
+import type { ChunkType, ProviderMetadata } from '../../../stream/types';
+import {
+  getTransformedToolPayload,
+  hasTransformedToolPayload,
+  transformToolPayloadForTargets,
+  withToolPayloadTransformMetadata,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -25,6 +32,7 @@ type AddToolMetadataOptions = {
   args: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
+  metadata?: Record<string, unknown>;
 } & (
   | {
       type: 'approval';
@@ -60,11 +68,61 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Fall back to the original tools from the closure if not set
       const stepTools = (_internal?.stepTools as Tools) || tools;
       const stepActiveTools = _internal?.stepActiveTools;
-
       const tool =
         stepTools?.[inputData.toolName] ||
         findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
+      const transformSource = {
+        policy: _internal?.toolPayloadTransform,
+        toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
+      };
+      const transformChunk = async (
+        chunk: ChunkType<OUTPUT>,
+        phase: 'input-available' | 'approval' | 'suspend' | 'output-available' | 'error',
+        extra?: { output?: unknown; error?: unknown; suspendPayload?: unknown },
+      ): Promise<ChunkType<OUTPUT>> => {
+        const payload = 'payload' in chunk ? (chunk.payload as Record<string, any>) : {};
+        const transformInput = payload.args ?? inputData.args;
+        const transformToolName = typeof payload.toolName === 'string' ? payload.toolName : inputData.toolName;
+        const transformToolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : inputData.toolCallId;
+        const transformProviderMetadata =
+          (payload.providerMetadata as Record<string, unknown> | undefined) ??
+          (inputData.providerMetadata as Record<string, unknown> | undefined);
+
+        const inputTransform = await transformToolPayloadForTargets(
+          {
+            phase: 'input-available',
+            toolName: transformToolName,
+            toolCallId: transformToolCallId,
+            input: transformInput,
+            providerMetadata: transformProviderMetadata,
+          },
+          transformSource,
+          logger,
+        );
+        const transform =
+          phase === 'input-available'
+            ? undefined
+            : await transformToolPayloadForTargets(
+                {
+                  phase,
+                  toolName: transformToolName,
+                  toolCallId: transformToolCallId,
+                  input: transformInput,
+                  output: extra?.output,
+                  error: extra?.error,
+                  suspendPayload: extra?.suspendPayload,
+                  providerMetadata: transformProviderMetadata,
+                },
+                transformSource,
+                logger,
+              );
+
+        return withToolPayloadTransformMetadata(
+          withToolPayloadTransformMetadata(chunk, inputTransform),
+          transform,
+        ) as ChunkType<OUTPUT>;
+      };
 
       const addToolMetadata = ({
         toolCallId,
@@ -74,6 +132,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         resumeSchema,
         type,
         suspendedToolRunId,
+        metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
@@ -90,14 +149,35 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : {};
           metadata[metadataKey] = metadata[metadataKey] || {};
           // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
+          const inputTransform = getTransformedToolPayload(
+            toolStateTransformMetadata,
+            'transcript',
+            'input-available',
+          )?.transformed;
+          const approvalTransform = getTransformedToolPayload(
+            toolStateTransformMetadata,
+            'transcript',
+            'approval',
+          )?.transformed;
+          const suspendTransform = getTransformedToolPayload(
+            toolStateTransformMetadata,
+            'transcript',
+            'suspend',
+          )?.transformed;
+          const transformedArgs =
+            type === 'approval'
+              ? (approvalTransform ?? inputTransform ?? args)
+              : (inputTransform ?? suspendTransform ?? args);
+          const transformedSuspendPayload = type === 'suspension' ? (suspendTransform ?? suspendPayload) : undefined;
           metadata[metadataKey][toolName] = {
             toolCallId,
             toolName,
-            args,
+            args: transformedArgs,
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
-            ...(type === 'suspension' ? { suspendPayload } : {}),
+            ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
+            ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
           };
           lastAssistantMessage.content.metadata = metadata;
         }
@@ -319,17 +399,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (toolRequiresApproval) {
           if (!resumeData) {
-            safeEnqueue(controller, {
-              type: 'tool-call-approval',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args: inputData.args,
-                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+            const approvalChunk = await transformChunk(
+              {
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  args: inputData.args,
+                  resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                },
               },
-            });
+              'approval',
+            );
+            safeEnqueue(controller, approvalChunk);
 
             // Add approval metadata to message before persisting
             addToolMetadata({
@@ -338,6 +422,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               args: inputData.args,
               type: 'approval',
               resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+              metadata: approvalChunk.metadata,
             });
 
             // Flush messages before suspension to ensure they are persisted
@@ -402,29 +487,33 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : undefined,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
-              safeEnqueue(controller, {
-                type: 'tool-call-approval',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId: inputData.toolCallId,
-                  toolName: inputData.toolName,
-                  args: inputData.args,
-                  resumeSchema: JSON.stringify(
-                    standardSchemaToJSONSchema(
-                      toStandardSchema(
-                        z.object({
-                          approved: z
-                            .boolean()
-                            .describe(
-                              'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                            ),
-                        }),
+              const approvalChunk = await transformChunk(
+                {
+                  type: 'tool-call-approval',
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId: inputData.toolCallId,
+                    toolName: inputData.toolName,
+                    args: inputData.args,
+                    resumeSchema: JSON.stringify(
+                      standardSchemaToJSONSchema(
+                        toStandardSchema(
+                          z.object({
+                            approved: z
+                              .boolean()
+                              .describe(
+                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                              ),
+                          }),
+                        ),
                       ),
                     ),
-                  ),
+                  },
                 },
-              });
+                'approval',
+              );
+              safeEnqueue(controller, approvalChunk);
 
               // Add approval metadata to message before persisting
               addToolMetadata({
@@ -446,6 +535,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     ),
                   ),
                 ),
+                metadata: approvalChunk.metadata,
               });
 
               // Flush messages before suspension to ensure they are persisted
@@ -465,18 +555,23 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
               );
             } else {
-              safeEnqueue(controller, {
-                type: 'tool-call-suspended',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId: inputData.toolCallId,
-                  toolName: inputData.toolName,
-                  suspendPayload,
-                  args: inputData.args,
-                  resumeSchema: options?.resumeSchema,
+              const suspensionChunk = await transformChunk(
+                {
+                  type: 'tool-call-suspended',
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId: inputData.toolCallId,
+                    toolName: inputData.toolName,
+                    suspendPayload,
+                    args: inputData.args,
+                    resumeSchema: options?.resumeSchema,
+                  },
                 },
-              });
+                'suspend',
+                { suspendPayload },
+              );
+              safeEnqueue(controller, suspensionChunk);
 
               // Add suspension metadata to message before persisting
               addToolMetadata({
@@ -487,6 +582,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 suspendedToolRunId: options?.runId,
                 type: 'suspension',
                 resumeSchema: options?.resumeSchema,
+                metadata: suspensionChunk.metadata,
               });
 
               // Flush messages before suspension to ensure they are persisted
@@ -621,6 +717,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             if (!resolvedTool?.execute) {
               throw new ToolNotFoundError(inputData.toolName);
             }
+            let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
+            const emittedReplayedToolCalls = new Set<string>();
 
             // Create a self-contained background task with per-stream hooks
             const bgTask = createBackgroundTask(backgroundTaskManager, {
@@ -673,55 +771,89 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // chunks so UIs rendering this stream can show the tool's
                 // outcome inline with the conversation.
                 onChunk: chunk => {
-                  try {
-                    const bgRunId = chunk.payload.runId;
-                    if (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) {
-                      controller.enqueue({
-                        type: 'tool-call',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          args: inputData.args,
-                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                          providerExecuted: inputData.providerExecuted,
-                        },
-                      });
-                    }
+                  backgroundChunkTransformQueue = backgroundChunkTransformQueue
+                    .then(async () => {
+                      const bgRunId = chunk.payload.runId;
+                      const replayKey = `${bgRunId}:${chunk.payload.toolCallId}`;
+                      if (
+                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) &&
+                        !emittedReplayedToolCalls.has(replayKey)
+                      ) {
+                        safeEnqueue(
+                          controller,
+                          await transformChunk(
+                            {
+                              type: 'tool-call',
+                              runId: bgRunId,
+                              from: ChunkFrom.AGENT,
+                              payload: {
+                                toolCallId: chunk.payload.toolCallId,
+                                toolName: chunk.payload.toolName,
+                                args: inputData.args,
+                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                                providerExecuted: inputData.providerExecuted,
+                              },
+                            },
+                            'input-available',
+                          ),
+                        );
+                        emittedReplayedToolCalls.add(replayKey);
+                      }
 
-                    if (chunk.type === 'background-task-completed') {
-                      controller.enqueue({
-                        type: 'tool-result',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          args: inputData.args,
-                          result: chunk.payload.result,
-                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                          providerExecuted: inputData.providerExecuted,
-                        },
+                      if (chunk.type === 'background-task-completed') {
+                        safeEnqueue(
+                          controller,
+                          await transformChunk(
+                            {
+                              type: 'tool-result',
+                              runId: bgRunId,
+                              from: ChunkFrom.AGENT,
+                              payload: {
+                                toolCallId: chunk.payload.toolCallId,
+                                toolName: chunk.payload.toolName,
+                                args: inputData.args,
+                                result: chunk.payload.result,
+                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                                providerExecuted: inputData.providerExecuted,
+                              },
+                            },
+                            'output-available',
+                            { output: chunk.payload.result },
+                          ),
+                        );
+                      } else if (chunk.type === 'background-task-failed') {
+                        safeEnqueue(
+                          controller,
+                          await transformChunk(
+                            {
+                              type: 'tool-error',
+                              runId: bgRunId,
+                              from: ChunkFrom.AGENT,
+                              payload: {
+                                toolCallId: chunk.payload.toolCallId,
+                                toolName: chunk.payload.toolName,
+                                error: chunk.payload.error,
+                                args: inputData.args,
+                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                                providerExecuted: inputData.providerExecuted,
+                              },
+                            },
+                            'error',
+                            { error: chunk.payload.error },
+                          ),
+                        );
+                      }
+                    })
+                    .catch(error => {
+                      logger?.warn?.('Error transforming background task stream chunk', {
+                        toolCallId: chunk.payload.toolCallId,
+                        toolName: chunk.payload.toolName,
+                        runId: chunk.payload.runId,
+                        error,
+                        errorMessage: error instanceof Error ? error.message : undefined,
+                        errorStack: error instanceof Error ? error.stack : undefined,
                       });
-                    } else {
-                      controller.enqueue({
-                        type: 'tool-error',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          error: chunk.payload.error,
-                          args: inputData.args,
-                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                          providerExecuted: inputData.providerExecuted,
-                        },
-                      });
-                    }
-                  } catch {
-                    // Controller may be closed if stream ended — ignore
-                  }
+                    });
                 },
 
                 // Result injector — updates the existing tool-invocation in the
@@ -737,6 +869,56 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     params.status === 'failed'
                       ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
                       : params.result;
+                  let transformCarrier = withToolPayloadTransformMetadata(
+                    { metadata: {} as Record<string, any> },
+                    await transformToolPayloadForTargets(
+                      {
+                        phase: 'input-available',
+                        toolName: params.toolName,
+                        toolCallId: params.toolCallId,
+                        input: args,
+                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                      },
+                      transformSource,
+                      logger,
+                    ),
+                  );
+                  transformCarrier = withToolPayloadTransformMetadata(
+                    transformCarrier,
+                    await transformToolPayloadForTargets(
+                      {
+                        phase: params.status === 'failed' ? 'error' : 'output-available',
+                        toolName: params.toolName,
+                        toolCallId: params.toolCallId,
+                        input: args,
+                        output: params.status === 'failed' ? undefined : params.result,
+                        error: params.status === 'failed' ? params.error : undefined,
+                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                      },
+                      transformSource,
+                      logger,
+                    ),
+                  );
+                  const transcriptArgsTransform = getTransformedToolPayload(
+                    transformCarrier.metadata,
+                    'transcript',
+                    'input-available',
+                  );
+                  const transcriptResultTransform = getTransformedToolPayload(
+                    transformCarrier.metadata,
+                    'transcript',
+                    params.status === 'failed' ? 'error' : 'output-available',
+                  );
+                  const transcriptArgs = hasTransformedToolPayload(transcriptArgsTransform)
+                    ? transcriptArgsTransform.transformed
+                    : args;
+                  const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
+                    ? transcriptResultTransform.transformed
+                    : result;
+                  const providerMetadata = withToolPayloadTransformProviderMetadata(
+                    inputData.providerMetadata as ProviderMetadata | undefined,
+                    transformCarrier.metadata,
+                  ) as ProviderMetadata | undefined;
 
                   const updated = messageList.updateToolInvocation(
                     {
@@ -748,6 +930,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         args,
                         result,
                       },
+                      ...(providerMetadata ? { providerMetadata } : {}),
                     },
                     {
                       mode: 'stream',
@@ -782,7 +965,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 type: 'tool-call' as const,
                                 toolCallId: params.toolCallId,
                                 toolName: params.toolName,
-                                args,
+                                args: transcriptArgs,
                               },
                             ],
                           },
@@ -799,7 +982,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                               type: 'tool-result' as const,
                               toolCallId: params.toolCallId,
                               toolName: params.toolName,
-                              result,
+                              result: transcriptResult,
                               isError: params.status === 'failed',
                             },
                           ],
@@ -821,6 +1004,26 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // Execution injector — updates the existing tool-invocation in the
                 // message list (keyed by toolCallId) background task startedAt.
                 onExecution: async params => {
+                  const inputTransform = await transformToolPayloadForTargets(
+                    {
+                      phase: 'input-available',
+                      toolName: params.toolName,
+                      toolCallId: params.toolCallId,
+                      input: args,
+                      providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                    },
+                    transformSource,
+                    logger,
+                  );
+                  const transformCarrier = withToolPayloadTransformMetadata(
+                    { metadata: {} as Record<string, any> },
+                    inputTransform,
+                  );
+                  const providerMetadata = withToolPayloadTransformProviderMetadata(
+                    inputData.providerMetadata as ProviderMetadata | undefined,
+                    transformCarrier.metadata,
+                  ) as ProviderMetadata | undefined;
+
                   messageList.updateToolInvocation(
                     {
                       type: 'tool-invocation',
@@ -830,6 +1033,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         toolName: params.toolName,
                         args,
                       },
+                      ...(providerMetadata ? { providerMetadata } : {}),
                     },
                     {
                       mode: 'stream',

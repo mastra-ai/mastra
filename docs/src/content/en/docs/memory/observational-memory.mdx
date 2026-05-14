@@ -93,6 +93,48 @@ The observer also sees these markers when it processes the thread, so the observ
 
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
+## Early activation
+
+OM can activate buffered observations before the token threshold is reached. This is useful when a prompt cache is likely to expire, or when the agent changes model providers.
+
+Top-level early activation settings apply to observations by default:
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      activateAfterIdle: '5m',
+      activateOnProviderChange: true,
+    },
+  },
+})
+```
+
+Use nested `observation` and `reflection` settings for per-phase control. Reflection early activation is opt-in, so top-level settings affect only observations.
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      activateAfterIdle: '5m',
+      observation: {
+        activateAfterIdle: false,
+      },
+      reflection: {
+        activateAfterIdle: '10m',
+        activateOnProviderChange: true,
+      },
+    },
+  },
+})
+```
+
+In this example, the top-level idle setting is disabled for observations, while reflections opt into idle and provider-change activation.
+
+See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
+
 ## Benefits
 
 - **Prompt caching**: OM's context is stable and observations append over time rather than being dynamically retrieved each turn. This keeps the prompt prefix cacheable, which reduces costs.
@@ -397,12 +439,14 @@ Reflection works similarly — the Reflector runs in the background when observa
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens` — with the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety threshold as a multiplier of `messageTokens`. At `1.2`, synchronous observation is forced at 36k tokens (1.2 × 30k). Only matters if buffering can't keep up. |
-| `activateAfterIdle` | none | Forces buffered observations and buffered reflections to activate after a period of inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. Set this to your prompt cache TTL if you want activation to happen before the next cold prompt. |
-| `activateOnProviderChange` | `false` | Forces buffered observations and reflections to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
+| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, or duration strings like `"5m"` or `"1hr"`. Set this to your prompt cache TTL if you want activation to happen before the next cold prompt. |
+| `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
+| `reflection.activateAfterIdle` | none | Opts buffered reflections into idle activation. Reflections don't inherit top-level `activateAfterIdle`. |
+| `reflection.activateOnProviderChange` | `false` | Opts buffered reflections into provider-change activation. Reflections don't inherit top-level `activateOnProviderChange`. |
 | `reflection.blockAfter` | `1.2` | Safety threshold for reflection, same logic as observation. |
 
-If you're relying on prompt caching, set `activateAfterIdle` to match your cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations or reflections first and send a smaller compressed context window.
+If you're relying on prompt caching, set `activateAfterIdle` to match your cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations first and send a smaller compressed context window.
 
 ```typescript
 const memory = new Memory({
@@ -416,9 +460,9 @@ const memory = new Memory({
 })
 ```
 
-With a 5-minute prompt cache TTL, this activates buffered context after 5 minutes of inactivity so the next uncached prompt uses observations and reflections instead of a larger raw message window. If you prefer, `300_000` works the same way.
+With a 5-minute prompt cache TTL, this activates buffered observations after 5 minutes of inactivity so the next uncached prompt uses compressed observations instead of a larger raw message window. If you prefer, `300_000` works the same way.
 
-Changing model or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered context to activate before the new provider runs. That avoids sending a large raw window to a provider that cannot reuse the previous prompt cache.
+Changing model or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered observations to activate before the new provider runs. That avoids sending a large raw window to a provider that can't reuse the previous prompt cache.
 
 ### Disabling
 
