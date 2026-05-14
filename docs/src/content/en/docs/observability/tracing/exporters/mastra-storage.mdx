@@ -191,7 +191,7 @@ The MastraStorageExporter includes robust error handling for production use:
 
 ## Dropped observability events
 
-`MastraStorageExporter` emits structured drop events when it cannot persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
+`DefaultExporter` emits structured drop events when it cannot persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
 
 There are two drop reasons:
 

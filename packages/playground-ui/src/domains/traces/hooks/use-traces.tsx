@@ -11,7 +11,7 @@ const fetchTracesFn = async ({
   page,
   perPage,
   filters,
-  listMode = 'branches',
+  listMode = 'traces',
 }: TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
   page: number;
@@ -81,7 +81,7 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
   return { spans, threadTitles };
 }
 
-export const useTraces = ({ filters, listMode = 'branches' }: TracesFilters) => {
+export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 

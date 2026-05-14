@@ -405,7 +405,7 @@ describe('serverDeployAction', () => {
     expect(saveProjectConfig).toHaveBeenCalledWith(
       expect.any(String),
       {
-        projectId: 'my-app',
+        projectId: 'proj-1',
         projectName: 'my-app',
         projectSlug: 'my-app',
         organizationId: 'org-1',
@@ -413,7 +413,7 @@ describe('serverDeployAction', () => {
       },
       undefined,
     );
-    expect(uploadServerDeploy).toHaveBeenCalledWith('test-token', 'org-1', 'my-app', expect.any(Buffer), {
+    expect(uploadServerDeploy).toHaveBeenCalledWith('test-token', 'org-1', 'proj-1', expect.any(Buffer), {
       projectName: 'my-app',
       envVars: { API_KEY: 'test' },
       disablePlatformObservability: true,
@@ -534,6 +534,71 @@ describe('serverDeployAction', () => {
     expect(platform.createServerProject).not.toHaveBeenCalled();
 
     exitSpy.mockRestore();
+  });
+
+  it('--project <name> bypasses the selector when it matches an existing project by name', async () => {
+    vi.resetModules();
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchServerProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'My App', slug: 'my-app-slug', organizationId: 'org-1' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other', organizationId: 'org-1' } as never,
+    ]);
+
+    const prompts = await import('@clack/prompts');
+    vi.mocked(prompts.confirm).mockResolvedValueOnce(false as never);
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('__exit__');
+    });
+
+    const { serverDeployAction } = await import('./deploy.js');
+    await expect(serverDeployAction(undefined, { project: 'My App' })).rejects.toThrow();
+
+    expect(prompts.select).not.toHaveBeenCalled();
+    expect(platform.createServerProject).not.toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+  });
+
+  it('--project <name> with --yes creates the project when no match exists and saves real project ID', async () => {
+    vi.resetModules();
+
+    const { loadProjectConfig, saveProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchServerProjects).mockResolvedValue([
+      { id: 'proj-other', name: 'Other', slug: 'other', organizationId: 'org-1' } as never,
+    ]);
+    vi.mocked(platform.createServerProject).mockResolvedValue({
+      id: 'proj-real-id',
+      name: 'brand-new',
+      slug: 'brand-new',
+      organizationId: 'org-1',
+    } as never);
+
+    const { readdir, readFile } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
+
+    const { serverDeployAction } = await import('./deploy.js');
+    await expect(serverDeployAction(undefined, { project: 'brand-new', yes: true })).resolves.toBeUndefined();
+
+    expect(platform.createServerProject).toHaveBeenCalledWith('test-token', 'org-1', 'brand-new');
+    expect(saveProjectConfig).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ projectId: 'proj-real-id', projectName: 'brand-new', projectSlug: 'brand-new' }),
+      undefined,
+    );
   });
 
   it('auto-accept with multiple projects and no name match throws a helpful error', async () => {

@@ -377,7 +377,7 @@ function createStepFromParams<
   // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
   // but we need it to match the inferred generic types. The public overloads ensure
   // type safety for consumers.
-  return {
+  const step = {
     id: params.id,
     description: params.description,
     inputSchema: params.inputSchema ? toStandardSchema(params.inputSchema) : params.inputSchema,
@@ -399,6 +399,29 @@ function createStepFromParams<
       DefaultEngineType
     >['execute'],
   };
+
+  const paramsWithChildren = params as StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema
+  > & {
+    steps?: Record<string, unknown> | unknown[];
+    children?: Record<string, unknown> | unknown[];
+    stepGraph?: unknown[];
+  };
+
+  if (paramsWithChildren.steps || paramsWithChildren.children || paramsWithChildren.stepGraph) {
+    Object.assign(step, {
+      steps: paramsWithChildren.steps,
+      children: paramsWithChildren.children,
+      stepGraph: paramsWithChildren.stepGraph,
+    });
+  }
+
+  return step;
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
@@ -635,6 +658,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   DefaultEngineType
 > {
+  type ProcessorLoadedToolsProvider = {
+    getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
+  };
+
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -692,7 +719,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   // but TypeScript type inference has issues with the complex discriminated union types.
   // We use type assertions here since toStandardSchema returns the schema directly
   // when it already implements StandardSchemaWithJSON.
-  return {
+  const step = {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
@@ -1424,6 +1451,14 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     DefaultEngineType
   >;
+
+  const toolProvider = processor as ProcessorLoadedToolsProvider;
+  if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+    (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+      toolProvider.getLoadedToolsForRequestContext.bind(processor);
+  }
+
+  return step;
 }
 
 export function cloneStep<TStepId extends string>(

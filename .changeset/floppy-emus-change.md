@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Increased contrast of the Mastra version badge in light mode for better readability.
+Improved the light mode Mastra version badge.

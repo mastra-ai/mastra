@@ -77,7 +77,7 @@ For each error processor, write at minimum:
 
 ## Passing Messages with Tool Calls
 
-When seeding conversation history for tool-related tests, pass messages as the first argument to `agent.generate()` or `agent.stream()` using the AI SDK message format:
+When seeding conversation history for tool-related tests, pass messages as the second argument to `agent.generate()` or `agent.stream()` using the AI SDK message format:
 
 ```ts
 const messages = [

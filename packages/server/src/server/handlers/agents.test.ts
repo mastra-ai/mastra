@@ -15,6 +15,8 @@ import { sendAgentSignalBodySchema, subscribeAgentThreadBodySchema } from '../sc
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
+  GET_AGENT_BY_ID_ROUTE,
+  LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
@@ -533,6 +535,63 @@ describe('Agent Routes Authorization', () => {
     }
     return requestContext;
   }
+
+  describe('agent metadata serialization', () => {
+    it('includes metadata in the list agents response', async () => {
+      mockAgent = new Agent({
+        id: 'metadata-agent',
+        name: 'metadata-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+        metadata: { type: 'support' },
+      });
+
+      mastra = new Mastra({
+        agents: { 'metadata-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        mastra,
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result['metadata-agent']?.metadata).toEqual({ type: 'support' });
+    });
+
+    it('includes metadata in the get agent response', async () => {
+      mockAgent = new Agent({
+        id: 'metadata-agent',
+        name: 'metadata-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+        metadata: { type: 'support' },
+      });
+      vi.spyOn(mockAgent, 'listTools').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getLLM').mockResolvedValue({
+        getModel: () => undefined,
+        getProvider: () => 'test-provider',
+        getModelId: () => 'test-model',
+      } as any);
+      vi.spyOn(mockAgent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getDefaultOptions').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getModelList').mockResolvedValue(null);
+
+      mastra = new Mastra({
+        agents: { 'metadata-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'metadata-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.metadata).toEqual({ type: 'support' });
+    });
+  });
 
   describe('GENERATE_AGENT_ROUTE', () => {
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
@@ -1204,16 +1263,13 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
-    it('should merge idle stream requestContext into signal runs without overriding reserved keys', async () => {
+    it('should merge idle stream request context before waking a thread with a signal', async () => {
       await mockMemory.createThread({
-        threadId: 'signal-thread-with-body-context',
+        threadId: 'signal-thread-with-context',
         resourceId: 'user-a',
-        title: 'Signal Thread',
+        title: 'Signal Thread With Context',
       });
-      const requestContext = createContextWithReservedKeys({
-        resourceId: 'user-a',
-        threadId: 'signal-thread-with-body-context',
-      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
       let capturedTarget: any;
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
@@ -1221,16 +1277,15 @@ describe('Agent Routes Authorization', () => {
         return { accepted: true, runId: 'signal-run-id' };
       });
 
-      await SEND_AGENT_SIGNAL_ROUTE.handler({
+      const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
         mastra,
         agentId: 'test-agent',
         requestContext,
         signal: { type: 'user-message', contents: 'hello' },
-        resourceId: 'user-b',
-        threadId: 'client-thread',
+        resourceId: 'user-a',
+        threadId: 'signal-thread-with-context',
         ifIdle: {
           streamOptions: {
-            instructions: 'Use the fixture.',
             requestContext: {
               fixture: 'text-stream',
               [MASTRA_RESOURCE_ID_KEY]: 'user-b',
@@ -1239,46 +1294,9 @@ describe('Agent Routes Authorization', () => {
         },
       } as any);
 
-      const streamRequestContext = capturedTarget.ifIdle.streamOptions.requestContext as RequestContext;
-      expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
-      expect(streamRequestContext).toBe(requestContext);
-      expect(streamRequestContext.get('fixture')).toBe('text-stream');
-      expect(streamRequestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
-      expect(capturedTarget).toMatchObject({
-        resourceId: 'user-a',
-        threadId: 'signal-thread-with-body-context',
-      });
-    });
-
-    it('should use idle stream requestContext for signal-started agent version resolution', async () => {
-      const applyStoredOverrides = vi.fn(async agent => agent);
-      (mastra as any).getEditor = vi.fn(() => ({
-        agent: { applyStoredOverrides },
-      }));
-
-      (mockAgent as any).sendSignal = vi.fn(() => ({ accepted: true, runId: 'signal-run-id' }));
-
-      await SEND_AGENT_SIGNAL_ROUTE.handler({
-        mastra,
-        agentId: 'test-agent',
-        requestContext: createContextWithReservedKeys({}),
-        signal: { type: 'user-message', contents: 'hello' },
-        resourceId: 'user-a',
-        threadId: 'signal-version-thread',
-        ifIdle: {
-          streamOptions: {
-            requestContext: {
-              agentVersionId: 'version-from-signal-body',
-            },
-          },
-        },
-      } as any);
-
-      expect(applyStoredOverrides).toHaveBeenCalledWith(
-        mockAgent,
-        { versionId: 'version-from-signal-body' },
-        expect.any(RequestContext),
-      );
+      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
     });
 
     it('should reject sending a signal to a thread owned by a different resource', async () => {

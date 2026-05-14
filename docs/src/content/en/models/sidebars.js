@@ -418,6 +418,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nearai',
+          label: 'NEAR AI Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
         },

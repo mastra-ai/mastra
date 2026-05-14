@@ -188,7 +188,7 @@ function normalizeWriteOpts(
     return { agentId: o.agentId, requestContext: o.requestContext };
   }
   // Empty object → no agentId, no requestContext.
-  if (Object.keys(opts).length === 0) return {};
+  if (keys.length === 0) return {};
   // Legacy shape: caller passed a RequestContext / plain context object directly.
   return { requestContext: opts as RequestContext | Record<string, any> };
 }

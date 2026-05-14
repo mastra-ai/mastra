@@ -1099,7 +1099,7 @@ const mcpClient = new MCPClient({
   servers: {
     apiServer: {
       url: new URL('https://api.example.com/mcp'),
-      fetch: async (url, init, requestContext) => {
+      fetch: async (url, init) => {
         const method = (init?.method || 'GET').toUpperCase()
 
         // The SDK opens a background GET stream for server-pushed notifications.
@@ -1164,7 +1164,7 @@ const sseClientWithFetch = new MCPClient({
   servers: {
     exampleServer: {
       url: new URL('https://your-mcp-server.com/sse'),
-      fetch: async (url, init, requestContext) => {
+      fetch: async (url, init) => {
         const headers = new Headers(init?.headers || {})
         headers.set('Authorization', 'Bearer your-token')
         return fetch(url, {

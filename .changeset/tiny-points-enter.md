@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Agent signals now resume idle runs with the correct request context.
+Fixed agent signal wakeups so idle runs receive request context values while preserving server-owned resource identifiers.

@@ -170,7 +170,7 @@ if [ -z "$pane_info" ]; then
 fi
 
 decode_pane_info() {
-  printf '%s' "$pane_info" | base64 -D | jq -r "$1"
+  printf '%s' "$pane_info" | base64 --decode | jq -r "$1"
 }
 
 tab_id="$(decode_pane_info '.tab_id')"
