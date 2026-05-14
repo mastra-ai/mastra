@@ -1228,7 +1228,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       memory: memoryConfig,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
-      metadata: options.metadata ?? (await agent.getMetadata({ requestContext })),
+      metadata:
+        options.metadata ??
+        (typeof agent.getMetadata === 'function' ? await agent.getMetadata({ requestContext }) : undefined),
       authorId: options.authorId,
     };
 
