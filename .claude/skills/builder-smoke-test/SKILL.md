@@ -192,7 +192,7 @@ it blocks future runs.
 
 ### Project layout (scaffolded for you)
 
-```
+```text
 $PROJECT_DIR/                                    ← see "Project dir resolution" below
 ├── package.json                                 ← pnpm overrides → link:<worktree>/packages/*
 ├── tsconfig.json

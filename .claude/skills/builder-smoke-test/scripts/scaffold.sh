@@ -161,13 +161,16 @@ echo "✓ wrote .env"
 # 9. Install deps.
 if [ "${needs_install}" = "yes" ]; then
   echo "→ pnpm install --ignore-workspace (this can take ~30-90s)"
-  pushd "${PROJECT_DIR}" >/dev/null
+  if ! pushd "${PROJECT_DIR}" >/dev/null; then
+    echo "✗ scaffold: could not cd into ${PROJECT_DIR}" >&2
+    exit 1
+  fi
   if ! pnpm install --ignore-workspace 2>&1; then
-    popd >/dev/null
+    popd >/dev/null || true
     echo "✗ scaffold: pnpm install failed in ${PROJECT_DIR}" >&2
     exit 1
   fi
-  popd >/dev/null
+  popd >/dev/null || true
   echo "✓ install complete"
 fi
 

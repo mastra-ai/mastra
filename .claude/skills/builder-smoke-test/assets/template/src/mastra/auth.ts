@@ -30,6 +30,10 @@ async function initAuth(): Promise<AuthBundle> {
         redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
       });
       const rbacProvider = new MastraRBACWorkos({
+        // Intentional: smoke tests assert live RBAC behavior on every request.
+        // A 1ms TTL effectively disables caching so each call re-fetches roles
+        // and permissions from WorkOS, ensuring scaffold roleMapping edits and
+        // upstream role changes take effect immediately during a run.
         cache: { ttlMs: 1 },
         roleMapping: {
           admin: ['*'],

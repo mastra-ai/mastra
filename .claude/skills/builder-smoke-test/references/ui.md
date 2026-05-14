@@ -194,7 +194,7 @@ Still on `/agent-builder/skills`:
 
 Resize browser to mobile width (or use the device toggle).
 
-- [ ] Bottom-bar shows the same primary entries as the desktop sidebar (Agents, Skills, Favorites, Library, plus Infrastructure for admins)
+- [ ] Bottom-bar shows the same primary entries as the desktop sidebar (Agents, Skills, Favorites, Library, Infrastructure — Infrastructure is read-only for all default roles since the payload is deployment-shape with no secrets)
 - [ ] Tapping each navigates to the matching route and the corresponding tab is active
 
 ### 15. Scrollable lists (#16252, #16253) _(Extended)_

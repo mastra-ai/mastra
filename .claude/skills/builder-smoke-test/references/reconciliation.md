@@ -20,6 +20,8 @@ On startup, `ensureBuilderWorkspaces()`:
 
 ## Prerequisites
 
+> **Auth-on session header.** Under `--auth on`, prepend `-H "Cookie: $COOKIE"` to every `curl` below (exported from `references/auth.md` step 0). Snippets omit it for readability; an authenticated run without the cookie returns `401` before any reconciliation assertion can fire.
+
 Resolve the builder workspace ID (the rest of this file assumes `$WORKSPACE_ID` is set):
 
 ```bash

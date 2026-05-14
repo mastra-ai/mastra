@@ -4,6 +4,8 @@ Test stored workspace create, read, update, and delete via API.
 
 ## Prerequisites
 
+> **Auth-on session header.** Under `--auth on`, prepend `-H "Cookie: $COOKIE"` to every `curl` in this file (exported from `references/auth.md` step 0). Snippets below omit it for readability so they read cleanly under `--auth off`; an authenticated run without the cookie returns `401` before the intended assertion fires.
+
 Resolve the builder workspace ID (used in steps 2 and 6):
 
 ```bash

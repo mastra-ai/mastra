@@ -33,7 +33,7 @@ curl -s "$BASE/editor/builder/infrastructure" | jq '.channels'
 Set `SLACK_*` env vars in `$PROJECT_DIR/.env`, restart the dev server.
 
 ```bash
-curl -s "$BASE/editor/builder/infrastructure" | jq '.channels.slack // .channels[] | select(.id==\"slack\")'
+curl -s "$BASE/editor/builder/infrastructure" | jq '.channels.providers[] | select(.id==\"slack\")'
 ```
 
 - [ ] Slack entry present

@@ -25,7 +25,7 @@ bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
 
 `$PROJECT_DIR/.env` must have all four:
 
-```
+```dotenv
 AUTH_PROVIDER=workos
 WORKOS_API_KEY=<key>
 WORKOS_CLIENT_ID=<id>
@@ -102,7 +102,7 @@ If `roles` does not contain the `--role` value, **stop the run** and tell the us
 
 > The logged-in user's roles are `<actual roles>` but `--role` is `<expected>`. Either change your WorkOS role to `<expected>` and restart the server, or re-run the smoke test with `--role <one of your actual roles>`.
 
-Do not try to "simulate" a different role by setting headers — there is no server-side role-override header in this build. The only way to test a different role is to log in as a user that actually has it.
+Do not try to "simulate" a different role by setting headers — there is no server-side role-override header in this build. The only way to test a different role is to log in as a user who actually has it.
 
 ### 2. Auth ON — verify authorId is set
 
