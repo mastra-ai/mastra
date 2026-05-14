@@ -914,24 +914,12 @@ describe('MCPClient', () => {
   });
 
   describe('Per-server fault isolation (issue #13521)', () => {
-    let faultIsolationWeatherFixtureServer: WeatherFixtureServer;
-    let faultIsolationWeatherServerPort: number;
-
-    beforeAll(async () => {
-      faultIsolationWeatherFixtureServer = await startWeatherFixtureServer();
-      faultIsolationWeatherServerPort = faultIsolationWeatherFixtureServer.port;
-    });
-
-    afterAll(async () => {
-      await stopWeatherFixtureServer(faultIsolationWeatherFixtureServer?.process);
-    });
-
     it('listTools should return tools from healthy servers when one server fails', async () => {
       const mixedMcp = new MCPClient({
         id: 'test-fault-isolation-tools',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${faultIsolationWeatherServerPort}/sse`),
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
@@ -956,7 +944,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-toolsets',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${faultIsolationWeatherServerPort}/sse`),
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
@@ -983,7 +971,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-disconnect',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${faultIsolationWeatherServerPort}/sse`),
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
