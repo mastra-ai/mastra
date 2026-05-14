@@ -289,6 +289,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'note.txt',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1, 2, 3]),
         });
 
@@ -446,6 +447,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'note.txt',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1, 2, 3, 4]),
         });
 
@@ -467,6 +469,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'shared',
           name: 'a.txt',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1]),
         });
         await harness.saveAttachment({
@@ -474,6 +477,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'shared',
           name: 'b.txt',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([2]),
         });
 
@@ -490,6 +494,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'first.txt',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1]),
         });
         await harness.saveAttachment({
@@ -497,6 +502,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'second.txt',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([2, 3]),
         });
 
@@ -515,6 +521,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'bin',
           mimeType: 'application/octet-stream',
+          source: 'preupload',
           data: random,
         });
 
@@ -530,6 +537,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'n.txt',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1, 2, 3]),
         });
 
@@ -539,11 +547,13 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         });
         expect(record).toMatchObject({
           attachmentId: 'a1',
-          sessionId: 'session-1',
+          ownerSessionId: 'session-1',
           name: 'n.txt',
           mimeType: 'text/plain',
-          sizeBytes: 3,
+          bytes: 3,
+          source: 'preupload',
         });
+        expect(record?.sha256).toHaveLength(64);
         expect(record?.createdAt).toBeGreaterThan(0);
       });
 
@@ -554,6 +564,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'n',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1]),
         });
 
@@ -569,6 +580,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'n',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1]),
         });
         await harness.saveAttachment({
@@ -576,6 +588,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a2',
           name: 'n',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([2]),
         });
 
@@ -595,6 +608,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           attachmentId: 'a1',
           name: 'n',
           mimeType: 'text/plain',
+          source: 'preupload',
           data: new Uint8Array([1]),
         });
 

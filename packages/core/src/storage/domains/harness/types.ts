@@ -45,11 +45,22 @@ export interface TokenUsage {
  * A persisted attachment reference on a queued or pending message.
  *
  * `kind: 'ref'` points at a row in the harness attachment index (the bytes
- * live in BlobStore or whatever the adapter delegates to).
+ * live in BlobStore or whatever the adapter delegates to). Durable refs carry
+ * owner, size, digest, and source metadata so recovery can validate the bytes
+ * that were admitted.
  * `kind: 'url'` is a remote URL fetched at message-build time.
  */
 export type PersistedAttachment =
-  | { kind: 'ref'; name: string; mimeType: string; attachmentId: string }
+  | {
+      kind: 'ref';
+      name: string;
+      mimeType: string;
+      ownerSessionId: string;
+      attachmentId: string;
+      bytes: number;
+      sha256: string;
+      source: AttachmentSource;
+    }
   | { kind: 'url'; name: string; mimeType: string; url: string };
 
 /**
@@ -176,6 +187,8 @@ export interface SessionWorkspaceState {
   state: unknown;
 }
 
+export type AttachmentSource = 'inline' | 'preupload' | 'url' | 'provider';
+
 /**
  * Durable session state. Loaded on hydration, flushed under the session's
  * write lease (see HARNESS_V1_SPEC.md §5.8).
@@ -281,16 +294,20 @@ export interface SessionSummary {
  * harness-domain pointer.
  */
 export interface AttachmentRecord {
+  /** Session that owns the attachment bytes. */
+  ownerSessionId: string;
   /** Stable identifier referenced by `PersistedAttachment.attachmentId`. */
   attachmentId: string;
-  /** Owning session — bytes are deleted with the session. */
-  sessionId: string;
   /** Original filename (display only). */
   name: string;
   /** MIME type, validated at upload. */
   mimeType: string;
   /** Size of the underlying bytes. */
-  sizeBytes: number;
+  bytes: number;
+  /** Hex SHA-256 digest of the underlying bytes. */
+  sha256: string;
+  /** Where the attachment came from. */
+  source: AttachmentSource;
   /** Epoch ms. */
   createdAt: number;
 }
@@ -351,11 +368,20 @@ export interface SaveAttachmentInput {
   attachmentId: string;
   name: string;
   mimeType: string;
+  source: AttachmentSource;
   data: Uint8Array;
+}
+
+export interface SaveAttachmentResult {
+  attachmentId: string;
+  bytes: number;
+  sha256: string;
 }
 
 export interface LoadedAttachment {
   name: string;
   mimeType: string;
+  bytes: number;
+  sha256: string;
   data: Uint8Array;
 }

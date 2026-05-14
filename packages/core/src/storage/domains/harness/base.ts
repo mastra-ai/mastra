@@ -7,6 +7,7 @@ import type {
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
+  SaveAttachmentResult,
   SaveSessionOptions,
   SaveSessionResult,
   SessionLeaseResult,
@@ -75,9 +76,9 @@ export class HarnessStorageSessionNotFoundError extends Error {
  *      (HARNESS_V1_SPEC.md §5.8). Acquire-renew-release pattern with TTL.
  *
  *   3. **Attachment metadata** — index rows mapping `attachmentId` to
- *      `(sessionId, name, mimeType, sizeBytes)` and the underlying bytes.
- *      Adapters are free to delegate the bytes to a separate blob store
- *      (S3, R2, local disk) under the same interface.
+ *      `(ownerSessionId, name, mimeType, bytes, sha256, source)` and the
+ *      underlying bytes. Adapters are free to delegate the bytes to a
+ *      separate blob store (S3, R2, local disk) under the same interface.
  *
  * Threads and messages are NOT in this domain — they live under
  * `MemoryStorage`. The harness layer composes the two.
@@ -194,10 +195,11 @@ export abstract class HarnessStorage extends StorageDomain {
    * Persist an attachment's bytes and index row.
    *
    * Adapters MAY delegate the bytes to a blob store but the index row
-   * (filename, mime type, size, owning session) must be queryable through
-   * `loadAttachment`.
+   * (filename, mime type, size, digest, source, owning session) must be
+   * queryable through `getAttachmentRecord`; `loadAttachment` returns the
+   * byte payload plus replay-validation metadata.
    */
-  abstract saveAttachment(opts: SaveAttachmentInput): Promise<void>;
+  abstract saveAttachment(opts: SaveAttachmentInput): Promise<SaveAttachmentResult>;
 
   /**
    * Load an attachment by (sessionId, attachmentId). Returns null when the

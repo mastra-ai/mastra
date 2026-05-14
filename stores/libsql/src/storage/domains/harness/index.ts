@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { Client } from '@libsql/client';
 import {
   HarnessStorage,
@@ -17,6 +19,7 @@ import type {
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
+  SaveAttachmentResult,
   SaveSessionOptions,
   SaveSessionResult,
   SessionLeaseResult,
@@ -36,7 +39,8 @@ import type { LibSQLDomainConfig } from '../../db';
  *
  * Attachments live in `mastra_harness_attachments` with a composite primary
  * key on `(session_id, attachment_id)`. Bytes are stored base64-encoded in
- * `data_b64` for now; see the schema comment in core for the rationale.
+ * `data_b64` for now and the digest/source metadata is stored alongside the
+ * byte payload.
  */
 export class HarnessLibSQL extends HarnessStorage {
   #db: LibSQLDB;
@@ -64,6 +68,12 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
       compositePrimaryKey: attachmentsConfig?.compositePrimaryKey,
     });
+    await this.#db.alterTable({
+      tableName: TABLE_HARNESS_ATTACHMENTS,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
+      ifNotExists: ['sha256', 'source'],
+    });
+    await this.#backfillAttachmentMetadata();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -291,20 +301,32 @@ export class HarnessLibSQL extends HarnessStorage {
   // Attachments
   // -------------------------------------------------------------------------
 
-  async saveAttachment({ sessionId, attachmentId, name, mimeType, data }: SaveAttachmentInput): Promise<void> {
+  async saveAttachment({
+    sessionId,
+    attachmentId,
+    name,
+    mimeType,
+    source,
+    data,
+  }: SaveAttachmentInput): Promise<SaveAttachmentResult> {
+    const sha256 = sha256Hex(data);
+    const bytes = data.byteLength;
     const dataB64 = bytesToBase64(data);
     await this.#client.execute({
       sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENTS}
-            (session_id, attachment_id, name, mime_type, size_bytes, created_at, data_b64)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (session_id, attachment_id, name, mime_type, size_bytes, sha256, source, created_at, data_b64)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, attachment_id) DO UPDATE SET
               name = excluded.name,
               mime_type = excluded.mime_type,
               size_bytes = excluded.size_bytes,
+              sha256 = excluded.sha256,
+              source = excluded.source,
               created_at = excluded.created_at,
               data_b64 = excluded.data_b64`,
-      args: [sessionId, attachmentId, name, mimeType, data.byteLength, Date.now(), dataB64],
+      args: [sessionId, attachmentId, name, mimeType, bytes, sha256, source, Date.now(), dataB64],
     });
+    return { attachmentId, bytes, sha256 };
   }
 
   async loadAttachment({
@@ -315,7 +337,7 @@ export class HarnessLibSQL extends HarnessStorage {
     attachmentId: string;
   }): Promise<LoadedAttachment | null> {
     const result = await this.#client.execute({
-      sql: `SELECT name, mime_type, data_b64 FROM ${TABLE_HARNESS_ATTACHMENTS}
+      sql: `SELECT name, mime_type, size_bytes, sha256, data_b64 FROM ${TABLE_HARNESS_ATTACHMENTS}
             WHERE session_id = ? AND attachment_id = ?`,
       args: [sessionId, attachmentId],
     });
@@ -324,6 +346,8 @@ export class HarnessLibSQL extends HarnessStorage {
     return {
       name: String(row.name),
       mimeType: String(row.mime_type),
+      bytes: Number(row.size_bytes),
+      sha256: String(row.sha256),
       data: base64ToBytes(String(row.data_b64)),
     };
   }
@@ -351,7 +375,7 @@ export class HarnessLibSQL extends HarnessStorage {
     attachmentId: string;
   }): Promise<AttachmentRecord | null> {
     const result = await this.#client.execute({
-      sql: `SELECT session_id, attachment_id, name, mime_type, size_bytes, created_at
+      sql: `SELECT session_id, attachment_id, name, mime_type, size_bytes, sha256, source, created_at
             FROM ${TABLE_HARNESS_ATTACHMENTS}
             WHERE session_id = ? AND attachment_id = ?`,
       args: [sessionId, attachmentId],
@@ -359,13 +383,44 @@ export class HarnessLibSQL extends HarnessStorage {
     const row = result.rows[0];
     if (!row) return null;
     return {
-      sessionId: String(row.session_id),
+      ownerSessionId: String(row.session_id),
       attachmentId: String(row.attachment_id),
       name: String(row.name),
       mimeType: String(row.mime_type),
-      sizeBytes: Number(row.size_bytes),
+      bytes: Number(row.size_bytes),
+      sha256: String(row.sha256),
+      source: toAttachmentSource(row.source),
       createdAt: Number(row.created_at),
     };
+  }
+
+  async #backfillAttachmentMetadata(): Promise<void> {
+    for (;;) {
+      const result = await this.#client.execute({
+        sql: `SELECT session_id, attachment_id, data_b64, sha256, source
+              FROM ${TABLE_HARNESS_ATTACHMENTS}
+              WHERE sha256 IS NULL OR sha256 = '' OR source IS NULL OR source = ''
+              LIMIT 100`,
+      });
+      if (result.rows.length === 0) return;
+
+      for (const row of result.rows) {
+        const sha256 =
+          row.sha256 != null && String(row.sha256).length > 0
+            ? String(row.sha256)
+            : sha256Hex(base64ToBytes(String(row.data_b64)));
+        // Legacy rows predate source tracking; they were written through the
+        // staged local upload path, so `preupload` is the least lossy default.
+        const source =
+          row.source != null && String(row.source).length > 0 ? toAttachmentSource(row.source) : 'preupload';
+        await this.#client.execute({
+          sql: `UPDATE ${TABLE_HARNESS_ATTACHMENTS}
+                SET sha256 = ?, source = ?
+                WHERE session_id = ? AND attachment_id = ?`,
+          args: [sha256, source, String(row.session_id), String(row.attachment_id)],
+        });
+      }
+    }
   }
 }
 
@@ -504,4 +559,15 @@ function base64ToBytes(b64: string): Uint8Array {
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
   return out;
+}
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function toAttachmentSource(value: unknown): AttachmentRecord['source'] {
+  if (value === 'inline' || value === 'preupload' || value === 'url' || value === 'provider') {
+    return value;
+  }
+  return 'preupload';
 }

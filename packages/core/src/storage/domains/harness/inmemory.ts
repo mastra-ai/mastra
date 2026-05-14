@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { InMemoryDB } from '../inmemory-db';
 import {
   HarnessStorage,
@@ -13,6 +15,7 @@ import type {
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
+  SaveAttachmentResult,
   SaveSessionOptions,
   SaveSessionResult,
   SessionLeaseResult,
@@ -179,19 +182,31 @@ export class InMemoryHarness extends HarnessStorage {
   // Attachments
   // -------------------------------------------------------------------------
 
-  async saveAttachment({ sessionId, attachmentId, name, mimeType, data }: SaveAttachmentInput): Promise<void> {
+  async saveAttachment({
+    sessionId,
+    attachmentId,
+    name,
+    mimeType,
+    source,
+    data,
+  }: SaveAttachmentInput): Promise<SaveAttachmentResult> {
     const key = attachmentKey(sessionId, attachmentId);
+    const bytes = data.byteLength;
+    const sha256 = sha256Hex(data);
     const record: AttachmentRecord = {
+      ownerSessionId: sessionId,
       attachmentId,
-      sessionId,
       name,
       mimeType,
-      sizeBytes: data.byteLength,
+      bytes,
+      sha256,
+      source,
       createdAt: Date.now(),
     };
     this.db.harnessAttachmentRecords.set(key, record);
     // Copy the bytes so callers can reuse their buffer.
     this.db.harnessAttachmentBytes.set(key, new Uint8Array(data));
+    return { attachmentId, bytes, sha256 };
   }
 
   async loadAttachment({
@@ -205,7 +220,13 @@ export class InMemoryHarness extends HarnessStorage {
     const record = this.db.harnessAttachmentRecords.get(key);
     const bytes = this.db.harnessAttachmentBytes.get(key);
     if (!record || !bytes) return null;
-    return { name: record.name, mimeType: record.mimeType, data: new Uint8Array(bytes) };
+    return {
+      name: record.name,
+      mimeType: record.mimeType,
+      bytes: record.bytes,
+      sha256: record.sha256,
+      data: new Uint8Array(bytes),
+    };
   }
 
   async deleteAttachment({ sessionId, attachmentId }: { sessionId: string; attachmentId: string }): Promise<void> {
@@ -254,8 +275,12 @@ export class InMemoryHarness extends HarnessStorage {
  * separator means session-prefix scans for `deleteAttachmentsForSession` are
  * unambiguous regardless of the contents of the ids.
  */
-function attachmentKey(sessionId: string, attachmentId: string): string {
-  return `${sessionId}\u0000${attachmentId}`;
+function attachmentKey(ownerSessionId: string, attachmentId: string): string {
+  return `${ownerSessionId}\u0000${attachmentId}`;
+}
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 /**

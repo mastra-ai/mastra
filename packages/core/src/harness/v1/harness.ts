@@ -13,10 +13,9 @@
  *   - `harness.models.*` exposes the static model catalog and auth-status
  *     resolver.
  *
- * Known remaining gaps are deliberately visible here: `attachments.upload` and
- * `attachments.delete` still throw, and production server routes, remote SDKs,
- * durable admission/result rows, channels, wakeups, and worker recovery live in
- * follow-up Harness v1 lanes.
+ * Known remaining gaps are deliberately visible here: production server routes,
+ * remote SDKs, durable admission/result rows, channels, wakeups, and worker
+ * recovery live in follow-up Harness v1 lanes.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -1354,11 +1353,42 @@ export class Harness {
   };
 
   attachments = {
-    upload: async (_opts: AttachmentUploadOptions): Promise<AttachmentRef> => {
-      throw new Error('Harness.attachments.upload: not implemented');
+    upload: async (opts: AttachmentUploadOptions): Promise<AttachmentRef> => {
+      const storage = this._requireStorage('attachments.upload()');
+      const session = await this.session(
+        opts.resourceId ? { sessionId: opts.sessionId, resourceId: opts.resourceId } : { sessionId: opts.sessionId },
+      );
+      const data =
+        opts.data instanceof Uint8Array
+          ? new Uint8Array(opts.data)
+          : new Uint8Array(await new Response(opts.data).arrayBuffer());
+      const attachmentId = `attachment-${randomUUID()}`;
+      const saved = await storage.saveAttachment({
+        sessionId: session.id,
+        attachmentId,
+        name: opts.filename,
+        mimeType: opts.contentType,
+        source: 'preupload',
+        data,
+      });
+      return {
+        attachmentId: saved.attachmentId,
+        resourceId: session.resourceId,
+        ownerSessionId: session.id,
+        bytes: saved.bytes,
+        sha256: saved.sha256,
+        source: 'preupload',
+      };
     },
-    delete: async (_opts: AttachmentDeleteOptions): Promise<void> => {
-      throw new Error('Harness.attachments.delete: not implemented');
+    delete: async (opts: AttachmentDeleteOptions): Promise<void> => {
+      const storage = this._requireStorage('attachments.delete()');
+      const session = await this.session(
+        opts.resourceId ? { sessionId: opts.sessionId, resourceId: opts.resourceId } : { sessionId: opts.sessionId },
+      );
+      await storage.deleteAttachment({
+        sessionId: session.id,
+        attachmentId: opts.attachmentId,
+      });
     },
   };
 

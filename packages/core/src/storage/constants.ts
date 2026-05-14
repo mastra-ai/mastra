@@ -668,6 +668,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     name: { type: 'text', nullable: false },
     mime_type: { type: 'text', nullable: false },
     size_bytes: { type: 'bigint', nullable: false },
+    sha256: { type: 'text', nullable: false },
+    source: { type: 'text', nullable: false },
     created_at: { type: 'bigint', nullable: false },
     data_b64: { type: 'text', nullable: false },
   },

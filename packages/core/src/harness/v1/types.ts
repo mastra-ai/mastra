@@ -16,7 +16,11 @@ import type { ToolsInput } from '../../agent/types';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage/base';
-import type { HarnessStorage, SessionRecord as StoredSessionRecord } from '../../storage/domains/harness';
+import type {
+  AttachmentSource,
+  HarnessStorage,
+  SessionRecord as StoredSessionRecord,
+} from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
@@ -536,6 +540,10 @@ export type SessionRecord = StoredSessionRecord;
 export interface AttachmentRef {
   attachmentId: string;
   resourceId: string;
+  ownerSessionId?: string;
+  bytes?: number;
+  sha256?: string;
+  source?: AttachmentSource;
 }
 
 // ---------------------------------------------------------------------------
@@ -719,15 +727,17 @@ export interface SessionLoadByIdOptions {
 }
 
 export interface AttachmentUploadOptions {
-  resourceId: string;
-  data: Buffer | ReadableStream<Uint8Array>;
+  sessionId: string;
+  resourceId?: string;
+  data: Buffer | Uint8Array | ReadableStream<Uint8Array>;
   filename: string;
   contentType: string;
 }
 
 export interface AttachmentDeleteOptions {
   attachmentId: string;
-  resourceId: string;
+  sessionId: string;
+  resourceId?: string;
 }
 
 export interface ShutdownOptions {
