@@ -129,7 +129,7 @@ describe('Session skill discovery (§4.6)', () => {
     expect(await session.skills.get('any')).toBeUndefined();
   });
 
-  it('projects workspace skills into HarnessSkill descriptors with source="workspace"', async () => {
+  it('projects workspace skills into HarnessSkill descriptors', async () => {
     const fakeSkills = new FakeWorkspaceSkills([
       { name: 'lint', description: 'Lint the repo' },
       { name: 'format', description: 'Format files', path: 'tools/format/SKILL.md' },
@@ -141,14 +141,12 @@ describe('Session skill discovery (§4.6)', () => {
     expect(skills[0]).toMatchObject<Partial<HarnessSkill>>({
       name: 'lint',
       description: 'Lint the repo',
-      source: 'workspace',
       filePath: 'skills/lint',
       instructions: '',
     });
     expect(skills[1]).toMatchObject<Partial<HarnessSkill>>({
       name: 'format',
       description: 'Format files',
-      source: 'workspace',
       filePath: 'tools/format/SKILL.md',
     });
   });
@@ -159,7 +157,7 @@ describe('Session skill discovery (§4.6)', () => {
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     const lint = await session.skills.get('lint');
     expect(lint?.name).toBe('lint');
-    expect(lint?.source).toBe('workspace');
+    expect(lint?.filePath).toBe('skills/lint');
     expect(await session.skills.get('unknown')).toBeUndefined();
   });
 

@@ -234,6 +234,9 @@ describe('Session — surface area (M1)', () => {
         '_skillsList',
         '_skillsGet',
         '_skillsRefresh',
+        '_skillsUse',
+        '_extractRequiredArgKeys',
+        '_buildSkillPrompt',
         'setGoal',
         'getGoal',
         'pauseGoal',
@@ -331,6 +334,6 @@ describe('Session — surface area (M1)', () => {
     const { session } = makeStandaloneSession();
     expect(typeof session.skills).toBe('object');
     expect(Object.isFrozen(session.skills)).toBe(true);
-    expect(Object.keys(session.skills).sort()).toEqual(['get', 'list', 'refresh'].sort());
+    expect(Object.keys(session.skills).sort()).toEqual(['get', 'list', 'refresh', 'use'].sort());
   });
 });

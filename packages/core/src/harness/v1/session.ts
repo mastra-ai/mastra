@@ -50,6 +50,8 @@ import {
   HarnessOverrideConflictError,
   HarnessQueueFullError,
   HarnessSessionClosedError,
+  HarnessSkillArgsValidationError,
+  HarnessSkillNotFoundError,
   HarnessValidationError,
   HarnessWorkspaceLostError,
 } from './errors';
@@ -75,6 +77,7 @@ import type {
   HarnessMode,
   HarnessRequestContext,
   HarnessSkill,
+  UseSkillOptions,
   ListMessagesOptions,
   MessageOptions,
   MessageOptionsDefault,
@@ -896,32 +899,34 @@ export class Session {
   }
 
   // -------------------------------------------------------------------------
-  // Skill discovery / inspection — §4.6.
+  // Skills — §4.6.
   //
   // Workspace-discovered skills are projected from the configured
-  // `WorkspaceSkills` source into `HarnessSkill` descriptors with
-  // `source: 'workspace'`. Discovery runs asynchronously on the first
-  // `listSkills` / `getSkill` call per in-memory Session instance and the
-  // result is cached for the session's lifetime. Concurrent calls during a
-  // generation build share a single-flight promise. `refreshSkills()`
-  // drops the cache so the next call re-runs discovery.
+  // `WorkspaceSkills` source into `HarnessSkill` descriptors. Discovery
+  // runs asynchronously on the first `list` / `get` / `use` call per
+  // in-memory Session instance and the result is cached for the session's
+  // lifetime. Concurrent calls during a generation share a single-flight
+  // promise. `refresh()` drops the cache so the next call re-runs
+  // discovery.
   //
-  // Phase 1 ships workspace-only discovery; code-registered skills and
-  // `useSkill` execution land in a follow-up slice.
+  // `use(ref, opts?)` resolves a skill by frontmatter name or relative
+  // path under the workspace skill source, validates declared required
+  // args, appends a JSON code block carrying the validated args to the
+  // skill body, and delegates to the signal-driven message path. The
+  // returned `AgentResult` is the underlying turn's result. Admission
+  // idempotency is deferred to a follow-up slice.
   // -------------------------------------------------------------------------
 
   /**
-   * Skill discovery and inspection — see §4.6 and §4.2c.
+   * Skill discovery, inspection, and programmatic execution — see §4.6
+   * and §4.2c.
    *
    * Workspace-discovered skills are projected into `HarnessSkill`
-   * descriptors with `source: 'workspace'`. Discovery runs asynchronously
-   * on the first `list` / `get` call per in-memory Session instance and is
-   * cached for the session's lifetime. Concurrent callers share a
-   * single-flight promise. `refresh()` drops the cache so the next call
-   * re-runs discovery.
-   *
-   * Phase 1 ships workspace-only discovery; code-registered skills and
-   * `useSkill` execution land in a follow-up slice.
+   * descriptors. Discovery runs asynchronously on the first `list` /
+   * `get` / `use` call per in-memory Session instance and is cached for
+   * the session's lifetime. Concurrent callers share a single-flight
+   * promise. `refresh()` drops the cache so the next call re-runs
+   * discovery.
    */
   readonly skills = Object.freeze({
     /**
@@ -929,22 +934,33 @@ export class Session {
      *
      * Returns an empty array when the session has no workspace configured.
      * Otherwise delegates to the resolved workspace's `WorkspaceSkills`
-     * surface and projects each entry into a `HarnessSkill` with
-     * `source: 'workspace'`.
+     * surface and projects each entry into a `HarnessSkill`.
      */
     list: (): Promise<HarnessSkill[]> => this._skillsList(),
     /**
      * Look up a skill by name. Returns `undefined` when the name does not
-     * resolve. In Phase 1 the only source consulted is the session's
-     * workspace.
+     * resolve. The only source consulted is the session's workspace.
      */
     get: (name: string): Promise<HarnessSkill | undefined> => this._skillsGet(name),
     /**
      * Drop the cached workspace-discovery result. The next `list` / `get`
-     * call re-runs discovery through the configured workspace skill
-     * source. Local-only — absent from `RemoteSession` (§13.5).
+     * / `use` call re-runs discovery through the configured workspace
+     * skill source. Local-only — absent from `RemoteSession` (§13.5).
      */
     refresh: (): Promise<void> => this._skillsRefresh(),
+    /**
+     * Resolve a workspace skill by name or relative path, optionally
+     * validate provided arguments against the skill's declared
+     * `args.required[]` frontmatter, append a JSON code block of the
+     * validated args to the skill instructions, and dispatch the result
+     * through the signal-driven message path as a single turn. Resolves
+     * to the underlying turn's `AgentResult`.
+     *
+     * Throws {@link HarnessSkillNotFoundError} when `ref` does not match
+     * any workspace skill, and {@link HarnessSkillArgsValidationError}
+     * when required args are missing.
+     */
+    use: (ref: string, opts?: UseSkillOptions): Promise<AgentResult> => this._skillsUse(ref, opts),
   });
 
   private async _skillsList(): Promise<HarnessSkill[]> {
@@ -973,6 +989,91 @@ export class Session {
   }
 
   /**
+   * Resolve a workspace skill by name or relative path, validate any
+   * declared required args, inject the validated args as a JSON code
+   * block into the skill instructions, and dispatch the result through
+   * `message()` as a single turn. Returns the underlying `AgentResult`.
+   *
+   * Reference resolution mirrors Flue's `session.skill(ref, ...)` — either
+   * the frontmatter `name` or a relative path under the workspace skill
+   * source resolves. `WorkspaceSkills.get(ref)` already supports both.
+   */
+  private async _skillsUse(ref: string, opts?: UseSkillOptions): Promise<AgentResult> {
+    this._assertLive('skills.use()');
+    if (typeof ref !== 'string' || ref.length === 0) {
+      throw new HarnessValidationError('skills.use()', 'ref must be a non-empty string');
+    }
+
+    // Force workspace materialization. Unlike `list` / `get`, `use` must
+    // produce a definitive answer (start a turn or refuse with a typed
+    // not-found error); provisional code-only results are not acceptable.
+    const workspace = await this.getWorkspace();
+    const workspaceSkills = workspace?.skills;
+    if (!workspaceSkills) {
+      throw new HarnessSkillNotFoundError(ref, []);
+    }
+
+    // `WorkspaceSkills.get` accepts either the frontmatter `name` or a
+    // relative path under the configured skill source.
+    const skill = await workspaceSkills.get(ref);
+    if (!skill) {
+      throw new HarnessSkillNotFoundError(ref, ['workspace']);
+    }
+
+    const args = opts?.args;
+
+    // Phase 2 args validation: only enforce `args.required[]` (if the
+    // skill frontmatter declares it). Full schema validation lands with
+    // admission idempotency in a follow-up slice.
+    const requiredKeys = this._extractRequiredArgKeys(skill.metadata);
+    if (requiredKeys.length > 0) {
+      const provided = args ?? {};
+      const missing = requiredKeys.filter(k => !(k in provided));
+      if (missing.length > 0) {
+        throw new HarnessSkillArgsValidationError(
+          skill.name,
+          missing.map(k => `missing required arg: "${k}"`),
+        );
+      }
+    }
+
+    // Build the expanded prompt: skill instructions + (optional) JSON
+    // code block carrying validated args. Skill authors reference the
+    // args naturally in Markdown.
+    const expandedContent = this._buildSkillPrompt(skill.instructions, args);
+
+    return this.message({
+      content: expandedContent,
+      ...(opts?.modelOverride ? { model: opts.modelOverride } : {}),
+    });
+  }
+
+  /**
+   * Pull `args.required[]` (a string array) out of skill frontmatter
+   * metadata, if declared. Returns an empty array when the skill does not
+   * declare required args. Defensive against malformed metadata.
+   */
+  private _extractRequiredArgKeys(metadata: Record<string, unknown> | undefined): string[] {
+    if (!metadata || typeof metadata !== 'object') return [];
+    const argsField = (metadata as Record<string, unknown>).args;
+    if (!argsField || typeof argsField !== 'object') return [];
+    const required = (argsField as Record<string, unknown>).required;
+    if (!Array.isArray(required)) return [];
+    return required.filter((k): k is string => typeof k === 'string' && k.length > 0);
+  }
+
+  /**
+   * Compose the skill prompt body. When args are supplied, append a JSON
+   * code block carrying them. No delimiters beyond the Markdown fence —
+   * skill authors reference args inline in their instructions.
+   */
+  private _buildSkillPrompt(instructions: string, args: Record<string, unknown> | undefined): string {
+    if (!args || Object.keys(args).length === 0) return instructions;
+    const json = JSON.stringify(args, null, 2);
+    return `${instructions}\n\n\`\`\`json\n${json}\n\`\`\``;
+  }
+
+  /**
    * Internal: resolve the skill catalog for this session, sharing a
    * single-flight promise across concurrent callers.
    */
@@ -992,13 +1093,12 @@ export class Session {
       const projected: HarnessSkill[] = entries.map(meta => ({
         name: meta.name,
         description: meta.description,
-        // `list()` returns metadata only; the instructions body lives in the
-        // skill's SKILL.md and is fetched via `workspace.skills.get(name)`.
-        // Phase 2 (`useSkill`) materializes instructions lazily; for the
-        // inspection surface we surface an empty string so the descriptor
-        // shape stays uniform.
+        // `list()` returns metadata only; the instructions body lives in
+        // the skill's SKILL.md and is fetched via
+        // `workspace.skills.get(name)`. `use()` materializes instructions
+        // lazily; for the inspection surface we surface an empty string so
+        // the descriptor shape stays uniform.
         instructions: '',
-        source: 'workspace',
         ...(meta.path ? { filePath: meta.path } : {}),
         // Pass through arbitrary skill frontmatter metadata so callers can
         // discover skill-level flags (e.g. `metadata.goal === true` for
@@ -3295,6 +3395,10 @@ export class Session {
         if (!agentType) return null;
         return this._record.subagentModelOverrides?.[agentType] ?? null;
       },
+      // Tool-facing skill execution. Delegates back to the owning session
+      // so resolution, args validation, prompt construction, and dispatch
+      // stay in one place (§4.6).
+      useSkill: (ref, opts) => session._skillsUse(ref, opts),
       ...(workspace ? { workspace } : {}),
     };
     return new RequestContext([['harness', harnessSlot]]);

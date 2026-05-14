@@ -9,12 +9,21 @@
     list(): Promise<HarnessSkill[]>;
     get(name: string): Promise<HarnessSkill | undefined>;
     // Drop the cached workspace-discovery result. The next list / get /
-    // useSkill call re-runs async workspace discovery. Code-registered
-    // skills are unaffected — they live on the harness and don't need
-    // refreshing. Local-only: workspace discovery requires server-side
-    // access to the configured workspace skill source, so `refresh` is
-    // absent from `RemoteSession`. See §4.6 and §13.5.
+    // use call re-runs async workspace discovery. Local-only: workspace
+    // discovery requires server-side access to the configured workspace
+    // skill source, so `refresh` is absent from `RemoteSession`. See
+    // §4.6 and §13.5.
     refresh(): Promise<void>;
+    // Programmatic skill execution. Resolves `ref` against the
+    // workspace skill source (frontmatter `name:` or workspace-relative
+    // path), validates declared required args, appends a JSON code
+    // block carrying the validated args to the skill body, and
+    // dispatches as a single turn through the signal-driven message
+    // path. Resolves to the underlying turn's `AgentResult`. Throws
+    // `HarnessSkillNotFoundError` when `ref` does not resolve and
+    // `HarnessSkillArgsValidationError` when declared required args
+    // are missing. Admission idempotency lands in a follow-up slice.
+    use(ref: string, opts?: UseSkillOptions): Promise<AgentResult>;
   };
 
   // Concurrency / inspection (read-only). These methods read the owning

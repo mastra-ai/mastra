@@ -157,19 +157,34 @@ export class HarnessModelNotFoundError extends Error {
 }
 
 /**
- * `session.useSkill(name)` could not resolve `name` from either source in the
- * resolution chain (code-registered skills, then workspace-discovered skills).
- * `searchedSources` reports which sources were consulted before giving up so
- * callers can distinguish "no workspace configured" from "workspace consulted
- * but nothing matched". See spec §4.6.
+ * `session.skills.use(ref)` could not resolve `ref` in the session's workspace
+ * skills catalogue. `searchedSources` reports which sources were consulted
+ * before giving up so callers can distinguish "no workspace configured" from
+ * "workspace consulted but nothing matched". See spec §4.6.
  */
 export class HarnessSkillNotFoundError extends Error {
   readonly name = 'HarnessSkillNotFoundError';
   constructor(
     public readonly skillName: string,
-    public readonly searchedSources: ReadonlyArray<'config' | 'workspace'>,
+    public readonly searchedSources: ReadonlyArray<'workspace'>,
   ) {
     super(`Skill "${skillName}" not found (searched: ${searchedSources.join(', ') || 'none'})`);
+  }
+}
+
+/**
+ * `session.skills.use(ref, { args })` failed args validation against the
+ * resolved skill's declared schema. Phase 2 only enforces the
+ * `args.required[]` frontmatter list; richer schema validation lands with
+ * idempotency in a follow-up slice. See spec §4.6.
+ */
+export class HarnessSkillArgsValidationError extends Error {
+  readonly name = 'HarnessSkillArgsValidationError';
+  constructor(
+    public readonly skillName: string,
+    public readonly issues: ReadonlyArray<string>,
+  ) {
+    super(`Skill "${skillName}" args invalid: ${issues.join('; ')}`);
   }
 }
 

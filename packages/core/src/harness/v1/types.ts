@@ -150,31 +150,20 @@ export type ModelAuthStatus = 'authenticated' | 'needs_auth' | 'unknown';
 // HarnessSkill (§4.6).
 //
 // A skill is a named, parameterised prompt invoked via
-// `session.useSkill(name, opts)`. Two sources feed the resolution chain:
-//   - Code-registered skills (`HarnessConfig.skills`, `source: 'config'`)
-//   - Workspace-discovered skills (resolved from the session workspace's
-//     configured `WorkspaceSkills` source, `source: 'workspace'`)
-//
-// Phase 1 (this slice) ships workspace-discovered skills only: code-registered
-// skills, programmatic `session.useSkill()` execution, args injection, and
-// admission idempotency land in a follow-up slice.
+// `session.skills.use(ref, opts)`. Skills are sourced from the session's
+// configured `WorkspaceSkills` — there is no separate code-registered
+// catalogue.
 // ---------------------------------------------------------------------------
 
 /**
  * Public skill descriptor. See §4.6.
  *
- * Workspace-discovered skills are projected from the configured
- * `WorkspaceSkills` source into this shape. Their core `Skill.source` values
- * (`local`, `external`, `managed`) all collapse to `source: 'workspace'`;
- * those are not public source enum members.
- *
- * Code-registered skills declared on `HarnessConfig.skills` carry
- * `source: 'config'` and may supply `argsSchema`, `outputSchema`, and
- * `defaultMode` directly. Workspace skills omit those fields unless the
- * configured workspace skill source supplies equivalent metadata.
+ * Projected from the workspace `WorkspaceSkills` source into this shape.
+ * Workspace-internal fields (references, scripts, assets, license,
+ * compatibility) remain owned by `WorkspaceSkills` and are not surfaced here.
  */
 export interface HarnessSkill {
-  /** Lookup key for `session.useSkill(name, ...)`. */
+  /** Lookup key for `session.skills.use(name, ...)`. */
   name: string;
 
   /** Shown in tool catalogues / UIs. */
@@ -187,32 +176,39 @@ export interface HarnessSkill {
    */
   instructions: string;
 
-  /**
-   * Optional Zod schema validating `useSkill({ args })`. Currently only
-   * code-registered skills can carry one; workspace skills omit this unless
-   * the configured workspace skill source surfaces equivalent metadata.
-   */
-  argsSchema?: z.ZodTypeAny;
-
-  /**
-   * Optional default output schema. The per-call `opts.output` still wins.
-   */
-  outputSchema?: z.ZodTypeAny;
-
-  /**
-   * Optional mode override applied when `useSkill` runs. Lower precedence than
-   * the per-call mode override; selects that mode's bound agent for the run.
-   */
-  defaultMode?: string;
-
-  /** Origin of this skill. Set by the harness, not the author. */
-  source: 'config' | 'workspace';
+  /** Optional category tag (mirrors workspace skill metadata when present). */
+  category?: string;
 
   /**
    * Optional path-like locator (e.g. `skills/my-skill/SKILL.md`). Present when
    * the workspace skill source exposes one; otherwise omitted.
    */
   filePath?: string;
+
+  /**
+   * Pass-through of workspace skill metadata (e.g. `goal: true` for skills
+   * that should appear under `/goal/<name>`). Opaque to the harness.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Options for {@link Session.skills.use}. See §4.6.
+ */
+export interface UseSkillOptions {
+  /**
+   * Arguments to inject into the skill prompt as a JSON code block. If the
+   * resolved skill declares required argument keys in its frontmatter
+   * (`args.required[]`), missing keys throw
+   * {@link HarnessSkillArgsValidationError} before any turn starts.
+   */
+  args?: Record<string, unknown>;
+
+  /**
+   * Optional per-call model override. Routed to the underlying signal dispatch
+   * exactly as {@link Session.signal}'s `modelOverride`.
+   */
+  modelOverride?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1076,6 +1072,15 @@ export interface HarnessRequestContext<TState = unknown> {
    * one. Tools should null-check before use.
    */
   workspace?: Workspace;
+
+  /**
+   * Invoke a workspace skill programmatically from inside a tool. Resolves
+   * by frontmatter `name` or relative path under the workspace skill
+   * source. Delegates to `session.skills.use(ref, opts)` against the
+   * owning session, sharing its resolution, args validation, prompt
+   * construction, and turn dispatch. See spec §4.6.
+   */
+  useSkill: (ref: string, opts?: UseSkillOptions) => Promise<AgentResult>;
 }
 
 // ---------------------------------------------------------------------------
