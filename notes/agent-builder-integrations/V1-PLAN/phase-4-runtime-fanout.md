@@ -7,7 +7,7 @@
 
 ## Goal
 
-`resolveStoredIntegrationTools` exists in core, fans out per connection, renames tools with a label-derived suffix, and appends a routing hint to each tool's description. Agent hydration in `packages/editor/src/namespaces/agent.ts` calls it once for the whole `integrationTools` blob.
+`resolveStoredToolIntegrations` exists in core, fans out per connection, renames tools with a label-derived suffix, and appends a routing hint to each tool's description. Agent hydration in `packages/editor/src/namespaces/agent.ts` calls it once for the whole `integrationTools` blob.
 
 ## Background
 
@@ -15,27 +15,33 @@
 - Spec sections to re-read:
   - ARCHITECTURE §8 "Runtime fan-out"
   - ARCHITECTURE §3.5.1 LLM-facing example
-- Inherited blockers / constraints: provider only sees a single `connectionId` at a time; the loop is owned by the runtime, not the adapter.
+- Inherited blockers / constraints:
+  - Provider only sees a single `connectionId` at a time; the loop is owned by the runtime, not the adapter.
+  - **Compat window**: Phase 1 introduced the new `toolIntegrations` storage field alongside the legacy `integrationTools` field. Phase 4 reads `toolIntegrations` for new agents. The legacy `integrationTools` path is still served by the prototype runtime in `editor/namespaces/agent.ts` until Phase 10 collapses them. Do NOT remove the legacy branch in Phase 4 — leave it untouched, just add the new branch alongside.
 
 ## Scope
 
 ### Core
 - `packages/core/src/tool-provider/runtime.ts` — new. Exports:
-  - `resolveStoredIntegrationTools(integrationTools, ctx)` — per ARCHITECTURE §8.
+  - `resolveStoredToolIntegrations(integrationTools, ctx)` — per ARCHITECTURE §8.
   - `buildConnectionSuffix(label, allLabels)` — sanitizes label, collision-resolves with `_2`/`_3`.
 - `packages/core/src/tool-provider/index.ts` — re-export.
 
 ### Editor
-- `packages/editor/src/namespaces/agent.ts` — replace prototype branching with:
+- `packages/editor/src/namespaces/agent.ts` — **add** new branch reading `storedAgent.toolIntegrations` (Phase 1's field name). Leave the legacy `integrationTools` / `connectionsByToolkit` / `bindings` / `authMode` reads in place — they continue to serve old agents. Phase 10 deletes the legacy branch and renames the new field.
   ```ts
-  if (storedAgent.integrationTools) {
+  // New branch — Phase 4
+  if (storedAgent.toolIntegrations) {
     tools = {
       ...tools,
-      ...await resolveStoredIntegrationTools(storedAgent.integrationTools, requestContext),
+      ...await resolveStoredToolIntegrations(storedAgent.toolIntegrations, requestContext),
     };
   }
+  // Legacy branch — left untouched, removed in Phase 10
+  if (storedAgent.integrationTools) {
+    // ...existing prototype path...
+  }
   ```
-  - Delete prototype's `connectionsByToolkit` / `bindings` / `authMode` reads.
 
 ### Tests
 - `packages/core/src/tool-provider/runtime.test.ts`:
@@ -50,7 +56,7 @@
 
 ## Acceptance truths
 
-- [ ] `resolveStoredIntegrationTools` calls `provider.resolveTools` exactly N times for N connections on a `toolService`.
+- [ ] `resolveStoredToolIntegrations` calls `provider.resolveTools` exactly N times for N connections on a `toolService`.
 - [ ] Single-connection tool keeps the original `toolSlug` (no suffix).
 - [ ] Two-connection tools produce two entries with `__<LABEL>` suffixes.
 - [ ] Each renamed tool has `Routes through connection: <Label>` appended to its description.

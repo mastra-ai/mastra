@@ -7,9 +7,9 @@ This directory breaks the [parent plan](../V1-PLAN.md) into independently-mergea
 | Phase | Doc | Resource / Area | Units touched | Depends on |
 |-------|-----|-----------------|---------------|------------|
 | 1 | [phase-1-provider-interface.md](./phase-1-provider-interface.md) | Core types + storage + server schemas | 5 | — |
-| 2 | [phase-2-base-provider-registry.md](./phase-2-base-provider-registry.md) | `BaseIntegrationProvider` + typed registry | 3 | Phase 1 |
-| 3 | [phase-3-composio-adapter.md](./phase-3-composio-adapter.md) | `ComposioToolProvider` rewrite | 2 | Phase 2 |
-| 4 | [phase-4-runtime-fanout.md](./phase-4-runtime-fanout.md) | `resolveStoredIntegrationTools` + suffix logic | 2 | Phase 3 |
+| 2 | [phase-2-base-provider-registry.md](./phase-2-base-provider-registry.md) | `BaseToolIntegration` + typed registry | 3 | Phase 1 |
+| 3 | [phase-3-composio-adapter.md](./phase-3-composio-adapter.md) | `ComposioToolIntegration` rewrite | 2 | Phase 2 |
+| 4 | [phase-4-runtime-fanout.md](./phase-4-runtime-fanout.md) | `resolveStoredToolIntegrations` + suffix logic | 2 | Phase 3 |
 | 5 | [phase-5-server-routes.md](./phase-5-server-routes.md) | `/api/tool-providers/*` + typed client | 8 | Phase 3 |
 | 6 | [phase-6-ui-tools-panel.md](./phase-6-ui-tools-panel.md) | Tools panel + connection picker | 6 | Phase 5 |
 | 7 | [phase-7-form-mappers.md](./phase-7-form-mappers.md) | Form schema + save/load mappers | 3 | Phase 6 |

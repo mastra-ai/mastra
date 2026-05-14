@@ -26,9 +26,9 @@ Each phase ships as its own PR. Open the linked doc for goal, scope, acceptance 
 | Phase | Doc | Resource / Area | Depends on |
 |-------|-----|-----------------|------------|
 | 1 | [phase-1-provider-interface.md](./V1-PLAN/phase-1-provider-interface.md) | Core types + storage + server schemas | — |
-| 2 | [phase-2-base-provider-registry.md](./V1-PLAN/phase-2-base-provider-registry.md) | `BaseIntegrationProvider` + typed registry | Phase 1 |
+| 2 | [phase-2-base-provider-registry.md](./V1-PLAN/phase-2-base-provider-registry.md) | `BaseToolIntegration` + typed registry | Phase 1 |
 | 3 | [phase-3-composio-adapter.md](./V1-PLAN/phase-3-composio-adapter.md) | `ComposioToolProvider` rewrite | Phase 2 |
-| 4 | [phase-4-runtime-fanout.md](./V1-PLAN/phase-4-runtime-fanout.md) | `resolveStoredIntegrationTools` + suffix logic | Phase 3 |
+| 4 | [phase-4-runtime-fanout.md](./V1-PLAN/phase-4-runtime-fanout.md) | `resolveStoredToolIntegrations` + suffix logic | Phase 3 |
 | 5 | [phase-5-server-routes.md](./V1-PLAN/phase-5-server-routes.md) | `/api/tool-providers/*` + typed client | Phase 3 |
 | 6 | [phase-6-ui-tools-panel.md](./V1-PLAN/phase-6-ui-tools-panel.md) | Tools panel + connection picker | Phase 5 |
 | 7 | [phase-7-form-mappers.md](./V1-PLAN/phase-7-form-mappers.md) | Form schema + save/load mappers | Phase 6 |

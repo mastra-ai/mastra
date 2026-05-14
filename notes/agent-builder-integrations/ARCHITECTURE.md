@@ -8,12 +8,12 @@
 
 ## 0. TL;DR
 
-- One `IntegrationProvider` interface; Composio implements it in v1. Provider-agnostic by design — additional adapters slot in without interface changes.
-- One `BaseIntegrationProvider` abstract class enforces allowlist filtering for free.
+- One `ToolIntegration` interface; Composio implements it in v1. Provider-agnostic by design — additional adapters slot in without interface changes.
+- One `BaseToolIntegration` abstract class enforces allowlist filtering for free.
 - One storage shape: `integrationTools[providerId] = { tools, connections }`.
 - One `Connection` shape: `{ toolService, connectionId, label }`; v1 writes author-mode only.
 - One generic server route surface: `/api/tool-providers/:id/...`.
-- One runtime fan-out (`resolveStoredIntegrationTools`) renames tools per connection and appends a routing hint to the description.
+- One runtime fan-out (`resolveStoredToolIntegrations`) renames tools per connection and appends a routing hint to the description.
 - The LLM sees one tool per `(toolSlug × connection)`. The provider never sees the suffix.
 - Per-agent health pill, batched `getConnectionStatus` per provider.
 - Schema is **additive-only**, no version field, Zod `.passthrough()` preserves unknown fields.
@@ -51,21 +51,21 @@ This spec uses **neutral, intent-revealing names** that don't leak Composio's ve
                           ▲ fan-out + rename + description hint
                           │
 ┌────────────────────────────────────────────────────────────────┐
-│ resolveStoredIntegrationTools  (generic, provider-neutral)     │
+│ resolveStoredToolIntegrations  (generic, provider-neutral)     │
 │   loops connections, calls provider.resolveTools once per      │
 │   connection                                                   │
 └────────────────────────────────────────────────────────────────┘
                           ▲
                           │
 ┌────────────────────────────────────────────────────────────────┐
-│ IntegrationProvider  (Composio in v1; others later)            │
+│ ToolIntegration  (Composio in v1; others later)            │
 │   listToolServices / listTools / resolveTools(one connection)  │
 │   authorize / getAuthStatus / getConnectionStatus / getHealth  │
 └────────────────────────────────────────────────────────────────┘
                           ▲ extends
                           │
 ┌────────────────────────────────────────────────────────────────┐
-│ BaseIntegrationProvider  (allowlist + glob filtering)          │
+│ BaseToolIntegration  (allowlist + glob filtering)          │
 └────────────────────────────────────────────────────────────────┘
                           ▲
                           │
@@ -87,10 +87,10 @@ All in a new shared module `packages/core/src/tool-provider/`.
 
 ```ts
 // 3.1 Provider interface
-interface IntegrationProvider {
+interface ToolIntegration {
   readonly id: string;                     // 'composio' in v1
   readonly displayName: string;
-  readonly capabilities: ProviderCapabilities;
+  readonly capabilities: ToolIntegrationCapabilities;
 
   listToolServices(): Promise<ToolService[]>;
   listTools(toolService: string): Promise<ToolDescriptor[]>;
@@ -103,11 +103,11 @@ interface IntegrationProvider {
     opts: { items: Array<{ connectionId: string; toolService: string }> },
   ): Promise<Record<string, { connected: boolean }>>;
 
-  getHealth(): Promise<ProviderHealth>;
+  getHealth(): Promise<ToolIntegrationHealth>;
 }
 
 // 3.2 Capabilities — asymmetric features without subclass checks
-type ProviderCapabilities = {
+type ToolIntegrationCapabilities = {
   multipleConnectionsPerService: boolean;   // Composio: true
   batchConnectionStatus: boolean;
   reauthorizeReusesConnectionId: boolean;
@@ -136,13 +136,13 @@ type Connection = {
 };
 
 // 3.5 Stored shape per provider
-type ProviderConfig = {
+type ToolIntegrationConfig = {
   tools: Record<string, { description?: string }>;
   connections: Record<string, Connection[]>;   // key = toolService
 };
 
 // 3.6 On the agent
-type IntegrationTools = Record<string /* providerId */, ProviderConfig>;
+type ToolIntegrations = Record<string /* providerId */, ToolIntegrationConfig>;
 ```
 
 ### 3.7 Validation rules (Zod)
@@ -171,15 +171,15 @@ const ConnectionSchema = z.object({
 
 ---
 
-## 4. BaseIntegrationProvider
+## 4. BaseToolIntegration
 
 Shared abstract class. Provides allowlist + glob filtering for free; replaces the previously proposed `FilteredToolProvider` wrapper.
 
 ```ts
-abstract class BaseIntegrationProvider implements IntegrationProvider {
+abstract class BaseToolIntegration implements ToolIntegration {
   abstract readonly id: string;
   abstract readonly displayName: string;
-  abstract readonly capabilities: ProviderCapabilities;
+  abstract readonly capabilities: ToolIntegrationCapabilities;
 
   constructor(protected opts: {
     allowedToolServices?: string[];      // exact match
@@ -208,7 +208,7 @@ abstract class BaseIntegrationProvider implements IntegrationProvider {
   abstract getConnectionStatus(opts: {
     items: Array<{ connectionId: string; toolService: string }>;
   }): Promise<Record<string, { connected: boolean }>>;
-  abstract getHealth(): Promise<ProviderHealth>;
+  abstract getHealth(): Promise<ToolIntegrationHealth>;
 
   // Shared filter helpers
   private isToolServiceAllowed(slug: string): boolean { /* ... */ }
@@ -220,7 +220,7 @@ abstract class BaseIntegrationProvider implements IntegrationProvider {
 Constructor usage:
 
 ```ts
-new ComposioToolProvider({
+new ComposioToolIntegration({
   apiKey: '...',
   allowedToolServices: ['gmail', 'slack'],
 });
@@ -240,7 +240,7 @@ new ComposioToolProvider({
 new Mastra({
   editor: new MastraEditor({
     toolProviders: [
-      new ComposioToolProvider({
+      new ComposioToolIntegration({
         apiKey: '...',
         allowedToolServices: ['gmail', 'slack'],
       }),
@@ -252,7 +252,7 @@ new Mastra({
 - Flat array. No `registries.composio.*` nesting.
 - Array order = tie-break when two providers expose the same `toolService` slug.
 - **One provider instance per app**, reused by both the agent builder UI and runtime fan-out. Not two separate instances.
-- `as const` is required at the callsite to preserve literal `id` types for compile-time lookups (§5.2). Forgetting it is harmless — `getToolProvider` degrades to a `string` parameter and `IntegrationProvider` return.
+- `as const` is required at the callsite to preserve literal `id` types for compile-time lookups (§5.2). Forgetting it is harmless — `getToolProvider` degrades to a `string` parameter and `ToolIntegration` return.
 
 ### 5.2 Typed accessor
 
@@ -260,7 +260,7 @@ new Mastra({
 
 ```ts
 class MastraEditor<
-  TProviders extends readonly IntegrationProvider[],
+  TProviders extends readonly ToolIntegration[],
 > {
   constructor(opts: { toolProviders: TProviders });
 
@@ -273,7 +273,7 @@ class MastraEditor<
 Each provider declares `readonly id` as a literal:
 
 ```ts
-class ComposioToolProvider extends BaseIntegrationProvider {
+class ComposioToolIntegration extends BaseToolIntegration {
   readonly id = 'composio' as const;
   readonly displayName = 'Composio';
   // ...
@@ -283,13 +283,13 @@ class ComposioToolProvider extends BaseIntegrationProvider {
 Callsite behavior:
 
 ```ts
-editor.getToolProvider('composio')   // ✅ typed as ComposioToolProvider
+editor.getToolProvider('composio')   // ✅ typed as ComposioToolIntegration
 editor.getToolProvider('cmposio')    // ❌ TS error — typo caught at compile time
 ```
 
 Why generic array over an object map:
 - **Order matters.** Two providers can expose the same `toolService` slug (`gmail`). Array order = deterministic tie-break.
-- **Multiple instances of the same provider type.** Two `ComposioToolProvider`s with different `allowedToolServices` is legal; an object map blocks it via key collision.
+- **Multiple instances of the same provider type.** Two `ComposioToolIntegration`s with different `allowedToolServices` is legal; an object map blocks it via key collision.
 - **Single source of truth for ids.** The instance owns the id; no key/id pair to keep in sync.
 - **Open to third-party providers.** Anyone can publish a `MyToolProvider` with `readonly id = 'my-thing' as const` and it slots in.
 
@@ -348,7 +348,7 @@ GET  /api/tool-providers/:id/health                   provider health
 
 ## 8. Runtime fan-out
 
-`resolveStoredIntegrationTools(integrationTools, requestContext)` is generic — no provider branches.
+`resolveStoredToolIntegrations(integrationTools, requestContext)` is generic — no provider branches.
 
 ```
 for providerId in integrationTools:
@@ -510,7 +510,7 @@ One detector in `tool-fallback.tsx`, one `ConnectRequiredBadge` component, no pe
 - `BindingModeToggle` and `AgentAuthModeRadio` (no kind/mode toggle in v1).
 - `ComposioConnectRequiredBadge` (v1.5; will return as one generic badge).
 - `useComposioConnectBridge`, `useComposioConnections`, `connect-link-modal` (replaced by generic equivalents).
-- Composio's `registries.composio.*` config (folded into `BaseIntegrationProvider` constructor opts).
+- Composio's `registries.composio.*` config (folded into `BaseToolIntegration` constructor opts).
 - Memory `resourceId` per-mode switch (lives with invoker mode in v1.5).
 - `authMode` / `authIdentity` storage fields (deleted, not just hidden).
 - `connectionsByToolkit`, `bindings` storage keys (replaced by `connections`).
@@ -527,7 +527,7 @@ Codifying the rules that produced this spec — apply when adding the next provi
 2. **Lowest-common-denominator surface.** A method goes on the interface only if every provider can implement it. Anything provider-specific lives behind a capability flag or in the adapter constructor.
 3. **Capabilities over inheritance.** UI/runtime reads `provider.capabilities`; no `if (provider instanceof ComposioX)`.
 4. **Opaque identifiers across the boundary.** Core never parses `connectionId`, `authId`, or tool slugs.
-5. **Provider owns its vocabulary internally.** Inside `ComposioToolProvider`, call it `connectedAccountId`. At the interface, translate to `connectionId`. The mapping table lives in one place — the adapter.
+5. **Provider owns its vocabulary internally.** Inside `ComposioToolIntegration`, call it `connectedAccountId`. At the interface, translate to `connectionId`. The mapping table lives in one place — the adapter.
 6. **Errors are structured, not stringly-typed.** `class ConnectionRequiredError extends ProviderError { providerId; toolService; connectionId }`. Consumers match on type, not message regex.
 7. **No leaky options bag.** No `Record<string, unknown>` "passthrough" options at the interface. Provider-specific knobs go in the subclass constructor.
 8. **Versioned capabilities, not versioned interfaces.** Adding a feature = adding a capability flag, not a new interface version.
@@ -560,11 +560,35 @@ authorId =
 
 ---
 
+## 14a. Backwards-compatibility window (Phase 2 → Phase 10)
+
+v1 lands behind a one-release compat window so that pre-GA consumers of `@mastra/editor` do not break on a single PR. Phase 2 introduces the shims; Phase 10 removes them. The window is **internal only** — public docs (Phase 11) describe the post-Phase-10 surface as the canonical v1 contract.
+
+**Phase 2 shims (Option B+):**
+
+| Surface | Legacy behaviour | v1-window behaviour | Phase 10 |
+|---|---|---|---|
+| `MastraEditorConfig.toolProviders` | `Record<string, ToolProvider>` | accepts `Record \| readonly ToolIntegration[]`; Record path logs a one-shot `console.warn` | array only |
+| `ToolProvider` interface | own interface in `@mastra/core/tool-provider` | `type ToolProvider = ToolIntegration` alias (`@deprecated`) | deleted, file removed |
+| `editor.getToolProvider(id)` | returns `undefined` on miss | returns `undefined` on miss (unchanged) | renamed from `getToolProviderOrThrow`; throws `UnknownProviderError` on miss |
+| `editor.getToolProviderOrThrow(id)` | did not exist | throws `UnknownProviderError`; type-narrows to the concrete subclass | renamed to `getToolProvider` |
+| `editor.getToolProviders()` | returned `Record` | returns `readonly ToolIntegration[]` (`@deprecated`) | deleted; consumers iterate `editor.toolProviders` directly |
+| `storedAgent.integrationTools` (legacy) | prototype `connectionsByToolkit` shape | still read by `editor/namespaces/agent.ts` | deleted |
+| `storedAgent.toolIntegrations` (new) | did not exist | added in Phase 1, written by new mappers | renamed to `integrationTools` |
+
+**Marker convention:** every shim line carries a `// PHASE-10-REMOVE` comment so `grep -r 'PHASE-10-REMOVE'` lists the deletion checklist. Phase 10's acceptance is "grep returns zero hits."
+
+**What consumers see:**
+- Phase 2 release: existing code keeps compiling and running. Deprecation warnings appear in dev logs.
+- Phase 10 release: hard break. Changeset (Phase 11) calls this out as the major-version bump.
+
+---
+
 ## 15. Phasing summary
 
 | Phase | Adds                                                                            | Reuses from v1                       |
 | ----- | ------------------------------------------------------------------------------- | ------------------------------------ |
-| v1    | Provider interface, `BaseIntegrationProvider`, registry, generic routes, storage, UI, fan-out, health pill | —                                    |
+| v1    | Provider interface, `BaseToolIntegration`, registry, generic routes, storage, UI, fan-out, health pill | —                                    |
 | v1.5  | `kind: 'invoker'` in UI, `__connectRequired` marker + badge, memory `resourceId` switch, auto-retry, white-label OAuth (Composio `authConfigs`, `callbackUrl`), additional adapters (e.g. Arcade) | All of v1                            |
 | v2    | `kind: 'platform'` (admin-gated), per-tool overrides (key changes from `toolService` to `toolSlug`) | All of v1, v1.5                      |
 

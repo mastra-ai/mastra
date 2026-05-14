@@ -7,7 +7,7 @@
 
 ## Goal
 
-A provider-agnostic `/api/tool-providers/*` namespace exists end-to-end. Each handler delegates to the registered `IntegrationProvider` via `editor.getToolProvider(id)`. The old `/api/editor/builder/composio/*` family is deleted.
+A provider-agnostic `/api/tool-providers/*` namespace exists end-to-end. Each handler delegates to the registered `ToolIntegration` via `editor.getToolProviderOrThrow(id)`. The old `/api/editor/builder/composio/*` family is deleted.
 
 ## Background
 
@@ -15,7 +15,9 @@ A provider-agnostic `/api/tool-providers/*` namespace exists end-to-end. Each ha
 - Spec sections to re-read:
   - ARCHITECTURE §7 "Server routes"
   - ARCHITECTURE §13 "Adapter design principles" (no leaky interfaces)
-- Inherited blockers / constraints: `editor.getToolProvider` throws `UnknownProviderError` (Phase 2) — handlers translate to 404. Server-side permission gating identical across providers.
+- Inherited blockers / constraints:
+  - Use `editor.getToolProviderOrThrow(id)` (NOT `getToolProvider` — that returns undefined under Phase 2's compat layer). The throw is caught and translated to 404 via centralized error middleware.
+  - Server-side permission gating identical across providers.
 
 ## Scope
 
