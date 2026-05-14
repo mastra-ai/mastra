@@ -21,7 +21,7 @@ export default defineConfig({
         // above applies to deeply imported radix providers (Tooltip, ...).
         // Tests that render heavier portal-based components (SideDialog) stub
         // the offending wrapper directly.
-        inline: [/@radix-ui\//, /@mastra\/playground-ui/, /use-debounce/, /@base-ui\//],
+        inline: [/@radix-ui\//, /@mastra\/playground-ui/, /use-debounce/, /@base-ui\//, /@floating-ui\//],
       },
     },
   },

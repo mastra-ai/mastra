@@ -1,12 +1,16 @@
 import { Button, Checkbox, Txt } from '@mastra/playground-ui';
-import { WrenchIcon, XIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { PlusIcon, WrenchIcon, XIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
+import { AddToolsDialog } from '@/domains/tool-integrations/components/add-tools-dialog';
+import type { AddToolsDialogSelection } from '@/domains/tool-integrations/components/add-tools-dialog';
 import { ConnectionPicker } from '@/domains/tool-integrations/components/connection-picker';
 import type { PickerConnection } from '@/domains/tool-integrations/components/connection-picker';
+import { HealthPill } from '@/domains/tool-integrations/components/health-pill';
+import type { AgentHealthResult } from '@/domains/tool-integrations/hooks/use-agent-health';
 
 /**
  * Props-driven view of a single `(integration, toolService)` group rendered
@@ -42,6 +46,10 @@ interface ToolsDetailProps {
    * to the Save-disabled toggle.
    */
   onConnectionsInvalid?: (invalid: boolean) => void;
+  /** Per-agent health rollup; rendered as a pill in the section header. */
+  health?: AgentHealthResult;
+  /** Called when the user submits the "Add tools" cross-provider catalog dialog. */
+  onAddTools?: (selection: AddToolsDialogSelection[]) => void;
 }
 
 export const ToolsDetail = ({
@@ -51,9 +59,20 @@ export const ToolsDetail = ({
   toolIntegrationServices = [],
   onConnectionsChange,
   onConnectionsInvalid,
+  health,
+  onAddTools,
 }: ToolsDetailProps) => {
   const { setValue, getValues } = useFormContext<AgentBuilderEditFormValues>();
   const activeCount = availableAgentTools.filter(item => item.isChecked).length;
+  const [addOpen, setAddOpen] = useState(false);
+
+  const initialSelectedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const tool of availableAgentTools) {
+      if (tool.type === 'integration' && tool.providerId) ids.add(`${tool.providerId}:${tool.name}`);
+    }
+    return ids;
+  }, [availableAgentTools]);
 
   const toggle = (item: AgentTool, next: boolean) => {
     if (item.type === 'integration') {
@@ -105,18 +124,38 @@ export const ToolsDetail = ({
               {activeCount} / {availableAgentTools.length}
             </Txt>
           )}
+          {health && health.state !== 'empty' && <HealthPill health={health} />}
         </div>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          tooltip="Close"
-          className="rounded-full"
-          onClick={onClose}
-          data-testid="tools-detail-close"
-        >
-          <XIcon />
-        </Button>
+        <div className="flex items-center gap-1">
+          {editable && onAddTools && (
+            <Button size="sm" variant="ghost" onClick={() => setAddOpen(true)} data-testid="tools-detail-add">
+              <PlusIcon className="h-4 w-4" />
+              Add tools
+            </Button>
+          )}
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            tooltip="Close"
+            className="rounded-full"
+            onClick={onClose}
+            data-testid="tools-detail-close"
+          >
+            <XIcon />
+          </Button>
+        </div>
       </div>
+      {onAddTools && (
+        <AddToolsDialog
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          initialSelectedIds={initialSelectedIds}
+          onSubmit={selection => {
+            onAddTools(selection);
+            setAddOpen(false);
+          }}
+        />
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto py-2">
         {availableAgentTools.length === 0 && toolIntegrationServices.length === 0 ? (

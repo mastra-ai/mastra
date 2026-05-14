@@ -6,3 +6,6 @@ export { useAuthorize } from './use-authorize';
 export type { AuthorizeArgs, AuthorizeResult, UseAuthorizeOptions } from './use-authorize';
 export { useConnectionStatus } from './use-connection-status';
 export type { ConnectionStatusItem } from './use-connection-status';
+export { useExistingConnections } from './use-existing-connections';
+export { useAgentHealth } from './use-agent-health';
+export type { AgentHealthResult, IntegrationHealth, ToolServiceHealth } from './use-agent-health';

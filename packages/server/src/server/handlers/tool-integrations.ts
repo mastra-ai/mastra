@@ -1,4 +1,6 @@
 import type { IMastraEditor } from '@mastra/core/editor';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { UnknownIntegrationError } from '@mastra/core/tool-integration';
 import type { ToolIntegration } from '@mastra/core/tool-integration';
 import { HTTPException } from '../http-exception';
@@ -8,6 +10,8 @@ import {
   authStatusToolIntegrationResponseSchema,
   connectionStatusToolIntegrationBodySchema,
   connectionStatusToolIntegrationResponseSchema,
+  listConnectionsQuerySchema,
+  listConnectionsResponseSchema,
   listToolIntegrationsResponseSchema,
   listToolIntegrationToolsQuerySchema,
   listToolIntegrationToolsResponseSchema,
@@ -40,6 +44,16 @@ function resolveIntegration(editor: IMastraEditor, integrationId: string): ToolI
     }
     throw error;
   }
+}
+
+/**
+ * Resolve the connection owner (Composio `userId` bucket) from the caller's
+ * `RequestContext`. Mirrors the runtime fan-out fallback to `'default'` when
+ * no auth context is present so OSS deployments still work.
+ */
+function resolveOwnerId(requestContext: RequestContext | undefined): string {
+  const value = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+  return typeof value === 'string' && value.length > 0 ? value : 'default';
 }
 
 // ============================================================================
@@ -201,6 +215,38 @@ export const TOOL_INTEGRATION_CONNECTION_STATUS_ROUTE = createRoute({
       return { items: result };
     } catch (error) {
       return handleError(error, 'Error getting connection status');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/connections - List existing provider connections
+ * for the caller, scoped to a tool service.
+ *
+ * The connection owner is resolved server-side from `RequestContext`
+ * (`MASTRA_RESOURCE_ID_KEY`) and falls back to `'default'` when no auth
+ * context is present. Clients cannot pass a userId.
+ */
+export const LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/connections',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  queryParamSchema: listConnectionsQuerySchema,
+  responseSchema: listConnectionsResponseSchema,
+  summary: 'List existing connections',
+  description:
+    'Returns existing provider connections for the caller on a given tool service, so the picker can offer them for pinning without re-running OAuth',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, toolService, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const userId = resolveOwnerId(requestContext);
+      return await integration.listConnections({ toolService, userId });
+    } catch (error) {
+      return handleError(error, 'Error listing tool integration connections');
     }
   },
 });

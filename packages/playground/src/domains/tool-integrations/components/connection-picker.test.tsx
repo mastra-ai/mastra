@@ -3,11 +3,13 @@ import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConnectionPicker } from './connection-picker';
 import type { PickerConnection } from './connection-picker';
+import { server } from '@/test/msw-server';
 
 // Stub useAuthorize so tests don't need to drive the popup + polling loop.
 const authorizeMock = vi.fn();
@@ -57,6 +59,13 @@ const renderPicker = (props: HarnessProps) => render(<Harness {...props} />);
 describe('ConnectionPicker', () => {
   beforeEach(() => {
     authorizeMock.mockReset();
+    // Default: no existing provider connections — keeps unrelated tests quiet
+    // by satisfying the unconditional `useExistingConnections` query.
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({ items: [] }),
+      ),
+    );
   });
 
   afterEach(() => {
@@ -140,5 +149,64 @@ describe('ConnectionPicker', () => {
     });
     fireEvent.click(screen.getByTestId(`connection-remove-${TOOL_SERVICE}-0`));
     expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it('lists unpinned existing connections and pins one with a fresh label', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [
+            { connectionId: 'ca_existing_1', toolService: TOOL_SERVICE, status: 'active' },
+            { connectionId: 'ca_pinned', toolService: TOOL_SERVICE, status: 'active' },
+          ],
+        }),
+      ),
+    );
+
+    const onChange = vi.fn();
+    renderPicker({
+      initial: [{ connectionId: 'ca_pinned', toolService: TOOL_SERVICE, label: 'Already' }],
+      onChange,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`connection-existing-${TOOL_SERVICE}-ca_existing_1`)).toBeTruthy();
+    });
+    // Already-pinned connection should NOT appear in the existing list.
+    expect(screen.queryByTestId(`connection-existing-${TOOL_SERVICE}-ca_pinned`)).toBeNull();
+
+    const labelInput = screen.getByTestId(
+      `connection-existing-label-${TOOL_SERVICE}-ca_existing_1`,
+    ) as HTMLInputElement;
+    fireEvent.change(labelInput, { target: { value: 'Personal' } });
+
+    fireEvent.click(screen.getByTestId(`connection-existing-pin-${TOOL_SERVICE}-ca_existing_1`));
+
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall).toHaveLength(2);
+    expect(lastCall[1]).toEqual({
+      connectionId: 'ca_existing_1',
+      toolService: TOOL_SERVICE,
+      label: 'Personal',
+    });
+  });
+
+  it('hides the existing-connections section in single-select once pinned', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [{ connectionId: 'ca_other', toolService: TOOL_SERVICE, status: 'active' }],
+        }),
+      ),
+    );
+
+    renderPicker({
+      initial: [{ connectionId: 'ca_pinned', toolService: TOOL_SERVICE, label: 'Primary' }],
+      multipleAllowed: false,
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId(`connection-picker-${TOOL_SERVICE}-existing`)).toBeNull();
+    });
   });
 });

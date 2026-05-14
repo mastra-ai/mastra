@@ -183,6 +183,43 @@ describe('AgentBuilderEditFormSchema', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects duplicate connectionIds per toolService', () => {
+      const result = AgentBuilderEditFormSchema.safeParse({
+        ...base,
+        toolIntegrations: {
+          composio: {
+            tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+            connections: {
+              gmail: [
+                { kind: 'author', toolService: 'gmail', connectionId: 'ca_dupe', label: 'a' },
+                { kind: 'author', toolService: 'gmail', connectionId: 'ca_dupe', label: 'b' },
+              ],
+            },
+          },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('allows the same connectionId across different toolServices', () => {
+      const result = AgentBuilderEditFormSchema.safeParse({
+        ...base,
+        toolIntegrations: {
+          composio: {
+            tools: {
+              GMAIL_FETCH: { toolService: 'gmail' },
+              GITHUB_CREATE: { toolService: 'github' },
+            },
+            connections: {
+              gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_shared', label: 'a' }],
+              github: [{ kind: 'author', toolService: 'github', connectionId: 'ca_shared', label: 'b' }],
+            },
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
     it('rejects kind values other than "author"', () => {
       const result = AgentBuilderEditFormSchema.safeParse({
         ...base,

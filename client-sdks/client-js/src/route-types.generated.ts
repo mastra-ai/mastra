@@ -77333,6 +77333,48 @@ export interface PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract
 }
 
 // ============================================================================
+// Route: GET /tool-integrations/:integrationId/connections
+// ============================================================================
+export type GetToolIntegrationsIntegrationIdConnections_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+};
+
+export type GetToolIntegrationsIntegrationIdConnections_QueryParams = {
+  /** Tool service slug whose connections to list */
+  toolService: string;
+};
+
+export type GetToolIntegrationsIntegrationIdConnections_Response = {
+  items: {
+    connectionId: string;
+    status: 'active' | 'pending' | 'failed' | 'inactive';
+    createdAt?: string | undefined;
+  }[];
+};
+
+export type GetToolIntegrationsIntegrationIdConnections_Request = Simplify<
+  (GetToolIntegrationsIntegrationIdConnections_PathParams extends never
+    ? {}
+    : { params: GetToolIntegrationsIntegrationIdConnections_PathParams }) &
+    (GetToolIntegrationsIntegrationIdConnections_QueryParams extends never
+      ? {}
+      : {} extends GetToolIntegrationsIntegrationIdConnections_QueryParams
+        ? { query?: GetToolIntegrationsIntegrationIdConnections_QueryParams }
+        : { query: GetToolIntegrationsIntegrationIdConnections_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrationsIntegrationIdConnections_RouteContract {
+  pathParams: GetToolIntegrationsIntegrationIdConnections_PathParams;
+  queryParams: GetToolIntegrationsIntegrationIdConnections_QueryParams;
+  body: never;
+  request: GetToolIntegrationsIntegrationIdConnections_Request;
+  response: GetToolIntegrationsIntegrationIdConnections_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /tool-integrations/:integrationId/health
 // ============================================================================
 export type GetToolIntegrationsIntegrationIdHealth_PathParams = {
@@ -81373,6 +81415,7 @@ export interface RouteTypes {
   'POST /tool-integrations/:integrationId/authorize': PostToolIntegrationsIntegrationIdAuthorize_RouteContract;
   'GET /tool-integrations/:integrationId/auth-status/:authId': GetToolIntegrationsIntegrationIdAuthStatusAuthId_RouteContract;
   'POST /tool-integrations/:integrationId/connection-status': PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;
+  'GET /tool-integrations/:integrationId/connections': GetToolIntegrationsIntegrationIdConnections_RouteContract;
   'GET /tool-integrations/:integrationId/health': GetToolIntegrationsIntegrationIdHealth_RouteContract;
   'GET /tool-providers': GetToolProviders_RouteContract;
   'GET /tool-providers/:providerId/toolkits': GetToolProvidersProviderIdToolkits_RouteContract;
@@ -82102,6 +82145,9 @@ export interface Client {
   };
   '/tool-integrations/:integrationId/connection-status': {
     POST: PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;
+  };
+  '/tool-integrations/:integrationId/connections': {
+    GET: GetToolIntegrationsIntegrationIdConnections_RouteContract;
   };
   '/tool-integrations/:integrationId/health': {
     GET: GetToolIntegrationsIntegrationIdHealth_RouteContract;

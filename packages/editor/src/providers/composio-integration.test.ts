@@ -267,7 +267,7 @@ describe('ComposioToolIntegration — authorize', () => {
     const result = await integration.authorize({ toolService: 'gmail', connectionId: 'author_1' });
 
     expect(raw.authConfigs.list).toHaveBeenCalledWith({ toolkit: 'gmail' });
-    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('author_1', 'ac_1');
+    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('author_1', 'ac_1', { allowMultiple: true });
     expect(result).toEqual({ url: 'https://oauth', authId: 'ca_new' });
   });
 
@@ -360,6 +360,47 @@ describe('ComposioToolIntegration — getConnectionStatus', () => {
     const result = await integration.getConnectionStatus({ items: [] });
     expect(result).toEqual({});
     expect(composioInstances.length).toBe(0);
+  });
+});
+
+describe('ComposioToolIntegration — listConnections', () => {
+  it('forwards toolService + userId and maps SDK items', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.listConnections({ toolService: 'gmail', userId: 'user_42' }).catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.list.mockResolvedValue({
+      items: [
+        { id: 'ca_1', status: 'ACTIVE', isDisabled: false, createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'ca_2', status: 'INACTIVE', isDisabled: false },
+        { id: 'ca_3', status: 'ACTIVE', isDisabled: true },
+      ],
+    });
+
+    const result = await integration.listConnections({ toolService: 'gmail', userId: 'user_42' });
+
+    expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
+      toolkitSlugs: ['gmail'],
+      userIds: ['user_42'],
+    });
+    expect(result.items).toEqual([
+      { connectionId: 'ca_1', status: 'active', createdAt: '2026-01-01T00:00:00Z' },
+      { connectionId: 'ca_2', status: 'inactive', createdAt: undefined },
+      { connectionId: 'ca_3', status: 'inactive', createdAt: undefined },
+    ]);
+  });
+
+  it("falls back to 'default' bucket when userId is not provided", async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.listConnections({ toolService: 'gmail' }).catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.list.mockResolvedValue({ items: [] });
+
+    await integration.listConnections({ toolService: 'gmail' });
+
+    expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
+      toolkitSlugs: ['gmail'],
+      userIds: ['default'],
+    });
   });
 });
 

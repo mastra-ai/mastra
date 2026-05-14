@@ -4168,6 +4168,118 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /tool-integrations": {
+    "method": "GET",
+    "path": "/tool-integrations",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "integrations"
+    }
+  },
+  "GET /tool-integrations/:integrationId/tool-services": {
+    "method": "GET",
+    "path": "/tool-integrations/:integrationId/tool-services",
+    "pathParams": [
+      "integrationId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "data"
+    }
+  },
+  "GET /tool-integrations/:integrationId/tools": {
+    "method": "GET",
+    "path": "/tool-integrations/:integrationId/tools",
+    "pathParams": [
+      "integrationId"
+    ],
+    "queryParams": [
+      "page",
+      "perPage",
+      "search",
+      "toolService"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "data",
+      "paginationProperty": "pagination"
+    }
+  },
+  "POST /tool-integrations/:integrationId/authorize": {
+    "method": "POST",
+    "path": "/tool-integrations/:integrationId/authorize",
+    "pathParams": [
+      "integrationId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "connectionId",
+      "toolName",
+      "toolService"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-integrations/:integrationId/auth-status/:authId": {
+    "method": "GET",
+    "path": "/tool-integrations/:integrationId/auth-status/:authId",
+    "pathParams": [
+      "integrationId",
+      "authId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /tool-integrations/:integrationId/connection-status": {
+    "method": "POST",
+    "path": "/tool-integrations/:integrationId/connection-status",
+    "pathParams": [
+      "integrationId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "items"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-integrations/:integrationId/health": {
+    "method": "GET",
+    "path": "/tool-integrations/:integrationId/health",
+    "pathParams": [
+      "integrationId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /tool-providers": {
     "method": "GET",
     "path": "/tool-providers",

@@ -115,6 +115,10 @@ export const connectionStatusToolIntegrationBodySchema = z.object({
     .describe('Connection tuples to batch-check'),
 });
 
+export const listConnectionsQuerySchema = z.object({
+  toolService: z.string().describe('Tool service slug whose connections to list'),
+});
+
 // Response Schemas
 
 const capabilitiesSchema = z.object({
@@ -171,6 +175,16 @@ export const authStatusToolIntegrationResponseSchema = z.object({
 
 export const connectionStatusToolIntegrationResponseSchema = z.object({
   items: z.record(z.string(), z.object({ connected: z.boolean() })),
+});
+
+export const listConnectionsResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      connectionId: z.string(),
+      status: z.enum(['active', 'pending', 'failed', 'inactive']),
+      createdAt: z.string().optional(),
+    }),
+  ),
 });
 
 export const toolIntegrationHealthResponseSchema = z.object({

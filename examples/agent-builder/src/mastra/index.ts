@@ -5,7 +5,7 @@ import { builderAgent } from '@mastra/editor/ee';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { initWorkOS } from './auth';
 import { StagehandBrowser } from '@mastra/stagehand';
-import { ComposioToolProvider } from '@mastra/editor/composio';
+import { ComposioToolProvider, ComposioToolIntegration } from '@mastra/editor/composio';
 import { weatherInfo } from './tools';
 import { weatherAgent } from './agents';
 import { greetWorkflow } from './workflows';
@@ -59,9 +59,10 @@ export const mastra = new Mastra({
     },
   }),
   editor: new MastraEditor({
-    toolProviders: {
-      composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '' }),
-    },
+    // toolProviders: {
+    //   composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '' }),
+    // },
+    toolIntegrations: [new ComposioToolIntegration({ apiKey: process.env.COMPOSIO_API_KEY!, allowedToolServices: ['gmail'] })],
     browsers: {
       stagehand: {
         id: 'stagehand',
@@ -100,9 +101,9 @@ export const mastra = new Mastra({
           memory: {
             observationalMemory: true,
           },
-          tools: { allowed: ['weather-info'] },
-          agents: { allowed: ['weather-agent'] },
-          workflows: { allowed: ['greet-workflow'] },
+          // tools: { allowed: ['weather-info'] },
+          // agents: { allowed: ['weather-agent'] },
+          // workflows: { allowed: ['greet-workflow'] },
           browser: {
             type: 'inline',
             config: {

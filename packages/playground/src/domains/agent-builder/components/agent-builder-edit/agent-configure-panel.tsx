@@ -14,6 +14,7 @@ import { SkillsDetail } from './details/skills-detail';
 import { ToolsDetail } from './details/tools-detail';
 import { useBuilderModelPolicy } from '@/domains/builder';
 import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
+import { useAgentHealth } from '@/domains/tool-integrations/hooks/use-agent-health';
 
 export interface AgentConfig {
   id: string;
@@ -482,7 +483,9 @@ function DetailPane({
   availableAgentTools,
   availableSkills,
 }: DetailPaneProps) {
-  const { toolIntegrationServices, handleConnectionsChange } = useToolIntegrationsBridge();
+  const { toolIntegrationServices, handleConnectionsChange, handleAddTools } = useToolIntegrationsBridge();
+  const toolIntegrations = useWatch<AgentBuilderEditFormValues, 'toolIntegrations'>({ name: 'toolIntegrations' });
+  const health = useAgentHealth(toolIntegrations);
 
   return (
     <div className="h-full w-full min-w-0 overflow-hidden">
@@ -501,6 +504,16 @@ function DetailPane({
           availableAgentTools={availableAgentTools}
           toolIntegrationServices={toolIntegrationServices}
           onConnectionsChange={handleConnectionsChange}
+          onAddTools={selection =>
+            handleAddTools(
+              selection.map(item => ({
+                providerId: item.integrationId,
+                toolSlug: item.slug,
+                toolService: item.toolService,
+              })),
+            )
+          }
+          health={health}
         />
       )}
       {activeDetail === 'skills' && features.skills && (

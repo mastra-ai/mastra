@@ -1,4 +1,5 @@
 import type { IMastraEditor } from '@mastra/core/editor';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { UnknownIntegrationError } from '@mastra/core/tool-integration';
 import type { ToolIntegration } from '@mastra/core/tool-integration';
 import { describe, it, expect, vi } from 'vitest';
@@ -8,6 +9,7 @@ import {
   AUTHORIZE_TOOL_INTEGRATION_ROUTE,
   GET_TOOL_INTEGRATION_AUTH_STATUS_ROUTE,
   GET_TOOL_INTEGRATION_HEALTH_ROUTE,
+  LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE,
   LIST_TOOL_INTEGRATION_TOOLS_ROUTE,
   LIST_TOOL_INTEGRATIONS_ROUTE,
   LIST_TOOL_SERVICES_ROUTE,
@@ -31,6 +33,7 @@ function makeIntegration(overrides: Partial<ToolIntegration> = {}): ToolIntegrat
     },
     listToolServices: vi.fn().mockResolvedValue({ data: [] }),
     listTools: vi.fn().mockResolvedValue({ data: [], pagination: { page: 1, hasMore: false } }),
+    listConnections: vi.fn().mockResolvedValue({ items: [] }),
     resolveTools: vi.fn(),
     authorize: vi.fn(),
     getAuthStatus: vi.fn(),
@@ -185,6 +188,57 @@ describe('TOOL_INTEGRATION_CONNECTION_STATUS_ROUTE', () => {
         'conn-2': { connected: false },
       },
     });
+  });
+});
+
+describe('LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE', () => {
+  it('resolves userId from RequestContext and forwards toolService', async () => {
+    const listConnections = vi.fn().mockResolvedValue({
+      items: [{ connectionId: 'ca_1', status: 'active' }],
+    });
+    const integration = makeIntegration({ listConnections });
+    const editor = makeEditor(integration);
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user_42');
+
+    const result = await LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE.handler({
+      mastra: makeMastra(editor),
+      integrationId: 'composio',
+      toolService: 'gmail',
+      requestContext,
+    } as any);
+
+    expect(listConnections).toHaveBeenCalledWith({ toolService: 'gmail', userId: 'user_42' });
+    expect(result).toEqual({
+      items: [{ connectionId: 'ca_1', status: 'active' }],
+    });
+  });
+
+  it("falls back to 'default' when no auth context is present", async () => {
+    const listConnections = vi.fn().mockResolvedValue({ items: [] });
+    const integration = makeIntegration({ listConnections });
+    const editor = makeEditor(integration);
+
+    await LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE.handler({
+      mastra: makeMastra(editor),
+      integrationId: 'composio',
+      toolService: 'gmail',
+      requestContext: undefined,
+    } as any);
+
+    expect(listConnections).toHaveBeenCalledWith({ toolService: 'gmail', userId: 'default' });
+  });
+
+  it('returns 404 for unknown integration id', async () => {
+    const editor = makeEditor();
+    await expect(
+      LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE.handler({
+        mastra: makeMastra(editor),
+        integrationId: 'missing',
+        toolService: 'gmail',
+        requestContext: undefined,
+      } as any),
+    ).rejects.toThrow(HTTPException);
   });
 });
 

@@ -1,8 +1,9 @@
 import { Button, Input, Txt, cn } from '@mastra/playground-ui';
-import { Trash2, Plus, RefreshCw, AlertCircle } from 'lucide-react';
-import { useMemo } from 'react';
+import { Trash2, Plus, RefreshCw, AlertCircle, Link2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 import { useAuthorize } from '../hooks/use-authorize';
+import { useExistingConnections } from '../hooks/use-existing-connections';
 
 /**
  * A single saved connection (provider-agnostic). Mirrors the shape that
@@ -75,6 +76,21 @@ export const ConnectionPicker = ({
   disabled,
 }: ConnectionPickerProps) => {
   const authorize = useAuthorize();
+  const existing = useExistingConnections(integrationId, toolService);
+
+  const pinnedIds = useMemo(() => new Set(connections.map(c => c.connectionId)), [connections]);
+
+  // Existing provider connections that are not yet pinned to this agent
+  // for this toolService. Driven by the picker UI's "Use existing connection"
+  // affordance — pinning one writes a fresh label without re-running OAuth.
+  const unpinnedExisting = useMemo(() => {
+    const items = existing.data?.items ?? [];
+    return items.filter(item => !pinnedIds.has(item.connectionId));
+  }, [existing.data?.items, pinnedIds]);
+
+  // Per-row label drafts for the unpinned existing list. Kept in local state
+  // so typing doesn't churn parent form state until the user clicks "Pin".
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const errorsByIndex = useMemo(() => {
     const map = new Map<number, string>();
@@ -83,6 +99,29 @@ export const ConnectionPicker = ({
     }
     return map;
   }, [connections]);
+
+  const validateDraft = (label: string): string | undefined => {
+    const trimmed = label.trim();
+    if (trimmed.length === 0) return 'Label is required';
+    if (trimmed.length > MAX_LABEL) return `Label must be ≤${MAX_LABEL} characters`;
+    if (!LABEL_RE.test(trimmed)) return 'Use letters, numbers, spaces, _ or -';
+    const key = trimmed.toLowerCase();
+    if (connections.some(c => c.label.trim().toLowerCase() === key)) {
+      return 'Duplicate label';
+    }
+    return undefined;
+  };
+
+  const handlePinExisting = (connectionId: string) => {
+    const label = (drafts[connectionId] ?? '').trim();
+    if (validateDraft(label)) return;
+    onChange([...connections, { connectionId, toolService, label }]);
+    setDrafts(prev => {
+      const next = { ...prev };
+      delete next[connectionId];
+      return next;
+    });
+  };
 
   const handleAdd = async () => {
     const result = await authorize.mutateAsync({ integrationId, toolService });
@@ -119,8 +158,68 @@ export const ConnectionPicker = ({
   const canAddMore = multipleAllowed || connections.length === 0;
   const showAddButton = multipleAllowed;
 
+  const renderExistingSection = () => {
+    if (!multipleAllowed && connections.length > 0) return null;
+    if (unpinnedExisting.length === 0) return null;
+
+    return (
+      <div
+        className="flex flex-col gap-2 rounded-md border border-border-default/60 bg-surface-2/30 px-3 py-2"
+        data-testid={`connection-picker-${toolService}-existing`}
+      >
+        <div className="flex items-center gap-2">
+          <Link2 className="size-3 text-icon-muted" />
+          <Txt as="span" variant="ui-xs" className="text-text-muted">
+            Use an existing connection — give it a label for this agent.
+          </Txt>
+        </div>
+        {unpinnedExisting.map(item => {
+          const draft = drafts[item.connectionId] ?? '';
+          const error = draft.length === 0 ? undefined : validateDraft(draft);
+          const inactive = item.status !== 'active';
+          return (
+            <div
+              key={item.connectionId}
+              className="flex items-center gap-2"
+              data-testid={`connection-existing-${toolService}-${item.connectionId}`}
+            >
+              <div className="flex-1">
+                <Input
+                  size="sm"
+                  value={draft}
+                  placeholder={`Label for ${item.connectionId.slice(0, 12)}…`}
+                  onChange={e => setDrafts(prev => ({ ...prev, [item.connectionId]: e.target.value }))}
+                  disabled={disabled || inactive}
+                  error={Boolean(error)}
+                  aria-invalid={Boolean(error)}
+                  data-testid={`connection-existing-label-${toolService}-${item.connectionId}`}
+                />
+                {error && <p className="text-error text-ui-xs mt-1 block">{error}</p>}
+                {inactive && (
+                  <p className="text-text-muted text-ui-xs mt-1 block">
+                    Status: {item.status} — reconnect before pinning.
+                  </p>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handlePinExisting(item.connectionId)}
+                disabled={disabled || inactive || draft.trim().length === 0 || Boolean(error)}
+                data-testid={`connection-existing-pin-${toolService}-${item.connectionId}`}
+              >
+                Pin
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-2" data-testid={`connection-picker-${toolService}`}>
+      {renderExistingSection()}
       {connections.length === 0 ? (
         <div
           className="flex items-center gap-2 rounded-md border border-dashed border-warning/40 bg-warning/5 px-3 py-2"

@@ -14,6 +14,9 @@ export type {
   ListToolsOpts,
   ListToolsResult,
   ListToolServicesResult,
+  ListConnectionsOpts,
+  ListConnectionsResult,
+  ExistingConnection,
 } from './tool-integration';
 
 export { BaseToolIntegration } from './base';

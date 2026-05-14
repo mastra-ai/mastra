@@ -79,20 +79,32 @@ export const AgentBuilderEditFormSchema = z
     if (!integrations) return;
 
     for (const [providerId, config] of Object.entries(integrations)) {
-      // Label uniqueness (case-insensitive) per toolService.
+      // Label uniqueness (case-insensitive) AND connectionId uniqueness per toolService.
+      // connectionId duplicates would pin the same OAuth bucket twice, doubling LLM
+      // surface area without adding capability — block at validation time.
       for (const [toolService, connections] of Object.entries(config.connections ?? {})) {
         const seenLabels = new Map<string, number>();
+        const seenConnectionIds = new Map<string, number>();
         connections.forEach((connection, index) => {
-          const key = connection.label.toLowerCase();
-          const previous = seenLabels.get(key);
-          if (previous !== undefined) {
+          const labelKey = connection.label.toLowerCase();
+          if (seenLabels.has(labelKey)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               message: `Duplicate label "${connection.label}" on ${toolService} (case-insensitive)`,
               path: ['toolIntegrations', providerId, 'connections', toolService, index, 'label'],
             });
           } else {
-            seenLabels.set(key, index);
+            seenLabels.set(labelKey, index);
+          }
+
+          if (seenConnectionIds.has(connection.connectionId)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `Connection "${connection.connectionId}" is already pinned to ${toolService}`,
+              path: ['toolIntegrations', providerId, 'connections', toolService, index, 'connectionId'],
+            });
+          } else {
+            seenConnectionIds.set(connection.connectionId, index);
           }
         });
       }

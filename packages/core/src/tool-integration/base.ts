@@ -2,6 +2,8 @@ import type { ToolAction } from '../tools/types';
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
+  ListConnectionsOpts,
+  ListConnectionsResult,
   ListToolServicesResult,
   ListToolsOpts,
   ListToolsResult,
@@ -99,6 +101,7 @@ export abstract class BaseToolIntegration implements ToolIntegration {
   abstract getConnectionStatus(opts: {
     items: Array<{ connectionId: string; toolService: string }>;
   }): Promise<Record<string, { connected: boolean }>>;
+  abstract listConnections(opts: ListConnectionsOpts): Promise<ListConnectionsResult>;
 
   /**
    * Default health implementation — returns `{ ok: true }`. Subclasses that

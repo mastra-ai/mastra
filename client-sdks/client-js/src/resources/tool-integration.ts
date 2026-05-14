@@ -2,6 +2,8 @@ import type {
   AuthorizeToolIntegrationParams,
   AuthorizeToolIntegrationResponse,
   ClientOptions,
+  ListToolIntegrationConnectionsParams,
+  ListToolIntegrationConnectionsResponse,
   ListToolIntegrationToolsParams,
   ListToolIntegrationToolsResponse,
   ListToolServicesResponse,
@@ -88,6 +90,22 @@ export class ToolIntegration extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  /**
+   * Lists existing provider connections for the caller, scoped to a tool service.
+   *
+   * The connection owner is resolved server-side from the request's auth
+   * context — clients cannot pass a userId. Use this to surface
+   * already-authorized accounts so authors can pin them onto an agent
+   * without re-running OAuth.
+   */
+  listConnections(params: ListToolIntegrationConnectionsParams): Promise<ListToolIntegrationConnectionsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('toolService', params.toolService);
+    return this.request(
+      `/tool-integrations/${encodeURIComponent(this.integrationId)}/connections?${searchParams.toString()}`,
+    );
   }
 
   /**

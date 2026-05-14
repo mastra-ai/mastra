@@ -1,6 +1,9 @@
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
+  ExistingConnection,
+  ListConnectionsOpts,
+  ListConnectionsResult,
   ListToolsOpts,
   ListToolsResult,
   ResolveToolsOpts,
@@ -103,13 +106,20 @@ export class ComposioToolIntegration extends BaseToolIntegration {
     // Composio's `getRawComposioTools` query is a discriminated union — every
     // variant accepts `limit`, but the toolkits/search keys are exclusive in
     // the TS types. We build the variant we need, then cast to the union.
+    //
+    // When the caller doesn't scope to a specific toolService, we fall back
+    // to the admin allowlist so the SDK returns a flat list across allowed
+    // toolkits in a single hop (vs. fanning out per service).
     const limit = opts.perPage;
+    const fallbackToolkits = this.allowedToolServices.length > 0 ? [...this.allowedToolServices] : undefined;
     const query: ComposioToolListParams = (
       opts.toolService
         ? { toolkits: [opts.toolService], limit, search: opts.search }
-        : opts.search
-          ? { search: opts.search, limit }
-          : { toolkits: [] as string[], limit }
+        : fallbackToolkits
+          ? { toolkits: fallbackToolkits, limit, search: opts.search }
+          : opts.search
+            ? { search: opts.search, limit }
+            : { toolkits: [] as string[], limit }
     ) as ComposioToolListParams;
 
     const rawTools: ComposioTool[] = await composio.tools.getRawComposioTools(query);
@@ -198,7 +208,11 @@ export class ComposioToolIntegration extends BaseToolIntegration {
     // for authorize we treat it as the Composio `userId` so the new connected
     // account lands under the same bucket as the agent's resolved identity.
     const internalUserId = opts.connectionId || DEFAULT_INTERNAL_USER_ID;
-    const request = await composio.connectedAccounts.initiate(internalUserId, authConfigId);
+    // `allowMultiple: true` — we explicitly support N connected accounts per
+    // (user, auth config) and disambiguate at runtime via per-connection labels.
+    const request = await composio.connectedAccounts.initiate(internalUserId, authConfigId, {
+      allowMultiple: true,
+    });
 
     if (!request.redirectUrl) {
       throw new Error(
@@ -254,6 +268,24 @@ export class ComposioToolIntegration extends BaseToolIntegration {
     return result;
   }
 
+  async listConnections(opts: ListConnectionsOpts): Promise<ListConnectionsResult> {
+    const composio = this.getRawClient();
+    const userId = opts.userId || DEFAULT_INTERNAL_USER_ID;
+
+    const list: ConnectedAccountListResponse = await composio.connectedAccounts.list({
+      toolkitSlugs: [opts.toolService],
+      userIds: [userId],
+    });
+
+    const items: ExistingConnection[] = list.items.map(account => ({
+      connectionId: account.id,
+      status: mapComposioStatus(account.status, account.isDisabled),
+      createdAt: account.createdAt,
+    }));
+
+    return { items };
+  }
+
   async getHealth(): Promise<ToolIntegrationHealth> {
     try {
       const composio = this.getRawClient();
@@ -291,6 +323,31 @@ export class ComposioToolIntegration extends BaseToolIntegration {
       );
     }
     return enabled[0]!.id;
+  }
+}
+
+/**
+ * Map Composio account status + `isDisabled` to the {@link ExistingConnection}
+ * status vocabulary surfaced to the picker UI.
+ */
+function mapComposioStatus(
+  status: string,
+  isDisabled: boolean,
+): ExistingConnection['status'] {
+  if (isDisabled) return 'inactive';
+  switch (status) {
+    case 'ACTIVE':
+      return 'active';
+    case 'INITIALIZING':
+    case 'INITIATED':
+      return 'pending';
+    case 'FAILED':
+    case 'EXPIRED':
+      return 'failed';
+    case 'INACTIVE':
+      return 'inactive';
+    default:
+      return 'pending';
   }
 }
 

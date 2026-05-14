@@ -17,6 +17,12 @@ vi.mock('@/domains/tool-integrations/hooks/use-authorize', () => ({
   useAuthorize: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// ConnectionPicker also queries existing provider connections; stub to avoid
+// requiring a QueryClientProvider in this unit harness.
+vi.mock('@/domains/tool-integrations/hooks/use-existing-connections', () => ({
+  useExistingConnections: () => ({ data: { items: [] }, isLoading: false }),
+}));
+
 interface HarnessProps {
   availableAgentTools?: AgentTool[];
   toolIntegrationServices?: ToolIntegrationServiceGroup[];

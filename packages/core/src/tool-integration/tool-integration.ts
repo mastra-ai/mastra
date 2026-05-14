@@ -238,6 +238,43 @@ export interface ToolIntegration {
     items: Array<{ connectionId: string; toolService: string }>;
   }): Promise<Record<string, { connected: boolean }>>;
 
+  /**
+   * List the underlying provider's existing connections for a given user +
+   * tool service. Used by the picker UI to surface already-authorized
+   * accounts so authors can pin them onto an agent without re-running OAuth.
+   *
+   * `userId` follows the same resolution rules as `resolveTools` (auth
+   * context → fallback to `'default'`). When omitted, the implementation
+   * resolves it from request context.
+   */
+  listConnections(opts: ListConnectionsOpts): Promise<ListConnectionsResult>;
+
   /** Integration-level health (config, reachability, etc.). */
   getHealth(): Promise<ToolIntegrationHealth>;
+}
+
+/**
+ * Options for `ToolIntegration.listConnections`.
+ */
+export interface ListConnectionsOpts {
+  /** Tool service slug (e.g. `'gmail'`). */
+  toolService: string;
+  /** Connection owner. Defaults to `'default'` when no auth context is present. */
+  userId?: string;
+}
+
+/**
+ * One existing connection on the underlying provider.
+ */
+export interface ExistingConnection {
+  /** Provider-issued connection identifier (e.g. Composio `ca_xxx`). */
+  connectionId: string;
+  /** Connection state: `'active'` is safe to pin; others are surfaced for visibility. */
+  status: 'active' | 'inactive' | 'failed' | 'pending';
+  /** When the connection was created, if the provider reports it. */
+  createdAt?: string;
+}
+
+export interface ListConnectionsResult {
+  items: ExistingConnection[];
 }
