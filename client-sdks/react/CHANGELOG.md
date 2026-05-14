@@ -1,5 +1,41 @@
 # @mastra/react
 
+## 0.3.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/client-js@1.18.2-alpha.1
+
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6)]:
+  - @mastra/core@1.34.0-alpha.0
+  - @mastra/client-js@1.18.2-alpha.0
+
+## 0.3.1
+
+### Patch Changes
+
+- Add an `enableThreadSignals` option to `useChat` for explicitly opting into the agent-signals streaming path. The option defaults to `false`, keeping consumers on the legacy `streamUntilIdle` route unless they pass `true`. ([#16551](https://github.com/mastra-ai/mastra/pull/16551))
+
+- Updated dependencies [[`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1), [`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb)]:
+  - @mastra/core@1.33.1
+  - @mastra/client-js@1.18.1
+
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- Add an `enableThreadSignals` option to `useChat` for explicitly opting into the agent-signals streaming path. The option defaults to `false`, keeping consumers on the legacy `streamUntilIdle` route unless they pass `true`. ([#16551](https://github.com/mastra-ai/mastra/pull/16551))
+
+- Updated dependencies [[`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb)]:
+  - @mastra/core@1.33.1-alpha.1
+  - @mastra/client-js@1.18.1-alpha.1
+
 ## 0.3.1-alpha.0
 
 ### Patch Changes

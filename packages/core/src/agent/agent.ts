@@ -95,14 +95,14 @@ import type {
   DelegationConfig,
   DelegationStartContext,
   DelegationCompleteContext,
-  SubAgent,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
-import { AgentThreadStreamRuntime } from './thread-stream-runtime';
+import type { SubAgent } from './subagent';
+import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -241,7 +241,7 @@ export class Agent<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >
   extends MastraBase
-  implements SubAgent<TOutput, TRequestContext>
+  implements SubAgent<TAgentId, TRequestContext>
 {
   public id: TAgentId;
   public name: string;
@@ -261,7 +261,7 @@ export class Agent<
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
-  #agents: DynamicArgument<Record<string, SubAgent>, TRequestContext>;
+  #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: MastraVoice;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
@@ -285,14 +285,6 @@ export class Agent<
    * close if they're still the active one.
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
-  /**
-   * Local fallback for standalone Agents that are not registered on a Mastra
-   * instance. Agents registered on the same Mastra instance coordinate through
-   * `mastra.agentThreadStreamRuntime` instead, so cross-agent thread locks and
-   * subscriptions are scoped to that Mastra runtime rather than process-global
-   * Agent state.
-   */
-  #threadStreamRuntime = new AgentThreadStreamRuntime();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -392,7 +384,7 @@ export class Agent<
 
     this.#scorers = config.scorers || ({} as MastraScorers);
 
-    this.#agents = config.agents || ({} as Record<string, SubAgent>);
+    this.#agents = config.agents || ({} as Record<string, SubAgent<string, TRequestContext>>);
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -556,7 +548,7 @@ export class Agent<
    * @internal
    */
   private async deriveSubAgentBackgroundConfig(
-    subAgent: SubAgent,
+    subAgent: SubAgent<string, TRequestContext>,
     requestContext: RequestContext,
   ): Promise<ToolBackgroundConfig | undefined> {
     try {
@@ -738,8 +730,8 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent>
-    | Promise<Record<string, SubAgent>> {
+    | Record<string, SubAgent<string, TRequestContext>>
+    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -3665,7 +3657,10 @@ export class Agent<
             // Recompute derived values from the resolved agent (may differ from
             // code-defined agent if a stored version changed the model or defaults)
             const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
-            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedDefaultOptions =
+              'getDefaultOptions' in resolvedAgent
+                ? await (resolvedAgent as Agent).getDefaultOptions({ requestContext })
+                : {};
             const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
 
             // Propagate parent memory to the resolved agent if it doesn't have its own.
@@ -3679,7 +3674,7 @@ export class Agent<
               supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
               if (!resolvedAgent.hasOwnMemory() && this.#memory) {
-                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory, TRequestContext>);
               }
             }
 
@@ -5964,7 +5959,7 @@ export class Agent<
   }
 
   #getThreadStreamRuntime() {
-    return this.#mastra?.agentThreadStreamRuntime ?? this.#threadStreamRuntime;
+    return agentThreadStreamRuntime;
   }
 
   /**

@@ -4,9 +4,10 @@ import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
-import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from '../agent';
+import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage, SubAgent } from '../agent';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MessageInput } from '../agent/message-list';
+import { isAgentCompatible } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
 import { MastraFGAPermissions } from '../auth/ee';
 import { MastraBase } from '../base';
@@ -138,10 +139,6 @@ export function mapVariable(config: any): any {
 // Type Guards
 // ============================================
 
-function isAgent<TStepId extends string>(input: unknown): input is Agent<TStepId, any> {
-  return input instanceof Agent;
-}
-
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
   return input instanceof Tool;
 }
@@ -230,7 +227,7 @@ export function createStep<
  * Creates a step from an agent (defaults to { text: string } output)
  */
 export function createStep<TStepId extends string>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
     structuredOutput?: never;
     retries?: number;
@@ -242,7 +239,7 @@ export function createStep<TStepId extends string>(
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
     structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
@@ -330,7 +327,7 @@ export function createStep<
 export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
   // Type assertions are needed because each branch returns a different Step type,
   // but the overloads ensure type safety for consumers
-  if (isAgent(params)) {
+  if (isAgentCompatible(params)) {
     return createStepFromAgent(params, agentOrToolOptions);
   }
 
@@ -405,7 +402,7 @@ function createStepFromParams<
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
-  params: Agent<TStepId, any>,
+  params: SubAgent<TStepId, any> | Agent<TStepId, any, any>,
   agentOrToolOptions?: AgentStepOptions<TStepOutput> & {
     structuredOutput?: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
@@ -477,42 +474,35 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       let stream: ReadableStream<any>;
 
-      if ((await params.getModel()).specificationVersion === 'v1') {
+      const handleFinish = (result: any) => {
+        const resultWithObject = result as typeof result & { object?: unknown };
+        if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+          structuredResult = resultWithObject.object;
+        }
+        streamPromise.resolve(result.text);
+        void agentOptions?.onFinish?.(result);
+      };
+
+      if ((await params.getModel()).specificationVersion === 'v1' && typeof params.streamLegacy === 'function') {
         const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
           ...observabilityContext,
-          onFinish: result => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
+          onFinish: handleFinish,
           abortSignal,
         });
         stream = fullStream as any;
       } else {
-        // @ts-expect-error - TODO: fix this
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
           ...observabilityContext,
-          onFinish: result => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
+          onFinish: handleFinish,
           abortSignal,
         });
 
-        stream = modelOutput.fullStream;
+        void modelOutput.text.then(streamPromise.resolve, streamPromise.reject);
+        stream = modelOutput.fullStream as ReadableStream<ChunkType>;
       }
 
       let tripwireChunk: any = null;
@@ -577,7 +567,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         text: string;
       };
     },
-    component: params.component,
+    component: 'AGENT',
   };
 }
 

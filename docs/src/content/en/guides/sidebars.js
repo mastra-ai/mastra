@@ -118,6 +118,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'deployment/aws-bedrock-agentcore',
+          label: 'Amazon Bedrock AgentCore',
+        },
+        {
+          type: 'doc',
           id: 'deployment/amazon-ec2',
           label: 'Amazon EC2',
         },
