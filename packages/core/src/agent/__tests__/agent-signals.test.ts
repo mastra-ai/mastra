@@ -1,3 +1,4 @@
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -95,7 +96,9 @@ describe('Agent signals', () => {
       metadata: { source: 'test', signal: { userProvided: true } },
     });
 
-    expect(signal.toLLMMessage()).toBe('Signal contents');
+    expect(signal.toLLMMessage()).toEqual([
+      { role: 'user', content: '<user-message priority="high">Signal contents</user-message>' },
+    ]);
     expect(signal.toDataPart()).toEqual({
       type: 'data-user-message',
       data: {
@@ -176,6 +179,183 @@ describe('Agent signals', () => {
     expect(fileSignal.toLLMMessage()).toEqual(fileContents);
     expect(fileSignal.toDataPart().data.contents).toEqual(fileContents);
     expect(mastraDBMessageToSignal(fileSignal.toDBMessage()).contents).toEqual(fileContents);
+  });
+
+  it('renders user-message attributes inline-wrapped for text and multimodal contents', () => {
+    const stringSignal = createSignal({
+      type: 'user-message',
+      contents: 'Hello',
+      attributes: { messageId: 'm-1', userId: 'u-1' },
+    });
+    expect(stringSignal.toLLMMessage()).toEqual([
+      { role: 'user', content: '<user-message messageId="m-1" userId="u-1">Hello</user-message>' },
+    ]);
+
+    const objectTextSignal = createSignal({
+      type: 'user-message',
+      contents: { role: 'user', content: 'Hello again' } as CoreMessage,
+      attributes: { messageId: 'm-1b' },
+    });
+    expect(objectTextSignal.toLLMMessage()).toEqual([
+      { role: 'user', content: '<user-message messageId="m-1b">Hello again</user-message>' },
+    ]);
+
+    const fileContents = {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: 'Look at this' },
+        {
+          type: 'file' as const,
+          data: 'data:image/png;base64,aGVsbG8=',
+          mediaType: 'image/png',
+        },
+      ],
+    };
+    const multimodalSignal = createSignal({
+      type: 'user-message',
+      contents: fileContents,
+      attributes: { messageId: 'm-2' },
+    });
+    // Multimodal: text part is inline-wrapped, file part is preserved.
+    const multimodalResult = multimodalSignal.toLLMMessage() as MastraDBMessage[];
+    expect(multimodalResult).toHaveLength(1);
+    expect(multimodalResult[0]?.role).toBe('user');
+    expect(multimodalResult[0]?.content.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'text',
+          text: '<user-message messageId="m-2">Look at this</user-message>',
+        }),
+        expect.objectContaining({
+          type: 'file',
+          data: 'data:image/png;base64,aGVsbG8=',
+        }),
+      ]),
+    );
+
+    // file-only: no text part exists, so the marker is prepended as its own message.
+    const fileOnlyContents = {
+      role: 'user' as const,
+      content: [{ type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' }],
+    };
+    const fileOnlySignal = createSignal({
+      type: 'user-message',
+      contents: fileOnlyContents,
+      attributes: { messageId: 'm-2d' },
+    });
+    const fileOnlyResult = fileOnlySignal.toLLMMessage() as Array<CoreMessage | MastraDBMessage>;
+    expect(fileOnlyResult[0]).toEqual({ role: 'user', content: '<user-message messageId="m-2d" />' });
+    expect((fileOnlyResult[1] as MastraDBMessage)?.content.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' })]),
+    );
+
+    const arraySignal = createSignal({
+      type: 'user-message',
+      contents: ['first', 'second'],
+      attributes: { messageId: 'm-3' },
+    });
+    expect(arraySignal.toLLMMessage()).toEqual([
+      { role: 'user', content: '<user-message messageId="m-3">first\nsecond</user-message>' },
+    ]);
+
+    const noAttributeSignal = createSignal({
+      type: 'user-message',
+      contents: 'Plain message',
+    });
+    expect(noAttributeSignal.toLLMMessage()).toBe('Plain message');
+
+    const onlyNullAttributesSignal = createSignal({
+      type: 'user-message',
+      contents: 'Plain message',
+      attributes: { ignored: null, alsoIgnored: undefined },
+    });
+    expect(onlyNullAttributesSignal.toLLMMessage()).toBe('Plain message');
+  });
+
+  it('renders system-reminder signals with multimodal contents the same way as user-message attributes', () => {
+    // Text-only system-reminder still wraps even without attributes (the wrapper is the signal).
+    const plainReminder = createSignal({
+      type: 'system-reminder',
+      contents: 'Be concise.',
+    });
+    expect(plainReminder.toLLMMessage()).toEqual([
+      { role: 'user', content: '<system-reminder>Be concise.</system-reminder>' },
+    ]);
+
+    // System-reminder with multimodal contents: emit a self-closing marker prefix; original contents survive.
+    const screenshotContents = {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: 'The user is looking at this screen.' },
+        {
+          type: 'file' as const,
+          data: 'data:image/png;base64,aGVsbG8=',
+          mediaType: 'image/png',
+        },
+      ],
+    };
+    const screenshotReminder = createSignal({
+      type: 'system-reminder',
+      contents: screenshotContents,
+      attributes: { kind: 'screenshot' },
+    });
+    expect(screenshotReminder.toLLMMessage()).toEqual([
+      { role: 'user', content: '<system-reminder kind="screenshot" />' },
+      screenshotContents,
+    ]);
+
+    // System-reminder with only file parts gets the same self-closing prefix.
+    const fileOnlyReminderContents = {
+      role: 'user' as const,
+      content: [{ type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' }],
+    };
+    const fileOnlyReminder = createSignal({
+      type: 'system-reminder',
+      contents: fileOnlyReminderContents,
+      attributes: { kind: 'reference-image' },
+    });
+    expect(fileOnlyReminder.toLLMMessage()).toEqual([
+      { role: 'user', content: '<system-reminder kind="reference-image" />' },
+      fileOnlyReminderContents,
+    ]);
+  });
+
+  it('persists multimodal signal contents as faithful DB parts so UIs can render them', () => {
+    const fileContents = {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: 'Look at this' },
+        { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+      ],
+    };
+
+    const userMessage = createSignal({
+      type: 'user-message',
+      contents: fileContents,
+      attributes: { messageId: 'm-1' },
+    });
+    const userDb = userMessage.toDBMessage();
+    expect(userDb.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Look at this' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
+    // Original raw contents are still preserved in metadata as the source of truth.
+    expect((userDb.content.metadata as { signal: { contents: unknown } }).signal.contents).toEqual(fileContents);
+
+    const reminder = createSignal({
+      type: 'system-reminder',
+      contents: fileContents,
+      attributes: { kind: 'screenshot' },
+    });
+    const reminderDb = reminder.toDBMessage();
+    expect(reminderDb.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Look at this' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
+
+    // Empty contents still produce a single empty text part so consumers that assume non-empty parts stay happy.
+    const emptyReminder = createSignal({ type: 'system-reminder', contents: '' });
+    expect(emptyReminder.toDBMessage().content.parts).toEqual([{ type: 'text', text: '' }]);
   });
 
   it('rejects invalid XML names for contextual signal markup', () => {

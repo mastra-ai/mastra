@@ -1,7 +1,8 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 
+import { MessageList } from './message-list';
 import type { BaseMessageListInput } from './message-list';
-import type { MastraDBMessage } from './message-list/state/types';
+import type { MastraDBMessage, MastraMessagePart } from './message-list/state/types';
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -33,7 +34,7 @@ export type UserMessageAgentSignalInput = AgentSignalInputBase & {
  */
 export type ContextAgentSignalInput = AgentSignalInputBase & {
   type: Exclude<AgentSignalType, 'user-message'>;
-  contents: string;
+  contents: AgentSignalContents;
 };
 
 /**
@@ -113,43 +114,138 @@ function signalAttributesToXml(attributes?: AgentSignalInput['attributes']): str
   return serialized ? ` ${serialized}` : '';
 }
 
-export function signalToXmlMarkup(signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>): string {
+// Render a text-only signal as a single XML element string. For multimodal contents
+// (file/image parts) use signalToLLMMessage which preserves attachments. This helper exists
+// for callers that already have a flat string and want the canonical XML wrapping.
+export function signalToXmlMarkup(signal: {
+  type: AgentSignalInput['type'];
+  contents?: string;
+  attributes?: AgentSignalInput['attributes'];
+}): string {
   assertXmlName(signal.type, 'tag name');
-  return `<${signal.type}${signalAttributesToXml(signal.attributes)}>${escapeXml(signalContentsToText(signal.contents))}</${signal.type}>`;
+  const attributesXml = signalAttributesToXml(signal.attributes);
+  // Self-close when there is no inner text — conventional XML shape for empty elements.
+  if (!signal.contents) return `<${signal.type}${attributesXml} />`;
+  return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
 }
 
-function signalContentsToText(contents: AgentSignalContents): string {
-  if (typeof contents === 'string') return contents;
-  if (Array.isArray(contents)) {
-    return contents.map(content => signalContentsToText(content as AgentSignalContents)).join('\n');
-  }
-  if (contents && typeof contents === 'object') {
-    const content = (contents as { content?: unknown }).content;
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-      return content
-        .map(part =>
-          part && typeof part === 'object' && 'text' in part ? String((part as { text: unknown }).text) : '',
-        )
-        .filter(Boolean)
-        .join('\n');
+// Normalize the loose BaseMessageListInput surface (string / CoreMessage / arrays / etc.) into
+// a single canonical MastraDBMessage[] shape using MessageList's own input pipeline. Once we
+// have this, the LLM and DB projections both read from the same walked representation instead
+// of each re-walking the raw input with its own duck-typing logic.
+function normalizeContents(contents: AgentSignalContents): MastraDBMessage[] {
+  const list = new MessageList();
+  list.add(contents, 'input');
+  return list.get.all.db();
+}
+
+// Flatten the canonical normalized form back into the text-only parts a UI would render.
+// Used by mastraDBMessageToSignal / dataPartToSignal to recover a string for non-user-message
+// signals whose original contents weren't preserved in metadata.
+function dbMessagesToText(dbMessages: MastraDBMessage[]): string {
+  return dbMessages
+    .flatMap(msg => msg.content?.parts ?? [])
+    .filter((part): part is { type: 'text'; text: string } => part.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text)
+    .filter(Boolean)
+    .join('\n');
+}
+
+// Project the canonical normalized form into the MastraMessagePart[] shape stored on
+// signal DB rows. Falls back to a single empty text part so consumers that assume non-empty
+// parts arrays stay happy.
+function dbMessagesToParts(dbMessages: MastraDBMessage[]): MastraMessagePart[] {
+  const parts = dbMessages.flatMap(msg => msg.content?.parts ?? []);
+  return parts.length > 0 ? parts : [{ type: 'text', text: '' }];
+}
+
+function hasMeaningfulAttributes(attributes?: AgentSignalInput['attributes']): boolean {
+  if (!attributes) return false;
+  return Object.keys(attributes).some(key => {
+    const value = attributes[key];
+    return value !== null && value !== undefined;
+  });
+}
+
+// True when every part in the normalized form is a text part. Drives the choice between the
+// "wrap as single CoreMessage" fast path and the multimodal handling below.
+function isTextOnlyDb(dbMessages: MastraDBMessage[]): boolean {
+  return dbMessages.every(msg => (msg.content?.parts ?? []).every(part => part.type === 'text'));
+}
+
+// Inline-wrap the first text part of the normalized DB messages with the signal's XML tag,
+// or prefix a self-closing marker message when no text part exists. Used by user-message
+// signals so the wrapper stays adjacent to the message it labels when possible.
+function injectMarkerInline(
+  signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>,
+  dbMessages: MastraDBMessage[],
+): BaseMessageListInput {
+  let wrapped = false;
+  const next = dbMessages.map(dbMsg => {
+    if (wrapped || !dbMsg.content?.parts) return { ...dbMsg, role: 'user' as const };
+    const parts: MastraMessagePart[] = [];
+    for (const part of dbMsg.content.parts) {
+      if (!wrapped && part.type === 'text') {
+        wrapped = true;
+        parts.push({ ...part, text: signalToXmlMarkup({ ...signal, contents: part.text }) });
+      } else {
+        parts.push(part);
+      }
     }
-  }
-  return '';
+    return { ...dbMsg, role: 'user' as const, content: { ...dbMsg.content, parts } };
+  });
+
+  if (wrapped) return next;
+
+  // No text part anywhere — prepend a self-closing marker message so attributes still surface.
+  const prefixMessage = {
+    role: 'user',
+    content: signalToXmlMarkup({ type: signal.type, attributes: signal.attributes }),
+  } satisfies CoreMessage;
+  return [prefixMessage, ...next];
 }
 
-function signalToLLMMessage(signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>): BaseMessageListInput {
-  if (signal.type === 'user-message') {
+// Build the LLM-facing projection from the pre-normalized canonical form. Three shapes:
+//   1. user-message with no attributes → pass original contents through unchanged
+//   2. text-only → single wrapped CoreMessage
+//   3. multimodal → user-message inlines the marker into the first text part; other signal
+//      types prefix a self-closing marker so framework context stays distinct from the
+//      preserved original contents
+function signalToLLMMessage(
+  signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>,
+  normalized: MastraDBMessage[],
+): BaseMessageListInput {
+  const isUserMessage = signal.type === 'user-message';
+  const hasAttrs = hasMeaningfulAttributes(signal.attributes);
+
+  // user-message is the model's natural input language; pass through untouched unless attributes
+  // need surfacing. Non-user-message signals always wrap — the XML wrapper is what tells the
+  // model "this is framework context, not a user/assistant turn".
+  if (isUserMessage && !hasAttrs) {
     return signal.contents;
   }
 
-  return [
-    {
-      // user role for system messages because "system" role can not in any provider go contextually within conversation history, which is what signals need to do. Not assistant role because then the assistant will think it was the one who said that. User role is the only appropriate role. We wrap in xml tags to make it clearer to the LLM that this is system added context.
-      role: 'user',
-      content: signalToXmlMarkup({ ...signal, contents: signalContentsToText(signal.contents) }),
-    } as CoreMessage,
-  ];
+  // Text-only fast path: emit a single wrapped user message. user role because providers reject
+  // system role mid-conversation, and assistant role would confuse the model about who spoke.
+  if (isTextOnlyDb(normalized)) {
+    const content = signalToXmlMarkup({ ...signal, contents: dbMessagesToText(normalized) });
+    return [{ role: 'user', content } satisfies CoreMessage];
+  }
+
+  // Multimodal user-message: inline-inject the marker into the first text part so attributes
+  // like messageId stay tied to the message they describe.
+  if (isUserMessage) {
+    return injectMarkerInline(signal, normalized);
+  }
+
+  // Multimodal non-user-message: prefix a self-closing marker and pass the original contents
+  // through untouched. Framework context (system-reminder, screenshot, etc.) should remain
+  // distinct from its reference material, not have the marker hidden inside it.
+  const prefixMessage = {
+    role: 'user',
+    content: signalToXmlMarkup({ type: signal.type, attributes: signal.attributes }),
+  } satisfies CoreMessage;
+  return [prefixMessage, signal.contents] as BaseMessageListInput;
 }
 
 function signalToDataPart(signal: ReturnType<typeof normalizeSignal>): AgentSignalDataPart {
@@ -168,6 +264,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>): AgentSign
 
 function signalToDBMessage(
   signal: ReturnType<typeof normalizeSignal>,
+  normalized: MastraDBMessage[],
   options?: { threadId?: string; resourceId?: string },
 ): MastraDBMessage {
   return {
@@ -179,7 +276,7 @@ function signalToDBMessage(
     type: signal.type,
     content: {
       format: 2,
-      parts: [{ type: 'text', text: signalContentsToText(signal.contents) }],
+      parts: dbMessagesToParts(normalized),
       metadata: {
         signal: {
           id: signal.id,
@@ -203,12 +300,16 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
 
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   const signal = normalizeSignal(input);
+  // Walk contents once via MessageList; both toDBMessage and toLLMMessage read from the
+  // memoized canonical form instead of duck-typing the raw input shape themselves.
+  let normalizedCache: MastraDBMessage[] | undefined;
+  const normalized = () => (normalizedCache ??= normalizeContents(signal.contents));
 
   return {
     ...signal,
     __isCreatedSignal: true as const,
-    toDBMessage: options => signalToDBMessage(signal, options),
-    toLLMMessage: () => signalToLLMMessage(signal),
+    toDBMessage: options => signalToDBMessage(signal, normalized(), options),
+    toLLMMessage: () => signalToLLMMessage(signal, normalized()),
     toDataPart: () => signalToDataPart(signal),
   };
 }
@@ -258,7 +359,9 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
   };
 
   return createSignal(
-    type === 'user-message' ? { ...base, type, contents } : { ...base, type, contents: signalContentsToText(contents) },
+    type === 'user-message'
+      ? { ...base, type, contents }
+      : { ...base, type, contents: dbMessagesToText(normalizeContents(contents)) },
   );
 }
 
@@ -266,6 +369,6 @@ export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal 
   return createSignal(
     part.data.type === 'user-message'
       ? { ...part.data, type: 'user-message' }
-      : { ...part.data, contents: signalContentsToText(part.data.contents) },
+      : { ...part.data, contents: dbMessagesToText(normalizeContents(part.data.contents)) },
   );
 }
