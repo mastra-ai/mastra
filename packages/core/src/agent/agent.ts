@@ -144,12 +144,65 @@ type ModelFallbacks = {
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
 
+type ProcessorLoadedToolsProvider = {
+  getLoadedToolsForRequestContext?: (args: {
+    requestContext: RequestContext;
+  }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
+};
+
+type ProcessorWorkflowChildrenContainer = {
+  steps?: Record<string, unknown> | unknown[];
+  children?: Record<string, unknown> | unknown[];
+  stepGraph?: Array<{
+    step?: unknown;
+    steps?: Array<{ step?: unknown } | unknown>;
+  }>;
+};
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
   }
 
   return cb(value as T);
+}
+
+function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
+  const workflowChildren = workflow as ProcessorWorkflowChildrenContainer;
+  const children: unknown[] = [];
+  const seen = new Set<unknown>();
+
+  const addChild = (child: unknown) => {
+    if (!child || seen.has(child)) {
+      return;
+    }
+    seen.add(child);
+    children.push(child);
+  };
+
+  const addChildren = (value: ProcessorWorkflowChildrenContainer['steps']) => {
+    if (Array.isArray(value)) {
+      value.forEach(addChild);
+      return;
+    }
+    Object.values(value ?? {}).forEach(addChild);
+  };
+
+  addChildren(workflowChildren.steps);
+  addChildren(workflowChildren.children);
+
+  for (const entry of workflowChildren.stepGraph ?? []) {
+    addChild(entry.step);
+    for (const stepEntry of entry.steps ?? []) {
+      addChild(
+        stepEntry && typeof stepEntry === 'object' && 'step' in stepEntry
+          ? (stepEntry as { step?: unknown }).step
+          : stepEntry,
+      );
+    }
+  }
+
+  return children;
 }
 
 function hasConfiguredProcessor(
@@ -877,6 +930,11 @@ export class Agent<
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        const toolProvider = processor as ProcessorLoadedToolsProvider;
+        if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+          (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+            toolProvider.getLoadedToolsForRequestContext.bind(processor);
+        }
       }
       workflow = workflow.then(step);
     }
@@ -2909,6 +2967,99 @@ export class Agent<
   }
 
   /**
+   * Returns tools that input processors loaded into their own state.
+   * These tools need to be available before a resumed approval call enters toolCallStep.
+   * Otherwise the resumed workflow bypasses processInputStep and loses dynamic executors.
+   * @internal
+   */
+  private async listInputProcessorLoadedTools({
+    processors,
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    outputWriter,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+    ...rest
+  }: {
+    processors: InputProcessorOrWorkflow[];
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
+    autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    const convertedProcessorTools: Record<string, CoreTool> = {};
+
+    const collectLoadedTools = async (processor: InputProcessorOrWorkflow | unknown) => {
+      if (isProcessorWorkflow(processor)) {
+        for (const childProcessor of listProcessorWorkflowChildren(processor)) {
+          await collectLoadedTools(childProcessor);
+        }
+      }
+
+      const toolProvider = processor as ProcessorLoadedToolsProvider;
+
+      if (typeof toolProvider.getLoadedToolsForRequestContext !== 'function') {
+        return;
+      }
+
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext });
+      if (!loadedTools || Object.keys(loadedTools).length === 0) {
+        return;
+      }
+
+      const workspace = await this.getWorkspace({ requestContext });
+      const memory = await this.getMemory({ requestContext });
+      const model = await this.getModel({ requestContext });
+
+      for (const [toolName, tool] of Object.entries(loadedTools)) {
+        if (isMastraTool(tool) || isProviderTool(tool)) {
+          convertedProcessorTools[toolName] = makeCoreTool(
+            tool as unknown as ToolToConvert,
+            {
+              name: toolName,
+              runId,
+              threadId,
+              resourceId,
+              logger: this.logger,
+              mastra: mastraProxy as MastraUnion | undefined,
+              memory,
+              agentName: this.name,
+              agentId: this.id,
+              requestContext,
+              ...observabilityContext,
+              model,
+              outputWriter,
+              tracingPolicy: this.#options?.tracingPolicy,
+              requireApproval: (tool as any).requireApproval,
+              backgroundConfig: (tool as any).background,
+              workspace,
+            },
+            undefined,
+            autoResumeSuspendedTools,
+            backgroundTaskEnabled,
+          );
+        } else {
+          convertedProcessorTools[toolName] = tool as CoreTool;
+        }
+      }
+    };
+
+    for (const processor of processors) {
+      await collectLoadedTools(processor);
+    }
+
+    return convertedProcessorTools;
+  }
+
+  /**
    * Executes input processors on the message list before LLM processing.
    * @internal
    */
@@ -4835,6 +4986,19 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
+    const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
+      processors: configuredInputProcessors,
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      outputWriter,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+    });
+
     const allTools = {
       ...assignedTools,
       ...memoryTools,
@@ -4846,6 +5010,7 @@ export class Agent<
       ...skillTools,
       ...channelTools,
       ...browserTools,
+      ...inputProcessorLoadedTools,
     };
     return this.formatTools(allTools);
   }

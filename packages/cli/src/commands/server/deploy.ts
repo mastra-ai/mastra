@@ -233,11 +233,34 @@ async function resolveProject(
 
   if (flagProject) {
     const projects = await fetchServerProjects(token, orgId);
-    const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
+    const byId = projects.find(proj => proj.id === flagProject);
+    const bySlug = projects.find(proj => proj.slug === flagProject);
+    const byName = projects.filter(proj => proj.name === flagProject);
+    if (!byId && !bySlug && byName.length > 1) {
+      p.cancel(
+        `Multiple projects are named "${flagProject}". Pass --project with the project id or slug to disambiguate.`,
+      );
+      process.exit(1);
+    }
+    const match = byId ?? bySlug ?? (byName.length === 1 ? byName[0] : undefined);
     if (match) {
       return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
-    return { projectId: flagProject, projectName: flagProject, projectSlug: flagProject };
+
+    // No match — create a new project with the flag value as its name.
+    if (!autoAccept) {
+      const confirmed = await p.confirm({
+        message: `No project named "${flagProject}" found. Create it?`,
+      });
+      if (p.isCancel(confirmed) || !confirmed) {
+        p.cancel('Deploy cancelled.');
+        process.exit(0);
+      }
+    }
+
+    const created = await createServerProject(token, orgId, flagProject);
+    p.log.success(`Created project "${created.name}"`);
+    return { projectId: created.id, projectName: created.name, projectSlug: created.slug ?? created.name };
   }
 
   if (projectConfig?.projectId && projectConfig.organizationId === orgId) {
