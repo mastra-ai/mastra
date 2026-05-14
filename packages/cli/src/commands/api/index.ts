@@ -221,7 +221,15 @@ export function registerApiCommand(program: CommanderCommand): void {
   });
 
   const trace = api.command('trace').description('Inspect observability traces');
-  addAction(trace, 'list', 'GET /observability/traces', { description: 'List observability traces', list: true });
+  addAction(trace, 'list', 'GET /observability/traces/light', {
+    description: 'List observability traces',
+    list: true,
+    verboseRouteKey: 'GET /observability/traces',
+    examples: [
+      { description: 'List lightweight traces', command: `mastra api trace list '{"page":0,"perPage":20}'` },
+      { description: 'List full traces', command: `mastra api trace list '{"page":0,"perPage":20}' --verbose` },
+    ],
+  });
   addAction(trace, 'get', 'GET /observability/traces/:traceId/light', {
     description: 'Get trace details',
     verboseRouteKey: 'GET /observability/traces/:traceId',

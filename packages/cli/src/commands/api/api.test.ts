@@ -54,8 +54,10 @@ describe('api command registration', () => {
     const trace = api?.commands.find(command => command.name() === 'trace');
     const traceGet = trace?.commands.find(command => command.name() === 'get');
 
+    expect(trace?.commands.find(command => command.name() === 'list')?.helpInformation()).toContain('--verbose');
     expect(traceGet?.helpInformation()).toContain('--verbose');
     expect(trace?.commands.find(command => command.name() === 'span')?.description()).toBe('Get a trace span');
+    expect(API_COMMANDS.traceList).toMatchObject({ method: 'GET', path: '/observability/traces/light' });
     expect(API_COMMANDS.traceGet).toMatchObject({ method: 'GET', path: '/observability/traces/:traceId/light' });
     expect(API_COMMANDS.traceSpan).toMatchObject({
       method: 'GET',
@@ -208,6 +210,65 @@ describe('api command executor', () => {
       headers: { 'content-type': 'application/json' },
       signal: expect.any(AbortSignal),
       body: JSON.stringify({ resourceId: 'user-1', threadId: 'thread-1', title: 'Test thread' }),
+    });
+  });
+
+  it('lists lightweight traces by default and full traces with --verbose', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          spans: [{ traceId: 'trace-1', spanId: 'span-1', name: 'agent' }],
+          pagination: { total: 1, page: 0, perPage: 1, hasMore: false },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          spans: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }],
+          pagination: { total: 1, page: 0, perPage: 1, hasMore: false },
+        }),
+      );
+
+    await executeDescriptor(API_COMMANDS.traceList, [], '{"page":0,"perPage":1}', {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://observability.mastra.ai/api/observability/traces/light?page=0&perPage=1',
+      {
+        method: 'GET',
+        headers: { Authorization: 'Bearer token', 'X-Mastra-Project-Id': 'project-1' },
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      data: [{ traceId: 'trace-1', spanId: 'span-1', name: 'agent' }],
+      page: { total: 1, page: 0, perPage: 1, hasMore: false },
+    });
+
+    stdout = '';
+
+    await executeDescriptor(API_COMMANDS.traceList, [], '{"page":0,"perPage":1}', {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+      verbose: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://observability.mastra.ai/api/observability/traces?page=0&perPage=1',
+      {
+        method: 'GET',
+        headers: { Authorization: 'Bearer token', 'X-Mastra-Project-Id': 'project-1' },
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      data: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }],
+      page: { total: 1, page: 0, perPage: 1, hasMore: false },
     });
   });
 
