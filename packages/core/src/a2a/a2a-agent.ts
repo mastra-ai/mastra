@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk';
-import type { AgentExecutionOptionsBase, SubAgent } from '../agent/agent.types';
+import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../agent/message-list';
 import { convertMessages } from '../agent/message-list/utils/convert-messages';
+import type { SubAgent } from '../agent/subagent';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import { RequestContext } from '../request-context';

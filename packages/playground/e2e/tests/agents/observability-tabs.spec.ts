@@ -43,6 +43,9 @@ async function mockSystemPackages(page: Page, observabilityEnabled: boolean) {
 test('requests agent traces when runtime observability is available without package metadata', async ({ page }) => {
   await mockSystemPackages(page, true);
 
+  // The Traces tab uses the shared Observability TracesPage, which defaults to
+  // `listMode=branches` (PR #16493) and hits `/observability/branches`. We mock
+  // both endpoints so the assertion still holds if the default flips back.
   let tracesUrl: URL | undefined;
   await page.route('**/api/observability/traces?**', async route => {
     tracesUrl = new URL(route.request().url());
@@ -51,6 +54,17 @@ test('requests agent traces when runtime observability is available without pack
       contentType: 'application/json',
       body: JSON.stringify({
         spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
+  await page.route('**/api/observability/branches?**', async route => {
+    tracesUrl = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        branches: [],
         pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
       }),
     });
@@ -83,6 +97,8 @@ test('keeps agent observability tabs disabled when runtime observability is unav
 test('agent traces tab pre-fills the agent filter as URL params on first visit', async ({ page }) => {
   await mockSystemPackages(page, true);
 
+  // Default list mode is `branches` (PR #16493) — mock both endpoints so the
+  // captured URL works regardless of which mode is active.
   let tracesUrl: URL | undefined;
   await page.route('**/api/observability/traces?**', async route => {
     tracesUrl = new URL(route.request().url());
@@ -91,6 +107,17 @@ test('agent traces tab pre-fills the agent filter as URL params on first visit',
       contentType: 'application/json',
       body: JSON.stringify({
         spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
+  await page.route('**/api/observability/branches?**', async route => {
+    tracesUrl = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        branches: [],
         pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
       }),
     });
@@ -117,6 +144,16 @@ test('agent traces tab locks the scope filter pills and hides them from the crea
       contentType: 'application/json',
       body: JSON.stringify({
         spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
+  await page.route('**/api/observability/branches?**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        branches: [],
         pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
       }),
     });
@@ -163,6 +200,16 @@ test('saved filters in an agent-scoped traces tab do not leak to other agents or
       }),
     });
   });
+  await page.route('**/api/observability/branches?**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        branches: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
 
   // Land on a page first so we have an origin to seed localStorage against.
   await page.goto('/observability');
@@ -195,6 +242,16 @@ test('global /observability traces page keeps the filter pills editable', async 
       contentType: 'application/json',
       body: JSON.stringify({
         spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
+  await page.route('**/api/observability/branches?**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        branches: [],
         pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
       }),
     });
