@@ -1,15 +1,62 @@
 ---
-title: "Reference: Agent.getMetadata() | Agents"
-description: "Documentation for the `Agent.getMetadata()` method in Mastra agents, which retrieves static agent metadata."
+title: 'Reference: Agent.getMetadata() | Agents'
+description: "Documentation for the `Agent.getMetadata()` method in Mastra agents, which retrieves the metadata configured for the agent."
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Agent.getMetadata()
 
-The `.getMetadata()` method retrieves metadata configured for an agent. Use metadata to classify agents in clients without encoding that data in the agent ID or name. Metadata can be a static record or a function resolved from the request context.
+The `.getMetadata()` method retrieves the metadata configured for an agent, resolving it if it's a function. Use metadata to classify agents in clients without encoding that data in the agent ID or name.
 
 ## Usage example
+
+```typescript
+await agent.getMetadata()
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'undefined',
+            description: 'Request Context passed to dynamic metadata functions. Ignored when metadata is static.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown> | Promise<Record<string, unknown>>',
+    description:
+      'The metadata configured for the agent, or `undefined` if no metadata was configured. Returns either directly or as a promise that resolves to the metadata when defined as a function.',
+  },
+]}
+/>
+
+## Extended usage example
 
 Static metadata:
 
@@ -46,33 +93,7 @@ export const supportAgent = new Agent({
 const metadata = await supportAgent.getMetadata({ requestContext })
 ```
 
-## Parameters
-
-<PropertiesTable
-  content={[
-  {
-    name: 'requestContext',
-    type: 'RequestContext',
-    isOptional: true,
-    description: 'Request context passed to dynamic metadata functions. Ignored when metadata is static.',
-  },
-]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined>',
-    description:
-      'The metadata configured for the agent, or `undefined` if no metadata was configured. Returns a `Promise` when metadata is defined as a function.',
-  },
-]}
-/>
-
 ## Related
 
-- [Agent class](/reference/agents/agent)
 - [Agents overview](/docs/agents/overview)
+- [Request Context](/docs/server/request-context)

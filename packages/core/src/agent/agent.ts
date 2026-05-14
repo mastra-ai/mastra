@@ -1569,19 +1569,13 @@ export class Agent<
   }
 
   /**
-   * Returns metadata configured for the agent. Metadata can be static or
-   * resolved dynamically from the request context.
+   * Gets the metadata for this agent, resolving function-based metadata if necessary.
+   * Metadata is a classification bag for clients and is never read by the agent runtime.
    *
-   * @example Static
+   * @example
    * ```typescript
-   * const metadata = agent.getMetadata();
+   * const metadata = await agent.getMetadata();
    * console.log(metadata?.type); // 'support'
-   * ```
-   *
-   * @example Dynamic
-   * ```typescript
-   * const metadata = await agent.getMetadata({ requestContext });
-   * console.log(metadata?.tenant); // resolved from requestContext
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
