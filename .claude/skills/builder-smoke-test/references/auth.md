@@ -113,7 +113,11 @@ session cookie into curl):
 curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -H 'Cookie: <session-cookie>' \
-  -d '{"name": "Auth Test Skill"}' | jq '.authorId'
+  -d '{
+    "name": "Auth Test Skill",
+    "description": "Created to verify authorId is set under auth-on",
+    "instructions": "Auth-on smoke test placeholder."
+  }' | jq '.authorId'
 ```
 
 - [ ] `authorId` is a non-empty string matching the logged-in WorkOS user ID (typically prefixed `user_…`); it must not be `null`, `undefined`, or omitted

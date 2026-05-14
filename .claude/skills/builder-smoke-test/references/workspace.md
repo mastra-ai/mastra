@@ -42,6 +42,7 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```bash
 curl -s -X POST $BASE/stored/workspaces \
   -H 'Content-Type: application/json' \
+  ${COOKIE:+-H "Cookie: $COOKIE"} \
   -d '{
     "id": "smoke-test-workspace",
     "name": "Smoke Test Workspace",
@@ -63,6 +64,7 @@ curl -s -X POST $BASE/stored/workspaces \
 ```bash
 curl -s -X PATCH $BASE/stored/workspaces/smoke-test-workspace \
   -H 'Content-Type: application/json' \
+  ${COOKIE:+-H "Cookie: $COOKIE"} \
   -d '{
     "name": "Updated Smoke Test Workspace",
     "description": "Updated during smoke test"
@@ -78,7 +80,7 @@ curl -s -X PATCH $BASE/stored/workspaces/smoke-test-workspace \
 ### 5. Delete the Test Workspace
 
 ```bash
-curl -s -X DELETE $BASE/stored/workspaces/smoke-test-workspace -H "$SESSION" -o /dev/null -w "%{http_code}\n"
+curl -s -X DELETE ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/smoke-test-workspace -o /dev/null -w "%{http_code}\n"
 ```
 
 **Verify:**

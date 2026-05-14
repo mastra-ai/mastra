@@ -50,8 +50,22 @@ while [ $# -gt 0 ]; do
         echo "preflight: --expect requires a value (on|off)" >&2
         exit 2
       fi
+      case "$2" in
+        on|off) ;;
+        *)
+          echo "preflight: --expect must be 'on' or 'off' (got: $2)" >&2
+          exit 2 ;;
+      esac
       EXPECT_MODE="$2"; shift 2 ;;
-    --expect=*) EXPECT_MODE="${1#--expect=}"; shift ;;
+    --expect=*)
+      val="${1#--expect=}"
+      case "$val" in
+        on|off) ;;
+        *)
+          echo "preflight: --expect must be 'on' or 'off' (got: $val)" >&2
+          exit 2 ;;
+      esac
+      EXPECT_MODE="$val"; shift ;;
     --skip-scaffold) SKIP_SCAFFOLD="yes"; shift ;;
     --dir)
       if [ $# -lt 2 ] || [ -z "${2:-}" ]; then

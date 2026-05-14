@@ -137,16 +137,17 @@ curl -s $BASE/stored/workspaces/builder-workspace-v2 | jq '{status, metadata}'
 Create a user workspace, then restart the server:
 
 ```bash
-# Create user workspace
+# Create user workspace (under --auth on, also pass -H "Cookie: $COOKIE")
 curl -s -X POST $BASE/stored/workspaces \
   -H 'Content-Type: application/json' \
+  ${COOKIE:+-H "Cookie: $COOKIE"} \
   -d '{"id": "user-workspace", "name": "User Workspace"}' | jq .
 
 # Record state
-curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
+curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
 
 # Restart server, then check again
-curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
+curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
 ```
 
 - [ ] User workspace is unchanged after restart
@@ -158,7 +159,7 @@ curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedA
 Clean up:
 
 ```bash
-curl -s -X DELETE $BASE/stored/workspaces/user-workspace
+curl -s -X DELETE ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/user-workspace
 ```
 
 ### 6. Metadata Backfill — unit-test only

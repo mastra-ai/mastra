@@ -11,7 +11,7 @@ or when a code change touches one of those surfaces.
 - **Core** (steps 1–8): shell loads, skills list, skills create starter,
   skill edit page, agent list, agent view page, star toggle, role
   impersonation menu (admin/owner only).
-- **Extended** (steps 9–14): model dropdown, workspace dropdown, Library
+- **Extended** (steps 9–15): model dropdown, workspace dropdown, Library
   - Copy flow, registry button gating, origin badges, mobile bottom-bar
     parity, scrollable list layout.
 
@@ -171,7 +171,7 @@ Navigate to `http://localhost:4111/agent-builder/library`.
 
 - [ ] Header: `Library / Agents shared with the team library`
 - [ ] Agents/Skills tab toggle is present
-- [ ] On the Skills tab, seeded public skills appear (e.g. `web-design-guidelines`, `api-design-principles`, `vercel-react-best-practices`, `postgres-query-tuning` — log any drift)
+- [ ] On the Skills tab, the seeded public skill appears: `Seeded public skill` (id `smoke-seed-public-skill`, owner `user_seed_other`). The private companion (`smoke-seed-private-skill`) must **not** appear here for non-owners. See `scripts/seed-multi-user.sh` for the canonical fixtures.
 - [ ] Under `--auth on`, clicking a row you don't own should navigate to `/agent-builder/skills/<id>/view` (read-only). Under `--auth off` everyone is treated as owner so the navigation lands on `/edit` instead — log which path you observed.
 - [ ] Under `--auth on`, a `Copy to my skills` action is available on the view page; submitting it creates a private copy with origin badge `copied`
 
