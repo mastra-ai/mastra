@@ -422,6 +422,7 @@ export function MastraRuntimeProvider({
   const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
+  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS === 'true';
 
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
@@ -445,11 +446,16 @@ export function MastraRuntimeProvider({
   }, [initialLegacyMessages]);
 
   const chatRequestContext = useMemo(() => {
-    if (!agentVersionId) return undefined;
+    if (!agentVersionId && !requestContext) return undefined;
     const ctx = new RequestContext();
-    ctx.set('agentVersionId', agentVersionId);
+    Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+      ctx.set(key, value);
+    });
+    if (agentVersionId) {
+      ctx.set('agentVersionId', agentVersionId);
+    }
     return ctx;
-  }, [agentVersionId]);
+  }, [agentVersionId, requestContext]);
 
   const {
     messages,
@@ -470,6 +476,7 @@ export function MastraRuntimeProvider({
     threadId,
     initialMessages,
     requestContext: chatRequestContext,
+    enableThreadSignals: threadSignalsEnabled,
     onSignalSent: addPendingSignal,
     onSignalEcho: removePendingSignal,
     onThreadSignalsUnsupported: () => {
@@ -1361,7 +1368,8 @@ export function MastraRuntimeProvider({
     <ThreadRuntimeStateProvider
       value={{
         isStreaming: isLegacyRunning || isRunningStream,
-        canSendWhileStreaming: isSupportedModel && !threadSignalsUnsupported,
+        canSendWhileStreaming:
+          isSupportedModel && threadSignalsEnabled && Boolean(threadId) && !threadSignalsUnsupported,
         cancelStream: onCancel,
         pendingSignals,
         hasPendingMessages: pendingSignals.length > 0,

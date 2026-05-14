@@ -1227,6 +1227,15 @@
       "docUrl": "https://fireworks.ai/docs/",
       "gateway": "models.dev"
     },
+    "ambient": {
+      "url": "https://api.ambient.xyz/v1",
+      "apiKeyEnvVar": "AMBIENT_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Ambient",
+      "models": ["moonshotai/kimi-k2.6", "zai-org/GLM-5.1-FP8"],
+      "docUrl": "https://ambient.xyz",
+      "gateway": "models.dev"
+    },
     "kimi-for-coding": {
       "url": "https://api.kimi.com/coding/v1",
       "apiKeyEnvVar": "KIMI_API_KEY",
@@ -5981,6 +5990,7 @@
       "accounts/fireworks/models/qwen3p6-plus",
       "accounts/fireworks/routers/kimi-k2p5-turbo"
     ],
+    "ambient": ["moonshotai/kimi-k2.6", "zai-org/GLM-5.1-FP8"],
     "kimi-for-coding": ["k2p5", "k2p6", "kimi-k2-thinking"],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "opencode-go": [
