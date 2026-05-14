@@ -3,6 +3,7 @@ import {
   ButtonWithTooltip,
   DateTimeRangePicker,
   NoTracesInfo,
+  Notice,
   PageLayout,
   PropertyFilterCreator,
   SpanDataPanelView,
@@ -13,6 +14,7 @@ import {
   TracesToolbar,
   buildTraceListFilters,
   createTracePropertyFilterFields,
+  isBranchesNotSupportedError,
   neutralizeFilterTokens,
   useEntityNames,
   useEnvironments,
@@ -83,6 +85,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [traceCollapsed, setTraceCollapsed] = useState(false);
+  // Set once we detect the active storage provider doesn't implement `listBranches`. Drives both the
+  // auto-flip from branches→traces below and hiding the Branches option in the List mode filter.
+  const [branchesUnsupported, setBranchesUnsupported] = useState(false);
+  const [branchesNoticeDismissed, setBranchesNoticeDismissed] = useState(false);
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<{
     traceId: string;
     rootSpanId: string | undefined;
@@ -150,6 +156,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           serviceNames: isServiceNamesLoading,
           environments: isEnvironmentsLoading,
         },
+        branchesSupported: !branchesUnsupported,
       }),
     [
       availableTags,
@@ -160,6 +167,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       isEntityNamesLoading,
       isServiceNamesLoading,
       isEnvironmentsLoading,
+      branchesUnsupported,
     ],
   );
 
@@ -186,6 +194,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
   const threadTitles = tracesData?.threadTitles ?? {};
+
+  // Storage providers that don't implement `listBranches` throw a known MastraError. When that
+  // surfaces in branches mode, treat the provider as branches-incapable for the rest of the
+  // session: flip the URL back to traces mode so the next query succeeds, and remove the
+  // Branches option from the List mode filter (see `branchesSupported` in `filterFields`).
+  useEffect(() => {
+    if (!tracesError || branchesUnsupported) return;
+    if (!isBranchesNotSupportedError(tracesError)) return;
+    setBranchesUnsupported(true);
+    if (url.listMode === 'branches') url.handleListModeChange('traces');
+  }, [tracesError, branchesUnsupported, url]);
 
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, url.spanIdParam ?? null, id =>
     url.handleSpanChange(id),
@@ -293,7 +312,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     </PageLayout.TopArea>
   );
 
-  if (tracesError) {
+  // Swallow the "branches not supported" error — the effect above flips listMode back to traces
+  // and the next query will succeed. Showing the red error screen for one frame would be jarring.
+  if (tracesError && !isBranchesNotSupportedError(tracesError)) {
     return (
       <PageLayout width="wide" height="full">
         {pageTopArea}
@@ -317,9 +338,27 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     );
   }
 
+  const branchesUnsupportedNotice =
+    branchesUnsupported && !branchesNoticeDismissed ? (
+      <Notice
+        variant="info"
+        action={
+          <Notice.Button variant="ghost" onClick={() => setBranchesNoticeDismissed(true)}>
+            Dismiss
+          </Notice.Button>
+        }
+        className="mb-4"
+      >
+        <Notice.Message>
+          Branches mode isn't supported by this storage provider — switched back to Traces.
+        </Notice.Message>
+      </Notice>
+    ) : null;
+
   return (
     <PageLayout width="wide" height="full">
       {pageTopArea}
+      {branchesUnsupportedNotice}
 
       <TracesLayout
         traceCollapsed={traceCollapsed}
