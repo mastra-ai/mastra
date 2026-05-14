@@ -591,10 +591,19 @@ export class GithubSignals {
   }
 
   #ensureTimer() {
-    if (this.#activeSubscriptions.size === 0 && this.#timer) {
-      clearInterval(this.#timer);
-      this.#timer = undefined;
+    if (this.#activeSubscriptions.size === 0) {
+      if (this.#timer) {
+        clearInterval(this.#timer);
+        this.#timer = undefined;
+      }
+      return;
     }
+
+    if (this.#timer) return;
+    this.#timer = setInterval(() => {
+      void this.poll();
+    }, this.#options.pollIntervalMs);
+    this.#timer.unref?.();
   }
 
   async #pollSubscription(subscription: ActiveSubscription) {

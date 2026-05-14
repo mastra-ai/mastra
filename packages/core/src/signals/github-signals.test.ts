@@ -161,7 +161,7 @@ describe('GithubSignals', () => {
     });
   });
 
-  it('persists a subscription and baselines existing activity without background polling', async () => {
+  it('persists a subscription, baselines existing activity, and starts idle polling', async () => {
     vi.useFakeTimers();
     const commandRunner = createSnapshotCommandRunner([
       createSnapshot({
@@ -195,8 +195,93 @@ describe('GithubSignals', () => {
       lastReviewTimestamp: '2026-01-02T00:01:00.000Z',
     });
     expect(sendSignal).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
 
+    github.destroy();
+    vi.useRealTimers();
+  });
+
+  it('polls subscribed idle threads on the interval after startup', async () => {
+    vi.useFakeTimers();
+    const commandRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'new startup comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    const [notification] = sendSignal.mock.calls[0] as any[];
+    expect(notification).toMatchObject({
+      contents: 'new startup comment',
+      attributes: { type: 'github-comment', user: 'reviewer', pr: 123 },
+    });
+    github.destroy();
+    vi.useRealTimers();
+  });
+
+  it('skips active threads during interval polling and polls once when they become idle', async () => {
+    vi.useFakeTimers();
+    const commandRunner = createSnapshotCommandRunner(
+      [
+        createSnapshot({
+          comments: [
+            {
+              id: 'comment-1',
+              body: 'idle comment',
+              createdAt: '2026-01-02T00:01:00.000Z',
+              author: { login: 'reviewer' },
+            },
+          ],
+        }),
+      ],
+      { reviewer: 'write' },
+    );
+    const github = new GithubSignals({ pollIntervalMs: 1_000, repo: 'mastra-ai/mastra', commandRunner });
+    const sendSignal = createSendSignalMock();
+    const context = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      ...context,
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastCommentTimestamp: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    github.markActive(context);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    await github.markIdle(context);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    const [notification] = sendSignal.mock.calls[0] as any[];
+    expect(notification).toMatchObject({ contents: 'idle comment' });
     github.destroy();
     vi.useRealTimers();
   });
@@ -271,7 +356,7 @@ describe('GithubSignals', () => {
       }),
     );
     expect(sendSignal).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
     github.destroy();
     vi.useRealTimers();
   });
@@ -317,7 +402,7 @@ describe('GithubSignals', () => {
     });
 
     await processSignals(github, harness, [subscribe]);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
     await processSignals(github, harness, [subscribe, unsubscribe]);
 
     expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions).toEqual({});
@@ -352,7 +437,7 @@ describe('GithubSignals', () => {
       repo: 'mastra-ai/mastra',
       prNumber: 123,
     });
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
 
     await (result?.tools?.github as any).execute({ action: 'unsubscribe', prNumber: 123 });
     expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions).toEqual({});
