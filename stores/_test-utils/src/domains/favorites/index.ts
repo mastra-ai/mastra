@@ -268,6 +268,20 @@ export function createFavoritesTests({ storage }: { storage: MastraStorage }) {
     });
 
     describe('agents.list integration', () => {
+      it('favoritedOnly without pinFavoritedFor returns empty page', async () => {
+        const a1 = createSampleAgent();
+        await agentsStorage.create({ agent: a1 });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a1.id });
+
+        const result = await agentsStorage.list({
+          favoritedOnly: true,
+          page: 0,
+          perPage: 50,
+        });
+        expect(result.agents).toEqual([]);
+        expect(result.total).toBe(0);
+      });
+
       it('favoritedOnly + pinFavoritedFor returns only the user’s favorites', async () => {
         const a1 = createSampleAgent();
         const a2 = createSampleAgent();
@@ -337,6 +351,20 @@ export function createFavoritesTests({ storage }: { storage: MastraStorage }) {
     });
 
     describe('skills.list integration', () => {
+      it('favoritedOnly without pinFavoritedFor returns empty page', async () => {
+        const s1 = createSampleSkill();
+        await skillsStorage.create({ skill: s1 });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'skill', entityId: s1.id });
+
+        const result = await skillsStorage.list({
+          favoritedOnly: true,
+          page: 0,
+          perPage: 50,
+        });
+        expect(result.skills).toEqual([]);
+        expect(result.total).toBe(0);
+      });
+
       it('favoritedOnly + pinFavoritedFor returns only the user’s favorites', async () => {
         const s1 = createSampleSkill();
         const s2 = createSampleSkill();
