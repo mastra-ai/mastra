@@ -31,8 +31,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
   const token = useMemo(() => tokens.find(t => t.fieldId === field.id), [tokens, field.id]);
   // Fall back to `defaultValue` when no token exists — lets view-toggle fields (e.g. List mode)
   // show their default option pre-selected before the user explicitly picks one.
-  const selectedValue =
-    typeof token?.value === 'string' ? token.value : !field.multi ? field.defaultValue : undefined;
+  const selectedValue = typeof token?.value === 'string' ? token.value : !field.multi ? field.defaultValue : undefined;
   const selectedValues = useMemo<string[]>(() => {
     if (Array.isArray(token?.value)) return token!.value as string[];
     if (typeof token?.value === 'string') return [token.value];
