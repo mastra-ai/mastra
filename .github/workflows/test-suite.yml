@@ -35,6 +35,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       MASTRA_SOURCE_MODE: '1'
+      MASTRA_SOURCE_MODE_WORKSPACE_ROOT: ${{ github.workspace }}
       NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     permissions:
       contents: read
@@ -94,6 +95,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       MASTRA_SOURCE_MODE: '1'
+      MASTRA_SOURCE_MODE_WORKSPACE_ROOT: ${{ github.workspace }}
       NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     permissions:
       contents: read

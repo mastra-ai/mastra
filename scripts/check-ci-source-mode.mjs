@@ -25,6 +25,13 @@ for (const workflow of checkedWorkflows) {
     if (buildPattern.test(line) && !allowedBuilds.has(location)) {
       violations.push(`${location}: ${line.trim()}`);
     }
+
+    if (line.includes("MASTRA_SOURCE_MODE: '1'")) {
+      const nextLines = lines.slice(index + 1, index + 4).join('\n');
+      if (!nextLines.includes('MASTRA_SOURCE_MODE_WORKSPACE_ROOT: ${{ github.workspace }}')) {
+        violations.push(`${location}: source-mode job is missing MASTRA_SOURCE_MODE_WORKSPACE_ROOT`);
+      }
+    }
   }
 }
 

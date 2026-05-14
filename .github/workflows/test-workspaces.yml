@@ -42,6 +42,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
       MASTRA_SOURCE_MODE: '1'
+      MASTRA_SOURCE_MODE_WORKSPACE_ROOT: ${{ github.workspace }}
       NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     strategy:
       fail-fast: false
@@ -68,6 +69,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
       MASTRA_SOURCE_MODE: '1'
+      MASTRA_SOURCE_MODE_WORKSPACE_ROOT: ${{ github.workspace }}
       NODE_OPTIONS: --max-old-space-size=8192 --conditions=mastra-source
     strategy:
       fail-fast: false
