@@ -304,7 +304,7 @@ export class MastraTUI {
     return images?.length
       ? [
           { type: 'text' as const, text: content },
-          ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
+          ...images.map(img => ({ type: 'file' as const, data: img.data, mimeType: img.mimeType })),
         ]
       : content;
   }
