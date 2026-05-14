@@ -68,4 +68,62 @@ describe('agent badge regressions', () => {
       undefined,
     );
   });
+
+  it('renders in-progress agent calls before a result is available', async () => {
+    mockResolveToChildMessages.mockReturnValue([]);
+
+    const { AgentBadgeWrapper } = await import('../badges/agent-badge-wrapper');
+
+    renderToStaticMarkup(
+      AgentBadgeWrapper({
+        agentId: 'agent-1',
+        result: undefined,
+        toolCallId: 'tool-call-1',
+        toolName: 'subagent-tool',
+        toolApprovalMetadata: undefined,
+        isNetwork: false,
+      }),
+    );
+
+    expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
+    expect(mockAgentBadge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keepOpenForStreamingChildMessages: false,
+        messages: [],
+      }),
+      undefined,
+    );
+  });
+
+  it('renders embedded agent text without fetching a subagent thread', async () => {
+    const { AgentBadgeWrapper } = await import('../badges/agent-badge-wrapper');
+
+    renderToStaticMarkup(
+      AgentBadgeWrapper({
+        agentId: 'agent-1',
+        result: {
+          text: 'remote A2A response',
+          subAgentThreadId: 'thread-that-may-not-exist-locally',
+          subAgentToolResults: [],
+        },
+        toolCallId: 'tool-call-1',
+        toolName: 'subagent-tool',
+        toolApprovalMetadata: undefined,
+        isNetwork: false,
+      }),
+    );
+
+    expect(mockUseAgentMessages).toHaveBeenCalledWith({
+      threadId: undefined,
+      agentId: 'agent-1',
+      memory: true,
+    });
+    expect(mockResolveToChildMessages).not.toHaveBeenCalled();
+    expect(mockAgentBadge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [{ type: 'text', content: 'remote A2A response' }],
+      }),
+      undefined,
+    );
+  });
 });
