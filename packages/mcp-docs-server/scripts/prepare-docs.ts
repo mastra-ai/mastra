@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { fromPackageRoot, fromRepoRoot, log } from '../src/utils';
 
 const BUILD_DIR = fromRepoRoot('docs/build');
@@ -46,6 +47,33 @@ async function copyDir(src: string, dest: string) {
   }
 }
 
+async function copySourceDocsFallback() {
+  log('Docs build manifest not found, copying source docs fallback...');
+
+  const sourceContentDir = fromRepoRoot('docs/src/content/en');
+  await fs.rm(DOCS_DEST, { recursive: true, force: true });
+
+  async function copyDocs(src: string, dest: string) {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+
+      if (entry.isDirectory()) {
+        await copyDocs(srcPath, destPath);
+      } else if (entry.isFile() && (entry.name.endsWith('.md') || entry.name.endsWith('.mdx'))) {
+        const finalDestPath = destPath.replace(/\.mdx$/, '.md');
+        await fs.copyFile(srcPath, finalDestPath);
+      }
+    }
+  }
+
+  await copyDocs(sourceContentDir, DOCS_DEST);
+  log('✅ Source docs fallback copied');
+}
+
 /**
  * Converts a source path like "docs/agents/adding-voice/llms.txt" to the destination path.
  *
@@ -85,7 +113,16 @@ async function copyLlmsTxtFiles() {
   await fs.mkdir(DOCS_DEST, { recursive: true });
 
   // Load manifest
-  const manifest = await loadManifest();
+  let manifest: Manifest;
+  try {
+    manifest = await loadManifest();
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      await copySourceDocsFallback();
+      return;
+    }
+    throw error;
+  }
 
   // Collect unique entries (since same entry can appear in multiple packages)
   const uniqueEntries = new Map<string, ManifestEntry>();
@@ -146,9 +183,11 @@ export async function prepare() {
   log('Documentation preparation complete!');
 }
 
-try {
-  await prepare();
-} catch (error) {
-  console.error('Error preparing documentation:', error);
-  process.exit(1);
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
+  try {
+    await prepare();
+  } catch (error) {
+    console.error('Error preparing documentation:', error);
+    process.exit(1);
+  }
 }
