@@ -29,6 +29,8 @@ import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { ChannelContext, ThreadHistoryMessage } from './types';
 
+const DEFAULT_INLINE_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+
 /** Message content that can be posted to a channel. */
 export type PostableMessage = string | CardElement;
 
@@ -146,10 +148,10 @@ export interface ChannelConfig {
    * Everything else is described as text metadata so the agent knows about the
    * file without crashing models that reject unsupported types.
    *
-   * - **Array of globs** — e.g. `['image/*']` (default), `['image/*', 'video/*']`
+   * - **Array of globs** — e.g. `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']` (default), `['image/*', 'video/*']`
    * - **Function** — `(mimeType: string) => boolean`
    *
-   * @default `['image/*']`
+   * @default `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`
    *
    * @example
    * ```ts
@@ -255,11 +257,11 @@ export interface ChannelConfig {
 /**
  * Build a predicate from the `inlineMedia` config option.
  * Supports glob patterns (e.g. `'image/*'`) and custom functions.
- * Default: only `image/*` is sent inline.
+ * Default: see `DEFAULT_INLINE_MEDIA_TYPES`.
  */
 function buildInlineMediaCheck(config?: string[] | ((mimeType: string) => boolean)): (mimeType: string) => boolean {
   if (typeof config === 'function') return config;
-  const patterns = config ?? ['image/*'];
+  const patterns = config ?? DEFAULT_INLINE_MEDIA_TYPES;
   return (mimeType: string) => {
     return patterns.some(pattern => {
       if (pattern === '*' || pattern === '*/*') return true;
@@ -1065,7 +1067,7 @@ export class AgentChannels {
     const parts: Exclude<CoreUserMessage['content'], string> = [{ type: 'text', text }];
     const attachments = message.attachments.filter(a => a.url || a.fetchData);
 
-    // Route attachments based on `inlineMedia` config (default: only image/*).
+    // Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
     // Inline types are sent as file parts (the LLM adapter converts image/* to
     // image content automatically). Non-inline types are described as text
     // metadata so the agent is aware of them without crashing models that
@@ -1106,6 +1108,7 @@ export class AgentChannels {
             type: 'file',
             data,
             mimeType,
+            ...(att.name ? { filename: att.name } : {}),
           });
         }
       } else {
@@ -1163,6 +1166,20 @@ export class AgentChannels {
       platform,
     });
 
+    // Subscribe BEFORE sending the signal so the subscription metadata write
+    // happens before the agent run loads the thread snapshot. Otherwise the
+    // in-flight agent run can read the thread pre-subscribe and later
+    // overwrite the `channel_subscribed` field via its own thread persistence.
+    await sdkThread.subscribe();
+
+    // Refresh the thread snapshot so the agent run sees the post-subscribe
+    // metadata. Without this, `prepareMemoryStep`'s deepEqual would detect a
+    // metadata mismatch and overwrite the freshly-written `channel_subscribed`
+    // with the stale pre-subscribe value.
+    const memoryStore = await mastra.getStorage()?.getStore('memory');
+    const refreshedThread = memoryStore ? await memoryStore.getThreadById({ threadId: mastraThread.id }) : null;
+    const threadForRun = refreshedThread ?? mastraThread;
+
     this.agent.sendSignal(
       {
         type: 'user-message',
@@ -1178,7 +1195,7 @@ export class AgentChannels {
           streamOptions: {
             requestContext,
             memory: {
-              thread: mastraThread,
+              thread: threadForRun,
               resource: threadResourceId,
             },
             // Without cards, we can't show approval buttons — auto-approve tools instead
@@ -1187,9 +1204,6 @@ export class AgentChannels {
         },
       },
     );
-
-    // Subscribe so follow-up messages also get handled
-    await sdkThread.subscribe();
   }
 
   /**
@@ -1343,9 +1357,20 @@ export class AgentChannels {
     // so we reset on every run boundary (finish / error / abort) to avoid leaking tool cards
     // or pending text from one run into the next.
     let textBuffer = '';
-    let typingStarted = false;
     let toolCalls = new Map<string, TrackedTool>();
-    let typingInterval: ReturnType<typeof setInterval> | undefined;
+
+    // Typing indicator: refresh on each generation chunk, debounced to avoid
+    // hammering the platform API. Slack/Discord auto-expire the indicator
+    // after ~5-10s, so when generation stops the indicator clears naturally.
+    let lastTypingAt = 0;
+    const refreshTyping = () => {
+      const now = Date.now();
+      if (now - lastTypingAt < 5_000) return;
+      lastTypingAt = now;
+      sdkThread.startTyping().catch(e => {
+        this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+      });
+    };
 
     const seedApprovalContext = () => {
       if (approvalContext) {
@@ -1359,37 +1384,6 @@ export class AgentChannels {
     };
     seedApprovalContext();
 
-    const ensureTyping = async () => {
-      if (!typingStarted) {
-        typingStarted = true;
-        try {
-          await sdkThread.startTyping();
-        } catch (e) {
-          this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
-        }
-      }
-    };
-
-    // Keep the typing indicator alive for slow generation (e.g. image models).
-    // Discord's indicator expires after ~10s, so we re-fire every 8s.
-    const startTypingKeepalive = () => {
-      if (typingInterval) return;
-      typingInterval = setInterval(async () => {
-        try {
-          await sdkThread.startTyping();
-        } catch {
-          // best-effort
-        }
-      }, 8_000);
-    };
-
-    const stopTypingKeepalive = () => {
-      if (typingInterval) {
-        clearInterval(typingInterval);
-        typingInterval = undefined;
-      }
-    };
-
     const flushText = async () => {
       // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
       const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
@@ -1399,225 +1393,210 @@ export class AgentChannels {
       }
     };
 
-    // If nothing triggers typing within 3s, start it anyway and keep it
-    // alive — covers slow generation (e.g. image models) where no text/tool
-    // chunks arrive for a long time.
-    const typingFallbackTimer = setTimeout(async () => {
-      if (!typingStarted) {
-        await ensureTyping();
-        startTypingKeepalive();
-      }
-    }, 3_000);
-
     const resetRunState = () => {
       textBuffer = '';
       toolCalls = new Map();
       seedApprovalContext();
+      // Reset the debounce so the next run's first generation chunk fires
+      // startTyping() immediately rather than being suppressed.
+      lastTypingAt = 0;
     };
 
-    try {
-      for await (const chunk of stream) {
-        // --- Signal echo: subscription streams replay user-message / system-reminder /
-        // custom data parts that callers wrote via sendSignal(). The platform already
-        // rendered the user's message, so we drop the echo to avoid double-posting.
-        if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
-          continue;
+    for await (const chunk of stream) {
+      // --- Signal echo: subscription streams replay user-message / system-reminder /
+      // custom data parts that callers wrote via sendSignal(). The platform already
+      // rendered the user's message, so we drop the echo to avoid double-posting.
+      if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
+        continue;
+      }
+
+      // --- Text accumulation ---
+      if (chunk.type === 'text-delta') {
+        if (chunk.payload.text) {
+          refreshTyping();
+        }
+        textBuffer += chunk.payload.text;
+        continue;
+      }
+
+      if (chunk.type === 'reasoning-delta') {
+        refreshTyping();
+        continue;
+      }
+
+      // --- File (e.g. model-generated image): post as attachment ---
+      if (chunk.type === 'file') {
+        await flushText();
+        const { data, mimeType } = chunk.payload;
+        this.logger?.debug('[CHANNEL] Received file chunk', {
+          mimeType,
+          dataType: typeof data,
+          size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
+        });
+        const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
+        const filename = `generated.${ext}`;
+        const binary =
+          typeof data === 'string'
+            ? Buffer.from(data, 'base64')
+            : data instanceof Uint8Array
+              ? Buffer.from(data)
+              : data;
+        try {
+          await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
+        }
+        continue;
+      }
+
+      // --- Text flush triggers ---
+      if (chunk.type === 'step-finish') {
+        await flushText();
+        continue;
+      }
+
+      // --- Run boundary: a single subscription stream carries many runs back-to-back,
+      // so we flush whatever's pending and reset per-run state before the next run starts.
+      if (chunk.type === 'finish') {
+        await flushText();
+        resetRunState();
+        continue;
+      }
+
+      // --- Errors / aborts surface in-stream now that we no longer have access to a
+      // MastraModelOutput.error field. Post the failure to the channel and reset state
+      // so a follow-up run on the same subscription starts clean.
+      if (chunk.type === 'error') {
+        await flushText();
+        const errPayload = chunk.payload as { error?: unknown };
+        const rawError = errPayload.error;
+        const message =
+          rawError instanceof Error
+            ? rawError.message
+            : typeof rawError === 'string'
+              ? rawError
+              : rawError != null
+                ? String(rawError)
+                : 'Unknown error';
+        const display = message.length > 500 ? message.slice(0, 500) + '…' : message;
+        this.log('error', `[${platform}] Stream completed with error`, { error: display });
+        try {
+          await sdkThread.post(`❌ Error: ${display}`);
+        } catch (postErr) {
+          this.logger?.debug('[CHANNEL] Failed to post error message', { error: postErr });
+        }
+        resetRunState();
+        continue;
+      }
+
+      if (chunk.type === 'abort') {
+        await flushText();
+        resetRunState();
+        continue;
+      }
+
+      // --- Tool call: post eager "Running…" card ---
+      if (chunk.type === 'tool-call') {
+        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+        refreshTyping();
+        await flushText();
+
+        const displayName = stripToolPrefix(chunk.payload.toolName);
+        const rawArgs = (
+          typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
+        ) as Record<string, unknown>;
+        const argsSummary = formatArgsSummary(rawArgs);
+
+        let messageId: string | undefined;
+        if (!adapterConfig?.formatToolCall) {
+          const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
+          messageId = sentMessage?.id;
         }
 
-        // --- Text accumulation ---
-        if (chunk.type === 'text-delta') {
-          if (chunk.payload.text) {
-            await ensureTyping();
-            startTypingKeepalive();
+        toolCalls.set(chunk.payload.toolCallId, {
+          displayName,
+          argsSummary,
+          startedAt: Date.now(),
+          messageId,
+        });
+        continue;
+      }
+
+      // --- Tool result: edit the "Running…" card with the outcome ---
+      if (chunk.type === 'tool-result') {
+        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+
+        // Look in the per-run tracked tools first; fall back to any approval card that was
+        // posted by the click handler (the resumed run's tool-result arrives via the thread
+        // subscription, which doesn't see the pre-suspension `tool-call` chunk).
+        let tracked = toolCalls.get(chunk.payload.toolCallId);
+        if (!tracked) {
+          const pending = this.pendingApprovalCards.get(chunk.payload.toolCallId);
+          if (pending) {
+            tracked = pending;
+            this.pendingApprovalCards.delete(chunk.payload.toolCallId);
           }
-          textBuffer += chunk.payload.text;
-          continue;
         }
+        const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
+        const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
+        const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
+        const channelMsgId = tracked?.messageId;
+        const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
 
-        if (chunk.type === 'reasoning-delta') {
-          await ensureTyping();
-          startTypingKeepalive();
-          continue;
-        }
-
-        // --- File (e.g. model-generated image): post as attachment ---
-        if (chunk.type === 'file') {
-          await flushText();
-          const { data, mimeType } = chunk.payload;
-          this.logger?.debug('[CHANNEL] Received file chunk', {
-            mimeType,
-            dataType: typeof data,
-            size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
+        if (adapterConfig?.formatToolCall) {
+          const custom = adapterConfig.formatToolCall({
+            toolName: displayName,
+            args: (chunk.payload.args ?? {}) as Record<string, unknown>,
+            result: chunk.payload.result,
+            isError: chunk.payload.isError,
           });
-          const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
-          const filename = `generated.${ext}`;
-          const binary =
-            typeof data === 'string'
-              ? Buffer.from(data, 'base64')
-              : data instanceof Uint8Array
-                ? Buffer.from(data)
-                : data;
-          try {
-            await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
-          } catch (e) {
-            this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
+          if (custom != null) {
+            await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
           }
-          continue;
-        }
-
-        // --- Text flush triggers ---
-        if (chunk.type === 'step-finish') {
-          await flushText();
-          continue;
-        }
-
-        // --- Run boundary: a single subscription stream carries many runs back-to-back,
-        // so we flush whatever's pending and reset per-run state before the next run starts.
-        if (chunk.type === 'finish') {
-          await flushText();
-          resetRunState();
-          continue;
-        }
-
-        // --- Errors / aborts surface in-stream now that we no longer have access to a
-        // MastraModelOutput.error field. Post the failure to the channel and reset state
-        // so a follow-up run on the same subscription starts clean.
-        if (chunk.type === 'error') {
-          await flushText();
-          const errPayload = chunk.payload as { error?: unknown };
-          const rawError = errPayload.error;
-          const message =
-            rawError instanceof Error
-              ? rawError.message
-              : typeof rawError === 'string'
-                ? rawError
-                : rawError != null
-                  ? String(rawError)
-                  : 'Unknown error';
-          const display = message.length > 500 ? message.slice(0, 500) + '…' : message;
-          this.log('error', `[${platform}] Stream completed with error`, { error: display });
-          try {
-            await sdkThread.post(`❌ Error: ${display}`);
-          } catch (postErr) {
-            this.logger?.debug('[CHANNEL] Failed to post error message', { error: postErr });
-          }
-          resetRunState();
-          continue;
-        }
-
-        if (chunk.type === 'abort') {
-          await flushText();
-          resetRunState();
-          continue;
-        }
-
-        // --- Tool call: post eager "Running…" card ---
-        if (chunk.type === 'tool-call') {
-          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-          await ensureTyping();
-          startTypingKeepalive();
-          await flushText();
-
-          const displayName = stripToolPrefix(chunk.payload.toolName);
-          const rawArgs = (
-            typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
-          ) as Record<string, unknown>;
-          const argsSummary = formatArgsSummary(rawArgs);
-
-          let messageId: string | undefined;
-          if (!adapterConfig?.formatToolCall) {
-            const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
-            messageId = sentMessage?.id;
-          }
-
-          toolCalls.set(chunk.payload.toolCallId, {
+        } else {
+          const resultMessage = formatToolResult(
             displayName,
             argsSummary,
-            startedAt: Date.now(),
-            messageId,
-          });
-          continue;
+            resultText,
+            !!chunk.payload.isError,
+            durationMs,
+            useCards,
+          );
+          await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
         }
-
-        // --- Tool result: edit the "Running…" card with the outcome ---
-        if (chunk.type === 'tool-result') {
-          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
-          // Look in the per-run tracked tools first; fall back to any approval card that was
-          // posted by the click handler (the resumed run's tool-result arrives via the thread
-          // subscription, which doesn't see the pre-suspension `tool-call` chunk).
-          let tracked = toolCalls.get(chunk.payload.toolCallId);
-          if (!tracked) {
-            const pending = this.pendingApprovalCards.get(chunk.payload.toolCallId);
-            if (pending) {
-              tracked = pending;
-              this.pendingApprovalCards.delete(chunk.payload.toolCallId);
-            }
-          }
-          const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
-          const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
-          const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-          const channelMsgId = tracked?.messageId;
-          const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
-
-          if (adapterConfig?.formatToolCall) {
-            const custom = adapterConfig.formatToolCall({
-              toolName: displayName,
-              args: (chunk.payload.args ?? {}) as Record<string, unknown>,
-              result: chunk.payload.result,
-              isError: chunk.payload.isError,
-            });
-            if (custom != null) {
-              await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
-            }
-          } else {
-            const resultMessage = formatToolResult(
-              displayName,
-              argsSummary,
-              resultText,
-              !!chunk.payload.isError,
-              durationMs,
-              useCards,
-            );
-            await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
-          }
-          continue;
-        }
-
-        // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
-        if (chunk.type === 'tool-call-approval') {
-          const { toolCallId, toolName, args: toolArgs } = chunk.payload;
-          const tracked = toolCalls.get(toolCallId);
-          const displayName = tracked?.displayName || stripToolPrefix(toolName);
-          const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
-          const channelMsgId = tracked?.messageId;
-
-          const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
-
-          await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
-          continue;
-        }
-
-        // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
-        // Without this branch the chunk is skipped, stream.error stays unset, and the
-        // user sees silence (see #15344).
-        if (chunk.type === 'tripwire') {
-          // retry=true means the agent will retry internally with the tripwire reason as
-          // feedback and produce a new response on this same stream, so nothing to post yet.
-          if (chunk.payload.retry) continue;
-
-          await flushText();
-          const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
-          const display = chunk.payload.processorId
-            ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
-            : `🛡️ ${reason}`;
-          await sdkThread.post(display);
-          continue;
-        }
+        continue;
       }
-    } finally {
-      clearTimeout(typingFallbackTimer);
-      stopTypingKeepalive();
+
+      // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
+      if (chunk.type === 'tool-call-approval') {
+        const { toolCallId, toolName, args: toolArgs } = chunk.payload;
+        const tracked = toolCalls.get(toolCallId);
+        const displayName = tracked?.displayName || stripToolPrefix(toolName);
+        const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
+        const channelMsgId = tracked?.messageId;
+
+        const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
+
+        await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
+        continue;
+      }
+
+      // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
+      // Without this branch the chunk is skipped, stream.error stays unset, and the
+      // user sees silence (see #15344).
+      if (chunk.type === 'tripwire') {
+        // retry=true means the agent will retry internally with the tripwire reason as
+        // feedback and produce a new response on this same stream, so nothing to post yet.
+        if (chunk.payload.retry) continue;
+
+        await flushText();
+        const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
+        const display = chunk.payload.processorId
+          ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
+          : `🛡️ ${reason}`;
+        await sdkThread.post(display);
+        continue;
+      }
     }
   }
 
