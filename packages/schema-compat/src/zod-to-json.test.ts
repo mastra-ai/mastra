@@ -508,7 +508,7 @@ describe('zodToJsonSchema', () => {
 
       expect(result).toBeDefined();
       expect(result.required).toContain('required');
-      expect(result.required).not.toContain('optional');
+      expect(result.required).toContain('optional');
     });
 
     it('should handle arrays', () => {
@@ -603,21 +603,20 @@ describe('zodToJsonSchema', () => {
 
 describe('ensureAllPropertiesRequired', () => {
   it('should add all properties to required array for object schemas', () => {
-    const schema = zodToJsonSchema(
-      z.object({
-        isComplete: z.boolean(),
-        completionReason: z.string(),
-        finalResult: z.string().optional(),
-      }),
-    );
+    // Test ensureAllPropertiesRequired directly on a raw JSON schema
+    // (zodToJsonSchema already calls this internally now)
+    const rawSchema: JSONSchema7 = {
+      type: 'object',
+      properties: {
+        isComplete: { type: 'boolean' },
+        completionReason: { type: 'string' },
+        finalResult: { type: 'string' },
+      },
+      required: ['isComplete', 'completionReason'],
+    };
 
-    // Before fix: finalResult should be in properties but NOT in required
-    expect(schema.properties).toHaveProperty('finalResult');
-    expect(schema.required).not.toContain('finalResult');
+    const fixed = ensureAllPropertiesRequired(rawSchema);
 
-    const fixed = ensureAllPropertiesRequired(schema);
-
-    // After fix: ALL properties should be in required
     expect(fixed.required).toContain('isComplete');
     expect(fixed.required).toContain('completionReason');
     expect(fixed.required).toContain('finalResult');
@@ -713,7 +712,7 @@ describe('ensureAllPropertiesRequired', () => {
     expect(branch.required).toContain('b');
   });
 
-  it('should not modify zodToJsonSchema default behavior', () => {
+  it('zodToJsonSchema puts all fields in required for OpenAI strict mode', () => {
     const schema = z.object({
       required: z.string(),
       optional: z.string().optional(),
@@ -721,6 +720,53 @@ describe('ensureAllPropertiesRequired', () => {
 
     const result = zodToJsonSchema(schema);
     expect(result.required).toContain('required');
-    expect(result.required).not.toContain('optional');
+    expect(result.required).toContain('optional');
   });
+});
+
+it('reproduce issue #16383 - optional fields must appear in required for OpenAI strict mode', () => {
+  // Zod optional fields normally disappear from `required`
+  // OpenAI strict mode requires all fields in `required`
+  // and optionals widened to nullable.
+
+  const schema = z.object({
+    name: z.string(),
+    nickname: z.string().optional().describe('The nickname'),
+  });
+
+  const result = zodToJsonSchema(schema) as any;
+
+  console.log(JSON.stringify(result, null, 2));
+
+  // Bug 1
+  expect(result.required).toBeDefined();
+
+  expect(result.required).toEqual(expect.arrayContaining(['name', 'nickname']));
+
+  const nicknameProp = result.properties?.nickname;
+
+  expect(nicknameProp).toBeDefined();
+
+  // Bug 2
+  if (nicknameProp.anyOf) {
+    expect(nicknameProp.anyOf).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'string',
+        }),
+        expect.objectContaining({
+          type: 'null',
+        }),
+      ]),
+    );
+  } else {
+    expect(nicknameProp.type).toEqual(expect.arrayContaining(['string', 'null']));
+
+    expect(nicknameProp.type).not.toContain('number');
+
+    expect(nicknameProp.type).not.toContain('boolean');
+  }
+
+  // Bug 3
+  expect(nicknameProp.description).toBe('The nickname');
 });

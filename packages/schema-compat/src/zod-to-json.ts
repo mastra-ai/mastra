@@ -131,7 +131,7 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
           !Array.isArray(propSchema) &&
           Object.keys(propSchema).length === 0
         ) {
-          return [key, { type: ['string', 'number', 'boolean', 'null'] as JSONSchema7['type'] }];
+          return [key, propSchema]; //override will handle it
         }
 
         // Recursively fix nested schemas
@@ -178,9 +178,25 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
   const result = { ...schema };
 
   if (result.type === 'object' && result.properties) {
+    const existingRequired = result.required ?? [];
     result.required = Object.keys(result.properties);
+
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([key, value]) => [key, ensureAllPropertiesRequired(value as JSONSchema7)]),
+      Object.entries(result.properties).map(([key, value]) => {
+        const prop = ensureAllPropertiesRequired(value as JSONSchema7) as any;
+
+        // Field was optional (not in required before) — widen type to include null
+        if (!existingRequired.includes(key)) {
+          if (prop.type && !Array.isArray(prop.type) && prop.type !== 'null') {
+            return [key, { ...prop, type: [prop.type, 'null'] }];
+          }
+          if (Array.isArray(prop.type) && !prop.type.includes('null')) {
+            return [key, { ...prop, type: [...prop.type, 'null'] }];
+          }
+        }
+
+        return [key, prop];
+      }),
     );
   }
 
@@ -308,16 +324,42 @@ export function zodToJsonSchema(
         if (def && (def.typeName === 'ZodObject' || def.type === 'object')) {
           ctx.jsonSchema.additionalProperties = false;
         }
+
+        // handle optional fields at source — emit [T, "null"] instead of {}
+        if (def && (def.type === 'optional' || def.typeName === 'ZodOptional')) {
+          const innerDef = def.innerType?._zod?.def || def.innerType?._def;
+          if (innerDef) {
+            const description = ctx.zodSchema.description;
+            const typeMap: Record<string, string> = {
+              string: 'string',
+              ZodString: 'string',
+              number: 'number',
+              ZodNumber: 'number',
+              boolean: 'boolean',
+              ZodBoolean: 'boolean',
+              integer: 'integer',
+              ZodBigInt: 'integer',
+            };
+            const innerType = typeMap[innerDef.type] || typeMap[innerDef.typeName];
+            if (innerType) {
+              ctx.jsonSchema.type = [innerType, 'null'];
+              if (description) ctx.jsonSchema.description = description;
+            }
+          }
+        }
       },
     }) as JSONSchema7;
 
-    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
-    return fixAnyOfNullable(jsonSchema);
+    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility + ensure all properties in required
+    return ensureAllPropertiesRequired(fixAnyOfNullable(jsonSchema));
   } else {
     // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    const jsonSchema = zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,
     }) as JSONSchema7;
+
+    // Same post-processing as v4: fix anyOf patterns + ensure all properties in required
+    return ensureAllPropertiesRequired(fixAnyOfNullable(jsonSchema));
   }
 }
