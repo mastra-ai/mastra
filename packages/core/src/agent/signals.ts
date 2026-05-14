@@ -119,28 +119,15 @@ function signalAttributesToXml(attributes?: AgentSignalInput['attributes']): str
   return serialized ? ` ${serialized}` : '';
 }
 
-// Render a text-only signal as a single XML element string. For multimodal contents
-// (file/image parts) use signalToLLMMessage which preserves attachments. This helper exists
-// for callers that already have a flat string and want the canonical XML wrapping.
-export function signalToXmlMarkup(signal: {
-  type: AgentSignalInput['type'];
-  contents?: string;
-  attributes?: AgentSignalInput['attributes'];
-}): string {
+export function signalToXmlMarkup(
+  signal: Pick<AgentSignalInput, 'type' | 'attributes'> & { contents?: string },
+): string {
   assertXmlName(signal.type, 'tag name');
   const attributesXml = signalAttributesToXml(signal.attributes);
-  // Self-close when there is no inner text — conventional XML shape for empty elements.
   if (!signal.contents) return `<${signal.type}${attributesXml} />`;
   return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
 }
 
-// Convert the narrow signal-contents input (string OR v4 TextPart/FilePart) into the canonical
-// MastraMessagePart[] used by storage. createSignal runs this once at the boundary so every
-// downstream projection (LLM, DB, data part) reads from the same walked representation. FilePart's
-// `data` is `DataContent | URL` at the input boundary; storage stores it as a string (base64 for
-// binary, stringified URL for URL instances) so DB rows stay JSON-safe. Public input naming
-// (`mimeType`) matches storage (`mimeType`), so no field rename is needed — just a structural
-// narrowing plus the `data` normalization.
 function contentsToMessageParts(contents: AgentSignalContents): MastraMessagePart[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
   return contents.map(part => {
