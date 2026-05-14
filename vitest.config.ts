@@ -149,7 +149,7 @@ const EXCLUDED_DIRS = new Set([
 // Directories to scan for vitest configs
 const PROJECT_GLOBS = [
   'packages/*/vitest.config.ts',
-  'stores/*/vitest.config.ts',
+  ...(SOURCE_MODE ? [] : ['stores/*/vitest.config.ts']),
   'deployers/*/vitest.config.ts',
   'voice/*/vitest.config.ts',
   'server-adapters/*/vitest.config.ts',

@@ -8,6 +8,8 @@ const MANIFEST_PATH = path.join(BUILD_DIR, 'llms-manifest.json');
 const COURSE_SOURCE = fromRepoRoot('docs/src/course');
 const DOCS_DEST = fromPackageRoot('.docs');
 const COURSE_DEST = path.join(DOCS_DEST, 'course');
+const PREPARE_LOCK_PATH = fromPackageRoot('.docs.prepare.lock');
+const PREPARED_MARKER_PATH = path.join(DOCS_DEST, '.prepared');
 
 // Top-level categories that should keep their index.md files
 const TOP_LEVEL_CATEGORIES = ['docs', 'guides', 'models', 'reference'];
@@ -28,6 +30,23 @@ interface Manifest {
 async function loadManifest(): Promise<Manifest> {
   const content = await fs.readFile(MANIFEST_PATH, 'utf-8');
   return JSON.parse(content) as Manifest;
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function acquirePrepareLock() {
+  while (true) {
+    try {
+      return await fs.open(PREPARE_LOCK_PATH, 'wx');
+    } catch (error: any) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+      await sleep(100);
+    }
+  }
 }
 
 // Copy a directory recursively (for course content which uses .md files directly)
@@ -177,10 +196,26 @@ async function copyCourseContent() {
 }
 
 export async function prepare() {
-  log('Preparing documentation...');
-  await copyLlmsTxtFiles();
-  await copyCourseContent();
-  log('Documentation preparation complete!');
+  const lock = await acquirePrepareLock();
+
+  try {
+    try {
+      await fs.access(PREPARED_MARKER_PATH);
+      await fs.access(COURSE_DEST);
+      return;
+    } catch {
+      // Prepare docs below when the marker or course content does not exist.
+    }
+
+    log('Preparing documentation...');
+    await copyLlmsTxtFiles();
+    await copyCourseContent();
+    await fs.writeFile(PREPARED_MARKER_PATH, new Date().toISOString());
+    log('Documentation preparation complete!');
+  } finally {
+    await lock.close();
+    await fs.rm(PREPARE_LOCK_PATH, { force: true });
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
