@@ -15,6 +15,8 @@ import { sendAgentSignalBodySchema, subscribeAgentThreadBodySchema } from '../sc
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
+  GET_AGENT_BY_ID_ROUTE,
+  LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
@@ -533,6 +535,63 @@ describe('Agent Routes Authorization', () => {
     }
     return requestContext;
   }
+
+  describe('agent metadata serialization', () => {
+    it('includes metadata in the list agents response', async () => {
+      mockAgent = new Agent({
+        id: 'metadata-agent',
+        name: 'metadata-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+        metadata: { type: 'support' },
+      });
+
+      mastra = new Mastra({
+        agents: { 'metadata-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        mastra,
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result['metadata-agent']?.metadata).toEqual({ type: 'support' });
+    });
+
+    it('includes metadata in the get agent response', async () => {
+      mockAgent = new Agent({
+        id: 'metadata-agent',
+        name: 'metadata-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+        metadata: { type: 'support' },
+      });
+      vi.spyOn(mockAgent, 'listTools').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getLLM').mockResolvedValue({
+        getModel: () => undefined,
+        getProvider: () => 'test-provider',
+        getModelId: () => 'test-model',
+      } as any);
+      vi.spyOn(mockAgent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getDefaultOptions').mockResolvedValue({});
+      vi.spyOn(mockAgent, 'getModelList').mockResolvedValue(null);
+
+      mastra = new Mastra({
+        agents: { 'metadata-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'metadata-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.metadata).toEqual({ type: 'support' });
+    });
+  });
 
   describe('GENERATE_AGENT_ROUTE', () => {
     it('should return 403 when memory option specifies thread owned by different resource', async () => {

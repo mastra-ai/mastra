@@ -224,6 +224,7 @@ describe('Stored Agents via MastraEditor', () => {
       expect(result).toBeInstanceOf(Agent);
       expect(result?.id).toBe('stored-agent-1');
       expect(result?.name).toBe('Test Stored Agent');
+      expect(result?.getMetadata()).toEqual({ version: '1.0' });
     });
 
     it('should expose raw config via toRawConfig()', async () => {
