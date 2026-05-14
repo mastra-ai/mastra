@@ -77,17 +77,18 @@ voice.close();
 
 ## Options
 
-| Option         | Type                            | Default                                        | Description                                                                                |
-| -------------- | ------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `apiKey`       | `string`                        | `process.env.INWORLD_API_KEY`                  | Inworld API key (Basic-encoded, passed verbatim).                                          |
-| `url`          | `string`                        | `wss://api.inworld.ai/api/v1/realtime/session` | Realtime websocket endpoint.                                                               |
-| `model`        | `string`                        | `anthropic/claude-sonnet-4-6`                  | LLM Router model ID.                                                                       |
-| `speaker`      | `string`                        | `Dennis`                                       | Default voice ID. Any catalog voice is accepted.                                           |
-| `sessionId`    | `string`                        | `voice-{Date.now()}`                           | Client-generated session key surfaced as the URL `?key=` parameter.                        |
-| `instructions` | `string`                        | `undefined`                                    | System prompt sent with the initial `session.update`.                                      |
-| `session`      | `Partial<InworldSessionConfig>` | `undefined`                                    | Typed first-class session knobs (see below). Deep-merged into every `session.update`.      |
-| `debug`        | `boolean`                       | `false`                                        | Log raw server events.                                                                     |
-| `providerData` | `Record<string, unknown>`       | `undefined`                                    | Untyped escape hatch for fields Inworld adds before typed support lands. Also deep-merged. |
+| Option             | Type                            | Default                                        | Description                                                                                                                                                                     |
+| ------------------ | ------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`           | `string`                        | `process.env.INWORLD_API_KEY`                  | Inworld API key (Basic-encoded, passed verbatim).                                                                                                                               |
+| `url`              | `string`                        | `wss://api.inworld.ai/api/v1/realtime/session` | Realtime websocket endpoint.                                                                                                                                                    |
+| `model`            | `string`                        | `anthropic/claude-sonnet-4-6`                  | LLM Router model ID.                                                                                                                                                            |
+| `speaker`          | `string`                        | `Dennis`                                       | Default voice ID. Any catalog voice is accepted.                                                                                                                                |
+| `sessionId`        | `string`                        | `voice-{Date.now()}`                           | Client-generated session key surfaced as the URL `?key=` parameter.                                                                                                             |
+| `instructions`     | `string`                        | `undefined`                                    | System prompt sent with the initial `session.update`.                                                                                                                           |
+| `session`          | `Partial<InworldSessionConfig>` | `undefined`                                    | Typed first-class session knobs (see below). Deep-merged into every `session.update`.                                                                                           |
+| `debug`            | `boolean`                       | `false`                                        | Log raw server events.                                                                                                                                                          |
+| `providerData`     | `Record<string, unknown>`       | `undefined`                                    | Untyped escape hatch for fields Inworld adds before typed support lands. Also deep-merged.                                                                                      |
+| `connectTimeoutMs` | `number`                        | `15000`                                        | Max time `connect()` will wait for both the WebSocket handshake and the initial `session.updated` round-trip. A pre-open error/close or timeout becomes a rejected `connect()`. |
 
 ### `session` (typed knobs)
 
@@ -126,20 +127,37 @@ new InworldRealtimeVoice({
 
 ## Events
 
-| Event                     | Payload                             |
-| ------------------------- | ----------------------------------- |
-| `speaking`                | `{ audio: Buffer, response_id }`    |
-| `speaking.done`           | `{ response_id }`                   |
-| `speaker`                 | `PassThrough` stream of PCM audio   |
-| `writing`                 | `{ text, response_id, role }`       |
-| `response.created`        | full server event                   |
-| `response.done`           | full server event                   |
-| `conversation.item.added` | full server event                   |
-| `conversation.item.done`  | full server event (Inworld-only)    |
-| `function_call.arguments` | `{ call_id, name, arguments }` JSON |
-| `tool-call-start`         | `{ toolCallId, toolName, args, … }` |
-| `tool-call-result`        | `{ toolCallId, …, result }`         |
-| `error`                   | `Error`                             |
+`on()` and `off()` are typed against `InworldVoiceEventMap` — known event names give you a typed callback payload, unknown event names fall back to `unknown`.
+
+| Event                     | Payload                                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `speaking`                | `{ audio: Buffer; response_id: string }`                                                                                                  |
+| `speaking.done`           | `{ response_id: string }`                                                                                                                 |
+| `speaker`                 | `PassThrough` stream of PCM audio                                                                                                         |
+| `writing`                 | `{ text: string; response_id: string; role: 'assistant' \| 'user' }`. Deduplicated across audio-transcript + text deltas in one response. |
+| `speech-started`          | Raw server `input_audio_buffer.speech_started` payload (VAD edge).                                                                        |
+| `speech-stopped`          | Raw server `input_audio_buffer.speech_stopped` payload (VAD edge).                                                                        |
+| `interrupted`             | `{ response_id: string }`. Synthesized once per in-flight response when the user starts speaking.                                         |
+| `response.created`        | Full server event.                                                                                                                        |
+| `response.done`           | Full server event.                                                                                                                        |
+| `conversation.item.added` | Full server event.                                                                                                                        |
+| `conversation.item.done`  | Full server event.                                                                                                                        |
+| `function_call.arguments` | `{ call_id, name, arguments }` JSON.                                                                                                      |
+| `tool-call-start`         | `{ toolCallId, toolName, args, … }`.                                                                                                      |
+| `tool-call-result`        | `{ toolCallId, …, result }`.                                                                                                              |
+| `error`                   | `Error` (or a server error event).                                                                                                        |
+
+### Barge-in
+
+`speech-started` and `speech-stopped` mirror Inworld's raw VAD edges. `interrupted` is a synthetic, client-side signal: whenever `speech-started` fires while one or more responses are in flight, `interrupted` is emitted once per active `response_id`. Listen to `interrupted` to stop audio playback without having to track response state yourself.
+
+### Awaitable `speak()`
+
+`speak()` resolves only after the full response lifecycle completes (`response.done` for the response it triggered). It rejects if the response is interrupted by user speech, or on a transport error. Serial calls are the supported pattern — concurrent `speak()` calls share the same listener pool and have undefined response-pinning order.
+
+### Default `turn_detection`
+
+`audio.input.turn_detection` defaults to `{ type: 'semantic_vad', eagerness: 'medium', create_response: true, interrupt_response: true }`. To override, set `session.audio.input.turn_detection` (or `providerData.audio.input.turn_detection`) to your own object. To disable turn detection entirely, set it to `null`.
 
 ## Getting an API key
 

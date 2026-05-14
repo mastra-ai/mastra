@@ -4,23 +4,14 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import { MastraVoice } from '@mastra/core/voice';
 import { WebSocket } from 'ws';
-import type { InworldResponseConfig, InworldSessionConfig } from './types';
+import type { InworldResponseConfig, InworldSessionConfig, InworldTurnDetection, InworldVoiceEventMap } from './types';
 import { deepMerge, isReadableStream, transformTools } from './utils';
 
 type EventCallback = (...args: any[]) => void;
 
 type StreamWithId = PassThrough & { id: string };
 
-type EventMap = {
-  transcribing: [{ text: string }];
-  writing: [{ text: string; response_id?: string; role?: 'assistant' | 'user' }];
-  speaking: [{ audio: Buffer; response_id: string }];
-  'speaking.done': [{ response_id: string }];
-  speaker: [StreamWithId];
-  error: [Error];
-} & {
-  [key: string]: EventCallback[];
-};
+type EventStore = Record<string, EventCallback[]>;
 
 /**
  * Default voice for Inworld TTS-2. Inworld ships a curated voice catalog; the
@@ -35,6 +26,23 @@ const DEFAULT_URL = 'wss://api.inworld.ai/api/v1/realtime/session';
  * model IDs are accepted directly.
  */
 const DEFAULT_MODEL = 'anthropic/claude-sonnet-4-6';
+
+/**
+ * Default turn-detection config. Semantic VAD is the conversational default —
+ * it produces speech-started/speech-stopped events the server interprets in
+ * context (rather than purely on energy thresholds) and lets the model
+ * interrupt itself mid-response. Override per call via `session.audio.input.turn_detection`,
+ * or disable entirely by passing `null`.
+ */
+const DEFAULT_TURN_DETECTION: InworldTurnDetection = {
+  type: 'semantic_vad',
+  eagerness: 'medium',
+  create_response: true,
+  interrupt_response: true,
+};
+
+/** Default deadline for the WS handshake + initial `session.updated` round-trip. */
+const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 
 /**
  * Curated voice list, mirroring how `@mastra/voice-openai-realtime` ships a
@@ -77,6 +85,13 @@ export interface InworldRealtimeVoiceOptions {
    * Prefer `session` for documented fields.
    */
   providerData?: Record<string, unknown>;
+  /**
+   * Max time `connect()` will wait for the WebSocket to open AND for the
+   * initial `session.updated` handshake to land. A pre-open `error` or `close`
+   * — or this timeout firing — surfaces as a rejected promise from `connect()`,
+   * NOT an uncaught socket error. Defaults to 15s.
+   */
+  connectTimeoutMs?: number;
 }
 
 /**
@@ -113,7 +128,7 @@ export class InworldRealtimeVoice extends MastraVoice {
   private ws?: WebSocket;
   private state: 'close' | 'open';
   private client: EventEmitter;
-  private events: EventMap;
+  private events: EventStore;
   private instructions?: string;
   private tools?: TTools;
   private debug: boolean;
@@ -122,13 +137,17 @@ export class InworldRealtimeVoice extends MastraVoice {
   private session?: Partial<InworldSessionConfig>;
   private providerData?: Record<string, unknown>;
   private sessionId: string;
+  /** response_ids currently between `response.created` and `response.done`. */
+  private activeResponseIds: Set<string> = new Set();
+  /** response_ids that already emitted a `writing` chunk via the audio transcript stream — used to suppress duplicate emits from `output_text.delta`. */
+  private textEmittedResponseIds: Set<string> = new Set();
 
   constructor(private options: InworldRealtimeVoiceOptions = {}) {
     super();
 
     this.client = new EventEmitter();
     this.state = 'close';
-    this.events = {} as EventMap;
+    this.events = {};
     this.speaker = options.speaker || DEFAULT_VOICE;
     this.debug = options.debug || false;
     this.session = options.session;
@@ -149,6 +168,12 @@ export class InworldRealtimeVoice extends MastraVoice {
     if (!this.ws) return;
     this.ws.close();
     this.state = 'close';
+    // Detach all internal routing handlers so the next `connect()` does not
+    // double-fire on `client.emit`. Consumer-facing listeners on `this.events`
+    // persist across reconnects.
+    this.client.removeAllListeners();
+    this.activeResponseIds.clear();
+    this.textEmittedResponseIds.clear();
   }
 
   addInstructions(instructions?: string) {
@@ -164,6 +189,12 @@ export class InworldRealtimeVoice extends MastraVoice {
    * verbatim — this mirrors the behavior of @mastra/voice-openai-realtime.
    * A per-call `speaker` is scoped to this response only (sent via
    * `response.audio.output.voice`); it does NOT mutate session state.
+   *
+   * Awaits the full response lifecycle: the returned promise resolves once
+   * the next `response.done` (or rejects on `interrupted` / `error`) for
+   * this `speak()` invocation. Serial `speak()` calls are supported;
+   * concurrent calls share the same listener pool and have undefined
+   * response-pinning order — most voice apps serialize.
    */
   async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<void> {
     if (typeof input !== 'string') {
@@ -177,6 +208,10 @@ export class InworldRealtimeVoice extends MastraVoice {
     if (input.trim().length === 0) {
       throw new Error('Input text is empty');
     }
+
+    // Register the lifecycle waiter BEFORE sending `response.create` so we
+    // can't miss the `response.created` event the server emits in reply.
+    const done = this.awaitResponseLifecycle();
 
     this.sendEvent('conversation.item.create', {
       item: {
@@ -193,6 +228,53 @@ export class InworldRealtimeVoice extends MastraVoice {
       response.audio = { output: { voice: options.speaker } };
     }
     this.sendEvent('response.create', { response });
+
+    await done;
+  }
+
+  /**
+   * Resolves on the next `response.done`, pinned by the `response.id`
+   * observed on the first `response.created` after registration. Rejects on
+   * `error` and on the synthetic `interrupted` signal for the pinned id.
+   */
+  private awaitResponseLifecycle(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let pinnedId: string | undefined;
+
+      const cleanup = () => {
+        this.client.removeListener('response.created', onCreated);
+        this.client.removeListener('response.done', onDone);
+        this.client.removeListener('error', onError);
+        this.client.removeListener('interrupted', onInterrupt);
+      };
+
+      const onCreated = (ev: any) => {
+        if (pinnedId) return;
+        pinnedId = ev?.response?.id;
+      };
+
+      const onDone = (ev: any) => {
+        if (!pinnedId || ev?.response?.id !== pinnedId) return;
+        cleanup();
+        resolve();
+      };
+
+      const onInterrupt = (ev: { response_id: string }) => {
+        if (!pinnedId || ev.response_id !== pinnedId) return;
+        cleanup();
+        reject(new Error(`Response ${pinnedId} was interrupted by user speech`));
+      };
+
+      const onError = (err: unknown) => {
+        cleanup();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      };
+
+      this.client.on('response.created', onCreated);
+      this.client.on('response.done', onDone);
+      this.client.on('error', onError);
+      this.client.on('interrupted', onInterrupt);
+    });
   }
 
   /**
@@ -247,9 +329,50 @@ export class InworldRealtimeVoice extends MastraVoice {
     }
   }
 
-  waitForOpen() {
-    return new Promise(resolve => {
-      this.ws?.on('open', resolve);
+  /**
+   * Resolves once the WebSocket emits `open`. Rejects on a pre-open `error`
+   * or `close`, and on a connect-timeout. Mirrors the pattern from
+   * `@mastra/voice-google-gemini-live-api` (ConnectionManager.waitForOpen).
+   */
+  waitForOpen(timeoutMs: number = this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.ws) {
+        reject(new Error('WebSocket not initialized'));
+        return;
+      }
+
+      if (this.ws.readyState === this.ws.OPEN) {
+        resolve();
+        return;
+      }
+
+      const onOpen = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(new Error(`Inworld realtime WebSocket failed to open: ${err?.message ?? String(err)}`));
+      };
+      const onClose = () => {
+        cleanup();
+        reject(new Error('Inworld realtime WebSocket closed before opening'));
+      };
+      const cleanup = () => {
+        this.ws?.removeListener('open', onOpen);
+        this.ws?.removeListener('error', onError);
+        this.ws?.removeListener('close', onClose);
+        clearTimeout(timer);
+      };
+
+      this.ws.once('open', onOpen);
+      this.ws.once('error', onError);
+      this.ws.once('close', onClose);
+
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Inworld realtime WebSocket connection timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
     });
   }
 
@@ -258,10 +381,24 @@ export class InworldRealtimeVoice extends MastraVoice {
    * `session.created` immediately on connect (despite older docs claiming
    * otherwise), but `session.updated` is the canonical handshake completion
    * because our `connect()` sends a `session.update` before declaring ready.
+   *
+   * Rejects with a clear error if the server does not acknowledge within
+   * `timeoutMs` — otherwise `connect()` would hang forever on a half-open
+   * socket.
    */
-  waitForSessionCreated() {
-    return new Promise(resolve => {
-      this.client.once('session.updated', resolve);
+  waitForSessionCreated(
+    timeoutMs: number = this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const onUpdated = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      this.client.once('session.updated', onUpdated);
+      const timer = setTimeout(() => {
+        this.client.removeListener('session.updated', onUpdated);
+        reject(new Error(`Inworld realtime session handshake timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
     });
   }
 
@@ -272,6 +409,11 @@ export class InworldRealtimeVoice extends MastraVoice {
    * URL contract: Inworld's Realtime WebSocket requires a client-generated
    * session ID (`?key=...`) and `&protocol=realtime`. The model is configured
    * via the initial `session.update`, NOT the URL.
+   *
+   * A pre-open error/close on the WebSocket — or a timeout exceeding
+   * `connectTimeoutMs` (15s default) — surfaces as a rejected promise
+   * instead of an uncaught socket error. On reject, the half-open socket
+   * is closed.
    */
   async connect({ requestContext }: { requestContext?: RequestContext } = {}) {
     const baseUrl = this.options.url || DEFAULT_URL;
@@ -293,24 +435,53 @@ export class InworldRealtimeVoice extends MastraVoice {
 
     this.setupEventListeners();
 
-    const opened = this.waitForOpen();
-    const ready = this.waitForSessionCreated();
-    await opened;
+    let ready: Promise<void> | undefined;
+    try {
+      const opened = this.waitForOpen();
+      ready = this.waitForSessionCreated();
+      await opened;
 
-    this.updateConfig({
-      model: this.options.model || DEFAULT_MODEL,
-      instructions: this.instructions,
-      tools: transformTools(this.tools),
-      audio: { output: { voice: this.speaker } },
-    });
+      // Compose the connect-time defaults. The typed `session` field and
+      // `providerData` escape hatch are deep-merged on top in updateConfig().
+      // `turn_detection` is opted out by setting it to `null` in either
+      // override; we also skip the default if either override supplies it
+      // explicitly so the user's shape doesn't inherit our defaults' fields.
+      const userTd = this.userTurnDetection();
+      const audio: NonNullable<InworldSessionConfig['audio']> = {
+        output: { voice: this.speaker },
+      };
+      if (userTd === undefined) {
+        audio.input = { turn_detection: { ...DEFAULT_TURN_DETECTION } };
+      }
+      const initial: Partial<InworldSessionConfig> = {
+        model: this.options.model || DEFAULT_MODEL,
+        instructions: this.instructions,
+        tools: transformTools(this.tools),
+        audio,
+      };
+      this.updateConfig(initial);
 
-    await ready;
-    this.state = 'open';
+      await ready;
+      this.state = 'open';
+    } catch (err) {
+      // Close the half-open socket so we don't leak file descriptors.
+      try {
+        this.ws?.close();
+      } catch {
+        // ignore
+      }
+      this.state = 'close';
+      this.client.removeAllListeners();
+      throw err;
+    }
   }
 
   disconnect() {
     this.state = 'close';
     this.ws?.close();
+    this.client.removeAllListeners();
+    this.activeResponseIds.clear();
+    this.textEmittedResponseIds.clear();
   }
 
   async send(audioData: NodeJS.ReadableStream | Int16Array, eventId?: string): Promise<void> {
@@ -345,6 +516,8 @@ export class InworldRealtimeVoice extends MastraVoice {
     this.sendEvent('response.create', { response: options ?? {} });
   }
 
+  on<E extends keyof InworldVoiceEventMap>(event: E, callback: (data: InworldVoiceEventMap[E]) => void): void;
+  on(event: string, callback: EventCallback): void;
   on(event: string, callback: EventCallback): void {
     if (!this.events[event]) {
       this.events[event] = [];
@@ -352,6 +525,8 @@ export class InworldRealtimeVoice extends MastraVoice {
     this.events[event].push(callback);
   }
 
+  off<E extends keyof InworldVoiceEventMap>(event: E, callback: (data: InworldVoiceEventMap[E]) => void): void;
+  off(event: string, callback: EventCallback): void;
   off(event: string, callback: EventCallback): void {
     if (!this.events[event]) return;
 
@@ -377,6 +552,13 @@ export class InworldRealtimeVoice extends MastraVoice {
       throw new Error('WebSocket not initialized');
     }
 
+    // Wipe stale routing from a previous `connect()` before re-registering.
+    // Reconnects (or test resets) would otherwise double-fire every event.
+    // Consumer-facing handlers on `this.events` are intentionally preserved.
+    this.client.removeAllListeners();
+    this.activeResponseIds.clear();
+    this.textEmittedResponseIds.clear();
+
     this.ws.on('message', message => {
       const data = JSON.parse(message.toString());
       this.client.emit(data.type, data);
@@ -401,6 +583,7 @@ export class InworldRealtimeVoice extends MastraVoice {
     });
 
     this.client.on('response.created', ev => {
+      this.activeResponseIds.add(ev.response.id);
       this.emit('response.created', ev);
 
       const speakerStream = new PassThrough() as StreamWithId;
@@ -419,6 +602,23 @@ export class InworldRealtimeVoice extends MastraVoice {
       this.emit('conversation.item.done', ev);
     });
 
+    // Barge-in. Inworld emits `speech_started`/`speech_stopped` from the VAD
+    // edges; we forward those raw and synthesize an `interrupted` per
+    // in-flight response_id so consumers can stop audio playback without
+    // tracking response state themselves.
+    this.client.on('input_audio_buffer.speech_started', ev => {
+      this.emit('speech-started', ev);
+      for (const responseId of this.activeResponseIds) {
+        const payload = { response_id: responseId };
+        this.emit('interrupted', payload);
+        // Internal channel for `speak()`'s awaiter (see awaitResponseLifecycle).
+        this.client.emit('interrupted', payload);
+      }
+    });
+    this.client.on('input_audio_buffer.speech_stopped', ev => {
+      this.emit('speech-stopped', ev);
+    });
+
     // GA spec audio deltas (NOT preview-spec `response.audio.delta`).
     this.client.on('response.output_audio.delta', ev => {
       const audio = Buffer.from(ev.delta, 'base64');
@@ -434,7 +634,13 @@ export class InworldRealtimeVoice extends MastraVoice {
       stream?.end();
     });
 
+    // Inworld can emit both `output_audio_transcript.delta` AND
+    // `output_text.delta` for the same response when audio+text modalities
+    // are both active. Pin the response_id on the first audio-transcript
+    // chunk and suppress the parallel text-delta stream to avoid duplicate
+    // `writing` emits. Text-only responses still emit normally.
     this.client.on('response.output_audio_transcript.delta', ev => {
+      this.textEmittedResponseIds.add(ev.response_id);
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.output_audio_transcript.done', ev => {
@@ -442,9 +648,11 @@ export class InworldRealtimeVoice extends MastraVoice {
     });
 
     this.client.on('response.output_text.delta', ev => {
+      if (this.textEmittedResponseIds.has(ev.response_id)) return;
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.output_text.done', ev => {
+      if (this.textEmittedResponseIds.has(ev.response_id)) return;
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
     });
 
@@ -469,11 +677,29 @@ export class InworldRealtimeVoice extends MastraVoice {
       await this.handleFunctionCalls(ev);
       this.emit('response.done', ev);
       speakerStreams.delete(ev.response.id);
+      this.activeResponseIds.delete(ev.response.id);
+      this.textEmittedResponseIds.delete(ev.response.id);
     });
 
     this.client.on('error', async ev => {
       this.emit('error', ev);
     });
+  }
+
+  /**
+   * Returns the user-supplied `turn_detection` value (or `null` for explicit
+   * opt-out), or `undefined` when neither override sets it. Used to decide
+   * whether to apply `DEFAULT_TURN_DETECTION`.
+   */
+  private userTurnDetection(): InworldTurnDetection | null | undefined {
+    const fromSession = this.session?.audio?.input?.turn_detection;
+    if (fromSession !== undefined) return fromSession;
+    const providerAudio = (this.providerData?.audio as Record<string, unknown> | undefined) ?? undefined;
+    const providerInput = (providerAudio?.input as Record<string, unknown> | undefined) ?? undefined;
+    if (providerInput && 'turn_detection' in providerInput) {
+      return providerInput.turn_detection as InworldTurnDetection | null;
+    }
+    return undefined;
   }
 
   private async handleFunctionCalls(ev: any) {
@@ -575,4 +801,5 @@ export type {
   InworldSessionConfig,
   InworldToolChoice,
   InworldTurnDetection,
+  InworldVoiceEventMap,
 } from './types';

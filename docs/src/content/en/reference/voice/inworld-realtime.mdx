@@ -133,6 +133,14 @@ voice.close()
       'Untyped escape hatch for realtime fields not yet covered by the typed `session` interface. Deep-merged into every session.update and overrides `session` on key collisions. Use this for forward-compatibility with new Inworld features.',
     isOptional: true,
   },
+  {
+    name: 'connectTimeoutMs',
+    type: 'number',
+    description:
+      'Max time `connect()` will wait for both the WebSocket handshake and the initial `session.updated` round-trip. A pre-open error or close on the WebSocket — or this timeout expiring — surfaces as a rejected promise instead of an uncaught socket error.',
+    isOptional: true,
+    defaultValue: '15000',
+  },
 ]}
 />
 
@@ -186,9 +194,9 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
   },
   {
     name: 'audio.input.turn_detection',
-    type: 'InworldTurnDetection',
+    type: 'InworldTurnDetection | null',
     description:
-      'Voice activity / turn detection. Supports server VAD and semantic VAD with an `eagerness` knob (low / medium / high / auto).',
+      'Voice activity / turn detection. Defaults to `{ type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }`. Supply your own object to override; set to `null` to disable turn detection entirely.',
     isOptional: true,
   },
   {
@@ -231,6 +239,8 @@ Prefer the typed `session` field for documented options. Reach for `providerData
 
 Opens the WebSocket connection, sends the initial `session.update`, and resolves once the server acknowledges with `session.updated`. Must be called before `speak()`, `listen()`, or `send()`.
 
+A pre-open `error` or `close` on the WebSocket — or a handshake that exceeds `connectTimeoutMs` (15s default) — surfaces as a rejected promise instead of an uncaught socket error. On reject, the half-open socket is closed.
+
 ```typescript
 await voice.connect()
 ```
@@ -239,7 +249,9 @@ Returns: `Promise<void>`
 
 ### `speak()`
 
-Sends a text message to the model and triggers an audio response.
+Sends a text message to the model and triggers an audio response. The returned promise resolves only after the full response lifecycle completes (`response.done` for the response this call triggered), and rejects if the response is interrupted by user speech or if a transport error occurs.
+
+Serial `speak()` calls are the supported pattern. Concurrent calls share the same listener pool and have undefined response-pinning order.
 
 <PropertiesTable
   content={[
@@ -425,7 +437,23 @@ The `InworldRealtimeVoice` class emits the following events:
     name: 'writing',
     type: 'event',
     description:
-      'Emitted as transcribed text becomes available. Callback receives { text: string, response_id: string, role: "assistant" | "user" }.',
+      'Emitted as transcribed text becomes available. Callback receives { text: string, response_id: string, role: "assistant" | "user" }. Deduplicated across audio-transcript and text deltas in the same response so a single response only emits one stream.',
+  },
+  {
+    name: 'speech-started',
+    type: 'event',
+    description: 'Raw `input_audio_buffer.speech_started` VAD edge from the server.',
+  },
+  {
+    name: 'speech-stopped',
+    type: 'event',
+    description: 'Raw `input_audio_buffer.speech_stopped` VAD edge from the server.',
+  },
+  {
+    name: 'interrupted',
+    type: 'event',
+    description:
+      'Synthetic client-side signal: emitted once per in-flight `response_id` when the user starts speaking. Use this to stop audio playback on barge-in. Callback receives `{ response_id: string }`.',
   },
   {
     name: 'response.created',
@@ -495,3 +523,5 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 - Audio output defaults to PCM16 at 24 kHz. `audio/pcmu` and `audio/pcma` at 8 kHz are also supported via `session.audio.output.format`.
 - Use `connect()` before any send, speak, or listen call. Events sent before the WebSocket is open are queued and flushed once the server acknowledges `session.updated`.
 - The voice instance must be closed with `close()` or `disconnect()` to release the WebSocket.
+- `audio.input.turn_detection` defaults to semantic VAD when neither `session` nor `providerData` supplies it. Override with your own object, or pass `null` to disable turn detection entirely.
+- `on()` and `off()` are typed against `InworldVoiceEventMap` — known event names yield a typed callback payload, unknown names fall back to `unknown`.

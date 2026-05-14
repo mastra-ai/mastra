@@ -151,3 +151,45 @@ export interface InworldResponse {
   output?: Array<InworldFunctionCallOutput | Record<string, unknown>>;
   [key: string]: unknown;
 }
+
+/**
+ * Typed event map for `InworldRealtimeVoice.on()` / `off()`.
+ *
+ * Standalone (not extending the base `VoiceEventMap`) because our
+ * `speaking.audio` is a `Buffer` and the base types it as `string`. The
+ * sibling `@mastra/voice-openai-realtime` package emits Buffers too and runs
+ * with an entirely untyped `on()`; we add typed overloads on the subclass
+ * directly so consumers get autocompletion without forcing the base type
+ * upstream.
+ *
+ * Raw server passthroughs (`session.created`, `response.created`, etc.) are
+ * typed as `Record<string, unknown>` because they mirror the wire payload
+ * unchanged — narrow them at the call site if you need stricter types.
+ */
+export interface InworldVoiceEventMap {
+  speaker: NodeJS.ReadableStream;
+  speaking: { audio: Buffer; response_id: string };
+  'speaking.done': { response_id: string };
+  writing: { text: string; response_id: string; role: 'assistant' | 'user' };
+  interrupted: { response_id: string };
+  'speech-started': Record<string, unknown>;
+  'speech-stopped': Record<string, unknown>;
+  'function_call.arguments': { call_id: string; name: string; arguments: string };
+  'tool-call-start': { toolCallId: string; toolName: string; toolDescription?: string; args: unknown };
+  'tool-call-result': {
+    toolCallId: string;
+    toolName: string;
+    toolDescription?: string;
+    args: unknown;
+    result: unknown;
+  };
+  error: Error | { message: string; code?: string; details?: unknown };
+  'session.created': Record<string, unknown>;
+  'session.updated': Record<string, unknown>;
+  'response.created': Record<string, unknown>;
+  'response.done': Record<string, unknown>;
+  'conversation.item.added': Record<string, unknown>;
+  'conversation.item.done': Record<string, unknown>;
+  /** Forward-compat fallback for any raw event name not in this map. */
+  [key: string]: unknown;
+}
