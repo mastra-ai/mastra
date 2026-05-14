@@ -15,13 +15,12 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let client: MCPClient;
 
   beforeAll(async () => {
-    const cliEntry =
-      process.env.MASTRA_SOURCE_MODE === '1'
-        ? path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `src`, `index.ts`)
-        : path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`);
-    const cliArgs = process.env.MASTRA_SOURCE_MODE === '1' ? ['exec', 'tsx', cliEntry, 'dev'] : [cliEntry, 'dev'];
+    const cliEntry = path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`);
+    const sourceModeCliEntry = path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `bin`, `mastra.mjs`);
+    const cliArgs =
+      process.env.MASTRA_SOURCE_MODE === '1' ? [sourceModeCliEntry, 'dev', '--source-mode'] : [cliEntry, 'dev'];
 
-    mastraServer = spawn('pnpm', cliArgs, {
+    mastraServer = spawn(process.env.MASTRA_SOURCE_MODE === '1' ? process.execPath : 'pnpm', cliArgs, {
       stdio: 'pipe',
       detached: true, // Run in a new process group so we can kill it and children
       env: {

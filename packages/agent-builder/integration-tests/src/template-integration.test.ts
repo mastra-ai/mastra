@@ -202,7 +202,7 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Starting Mastra server...');
 
     // Start the Mastra server
-    mastraServer = spawn('pnpm', ['dev'], {
+    mastraServer = spawn('pnpm', [process.env.MASTRA_SOURCE_MODE === '1' ? 'dev:source-mode' : 'dev'], {
       stdio: 'pipe',
       cwd: targetRepo,
       detached: true,

@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node:fs', () => ({
+  existsSync: vi.fn().mockReturnValue(false),
   writeFileSync: vi.fn(),
 }));
 
@@ -450,7 +451,7 @@ describe('dev command - inspect flag behavior', () => {
         expect(process.env.NODE_OPTIONS).toBe('--max-old-space-size=4096 --conditions=mastra-source');
         expect(execaMock).toHaveBeenCalled();
         expect(execaMock.mock.calls[0][1]).toContain('--import');
-        expect(execaMock.mock.calls[0][1]).toContain('tsx');
+        expect(execaMock.mock.calls[0][1]).toContainEqual(expect.stringContaining('tsx/dist/loader.mjs'));
         expect(execaMock.mock.calls[0][2].env).toMatchObject({
           MASTRA_SOURCE_MODE: '1',
           NODE_OPTIONS: '--max-old-space-size=4096 --conditions=mastra-source',

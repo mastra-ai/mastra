@@ -1,9 +1,10 @@
 import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
+import { execa } from 'execa';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
@@ -43,6 +44,19 @@ export class DevBundler extends Bundler {
     return Promise.resolve([]);
   }
 
+  private async getSourceModeStudioPath(): Promise<string> {
+    const playgroundPackageJsonPath = fileURLToPath(import.meta.resolve('@internal/playground/package.json'));
+    const playgroundRoot = dirname(playgroundPackageJsonPath);
+    const playgroundDist = join(playgroundRoot, 'dist');
+
+    if (!(await fsExtra.pathExists(join(playgroundDist, 'index.html')))) {
+      devLogger.info('Building Studio assets for source mode...');
+      await execa('pnpm', ['--dir', playgroundRoot, 'build'], { stdio: 'inherit' });
+    }
+
+    return playgroundDist;
+  }
+
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
 
@@ -50,12 +64,12 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const studioServePath = join(outputDirectory, this.outputDir, 'studio');
-    if (process.env.MASTRA_SOURCE_MODE === '1') {
-      await fsExtra.ensureDir(studioServePath);
-      return;
-    }
+    const studioSourcePath =
+      process.env.MASTRA_SOURCE_MODE === '1'
+        ? await this.getSourceModeStudioPath()
+        : join(dirname(__dirname), join('dist', 'studio'));
 
-    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
+    await fsExtra.copy(studioSourcePath, studioServePath, {
       overwrite: true,
     });
   }
@@ -67,7 +81,7 @@ export class DevBundler extends Bundler {
   ): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    const packageRoot = dirname(dirname(dirname(__dirname)));
+    const packageRoot = __dirname.endsWith(`${sep}dist`) ? dirname(__dirname) : dirname(dirname(dirname(__dirname)));
 
     const envFiles = await this.getEnvFiles();
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);

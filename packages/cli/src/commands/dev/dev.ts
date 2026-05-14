@@ -1,7 +1,9 @@
 import type { ChildProcess } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
@@ -25,6 +27,21 @@ let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 const SOURCE_MODE_CONDITION = '--conditions=mastra-source';
+const SOURCE_MODE_WORKSPACE_DIRS = [
+  'packages',
+  'stores',
+  'server-adapters',
+  'deployers',
+  'voice',
+  'workflows',
+  'pubsub',
+  'client-sdks',
+  'integrations',
+  'auth',
+  'observability',
+  'channels',
+  'browser',
+];
 
 function withSourceModeCondition(nodeOptions?: string) {
   if (nodeOptions?.split(/\s+/).includes(SOURCE_MODE_CONDITION)) {
@@ -34,13 +51,108 @@ function withSourceModeCondition(nodeOptions?: string) {
   return [nodeOptions, SOURCE_MODE_CONDITION].filter(Boolean).join(' ');
 }
 
+function getSourceModeWorkspaceRoot() {
+  if (process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT) {
+    return process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT;
+  }
+
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  return dirname(dirname(dirname(dirname(dirname(currentDir)))));
+}
+
 function applySourceModeEnv(env?: Map<string, string>) {
   const nodeOptions = withSourceModeCondition(env?.get('NODE_OPTIONS') ?? process.env.NODE_OPTIONS);
+  const workspaceRoot = getSourceModeWorkspaceRoot();
 
   process.env.MASTRA_SOURCE_MODE = '1';
+  process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT = workspaceRoot;
   process.env.NODE_OPTIONS = nodeOptions;
   env?.set('MASTRA_SOURCE_MODE', '1');
+  env?.set('MASTRA_SOURCE_MODE_WORKSPACE_ROOT', workspaceRoot);
   env?.set('NODE_OPTIONS', nodeOptions);
+}
+
+async function linkSourceModeWorkspacePackages(outputDir: string) {
+  if (process.env.MASTRA_SOURCE_MODE !== '1') {
+    return;
+  }
+
+  const workspaceRoot = getSourceModeWorkspaceRoot();
+  const nodeModulesDir = join(outputDir, 'node_modules');
+  await mkdir(nodeModulesDir, { recursive: true });
+
+  const linkNodeModules = async (sourceNodeModules: string) => {
+    if (!existsSync(sourceNodeModules)) {
+      return;
+    }
+
+    for (const entry of await readdir(sourceNodeModules, { withFileTypes: true })) {
+      if (entry.name === '.bin' || entry.name === '@mastra') {
+        continue;
+      }
+
+      const sourcePath = join(sourceNodeModules, entry.name);
+      if (entry.name.startsWith('@')) {
+        const scopeDir = join(nodeModulesDir, entry.name);
+        await mkdir(scopeDir, { recursive: true });
+        for (const scopedEntry of await readdir(sourcePath, { withFileTypes: true })) {
+          const linkPath = join(scopeDir, scopedEntry.name);
+          if (existsSync(linkPath)) {
+            continue;
+          }
+          await symlink(
+            join(sourcePath, scopedEntry.name),
+            linkPath,
+            process.platform === 'win32' ? 'junction' : 'dir',
+          );
+        }
+        continue;
+      }
+
+      const linkPath = join(nodeModulesDir, entry.name);
+      if (!existsSync(linkPath)) {
+        await symlink(sourcePath, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+      }
+    }
+  };
+
+  await linkNodeModules(join(workspaceRoot, 'node_modules'));
+
+  for (const workspaceDir of SOURCE_MODE_WORKSPACE_DIRS) {
+    const absoluteWorkspaceDir = join(workspaceRoot, workspaceDir);
+    if (!existsSync(absoluteWorkspaceDir)) {
+      continue;
+    }
+
+    for (const entry of await readdir(absoluteWorkspaceDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const packageDir = join(absoluteWorkspaceDir, entry.name);
+      const packageJsonPath = join(packageDir, 'package.json');
+      if (!existsSync(packageJsonPath)) {
+        continue;
+      }
+
+      await linkNodeModules(join(packageDir, 'node_modules'));
+
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8')) as { name?: string };
+      const packageJsonName = packageJson.name;
+      if (!packageJsonName || (!packageJsonName.startsWith('@mastra/') && packageJsonName !== 'mastra')) {
+        continue;
+      }
+
+      const packageNameParts = packageJsonName.split('/');
+      const scopeOrName = packageNameParts[0]!;
+      const packageName = packageNameParts[1];
+      const linkDir = packageName ? join(nodeModulesDir, scopeOrName) : nodeModulesDir;
+      const linkPath = packageName ? join(linkDir, packageName) : join(linkDir, scopeOrName);
+      await mkdir(linkDir, { recursive: true });
+      await rm(linkPath, { recursive: true, force: true });
+      await symlink(packageDir, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+  }
 }
 
 function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
@@ -144,7 +256,7 @@ const startServer = async (
     }
 
     if (process.env.MASTRA_SOURCE_MODE === '1') {
-      commands.push('--import', 'tsx');
+      commands.push('--import', import.meta.resolve('tsx'));
     }
     commands.push(join(dotMastraPath, 'index.mjs'));
 
@@ -156,6 +268,7 @@ const startServer = async (
     }
 
     await mkdir(publicDir, { recursive: true });
+    await linkSourceModeWorkspacePackages(dotMastraPath);
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {

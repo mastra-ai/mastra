@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
+    "dev:source-mode": "mastra dev --source-mode",
     "build": "mastra build"
   },
   "dependencies": {

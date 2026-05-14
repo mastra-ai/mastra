@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DevBundler } from './DevBundler';
@@ -65,10 +66,17 @@ vi.mock('fs-extra', () => {
   };
 });
 
+vi.mock('execa', () => {
+  return {
+    execa: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 // Import DevBundler after mocks
 
 describe('DevBundler', () => {
   const originalEnv = process.env.NODE_ENV;
+  const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
   const originalExit = process.exit;
 
   beforeEach(() => {
@@ -79,7 +87,60 @@ describe('DevBundler', () => {
 
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;
+    if (originalSourceMode === undefined) {
+      delete process.env.MASTRA_SOURCE_MODE;
+    } else {
+      process.env.MASTRA_SOURCE_MODE = originalSourceMode;
+    }
     process.exit = originalExit;
+  });
+
+  describe('prepare', () => {
+    it('should copy playground dist into the dev server output in source mode', async () => {
+      process.env.MASTRA_SOURCE_MODE = '1';
+      const devBundler = new DevBundler();
+      const fsExtra = await import('fs-extra');
+      const { execa } = await import('execa');
+      vi.mocked(fsExtra.pathExists as unknown as () => Promise<boolean>).mockResolvedValue(true);
+
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.prepare(tmpDir);
+
+        expect(fsExtra.copy).toHaveBeenCalledWith(
+          expect.stringMatching(/packages\/playground\/dist$/),
+          join(tmpDir, 'output', 'studio'),
+          { overwrite: true },
+        );
+        expect(execa).not.toHaveBeenCalled();
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
+    it('should build playground assets when source mode studio dist is missing', async () => {
+      process.env.MASTRA_SOURCE_MODE = '1';
+      const devBundler = new DevBundler();
+      const fsExtra = await import('fs-extra');
+      const { execa } = await import('execa');
+      vi.mocked(fsExtra.pathExists as unknown as () => Promise<boolean>).mockResolvedValue(false);
+
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.prepare(tmpDir);
+
+        expect(execa).toHaveBeenCalledWith('pnpm', ['--dir', expect.stringMatching(/packages\/playground$/), 'build'], {
+          stdio: 'inherit',
+        });
+        expect(fsExtra.copy).toHaveBeenCalledWith(
+          expect.stringMatching(/packages\/playground\/dist$/),
+          join(tmpDir, 'output', 'studio'),
+          { overwrite: true },
+        );
+      } finally {
+        await remove(tmpDir);
+      }
+    });
   });
 
   describe('watch', () => {
