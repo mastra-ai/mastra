@@ -277,6 +277,12 @@ Returns an `AgentThreadSubscription` object with these members:
     description: "Optional description of the agent's purpose and capabilities.",
   },
   {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Optional static metadata for classifying or filtering the agent in clients.',
+  },
+  {
     name: 'instructions',
     type: 'SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>',
     isOptional: false,

@@ -654,6 +654,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       id: storedAgent.id,
       name: storedAgent.name,
       description: storedAgent.description,
+      metadata: storedAgent.metadata,
       instructions: instructions ?? '',
       model,
       memory,

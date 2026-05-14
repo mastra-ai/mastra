@@ -253,6 +253,10 @@ export interface AgentConfig<
    */
   description?: string;
   /**
+   * Static metadata for classifying or filtering the agent in clients.
+   */
+  metadata?: Record<string, unknown>;
+  /**
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
    */

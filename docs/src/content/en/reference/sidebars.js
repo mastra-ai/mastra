@@ -33,6 +33,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/getInstructions', label: '.getInstructions()' },
         { type: 'doc', id: 'agents/getLLM', label: '.getLLM()' },
         { type: 'doc', id: 'agents/getMemory', label: '.getMemory()' },
+        { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },

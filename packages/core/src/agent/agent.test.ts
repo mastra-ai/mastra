@@ -5361,6 +5361,21 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 }
 
 describe('Agent Tests', () => {
+  describe('metadata', () => {
+    it('returns configured static metadata', () => {
+      const metadata = { type: 'support', tier: 'paid' };
+      const agent = new Agent({
+        id: 'metadata-agent',
+        name: 'metadata-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-5',
+        metadata,
+      });
+
+      expect(agent.getMetadata()).toEqual(metadata);
+    });
+  });
+
   describe('prepareStep', () => {
     it('should allow adding new tools via prepareStep', async () => {
       let capturedTools: any;

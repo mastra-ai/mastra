@@ -1,0 +1,47 @@
+---
+title: "Reference: Agent.getMetadata() | Agents"
+description: "Documentation for the `Agent.getMetadata()` method in Mastra agents, which retrieves static agent metadata."
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getMetadata()
+
+The `.getMetadata()` method retrieves static metadata configured for an agent. Use metadata to classify agents in clients without encoding that data in the agent ID or name.
+
+## Usage example
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You help customers with support requests.',
+  model: 'openai/gpt-5.4',
+  metadata: { type: 'support' },
+})
+
+const metadata = supportAgent.getMetadata()
+```
+
+## Parameters
+
+This method takes no parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown> | undefined',
+    description: 'The metadata configured for the agent, or `undefined` if no metadata was configured.',
+  },
+]}
+/>
+
+## Related
+
+- [Agent class](/reference/agents/agent)
+- [Agents overview](/docs/agents/overview)

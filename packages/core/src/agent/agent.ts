@@ -248,6 +248,7 @@ export class Agent<
   public source?: DefinitionSource;
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
+  readonly #metadata?: Record<string, unknown>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
@@ -330,6 +331,7 @@ export class Agent<
 
     this.#instructions = config.instructions;
     this.#description = config.description;
+    this.#metadata = config.metadata;
     this.#options = config.options;
 
     if (!config.model) {
@@ -1564,6 +1566,19 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Returns static metadata configured for the agent.
+   *
+   * @example
+   * ```typescript
+   * const metadata = agent.getMetadata();
+   * console.log(metadata?.type); // 'support'
+   * ```
+   */
+  public getMetadata(): Record<string, unknown> | undefined {
+    return this.#metadata;
   }
 
   /**

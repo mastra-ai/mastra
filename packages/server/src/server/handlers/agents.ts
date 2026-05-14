@@ -212,6 +212,7 @@ export interface SerializedWorkflow {
 export interface SerializedAgent {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   instructions?: SystemMessage;
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
@@ -518,6 +519,7 @@ async function formatAgentList({
   const logger = mastra.getLogger();
 
   const description = agent.getDescription();
+  const metadata = agent.getMetadata();
 
   // Per-agent dynamic getters can throw (e.g. when their callbacks destructure
   // fields from `requestContext` that aren't present under the active preset).
@@ -652,6 +654,7 @@ async function formatAgentList({
     id: agent.id || id,
     name: agent.name,
     description,
+    metadata,
     instructions,
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
@@ -796,6 +799,7 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
+  const metadata = agent.getMetadata();
 
   const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
@@ -913,6 +917,7 @@ async function formatAgent({
   return {
     name: agent.name,
     description,
+    metadata,
     instructions,
     tools: serializedAgentTools,
     agents: serializedAgentAgents,
