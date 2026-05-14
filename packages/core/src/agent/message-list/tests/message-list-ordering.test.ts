@@ -474,6 +474,55 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       });
     });
 
+    it('should add interjected signals after the latest response part timestamp', () => {
+      const baseTime = Date.now() + 60_000;
+      const responseTime = new Date(baseTime);
+      const toolPartTime = baseTime + 5_000;
+      const signalTime = new Date(baseTime + 2_000);
+      const list = new MessageList();
+      const signal = createSignal({
+        id: 'signal-after-tool-part',
+        type: 'user-message',
+        contents: 'Signal after tool output',
+        createdAt: signalTime,
+      });
+
+      list.add(
+        {
+          id: 'assistant-with-late-tool-part',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Before tool output' },
+              {
+                type: 'tool-invocation',
+                createdAt: toolPartTime,
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'gitStatus',
+                  args: {},
+                  result: '(no output)',
+                },
+              },
+            ],
+          },
+          createdAt: responseTime,
+        },
+        'response',
+      );
+
+      const signalForTranscript = list.addInterjectedSignal(signal);
+
+      expect(signalForTranscript.createdAt.getTime()).toBe(toolPartTime + 1);
+      expect(signalForTranscript.acceptedAt).toEqual(signalTime);
+      expect(list.get.all.db().map(message => message.id)).toEqual([
+        'assistant-with-late-tool-part',
+        'signal-after-tool-part',
+      ]);
+    });
+
     it('should preserve createdAt for V5 UI messages', () => {
       const time1 = new Date('2024-01-01T10:00:00.000Z');
       const time2 = new Date('2024-01-01T10:01:00.000Z');

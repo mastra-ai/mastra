@@ -302,6 +302,9 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
+    for (const message of this.messages) {
+      this.updateLastCreatedAt(message);
+    }
     return this;
   }
 
@@ -1446,6 +1449,7 @@ export class MessageList {
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger
       MessageMerger.merge(latestMessage, messageV2);
+      this.updateLastCreatedAt(latestMessage);
 
       // If latest message gets appended to, it should be added to the proper source
       this.pushMessageToSource(latestMessage, messageSource);
@@ -1533,6 +1537,7 @@ export class MessageList {
           );
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
+            this.updateLastCreatedAt(existingMessage);
             this.pushMessageToSource(existingMessage, messageSource);
             // Sort messages and return early — existingMessage stays in messages[] and its Sets
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -1547,6 +1552,10 @@ export class MessageList {
       this.pushMessageToSource(messageV2, messageSource);
     }
 
+    for (const storedMessage of this.messages) {
+      this.updateLastCreatedAt(storedMessage);
+    }
+
     // make sure messages are always stored in order of when they were created!
     this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
@@ -1558,6 +1567,18 @@ export class MessageList {
   }
 
   private lastCreatedAt?: number;
+
+  private updateLastCreatedAt(message: MastraDBMessage): void {
+    const latestPartTime = message.content.parts.reduce((latest, part) => {
+      if (typeof part.createdAt === 'number' && part.createdAt > latest) {
+        return part.createdAt;
+      }
+      return latest;
+    }, message.createdAt.getTime());
+
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, latestPartTime);
+  }
+
   // this makes sure messages added in order will always have a date atleast 1ms apart.
   private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
     // Normalize timestamp
@@ -1581,11 +1602,8 @@ export class MessageList {
 
     const now = new Date();
     const nowTime = startDate?.getTime() || now.getTime();
-    // find the latest createdAt in all stored messages
-    const lastTime = this.messages.reduce((p, m) => {
-      if (m.createdAt.getTime() > p) return m.createdAt.getTime();
-      return p;
-    }, this.lastCreatedAt || 0);
+    // find the latest createdAt in stored messages and parts
+    const lastTime = this.lastCreatedAt || 0;
 
     // make sure our new message is created later than the latest known message time
     // it's expected that messages are added to the list in order if they don't have a createdAt date on them

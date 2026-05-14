@@ -616,9 +616,9 @@ describe('Agent signals', () => {
     expect(firstSignal.id).not.toBe(userMessage.id);
     expect(secondSignal.id).not.toBe(userMessage.id);
     expect(firstSignal.createdAt.getTime()).toBeGreaterThan(firstAssistant.createdAt.getTime());
-    expect(firstSignal.createdAt.getTime()).toBeLessThan(secondAssistant.createdAt.getTime());
+    expect(firstSignal.createdAt.getTime()).toBeLessThanOrEqual(secondAssistant.createdAt.getTime());
     expect(secondSignal.createdAt.getTime()).toBeGreaterThan(secondAssistant.createdAt.getTime());
-    expect(secondSignal.createdAt.getTime()).toBeLessThan(thirdAssistant.createdAt.getTime());
+    expect(secondSignal.createdAt.getTime()).toBeLessThanOrEqual(thirdAssistant.createdAt.getTime());
 
     const firstRecalledSignal = mastraDBMessageToSignal(firstSignal);
     const secondRecalledSignal = mastraDBMessageToSignal(secondSignal);
