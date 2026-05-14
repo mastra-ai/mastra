@@ -48,7 +48,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function getGithubPrSubscriptionsFromMetadata(metadata: Record<string, unknown> | undefined): GithubPrSubscriptionBadge[] {
+export function getGithubPrSubscriptionsFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): GithubPrSubscriptionBadge[] {
   const mastra = isRecord(metadata?.mastra) ? metadata.mastra : undefined;
   const githubSignals = isRecord(mastra?.githubSignals) ? mastra.githubSignals : undefined;
   const subscriptions = isRecord(githubSignals?.subscriptions) ? githubSignals.subscriptions : undefined;
