@@ -176,17 +176,32 @@ describe('Agent signal routes', () => {
     expect(sentBody.resourceId).toBe('resource-123');
   });
 
-  it('executes clientTools on streamed tool-call chunks and emits a synthetic tool-result chunk', async () => {
+  it('executes clientTools after tool-calls finish and continues with tool-result messages', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
 
+    const assistantMessages = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' } }],
+      },
+    ];
     const toolCallChunk = {
       type: 'tool-call',
       runId: 'run-abc',
       payload: { toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' } },
     };
+    const finishChunk = {
+      type: 'finish',
+      runId: 'run-abc',
+      payload: {
+        stepResult: { reason: 'tool-calls' },
+        messages: { nonUser: assistantMessages },
+      },
+    };
     const controllableStream = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(toolCallChunk)}\n\n`));
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(finishChunk)}\n\n`));
         controller.close();
       },
     });
@@ -221,23 +236,38 @@ describe('Agent signal routes', () => {
       },
     });
 
-    // The client tool ran with the streamed args.
+    // The client tool ran with the streamed args only once the run finished with tool-calls.
     expect(executeSpy).toHaveBeenCalledTimes(1);
     expect((executeSpy.mock.calls[0] as any[])[0]).toEqual({ x: 'hi' });
 
-    // A synthetic tool-result chunk was emitted after the tool-call chunk.
-    const toolResultChunk = received.find(c => c.type === 'tool-result');
-    expect(toolResultChunk).toBeDefined();
+    // A synthetic tool-result chunk was emitted after the finish chunk.
+    const finishIndex = received.findIndex(c => c.type === 'finish');
+    const toolResultIndex = received.findIndex(c => c.type === 'tool-result');
+    expect(toolResultIndex).toBeGreaterThan(finishIndex);
+    const toolResultChunk = received[toolResultIndex];
     expect(toolResultChunk.payload).toEqual({
       toolCallId: 'call-1',
       toolName: 'myTool',
       result: { ok: true },
     });
 
-    // A continuation run was POSTed via streamUntilIdle with thread memory.
+    // A continuation run was POSTed with the assistant tool-call message plus the tool result.
     expect(streamUntilIdleSpy).toHaveBeenCalled();
-    const continuationCall = streamUntilIdleSpy.mock.calls.at(-1) as [unknown, { memory?: unknown }];
-    expect(continuationCall[0]).toEqual([]);
+    const continuationCall = streamUntilIdleSpy.mock.calls.at(-1) as [any[], { memory?: unknown }];
+    expect(continuationCall[0]).toEqual([
+      ...assistantMessages,
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'myTool',
+            result: { ok: true },
+          },
+        ],
+      },
+    ]);
     expect(continuationCall[1]?.memory).toEqual({ thread: 'thread-123', resource: 'resource-123' });
   });
 
