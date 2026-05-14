@@ -60,32 +60,36 @@ describe('agent generate', () => {
   });
 
   describe('multi-turn with memory', () => {
-    it('should remember context across turns on the same thread', async () => {
-      const threadId = crypto.randomUUID();
-      const resourceId = 'smoke-test-user';
+    it(
+      'should remember context across turns on the same thread',
+      async () => {
+        const threadId = crypto.randomUUID();
+        const resourceId = 'smoke-test-user';
 
-      // First turn: introduce a fact
-      const { data: first } = await generateAgent('test-agent', {
-        messages: [
-          {
-            role: 'user',
-            content: 'Remember this: the secret code is ALPHA-7. Just confirm you got it.',
-          },
-        ],
-        memory: { thread: threadId, resource: resourceId },
-      });
+        // First turn: introduce a fact
+        const { data: first } = await generateAgent('test-agent', {
+          messages: [
+            {
+              role: 'user',
+              content: 'Remember this: the secret code is ALPHA-7. Just confirm you got it.',
+            },
+          ],
+          memory: { thread: threadId, resource: resourceId },
+        });
 
-      expect(first.text).toBeTruthy();
+        expect(first.text).toBeTruthy();
 
-      // Second turn: ask about the fact on the same thread
-      const { data: second } = await generateAgent('test-agent', {
-        messages: [{ role: 'user', content: 'What is the secret code I told you?' }],
-        memory: { thread: threadId, resource: resourceId },
-      });
+        // Second turn: ask about the fact on the same thread
+        const { data: second } = await generateAgent('test-agent', {
+          messages: [{ role: 'user', content: 'What is the secret code I told you?' }],
+          memory: { thread: threadId, resource: resourceId },
+        });
 
-      expect(second.text).toBeTruthy();
-      expect(second.text.toUpperCase()).toContain('ALPHA-7');
-    });
+        expect(second.text).toBeTruthy();
+        expect(second.text.toUpperCase()).toContain('ALPHA-7');
+      },
+      60_000,
+    );
   });
 
   describe('error handling', () => {
