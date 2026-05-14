@@ -142,6 +142,7 @@ const EXCLUDED_DIRS = new Set([
         'packages/_external-types',
         'packages/_changeset-cli',
         'packages/_internal-core',
+        'voice/xai-realtime-api',
       ]
     : []),
 ]);
