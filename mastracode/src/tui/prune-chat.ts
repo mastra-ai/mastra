@@ -25,4 +25,9 @@ export function pruneChatContainer(state: TUIState): void {
   state.allShellComponents = state.allShellComponents.filter(
     component => !removed.has(component as unknown as Component),
   );
+  for (const [id, pending] of state.pendingSignalMessageComponentsById) {
+    if (removed.has(pending.component as unknown as Component)) {
+      state.pendingSignalMessageComponentsById.delete(id);
+    }
+  }
 }

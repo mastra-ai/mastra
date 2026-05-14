@@ -17,7 +17,6 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
-import { verifyProject } from './commands/actions/verify-project';
 import { registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
@@ -105,6 +104,12 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(createProject);
 
 program
@@ -126,6 +131,12 @@ program
     'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
     parseMcp,
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(initProject);
 
 registerApiCommand(program);
@@ -136,6 +147,12 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('--preflight', 'Also run bundle preflight checks (builds if needed)')
+  .option('--skip-build', 'Skip build, reuse existing .mastra/output (requires --preflight)')
+  .option('--env-file <file>', 'Env file for preflight validation (requires --preflight)')
+  .option('--strict', 'Treat warnings as errors')
+  .option('--json', 'Emit machine-readable JSON output')
+  .option('--debug', 'Enable debug logs', false)
   .action(lintProject);
 
 program
@@ -171,17 +188,6 @@ program
   .option('-s, --studio', 'Bundle the studio UI with the build')
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
-
-program
-  .command('verify')
-  .description('Validate that your Mastra project is ready to deploy (no upload)')
-  .option('-d, --dir <path>', 'Path to your Mastra project directory')
-  .option('--env-file <file>', 'Env file to validate against (for example: .env.production)')
-  .option('--skip-build', 'Skip the build step and use existing .mastra/output')
-  .option('--strict', 'Treat warnings as errors (exit 1 on any issue)')
-  .option('--json', 'Emit machine-readable JSON output (for CI)')
-  .option('--debug', 'Enable debug logs', false)
-  .action(wrapAction(verifyProject));
 
 const workerCommand = program.command('worker').description('Build and run standalone Mastra worker bundles');
 

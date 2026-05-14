@@ -63,9 +63,9 @@ createWorkflowTestSuite({
     Agent,
   }),
 
-  // Skip restart domain - restart() is not supported on evented workflows
   skip: {
-    restart: true,
+    // All domains should work on Evented Engine
+    restart: false, // Evented engine supports restart
   },
 
   // Provide access to storage for tests that need to spy on storage operations
@@ -111,31 +111,13 @@ createWorkflowTestSuite({
     rebindRegistryWorkflows();
   },
 
-  // Skip only tests that actually fail - updated after BUG fixes 2026-02
   skipTests: {
-    // Suspend/resume - parallel suspend has race condition (each step publishes workflow.suspend independently)
-    resumeParallelMulti: true,
-    resumeMultiSuspendError: true,
-    resumeBranchingStatus: true,
-    // Suspend/resume - still failing (loop/foreach coordination, nested input propagation)
-    resumeLoopInput: true,
-    resumeForeachIndex: true,
-    resumeForeachLabel: true, // Same issue as resumeForeachIndex
-    resumeForeachPartial: true, // Same issue as resumeForeachIndex
-    resumeForeachPartialIndex: true, // Same issue as resumeForeachIndex
-    resumeNested: true, // Nested resume works but input value from previous step lost (26 vs 27)
-    resumeDountil: true,
-
-    // Resume error tests - evented engine error behavior may differ
-    resumeNotSuspendedWorkflow: true,
-    resumeInvalidData: true,
-
-    // Deep nested suspend/resume not supported in evented engine
-    resumeDeepNested: true,
-    // Incorrect branches after resume in nested workflows - evented fails
-    resumeIncorrectBranches: true,
-    // Map-branch resume requires direct Mastra registration (server restart sim)
-    resumeMapBranchCondition: true,
+    // Enable all tests - Default Engine is the reference implementation
+    // Enable opt-in tests that require storage
+    errorStorageRoundtrip: false,
+    //persistWorkflowSnapshot error-handling tests are skipped because it's not used in evented-engine
+    errorPersistWithoutStack: true,
+    errorPersistMastraError: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -196,6 +178,7 @@ createWorkflowTestSuite({
         resumeData: options.resumeData,
         step: options.step,
         label: options.label,
+        forEachIndex: options.forEachIndex,
       } as any);
 
       return result as WorkflowResult;

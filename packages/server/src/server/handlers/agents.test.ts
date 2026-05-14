@@ -1204,6 +1204,42 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
+    it('should merge idle stream request context before waking a thread with a signal', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-with-context',
+        resourceId: 'user-a',
+        title: 'Signal Thread With Context',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      let capturedTarget: any;
+
+      (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
+        capturedTarget = target;
+        return { accepted: true, runId: 'signal-run-id' };
+      });
+
+      const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'signal-thread-with-context',
+        ifIdle: {
+          streamOptions: {
+            requestContext: {
+              fixture: 'text-stream',
+              [MASTRA_RESOURCE_ID_KEY]: 'user-b',
+            },
+          },
+        },
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+    });
+
     it('should reject sending a signal to a thread owned by a different resource', async () => {
       await mockMemory.createThread({
         threadId: 'signal-thread-owned-by-b',
@@ -1235,6 +1271,7 @@ describe('Agent Routes Authorization', () => {
         threadId: 'subscribe-thread-from-context',
       });
       let capturedTarget: any;
+      const abort = vi.fn(() => true);
       const unsubscribe = vi.fn();
       const chunk = {
         type: 'text-delta',
@@ -1247,10 +1284,11 @@ describe('Agent Routes Authorization', () => {
         capturedTarget = target;
         return {
           activeRunId: () => null,
-          abort: () => false,
+          abort,
           unsubscribe,
           stream: (async function* () {
             yield chunk;
+            await new Promise(() => {});
           })(),
         } as any;
       });
@@ -1267,8 +1305,11 @@ describe('Agent Routes Authorization', () => {
       expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
       const reader = stream.getReader();
       await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
+      expect(abort).not.toHaveBeenCalled();
+      expect(unsubscribe).not.toHaveBeenCalled();
       await reader.cancel();
-      expect(unsubscribe).toHaveBeenCalled();
+      expect(abort).toHaveBeenCalledTimes(1);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {

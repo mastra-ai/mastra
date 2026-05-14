@@ -1602,6 +1602,8 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     ifIdle,
   }) => {
     try {
+      mergeBodyRequestContext(serverRequestContext, ifIdle?.streamOptions?.requestContext);
+
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
