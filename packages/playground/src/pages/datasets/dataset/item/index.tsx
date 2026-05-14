@@ -1,14 +1,10 @@
 import {
   AlertDialog,
-  Breadcrumb,
   Button,
   ButtonsGroup,
   Column,
   Columns,
   CopyButton,
-  Crumb,
-  Header,
-  Icon,
   MainContentContent,
   MainContentLayout,
   MainHeader,
@@ -31,7 +27,7 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
 import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
@@ -243,22 +239,6 @@ function DatasetItemPage() {
   return (
     <>
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
-              <Icon>
-                <DatabaseIcon />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb as={Link} to={`/datasets/${datasetId}`}>
-              {dataset?.name}
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Item
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <div className="h-full overflow-hidden px-6 pb-4">
           <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
             <MainHeader>

@@ -9,7 +9,6 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // @ts-expect-error - window is always defined in the browser and we don't want to type this out.
     if (window.MASTRA_TELEMETRY_DISABLED) {
       console.info('[Analytics]: Telemetry is disabled.');
       return;

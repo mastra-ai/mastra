@@ -1227,6 +1227,15 @@
       "docUrl": "https://fireworks.ai/docs/",
       "gateway": "models.dev"
     },
+    "ambient": {
+      "url": "https://api.ambient.xyz/v1",
+      "apiKeyEnvVar": "AMBIENT_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Ambient",
+      "models": ["moonshotai/kimi-k2.6", "zai-org/GLM-5.1-FP8"],
+      "docUrl": "https://ambient.xyz",
+      "gateway": "models.dev"
+    },
     "kimi-for-coding": {
       "url": "https://api.kimi.com/coding/v1",
       "apiKeyEnvVar": "KIMI_API_KEY",
@@ -3069,6 +3078,15 @@
       "name": "Wafer",
       "models": ["GLM-5.1", "Qwen3.5-397B-A17B"],
       "docUrl": "https://docs.wafer.ai/wafer-pass",
+      "gateway": "models.dev"
+    },
+    "xpersona": {
+      "url": "https://xpersona.co/v1",
+      "apiKeyEnvVar": "XPERSONA_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Xpersona",
+      "models": ["xpersona-frieren-coder"],
+      "docUrl": "https://xpersona.co/docs",
       "gateway": "models.dev"
     },
     "cloudferro-sherlock": {
@@ -5981,6 +5999,7 @@
       "accounts/fireworks/models/qwen3p6-plus",
       "accounts/fireworks/routers/kimi-k2p5-turbo"
     ],
+    "ambient": ["moonshotai/kimi-k2.6", "zai-org/GLM-5.1-FP8"],
     "kimi-for-coding": ["k2p5", "k2p6", "kimi-k2-thinking"],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "opencode-go": [
@@ -7469,6 +7488,7 @@
     ],
     "abliteration-ai": ["abliterated-model"],
     "wafer.ai": ["GLM-5.1", "Qwen3.5-397B-A17B"],
+    "xpersona": ["xpersona-frieren-coder"],
     "cloudferro-sherlock": [
       "MiniMaxAI/MiniMax-M2.5",
       "meta-llama/Llama-3.3-70B-Instruct",
