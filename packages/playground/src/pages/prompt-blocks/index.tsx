@@ -9,7 +9,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { FileTextIcon, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
@@ -26,7 +26,7 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -34,7 +34,7 @@ export default function PromptBlocks() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="prompt blocks" />
       </NoDataPageLayout>
     );
@@ -42,7 +42,7 @@ export default function PromptBlocks() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load prompt blocks" message={error.message} />
       </NoDataPageLayout>
     );
@@ -50,7 +50,7 @@ export default function PromptBlocks() {
 
   if (promptBlocks.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <NoPromptBlocksInfo />
       </NoDataPageLayout>
     );

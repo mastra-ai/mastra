@@ -9,7 +9,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
+import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
 import { ScheduleTriggersList } from '@/domains/schedules/components/schedule-triggers-list';
@@ -46,7 +46,7 @@ export default function SchedulePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Schedule" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -54,7 +54,7 @@ export default function SchedulePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Schedule" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="schedules" />
       </NoDataPageLayout>
     );
@@ -62,7 +62,7 @@ export default function SchedulePage() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Schedule" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load schedule" message={error.message} />
       </NoDataPageLayout>
     );

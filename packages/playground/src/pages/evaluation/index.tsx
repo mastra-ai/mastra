@@ -8,7 +8,6 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { FlaskConicalIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -46,7 +45,7 @@ export default function Evaluation() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -54,7 +53,7 @@ export default function Evaluation() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="evaluation" />
       </NoDataPageLayout>
     );
@@ -62,7 +61,7 @@ export default function Evaluation() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load evaluation data" message={error.message} />
       </NoDataPageLayout>
     );

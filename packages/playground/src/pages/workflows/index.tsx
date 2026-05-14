@@ -6,7 +6,6 @@ import {
   PageLayout,
   PermissionDenied,
   SessionExpired,
-  WorkflowIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
@@ -23,7 +22,7 @@ function Workflows() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -31,7 +30,7 @@ function Workflows() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="workflows" />
       </NoDataPageLayout>
     );
@@ -39,7 +38,7 @@ function Workflows() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load workflows" message={error.message} />
       </NoDataPageLayout>
     );
@@ -47,7 +46,7 @@ function Workflows() {
 
   if (Object.keys(workflows || {}).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Workflows" icon={<WorkflowIcon />}>
+      <NoDataPageLayout>
         <NoWorkflowsInfo />
       </NoDataPageLayout>
     );

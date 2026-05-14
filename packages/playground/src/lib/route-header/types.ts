@@ -7,16 +7,43 @@ export interface CrumbCtx {
   pathname: string;
 }
 
-export interface CrumbDef {
+interface CrumbBase {
   /**
-   * Static label or custom node. For hook-driven crumbs (e.g., showing a
-   * fetched name), put the hook call inside a small React component and pass
-   * the element here — it will render with its own React lifecycle.
+   * Stable route-local identifier used as the React key and as reviewable
+   * route metadata. Prefer semantic ids like `agent`, `dataset-item`, or
+   * `schedules` over labels that may change.
    */
-  node: ReactNode;
+  id: string;
   to?: string;
   icon?: RouteHeaderIcon;
 }
+
+export type CrumbDef = CrumbBase &
+  (
+    | {
+        label: string;
+        node?: never;
+        Component?: never;
+      }
+    | {
+        /**
+         * Custom node for a crumb. Use sparingly; prefer `label` for static
+         * text and `Component` for hook-driven dynamic crumbs.
+         */
+        node: ReactNode;
+        label?: never;
+        Component?: never;
+      }
+    | {
+        /**
+         * Hook-driven crumbs (for fetched names, comboboxes, etc.) should live
+         * in small domain components so the route config stays declarative.
+         */
+        Component: ComponentType;
+        label?: never;
+        node?: never;
+      }
+  );
 
 export interface DocsLink {
   href: string;

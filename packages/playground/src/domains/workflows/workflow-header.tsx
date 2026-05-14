@@ -13,7 +13,7 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
     : `/workflows/schedules?workflowId=${encodeURIComponent(workflowId)}`;
 
   return (
-    <RouteHeaderActions>
+    <RouteHeaderActions owner="workflow-detail">
       <div className="flex items-center gap-2">
         {scheduleCount > 0 && (
           <Button as={Link} to={schedulesHref} size="sm">

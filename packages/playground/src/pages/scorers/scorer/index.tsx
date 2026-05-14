@@ -161,7 +161,7 @@ export default function Scorer() {
 
   const scorerHeaderActions =
     scorer?.scorer?.source === 'stored' ? (
-      <RouteHeaderActions>
+      <RouteHeaderActions owner="scorer-detail">
         <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`} size="sm">
           <PencilIcon /> Edit
         </Button>

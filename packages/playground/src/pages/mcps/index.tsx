@@ -1,7 +1,6 @@
 import {
   ErrorState,
   ListSearch,
-  McpServerIcon,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
@@ -20,7 +19,7 @@ const MCPs = () => {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="MCP Servers" icon={<McpServerIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -28,7 +27,7 @@ const MCPs = () => {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="MCP Servers" icon={<McpServerIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="MCP servers" />
       </NoDataPageLayout>
     );
@@ -36,7 +35,7 @@ const MCPs = () => {
 
   if (error) {
     return (
-      <NoDataPageLayout title="MCP Servers" icon={<McpServerIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load MCP servers" message={error.message} />
       </NoDataPageLayout>
     );
@@ -44,7 +43,7 @@ const MCPs = () => {
 
   if (mcpServers.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="MCP Servers" icon={<McpServerIcon />}>
+      <NoDataPageLayout>
         <NoMCPServersInfo />
       </NoDataPageLayout>
     );

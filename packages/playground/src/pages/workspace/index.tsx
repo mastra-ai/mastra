@@ -14,7 +14,7 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
-import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
+import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
@@ -300,7 +300,7 @@ export default function Workspace() {
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <Spinner />
       </NoDataPageLayout>
     );
@@ -309,7 +309,7 @@ export default function Workspace() {
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -318,7 +318,7 @@ export default function Workspace() {
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="workspaces" />
       </NoDataPageLayout>
     );
@@ -327,7 +327,7 @@ export default function Workspace() {
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <WorkspaceNotSupported />
       </NoDataPageLayout>
     );
@@ -337,7 +337,7 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
       </NoDataPageLayout>
     );
@@ -346,7 +346,7 @@ export default function Workspace() {
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <NoWorkspacesInfo />
       </NoDataPageLayout>
     );
@@ -356,7 +356,7 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <WorkspaceNotConfigured />
       </NoDataPageLayout>
     );

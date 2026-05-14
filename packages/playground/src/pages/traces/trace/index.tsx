@@ -158,7 +158,7 @@ export default function TracePage() {
   }, [rootSpan, featuredSpanId, updateSearchParams]);
 
   const traceHeaderActions = rootSpan ? (
-    <RouteHeaderActions>
+    <RouteHeaderActions owner="trace-detail">
       <ButtonsGroup>
         <ButtonWithTooltip tooltipContent="Evaluate Trace" aria-label="Evaluate Trace" onClick={handleEvaluateTrace}>
           <CircleGaugeIcon />

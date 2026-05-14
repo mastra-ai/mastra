@@ -7,7 +7,6 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { DatabaseIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { CreateDatasetDialog, DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
@@ -70,7 +69,7 @@ export default function Datasets() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -78,7 +77,7 @@ export default function Datasets() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="datasets" />
       </NoDataPageLayout>
     );
@@ -86,7 +85,7 @@ export default function Datasets() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load datasets" message={error.message} />
       </NoDataPageLayout>
     );
@@ -95,7 +94,7 @@ export default function Datasets() {
   if (datasets.length === 0 && !isLoading && page === 0) {
     return (
       <>
-        <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+        <NoDataPageLayout>
           <NoDatasetsInfo onCreateClick={openCreateDialog} />
         </NoDataPageLayout>
         <CreateDatasetDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />

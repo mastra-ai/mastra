@@ -17,7 +17,7 @@ function CreateLayoutWrapper() {
 
   return (
     <MainContentLayout>
-      <RouteHeaderActions>
+      <RouteHeaderActions owner="cms-agent-create">
         <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || !canPublish}>
           {isSubmitting ? (
             <>

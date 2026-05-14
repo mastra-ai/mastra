@@ -5,7 +5,6 @@ import {
   PageLayout,
   PermissionDenied,
   SessionExpired,
-  ToolsIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
@@ -25,7 +24,7 @@ export default function Tools() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -33,7 +32,7 @@ export default function Tools() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="tools" />
       </NoDataPageLayout>
     );
@@ -41,7 +40,7 @@ export default function Tools() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load tools" message={error.message} />
       </NoDataPageLayout>
     );
@@ -49,7 +48,7 @@ export default function Tools() {
 
   if (Object.keys(tools).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <NoToolsInfo />
       </NoDataPageLayout>
     );

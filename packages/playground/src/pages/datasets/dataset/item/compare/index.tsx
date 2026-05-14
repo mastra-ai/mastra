@@ -82,7 +82,7 @@ function DatasetItemsComparePage() {
 
   return (
     <MainContentLayout>
-      <RouteHeaderActions>
+      <RouteHeaderActions owner="dataset-items-compare">
         <Button as={Link} to={`/datasets/${datasetId}`} variant="outline">
           <ArrowLeft />
           Back to Dataset

@@ -45,7 +45,7 @@ function EditFormContent({
   isCodeAgentOverride?: boolean;
 }) {
   const [, setSearchParams] = useSearchParams();
-  const location = useLocation();
+  const { pathname } = useLocation();
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
   const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersionId;
@@ -91,7 +91,7 @@ function EditFormContent({
       readOnly={readOnly}
       isCodeAgentOverride={isCodeAgentOverride}
       basePath={`/cms/agents/${agentId}/edit`}
-      currentPath={location.pathname}
+      currentPath={pathname}
       banner={banner}
       versionId={selectedVersionId ?? undefined}
       rightPanel={rightPanel}
@@ -105,7 +105,7 @@ function EditLayoutWrapper() {
   const { agentId } = useParams<{ agentId: string }>();
   const { navigate, paths } = useLinkComponent();
   const routerNavigate = useNavigate();
-  const location = useLocation();
+  const { hash, pathname, search } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
@@ -133,13 +133,13 @@ function EditLayoutWrapper() {
 
   // Redirect code agent overrides from the Identity page to Instructions
   const basePath = `/cms/agents/${agentId}/edit`;
-  const isOnIdentityPage = location.pathname === basePath || location.pathname === `${basePath}/`;
+  const isOnIdentityPage = pathname === basePath || pathname === `${basePath}/`;
   useEffect(() => {
     if (isCodeAgentOverride && isOnIdentityPage) {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      routerNavigate(`${basePath}/instruction-blocks${location.search}${location.hash}`, { replace: true });
+      routerNavigate(`${basePath}/instruction-blocks${search}${hash}`, { replace: true });
     }
-  }, [isCodeAgentOverride, isOnIdentityPage, routerNavigate, basePath, location.search, location.hash]);
+  }, [isCodeAgentOverride, isOnIdentityPage, routerNavigate, basePath, search, hash]);
 
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
@@ -193,7 +193,7 @@ function EditLayoutWrapper() {
   return (
     <MainContentLayout>
       {isReady && (
-        <RouteHeaderActions>
+        <RouteHeaderActions owner="cms-agent-edit">
           <div className="flex items-center gap-2">
             {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
             <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>

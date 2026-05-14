@@ -103,7 +103,7 @@ function DatasetItemVersionsComparePage() {
 
   return (
     <MainContentLayout>
-      <RouteHeaderActions>
+      <RouteHeaderActions owner="dataset-item-versions-compare">
         <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`} variant="outline">
           <ArrowLeft />
           Back to Item

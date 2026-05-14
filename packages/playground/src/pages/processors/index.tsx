@@ -4,7 +4,6 @@ import {
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
-  ProcessorIcon,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
@@ -20,7 +19,7 @@ export function Processors() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -28,7 +27,7 @@ export function Processors() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="processors" />
       </NoDataPageLayout>
     );
@@ -36,7 +35,7 @@ export function Processors() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load processors" message={error.message} />
       </NoDataPageLayout>
     );
@@ -44,7 +43,7 @@ export function Processors() {
 
   if (Object.keys(processors).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <NoProcessorsInfo />
       </NoDataPageLayout>
     );

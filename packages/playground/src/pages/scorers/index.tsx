@@ -7,7 +7,6 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
@@ -20,7 +19,7 @@ export default function Scorers() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -28,7 +27,7 @@ export default function Scorers() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="scorers" />
       </NoDataPageLayout>
     );
@@ -36,7 +35,7 @@ export default function Scorers() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load scorers" message={error.message} />
       </NoDataPageLayout>
     );
@@ -44,7 +43,7 @@ export default function Scorers() {
 
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+      <NoDataPageLayout>
         <NoScorersInfo />
       </NoDataPageLayout>
     );

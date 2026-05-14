@@ -4,6 +4,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import type { RouteObject } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import { RouteHeader } from '../route-header';
+import { RouteHeaderActions, RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '../route-header-actions';
+import { RouteHeaderCrumbs, RouteHeaderCrumbsProvider } from '../route-header-crumbs';
 import type { CrumbDef, RouteHeaderHandle } from '../types';
 import { useRouteHeader } from '../use-route-header';
 import { routes } from '@/App';
@@ -100,12 +103,19 @@ function collectRouteHandles(routesToCheck: RouteObject[], basePath = '') {
 }
 
 function hasRenderableNode(crumb: CrumbDef) {
-  return crumb.node !== null && crumb.node !== undefined && crumb.node !== '';
+  if (!crumb.id) return false;
+  if ('label' in crumb) return crumb.label !== '';
+  if ('node' in crumb) return crumb.node !== null && crumb.node !== undefined && crumb.node !== '';
+  return Boolean(crumb.Component);
 }
 
 function RouteHeaderProbe() {
   const { docs } = useRouteHeader();
   return <div data-testid="route-docs">{docs?.href ?? 'none'}</div>;
+}
+
+function RouteHeaderOverrideProbe() {
+  return <RouteHeaderCrumbs crumbs={[{ id: 'override', label: 'Override crumb' }]} />;
 }
 
 describe('route header handles', () => {
@@ -143,7 +153,7 @@ describe('route header handles', () => {
         params: { scheduleId: '%E0%A4%A' },
         pathname: '/workflows/schedules/%E0%A4%A',
       });
-      expect(crumbs.at(-1)?.node).toBe('%E0%A4%A');
+      expect(crumbs.at(-1)).toMatchObject({ label: '%E0%A4%A' });
     }).not.toThrow();
   });
 
@@ -158,7 +168,7 @@ describe('route header handles', () => {
             {
               path: 'child',
               element: <RouteHeaderProbe />,
-              handle: { docs: () => undefined },
+              handle: { crumbs: [{ id: 'child', label: 'Child' }], docs: () => undefined },
             },
           ],
         },
@@ -169,5 +179,49 @@ describe('route header handles', () => {
     render(<RouterProvider router={router} />);
 
     await waitFor(() => expect(screen.getByTestId('route-docs').textContent).toBe('none'));
+  });
+
+  it('renders only the active route header action owner', async () => {
+    render(
+      <RouteHeaderActionsProvider>
+        <RouteHeaderActionsSlot />
+        <RouteHeaderActions owner="parent">Parent action</RouteHeaderActions>
+        <RouteHeaderActions owner="child" priority={1}>
+          Child action
+        </RouteHeaderActions>
+      </RouteHeaderActionsProvider>,
+    );
+
+    await waitFor(() => expect(screen.queryByText('Parent action')).toBeNull());
+    expect(screen.getByText('Child action')).toBeTruthy();
+  });
+
+  it('lets page-level crumbs override route-handle crumbs', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/',
+          element: (
+            <RouteHeaderCrumbsProvider>
+              <RouteHeader />
+              <Outlet />
+            </RouteHeaderCrumbsProvider>
+          ),
+          children: [
+            {
+              path: 'child',
+              element: <RouteHeaderOverrideProbe />,
+              handle: { crumbs: [{ id: 'handle', label: 'Handle crumb' }] },
+            },
+          ],
+        },
+      ],
+      { initialEntries: ['/child'] },
+    );
+
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(screen.getByText('Override crumb')).toBeTruthy());
+    expect(screen.queryByText('Handle crumb')).toBeNull();
   });
 });

@@ -6,7 +6,6 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { CalendarClockIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { SchedulesPage as SchedulesPageContent } from '@/domains/schedules/components/schedules-page';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
@@ -18,7 +17,7 @@ export default function SchedulesPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Schedules" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -26,7 +25,7 @@ export default function SchedulesPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Schedules" icon={<CalendarClockIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="schedules" />
       </NoDataPageLayout>
     );

@@ -15,7 +15,7 @@ export function AgentHeaderCreateAction() {
   const createPath = paths.cmsAgentCreateLink();
   if (!canCreateAgent || !createPath) return null;
   return (
-    <RouteHeaderActions>
+    <RouteHeaderActions owner="agent-list">
       <ButtonWithTooltip as={Link} to={createPath} tooltipContent="Create an agent" size="icon-sm">
         <Plus />
       </ButtonWithTooltip>

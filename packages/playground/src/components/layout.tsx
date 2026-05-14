@@ -16,7 +16,7 @@ import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-u
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { NavigationCommand } from '@/lib/command';
-import { RouteHeader, RouteHeaderActionsProvider } from '@/lib/route-header';
+import { RouteHeader, RouteHeaderActionsProvider, RouteHeaderCrumbsProvider } from '@/lib/route-header';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
@@ -81,7 +81,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
               <RouteHeaderActionsProvider>
-                <LayoutContent>{children}</LayoutContent>
+                <RouteHeaderCrumbsProvider>
+                  <LayoutContent>{children}</LayoutContent>
+                </RouteHeaderCrumbsProvider>
               </RouteHeaderActionsProvider>
             </MainSidebarProvider>
           </ExperimentalUIProvider>

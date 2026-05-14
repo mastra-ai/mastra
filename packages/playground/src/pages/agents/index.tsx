@@ -1,5 +1,4 @@
 import {
-  AgentIcon,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
@@ -21,7 +20,7 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -29,7 +28,7 @@ function Agents() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="agents" />
       </NoDataPageLayout>
     );
@@ -37,7 +36,7 @@ function Agents() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load agents" message={error.message} />
       </NoDataPageLayout>
     );
@@ -45,7 +44,7 @@ function Agents() {
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+      <NoDataPageLayout>
         <NoAgentsInfo />
       </NoDataPageLayout>
     );

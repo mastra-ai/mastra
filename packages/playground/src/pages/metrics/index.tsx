@@ -30,7 +30,7 @@ import {
   useServiceNames,
   useTags,
 } from '@mastra/playground-ui';
-import { BarChart3Icon, CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
@@ -213,7 +213,7 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -221,7 +221,7 @@ function MetricsContent() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="metrics" />
       </NoDataPageLayout>
     );
@@ -229,7 +229,7 @@ function MetricsContent() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load metrics" message={error.message} />
       </NoDataPageLayout>
     );
