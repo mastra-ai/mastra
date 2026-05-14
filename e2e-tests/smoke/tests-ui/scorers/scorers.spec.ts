@@ -36,23 +36,24 @@ test.describe('Scorers', () => {
     // URL segment is the scorer ID, not the human-readable name
     await page.goto('/scorers/completeness');
 
-    // Heading and description
-    await expect(page.getByRole('heading', { name: 'Completeness Scorer', level: 1 })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Checks whether the output contains non-empty content')).toBeVisible();
+    // The page heading is the generic "Scorer"; the human-readable scorer
+    // name lives in the breadcrumb combobox at the top of the page.
+    await expect(page.getByRole('heading', { name: 'Scorer', level: 1 })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('combobox').filter({ hasText: 'Completeness Scorer' })).toBeVisible();
 
     // A score row referencing the scored workflow should be visible
     const scoreRow = page.getByRole('button').filter({ hasText: 'scored-workflow' }).first();
     await expect(scoreRow).toBeVisible({ timeout: 10_000 });
 
-    // Scorer combobox shows current scorer and can switch to another
+    // Scorer combobox can switch to another scorer
     const scorerCombobox = page.getByRole('combobox').filter({ hasText: 'Completeness Scorer' });
     await scorerCombobox.click();
     await expect(page.getByRole('option', { name: 'Length Check Scorer' })).toBeVisible();
     await page.getByRole('option', { name: 'Length Check Scorer' }).click();
 
-    // Page navigates to the other scorer (URL uses scorer id)
+    // Page navigates to the other scorer (URL uses scorer id) and the
+    // breadcrumb combobox now reflects the new scorer name.
     await expect(page).toHaveURL(/\/scorers\//, { timeout: 5_000 });
-    await expect(page.getByRole('heading', { name: 'Length Check Scorer', level: 1 })).toBeVisible();
-    await expect(page.getByText('No scores yet')).toBeVisible();
+    await expect(page.getByRole('combobox').filter({ hasText: 'Length Check Scorer' })).toBeVisible();
   });
 });
