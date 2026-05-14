@@ -474,9 +474,34 @@ describe('Mock OM Agent Integration', () => {
   // On main, OM implements Processor directly; in our refactored architecture, ObservationalMemoryProcessor
   // is a separate class. The v5 execution engine's processor discovery may not find it.
   it('should insert a message boundary with a date matching the observed messages', async () => {
+    // Use a dedicated Memory instance with a higher threshold so observation fires
+    // exactly once per generate (after the tool result, on step 1). The shared
+    // `memory` for this suite uses messageTokens: 20, which — now that step 0
+    // can observe — produces multiple observation cycles within a single
+    // generate and changes the boundary expectations this test pins down.
+    const boundaryStore = new InMemoryStore();
+    const boundaryMemory = new Memory({
+      storage: boundaryStore,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: {
+            model: createMockObserverModel() as any,
+            messageTokens: 50,
+            bufferTokens: false,
+          },
+          reflection: {
+            model: createMockReflectorModel() as any,
+            observationTokens: 50000,
+          },
+        },
+      },
+    });
+
     // Create a model that supports multiple generate calls (alternating tool-call / text).
     // The shared createMockOmModel only fires a tool call on the very first call,
-    // so a second agent.generate() would stay on step 0 and never trigger observation.
+    // so a second agent.generate() would stay on step 0 and (with the prior
+    // step-0 dead zone) never trigger observation.
     let genCount = 0;
     const multiCallModel = new MockLanguageModelV2({
       doGenerate: async () => {
@@ -516,7 +541,7 @@ describe('Mock OM Agent Integration', () => {
       instructions: 'You are a helpful assistant. Always use the test tool first.',
       model: multiCallModel as any,
       tools: { test: omTriggerTool },
-      memory,
+      memory: boundaryMemory,
     });
 
     const threadId = 'test-thread-boundary-date';
@@ -527,7 +552,7 @@ describe('Mock OM Agent Integration', () => {
     const beforeFirstCall = new Date();
     await boundaryAgent.generate('Hello, I need help with something important.', { memory: memoryOpts });
 
-    const memoryStore = await store.getStore('memory');
+    const memoryStore = await boundaryStore.getStore('memory');
     const firstRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
     expect(firstRecord).toBeTruthy();
     expect(firstRecord!.activeObservations).toBeTruthy();
