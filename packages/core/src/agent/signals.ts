@@ -2,6 +2,7 @@ import type { CoreMessage, FilePart, TextPart } from '@internal/ai-sdk-v4';
 
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart } from './message-list/state/types';
+import type { BaseMessageListInput } from './message-list/types';
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -69,7 +70,7 @@ export type CreatedAgentSignal = AgentSignalInput & {
   id: string;
   createdAt: Date;
   toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
-  toLLMMessage: () => CoreMessage;
+  toLLMMessage: () => BaseMessageListInput;
   toDataPart: () => AgentSignalDataPart;
 };
 
@@ -317,7 +318,7 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   };
 }
 
-export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): CoreMessage {
+export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): BaseMessageListInput {
   return createSignal(signal).toLLMMessage();
 }
 
