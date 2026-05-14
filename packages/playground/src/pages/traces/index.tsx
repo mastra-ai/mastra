@@ -28,7 +28,7 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
-import { BookIcon, EyeIcon, ListIcon, ListTreeIcon } from 'lucide-react';
+import { BookIcon, EyeIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
@@ -49,10 +49,7 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const [groupByThread, setGroupByThread] = useState<boolean>(false);
-  const url = useTraceUrlState(searchParams, setSearchParams, {
-    onRemoveAll: () => setGroupByThread(false),
-  });
+  const url = useTraceUrlState(searchParams, setSearchParams);
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -186,7 +183,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   } = useTraces({ filters: traceFilters, listMode: url.listMode });
 
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
-  const threadTitles = tracesData?.threadTitles ?? {};
 
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, url.spanIdParam ?? null, id =>
     url.handleSpanChange(id),
@@ -258,15 +254,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <ButtonWithTooltip
-        disabled={isTracesLoading}
-        aria-pressed={groupByThread}
-        aria-label={groupByThread ? 'Ungroup traces' : 'Group traces by thread'}
-        tooltipContent={groupByThread ? 'Ungroup traces' : 'Group traces by thread'}
-        onClick={() => setGroupByThread(prev => !prev)}
-      >
-        {groupByThread ? <ListIcon /> : <ListTreeIcon />}
-      </ButtonWithTooltip>
       <ButtonWithTooltip
         as="a"
         href="https://mastra.ai/en/docs/observability/tracing/overview"
@@ -378,8 +365,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               const branchSpanId = isBranches ? (trace.spanId ?? undefined) : undefined;
               url.handleTraceClick(trace.traceId, branchSpanId, branchSpanId);
             }}
-            groupByThread={groupByThread}
-            threadTitles={threadTitles}
           />
         }
         tracePanelSlot={
