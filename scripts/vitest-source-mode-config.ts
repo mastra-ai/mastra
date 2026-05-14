@@ -21,6 +21,17 @@ const SOURCE_MODE_PACKAGE_GLOBS = [
   'workflows/*/package.json',
 ];
 const SOURCE_MODE_WORKSPACE_PACKAGES = new Map<string, { root: string; exports: Record<string, any> }>();
+const SOURCE_MODE_TEST_EXCLUDES = [
+  '**/node_modules/**',
+  '**/dist/**',
+  'packages/core/src/workflows/workflow.test.ts',
+  'src/workflows/workflow.test.ts',
+  'src/workflows/evented/evented-workflow.test.ts',
+  'src/storage/bundle.test.ts',
+  'src/workspace/lsp/servers.test.ts',
+  'packages/deployer/src/build/analyze/analyzeEntry.test.ts',
+  'src/build/analyze/analyzeEntry.test.ts',
+];
 
 if (SOURCE_MODE) {
   for (const packageJsonPath of SOURCE_MODE_PACKAGE_GLOBS.flatMap(pattern => globSync(pattern))) {
@@ -109,6 +120,7 @@ export function withSourceModeConfig<T extends UserWorkspaceConfig>(config: T): 
     },
     test: {
       ...config.test,
+      exclude: [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES],
       setupFiles: sourceModeSetupFiles(config.test?.setupFiles),
       server: {
         ...config.test?.server,
