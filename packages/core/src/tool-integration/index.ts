@@ -20,3 +20,6 @@ export { BaseToolIntegration } from './base';
 export type { BaseToolIntegrationOptions } from './base';
 
 export { DuplicateIntegrationError, UnknownIntegrationError } from './errors';
+
+export { buildConnectionSuffix, resolveStoredToolIntegrations } from './runtime';
+export type { ToolIntegrationLookup, ResolveStoredToolIntegrationsOpts } from './runtime';
