@@ -2,8 +2,8 @@ import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thr
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
+import type { AgentSignalContents } from '../agent/signals';
 import type { AgentThreadSubscription } from '../agent/types';
-import type { CoreUserMessage } from '../llm';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -1064,7 +1064,7 @@ export class AgentChannels {
     }
 
     const text = [historyBlock, message.text].filter(Boolean).join('\n\n');
-    const parts: Exclude<CoreUserMessage['content'], string> = [{ type: 'text', text }];
+    const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
     const attachments = message.attachments.filter(a => a.url || a.fetchData);
 
     // Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
@@ -1180,10 +1180,14 @@ export class AgentChannels {
     const refreshedThread = memoryStore ? await memoryStore.getThreadById({ threadId: mastraThread.id }) : null;
     const threadForRun = refreshedThread ?? mastraThread;
 
+    // When the message is text-only, pass the bare string to the signal pipeline.
+    // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
+    const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
+
     this.agent.sendSignal(
       {
         type: 'user-message',
-        contents: { role: 'user', content: parts },
+        contents: signalContents,
         attributes,
         metadata: signalMetadata,
       },
