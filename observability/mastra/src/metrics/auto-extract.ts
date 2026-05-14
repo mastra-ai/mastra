@@ -49,7 +49,11 @@ function emitUsageMetrics(
   let metricCosts = new Map<TokenMetrics, CostContext>();
   try {
     const provider = attrs.provider;
-    const model = attrs.responseModel ?? attrs.model;
+    // For OpenRouter, the responseModel uses provider naming conventions (e.g. "claude-4.6-sonnet")
+    // which may not match the user-configured alias (e.g. "claude-sonnet-4-6"). Use the
+    // configured model for the pricing lookup so the registry key matches.
+    const model =
+      provider === 'openrouter' ? (attrs.model ?? attrs.responseModel) : (attrs.responseModel ?? attrs.model);
 
     if (provider && model) {
       metricCosts = estimateCosts({
