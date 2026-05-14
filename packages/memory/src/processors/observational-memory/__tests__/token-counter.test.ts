@@ -563,16 +563,30 @@ describe('TokenCounter', () => {
           ],
         });
 
+      const baseline = new TokenCounter().countMessage(
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'file',
+              data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
+              mimeType: 'application/pdf',
+              filename: 'with-invalid-estimate.pdf',
+            },
+          ],
+        }),
+      );
+
       const counter = new TokenCounter();
       const nan = counter.countMessage(buildMessage(Number.NaN));
       const negative = counter.countMessage(buildMessage(-1));
       const nonNumeric = counter.countMessage(buildMessage('lots'));
 
-      // Invalid values fall through to the descriptor estimate (<500 tokens),
-      // not the raw stringified value the caller supplied.
-      expect(nan).toBeLessThan(500);
-      expect(negative).toBeLessThan(500);
-      expect(nonNumeric).toBeLessThan(500);
+      // Invalid values fall through to the framework auto-estimator, not the
+      // raw stringified value the caller supplied.
+      expect(nan).toBe(baseline);
+      expect(negative).toBe(baseline);
+      expect(nonNumeric).toBe(baseline);
     });
 
     it('does not call provider fetches when a client tokenEstimate is present', async () => {
