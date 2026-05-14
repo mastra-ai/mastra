@@ -97,7 +97,7 @@ const AttachmentRemove = () => {
     <AttachmentPrimitive.Remove asChild>
       <Button
         variant="default"
-        size="icon-md"
+        size="icon-sm"
         tooltip="Remove file"
         className="absolute -right-2 -top-2 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2"
       >

@@ -193,6 +193,7 @@ describe('Agent.stream', () => {
     });
     const updates: any[] = [];
     const onFinish = vi.fn();
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
 
     await expect(
       (agent as any).processChatResponse_vNext({

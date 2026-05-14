@@ -333,6 +333,9 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
+          customProps: {
+            tags: ['new'],
+          },
         },
       ],
     },

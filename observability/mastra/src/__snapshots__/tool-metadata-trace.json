@@ -139,8 +139,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -295,38 +294,13 @@
                       "toolOperation": "metadata-processing",
                       "inputValue": "some data",
                       "customFlag": true,
-                      "timestamp": "<date>",
-                      "environment": "test"
+                      "timestamp": "<date>"
                     },
                     "input": {
                       "input": "some data"
                     },
                     "output": {
                       "output": "Processed: some data"
-                    }
-                  }
-                },
-                {
-                  "span": {
-                    "id": "<span-6>",
-                    "traceId": "<trace-1>",
-                    "name": "chunk: 'tool-result'",
-                    "type": "model_chunk",
-                    "completed": false,
-                    "isEvent": true,
-                    "isRootSpan": false,
-                    "parentId": "<span-3>",
-                    "entityType": "agent",
-                    "entityId": "metadata-agent",
-                    "attributes": {
-                      "chunkType": "tool-result",
-                      "sequenceNumber": 1
-                    },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "toolCallId": "call-metadata-1",
-                      "toolName": "metadataTool",
-                      "environment": "test"
                     }
                   }
                 }
@@ -367,8 +341,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {

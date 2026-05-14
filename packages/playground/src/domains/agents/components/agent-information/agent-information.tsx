@@ -1,4 +1,4 @@
-import { Tabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
+import { ScrollArea, Tabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
 import { useBrowserSession } from '../../context/browser-session-context';
 import { useAgent } from '../../hooks/use-agent';
 import { useChannelPlatforms } from '../../hooks/use-channels';
@@ -48,27 +48,11 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
             </TabList>
           </div>
 
-        {/* Normal tabs - always rendered but hidden when browser overlay is active */}
-        <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
-          <TabList>
-            <Tab value="overview">Overview</Tab>
-            <Tab value="model-settings">Model Settings</Tab>
-            {hasMemory && <Tab value="memory">Memory</Tab>}
-            {hasChannels && <Tab value="channels">Channels</Tab>}
-            {agent?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
-            <Tab value="tracing-options">Tracing Options</Tab>
-          </TabList>
-          <TabContent value="overview">
-            <AgentMetadata agentId={agentId} />
-          </TabContent>
-          <TabContent value="model-settings">
-            <AgentSettings agentId={agentId} />
-          </TabContent>
-
-          {agent?.requestContextSchema && (
-            <TabContent value="request-context">
-              <div className="p-5">
-                <RequestContextSchemaForm requestContextSchema={agent.requestContextSchema} />
+          <div className="relative">
+            {/* Browser sidebar overlay - takes over when in sidebar mode */}
+            {hasSession && isInSidebar && (
+              <div className="absolute inset-0 z-20 bg-surface3">
+                <BrowserSidebarTab />
               </div>
             )}
 
@@ -79,15 +63,30 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
               <AgentSettings agentId={agentId} />
             </TabContent>
 
-          {hasChannels && (
-            <TabContent value="channels">
-              <AgentChannels agentId={agentId} />
-            </TabContent>
-          )}
+            {agent?.requestContextSchema && (
+              <TabContent value="request-context">
+                <div className="p-5">
+                  <RequestContextSchemaForm requestContextSchema={agent.requestContextSchema} />
+                </div>
+              </TabContent>
+            )}
 
-          <TabContent value="tracing-options">
-            <TracingRunOptions />
-          </TabContent>
+            {hasMemory && (
+              <TabContent value="memory">
+                <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
+              </TabContent>
+            )}
+
+            {hasChannels && (
+              <TabContent value="channels">
+                <AgentChannels agentId={agentId} />
+              </TabContent>
+            )}
+
+            <TabContent value="tracing-options">
+              <TracingRunOptions />
+            </TabContent>
+          </div>
         </Tabs>
       </ScrollArea>
     </AgentInformationLayout>

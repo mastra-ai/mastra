@@ -1029,8 +1029,8 @@ describe('Observability Registry', () => {
       // Note: ConsoleLogger.debug() calls console.info() internally
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-      // CloudExporter should not throw, but log debug message instead
-      const exporter = new CloudExporter({ logger });
+      // MastraPlatformExporter should not throw, but log debug message instead
+      const exporter = new MastraPlatformExporter({ logger });
 
       // Verify debug message was logged with exporter name
       expect(infoSpy).toHaveBeenCalledWith(

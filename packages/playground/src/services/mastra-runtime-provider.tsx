@@ -419,11 +419,26 @@ export function MastraRuntimeProvider({
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraUIMessage[]>([]);
+  const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
+  const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
+  const threadSignalsUnsupportedRef = useRef(false);
+  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS === 'true';
+
+  const addPendingSignal = useCallback((signalId: string, preview: string) => {
+    setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
+  }, []);
+
+  const removePendingSignal = useCallback((signalId: string) => {
+    setPendingSignals(prev => prev.filter(signal => signal.id !== signalId));
+  }, []);
 
   // Clear any persisted stream errors when switching threads or agents so they
   // don't leak across conversations.
   useEffect(() => {
     setStreamErrors([]);
+    setPendingSignals([]);
+    threadSignalsUnsupportedRef.current = false;
+    setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
 
   useEffect(() => {

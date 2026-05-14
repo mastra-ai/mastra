@@ -339,13 +339,13 @@ export async function createWorkspaceTools(
     if (opts?.requireWrite && isReadOnly) return;
 
     // Handle dynamic requireApproval: if it's a function, store as needsApprovalFn
-    // and set requireApproval to true so the execution pipeline knows to check
+    // so execution can evaluate it with the parsed tool args.
     let wrapped: any;
     if (typeof config.requireApproval === 'function') {
       const approvalFn = config.requireApproval;
       wrapped = {
         ...tool,
-        requireApproval: true,
+        requireApproval: false,
         needsApprovalFn: async (
           args: Record<string, unknown>,
           ctx?: {

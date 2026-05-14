@@ -140,8 +140,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -319,38 +318,13 @@
                           "environment": "test",
                           "childOperation": "data-processing",
                           "inputValue": "test-data",
-                          "processedValue": "processed-test-data",
-                          "environment": "test"
+                          "processedValue": "processed-test-data"
                         },
                         "input": "test-data",
                         "output": "child-result-test-data"
                       }
                     }
                   ]
-                },
-                {
-                  "span": {
-                    "id": "<span-7>",
-                    "traceId": "<trace-1>",
-                    "name": "chunk: 'tool-result'",
-                    "type": "model_chunk",
-                    "completed": false,
-                    "isEvent": true,
-                    "isRootSpan": false,
-                    "parentId": "<span-3>",
-                    "entityType": "agent",
-                    "entityId": "child-span-agent",
-                    "attributes": {
-                      "chunkType": "tool-result",
-                      "sequenceNumber": 1
-                    },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "toolCallId": "call-child-span-1",
-                      "toolName": "childSpanTool",
-                      "environment": "test"
-                    }
-                  }
                 }
               ]
             },
@@ -389,8 +363,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {

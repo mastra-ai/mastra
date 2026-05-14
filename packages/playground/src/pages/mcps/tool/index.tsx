@@ -11,37 +11,7 @@ const MCPServerToolExecutor = () => {
   if (!mcpTool) return null;
 
   return (
-    <div className="h-full w-full bg-surface2 overflow-y-auto">
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to={`/mcps`}>
-            <Icon>
-              <McpServerIcon />
-            </Icon>
-            MCP Servers
-          </Crumb>
-          <Crumb as={Link} to={`/mcps/${serverId}`}>
-            {currentServerName}
-          </Crumb>
-          <Crumb as="span" to="" isCurrent>
-            {toolActualName}
-          </Crumb>
-        </Breadcrumb>
-
-        <HeaderAction>
-          <Button
-            as={Link}
-            to="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
-            target="_blank"
-            variant="ghost"
-            size="md"
-          >
-            <DocsIcon />
-            MCP documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
+    <div className="h-full w-full overflow-y-auto">
       <MCPToolPanel toolId={toolId!} serverId={serverId!} />
     </div>
   );

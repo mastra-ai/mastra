@@ -134,10 +134,6 @@ export const readFileTool = createTool({
     'Read a file from the workspace filesystem. Text files come back as text — use offset/limit to read a line range from large files. Supported media files come back as a native file part you can view directly. Other binary files return only their metadata (path, size, mime type) since their raw contents are not useful to read.',
   inputSchema: z.object({
     path: z.string().describe('The path to the file to read (e.g., "data/config.json")'),
-    encoding: z
-      .enum(['utf-8', 'utf8', 'base64', 'hex', 'binary'])
-      .optional()
-      .describe('The encoding to use when reading the file. Defaults to utf-8 for text files.'),
     offset: z
       .number()
       .int()

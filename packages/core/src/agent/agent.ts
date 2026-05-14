@@ -70,10 +70,10 @@ import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
-import { setToolGateRuntimeStateForRun } from '../tools/tool-gate';
+import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool } from '../tools/types';
+import type { CoreTool, ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -3062,8 +3062,6 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
-          runId,
-          resourceId,
           retryCount: 0,
         });
         if (result.tools) {
@@ -5283,11 +5281,6 @@ export class Agent<
         resourceId,
       }) ||
       randomUUID();
-    if (options.toolGatePolicy) {
-      setToolGateRuntimeStateForRun(requestContext, runId, {
-        policy: options.toolGatePolicy,
-      });
-    }
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
     // Set Tracing context
@@ -5819,7 +5812,9 @@ export class Agent<
    * ```
    */
   async approveNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: true }, options);
+    const requestContext = new RequestContext(options.requestContext?.entries());
+    requestContext.set('__mastra_networkToolApprovalResume', true);
+    return this.resumeNetwork({ approved: true }, { ...options, requestContext });
   }
 
   /**
@@ -5838,7 +5833,9 @@ export class Agent<
    * ```
    */
   async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: false }, options);
+    const requestContext = new RequestContext(options.requestContext?.entries());
+    requestContext.set('__mastra_networkToolApprovalResume', true);
+    return this.resumeNetwork({ approved: false }, { ...options, requestContext });
   }
 
   async generate<

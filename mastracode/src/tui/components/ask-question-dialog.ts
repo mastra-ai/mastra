@@ -17,6 +17,8 @@ export interface AskQuestionDialogOptions {
    * Defaults to false. Enable for prompts that legitimately want paragraph-length replies.
    */
   multiline?: boolean;
+  allowEmptyInput?: boolean;
+  defaultValue?: string;
   tui?: TUI;
   onSubmit: (answer: string) => void;
   onCancel: () => void;
@@ -29,6 +31,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private input?: Input | MultilineInput;
   private tui?: TUI;
   private multiline = false;
+  private allowEmptyInput = false;
+  private defaultValue?: string;
   private onSubmit: (answer: string) => void;
   private onCancel: () => void;
 
@@ -51,6 +55,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.onCancel = options.onCancel;
     this.tui = options.tui;
     this.multiline = Boolean(options.multiline);
+    this.allowEmptyInput = Boolean(options.allowEmptyInput);
+    this.defaultValue = options.defaultValue;
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Question')), 0, 0));
@@ -112,10 +118,11 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private buildInputMode(): void {
     if (this.useMultiline()) {
       const multilineInput = new MultilineInput(this.tui!, getEditorTheme());
+      multilineInput.allowEmptySubmit = this.allowEmptyInput;
       multilineInput.onSubmit = (value: string) => {
         // Trim only for the emptiness decision; forward the raw value
         // so leading indentation / trailing newlines survive.
-        if (value.trim()) {
+        if (value.trim() || this.allowEmptyInput) {
           this.onSubmit(value);
         }
       };
@@ -127,7 +134,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       this.input = new Input();
       this.input.onSubmit = (value: string) => {
         const trimmed = value.trim();
-        if (trimmed) {
+        if (trimmed || this.allowEmptyInput) {
           this.onSubmit(trimmed);
         }
       };
@@ -146,6 +153,10 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     const hint = new Text(theme.fg('dim', hintText), 0, 0);
     this.addChild(hint);
     this.modeChildren.push(hint);
+
+    if (this.defaultValue) {
+      (this.input as Input).setValue?.(this.defaultValue);
+    }
 
     // Carry focus over so switchToCustomInput() yields a focused input.
     this.input.focused = this._focused;

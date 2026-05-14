@@ -1,7 +1,6 @@
 import type { JSONSchema7 } from 'json-schema';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { MemoryConfig } from '../../../memory/types';
-import type { ToolGateSerializableState } from '../../../tools/tool-gate';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
@@ -16,11 +15,19 @@ import type {
   DurableAgenticWorkflowInput,
 } from '../types';
 
+type SerializableApprovalTool = CoreTool & {
+  requireApproval?: boolean;
+  needsApproval?: boolean | ((args: any, ctx?: any) => boolean | Promise<boolean>);
+  needsApprovalFn?: (args: any, ctx?: any) => boolean | Promise<boolean>;
+  hasSuspendSchema?: boolean;
+};
+
 /**
  * Extract serializable metadata from a CoreTool
  * This strips out the execute function and converts the schema to JSON Schema
  */
 export function serializeToolMetadata(name: string, tool: CoreTool): SerializableToolMetadata {
+  const approvalTool = tool as SerializableApprovalTool;
   // Extract JSON Schema from the parameters
   let inputSchema: JSONSchema7 = { type: 'object' };
 
@@ -46,8 +53,10 @@ export function serializeToolMetadata(name: string, tool: CoreTool): Serializabl
     name,
     description: tool.description,
     inputSchema,
-    requireApproval: (tool as any).requireApproval,
-    hasSuspendSchema: (tool as any).hasSuspendSchema,
+    requireApproval: Boolean(
+      approvalTool.requireApproval || approvalTool.needsApproval || approvalTool.needsApprovalFn,
+    ),
+    hasSuspendSchema: approvalTool.hasSuspendSchema,
   };
 }
 
@@ -144,7 +153,6 @@ export function serializeDurableState(params: {
   threadExists?: boolean;
   savePerStep?: boolean;
   observationalMemory?: boolean;
-  toolGate?: ToolGateSerializableState;
 }): SerializableDurableState {
   return {
     memoryConfig: params.memoryConfig,
@@ -153,7 +161,6 @@ export function serializeDurableState(params: {
     threadExists: params.threadExists,
     savePerStep: params.savePerStep,
     observationalMemory: params.observationalMemory,
-    toolGate: params.toolGate,
   };
 }
 

@@ -916,35 +916,121 @@ export async function executeForeach(
   const totalCount = prevOutput.length;
   let completedCount = 0;
 
-  for (let i = 0; i < prevOutput.length; i += concurrency) {
-    // Honor cancellation between concurrency chunks so cancelling a long
-    // foreach (large list / slow steps) terminates without dispatching more work.
-    if (abortController?.signal?.aborted) {
-      await engine.endChildSpan({
-        span: loopSpan,
-        operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end.early`,
-        endOptions: {
-          output: results,
+  // Use a fastq callback-based queue for fluid concurrency.
+  // Unlike the previous batch approach (Promise.all on slices), this starts the
+  // next item as soon as any slot frees up, keeping `concurrency` items running
+  // at all times instead of waiting for an entire batch to finish.
+  type ForeachTask = { item: any; k: number; resumeToUse: typeof resume };
+  let errorResult: StepFailure<any, any, any, any> | null = null;
+  let exitResult = null as ForeachStepResult | null;
+  let canceledResult: ForeachStepResult | null = null;
+  let inFlight = 0;
+  let resolveCompletion: (() => void) | undefined;
+
+  /** Publish a workflow-step-progress event for a single foreach iteration. */
+  const emitIterationProgress = (
+    k: number,
+    iterationStatus: 'success' | 'suspended' | 'failed',
+    iterationOutput?: unknown,
+  ) =>
+    pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-progress',
+        payload: {
+          id: step.id,
+          completedCount,
+          totalCount,
+          currentIndex: k,
+          iterationStatus,
+          ...(iterationOutput !== undefined ? { iterationOutput } : {}),
         },
-      });
-      return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
-        any,
-        any,
-        any,
-        any
-      >;
+      },
+    });
+
+  /** Drain all queued (not yet in-flight) tasks and kill the queue. */
+  const killQueue = () => {
+    inFlight -= queue.length();
+    queue.kill();
+  };
+
+  /** Execute a single foreach iteration and return its result. */
+  const executeForeachIteration = (item: any, k: number, resumeToUse: typeof resume) =>
+    engine.executeStep({
+      workflowId,
+      runId,
+      resourceId,
+      step,
+      stepResults,
+      restart,
+      timeTravel,
+      executionContext: { ...executionContext, foreachIndex: k },
+      resume: resumeToUse,
+      prevOutput: item,
+      ...createObservabilityContext({ currentSpan: loopSpan }),
+      pubsub,
+      abortController,
+      requestContext,
+      skipEmits: true,
+      outputWriter,
+      disableScorers,
+      serializedStepGraph,
+      perStep,
+    });
+
+  /** Handle a non-success result (suspended or failed). Kills the queue so remaining items are skipped. */
+  const handleNonSuccessResult = async (result: ForeachStepResult, k: number) => {
+    if (result.status === 'suspended') {
+      if (!foreachIndexObj[k]) {
+        foreachIndexObj[k] = {
+          status: result.status,
+          suspendPayload: result.suspendPayload,
+          suspendedAt: result.suspendedAt,
+        };
+      }
+      await emitIterationProgress(k, 'suspended');
+    } else if (result.status === 'failed') {
+      completedCount++;
+      await emitIterationProgress(k, 'failed');
+      if (!errorResult) {
+        errorResult = result;
+      }
+    } else if (result.status !== 'success') {
+      completedCount++;
+      await emitIterationProgress(k, 'failed');
+      if (!exitResult) {
+        exitResult = result;
+      }
     }
 
-    const items = prevOutput.slice(i, i + concurrency);
-    const itemsResults = await Promise.all(
-      items.map(async (item: any, j: number) => {
-        const k = i + j;
-        const prevItemResult = prevForeachOutput[k];
-        if (
-          prevItemResult?.status === 'success' ||
-          (prevItemResult?.status === 'suspended' && resume?.forEachIndex !== k && resume?.forEachIndex !== undefined)
-        ) {
-          return prevItemResult;
+    killQueue();
+  };
+
+  /** Handle a successful iteration result. */
+  const handleSuccessResult = async (result: Extract<ForeachStepResult, { status: 'success' }>, k: number) => {
+    completedCount++;
+    await emitIterationProgress(k, 'success', result.output);
+
+    const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k);
+    if (indexResumeLabel !== undefined) {
+      delete resumeLabels[indexResumeLabel];
+    }
+  };
+
+  const worker = async (task: ForeachTask, cb: DoneCallback) => {
+    const { item, k, resumeToUse } = task;
+
+    try {
+      // Honor cancellation before dispatching more work
+      if (abortController?.signal?.aborted) {
+        if (!canceledResult) {
+          canceledResult = {
+            ...stepInfo,
+            status: 'canceled',
+            output: results,
+            endedAt: Date.now(),
+          } as unknown as StepResult<any, any, any, any>;
         }
         killQueue();
         inFlight--;
@@ -1203,26 +1289,6 @@ export async function executeForeach(
         },
       },
     } as StepSuspended<any, any, any>;
-  }
-
-  // Honor cancellation that landed during the final concurrency chunk. Without
-  // this check, a foreach whose steps ignore abortSignal would still emit a
-  // 'success' workflow-step-result and persist a successful step result, even
-  // though the run was cancelled.
-  if (abortController?.signal?.aborted) {
-    await engine.endChildSpan({
-      span: loopSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end.early`,
-      endOptions: {
-        output: results,
-      },
-    });
-    return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
-      any,
-      any,
-      any,
-      any
-    >;
   }
 
   await pubsub.publish(`workflow.events.v2.${runId}`, {

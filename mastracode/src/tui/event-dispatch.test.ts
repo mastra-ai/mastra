@@ -107,6 +107,36 @@ describe('dispatchEvent thread lifecycle', () => {
     );
   });
 
+  it('persists only explicitly pending goals to created threads', async () => {
+    const goalManager = state.goalManager as any;
+    goalManager.consumePersistOnNextThreadCreate.mockReturnValueOnce(true);
+
+    await dispatchEvent(
+      { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New', metadata: { goal: null } } } as any,
+      ectx,
+      state,
+    );
+
+    expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
+  });
+
+  it('loads thread metadata instead of copying non-pending goals to created threads', async () => {
+    const goalManager = state.goalManager as any;
+
+    await dispatchEvent(
+      {
+        type: 'thread_created',
+        thread: { id: 'brand-new', title: 'Brand New', metadata: { goal: { status: 'done' } } },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
+    expect(goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: { status: 'done' } });
+  });
+
   it('resets taskToolInsertIndex on thread_changed', async () => {
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,

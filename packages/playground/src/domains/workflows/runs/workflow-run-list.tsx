@@ -1,19 +1,16 @@
-import {
-  AlertDialog,
-  Skeleton,
-  Spinner,
-  ThreadDeleteButton,
-  ThreadItem,
-  ThreadLink,
-  ThreadList,
-  Threads,
-  Txt,
-  Icon,
-} from '@mastra/playground-ui';
+import { AlertDialog, Icon, Skeleton, Spinner } from '@mastra/playground-ui';
 import { formatDate } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { WorkflowRunStatusBadge } from '../components/workflow-run-status-badge';
+import {
+  ThreadList,
+  ThreadListEmpty,
+  ThreadListItem,
+  ThreadListItems,
+  ThreadListNewItem,
+  ThreadListSeparator,
+} from '@/components/thread-list';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';

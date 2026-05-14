@@ -25,6 +25,7 @@ export function AgentCombobox({
   className,
   disabled = false,
   variant = 'default',
+  size,
 }: AgentComboboxProps) {
   const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();

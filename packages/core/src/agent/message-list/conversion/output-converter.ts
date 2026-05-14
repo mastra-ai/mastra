@@ -7,7 +7,7 @@ import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
-import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
+import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from '../utils/provider-compat';
 import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**

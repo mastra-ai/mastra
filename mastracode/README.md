@@ -13,6 +13,7 @@ Learn more in the [documentation](https://code.mastra.ai/) and [announcement pos
 - **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
 - **Persistent conversations**: Threads are saved per-project and resume automatically
 - **Coding tools**: View files, edit code, run shell commands
+- **Goals**: Pursue longer-running objectives with configurable judge models and goal-enabled commands/skills
 - **Plan persistence**: Approved plans are saved as markdown files for future reference
 - **Token tracking**: Monitor usage with persistent token counts per thread
 - **Beautiful TUI**: Polished terminal interface with streaming responses

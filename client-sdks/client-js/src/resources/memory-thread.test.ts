@@ -250,6 +250,27 @@ describe('MemoryThread', () => {
       expect(result).toEqual(mockResponse);
     });
 
+    it('should preserve legacy requestContext objects that contain agentId plus other fields', async () => {
+      const messageIds = ['msg-1'];
+      const mockResponse = { success: true, message: '1 message deleted successfully' };
+
+      mockFetchResponse(mockResponse);
+
+      const result = await thread.deleteMessages(messageIds, {
+        agentId: 'user-123',
+        tenantId: 'tenant-1',
+      } as any);
+
+      const requestUrl = new URL((global.fetch as any).mock.calls[0][0]);
+      const requestContext = JSON.parse(
+        Buffer.from(requestUrl.searchParams.get('requestContext') ?? '', 'base64').toString('utf8'),
+      );
+
+      expect(requestUrl.searchParams.get('agentId')).toBe(agentId);
+      expect(requestContext).toEqual({ agentId: 'user-123', tenantId: 'tenant-1' });
+      expect(result).toEqual(mockResponse);
+    });
+
     it('should handle empty array', async () => {
       const messageIds: string[] = [];
 
@@ -459,26 +480,6 @@ describe('MemoryThread', () => {
           body: JSON.stringify({ messageIds }),
         }),
       );
-      expect(result).toEqual(mockResponse);
-    });
-
-    it('should preserve legacy requestContext objects that contain agentId plus other fields', async () => {
-      const messageIds = ['msg-1'];
-      const mockResponse = { success: true, message: '1 message deleted successfully' };
-      mockFetchResponse(mockResponse);
-
-      const result = await thread.deleteMessages(messageIds, {
-        agentId: 'user-123',
-        tenantId: 'tenant-1',
-      } as any);
-
-      const requestUrl = new URL((global.fetch as any).mock.calls[0][0]);
-      const requestContext = JSON.parse(
-        Buffer.from(requestUrl.searchParams.get('requestContext') ?? '', 'base64').toString('utf8'),
-      );
-
-      expect(requestUrl.searchParams.get('agentId')).toBe(agentId);
-      expect(requestContext).toEqual({ agentId: 'user-123', tenantId: 'tenant-1' });
       expect(result).toEqual(mockResponse);
     });
   });

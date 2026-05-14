@@ -405,7 +405,7 @@ export class MemoryDSQL extends MemoryStorage {
         const now = new Date().toISOString();
         const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
           `UPDATE ${threadTableName}
-                      SET
+                      SET 
                           title = $1,
                           metadata = $2,
                           "updatedAt" = $3::timestamp,
@@ -807,7 +807,7 @@ export class MemoryDSQL extends MemoryStorage {
               ? new Date(message.createdAt).toISOString()
               : new Date().toISOString();
             return t.none(
-              `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
+              `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId") 
                VALUES ($1, $2, $3, $4::timestamp, $5::timestamptz, $6, $7, $8)
                ON CONFLICT (id) DO UPDATE SET
                 thread_id = EXCLUDED.thread_id,
@@ -830,8 +830,8 @@ export class MemoryDSQL extends MemoryStorage {
 
           const nowIso = new Date().toISOString();
           const threadUpdate = t.none(
-            `UPDATE ${threadTableName}
-                          SET
+            `UPDATE ${threadTableName} 
+                          SET 
                               "updatedAt" = $1::timestamp,
                               "updatedAtZ" = $2::timestamptz
                           WHERE id = $3

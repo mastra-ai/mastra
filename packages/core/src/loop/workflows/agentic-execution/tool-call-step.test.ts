@@ -8,7 +8,6 @@ import { ChunkFrom } from '../../../stream/types';
 import { createTool } from '../../../tools';
 import { ToolStream } from '../../../tools/stream';
 import { CoreToolBuilder } from '../../../tools/tool-builder/builder';
-import { getToolGateRuntimeState, setToolGateRuntimeState } from '../../../tools/tool-gate';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { OuterLLMRun } from '../../types';
 import { createToolCallStep } from './tool-call-step';
@@ -312,6 +311,8 @@ describe('createToolCallStep tool approval workflow', () => {
     const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
     await new Promise(resolve => setImmediate(resolve));
 
+    await new Promise(resolve => setImmediate(resolve));
+
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'tool-call-approval',
@@ -352,11 +353,409 @@ describe('createToolCallStep tool approval workflow', () => {
 
     expect(result).toEqual({
       result: 'Tool call was not approved by the user',
-      denied: true,
-      deniedReason: 'Tool call was not approved by the user',
       ...inputData,
     });
     expectNoToolExecution();
+  });
+
+  it('should reject malformed approval resumes without executing the tool', async () => {
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: {} }));
+
+    expect(result).toEqual({
+      result: 'Tool call was not approved by the user',
+      ...inputData,
+    });
+    expectNoToolExecution();
+  });
+
+  it('should honor declined approval even if needsApprovalFn later returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    tools['test-tool'].requireApproval = false;
+    (tools['test-tool'] as any).needsApprovalFn = needsApprovalFn;
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'test-tool': {
+              toolCallId: 'test-call-id',
+              toolName: 'test-tool',
+              args: { param: 'test' },
+              type: 'approval',
+              runId: 'test-run',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    (messageList.get.all.db as Mock).mockReturnValue?.([assistantMessage]);
+    if (!('mock' in messageList.get.all.db)) {
+      messageList.get.all.db = () => [assistantMessage];
+    }
+    const inputData = makeInputData();
+    const resumeData = { approved: false };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
+
+    expect(result).toEqual({
+      result: 'Tool call was not approved by the user',
+      ...inputData,
+    });
+    expect(needsApprovalFn).not.toHaveBeenCalled();
+    expectNoToolExecution();
+  });
+
+  it('should reject malformed stored approval resumes even if needsApprovalFn later returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    tools['test-tool'].requireApproval = false;
+    (tools['test-tool'] as any).needsApprovalFn = needsApprovalFn;
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'test-tool': {
+              toolCallId: 'test-call-id',
+              toolName: 'test-tool',
+              args: { param: 'test' },
+              type: 'approval',
+              runId: 'test-run',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    (messageList.get.all.db as Mock).mockReturnValue?.([assistantMessage]);
+    if (!('mock' in messageList.get.all.db)) {
+      messageList.get.all.db = () => [assistantMessage];
+    }
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: {} }));
+
+    expect(result).toEqual({
+      result: 'Tool call was not approved by the user',
+      ...inputData,
+    });
+    expect(needsApprovalFn).not.toHaveBeenCalled();
+    expectNoToolExecution();
+  });
+
+  it('should consume approved stored approval resumes even if needsApprovalFn later returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const toolResult = { success: true };
+    tools['test-tool'].requireApproval = false;
+    (tools['test-tool'] as any).needsApprovalFn = needsApprovalFn;
+    tools['test-tool'].execute.mockResolvedValue(toolResult);
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'test-tool': {
+              toolCallId: 'test-call-id',
+              toolName: 'test-tool',
+              args: { param: 'test' },
+              type: 'approval',
+              runId: 'test-run',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    (messageList.get.all.db as Mock).mockReturnValue?.([assistantMessage]);
+    if (!('mock' in messageList.get.all.db)) {
+      messageList.get.all.db = () => [assistantMessage];
+    }
+    const flushMessages = vi.fn();
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-id',
+      },
+    } as any);
+    const inputData = makeInputData();
+
+    const result = await step.execute(makeExecuteParams({ inputData, resumeData: { approved: true } }));
+
+    expect(needsApprovalFn).toHaveBeenCalled();
+    expect(tools['test-tool'].execute).toHaveBeenCalledWith(
+      inputData.args,
+      expect.objectContaining({
+        resumeData: undefined,
+      }),
+    );
+    expect(assistantMessage.content.metadata.pendingToolApprovals).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+    expect(result).toEqual({
+      result: toolResult,
+      ...inputData,
+    });
+  });
+
+  it('should pass approved-shaped suspension resumes when approval is not required', async () => {
+    const toolResult = { resumed: true };
+    tools['test-tool'].requireApproval = false;
+    tools['test-tool'].execute.mockResolvedValue(toolResult);
+    const inputData = makeInputData();
+    const resumeData = { approved: false };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
+
+    expect(tools['test-tool'].execute).toHaveBeenCalledWith(
+      inputData.args,
+      expect.objectContaining({
+        resumeData,
+      }),
+    );
+    expect(result).toEqual({
+      result: toolResult,
+      ...inputData,
+    });
+  });
+
+  it('should clear delegated agent approval metadata when resuming workflow approval data', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'agent-subAgent': {
+              toolCallId: 'agent-call-id',
+              toolName: 'agent-subAgent',
+              args: { prompt: 'lookup' },
+              type: 'approval',
+              runId: 'suspended-agent-run-id',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    const flushMessages = vi.fn();
+    const agentTool = {
+      execute: vi.fn().mockResolvedValue({ text: 'declined' }),
+      requireApproval: false,
+    };
+    const step = createToolCallStep({
+      tools: { 'agent-subAgent': agentTool },
+      messageList: {
+        get: {
+          input: { aiV5: { model: () => [] } },
+          response: { db: () => [] },
+          all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+        },
+      } as unknown as MessageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-id',
+      },
+    } as any);
+
+    const inputData = {
+      toolCallId: 'agent-call-id',
+      toolName: 'agent-subAgent',
+      args: { prompt: 'lookup' },
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('__mastra_requireToolApproval', true);
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        requestContext,
+        resumeData: { approved: false },
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'agent-call-id',
+          name: 'agent-subAgent',
+          runId: 'test-run-id',
+        }),
+      }),
+    );
+
+    expect(agentTool.execute).toHaveBeenCalledWith(
+      {
+        prompt: 'lookup',
+        resourceId: undefined,
+        suspendedToolRunId: 'suspended-agent-run-id',
+        threadId: 'thread-id',
+      },
+      expect.objectContaining({
+        resumeData: { approved: false },
+      }),
+    );
+    expect(assistantMessage.content.metadata.pendingToolApprovals).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+    expect(result).toEqual({
+      result: { text: 'declined' },
+      ...inputData,
+    });
+  });
+
+  it('should not pass local agent approval resume data to the delegated tool wrapper', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'agent-subAgent': {
+              toolCallId: 'agent-call-id',
+              toolName: 'agent-subAgent',
+              args: { prompt: 'lookup' },
+              type: 'approval',
+              runId: 'test-run',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    const flushMessages = vi.fn();
+    const agentTool = {
+      execute: vi.fn().mockResolvedValue({ text: 'approved' }),
+      requireApproval: false,
+    };
+    const step = createToolCallStep({
+      tools: { 'agent-subAgent': agentTool },
+      messageList: {
+        get: {
+          input: { aiV5: { model: () => [] } },
+          response: { db: () => [] },
+          all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+        },
+      } as unknown as MessageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-id',
+      },
+    } as any);
+    const requestContext = new RequestContext();
+    requestContext.set('__mastra_requireToolApproval', true);
+
+    await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'agent-call-id',
+          toolName: 'agent-subAgent',
+          args: { prompt: 'lookup' },
+        },
+        requestContext,
+        resumeData: { approved: true },
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'agent-call-id',
+          name: 'agent-subAgent',
+          runId: 'test-run-id',
+        }),
+      }),
+    );
+
+    expect(agentTool.execute).toHaveBeenCalledOnce();
+    const [, toolOptions] = agentTool.execute.mock.calls[0]!;
+    expect(toolOptions.resumeData).toBeUndefined();
+    expect(assistantMessage.content.metadata.pendingToolApprovals).toBeUndefined();
+  });
+
+  it('should clear delegated agent suspension metadata when resume data contains approved', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          suspendedTools: {
+            'agent-subAgent': {
+              toolCallId: 'agent-call-id',
+              toolName: 'agent-subAgent',
+              args: { prompt: 'lookup' },
+              type: 'suspension',
+              runId: 'suspended-agent-run-id',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    const flushMessages = vi.fn();
+    const agentTool = {
+      execute: vi.fn().mockResolvedValue({ text: 'resumed' }),
+      requireApproval: true,
+    };
+    const step = createToolCallStep({
+      tools: { 'agent-subAgent': agentTool },
+      messageList: {
+        get: {
+          input: { aiV5: { model: () => [] } },
+          response: { db: () => [] },
+          all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+        },
+      } as unknown as MessageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-id',
+      },
+    } as any);
+
+    const inputData = {
+      toolCallId: 'agent-call-id',
+      toolName: 'agent-subAgent',
+      args: { prompt: 'lookup', resumeData: { approved: false } },
+    };
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'agent-call-id',
+          name: 'agent-subAgent',
+          runId: 'test-run-id',
+        }),
+      }),
+    );
+
+    expect(agentTool.execute).toHaveBeenCalledWith(
+      {
+        prompt: 'lookup',
+        resourceId: undefined,
+        suspendedToolRunId: 'suspended-agent-run-id',
+        threadId: 'thread-id',
+      },
+      expect.objectContaining({
+        resumeData: { approved: false },
+      }),
+    );
+    expect(assistantMessage.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+    expect(result).toEqual({
+      result: { text: 'resumed' },
+      ...inputData,
+    });
   });
 
   it('should return inputData as-is for provider-executed tools (no client execution)', async () => {
@@ -388,6 +787,7 @@ describe('createToolCallStep tool approval workflow', () => {
       expect.objectContaining({
         toolCallId: inputData.toolCallId,
         messages: [],
+        resumeData: undefined,
       }),
     );
     expect(suspend).not.toHaveBeenCalled();
@@ -467,13 +867,13 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
-  it('should skip approval when needsApprovalFn returns false', async () => {
+  it('should skip approval when only needsApprovalFn returns false', async () => {
     const needsApprovalFn = vi.fn().mockReturnValue(false);
     const toolResult = { deleted: true };
     const tools = {
       'ctx-tool': {
         execute: vi.fn().mockResolvedValue(toolResult),
-        requireApproval: true,
+        requireApproval: false,
         needsApprovalFn,
       },
     };
@@ -495,156 +895,63 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
       ...makeInputData(),
     });
   });
-});
 
-describe('createToolCallStep tool gate enforcement', () => {
-  let controller: { enqueue: Mock };
-  let suspend: Mock;
-  let streamState: { serialize: Mock };
-  let messageList: MessageList;
-
-  const makeInputData = (args: Record<string, unknown> = { action: 'send' }) => ({
-    toolCallId: 'gate-call-id',
-    toolName: 'gate-tool',
-    args,
-  });
-
-  const makeExecuteParams = (requestContext: RequestContext, overrides: any = {}) => ({
-    ...makeBaseExecuteParams(suspend, { requestContext }),
-    writer: new ToolStream({
-      prefix: 'tool',
-      callId: 'gate-call-id',
-      name: 'gate-tool',
-      runId: 'gate-run-id',
-    }),
-    inputData: makeInputData(),
-    ...overrides,
-  });
-
-  beforeEach(() => {
-    controller = { enqueue: vi.fn() };
-    suspend = vi.fn().mockReturnValue(new Promise(() => {}));
-    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
-    messageList = createMessageList();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-    vi.restoreAllMocks();
-  });
-
-  it('rejects denied tool calls before execution', async () => {
-    const execute = vi.fn().mockResolvedValue({ ok: true });
-    const onInputAvailable = vi.fn();
-    const requestContext = new RequestContext();
-    setToolGateRuntimeState(requestContext, {
-      policy: {
-        id: 'deny-policy',
-        evaluate: ({ subject, args }) => {
-          expect(subject.boundary).toBe('tool-call');
-          expect(args).toEqual({ action: 'delete' });
-          return { effect: 'deny', reason: 'delete is disabled' };
-        },
+  it('should require approval when requireApproval is true and needsApprovalFn returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn(),
+        requireApproval: true,
+        needsApprovalFn,
       },
-    });
+    };
 
     const toolCallStep = createToolCallStep({
-      tools: {
-        'gate-tool': { execute, onInputAvailable },
-      },
+      tools,
       messageList,
       controller,
-      runId: 'gate-run-id',
+      runId: 'static-approval-run-id',
       streamState,
-    } as any);
-
-    const result = await toolCallStep.execute(
-      makeExecuteParams(requestContext, {
-        inputData: makeInputData({ action: 'delete' }),
-      }),
-    );
-
-    expect(execute).not.toHaveBeenCalled();
-    expect(onInputAvailable).not.toHaveBeenCalled();
-    expect(result.error?.name).toBe('ToolNotFoundError');
-    expect(String(result.error?.message)).toContain('delete is disabled');
-    expect(getToolGateRuntimeState(requestContext)?.decisions?.[0]).toMatchObject({
-      effect: 'deny',
-      toolCallId: 'gate-call-id',
-    });
-  });
-
-  it('does not let needsApprovalFn downgrade tool gate approval', async () => {
-    const execute = vi.fn();
-    const requestContext = new RequestContext();
-    setToolGateRuntimeState(requestContext, {
-      policy: {
-        id: 'approval-policy',
-        evaluate: () => ({ effect: 'requireApproval', reason: 'external write' }),
-      },
     });
 
-    const toolCallStep = createToolCallStep({
-      tools: {
-        'gate-tool': {
-          execute,
-          needsApprovalFn: vi.fn().mockReturnValue(false),
-        },
-      },
-      messageList,
-      controller,
-      runId: 'gate-run-id',
-      streamState,
-    } as any);
+    const executePromise = toolCallStep.execute(makeExecuteParams());
 
-    const executePromise = toolCallStep.execute(makeExecuteParams(requestContext));
     await new Promise(resolve => setImmediate(resolve));
 
-    expect(execute).not.toHaveBeenCalled();
+    expect(needsApprovalFn).toHaveBeenCalled();
     expect(suspend).toHaveBeenCalled();
-    expect(controller.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'tool-call-approval',
-      }),
-    );
+    expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
-  it('does not accept model-provided resumeData for tool gate approval', async () => {
-    const execute = vi.fn();
-    const requestContext = new RequestContext();
-    setToolGateRuntimeState(requestContext, {
-      policy: {
-        id: 'approval-policy',
-        evaluate: () => ({ effect: 'requireApproval', reason: 'external write' }),
+  it('should require approval when requireToolApproval is true and needsApprovalFn returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn(),
+        requireApproval: false,
+        needsApprovalFn,
       },
-    });
+    };
 
     const toolCallStep = createToolCallStep({
-      tools: {
-        'gate-tool': { execute },
-      },
+      tools,
       messageList,
       controller,
-      runId: 'gate-run-id',
+      runId: 'global-approval-run-id',
       streamState,
-    } as any);
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('__mastra_requireToolApproval', true);
 
-    const executePromise = toolCallStep.execute(
-      makeExecuteParams(requestContext, {
-        inputData: makeInputData({ action: 'send', resumeData: { approved: true } }),
-      }),
-    );
+    const executePromise = toolCallStep.execute(makeExecuteParams({ requestContext }));
+
     await new Promise(resolve => setImmediate(resolve));
 
-    expect(execute).not.toHaveBeenCalled();
+    expect(needsApprovalFn).toHaveBeenCalled();
     expect(suspend).toHaveBeenCalled();
-    expect(controller.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'tool-call-approval',
-      }),
-    );
+    expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });

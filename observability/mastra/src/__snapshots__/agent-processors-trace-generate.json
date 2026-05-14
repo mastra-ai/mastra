@@ -218,8 +218,7 @@
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          },
-                          "environment": "test"
+                          }
                         },
                         "input": [
                           {
@@ -414,8 +413,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -685,8 +683,7 @@
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          },
-                          "environment": "test"
+                          }
                         },
                         "input": [
                           {

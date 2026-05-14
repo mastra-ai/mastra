@@ -1,8 +1,57 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
+import { PassThrough } from 'node:stream';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Mastra } from '@mastra/core/mastra';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MastraServer } from './index';
+
+class TestMastraServer extends MastraServer<any, any, any> {
+  stream = vi.fn();
+  getParams = vi.fn();
+  sendResponse = vi.fn();
+  registerRoute = vi.fn();
+  registerContextMiddleware = vi.fn();
+  registerAuthMiddleware = vi.fn();
+  registerHttpLoggingMiddleware = vi.fn();
+
+  // Exposes the protected bridge for focused unit coverage.
+  async writeResponse(response: Response, nodeRes: any, signal?: AbortSignal) {
+    await this.writeCustomRouteResponse(response, nodeRes, signal);
+  }
+}
+
+function createTestAdapter() {
+  return new TestMastraServer({
+    app: {},
+    mastra: {
+      getServer: () => undefined,
+      setMastraServer: vi.fn(),
+    } as unknown as Mastra,
+  });
+}
+
+function createWritableResponse() {
+  const response = new PassThrough();
+  const originalEnd = response.end.bind(response);
+  const originalWrite = response.write.bind(response);
+  return Object.assign(response, {
+    write: vi.fn((chunk: unknown, ...args: any[]) => originalWrite(chunk as any, ...args)),
+    writeHead: vi.fn(),
+    end: vi.fn((chunk?: string) => originalEnd(chunk)),
+  });
+}
+
+async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
+  const start = Date.now();
+  while (!assertion()) {
+    if (Date.now() - start > timeout) {
+      throw new Error('Timed out waiting for assertion');
+    }
+    await new Promise(resolve => setTimeout(resolve, 1));
+  }
+}
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
   return {
@@ -179,6 +228,202 @@ describe('FGA Middleware - checkRouteFGA', () => {
         permission: 'tenant-resource:read',
         context: { resourceId: 'tenant-1:resource-1', requestContext },
       },
+    );
+  });
+});
+
+describe('custom route response bridge', () => {
+  it('pipes custom route response streams to node responses', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const chunks: Buffer[] = [];
+    nodeRes.on('data', chunk => chunks.push(Buffer.from(chunk)));
+
+    await adapter.writeResponse(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('hello '));
+            controller.enqueue(new TextEncoder().encode('world'));
+            controller.close();
+          },
+        }),
+        { status: 201, headers: { 'x-test': 'yes' } },
+      ),
+      nodeRes,
+    );
+
+    expect(nodeRes.writeHead).toHaveBeenCalledWith(201, { 'x-test': 'yes' });
+    expect(Buffer.concat(chunks).toString('utf8')).toBe('hello world');
+    expect(nodeRes.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips header writes when the node response is already closed', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    nodeRes.destroy();
+
+    await adapter.writeResponse(new Response('late response', { status: 200 }), nodeRes);
+
+    expect(nodeRes.writeHead).not.toHaveBeenCalled();
+    expect(nodeRes.end).not.toHaveBeenCalled();
+  });
+
+  it('cancels custom route response streams when the node response closes early', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const cancel = vi.fn();
+
+    const writePromise = adapter.writeResponse(
+      new Response(
+        new ReadableStream({
+          async pull(controller) {
+            controller.enqueue(new TextEncoder().encode('chunk\n'));
+            await new Promise(resolve => setTimeout(resolve, 5));
+          },
+          cancel,
+        }),
+      ),
+      nodeRes,
+    );
+
+    await waitFor(() => nodeRes.write.mock.calls.length > 0);
+
+    const closeError = new Error('client closed') as Error & { code: string };
+    closeError.code = 'ECONNRESET';
+    nodeRes.destroy(closeError);
+
+    await writePromise;
+    expect(cancel).toHaveBeenCalledWith(closeError);
+  });
+
+  it('rethrows response body stream errors instead of treating them as client disconnects', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const upstreamError = Object.assign(new Error('upstream reset'), { code: 'ECONNRESET' });
+
+    nodeRes.on('error', () => {});
+
+    await expect(
+      adapter.writeResponse(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('chunk\n'));
+              queueMicrotask(() => {
+                controller.error(upstreamError);
+              });
+            },
+          }),
+        ),
+        nodeRes,
+      ),
+    ).rejects.toMatchObject({ code: 'ECONNRESET' });
+  });
+
+  it('rethrows response body abort errors when they happen before response close aborts the signal', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const controller = new AbortController();
+    const upstreamError = new DOMException('upstream aborted', 'AbortError');
+
+    nodeRes.on('close', () => {
+      if (!nodeRes.writableEnded) {
+        controller.abort();
+      }
+    });
+    nodeRes.on('error', () => {});
+
+    await expect(
+      adapter.writeResponse(
+        new Response(
+          new ReadableStream({
+            start(streamController) {
+              streamController.enqueue(new TextEncoder().encode('chunk\n'));
+              queueMicrotask(() => {
+                streamController.error(upstreamError);
+              });
+            },
+          }),
+        ),
+        nodeRes,
+        controller.signal,
+      ),
+    ).rejects.toBe(upstreamError);
+  });
+});
+
+describe('EE license validation', () => {
+  let originalNodeEnv: string | undefined;
+  let originalMastraDev: string | undefined;
+  let originalLicense: string | undefined;
+
+  beforeEach(() => {
+    originalNodeEnv = process.env['NODE_ENV'];
+    originalMastraDev = process.env['MASTRA_DEV'];
+    originalLicense = process.env['MASTRA_EE_LICENSE'];
+    delete process.env['MASTRA_DEV'];
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    if (originalNodeEnv !== undefined) process.env['NODE_ENV'] = originalNodeEnv;
+    else delete process.env['NODE_ENV'];
+    if (originalMastraDev !== undefined) process.env['MASTRA_DEV'] = originalMastraDev;
+    else delete process.env['MASTRA_DEV'];
+    if (originalLicense !== undefined) process.env['MASTRA_EE_LICENSE'] = originalLicense;
+    else delete process.env['MASTRA_EE_LICENSE'];
+    vi.resetModules();
+  });
+
+  it('should reject FGA in production without a valid EE license', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['MASTRA_EE_LICENSE'];
+
+    const mastra = new Mastra({
+      server: {
+        fga: createMockFGAProvider(),
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.validateEELicense()).rejects.toThrow('FGA is configured but no valid EE license was found');
+  });
+
+  it('should allow FGA in production with a valid EE license', async () => {
+    process.env['NODE_ENV'] = 'production';
+    process.env['MASTRA_EE_LICENSE'] = 'a'.repeat(32);
+
+    const mastra = new Mastra({
+      server: {
+        fga: createMockFGAProvider(),
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.validateEELicense()).resolves.toBeUndefined();
+  });
+
+  it('should mention both configured EE authorization features when both are unlicensed', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['MASTRA_EE_LICENSE'];
+
+    const mastra = new Mastra({
+      server: {
+        rbac: {
+          getRoles: vi.fn(),
+          getPermissions: vi.fn(),
+          hasPermission: vi.fn(),
+          hasAllPermissions: vi.fn(),
+          hasAnyPermission: vi.fn(),
+        },
+        fga: createMockFGAProvider(),
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.validateEELicense()).rejects.toThrow(
+      'RBAC and FGA are configured but no valid EE license was found',
     );
   });
 });

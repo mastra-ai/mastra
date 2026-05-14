@@ -930,6 +930,22 @@ export interface IModelSpanTracker {
   updateStep?(payload?: StepStartPayload): void;
 
   /**
+   * Open the MODEL_INFERENCE span for the current step. Call this immediately
+   * before invoking the model so the span's startTime excludes input processor
+   * work (and `setInferenceContext` reflects the post-processor tool set).
+   * Falls back to auto-creation on first chunk if the caller forgets.
+   */
+  startInference?(payload?: StepStartPayload): void;
+
+  /**
+   * Set the request-side context applied to subsequent MODEL_INFERENCE spans
+   * (parameters, providerOptions, availableTools, toolChoice, responseFormat).
+   * Call after input processors have finalised the tool set, just before
+   * `startInference()`; the next inference span snapshots this context.
+   */
+  setInferenceContext?(context: ModelInferenceContext): void;
+
+  /**
    * Enable or disable deferred step closing for durable execution.
    * When enabled, step-finish chunks won't automatically close the step span.
    * Use exportCurrentStep() to get the span data, then endDeferredStep() to close later.

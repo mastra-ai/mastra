@@ -427,41 +427,6 @@ describe('OpenAI reasoning round-trip', () => {
     );
   });
 
-  it('should not canonicalize mismatched mirrored Azure and OpenAI itemIds in cache keys', () => {
-    const azureOnly = [
-      {
-        type: 'reasoning',
-        text: '',
-        providerOptions: {
-          azure: {
-            itemId: 'rs_azure_A',
-          },
-        },
-      },
-    ];
-    const mismatchedMirror = [
-      {
-        type: 'reasoning',
-        text: '',
-        providerOptions: {
-          azure: {
-            itemId: 'rs_azure_A',
-          },
-          openai: {
-            itemId: 'rs_azure_B',
-          },
-        },
-      },
-    ];
-
-    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(azureOnly as any)).not.toBe(
-      CacheKeyGenerator.fromAIV4CoreMessageContent(mismatchedMirror as any),
-    );
-    expect(CacheKeyGenerator.fromAIV5ModelMessageContent(azureOnly as any)).not.toBe(
-      CacheKeyGenerator.fromAIV5ModelMessageContent(mismatchedMirror as any),
-    );
-  });
-
   it('should deduplicate mirrored provider metadata and options in cache keys', () => {
     const providerOptionsOnly = [
       {
@@ -493,6 +458,66 @@ describe('OpenAI reasoning round-trip', () => {
 
     expect(CacheKeyGenerator.fromAIV4CoreMessageContent(providerOptionsOnly as any)).toBe(
       CacheKeyGenerator.fromAIV4CoreMessageContent(mirroredAcrossBags as any),
+    );
+  });
+
+  it('should not canonicalize mirrored Azure and OpenAI itemIds when values differ', () => {
+    const azureReasoningOnly = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_A',
+          },
+        },
+      },
+    ];
+    const mirroredReasoningWithDifferentValues = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_A',
+          },
+          openai: {
+            itemId: 'rs_azure_B',
+          },
+        },
+      },
+    ];
+    const azureTextOnly = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerOptions: {
+          azure: {
+            itemId: 'msg_azure_A',
+          },
+        },
+      },
+    ];
+    const mirroredTextWithDifferentValues = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerOptions: {
+          azure: {
+            itemId: 'msg_azure_A',
+          },
+          openai: {
+            itemId: 'msg_azure_B',
+          },
+        },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(azureReasoningOnly as any)).not.toBe(
+      CacheKeyGenerator.fromAIV4CoreMessageContent(mirroredReasoningWithDifferentValues as any),
+    );
+    expect(CacheKeyGenerator.fromAIV5ModelMessageContent(azureTextOnly as any)).not.toBe(
+      CacheKeyGenerator.fromAIV5ModelMessageContent(mirroredTextWithDifferentValues as any),
     );
   });
 

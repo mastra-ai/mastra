@@ -47,8 +47,6 @@ export type MastraToolInvocation = Omit<LegacyToolInvocation, 'state'> & {
   errorText?: string;
   rawInput?: unknown;
   approval?: MastraToolApproval;
-  denied?: boolean;
-  deniedReason?: string;
 };
 
 export type MastraToolInvocationPart = Omit<LegacyToolInvocationPart, 'toolInvocation'> & {

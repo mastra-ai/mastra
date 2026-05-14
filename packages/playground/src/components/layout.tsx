@@ -3,6 +3,7 @@ import {
   LogoWithoutText,
   MainSidebar,
   MainSidebarProvider,
+  PageHeadingContext,
   ThemeProvider,
   Toaster,
   TooltipProvider,
@@ -31,7 +32,7 @@ function MobileNavbar() {
     <header className="lg:hidden sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border1 bg-surface1 px-3">
       <MainSidebar.MobileTrigger />
       <span className="flex items-center gap-2">
-        <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+        <LogoWithoutText className="size-[1.5rem] shrink-0" />
         <span className="font-serif text-sm whitespace-nowrap">Mastra Studio</span>
       </span>
     </header>
@@ -48,31 +49,35 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
   const shouldReserveRouteHeader = shouldShowSidebar;
 
-  const content = (
-    <AuthRequired>
-      <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-    </AuthRequired>
-  );
-
   return (
     <>
       <NavigationCommand />
       <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
         {shouldShowSidebar && <AppSidebar />}
-        {shouldShowSidebar ? (
-          <div className="flex flex-col h-full min-h-0">
-            <MobileNavbar />
-            <div className="flex-1 min-h-0 bg-transparent overflow-y-auto">{content}</div>
-          </div>
-        ) : (
-          <div
-            className={cn('bg-transparent overflow-y-auto', {
-              'h-[calc(100%-1.5rem)]': shouldHideSidebar,
-            })}
-          >
-            {content}
-          </div>
-        )}
+        <div className="flex flex-col h-full min-h-0">
+          {shouldShowSidebar && <MobileNavbar />}
+          {shouldReserveRouteHeader && (
+            <div className="mx-1.5 mt-1 shrink-0 lg:mx-2 lg:mt-1.5">
+              <RouteHeader />
+            </div>
+          )}
+          <PageHeadingContext.Provider value={pageHeading}>
+            <div
+              className={cn(
+                'ml-0 mx-1.5 mb-1.5 flex-1 min-h-0 overflow-y-auto [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:mb-2 lg:ml-0',
+                {
+                  'mt-0': shouldReserveRouteHeader,
+                  'mt-1.5 lg:mt-2': !shouldReserveRouteHeader,
+                  'h-[calc(100%-1.5rem)]': !shouldShowSidebar && shouldHideSidebar,
+                },
+              )}
+            >
+              <AuthRequired>
+                <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+              </AuthRequired>
+            </div>
+          </PageHeadingContext.Provider>
+        </div>
       </div>
     </>
   );

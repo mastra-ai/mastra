@@ -763,14 +763,16 @@ export class CoreToolBuilder extends MastraBase {
     // Map AI SDK's needsApproval to our requireApproval
     // needsApproval can be boolean or a function that takes input and returns boolean
     let requireApproval = false;
-    let needsApprovalFn: ((input: any) => boolean | Promise<boolean>) | undefined;
+    let needsApprovalFn: ((input: any, ctx?: any) => boolean | Promise<boolean>) | undefined =
+      typeof (this.originalTool as any).needsApprovalFn === 'function'
+        ? (this.originalTool as any).needsApprovalFn
+        : undefined;
 
     if (typeof this.options.requireApproval === 'function') {
-      requireApproval = true;
+      // Dynamic approval is evaluated per call via needsApprovalFn.
       needsApprovalFn = this.options.requireApproval;
     } else if (typeof this.options.requireApproval === 'boolean') {
       requireApproval = this.options.requireApproval;
-      needsApprovalFn = undefined;
     }
 
     if (isVercelTool(this.originalTool) && 'needsApproval' in this.originalTool) {
@@ -781,8 +783,6 @@ export class CoreToolBuilder extends MastraBase {
       } else if (typeof needsApproval === 'function') {
         // Store the function to evaluate it per-call
         needsApprovalFn = needsApproval;
-        // Set requireApproval to true so the tool-call-step knows to check the function
-        requireApproval = true;
       }
     }
 

@@ -1,4 +1,4 @@
-import { useAssistantState } from '@assistant-ui/react';
+import { useAuiState } from '@assistant-ui/react';
 import { Notice, Badge, Icon, cn } from '@mastra/playground-ui';
 import type { MastraUIMessageMetadata } from '@mastra/react';
 import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
@@ -7,7 +7,7 @@ import { MarkdownText } from './markdown-text';
 import { TripwireNotice } from './tripwire-notice';
 
 export const ErrorAwareText = () => {
-  const part = useAssistantState(({ part }) => part);
+  const part = useAuiState(({ part }) => part);
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
 
   // Get text from the part - it's a TextPart so it has a text property

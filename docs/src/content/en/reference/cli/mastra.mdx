@@ -213,11 +213,13 @@ mastra studio deploy
 
 The command runs `mastra build`, zips the output, reads an env file from the project directory, and uploads everything to the platform. After uploading, it polls the deploy status and streams build logs until the deploy reaches a terminal state.
 
+The deploy command auto-loads the project's `.env` file. If `MASTRA_PROJECT_ID` points to a project that was provisioned for Observability, the deploy links to that project instead of creating a new one. Deploying Studio to an observability-only project converts it into a Studio project on the platform side.
+
 The CLI requires at least one `.env` or `.env.*` file (excluding `.env.example`) in the project directory and fails with `Error: No env file found for deploy.` if none exists. When multiple env files are present, the CLI prompts you to pick one (defaulting to `.env.production`); pass `--env-file` to choose explicitly. With `--yes` and multiple env files, you must pass `--env-file` or the deploy errors.
 
 Organization and project are resolved in order from: Environment variable flag, `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
-If `--project <value>` does not match an existing project (by ID or slug), the CLI treats `<value>` as a new project name and creates it after confirmation. Combined with `--yes`, this creates and deploys a new project in one non-interactive command:
+If `--project <value>` doesn't match an existing project (by ID or slug), the CLI treats `<value>` as a new project name and creates it after confirmation. Combined with `--yes`, this creates and deploys a new project in one non-interactive command:
 
 ```bash
 mastra studio deploy --project "my-new-project" --yes
@@ -307,7 +309,7 @@ Shows diagnosis results and suggested fixes for a failed Studio deploy.
 mastra studio deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
 
 ### `mastra studio projects`
 
@@ -315,7 +317,7 @@ Lists all projects in the current organization.
 
 ### `mastra studio projects create`
 
-Creates a new project through an interactive prompt. This command does not accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
+Creates a new project through an interactive prompt. This command doesn't accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
 
@@ -335,7 +337,7 @@ Shows diagnosis results and suggested fixes for a failed Server deploy.
 mastra server deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
 
 ## `mastra server pause`
 
@@ -454,7 +456,7 @@ Lists all organizations with your role in each. The current organization is mark
 
 #### `mastra auth orgs switch`
 
-Switches the active organization through an interactive prompt. This command can't be used when `MASTRA_API_TOKEN` or `MASTRA_ORG_ID` environment variables are set.
+Switches the active organization through an interactive prompt. Can't be used when `MASTRA_API_TOKEN` or `MASTRA_ORG_ID` environment variables are set.
 
 ### `mastra auth tokens`
 

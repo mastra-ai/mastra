@@ -165,6 +165,11 @@ export interface LLMRecording {
   };
 }
 
+type ReplayRecording = LLMRecording & {
+  /** Additional exact-match hashes derived at replay time for backward compatibility. */
+  lookupHashes?: string[];
+};
+
 /**
  * Metadata stored at the top of each recording file.
  * Makes recording files self-describing — you can open a JSON
@@ -605,14 +610,14 @@ const SIMILARITY_THRESHOLD = 0.6;
  * recording).  Exact hash matches are always exempt.
  */
 function findRecording(
-  recordings: LLMRecording[],
+  recordings: ReplayRecording[],
   hash: string,
   url: string,
   body: unknown,
   usedHashes?: Set<string>,
-): LLMRecording | undefined {
+): ReplayRecording | undefined {
   // 1. Exact hash match (fast path)
-  const exact = recordings.find(r => r.hash === hash);
+  const exact = recordings.find(r => isExactRecordingMatch(r, hash));
   if (exact) {
     return exact;
   }
@@ -701,6 +706,33 @@ function findRecording(
   return undefined;
 }
 
+function isExactRecordingMatch(recording: ReplayRecording, hash: string): boolean {
+  return recording.hash === hash || recording.lookupHashes?.includes(hash) === true;
+}
+
+function prepareReplayRecordings(
+  recordings: LLMRecording[],
+  transformRequest?: LLMRecorderOptions['transformRequest'],
+): ReplayRecording[] {
+  if (!transformRequest) {
+    return recordings;
+  }
+
+  return recordings.map(recording => {
+    const transformed = transformRequest({ url: recording.request.url, body: recording.request.body });
+    const transformedHash = hashRequest(transformed.url, transformed.body);
+
+    if (transformedHash === recording.hash) {
+      return recording;
+    }
+
+    return {
+      ...recording,
+      lookupHashes: [recording.hash, transformedHash],
+    };
+  });
+}
+
 /**
  * Set up LLM response recording/replay
  */
@@ -719,14 +751,14 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
   // Load existing recordings / metadata before any mutations (backward compatible)
   // In record/update modes a corrupted file should not block re-recording.
-  let savedRecordings: LLMRecording[] = [];
+  let savedRecordings: ReplayRecording[] = [];
   let existingMeta: RecordingMeta | undefined;
   if (recordingExists) {
     const willRecord = mode === 'record' || mode === 'update';
     try {
       const file = loadRecordingFile(recordingPath, options.name);
       existingMeta = file.meta;
-      savedRecordings = file.recordings;
+      savedRecordings = prepareReplayRecordings(file.recordings, options.transformRequest);
     } catch (err) {
       if (!willRecord) {
         throw err;
@@ -957,11 +989,11 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         }
 
         if (debug) {
-          const matchType = recording.hash === hash ? 'exact' : 'fuzzy';
+          const matchType = isExactRecordingMatch(recording, hash) ? 'exact' : 'fuzzy';
           console.log(`[llm-recorder]   Matched (${matchType}): ${recording.request.url} [hash: ${recording.hash}]`);
         }
 
-        if (recording.hash !== hash) {
+        if (!isExactRecordingMatch(recording, hash)) {
           // findRecording returned a fuzzy match (rating >= SIMILARITY_THRESHOLD).
           // Accept it with a warning rather than failing the test.
           console.warn(

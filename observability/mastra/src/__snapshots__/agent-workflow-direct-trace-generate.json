@@ -142,8 +142,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -373,30 +372,6 @@
                       ]
                     }
                   ]
-                },
-                {
-                  "span": {
-                    "id": "<span-8>",
-                    "traceId": "<trace-1>",
-                    "name": "chunk: 'tool-result'",
-                    "type": "model_chunk",
-                    "completed": false,
-                    "isEvent": true,
-                    "isRootSpan": false,
-                    "parentId": "<span-3>",
-                    "entityType": "agent",
-                    "entityId": "workflow-agent",
-                    "attributes": {
-                      "chunkType": "tool-result",
-                      "sequenceNumber": 1
-                    },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "toolCallId": "call-workflow-1",
-                      "toolName": "workflow-simpleWorkflow",
-                      "environment": "test"
-                    }
-                  }
                 }
               ]
             },
@@ -436,8 +411,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {

@@ -754,22 +754,22 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Feedback
-  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index
   // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
   // immediately. With normal retention turning over the table, the index
   // converges to full coverage without an explicit backfill.
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_traceId', 'traceId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_threadId', 'threadId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_resourceId', 'resourceId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_userId', 'userId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_organizationId', 'organizationId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_experimentId', 'experimentId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_runId', 'runId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_sessionId', 'sessionId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_requestId', 'requestId'),
 ];
 
 /**

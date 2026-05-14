@@ -5,7 +5,6 @@ import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
@@ -133,30 +132,6 @@ export interface HarnessSubagent {
    * @default false
    */
   forked?: boolean;
-
-  /**
-   * Optional input processor chain applied to non-forked subagent runs.
-   *
-   * When set, the fresh `Agent` constructed for the subagent is configured
-   * with these processors so frameworks layered on top of Mastra (e.g.
-   * PapersFlow's prompt-context producers) can shape the subagent prompt
-   * with the same architecture used for top-level agents. Forked subagents
-   * reuse the parent agent's processors and ignore this field, mirroring
-   * the existing behavior for `instructions`, `tools`, etc.
-   *
-   * @default undefined (no processor chain - subagent runs without one)
-   */
-  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
-
-  /**
-   * Optional output processor chain applied to non-forked subagent runs.
-   * Mirrors `inputProcessors` - accepts either a static array or a
-   * function returning the array, matching Agent's `outputProcessors`
-   * shape so any value valid on `Agent` config also works here.
-   *
-   * @default undefined
-   */
-  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
 }
 
 /**
@@ -463,6 +438,17 @@ export interface TokenUsage {
   raw?: unknown;
 }
 
+/** Creates a zero-initialized TokenUsage object. */
+export function createEmptyTokenUsage(): TokenUsage {
+  return {
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  };
+}
+
 // =============================================================================
 // Observational Memory Progress
 // =============================================================================
@@ -523,13 +509,10 @@ export interface OMProgressState {
 export interface ActiveToolState {
   name: string;
   args: unknown;
-  status: 'streaming_input' | 'running' | 'completed' | 'error' | 'denied';
-  startedAt?: Date;
-  completedAt?: Date;
+  status: 'streaming_input' | 'running' | 'completed' | 'error';
   partialResult?: string;
   result?: unknown;
   isError?: boolean;
-  deniedReason?: string;
   shellOutput?: string;
 }
 
@@ -545,8 +528,6 @@ export interface ActiveSubagentState {
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
-  startedAt?: Date;
-  completedAt?: Date;
   durationMs?: number;
   result?: string;
 }
@@ -758,7 +739,13 @@ export type HarnessEvent =
       resumeSchema?: string;
     }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean; denied?: boolean; deniedReason?: string }
+  | {
+      type: 'tool_end';
+      toolCallId: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: Record<string, unknown>;
+    }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
@@ -961,8 +948,7 @@ export type HarnessMessageContent =
       name: string;
       result: unknown;
       isError: boolean;
-      denied?: boolean;
-      deniedReason?: string;
+      providerMetadata?: Record<string, unknown>;
     }
   | {
       type: 'system_reminder';

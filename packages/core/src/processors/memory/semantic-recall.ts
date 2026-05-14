@@ -245,6 +245,38 @@ export class SemanticRecall implements Processor {
   }
 
   /**
+   * Sort recalled messages into a stable order before formatting so that
+   * vector-query result ordering (which depends on similarity scores and can
+   * vary between runs for equivalent results) doesn't change the rendered
+   * prompt. Ordering: createdAt, then threadId, then role (user → assistant →
+   * tool → system), then id. Uses plain string comparison (ASCII identifiers)
+   * to stay locale-independent across CI/dev machines.
+   */
+  private sortMessagesForRecall(messages: MastraDBMessage[]): MastraDBMessage[] {
+    const roleOrder: Record<string, number> = {
+      system: 0,
+      user: 1,
+      assistant: 2,
+      tool: 3,
+    };
+
+    const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+    return [...messages].sort((a, b) => {
+      const timeDelta = a.createdAt.getTime() - b.createdAt.getTime();
+      if (timeDelta !== 0) return timeDelta;
+
+      const threadDelta = cmp(a.threadId ?? '', b.threadId ?? '');
+      if (threadDelta !== 0) return threadDelta;
+
+      const roleDelta = (roleOrder[a.role] ?? 99) - (roleOrder[b.role] ?? 99);
+      if (roleDelta !== 0) return roleDelta;
+
+      return cmp(a.id ?? '', b.id ?? '');
+    });
+  }
+
+  /**
    * Format cross-thread messages as a system message with timestamps and labels
    * Uses the exact formatting logic from main that was tested with longmemeval benchmark
    */
@@ -252,10 +284,67 @@ export class SemanticRecall implements Processor {
     let result = ``;
 
     // Convert to v1 format like main did
-    const v1Messages = new MessageList().add(messages, 'memory').get.all.v1();
+    const v1Messages = new MessageList().add(this.sortMessagesForRecall(messages), 'memory').get.all.v1();
     let lastYmd: string | null = null;
 
-    for (const msg of v1Messages) {
+    const minuteBucket = (date: Date) =>
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes());
+    const isSameThreadNearAssistantUserSkew = (
+      a: (typeof v1Messages)[number],
+      b: (typeof v1Messages)[number],
+      timeDiff: number,
+    ) =>
+      a.threadId === b.threadId &&
+      a.threadId !== currentThreadId &&
+      a.role === 'assistant' &&
+      b.role === 'user' &&
+      minuteBucket(a.createdAt) === minuteBucket(b.createdAt) &&
+      timeDiff >= 0 &&
+      timeDiff <= 1000;
+
+    const sortedMessages = v1Messages
+      .map((message, index) => ({ message, index }))
+      .sort((a, b) => {
+        const timeDiff = a.message.createdAt.getTime() - b.message.createdAt.getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.index - b.index;
+      })
+      .map(({ message }) => message);
+
+    const repairedThreads = new Set<string>();
+    for (let index = 0; index < sortedMessages.length - 1; index++) {
+      const current = sortedMessages[index]!;
+      const threadId = current.threadId;
+
+      if (!threadId || repairedThreads.has(threadId) || current.role !== 'assistant') {
+        continue;
+      }
+
+      const hasEarlierThreadMessage = sortedMessages.slice(0, index).some(message => message.threadId === threadId);
+      if (hasEarlierThreadMessage) {
+        repairedThreads.add(threadId);
+        continue;
+      }
+
+      for (let nextIndex = index + 1; nextIndex < sortedMessages.length; nextIndex++) {
+        const next = sortedMessages[nextIndex]!;
+        const timeDiff = next.createdAt.getTime() - current.createdAt.getTime();
+        if (timeDiff > 1000 || minuteBucket(next.createdAt) !== minuteBucket(current.createdAt)) {
+          break;
+        }
+        if (next.threadId !== threadId) {
+          continue;
+        }
+        if (isSameThreadNearAssistantUserSkew(current, next, timeDiff)) {
+          sortedMessages[index] = next;
+          sortedMessages[nextIndex] = current;
+          repairedThreads.add(threadId);
+        }
+        break;
+      }
+    }
+
+    for (const msg of sortedMessages) {
       const date = msg.createdAt;
       const year = date.getUTCFullYear();
       const month = date.toLocaleString('default', { month: 'short' });

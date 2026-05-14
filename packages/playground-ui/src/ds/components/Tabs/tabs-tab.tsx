@@ -18,13 +18,24 @@ export const Tab = ({ children, value, onClick, onClose, disabled, className }: 
       value={value}
       disabled={disabled}
       className={cn(
-        'py-2 px-5 text-ui-md font-normal text-neutral3 border-b-2 border-transparent',
+        'text-ui-md font-normal text-neutral3',
         'whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 outline-none cursor-pointer',
         transitions.colors,
         focusRing.visible,
         'hover:text-neutral4',
-        'data-[state=active]:text-neutral5 data-[state=active]:border-neutral3',
+        'data-[active]:text-neutral5',
         'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
+        // Line variant (default) — active state drawn by <Tabs.Indicator> in TabList
+        'group-data-[variant=line]/tabs-list:py-2 group-data-[variant=line]/tabs-list:px-5',
+        'group-data-[variant=line]/tabs-list:border-b-2 group-data-[variant=line]/tabs-list:border-transparent',
+        // Pill variant
+        'group-data-[variant=pill]/tabs-list:relative group-data-[variant=pill]/tabs-list:z-10',
+        'group-data-[variant=pill]/tabs-list:py-1 group-data-[variant=pill]/tabs-list:px-3',
+        'group-data-[variant=pill]/tabs-list:rounded-full',
+        // Pill-ghost variant (pill without list background)
+        'group-data-[variant=pill-ghost]/tabs-list:relative group-data-[variant=pill-ghost]/tabs-list:z-10',
+        'group-data-[variant=pill-ghost]/tabs-list:py-1 group-data-[variant=pill-ghost]/tabs-list:px-3',
+        'group-data-[variant=pill-ghost]/tabs-list:rounded-full',
         className,
       )}
       onClick={onClick}

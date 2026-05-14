@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.33.0-alpha.0+papersflow.12",
+  "version": "1.34.0-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -229,16 +229,6 @@
       "require": {
         "types": "./dist/features/index.d.ts",
         "default": "./dist/features/index.cjs"
-      }
-    },
-    "./flow-signals": {
-      "import": {
-        "types": "./dist/flow-signals/index.d.ts",
-        "default": "./dist/flow-signals/index.js"
-      },
-      "require": {
-        "types": "./dist/flow-signals/index.d.ts",
-        "default": "./dist/flow-signals/index.cjs"
       }
     },
     "./harness": {

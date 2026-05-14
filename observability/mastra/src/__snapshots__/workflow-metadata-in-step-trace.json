@@ -50,8 +50,7 @@
               "environment": "production",
               "customValue": "tacos",
               "stepType": "metadata-test",
-              "executionTime": "<date>",
-              "environment": "production"
+              "executionTime": "<date>"
             },
             "input": {
               "value": "tacos"

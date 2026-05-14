@@ -137,8 +137,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -245,9 +244,36 @@
                         }
                       }
                     },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "environment": "test"
+                    {
+                      "span": {
+                        "id": "<span-6>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'tool-call'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-4>",
+                        "entityType": "agent",
+                        "entityId": "multi-step-agent",
+                        "attributes": {
+                          "chunkType": "tool-call",
+                          "sequenceNumber": 1
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>",
+                          "environment": "test"
+                        },
+                        "output": {
+                          "toolName": "calculator",
+                          "toolCallId": "call-calc-1",
+                          "toolInput": {
+                            "operation": "add",
+                            "a": 5,
+                            "b": 3
+                          }
+                        }
+                      }
                     },
                     {
                       "span": {
@@ -305,30 +331,6 @@
                       "result": 8
                     }
                   }
-                },
-                {
-                  "span": {
-                    "id": "<span-7>",
-                    "traceId": "<trace-1>",
-                    "name": "chunk: 'tool-result'",
-                    "type": "model_chunk",
-                    "completed": false,
-                    "isEvent": true,
-                    "isRootSpan": false,
-                    "parentId": "<span-3>",
-                    "entityType": "agent",
-                    "entityId": "multi-step-agent",
-                    "attributes": {
-                      "chunkType": "tool-result",
-                      "sequenceNumber": 2
-                    },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "toolCallId": "call-calc-1",
-                      "toolName": "calculator",
-                      "environment": "test"
-                    }
-                  }
                 }
               ]
             },
@@ -368,8 +370,7 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {

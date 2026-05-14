@@ -18,7 +18,6 @@ import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
-import type { ToolGateSerializableState } from '../../tools/tool-gate';
 import type { Workspace } from '../../workspace';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
@@ -115,8 +114,6 @@ export interface SerializableDurableState {
   savePerStep?: boolean;
   /** Whether observational memory is enabled (suppresses savePerStep) */
   observationalMemory?: boolean;
-  /** Serializable Tool Gate snapshot for durable resume/debug parity */
-  toolGate?: ToolGateSerializableState;
 }
 
 /**
@@ -266,10 +263,6 @@ export interface DurableToolCallInput {
 export interface DurableToolCallOutput extends DurableToolCallInput {
   /** Result from tool execution */
   result?: unknown;
-  /** Whether the tool call was denied by approval flow */
-  denied?: boolean;
-  /** Reason the tool call was denied */
-  deniedReason?: string;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -419,10 +412,6 @@ export interface RunRegistryEntry {
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
-  /** Thread ID for memory and processor context */
-  threadId?: string;
-  /** Resource ID for memory and processor context */
-  resourceId?: string;
   /** Resolved input processors (non-serializable) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Resolved output processors (non-serializable) */

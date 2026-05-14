@@ -2,8 +2,8 @@
 
 Amazon Aurora DSQL storage implementation for Mastra, providing thread, message, workflow, and observability storage using Aurora DSQL with IAM authentication.
 
-> **Note**
-> Aurora DSQL doesn’t support PostgreSQL extensions (`CREATE EXTENSION`), including `pgvector`.
+> **Note**  
+> Aurora DSQL doesn’t support PostgreSQL extensions (`CREATE EXTENSION`), including `pgvector`.  
 > For vector storage, use a separate vector store like `@mastra/s3vectors`.
 
 ## Installation

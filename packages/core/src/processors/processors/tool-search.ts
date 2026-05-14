@@ -1,13 +1,7 @@
 import { z } from 'zod/v4';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
+import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
-import {
-  createToolGateSubject,
-  evaluateToolGateForRequest,
-  type ToolGateBoundary,
-  type ToolGateDecisionRecord,
-} from '../../tools/tool-gate';
 import { BM25Index } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
@@ -156,87 +150,6 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     return args.requestContext?.get(MASTRA_THREAD_ID_KEY) || 'default';
   }
 
-  private getResourceId(args: ProcessInputStepArgs): string | undefined {
-    return args.resourceId ?? args.requestContext?.get(MASTRA_RESOURCE_ID_KEY);
-  }
-
-  private getToolByName(toolName: string): Tool<any, any> | undefined {
-    return this.allTools[toolName] ?? Object.values(this.allTools).find(tool => tool.id === toolName);
-  }
-
-  private async evaluateDynamicToolGate({
-    args,
-    boundary,
-    toolName,
-    loaded = false,
-    toolGateArgs,
-  }: {
-    args: ProcessInputStepArgs;
-    boundary: ToolGateBoundary;
-    toolName: string;
-    loaded?: boolean;
-    toolGateArgs?: unknown;
-  }): Promise<ToolGateDecisionRecord | undefined> {
-    if (!args.requestContext) return undefined;
-
-    const tool = this.getToolByName(toolName);
-    const subject = createToolGateSubject({
-      boundary,
-      toolName,
-      tool,
-      source: { source: 'dynamic', loaded },
-    });
-
-    return evaluateToolGateForRequest({
-      requestContext: args.requestContext,
-      subject,
-      args: toolGateArgs,
-      runId: args.runId,
-      threadId: this.getThreadId(args),
-      resourceId: this.getResourceId(args),
-    });
-  }
-
-  private async canExposeDynamicTool(
-    args: ProcessInputStepArgs,
-    toolName: string,
-    toolGateArgs?: unknown,
-  ): Promise<boolean> {
-    const decision = await this.evaluateDynamicToolGate({
-      args,
-      boundary: 'dynamic-search',
-      toolName,
-      toolGateArgs,
-    });
-
-    return decision?.effect !== 'deny';
-  }
-
-  private async canLoadDynamicTool(
-    args: ProcessInputStepArgs,
-    toolName: string,
-    loaded = false,
-    toolGateArgs?: unknown,
-  ): Promise<boolean> {
-    const decision = await this.evaluateDynamicToolGate({
-      args,
-      boundary: 'dynamic-load',
-      toolName,
-      loaded,
-      toolGateArgs,
-    });
-
-    return decision?.effect !== 'deny';
-  }
-
-  private async pruneDeniedLoadedTools(args: ProcessInputStepArgs, loadedToolNames: Set<string>): Promise<void> {
-    for (const toolName of Array.from(loadedToolNames)) {
-      if (!(await this.canLoadDynamicTool(args, toolName, true, { toolName, loaded: true }))) {
-        loadedToolNames.delete(toolName);
-      }
-    }
-  }
-
   /**
    * Get the set of loaded tool names for the current thread.
    * Updates the lastAccessed timestamp for TTL management.
@@ -261,7 +174,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const loadedTools: Record<string, Tool<any, any>> = {};
 
     for (const toolName of loadedNames) {
-      const tool = this.getToolByName(toolName);
+      const tool = this.allTools[toolName] || Object.values(this.allTools).find(t => t.id === toolName);
       if (tool) {
         loadedTools[toolName] = tool;
       }
@@ -382,7 +295,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     if (this.bm25Index.size === 0) return [];
 
     // Get BM25 results (request more than topK to allow for re-ranking after boosting)
-    const bm25Results = this.bm25Index.search(query, this.searchConfig.topK * 4, 0);
+    const bm25Results = this.bm25Index.search(query, this.searchConfig.topK * 2, 0);
 
     if (bm25Results.length === 0) return [];
 
@@ -407,11 +320,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       return { id: result.id, score };
     });
 
-    // Re-sort after boosting and keep enough candidates for policy filtering to backfill denied results.
+    // Re-sort after boosting, filter by minScore, apply topK
     return boostedResults
       .sort((a, b) => b.score - a.score)
       .filter(r => r.score > this.searchConfig.minScore)
-      .slice(0, this.searchConfig.topK * 4)
+      .slice(0, this.searchConfig.topK)
       .map(r => {
         const description = this.toolDescriptions.get(r.id) || '';
         return {
@@ -426,7 +339,6 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const { tools, messageList } = args;
     const threadId = this.getThreadId(args);
     const loadedToolNames = this.getLoadedToolNames(threadId);
-    await this.pruneDeniedLoadedTools(args, loadedToolNames);
 
     // Add system instruction about the meta-tools
     messageList.addSystem(
@@ -458,15 +370,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }),
       execute: async ({ query }) => {
         // Use BM25 search for relevance-ranked results
-        const results: SearchResult[] = [];
-        for (const result of this.searchTools(query)) {
-          if (await this.canExposeDynamicTool(args, result.name, { query })) {
-            results.push(result);
-          }
-          if (results.length >= this.searchConfig.topK) {
-            break;
-          }
-        }
+        const results = this.searchTools(query);
 
         if (results.length === 0) {
           return {
@@ -536,14 +440,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         for (const name of toLoad) {
           // Check if tool exists
-          const matchingTool = this.getToolByName(name);
+          const matchingTool = this.allTools[name] ?? Object.values(this.allTools).find(tool => tool.id === name);
 
           if (!matchingTool) {
-            notFound.push(name);
-            continue;
-          }
-
-          if (!(await this.canLoadDynamicTool(args, name, false, { toolName: name, requestedToolNames: toLoad }))) {
             notFound.push(name);
             continue;
           }
@@ -566,21 +465,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           if (notFound.length > 0) {
             const name = toLoad[0]!;
             const availableToolNames = Object.keys(this.allTools);
-            const matchingSuggestions = availableToolNames.filter(
+            const suggestions = availableToolNames.filter(
               n => n.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(n.toLowerCase()),
             );
-            const suggestions: string[] = [];
-            for (const suggestion of matchingSuggestions) {
-              if (
-                await this.canLoadDynamicTool(args, suggestion, false, {
-                  toolName: suggestion,
-                  requestedToolNames: [name],
-                  suggestionFor: name,
-                })
-              ) {
-                suggestions.push(suggestion);
-              }
-            }
             let message = `Tool "${name}" not found.`;
             if (suggestions.length > 0) {
               message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;

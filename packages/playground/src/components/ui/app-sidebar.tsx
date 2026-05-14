@@ -1,28 +1,5 @@
-import {
-  AgentIcon,
-  LogoWithoutText,
-  MainSidebar,
-  McpServerIcon,
-  SettingsIcon,
-  ToolsIcon,
-  WorkflowIcon,
-  cn,
-  useMainSidebar,
-} from '@mastra/playground-ui';
-import type { NavLink, NavSection } from '@mastra/playground-ui';
-import {
-  EyeIcon,
-  GlobeIcon,
-  BookIcon,
-  FileTextIcon,
-  FolderIcon,
-  Cpu,
-  BarChart3Icon,
-  LogsIcon,
-  DatabaseIcon,
-  FlaskConical,
-  GaugeIcon,
-} from 'lucide-react';
+import { LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
+import type { NavLink } from '@mastra/playground-ui';
 import { useLocation } from 'react-router';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
@@ -154,6 +131,19 @@ export function AppSidebar() {
       </MainSidebar.Nav>
 
       <MainSidebar.Bottom className="pb-3">
+        {filteredBottom.length > 0 && (
+          <MainSidebar.NavList>
+            {filteredBottom.map(item => (
+              <MainSidebar.NavLink
+                key={item.name}
+                LinkComponent={Link}
+                state={state}
+                link={toSidebarLink(item)}
+                isActive={getIsLinkActive(item, pathname)}
+              />
+            ))}
+          </MainSidebar.NavList>
+        )}
         {state !== 'collapsed' && (
           <>
             <div role="separator" aria-orientation="horizontal" className="mx-6 my-2 h-px bg-border1" />

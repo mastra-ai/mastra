@@ -153,6 +153,25 @@ function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string
   return undefined;
 }
 
+/**
+ * Decodes the owning workflow id directly from a `wf_<encoded>` /
+ * `wf_<encoded>__<...>` row id without needing the workflow to be in the
+ * current registry. Used to identify rows whose workflow has been deleted
+ * from code so we can clean them up on startup.
+ */
+function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
+  if (!rowId.startsWith('wf_')) return undefined;
+  const rest = rowId.slice('wf_'.length);
+  const sep = rest.indexOf('__');
+  const encoded = sep === -1 ? rest : rest.slice(0, sep);
+  if (!encoded) return undefined;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
+}
+
 /** See {@link targetsEqual}. Same approach for free-form metadata. */
 function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | undefined): boolean {
   const aNorm = a ?? undefined;
@@ -445,6 +464,19 @@ export interface Config<
    * ```
    */
   environment?: string;
+  /**
+   * Optional central transform policy for tool payloads before they are
+   * serialized into display streams or user-visible transcripts.
+   */
+  transform?: ToolPayloadTransformPolicy;
+  /**
+   * Configure which workers run in this Mastra instance.
+   *
+   * - `undefined` (default): Auto-creates default workers (existing behavior)
+   * - `false`: Disables all event processing — useful when running standalone workers separately
+   * - `MastraWorker[]`: Use exactly these workers
+   */
+  workers?: MastraWorker[] | false;
 }
 
 /**
@@ -538,6 +570,24 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
+  #toolPayloadTransform?: ToolPayloadTransformPolicy;
+  #workers: MastraWorker[] = [];
+  #workerFilter?: Set<string>;
+  // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
+  // pull-mode workers (OrchestrationWorker) and push-mode entry points
+  // (in-process EventEmitter listener, the /api/workers/events HTTP route).
+  #workflowEventProcessor?: WorkflowEventProcessor;
+  // Callback registered against the pubsub when running in push mode so we can
+  // unsubscribe it cleanly during stopWorkers().
+  #pushSubscription?: { topic: string; cb: EventCallback };
+  // Tracks (topic, listener) pairs registered against the pubsub on behalf of
+  // user-defined event listeners during startWorkers(). Used to make
+  // startWorkers()/stopWorkers() idempotent — a second startWorkers() call
+  // must not double-subscribe the same listener.
+  #userEventSubscriptions: Array<{
+    topic: string;
+    cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+  }> = [];
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -678,6 +728,10 @@ export class Mastra<
    */
   public getEnvironment(): string | undefined {
     return this.#environment;
+  }
+
+  public getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
   }
 
   /**
@@ -869,6 +923,9 @@ export class Mastra<
     // Resolve deployment environment: explicit config wins, else fall back to
     // NODE_ENV. Leave undefined if neither is set rather than guessing.
     this.#environment = config?.environment ?? process.env.NODE_ENV;
+    this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
+      config?.transform ?? (config as any)?.toolPayloadProjection,
+    );
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -1006,8 +1063,6 @@ export class Mastra<
     if (workersOption !== false) {
       this.#ensureBackgroundTaskManager();
     }
-
-    this.#schedulerConfig = config?.scheduler;
 
     this.#schedulerConfig = config?.scheduler;
 
@@ -1168,7 +1223,9 @@ export class Mastra<
 
     this.setLogger({ logger });
 
-    this.#ensureScheduler();
+    if (workersOption !== false) {
+      this.#ensureScheduler();
+    }
 
     // Initialize channels asynchronously (auto-provision apps, etc.)
     // This runs after all agents are registered so configs are available
@@ -1208,6 +1265,33 @@ export class Mastra<
 
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
+    });
+  }
+
+  /**
+   * Build a `ToolExecutor` adapter for a Mastra-registered tool and stash it
+   * on the background task manager's static registry. Skipped if the tool has
+   * no `execute` (declarative-only tools, e.g. MCP descriptors).
+   */
+  #registerToolWithBackgroundManager(name: string, tool: ToolAction<any, any, any, any>): void {
+    if (!this.#backgroundTaskManager) return;
+    if (typeof tool.execute !== 'function') return;
+    const execute = tool.execute.bind(tool);
+    this.#backgroundTaskManager.registerStaticExecutor(name, {
+      execute: async (args, options) => {
+        // Cross-process workers don't have access to the producer's
+        // request/workspace context. Statically-resolvable tools should
+        // tolerate a minimal context (abortSignal only). Tools that need
+        // closure-captured state must run in-process via TaskContext.
+        return execute(
+          args as any,
+          {
+            toolCallId: '',
+            messages: [],
+            abortSignal: options?.abortSignal,
+          } as any,
+        );
+      },
     });
   }
 
@@ -1383,27 +1467,30 @@ export class Mastra<
       }
     }
 
-    // Orphan deletion: drop any storage rows owned by a registered workflow
-    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) but not
-    // present in the current declared set. This keeps the storage in sync
-    // when array-form entries are removed across deploys. We only consider
-    // workflows we actually have registered — schedules belonging to a
-    // removed workflow are left alone (the workflow may be coming back).
-    if (declaredIdsByWorkflow.size > 0) {
-      const allRows = await schedulesStore.listSchedules();
-      for (const row of allRows) {
-        if (declaredIds.has(row.id)) continue;
-        const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow);
-        if (!ownerWorkflowId) continue;
-        try {
-          await schedulesStore.deleteSchedule(row.id);
-        } catch (error) {
-          this.#logger?.error('Failed to delete orphaned declarative schedule', {
-            scheduleId: row.id,
-            workflowId: ownerWorkflowId,
-            error,
-          });
-        }
+    // Orphan deletion: drop any Mastra-managed declarative schedule rows
+    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) that are no
+    // longer declared in code. This covers two cases:
+    //   1. A registered workflow's array-form entries shrunk across deploys.
+    //   2. The owning workflow itself was deleted from code. Leaving these
+    //      rows behind would have the scheduler keep firing for a workflow
+    //      the processor can't resolve, producing infinite event-redelivery
+    //      loops (see WorkflowEventProcessor#dispatch).
+    // User-created schedules (via the schedules API) don't use the `wf_`
+    // prefix, so they're untouched.
+    const allRows = await schedulesStore.listSchedules();
+    for (const row of allRows) {
+      if (declaredIds.has(row.id)) continue;
+      if (!row.id.startsWith('wf_')) continue;
+      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
+      if (!ownerWorkflowId) continue;
+      try {
+        await schedulesStore.deleteSchedule(row.id);
+      } catch (error) {
+        this.#logger?.error('Failed to delete orphaned declarative schedule', {
+          scheduleId: row.id,
+          workflowId: ownerWorkflowId,
+          error,
+        });
       }
     }
   }
@@ -3220,6 +3307,8 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
+    this.registerStaticWorkflowScorers(workflow);
+
     // If a schedule is declared, mark the flag and either register into the
     // running scheduler or trigger a lazy ensure.
     if (hasSchedule) {
@@ -3239,6 +3328,19 @@ export class Mastra<
         })();
       } else {
         this.#ensureScheduler();
+      }
+    }
+  }
+
+  private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
+    for (const step of Object.values(workflow.steps ?? {})) {
+      const scorers = step.scorers;
+      if (!scorers || typeof scorers === 'function') {
+        continue;
+      }
+
+      for (const [, entry] of Object.entries(scorers)) {
+        this.addScorer(entry.scorer, undefined, { source: 'code' });
       }
     }
   }
@@ -4235,6 +4337,7 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    // Stop legacy scheduler if it was started via #ensureScheduler
     if (this.#schedulerInitPromise) {
       try {
         await this.#schedulerInitPromise;
@@ -4249,7 +4352,7 @@ export class Mastra<
         this.#logger?.error('Failed to stop workflow scheduler', error);
       }
     }
-    await this.stopEventEngine();
+    await this.stopWorkers();
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
 

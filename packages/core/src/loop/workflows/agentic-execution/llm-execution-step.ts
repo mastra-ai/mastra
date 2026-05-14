@@ -36,12 +36,12 @@ import type {
   StreamTransportRef,
 } from '../../../stream/types';
 import { ChunkFrom, readModelStreamTransport } from '../../../stream/types';
-import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import {
-  createToolGateSubjectForTool,
-  evaluateToolGateForRequest,
-  getToolGateRuntimeState,
-} from '../../../tools/tool-gate';
+  transformToolPayloadForTargets,
+  withToolPayloadTransformMetadata,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../tools/payload-transform';
+import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
@@ -54,6 +54,38 @@ import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
+
+function getRequestInputProcessors({
+  inputProcessors,
+  llmRequestInputProcessors,
+}: {
+  inputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+}): InputProcessorOrWorkflow[] {
+  if (!llmRequestInputProcessors?.length) {
+    return inputProcessors || [];
+  }
+
+  if (!inputProcessors?.length) {
+    return llmRequestInputProcessors;
+  }
+
+  const requestProcessorIds = new Set(
+    llmRequestInputProcessors.filter(processor => !isProcessorWorkflow(processor)).map(processor => processor.id),
+  );
+  const additionalInputProcessors = inputProcessors.filter(
+    processor => !isProcessorWorkflow(processor) && !requestProcessorIds.has(processor.id),
+  );
+
+  return additionalInputProcessors.length
+    ? [...llmRequestInputProcessors, ...additionalInputProcessors]
+    : llmRequestInputProcessors;
+}
+
+type ProcessOutputStreamResult = {
+  collectedChunks: CollectedChunk[];
+  interjectedSignals: CreatedAgentSignal[];
+};
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
@@ -74,7 +106,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
-  toolGatePolicyActive?: boolean;
+  toolPayloadTransform?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
 };
 
 async function addToolPayloadTransformToChunk<OUTPUT>(
@@ -211,72 +243,65 @@ function buildResponseModelMetadata(
   return Object.keys(metadata).length > 0 ? { metadata } : undefined;
 }
 
-function getSpecificToolChoiceName(toolChoice: ToolChoice<any> | undefined): string | undefined {
-  return typeof toolChoice === 'object' && toolChoice !== null && 'toolName' in toolChoice
-    ? String(toolChoice.toolName)
-    : undefined;
-}
-
-async function applyToolGateToModelInput<TOOLS extends ToolSet>({
-  currentStep,
-  requestContext,
+function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = ToolSet>({
+  error,
+  controller,
   runId,
-  threadId,
-  resourceId,
+  model,
+  messageList,
+  messageId,
+  stepTools,
+  _internal,
 }: {
-  currentStep: {
-    tools?: TOOLS | undefined;
-    toolChoice?: ToolChoice<TOOLS> | undefined;
-    activeTools?: (keyof TOOLS)[] | undefined;
-  };
-  requestContext: RequestContext;
+  error: TripWire;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   runId: string;
-  threadId?: string;
-  resourceId?: string;
-}): Promise<void> {
-  if (!getToolGateRuntimeState(requestContext, { runId })?.policy) return;
-  if (!currentStep.tools) return;
+  model: MastraLanguageModel;
+  messageList: MessageList;
+  messageId: string;
+  stepTools?: TOOLS;
+  _internal: OuterLLMRun<TOOLS, OUTPUT>['_internal'];
+}) {
+  const tripwireChunk: ChunkType<OUTPUT> = {
+    type: 'tripwire',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: {
+      reason: error.message,
+      retry: error.options?.retry,
+      metadata: error.options?.metadata,
+      processorId: error.processorId,
+    },
+  };
 
-  const toolEntries = Object.entries(currentStep.tools);
-  if (toolEntries.length === 0) return;
+  safeEnqueue(controller, tripwireChunk);
 
-  const activeToolNames = currentStep.activeTools?.map(String);
-  const deniedToolNames = new Set<string>();
+  const runState = new AgenticRunState({
+    _internal,
+    model,
+  });
 
-  for (const [toolName, tool] of toolEntries) {
-    if (activeToolNames && !activeToolNames.includes(toolName)) continue;
-
-    const decision = await evaluateToolGateForRequest({
-      requestContext,
-      subject: createToolGateSubjectForTool({
-        boundary: 'model-input',
-        toolName,
-        tool,
+  return {
+    callBail: true,
+    outputStream: new MastraModelOutput<OUTPUT>({
+      model: {
+        modelId: model.modelId,
+        provider: model.provider,
+        version: model.specificationVersion,
+      },
+      stream: new ReadableStream({
+        start(c) {
+          c.enqueue(tripwireChunk);
+          c.close();
+        },
       }),
-      runId,
-      threadId,
-      resourceId,
-    });
-
-    if (decision?.effect === 'deny') {
-      deniedToolNames.add(toolName);
-    }
-  }
-
-  if (deniedToolNames.size === 0) return;
-
-  currentStep.tools = Object.fromEntries(toolEntries.filter(([toolName]) => !deniedToolNames.has(toolName))) as TOOLS;
-
-  if (currentStep.activeTools) {
-    currentStep.activeTools = currentStep.activeTools.filter(
-      toolName => !deniedToolNames.has(String(toolName)),
-    ) as (keyof TOOLS)[];
-  }
-
-  const chosenToolName = getSpecificToolChoiceName(currentStep.toolChoice);
-  if (chosenToolName && deniedToolNames.has(chosenToolName)) {
-    currentStep.toolChoice = Object.keys(currentStep.tools).length > 0 ? ('auto' as ToolChoice<TOOLS>) : undefined;
-  }
+      messageList,
+      messageId,
+      options: { runId },
+    }),
+    runState,
+    stepTools,
+  };
 }
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -294,8 +319,8 @@ async function processOutputStream<OUTPUT = undefined>({
   drainPendingSignals,
   transportRef,
   transportResolver,
-  toolGatePolicyActive,
-}: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
+  toolPayloadTransform,
+}: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
 
@@ -362,7 +387,7 @@ async function processOutputStream<OUTPUT = undefined>({
           tools?.[chunk.payload.toolName] ||
           Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
 
-        if (!toolGatePolicyActive && tool && 'onInputStart' in tool) {
+        if (tool && 'onInputStart' in tool) {
           try {
             await tool?.onInputStart?.({
               toolCallId: chunk.payload.toolCallId,
@@ -383,7 +408,7 @@ async function processOutputStream<OUTPUT = undefined>({
           tools?.[chunk.payload.toolName || ''] ||
           Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
 
-        if (!toolGatePolicyActive && tool && 'onInputDelta' in tool) {
+        if (tool && 'onInputDelta' in tool) {
           try {
             await tool?.onInputDelta?.({
               inputTextDelta: chunk.payload.argsTextDelta,
@@ -738,8 +763,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 stepNumber: inputData.output?.steps?.length || 0,
                 ...createObservabilityContext(stepTracingContext),
                 requestContext,
-                runId,
-                resourceId: _internal?.resourceId,
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,
@@ -853,16 +876,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger?.error('Error in processInputStep processors:', error);
               throw error;
             }
-          }
-
-          if (requestContext && getToolGateRuntimeState(requestContext, { runId })?.policy) {
-            await applyToolGateToModelInput({
-              currentStep,
-              requestContext,
-              runId,
-              threadId: _internal?.threadId,
-              resourceId: _internal?.resourceId,
-            });
           }
 
           // Store activeTools on _internal so toolCallStep can enforce them
@@ -1205,7 +1218,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               drainPendingSignals: _internal?.drainPendingSignals,
               transportRef: _internal?.transportRef,
               transportResolver,
-              toolGatePolicyActive: requestContext ? !!getToolGateRuntimeState(requestContext, { runId })?.policy : false,
+              toolPayloadTransform: _internal?.toolPayloadTransform,
             });
 
             // Build messages from the full chunk sequence and add to messageList.

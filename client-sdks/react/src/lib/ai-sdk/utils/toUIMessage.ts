@@ -268,29 +268,28 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   // Always return a new array reference for React
   const result = [...conversation];
 
-  if (
-    chunk.type === 'data-user-message' &&
-    'data' in chunk &&
-    chunk.data &&
-    typeof chunk.data === 'object' &&
-    (chunk.data as { type?: unknown }).type === 'user-message'
-  ) {
-    const signalData = chunk.data as { id?: unknown; contents?: unknown };
-    const signalMessages = signalContentsToUserMessages(signalData.contents, metadata);
-    if (!signalMessages.length) return result;
-
-    const finalized = finishStreamingAssistantMessage(result);
-    const baseId = typeof signalData.id === 'string' ? signalData.id : undefined;
-    const withIds = signalMessages.map((message, index) => ({
-      ...message,
-      id: baseId ? `${baseId}${index > 0 ? `-${index}` : ''}` : message.id,
-    }));
-    const deduped = withIds.filter(message => !finalized.some(existing => existing.id === message.id));
-    return deduped.length ? [...finalized, ...deduped] : finalized;
-  }
-
   // Handle data-* chunks (custom data chunks from writer.custom())
   if (chunk.type.startsWith('data-')) {
+    if (chunk.type === 'data-user-message' && 'data' in chunk && chunk.data?.type === 'user-message') {
+      const signalId = chunk.data.id;
+      if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
+        return result;
+      }
+
+      const userMessages = signalContentsToUserMessages(chunk.data.contents, metadata);
+      if (!userMessages.length) return result;
+
+      const conversationWithFinishedAssistant = finishStreamingAssistantMessage(result);
+      const messageIdPrefix = typeof signalId === 'string' ? signalId : `signal-${chunk.runId}-${Date.now()}`;
+      return [
+        ...conversationWithFinishedAssistant,
+        ...userMessages.map((message, index) => ({
+          ...message,
+          id: index === 0 ? messageIdPrefix : `${messageIdPrefix}-${index}`,
+        })),
+      ];
+    }
+
     const dataPart = {
       type: chunk.type as `data-${string}`,
       data: 'data' in chunk ? chunk.data : undefined,

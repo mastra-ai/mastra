@@ -6,7 +6,7 @@ import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import type { ModelSettings } from './types';
@@ -59,6 +59,16 @@ export type StreamArgs = SharedArgs & {
 
 export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
+};
+
+const isThreadSignalUnsupportedError = (error: unknown) => {
+  const candidate = error as { status?: number; message?: string; body?: unknown } | undefined;
+  const status = candidate?.status;
+  if (status === 404 || status === 405 || status === 501) {
+    return true;
+  }
+
+  return status === 400 && candidate?.message?.includes('No active agent run found for signal target');
 };
 
 export const useChat = ({

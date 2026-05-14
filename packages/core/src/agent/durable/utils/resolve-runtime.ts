@@ -5,6 +5,7 @@ import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { RequestContext } from '../../../request-context';
+import { resolveToolRequiresApproval } from '../../../tools/approval';
 import type { CoreTool } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
 import { MessageList } from '../../message-list';
@@ -245,28 +246,30 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
 /**
  * Check if a tool requires human approval.
  *
- * If the tool has a `needsApprovalFn`, it takes precedence over both the
- * global `requireToolApproval` flag and the tool-level `requireApproval` flag.
- * This matches the behavior of the non-durable agent's tool-call-step.
+ * The global `requireToolApproval` flag and tool-level `requireApproval` flag
+ * are approval floors. A `needsApprovalFn` can add approval for a specific call,
+ * but cannot bypass those stricter static requirements.
  */
 export async function toolRequiresApproval(
   tool: CoreTool,
   globalRequireApproval?: boolean,
   args?: Record<string, unknown>,
+  context?: {
+    requestContext?: Record<string, unknown> | { entries(): Iterable<[string, unknown]> };
+    workspace?: Workspace;
+    logger?: { error: (...args: any[]) => void };
+    toolName?: string;
+  },
 ): Promise<boolean> {
-  let requires = !!(globalRequireApproval || (tool as any).requireApproval);
-
-  // needsApprovalFn overrides all other flags (e.g., skill tools return false)
-  if ((tool as any).needsApprovalFn) {
-    try {
-      requires = await (tool as any).needsApprovalFn(args ?? {});
-    } catch {
-      // On error, default to requiring approval (safe default)
-      requires = true;
-    }
-  }
-
-  return requires;
+  return resolveToolRequiresApproval({
+    tool,
+    args,
+    requireToolApproval: globalRequireApproval,
+    requestContext: context?.requestContext,
+    workspace: context?.workspace,
+    logger: context?.logger,
+    toolName: context?.toolName,
+  });
 }
 
 /**

@@ -399,6 +399,7 @@ export class ModelSpanTracker {
         ...(payload?.warnings?.length ? { warnings: payload.warnings } : {}),
       },
       input,
+      tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
     this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
     // Reset chunk sequence for new step

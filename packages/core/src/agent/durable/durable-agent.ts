@@ -38,8 +38,6 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request Context containing dynamic configuration and state */
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
-  /** Experimental runtime policy for model-visible tools and server-side tool calls. */
-  toolGatePolicy?: AgentExecutionOptions<OUTPUT>['toolGatePolicy'];
   /** Maximum number of steps to run */
   maxSteps?: number;
   /** Additional tool sets that can be used for this execution */
@@ -448,7 +446,7 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    globalRunRegistry.set(runId, { ...registryEntry, messageList, threadId, resourceId });
+    globalRunRegistry.set(runId, { ...registryEntry, messageList });
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -811,8 +809,6 @@ export class DurableAgent<
     globalRunRegistry.set(preparation.runId, {
       ...preparation.registryEntry,
       messageList: preparation.messageList,
-      threadId: preparation.threadId,
-      resourceId: preparation.resourceId,
     });
 
     return {

@@ -35,10 +35,9 @@ import {
   taskWriteTool,
 } from './tools';
 import type { TaskItemSnapshot } from './tools';
-import { defaultDisplayState, defaultOMProgressState } from './types';
+import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
-  ActiveSubagentState,
   HeartbeatHandler,
   HarnessConfig,
   HarnessDisplayState,
@@ -60,9 +59,12 @@ import type {
   ToolCategory,
 } from './types';
 
-function createEmptyTokenUsage(): TokenUsage {
-  return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-}
+type HarnessStreamState = {
+  currentMessage: HarnessMessage;
+  isSuspended: boolean;
+  textContentById: Map<string, { index: number; text: string }>;
+  thinkingContentById: Map<string, { index: number; text: string }>;
+};
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -86,6 +88,102 @@ function addOptionalUsageField(
   if (value !== undefined) {
     usage[key] = (usage[key] ?? 0) + value;
   }
+}
+
+function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase, fallback: unknown) {
+  const transform = getTransformedToolPayload(metadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
+}
+
+function getStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getRecordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
+  if (typeof contents === 'string') return [{ type: 'text', text: contents }];
+  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
+  if (!contents || typeof contents !== 'object') return [];
+
+  const content = (contents as { content?: unknown }).content;
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (Array.isArray(content)) {
+    return content.flatMap((part): HarnessMessageContent[] => {
+      const record = getRecordValue(part);
+      if (!record) return [];
+      if (record.type === 'text' && typeof record.text === 'string') {
+        return [{ type: 'text', text: record.text }];
+      }
+      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
+        if (record.mediaType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
+        }
+        return [
+          {
+            type: 'file',
+            data: record.data,
+            mediaType: record.mediaType,
+            filename: typeof record.filename === 'string' ? record.filename : undefined,
+          },
+        ];
+      }
+      return [];
+    });
+  }
+
+  return [];
+}
+
+function toSystemReminderContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
+  const attributes = getRecordValue(payload.attributes);
+  const metadata = getRecordValue(payload.metadata);
+  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  if (message === undefined) return undefined;
+
+  return {
+    type: 'system_reminder',
+    message,
+    reminderType:
+      getStringValue(payload.reminderType) ?? getStringValue(attributes?.type) ?? getStringValue(payload.type),
+    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
+    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
+    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
+    gapMs:
+      typeof payload.gapMs === 'number'
+        ? payload.gapMs
+        : typeof attributes?.gapMs === 'number'
+          ? attributes.gapMs
+          : undefined,
+    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
+    goalMaxTurns:
+      typeof payload.goalMaxTurns === 'number'
+        ? payload.goalMaxTurns
+        : typeof metadata?.goalMaxTurns === 'number'
+          ? metadata.goalMaxTurns
+          : undefined,
+    judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
+  };
+}
+
+function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
+  const id = getStringValue(payload.id);
+  const contents = payload.contents ?? payload.message;
+  if (!id || contents === undefined) return undefined;
+
+  const content = signalContentsToHarnessContent(contents);
+  if (content.length === 0) return undefined;
+
+  return {
+    id,
+    role: 'user',
+    content,
+    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
+  };
 }
 
 /**
@@ -367,6 +465,19 @@ export class Harness<TState = {}> {
     this.emit({ type: 'state_changed', state: this.state as Record<string, unknown>, changedKeys });
   }
 
+  /**
+   * Update harness state. Validates against schema if provided.
+   * Emits state_changed event.
+   */
+  async setState(updates: Partial<TState>): Promise<void> {
+    const run = this.stateUpdateQueue.then(() => this.applyStateUpdates(updates));
+    this.stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private async updateState<TResult>(
     updater: (
       state: Readonly<TState>,
@@ -374,12 +485,10 @@ export class Harness<TState = {}> {
       | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
       | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
   ): Promise<TResult> {
-    // Serializes read-modify-write helpers that opt into this path. Direct
-    // setState() calls remain immediate for backwards compatibility.
     const run = this.stateUpdateQueue.then(async () => {
       const update = await updater(this.getState());
       if (update.updates && Object.keys(update.updates).length > 0) {
-        await this.setState(update.updates);
+        await this.applyStateUpdates(update.updates);
       }
       for (const event of update.events ?? []) {
         this.emit(event);
@@ -1825,8 +1934,6 @@ export class Harness<TState = {}> {
           args?: unknown;
           result?: unknown;
           isError?: boolean;
-          denied?: boolean;
-          deniedReason?: string;
         };
         [key: string]: unknown;
       }>;
@@ -1910,7 +2017,7 @@ export class Harness<TState = {}> {
                 name: inv.toolName,
                 result: inv.result,
                 isError: inv.isError ?? false,
-                ...(inv.denied === true ? { denied: true, deniedReason: inv.deniedReason } : {}),
+                ...(partProviderMetadata ? { providerMetadata: partProviderMetadata } : {}),
               });
             }
           } else if (part.toolCallId && part.toolName) {
@@ -1931,12 +2038,7 @@ export class Harness<TState = {}> {
               name: part.toolName,
               result: part.result,
               isError: part.isError ?? false,
-              ...(part.denied === true
-                ? {
-                    denied: true,
-                    deniedReason: typeof part.deniedReason === 'string' ? part.deniedReason : undefined,
-                  }
-                : {}),
+              ...(resultProviderMetadata ? { providerMetadata: resultProviderMetadata } : {}),
             });
           }
           break;
@@ -2081,478 +2183,19 @@ export class Harness<TState = {}> {
       if (chunk.type === 'error') {
         error = true;
       }
-
-      switch (chunk.type) {
-        case 'text-start': {
-          const textIndex = currentMessage.content.length;
-          currentMessage.content.push({ type: 'text', text: '' });
-          textContentById.set(chunk.payload.id, { index: textIndex, text: '' });
-          this.emit({ type: 'message_start', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'text-delta': {
-          const textState = textContentById.get(chunk.payload.id);
-          if (textState) {
-            textState.text += chunk.payload.text;
-            const textContent = currentMessage.content[textState.index];
-            if (textContent && textContent.type === 'text') {
-              textContent.text = textState.text;
-            }
-            this.emit({ type: 'message_update', message: { ...currentMessage } });
-          }
-          break;
-        }
-
-        case 'reasoning-start': {
-          const thinkingIndex = currentMessage.content.length;
-          currentMessage.content.push({ type: 'thinking', thinking: '' });
-          thinkingContentById.set(chunk.payload.id, { index: thinkingIndex, text: '' });
-          this.emit({ type: 'message_update', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'reasoning-delta': {
-          const thinkingState = thinkingContentById.get(chunk.payload.id);
-          if (thinkingState) {
-            thinkingState.text += chunk.payload.text;
-            const thinkingContent = currentMessage.content[thinkingState.index];
-            if (thinkingContent && thinkingContent.type === 'thinking') {
-              thinkingContent.thinking = thinkingState.text;
-            }
-            this.emit({ type: 'message_update', message: { ...currentMessage } });
-          }
-          break;
-        }
-
-        case 'tool-call-input-streaming-start': {
-          const { toolCallId, toolName } = chunk.payload;
-          this.emit({ type: 'tool_input_start', toolCallId, toolName });
-          break;
-        }
-
-        case 'tool-call-delta': {
-          const { toolCallId, argsTextDelta, toolName } = chunk.payload;
-          this.emit({ type: 'tool_input_delta', toolCallId, argsTextDelta, toolName });
-          break;
-        }
-
-        case 'tool-call-input-streaming-end': {
-          const { toolCallId } = chunk.payload;
-          this.emit({ type: 'tool_input_end', toolCallId });
-          break;
-        }
-
-        case 'tool-call': {
-          const toolCall = chunk.payload;
-          currentMessage.content.push({
-            type: 'tool_call',
-            id: toolCall.toolCallId,
-            name: toolCall.toolName,
-            args: toolCall.args,
-          });
-          this.emit({
-            type: 'tool_start',
-            toolCallId: toolCall.toolCallId,
-            toolName: toolCall.toolName,
-            args: toolCall.args,
-          });
-          this.emit({ type: 'message_update', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'tool-result': {
-          const toolResult = chunk.payload;
-          currentMessage.content.push({
-            type: 'tool_result',
-            id: toolResult.toolCallId,
-            name: toolResult.toolName,
-            result: toolResult.result,
-            isError: toolResult.isError ?? false,
-            ...(toolResult.denied === true ? { denied: true, deniedReason: toolResult.deniedReason } : {}),
-          });
-          this.emit({
-            type: 'tool_end',
-            toolCallId: toolResult.toolCallId,
-            result: toolResult.result,
-            isError: toolResult.isError ?? false,
-            denied: toolResult.denied,
-            deniedReason: toolResult.deniedReason,
-          });
-          this.emit({ type: 'message_update', message: { ...currentMessage } });
-          break;
-        }
-
-        case 'tool-error': {
-          const toolError = chunk.payload;
-          this.emit({ type: 'tool_end', toolCallId: toolError.toolCallId, result: toolError.error, isError: true });
-          break;
-        }
-
-        case 'tool-call-approval': {
-          const toolCallId = chunk.payload.toolCallId;
-          const toolName = chunk.payload.toolName;
-          const toolArgs = chunk.payload.args;
-
-          const policy = this.resolveToolApproval(toolName);
-
-          if (policy === 'allow') {
-            const result = await this.handleToolApprove({ toolCallId, requestContext });
-            currentMessage = result.message;
-            return result;
-          }
-
-          if (policy === 'deny') {
-            const result = await this.handleToolDecline({ toolCallId, requestContext });
-            currentMessage = result.message;
-            return result;
-          }
-
-          this.pendingApprovalToolName = toolName;
-          this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
-
-          const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
-            resolve => {
-              this.pendingApprovalResolve = resolve;
-            },
-          );
-          this.pendingApprovalToolName = null;
-
-          if (approval.decision === 'approve') {
-            const result = await this.handleToolApprove({
-              toolCallId,
-              requestContext: approval.requestContext ?? requestContext,
-            });
-            currentMessage = result.message;
-            return result;
-          } else {
-            const result = await this.handleToolDecline({
-              toolCallId,
-              requestContext: approval.requestContext ?? requestContext,
-            });
-            currentMessage = result.message;
-            return result;
-          }
-        }
-
-        case 'tool-call-suspended': {
-          const suspToolCallId = chunk.payload.toolCallId;
-          const suspToolName = chunk.payload.toolName;
-          const suspArgs = chunk.payload.args;
-          const suspPayload = chunk.payload.suspendPayload;
-          const suspResumeSchema = chunk.payload.resumeSchema;
-
-          this.emit({
-            type: 'tool_suspended',
-            toolCallId: suspToolCallId,
-            toolName: suspToolName,
-            args: suspArgs,
-            suspendPayload: suspPayload,
-            resumeSchema: suspResumeSchema,
-          });
-
-          this.pendingSuspensionRunId = this.currentRunId;
-          this.pendingSuspensionToolCallId = suspToolCallId;
-
-          // Don't return immediately — continue draining the stream so the
-          // workflow engine has a chance to persist the snapshot before the
-          // caller tries to resume.
-          isSuspended = true;
-          break;
-        }
-
-        case 'error': {
-          const streamError =
-            chunk.payload.error instanceof Error ? chunk.payload.error : new Error(String(chunk.payload.error));
-          this.emit({ type: 'error', error: streamError });
-          break;
-        }
-
-        case 'step-finish': {
-          const usage = chunk.payload?.output?.usage;
-          if (usage) {
-            const usageRecord = usage as Record<string, unknown>;
-            const promptTokens =
-              getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-            const completionTokens =
-              getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-            const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-            const stepUsage: TokenUsage = {
-              promptTokens,
-              completionTokens,
-              totalTokens,
-            };
-            addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-            addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-            addOptionalUsageField(
-              stepUsage,
-              'cacheCreationInputTokens',
-              getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-            );
-            if (usageRecord.raw !== undefined) {
-              stepUsage.raw = usageRecord.raw;
-            }
-
-            this.tokenUsage.promptTokens += promptTokens;
-            this.tokenUsage.completionTokens += completionTokens;
-            this.tokenUsage.totalTokens += totalTokens;
-            addOptionalUsageField(this.tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
-            addOptionalUsageField(this.tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
-            addOptionalUsageField(this.tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
-            if (stepUsage.raw !== undefined) {
-              this.tokenUsage.raw = stepUsage.raw;
-            }
-
-            this.persistTokenUsage().catch(() => {});
-            this.emit({ type: 'usage_update', usage: stepUsage });
-          }
-          break;
-        }
-
-        case 'finish': {
-          const finishReason = chunk.payload.stepResult?.reason;
-          if (finishReason === 'stop' || finishReason === 'end-turn') {
-            currentMessage.stopReason = 'complete';
-          } else if (finishReason === 'tool-calls') {
-            currentMessage.stopReason = 'tool_use';
-          } else {
-            currentMessage.stopReason = 'complete';
-          }
-          break;
-        }
-
-        // Observational Memory data parts
-        // NOTE: OM data parts arrive as { type, data: { ... } } — NOT { type, payload }
-        case 'data-om-status': {
-          const d = (chunk as any).data as Record<string, any> | undefined;
-          if (d?.windows) {
-            const w = d.windows;
-            const active = w.active ?? {};
-            const msgs = active.messages ?? {};
-            const obs = active.observations ?? {};
-            const buffObs = w.buffered?.observations ?? {};
-            const buffRef = w.buffered?.reflection ?? {};
-
-            this.emit({
-              type: 'om_status',
-              windows: {
-                active: {
-                  messages: { tokens: msgs.tokens ?? 0, threshold: msgs.threshold ?? 0 },
-                  observations: { tokens: obs.tokens ?? 0, threshold: obs.threshold ?? 0 },
-                },
-                buffered: {
-                  observations: {
-                    status: buffObs.status ?? 'idle',
-                    chunks: buffObs.chunks ?? 0,
-                    messageTokens: buffObs.messageTokens ?? 0,
-                    projectedMessageRemoval: buffObs.projectedMessageRemoval ?? 0,
-                    observationTokens: buffObs.observationTokens ?? 0,
-                  },
-                  reflection: {
-                    status: buffRef.status ?? 'idle',
-                    inputObservationTokens: buffRef.inputObservationTokens ?? 0,
-                    observationTokens: buffRef.observationTokens ?? 0,
-                  },
-                },
-              },
-              recordId: d.recordId ?? '',
-              threadId: d.threadId ?? '',
-              stepNumber: d.stepNumber ?? 0,
-              generationCount: d.generationCount ?? 0,
-            });
-          }
-          break;
-        }
-        case 'data-om-observation-start': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            if (payload.operationType === 'observation') {
-              this.emit({
-                type: 'om_observation_start',
-                cycleId: payload.cycleId,
-                operationType: payload.operationType,
-                tokensToObserve: payload.tokensToObserve ?? 0,
-              });
-            } else if (payload.operationType === 'reflection') {
-              this.emit({
-                type: 'om_reflection_start',
-                cycleId: payload.cycleId,
-                tokensToReflect: payload.tokensToObserve ?? 0,
-              });
-            }
-          }
-          break;
-        }
-        case 'data-om-observation-end': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            if (payload.operationType === 'reflection') {
-              this.emit({
-                type: 'om_reflection_end',
-                cycleId: payload.cycleId,
-                durationMs: payload.durationMs ?? 0,
-                compressedTokens: payload.observationTokens ?? 0,
-                observations: payload.observations,
-              });
-            } else {
-              this.emit({
-                type: 'om_observation_end',
-                cycleId: payload.cycleId,
-                durationMs: payload.durationMs ?? 0,
-                tokensObserved: payload.tokensObserved ?? 0,
-                observationTokens: payload.observationTokens ?? 0,
-                observations: payload.observations,
-                currentTask: payload.currentTask,
-                suggestedResponse: payload.suggestedResponse,
-              });
-            }
-          }
-          break;
-        }
-        case 'data-om-observation-failed': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload) {
-            const operationType = payload.operationType === 'reflection' ? 'reflection' : 'observation';
-            const error = payload.error ?? 'Unknown error';
-
-            if (operationType === 'reflection') {
-              this.emit({
-                type: 'om_reflection_failed',
-                cycleId: payload.cycleId ?? 'unknown',
-                error,
-                durationMs: payload.durationMs ?? 0,
-              });
-            } else {
-              this.emit({
-                type: 'om_observation_failed',
-                cycleId: payload.cycleId ?? 'unknown',
-                error,
-                durationMs: payload.durationMs ?? 0,
-              });
-            }
-
-            abortForOmFailure({ operationType, stage: 'run', error });
-            return { message: currentMessage };
-          }
-          break;
-        }
-        // Async buffering lifecycle
-        case 'data-om-buffering-start': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            this.emit({
-              type: 'om_buffering_start',
-              cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              tokensToBuffer: payload.tokensToBuffer ?? 0,
-            });
-          }
-          break;
-        }
-        case 'data-om-buffering-end': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            this.emit({
-              type: 'om_buffering_end',
-              cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              tokensBuffered: payload.tokensBuffered ?? 0,
-              bufferedTokens: payload.bufferedTokens ?? 0,
-              observations: payload.observations,
-            });
-          }
-          break;
-        }
-        case 'data-om-buffering-failed': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload) {
-            const operationType = payload.operationType ?? 'observation';
-            const error = payload.error ?? 'Unknown error';
-
-            this.emit({
-              type: 'om_buffering_failed',
-              cycleId: payload.cycleId,
-              operationType,
-              error,
-            });
-
-            abortForOmFailure({ operationType, stage: 'buffering', error });
-            return { message: currentMessage };
-          }
-          break;
-        }
-        case 'data-system-reminder': {
-          const payload = (chunk as any).data as Record<string, unknown> | undefined;
-          const message = payload?.message;
-          if (typeof message === 'string') {
-            currentMessage.content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
-              path: typeof payload?.path === 'string' ? payload.path : undefined,
-              precedesMessageId: typeof payload?.precedesMessageId === 'string' ? payload.precedesMessageId : undefined,
-              gapText: typeof payload?.gapText === 'string' ? payload.gapText : undefined,
-              gapMs: typeof payload?.gapMs === 'number' ? payload.gapMs : undefined,
-              timestamp: typeof payload?.timestamp === 'string' ? payload.timestamp : undefined,
-            });
-            this.emit({ type: 'message_update', message: currentMessage });
-          }
-          break;
-        }
-        case 'data-om-activation': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
-            this.emit({
-              type: 'om_activation',
-              cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              chunksActivated: payload.chunksActivated ?? 0,
-              tokensActivated: payload.tokensActivated ?? 0,
-              observationTokens: payload.observationTokens ?? 0,
-              messagesActivated: payload.messagesActivated ?? 0,
-              generationCount: payload.generationCount ?? 0,
-              triggeredBy: payload.triggeredBy,
-              lastActivityAt: payload.lastActivityAt,
-              ttlExpiredMs: payload.ttlExpiredMs,
-              activateAfterIdle: payload.config?.activateAfterIdle,
-              previousModel: payload.previousModel,
-              currentModel: payload.currentModel,
-            });
-          }
-          break;
-        }
-        case 'data-om-thread-update': {
-          const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.newTitle) {
-            this.emit({
-              type: 'om_thread_title_updated',
-              cycleId: payload.cycleId ?? 'unknown',
-              threadId: payload.threadId ?? this.currentThreadId ?? 'unknown',
-              oldTitle: payload.oldTitle,
-              newTitle: payload.newTitle,
-            });
-          }
-          break;
-        }
-
-        // Sandbox streaming data chunks (from workspace execute_command tool)
-        case 'data-sandbox-stdout': {
-          const d = (chunk as any).data as Record<string, any> | undefined;
-          if (d?.output && d?.toolCallId) {
-            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
-          }
-          break;
-        }
-        case 'data-sandbox-stderr': {
-          const d = (chunk as any).data as Record<string, any> | undefined;
-          if (d?.output && d?.toolCallId) {
-            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
-          }
-          break;
-        }
-
-        default:
-          break;
+      if (chunk.type === 'abort') {
+        aborted = true;
+      }
+      if (
+        result ||
+        chunk.type === 'finish' ||
+        chunk.type === 'error' ||
+        chunk.type === 'abort' ||
+        chunk.type === 'tool-call-suspended' ||
+        this.abortRequested
+      ) {
+        result ??= this.finishStreamState(state);
+        break;
       }
     }
 
@@ -3534,34 +3177,22 @@ export class Harness<TState = {}> {
         ds.pendingSuspension = null;
         break;
 
-      case 'agent_end': {
+      case 'agent_end':
         ds.isRunning = false;
         ds.pendingApproval = null;
-        ds.pendingQuestion = null;
-        ds.pendingPlanApproval = null;
         if (event.reason !== 'suspended') {
           ds.pendingSuspension = null;
-          const completedAt = new Date();
-          // Mark any still-running tools as errored (handles abort mid-run)
-          for (const [toolCallId, tool] of ds.activeTools) {
-            if (tool.status === 'running' || tool.status === 'streaming_input') {
-              tool.status = 'error';
-              tool.completedAt = completedAt;
-              ds.toolInputBuffers.delete(toolCallId);
-            }
-          }
-          const forcedSubagents = new Map<string, ActiveSubagentState>();
-          for (const [toolCallId, subagent] of ds.activeSubagents) {
-            if (subagent.status === 'running') {
-              subagent.status = 'error';
-              subagent.completedAt = completedAt;
-              forcedSubagents.set(toolCallId, subagent);
-            }
-          }
-          ds.activeSubagents = forcedSubagents;
         }
+        ds.pendingQuestion = null;
+        ds.pendingPlanApproval = null;
+        // Mark any still-running tools as errored (handles abort mid-run)
+        for (const [, tool] of ds.activeTools) {
+          if (tool.status === 'running' || tool.status === 'streaming_input') {
+            tool.status = 'error';
+          }
+        }
+        ds.activeSubagents = new Map();
         break;
-      }
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
@@ -3581,29 +3212,12 @@ export class Harness<TState = {}> {
         ds.toolInputBuffers.set(event.toolCallId, { text: '', toolName: event.toolName });
         const existing = ds.activeTools.get(event.toolCallId);
         if (existing) {
-          if (existing.status === 'completed' || existing.status === 'error') {
-            existing.name = event.toolName;
-            existing.args = {};
-            existing.startedAt = new Date();
-          } else {
-            if (existing.status === 'streaming_input') {
-              existing.name = event.toolName;
-              existing.args = {};
-            }
-            existing.startedAt ??= new Date();
-          }
           existing.status = 'streaming_input';
-          delete existing.completedAt;
-          delete existing.partialResult;
-          delete existing.result;
-          delete existing.isError;
-          delete existing.shellOutput;
         } else {
           ds.activeTools.set(event.toolCallId, {
             name: event.toolName,
             args: {},
             status: 'streaming_input',
-            startedAt: new Date(),
           });
         }
         break;
@@ -3624,25 +3238,14 @@ export class Harness<TState = {}> {
       case 'tool_start': {
         const existingTool = ds.activeTools.get(event.toolCallId);
         if (existingTool) {
-          if (existingTool.status === 'completed' || existingTool.status === 'error') {
-            existingTool.startedAt = new Date();
-          } else {
-            existingTool.startedAt ??= new Date();
-          }
           existingTool.name = event.toolName;
           existingTool.args = event.args;
           existingTool.status = 'running';
-          delete existingTool.completedAt;
-          delete existingTool.partialResult;
-          delete existingTool.result;
-          delete existingTool.isError;
-          delete existingTool.shellOutput;
         } else {
           ds.activeTools.set(event.toolCallId, {
             name: event.toolName,
             args: event.args,
             status: 'running',
-            startedAt: new Date(),
           });
         }
         break;
@@ -3660,16 +3263,12 @@ export class Harness<TState = {}> {
       case 'tool_end': {
         const endedTool = ds.activeTools.get(event.toolCallId);
         if (endedTool) {
-          endedTool.status = event.denied ? 'denied' : event.isError ? 'error' : 'completed';
+          endedTool.status = event.isError ? 'error' : 'completed';
           endedTool.result = event.result;
           endedTool.isError = event.isError;
-          endedTool.completedAt = new Date();
-          if (event.denied) {
-            endedTool.deniedReason = event.deniedReason;
-          }
         }
         // Track file modifications
-        if (!event.isError && !event.denied) {
+        if (!event.isError) {
           const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
           const toolState = ds.activeTools.get(event.toolCallId);
           if (toolState && FILE_TOOLS.includes(toolState.name)) {
@@ -3751,7 +3350,6 @@ export class Harness<TState = {}> {
           toolCalls: [],
           textDelta: '',
           status: 'running',
-          startedAt: new Date(),
         });
         break;
       }
@@ -3789,7 +3387,6 @@ export class Harness<TState = {}> {
           endedSub.status = event.isError ? 'error' : 'completed';
           endedSub.durationMs = event.durationMs;
           endedSub.result = event.result;
-          endedSub.completedAt = new Date();
         }
         break;
       }
@@ -4270,6 +3867,7 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
+    this.cleanupAgentThreadSubscription();
     for (const scheduler of this.displayStateSchedulers) {
       scheduler.dispose();
     }

@@ -126,14 +126,7 @@ export default function LogsPage() {
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        <PageLayout.Column>
-          <PageHeader>
-            <PageHeader.Title isLoading={isLoadingLogs}>
-              <LogsIcon /> Logs
-            </PageHeader.Title>
-          </PageHeader>
-        </PageLayout.Column>
-        <PageLayout.Column className="flex justify-end items-center gap-2">
+        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
           <DateTimeRangePicker
             preset={url.datePreset}
             onPresetChange={url.handleDatePresetChange}
@@ -150,16 +143,6 @@ export default function LogsPage() {
             disabled={isLoadingLogs}
             onStartTextFilter={setAutoFocusFilterFieldId}
           />
-          <ButtonWithTooltip
-            as="a"
-            href="https://mastra.ai/en/docs/observability/logging"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Logs documentation"
-            tooltipContent="Go to Logs documentation"
-          >
-            <BookIcon />
-          </ButtonWithTooltip>
         </PageLayout.Column>
       </PageLayout.Row>
 
@@ -188,7 +171,9 @@ export default function LogsPage() {
     );
   }
 
-  if (logs.length === 0 && !isLoadingLogs && url.filterTokens.length === 0) {
+  const contentFiltersApplied = !!url.selectedEntityOption || url.filterTokens.length > 0;
+
+  if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
       <PageLayout width="wide" height="full">
         {pageTopArea}

@@ -247,7 +247,7 @@ export function dsqlTests() {
           await dbOps.createTable({ tableName: tableName as TABLE_NAMES, schema });
 
           const columnInfo = await store.db.oneOrNone(
-            `SELECT data_type FROM information_schema.columns
+            `SELECT data_type FROM information_schema.columns 
              WHERE table_name = $1 AND column_name = 'metadata'`,
             [tableName.toLowerCase()],
           );

@@ -401,9 +401,23 @@ export const routes: RouteObject[] = [
         } satisfies RouteHeaderHandle,
       },
 
-      { path: '/workflows', element: <Workflows /> },
-      { path: '/workflows/schedules', element: <SchedulesPage /> },
-      { path: '/workflows/schedules/:scheduleId', element: <SchedulePage /> },
+      { path: '/workflows', element: <Workflows />, handle: navHandle('/workflows') },
+      {
+        path: '/workflows/schedules',
+        element: <SchedulesPage />,
+        handle: navHandleWithChildren('/workflows', [schedulesCrumb]),
+      },
+      {
+        path: '/workflows/schedules/:scheduleId',
+        element: <SchedulePage />,
+        handle: {
+          crumbs: ({ params }) => [
+            navCrumb('/workflows'),
+            schedulesCrumb,
+            { id: 'schedule', label: decodeRouteParam(params.scheduleId), icon: CalendarClockIcon },
+          ],
+        } satisfies RouteHeaderHandle,
+      },
       {
         path: '/workflows/:workflowId',
         element: (
@@ -544,6 +558,7 @@ function App() {
     [baseUrl, apiPrefix],
   );
   const studioHeaders = useMemo(() => ({ ...headers, 'x-mastra-client-type': 'studio' }), [headers]);
+  const router = useMemo(() => createBrowserRouter(routes, { basename: studioBasePath }), [studioBasePath]);
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition

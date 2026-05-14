@@ -364,7 +364,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-service',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),

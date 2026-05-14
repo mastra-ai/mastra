@@ -1,6 +1,6 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
-import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, Button, useAutoscroll } from '@mastra/playground-ui';
+import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
+import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
@@ -130,11 +130,9 @@ interface ComposerProps {
 const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Track IME composition state to prevent Enter from submitting during CJK input.
-  // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
-  // triggers form submission instead of completing the IME composition.
-  // See: https://github.com/mastra-ai/mastra/issues/16109
-  const isComposingRef = useRef(false);
+  const composerRuntime = useComposerRuntime();
+  const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
+  const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
 
@@ -188,35 +186,42 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
           ) : null}
         </div>
 
-        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline-solid focus-within:outline-accent1 -outline-offset-2">
-          <ComposerPrimitive.Input asChild className="w-full">
-            <textarea
-              ref={textareaRef}
-              autoFocus={false}
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-              name=""
-              id=""
-              onChange={e => setThreadInput?.(e.target.value)}
-              onCompositionStart={() => {
-                isComposingRef.current = true;
-              }}
-              onCompositionEnd={() => {
-                isComposingRef.current = false;
-              }}
-              onKeyDown={e => {
-                // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
-                // while an IME composition session is active (e.g. Chinese pinyin).
-                // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
-                // not prevent the primitive's onKeyDown from running on the same element —
-                // preventDefault() is required. e.nativeEvent.isComposing is added as a
-                // defensive fallback for browsers/timings where compositionend has already fired.
-                if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }
-              }}
-              disabled={!canExecuteAgent}
+        <div
+          className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
+          onClick={e => {
+            if (e.target === e.currentTarget) textareaRef.current?.focus();
+          }}
+        >
+          <ComposerSendingGradient pulseKey={sendPulseKey} />
+          <div className="relative z-10">
+            <ComposerPrimitive.Input
+              asChild
+              className="w-full"
+              submitMode={isStreaming && !canSendWhileStreaming ? 'none' : undefined}
+            >
+              <textarea
+                ref={textareaRef}
+                autoFocus={false}
+                className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
+                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                name=""
+                id=""
+                onChange={e => setThreadInput?.(e.target.value)}
+                onKeyDownCapture={e => {
+                  if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    composerRuntime.send();
+                  }
+                }}
+                disabled={!canExecuteAgent}
+              />
+            </ComposerPrimitive.Input>
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
+            <ComposerActionRow
+              canExecute={canExecuteAgent}
+              agentId={agentId}
+              showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
             />
           </div>
         </div>
@@ -267,7 +272,7 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="h-5 w-5 text-neutral3 hover:text-neutral6" />}
     </Button>
   );
 };
@@ -286,19 +291,31 @@ const ComposerActionRow = ({ canExecute = true, agentId, showModelSwitcher }: Co
 
   return (
     <>
-      {canExecute && (
-        <Button
-          variant="default"
-          size="icon-md"
-          type="button"
-          tooltip="Add attachment"
-          className="rounded-full"
-          onClick={() => setIsAddAttachmentDialogOpen(true)}
-        >
-          <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-        </Button>
-      )}
-
+      {/* Keep action buttons above the switcher when this row wraps. */}
+      <div className="flex flex-wrap-reverse items-center gap-2 px-1.5 pb-1.5">
+        {showModelSwitcher && agentId && (
+          <div className="shrink-0 max-w-full rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
+            <ComposerModelSwitcher agentId={agentId} />
+          </div>
+        )}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <ButtonsGroup spacing="close">
+            {canExecute && (
+              <Button
+                variant="default"
+                size="icon-md"
+                type="button"
+                tooltip="Add attachment"
+                onClick={() => setIsAddAttachmentDialogOpen(true)}
+              >
+                <PlusIcon className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+              </Button>
+            )}
+            {canExecute && <SpeechInput agentId={agentId} />}
+          </ButtonsGroup>
+          <ComposerSendButton canExecute={canExecute} />
+        </div>
+      </div>
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
     </>
   );
@@ -340,17 +357,15 @@ const ComposerSendButton = ({ canExecute = true }: ComposerActionProps) => {
             className="rounded-full border border-border1 bg-surface5"
             disabled={!canExecute}
           >
-            <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+            <ArrowUp className="h-5 w-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </ComposerPrimitive.Send>
-      </ThreadPrimitive.If>
-      <ThreadPrimitive.If running>
-        <ComposerPrimitive.Cancel asChild>
-          <Button variant="default" size="icon-md" tooltip="Cancel">
-            <CircleStopIcon />
-          </Button>
-        </ComposerPrimitive.Cancel>
-      </ThreadPrimitive.If>
+      )}
+      {isStreaming && (
+        <Button variant="default" size="icon-md" tooltip="Cancel" onClick={() => void cancelStream()}>
+          <CircleStopIcon />
+        </Button>
+      )}
     </>
   );
 };

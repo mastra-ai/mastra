@@ -44,12 +44,18 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     pendingQueuedActions: [],
     pendingSlashCommands: [],
     pendingTools: new Map(),
-    chatContainer: { children: [], invalidate: vi.fn() },
+    chatContainer: {
+      children: [],
+      addChild: vi.fn(function (this: any, child: unknown) {
+        this.children.push(child);
+      }),
+      invalidate: vi.fn(),
+    },
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
     allShellComponents: [],
-    ui: { requestRender: vi.fn() } as TUIState['ui'],
+    ui: { requestRender: vi.fn() } as unknown as TUIState['ui'],
     ...overrides,
   } as unknown as TUIState;
 }

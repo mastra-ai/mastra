@@ -159,45 +159,14 @@ export default function Scorer() {
   const hasNoScores = !isLoadingScores && scores.length === 0;
   const hasFilterApplied = selectedEntityOption?.value !== 'all';
 
-  const scorerTopAreaSharedContent = (
-    <>
-      <Breadcrumb>
-        <Crumb as={Link} to={`/scorers`}>
-          Scorers
-        </Crumb>
-        <ScorerCombobox value={scorerId} variant="link" />
-      </Breadcrumb>
-      <PageLayout.Row>
-        <PageHeader>
-          <PageHeader.Title isLoading={isScorerLoading}>
-            <GaugeIcon /> {scorer?.scorer?.config?.name || scorerId}
-          </PageHeader.Title>
-          {(isScorerLoading || scorer?.scorer?.config?.description) && (
-            <PageHeader.Description isLoading={isScorerLoading}>
-              {scorer?.scorer?.config?.description}
-            </PageHeader.Description>
-          )}
-        </PageHeader>
-        <div className="flex justify-end gap-2">
-          <ButtonWithTooltip
-            as="a"
-            href="https://mastra.ai/en/docs/evals/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Scorers documentation"
-            tooltipContent="Go to Scorers documentation"
-          >
-            <BookIcon />
-          </ButtonWithTooltip>
-          {scorer?.scorer?.source === 'stored' && (
-            <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
-              <PencilIcon /> Edit
-            </Button>
-          )}
-        </div>
-      </PageLayout.Row>
-    </>
-  );
+  const scorerHeaderActions =
+    scorer?.scorer?.source === 'stored' ? (
+      <RouteHeaderActions owner="scorer-detail">
+        <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`} size="sm">
+          <PencilIcon /> Edit
+        </Button>
+      </RouteHeaderActions>
+    ) : null;
 
   const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
 
