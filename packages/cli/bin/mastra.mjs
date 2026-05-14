@@ -41,7 +41,12 @@ function run(command, commandArgs, env = process.env) {
 
 if (sourceMode && existsSync(sourceEntry)) {
   const localTsxBin = join(packageRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
-  const repoTsxBin = join(dirname(dirname(packageRoot)), 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
+  const repoTsxBin = join(
+    dirname(dirname(packageRoot)),
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'tsx.cmd' : 'tsx',
+  );
   const command = existsSync(localTsxBin) ? localTsxBin : existsSync(repoTsxBin) ? repoTsxBin : 'tsx';
 
   run(command, [sourceEntry, ...args], {
