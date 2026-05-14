@@ -157,7 +157,11 @@ const REQUESTED_PROJECTS = new Set(
 function shouldScanProjectGroup(projectGroup: string) {
   if (!SOURCE_MODE || REQUESTED_PROJECTS.size === 0) return true;
   return [...REQUESTED_PROJECTS].some(
-    project => project === `unit:${projectGroup}/*` || project === `e2e:${projectGroup}/*`,
+    project =>
+      project === `unit:${projectGroup}/*` ||
+      project === `e2e:${projectGroup}/*` ||
+      project.startsWith(`unit:${projectGroup}/`) ||
+      project.startsWith(`e2e:${projectGroup}/`),
   );
 }
 
