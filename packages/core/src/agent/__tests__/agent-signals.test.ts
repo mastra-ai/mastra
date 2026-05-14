@@ -1,5 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -11,7 +11,7 @@ import {
   signalToDataPartFormat,
   signalToMastraDBMessage,
 } from '../signals';
-import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -81,6 +81,10 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 500) {
 }
 
 describe('Agent signals', () => {
+  beforeEach(() => {
+    agentThreadStreamRuntime.resetForTests();
+  });
+
   it('converts signals between DB, LLM, and data part formats', () => {
     const signal = createSignal({
       id: 'signal-1',
