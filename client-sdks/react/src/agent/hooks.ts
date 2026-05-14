@@ -26,6 +26,12 @@ export interface MastraChatProps {
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
+  /**
+   * Opt into the agent-signals streaming path (sendSignal + subscribeToThread).
+   * Defaults to `false` so consumers stay on the legacy `streamUntilIdle` route
+   * unless they explicitly enable the signals path.
+   */
+  enableThreadSignals?: boolean;
 }
 
 interface SharedArgs {
@@ -74,7 +80,9 @@ export const useChat = ({
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
+  enableThreadSignals = false,
 }: MastraChatProps) => {
+  const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
@@ -246,14 +254,17 @@ export const useChat = ({
   }, [agentId, resourceId, threadId, closeThreadSubscription]);
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!threadId || threadSignalsDisabled) {
+      closeThreadSubscription();
+      return;
+    }
 
     void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
       if ((error as { name?: string }).name !== 'AbortError') {
         console.error('[useChat] Thread subscription failed', error);
       }
     });
-  }, [agentId, ensureThreadSubscription, resourceId, threadId]);
+  }, [agentId, closeThreadSubscription, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
   const generate = async ({
     coreUserMessages,
@@ -436,7 +447,7 @@ export const useChat = ({
       setIsRunning(false);
     };
 
-    if (!threadId || _threadSignalsUnsupportedRef.current) {
+    if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
       await streamWithLegacyRoute();
       return;
     }
@@ -775,7 +786,9 @@ export const useChat = ({
 
     const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
     const signalId =
-      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current ? uiMessages[0]?.id : undefined;
+      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
+        ? uiMessages[0]?.id
+        : undefined;
     if (!signalId) {
       setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
     }

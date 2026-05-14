@@ -175,6 +175,26 @@ export class EventedExecutionEngine extends ExecutionEngine {
             requestContext: params.requestContext.toJSON(),
             format: params.format,
             perStep: params.perStep,
+            state: params.timeTravel.state,
+          },
+        });
+      } else if (params.restart) {
+        const prevStep = getStep(this.resolveWorkflow(params.workflowId), params.restart.activePaths);
+        const prevResult = params.restart.stepResults[prevStep?.id ?? 'input'];
+        await pubsub.publish('workflows', {
+          type: 'workflow.start',
+          runId: params.runId,
+          data: {
+            workflowId: params.workflowId,
+            runId: params.runId,
+            executionPath: params.restart.activePaths,
+            stepResults: params.restart.stepResults,
+            restart: params.restart,
+            prevResult: { status: 'success', output: prevResult?.payload },
+            requestContext: params.requestContext.toJSON(),
+            format: params.format,
+            perStep: params.perStep,
+            state: params.restart.state,
           },
         });
       } else {

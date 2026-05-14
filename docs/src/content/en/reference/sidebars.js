@@ -257,7 +257,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       collapsed: true,
       items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
     },
