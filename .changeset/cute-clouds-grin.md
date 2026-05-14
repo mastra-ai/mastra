@@ -2,7 +2,7 @@
 "@mastra/docker": minor
 ---
 
-You can now secure and limit Docker sandbox containers with memory, CPU quota/period, PID, capability add/drop, security options, ulimits, read-only root filesystem, and tmpfs options.
+Docker sandbox containers now support resource limits and security hardening through Docker HostConfig options. Configure memory, CPU quota, process IDs, capabilities, security options, read-only root filesystems, and tmpfs mounts.
 
 ```typescript
 const sandbox = new DockerSandbox({

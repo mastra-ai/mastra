@@ -397,7 +397,7 @@ export class DockerSandbox extends MastraSandbox {
       entries.unshift(['Privileged', this._privileged]);
     }
 
-    return entries.filter((entry): entry is [keyof Docker.HostConfig, unknown] => entry[1] != null);
+    return entries.filter((entry): entry is [keyof Docker.HostConfig, unknown] => isPresentHostConfigValue(entry[1]));
   }
 
   async stop(): Promise<void> {
@@ -597,6 +597,8 @@ function isHostConfigValueEqual(field: keyof Docker.HostConfig, actual: unknown,
 }
 
 function normalizeHostConfigValue(field: keyof Docker.HostConfig, value: unknown): unknown {
+  if (value == null) return undefined;
+
   if ((field === 'CapAdd' || field === 'CapDrop') && Array.isArray(value)) {
     if (value.length === 0) return undefined;
     return value.map(normalizeCapability).sort();
@@ -636,6 +638,13 @@ function normalizeHostConfigValue(field: keyof Docker.HostConfig, value: unknown
   }
 
   return value;
+}
+
+function isPresentHostConfigValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
 }
 
 function normalizeCapability(capability: unknown): unknown {

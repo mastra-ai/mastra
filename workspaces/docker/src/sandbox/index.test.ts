@@ -637,7 +637,13 @@ describe('DockerSandbox', () => {
       mockContainer.inspect.mockResolvedValue({
         Id: 'existing-container-id',
         State: { Status: 'running', Running: true },
-        HostConfig: {},
+        HostConfig: {
+          CapDrop: null,
+          CapAdd: null,
+          SecurityOpt: null,
+          Ulimits: null,
+          Tmpfs: null,
+        },
       });
       const logger = {
         debug: vi.fn(),
