@@ -7,7 +7,6 @@ import {
   tracesOrderBySchema,
   paginationArgsSchema,
   spanIdsSchema,
-  listTracesLightResponseSchema,
   listTracesResponseSchema,
   scoreTracesRequestSchema,
   scoreTracesResponseSchema,
@@ -32,6 +31,7 @@ import {
   listBranchesResponseSchema,
   getBranchArgsSchema,
   getBranchResponseSchema,
+  listTracesLightResponseSchema,
 } from './observability-storage-schemas';
 
 export * from './observability-new-endpoints';
