@@ -16,54 +16,70 @@
   - ARCHITECTURE §3 "Core types" (esp. `resolveTools` signature)
   - ARCHITECTURE §13 "Adapter design principles"
   - ARCHITECTURE §14 "Auth dependency (OSS / no-RBAC mode)" — `'default'` fallback
-- Inherited blockers / constraints: must preserve the prototype's `outputSchema = undefined` mutation (Composio runtime issue). No agent-level `authMode`, no `bindings[]` array argument.
+- **Branch reality**: the current `providers/composio.ts` is the editor-only catalog adapter (180 lines). It has no auth surface, no `connectedAccountId` injection, and no `outputSchema = undefined` mutation. Phase 3 is a **fresh implementation** of the auth + runtime surface, not a port of the on-disk file. Patterns to lift come from `.context/composio-research/HOW-IT-WORKS.md` (stashed prototype reference), but every line is new code against the new `ToolIntegration` interface.
+- Inherited constraints: no agent-level `authMode`, no `bindings[]` array argument, no fan-out inside the provider.
 
 ## Scope
 
 ### Editor
-- `packages/editor/src/providers/composio.ts` — full rewrite (don't patch the prototype):
+- `packages/editor/src/providers/composio.ts` — replace the existing legacy adapter (do not patch it; the old `ToolProvider` shape is incompatible):
   - `readonly id = 'composio' as const`.
-  - Constructor: `{ apiKey, allowedToolServices?, allowedTools? }`.
+  - `readonly displayName = 'Composio'`.
+  - Constructor: `{ apiKey, allowedToolServices?, allowedTools? }`. Pass the allowlists through to `super({ allowedToolServices, allowedTools })`.
   - `capabilities = { multipleConnectionsPerService: true, batchConnectionStatus: true, reauthorizeReusesConnectionId: true }`.
-  - `fetchToolServices()` / `fetchTools()` — wrap Composio SDK list calls.
-  - `resolveTools({ toolSlugs, connectionId, requestContext })` — single connection. Calls `composio.tools.get(internalUserId, { tools: toolSlugs })` with `beforeExecute` injecting `connectedAccountId = connectionId`. Mutates each tool: `tool.outputSchema = undefined`.
-  - `internalUserId` resolution: `storedAgent.authorId ?? requestContext.currentUser?.id ?? 'default'` (per ARCHITECTURE §14). Never `'default'` for v1.5 invoker mode.
-  - `authorize({ toolService, connectionId? })` — `initiateConnection`; returns `{ url, authId }`.
-  - `getAuthStatus(authId)` — polls Composio.
-  - `getConnectionStatus({ items })` — one `listConnections` call, filtered locally.
-  - `getHealth()` — auth-config presence per tool service.
-- `packages/editor/src/composio.ts` — re-export only `ComposioToolIntegration`. Drop `ArcadeToolProvider` re-export (deferred to v1.5).
-- `packages/editor/src/arcade.ts` — delete entry.
+  - `fetchToolServices()` / `fetchTools(toolService)` — wrap Composio SDK list calls (`composio.toolkits.get`, `composio.tools.getRawComposioTools`). `BaseToolIntegration` applies the allowlist filter on top — adapter never reads `allowedTools` directly.
+  - `resolveTools({ toolSlugs, toolMeta, connectionId, requestContext })` — single connection. Calls `composio.tools.get(internalUserId, { tools: toolSlugs })` via the `MastraProvider` client so returned tools are already in `createTool()` shape. **New behavior** (not on current branch): wrap each tool with `beforeExecute` that injects `connectedAccountId = connectionId`, and set `tool.outputSchema = undefined` to dodge the Composio runtime's union-schema rejection. Apply per-tool `toolMeta[slug].description` overrides.
+  - `internalUserId` resolution: read `requestContext[MASTRA_RESOURCE_ID_KEY]` (string) → else `'default'`. For v1 (author-only) the runtime fan-out caller is responsible for putting the agent's `authorId` (or `'default'`) into `requestContext` under that key; the adapter does not see `storedAgent.authorId` directly.
+  - `authorize({ toolService, connectionId? })` — `composio.connectedAccounts.initiateConnection(...)`; returns `{ url, authId }`.
+  - `getAuthStatus(authId)` — polls `composio.connectedAccounts.get(authId)` and maps to `'pending' | 'completed' | 'failed'`.
+  - `getConnectionStatus({ items })` — one `composio.connectedAccounts.list({ ids: [...] })` call; bucket result by `connectionId`.
+  - `getHealth()` — best-effort SDK reachability probe (e.g. `toolkits.get({ limit: 1 })`); return `{ ok, message?, details? }`.
+- `packages/editor/src/composio.ts` — re-export only `ComposioToolIntegration` + its config type. Drop the `ComposioToolProvider` re-export.
+- `packages/editor/src/arcade.ts` — delete entry (Arcade is v1.5).
+- `packages/editor/src/providers/arcade.ts` — delete (Arcade is v1.5).
+- `packages/editor/src/providers/index.ts` — drop Arcade re-export if present.
 
 ### Tests
-- `packages/editor/src/providers/composio.test.ts` — rewrite:
+- `packages/editor/src/providers/composio.test.ts` — new file (no existing test on this branch):
   - `listToolServices` honors `allowedToolServices`.
-  - `listTools` honors `allowedTools` glob (`Gmail.*`).
-  - `resolveTools` single-connection: tool list correct, `beforeExecute` injects `connectedAccountId`, `outputSchema` is `undefined` after resolve.
+  - `listTools` honors `allowedTools` glob (`gmail.*`).
+  - `resolveTools` single-connection: tool list correct, `beforeExecute` injects `connectedAccountId`, `outputSchema` is `undefined` after resolve, per-tool description overrides applied.
   - `authorize` returns `{ url, authId }` shape.
   - `getConnectionStatus` batch — one SDK call for N items.
-  - `'default'` fallback when no `authorId` and no `currentUser`.
+  - `internalUserId`: reads `requestContext[MASTRA_RESOURCE_ID_KEY]` when present; falls back to `'default'` when absent.
+- `packages/editor/src/editor-integration-tools.test.ts` — delete or skip the `ArcadeToolProvider e2e` block and migrate the `ComposioToolProvider e2e` block to the new class name + interface. The pre-existing skip-guard (`describe.skipIf(!process.env.COMPOSIO_API_KEY)`) stays.
 
-**Explicitly NOT touched**: no fan-out loop inside the provider, no `bindings[]` argument, no agent-level `authMode`, no UI, no server routes.
+**Explicitly NOT touched**: no fan-out loop inside the provider, no `bindings[]` argument, no agent-level `authMode`, no UI, no server routes, no `storedAgent.authorId` plumbing (that lands in Phase 4's runtime fan-out).
 
 ## Acceptance truths
 
 - [ ] `ComposioToolIntegration` extends `BaseToolIntegration`.
-- [ ] `provider.id === 'composio'` typed as the literal `'composio'`.
+- [ ] `integration.id === 'composio'` typed as the literal `'composio'`.
 - [ ] `resolveTools` accepts a single `connectionId` and returns tools whose `outputSchema === undefined`.
 - [ ] `beforeExecute` on every resolved tool injects `connectedAccountId` matching the passed `connectionId`.
 - [ ] `getConnectionStatus({ items: [a, b, c] })` makes exactly one underlying SDK call.
-- [ ] `internalUserId` resolves to `'default'` only when both `storedAgent.authorId` and `requestContext.currentUser?.id` are missing.
-- [ ] The string `'connectedAccountId'` appears nowhere outside this file (verified via repo search).
+- [ ] `internalUserId` reads `requestContext[MASTRA_RESOURCE_ID_KEY]` and falls back to `'default'` only when that key is missing.
+- [ ] The string `'connectedAccountId'` appears nowhere outside `providers/composio.ts` (verified via repo search).
+- [ ] `packages/editor/src/providers/arcade.ts` and `packages/editor/src/arcade.ts` are deleted; `editor-integration-tools.test.ts` has no live Arcade references.
+- [ ] The legacy `ComposioToolProvider` class name is gone from `packages/editor/src/`.
 
 ## Verification step
 
 ```
 pnpm --filter ./packages/editor build
 pnpm --filter ./packages/editor test composio
+pnpm --filter ./packages/core build:lib    # consumers re-exported types
 ```
 
-All must pass. 100% of Composio adapter tests green.
+Also run a workspace-level typecheck since `examples/agent-builder/src/mastra/index.ts` currently constructs `ComposioToolProvider`; Phase 3 must migrate that callsite (or the example build will fail). The example app is the canonical smoke target — its `index.ts` should now register the integration via the new array form:
+
+```ts
+toolIntegrations: [
+  new ComposioToolIntegration({ apiKey: process.env.COMPOSIO_API_KEY ?? '' }),
+] as const,
+```
+
+All builds and adapter tests must pass.
 
 ## Handoff to next phase
 
