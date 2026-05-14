@@ -201,7 +201,7 @@ export const createMastraProject = async ({
     const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
 
     result = await interactivePrompt({
-      options: { showBanner: false },
+      options: { command: 'create', showBanner: false },
       skip: {
         llmProvider: llmProvider !== undefined,
         llmApiKey: llmApiKey !== undefined,

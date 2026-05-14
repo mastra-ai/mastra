@@ -15,6 +15,14 @@ vi.mock('@clack/prompts', () => ({
   log: { info: vi.fn(), warn: vi.fn() },
 }));
 
+const { trackEventMock } = vi.hoisted(() => ({
+  trackEventMock: vi.fn(),
+}));
+
+vi.mock('../../analytics/index', () => ({
+  getAnalytics: vi.fn(() => ({ trackEvent: trackEventMock })),
+}));
+
 vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
   loadCredentials: vi.fn(),
@@ -41,6 +49,12 @@ describe('promptForObservability', () => {
     await expect(promptForObservability()).resolves.toEqual({ enabled: true, token: 'platform-token' });
 
     expect(getTokenMock).toHaveBeenCalledTimes(1);
+    expect(trackEventMock).toHaveBeenCalledWith('cli_observability_selected', {
+      command: undefined,
+      enabled: true,
+      answer: 'yes',
+      selection_method: 'interactive',
+    });
   });
 
   test('does not start platform auth when observability is skipped', async () => {
@@ -49,6 +63,12 @@ describe('promptForObservability', () => {
     await expect(promptForObservability()).resolves.toEqual({ enabled: false });
 
     expect(getTokenMock).not.toHaveBeenCalled();
+    expect(trackEventMock).toHaveBeenCalledWith('cli_observability_selected', {
+      command: undefined,
+      enabled: false,
+      answer: 'no',
+      selection_method: 'interactive',
+    });
   });
 
   test('prints logged-in user when creds existed before getToken()', async () => {
