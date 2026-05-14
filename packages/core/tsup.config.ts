@@ -72,6 +72,7 @@ export default defineConfig({
     'src/storage/domains/prompt-blocks/index.ts',
     'src/storage/domains/scorer-definitions/index.ts',
     'src/storage/domains/skills/index.ts',
+    'src/storage/domains/stars/index.ts',
     'src/storage/domains/workspaces/index.ts',
   ],
   format: ['esm', 'cjs'],
