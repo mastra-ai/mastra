@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
-import { AgentThreadStreamRuntime } from '../agent/thread-stream-runtime';
+import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import { BackgroundTaskManager } from '../background-tasks';
@@ -18,6 +18,7 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
+import type { Harness as HarnessV1 } from '../harness/v1';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
@@ -464,6 +465,28 @@ export interface Config<
    * ```
    */
   environment?: string;
+
+  /**
+   * Harness v1 instances registered on this Mastra. Each harness is bound
+   * to this Mastra during construction so its modes can resolve agents and
+   * its sessions persist via the harness-storage domain.
+   *
+   * Look up a registered harness with `mastra.getHarness('name')`.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   agents: { code: codeAgent },
+   *   harnesses: {
+   *     code: new Harness({
+   *       modes: [{ id: 'build', agentId: 'code' }],
+   *       defaultModeId: 'build',
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  harnesses?: Record<string, HarnessV1>;
   /**
    * Optional central transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.
@@ -555,7 +578,6 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
-  #agentThreadStreamRuntime = new AgentThreadStreamRuntime();
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
@@ -570,6 +592,7 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
+  #harnesses: Record<string, HarnessV1> = {};
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
@@ -612,7 +635,7 @@ export class Mastra<
   }
 
   get agentThreadStreamRuntime() {
-    return this.#agentThreadStreamRuntime;
+    return agentThreadStreamRuntime;
   }
 
   get workers(): readonly MastraWorker[] {
@@ -1212,6 +1235,17 @@ export class Mastra<
           this.addAgent(agent, key);
         }
       });
+    }
+
+    // Harnesses bind to this Mastra after agents are registered so that
+    // mode->agent validation succeeds. Each harness is single-bound; calling
+    // __registerMastra a second time with a different parent throws.
+    if (config?.harnesses) {
+      for (const [key, harness] of Object.entries(config.harnesses)) {
+        if (harness == null) continue;
+        harness.__registerMastra(this);
+        this.#harnesses[key] = harness;
+      }
     }
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
@@ -2297,6 +2331,48 @@ export class Mastra<
     }
 
     return workflow;
+  }
+
+  /**
+   * Look up a Harness v1 instance registered on this Mastra.
+   *
+   * @param name - The key the harness was registered under in the
+   *   `harnesses` config map.
+   * @returns The harness instance.
+   * @throws If no harness is registered under the given name.
+   *
+   * @example
+   * ```typescript
+   * const code = mastra.getHarness('code');
+   * const session = await code.session({ threadId, resourceId });
+   * ```
+   */
+  public getHarness(name: string): HarnessV1 {
+    const harness = this.#harnesses[name];
+    if (!harness) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_HARNESS_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Harness with name "${name}" not found`,
+        details: {
+          status: 404,
+          name,
+          harnesses: Object.keys(this.#harnesses).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return harness;
+  }
+
+  /**
+   * Returns every Harness registered on this Mastra, keyed by name.
+   * Mutating the returned record does not affect the registry.
+   */
+  public getHarnesses(): Record<string, HarnessV1> {
+    return { ...this.#harnesses };
   }
 
   __registerInternalWorkflow(workflow: Workflow) {

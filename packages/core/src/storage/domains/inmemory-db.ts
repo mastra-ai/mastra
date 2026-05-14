@@ -20,6 +20,7 @@ import type {
   ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
+import type { AttachmentRecord, SessionRecord } from './harness/types';
 import type { MCPClientVersion } from './mcp-clients';
 import type { MCPServerVersion } from './mcp-servers';
 import type { TraceEntry } from './observability';
@@ -84,6 +85,11 @@ export class InMemoryDB {
   readonly schedules = new Map<string, Schedule>();
   readonly scheduleTriggers: ScheduleTrigger[] = [];
 
+  // Harness domain — see HARNESS_V1_SPEC.md §5.
+  readonly harnessSessions = new Map<string, SessionRecord>();
+  readonly harnessAttachmentRecords = new Map<string, AttachmentRecord>();
+  readonly harnessAttachmentBytes = new Map<string, Uint8Array>();
+
   /**
    * Clears all data from all collections.
    * Useful for testing.
@@ -122,5 +128,8 @@ export class InMemoryDB {
     this.backgroundTasks.clear();
     this.schedules.clear();
     this.scheduleTriggers.length = 0;
+    this.harnessSessions.clear();
+    this.harnessAttachmentRecords.clear();
+    this.harnessAttachmentBytes.clear();
   }
 }

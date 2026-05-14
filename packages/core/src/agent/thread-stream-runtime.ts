@@ -58,6 +58,12 @@ export class AgentThreadStreamRuntime {
   #watchedThreadRunIds = new Set<string>();
   #preparedRunsById = new Map<string, PreparedThreadRun>();
   #abortedRunIds = new Set<string>();
+  /**
+   * Per-run resolvers used by `waitForRunOutput()`. Populated lazily on the
+   * first `waitForRunOutput()` call and cleared when `registerRun()` resolves
+   * the matching entry (or when the run is cancelled).
+   */
+  #pendingOutputWaiters = new Map<string, Array<(out: MastraModelOutput<any>) => void>>();
 
   #threadKey(resourceId: string | undefined, threadId: string): string {
     return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
@@ -114,11 +120,63 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  /**
+   * Returns the `MastraModelOutput` for a registered run, or `undefined` if the
+   * run has finished and been cleared. Used by signal-routed callers (e.g.
+   * harness v1 `Session.message()`) that send a signal — getting back a
+   * `runId` — and then need the matching output to drain events or await
+   * completion. Real subscribers should prefer `subscribeToThread` instead.
+   */
+  getRunOutput<OUTPUT = unknown>(runId: string): MastraModelOutput<OUTPUT> | undefined {
+    const record = this.#threadRunsById.get(runId);
+    return record?.output as MastraModelOutput<OUTPUT> | undefined;
+  }
+
+  /**
+   * Resolves with the `MastraModelOutput` for `runId` as soon as `registerRun`
+   * fires for it (or immediately if it has already been registered and the
+   * record has not yet been cleaned up). Used by signal-routed callers (e.g.
+   * harness v1 `Session.message()`) that receive a `runId` from `sendSignal`
+   * synchronously and need a handle to the output without polling.
+   *
+   * Note: if the run's output has already been registered AND finished AND
+   * cleaned up by the time this is called, the waiter never resolves. Callers
+   * should still pair this with a timeout or completion path of their own
+   * (the harness drives this off the per-run completion promise).
+   */
+  waitForRunOutput<OUTPUT = unknown>(runId: string): Promise<MastraModelOutput<OUTPUT>> {
+    const existing = this.#threadRunsById.get(runId);
+    if (existing) return Promise.resolve(existing.output as MastraModelOutput<OUTPUT>);
+    return new Promise<MastraModelOutput<OUTPUT>>(resolve => {
+      const waiters = this.#pendingOutputWaiters.get(runId) ?? [];
+      waiters.push(resolve as (out: MastraModelOutput<any>) => void);
+      this.#pendingOutputWaiters.set(runId, waiters);
+    });
+  }
+
   abortThread(options: AgentSubscribeToThreadOptions): boolean {
     const key = this.#threadKey(options.resourceId, options.threadId);
     const activeRunId = this.#activeThreadRunIds.get(key);
     if (!activeRunId) return false;
     return this.abortRun(activeRunId);
+  }
+
+  /** @internal */
+  resetForTests() {
+    this.#preparedRunsById.forEach(preparedRun => {
+      preparedRun.abortController.abort();
+      preparedRun.cleanup();
+    });
+    this.#threadRunsById.clear();
+    this.#threadKeysByRunId.clear();
+    this.#activeThreadRunIds.clear();
+    this.#threadRunSubscribers.clear();
+    this.#pendingSignalsByThread.clear();
+    this.#pendingIdleSignalsByThread.clear();
+    this.#pendingOutputWaiters.clear();
+    this.#watchedThreadRunIds.clear();
+    this.#preparedRunsById.clear();
+    this.#abortedRunIds.clear();
   }
 
   #cleanupPreparedRun(runId: string) {
@@ -167,6 +225,11 @@ export class AgentThreadStreamRuntime {
     this.#threadRunsById.set(output.runId, record);
     this.#threadKeysByRunId.set(output.runId, key);
     this.#activeThreadRunIds.set(key, output.runId);
+    const waiters = this.#pendingOutputWaiters.get(output.runId);
+    if (waiters) {
+      this.#pendingOutputWaiters.delete(output.runId);
+      for (const resolve of waiters) resolve(output);
+    }
     this.#notifyThreadRun(record);
     this.#watchThreadRunCompletion(key, record);
   }
@@ -502,3 +565,5 @@ export class AgentThreadStreamRuntime {
     return { accepted: true, runId, signal };
   }
 }
+
+export const agentThreadStreamRuntime = new AgentThreadStreamRuntime();

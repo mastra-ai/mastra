@@ -102,7 +102,7 @@ import { SaveQueueManager } from './save-queue';
 import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
-import { AgentThreadStreamRuntime } from './thread-stream-runtime';
+import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -285,14 +285,6 @@ export class Agent<
    * close if they're still the active one.
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
-  /**
-   * Local fallback for standalone Agents that are not registered on a Mastra
-   * instance. Agents registered on the same Mastra instance coordinate through
-   * `mastra.agentThreadStreamRuntime` instead, so cross-agent thread locks and
-   * subscriptions are scoped to that Mastra runtime rather than process-global
-   * Agent state.
-   */
-  #threadStreamRuntime = new AgentThreadStreamRuntime();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -5971,7 +5963,44 @@ export class Agent<
   }
 
   #getThreadStreamRuntime() {
-    return this.#mastra?.agentThreadStreamRuntime ?? this.#threadStreamRuntime;
+    return agentThreadStreamRuntime;
+  }
+
+  /**
+   * @internal Test-only hook for duck-typed agents (e.g. harness v1 MockAgent) that
+   * override `stream()` without going through the real execution loop. Production
+   * `Agent.stream()` registers its output via the same runtime path (§thread-stream-runtime).
+   * Without this hook, signal-routed `subscribeToThread` consumers never see chunks
+   * from test agents. Do not use outside of test mocks.
+   */
+  _internalRegisterStreamRun<OUTPUT = TOutput>(
+    output: MastraModelOutput<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT>,
+  ): void {
+    this.#getThreadStreamRuntime().registerRun(this as Agent<any, any, any, any>, output, streamOptions);
+  }
+
+  /**
+   * Look up the `MastraModelOutput` for a run registered with the thread stream
+   * runtime. Returns `undefined` if the run has finished and been cleared.
+   * Signal-routed callers (e.g. harness v1 `Session.message()`) use this after
+   * `sendSignal()` returns a `runId` to drain events from the run's output.
+   */
+  getRunOutput<OUTPUT = TOutput>(runId: string): MastraModelOutput<OUTPUT> | undefined {
+    return this.#getThreadStreamRuntime().getRunOutput<OUTPUT>(runId);
+  }
+
+  /**
+   * Resolves with the `MastraModelOutput` for `runId` as soon as it is
+   * registered with the thread stream runtime (or immediately if already
+   * registered). Pairs with `sendSignal()` to give callers a handle to the
+   * output without polling `getRunOutput()` until it returns non-undefined.
+   *
+   * The returned promise never rejects; callers are expected to enforce
+   * their own completion deadline (e.g. tied to the per-run completion path).
+   */
+  waitForRunOutput<OUTPUT = TOutput>(runId: string): Promise<MastraModelOutput<OUTPUT>> {
+    return this.#getThreadStreamRuntime().waitForRunOutput<OUTPUT>(runId);
   }
 
   /**
