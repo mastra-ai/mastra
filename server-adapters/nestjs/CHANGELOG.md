@@ -1,5 +1,35 @@
 # @mastra/nestjs
 
+## 0.1.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804)]:
+  - @mastra/core@1.34.0-alpha.3
+  - @mastra/server@1.34.0-alpha.3
+
+## 0.1.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+  - @mastra/server@1.34.0-alpha.2
+
+## 0.1.5-alpha.1
+
+### Patch Changes
+
+- Fixed `@mastra/nestjs` coercing query parameter values to booleans, `null`, numbers, and parsed JSON objects/arrays before route schema validation. A route declaring `queryParamSchema: z.object({ filter: z.string() })` could reject a valid request like `?filter={"a":1}` because the adapter had already turned the string into an object. NestJS now forwards query values as the raw strings (or string arrays) the HTTP layer delivered — matching `@mastra/hono`, `@mastra/express`, `@mastra/fastify`, and `@mastra/koa`. ([#16268](https://github.com/mastra-ai/mastra/pull/16268))
+
+  Routes that want type coercion should opt in via the schema, e.g. `z.coerce.boolean()`, `z.coerce.number()`, or a JSON preprocessor on the field.
+
+  Fixes #16114.
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/server@1.34.0-alpha.1
+
 ## 0.1.5-alpha.0
 
 ### Patch Changes

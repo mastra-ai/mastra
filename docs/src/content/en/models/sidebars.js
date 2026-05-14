@@ -418,6 +418,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nearai',
+          label: 'NEAR AI Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
         },
@@ -610,6 +615,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi-token-plan-sgp',
           label: 'Xiaomi Token Plan (Singapore)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xpersona',
+          label: 'Xpersona',
         },
         {
           type: 'doc',

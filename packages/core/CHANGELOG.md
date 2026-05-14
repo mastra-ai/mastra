@@ -1,5 +1,116 @@
 # @mastra/core
 
+## 1.34.0-alpha.3
+
+### Minor Changes
+
+- Added optional `metadata` to code-defined agents. Pass a `metadata` record to `new Agent({...})`, read it back with `agent.getMetadata()`, and clients can filter on it from the existing `/agents` and `/agents/:agentId` responses without encoding the data into IDs or names. ([#16603](https://github.com/mastra-ai/mastra/pull/16603))
+
+  Metadata supports the same `DynamicArgument` form as other agent config fields, so it can also be resolved per request from the request context.
+
+  Stored agents loaded via the editor also expose their metadata through `agent.getMetadata()`, so clients can filter these agents as well. Cloning a runtime agent via `editor.agent.clone()` now carries the source agent's metadata over to the stored clone when the caller does not provide one explicitly.
+
+  ```ts
+  // Static
+  const supportAgent = new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    instructions: 'You help customers with support requests.',
+    model: 'openai/gpt-5',
+    metadata: { type: 'support' },
+  });
+
+  supportAgent.getMetadata(); // { type: 'support' }
+
+  // Dynamic
+  const tenantAgent = new Agent({
+    id: 'tenant-agent',
+    name: 'Tenant Agent',
+    instructions: 'You help customers with tenant-specific tasks.',
+    model: 'openai/gpt-5',
+    metadata: ({ requestContext }) => ({
+      type: 'support',
+      tenant: requestContext.get('tenant'),
+    }),
+  });
+
+  await tenantAgent.getMetadata({ requestContext }); // { type: 'support', tenant: 'acme' }
+  ```
+
+- Added an opt-in foundation for building agent-builder admin policies and role-aware capabilities, available under two new entry points. ([#16578](https://github.com/mastra-ai/mastra/pull/16578))
+
+  **`@mastra/core/agent-builder/ee`**
+
+  Exposes types, validators, and picker utilities for working with model allowlists and admin model policies on stored agents — for example normalizing model candidates, choosing a default from a configured allowlist, and producing typed errors when a request violates policy.
+
+  **`@mastra/core/auth/ee`**
+
+  Adds optional methods on `IRBACProvider` for listing available roles and resolving the permissions for a given role:
+
+  ```ts
+  interface IRBACProvider {
+    // existing methods...
+    getAvailableRoles?(): Promise<RoleDescriptor[]>;
+    getPermissionsForRole?(role: string): Promise<PermissionDescriptor[]>;
+  }
+  ```
+
+  Static defaults, an expanded permissions catalog, and a capabilities helper that surfaces `availableRoles` to clients when the provider supports it are also included. Providers that do not implement the new methods continue to work unchanged.
+
+  Also adds a `StorageBrowserRef` shape to `@mastra/core/storage` for referencing a configured headless browser on stored agents.
+
+### Patch Changes
+
+- Fixed approval resume for tools loaded by processor workflows. ([#16365](https://github.com/mastra-ai/mastra/pull/16365))
+
+- Fixed approval resume for tools loaded with ToolSearchProcessor. ([#16365](https://github.com/mastra-ai/mastra/pull/16365))
+
+- Expose `GET /observability/traces/light` and storage support for fetching paginated trace-list rows without span payload data. ([#16608](https://github.com/mastra-ai/mastra/pull/16608))
+
+- `GET /api/observability/discovery/metric-names` and `GET /api/observability/discovery/metric-label-values` now accept `limit` as a URL query parameter without pre-parsing. Previously, passing `?limit=10` was rejected as a validation error; callers can now use these endpoints directly from HTTP clients, consistent with other query endpoints (e.g. pagination). ([#16489](https://github.com/mastra-ai/mastra/pull/16489))
+
+## 1.34.0-alpha.2
+
+### Patch Changes
+
+- Fixed listMessages perPage=0 behavior in the in-memory store to match other adapters. ([#16602](https://github.com/mastra-ai/mastra/pull/16602))
+
+## 1.34.0-alpha.1
+
+### Minor Changes
+
+- Changed background process output retention. ([#16574](https://github.com/mastra-ai/mastra/pull/16574))
+
+  **Before:** Spawned process handles retained all stdout and stderr, which could grow without bound for long-running background processes.
+
+  **After:** Spawned process handles now retain the latest 1 MiB of stdout and stderr per stream by default. Pass `maxRetainedBytes` to `processes.spawn()` to customize the limit, use `0` to disable retained polling output, or use `Infinity` to keep the previous retain-all behavior.
+
+  ```ts
+  const handle = await sandbox.processes.spawn('npm run dev', {
+    maxRetainedBytes: 512 * 1024,
+  });
+  ```
+
+  Streaming callbacks and reader streams still receive every chunk in full. Handles also expose truncation and dropped-byte counters so callers can detect when `stdout`, `stderr`, or `wait()` results only include retained output.
+
+  The built-in `executeCommand()` implementation still retains full output by default; pass `maxRetainedBytes` there only when you want bounded command results.
+
+### Patch Changes
+
+- Improved background-task observability. ([#16590](https://github.com/mastra-ai/mastra/pull/16590))
+
+  Retry attempts now appear as separate workflow steps in run history and event traces, making retry progression easier to debug. No public API changes.
+
+- Fixed durable agents that could drop object-form system instructions when provider options like `cacheControl` were used. These instructions are now preserved so provider-specific options are respected. ([#16599](https://github.com/mastra-ai/mastra/pull/16599))
+
+- **Fixed** non-deterministic ordering of cross-thread semantic recall messages. ([#16600](https://github.com/mastra-ai/mastra/pull/16600))
+
+  When messages recalled from other threads shared the same timestamp, they were rendered into the system prompt in whatever order the vector query returned them — driven by similarity scores that can vary between equivalent runs. This made any test or evaluation that snapshots prompt output (or hashes the outbound LLM request) flaky.
+
+  Recalled cross-thread messages are now sorted by createdAt, then threadId, then role (user → assistant → tool → system), then id before formatting, so the same set of recalled messages always produces the same prompt.
+
+- Fixed agent signals so standalone agents coordinate thread streams through a shared runtime. ([#16581](https://github.com/mastra-ai/mastra/pull/16581))
+
 ## 1.34.0-alpha.0
 
 ### Minor Changes

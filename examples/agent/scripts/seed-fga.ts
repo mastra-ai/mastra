@@ -54,13 +54,13 @@ async function main() {
     await workos.authorization.listResources({ resourceTypeSlug: 'agent', organizationId: orgId, limit: 1 });
   } catch {
     console.error(
-`Error: The "agent" resource type does not exist in your WorkOS environment.
+      `Error: The "agent" resource type does not exist in your WorkOS environment.
 
 Create it in your WorkOS dashboard before running this script:
   1. Go to Authorization > Resource Types
   2. Create a resource type with slug "agent" as a child of Organization
 
-This is the one step that cannot be done via API.`
+This is the one step that cannot be done via API.`,
     );
     process.exit(1);
   }

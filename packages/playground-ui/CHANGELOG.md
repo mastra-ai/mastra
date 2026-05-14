@@ -1,5 +1,47 @@
 # @mastra/playground-ui
 
+## 28.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804)]:
+  - @mastra/core@1.34.0-alpha.3
+  - @mastra/client-js@1.19.0-alpha.3
+  - @mastra/react@0.3.2-alpha.3
+
+## 27.1.0-alpha.2
+
+### Minor Changes
+
+- Added a List mode filter to the Observability traces page for switching between Traces and Branches mode, and changed the default to Traces mode. Previously, the page opened in Branches mode; now it opens in Traces mode, and users can switch modes via the new "List mode" property in the Add filter menu. For example: open Observability → Traces (now defaults to Traces) → Add filter → List mode → pick Branches or Traces. ([#16587](https://github.com/mastra-ai/mastra/pull/16587))
+
+### Patch Changes
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+  - @mastra/client-js@1.18.2-alpha.2
+  - @mastra/react@0.3.2-alpha.2
+
+## 27.0.2-alpha.1
+
+### Patch Changes
+
+- Removed the inset top gloss from the `shadow-dialog` token. The gloss read as a faint highlight band along the top edge of dropdown menus, popovers, selects, comboboxes, dialogs, tooltips, side dialogs and the main app container in dark mode. The token now applies a drop-shadow only and is consistent across light and dark themes. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Restyled `MainSidebar` and swapped sidebar icons to the new Figma design system set. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+  - Section titles are larger and medium-weight (`text-ui-sm`, `font-medium`), lowercase, muted — replacing the previous uppercase + wide-tracking treatment. Underline divider beneath the title removed in both expanded and collapsed states. Active indicator bar on the left edge removed.
+  - Nav items render flush: icons align horizontally with the section title, hover/active state now uses theme-aware sidebar surface tokens without item borders or shadows. The legacy `indent` option is still accepted but no longer changes layout.
+  - New sidebar icons: `WorkspacesIcon`, `RequestContextIcon`, `ScorersIcon`, `DatasetsIcon`, `ExperimentsIcon`, `MetricsIcon`. Existing icons `AgentIcon`, `PromptIcon`, `WorkflowIcon`, `ProcessorIcon`, `McpServerIcon`, `ToolsIcon`, `LogsIcon`, `TraceIcon` updated to match the Figma artwork. All icons accept `React.SVGProps<SVGSVGElement>` and inherit color via `currentColor`.
+
+- Improved Studio main content framing, persistent page breadcrumbs, accessible page headings, panel layering, and theme-aware navigation/card contrast. ([#16544](https://github.com/mastra-ai/mastra/pull/16544))
+
+- Fixed a React/React DOM version mismatch that prevented Storybook from rendering in `@mastra/playground-ui`. ([#16529](https://github.com/mastra-ai/mastra/pull/16529))
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/client-js@1.18.2-alpha.1
+  - @mastra/react@0.3.2-alpha.1
+
 ## 27.0.2-alpha.0
 
 ### Patch Changes
