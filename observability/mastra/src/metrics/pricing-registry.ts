@@ -191,14 +191,33 @@ function normalizeProvider(provider: string): string {
 
 /**
  * Generate model name variants to try during lookup, in priority order:
- * 1. Original model name
- * 2. Dots converted to dashes (e.g., "gpt-5.4" → "gpt-5-4")
- * 3. Date suffix stripped from original
- * 4. Date suffix stripped from dashed version
+ * 1. Original (and date-stripped original)
+ * 2. Dots → dashes, e.g. "gpt-5.4" → "gpt-5-4" (and date-stripped)
+ * 3. Dots and slashes → dashes, e.g. "xiaomi/mimo-v2-pro" → "xiaomi-mimo-v2-pro"
+ *    (covers OpenRouter entries that keep the vendor prefix flattened with a dash)
+ * 4. Vendor prefix dropped, e.g. "openai/gpt-5-mini" → "gpt-5-mini"
+ *    (covers OpenRouter entries stored without the vendor prefix)
+ *
+ * Each variant is also tried with its date suffix stripped.
+ * The Set dedupes so non-prefixed inputs do not pay for redundant lookups.
  */
 function getModelVariants(model: string): string[] {
-  const dashed = model.replace(/\./g, '-');
-  return [model, dashed, stripDateSuffix(model), stripDateSuffix(dashed)];
+  const variants = new Set<string>();
+  const add = (v: string) => {
+    variants.add(v);
+    variants.add(stripDateSuffix(v));
+  };
+
+  add(model);
+  add(model.replace(/\./g, '-'));
+  add(model.replace(/[./]/g, '-'));
+
+  const slashIndex = model.indexOf('/');
+  if (slashIndex !== -1) {
+    add(model.substring(slashIndex + 1));
+  }
+
+  return [...variants];
 }
 
 /**

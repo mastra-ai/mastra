@@ -119,6 +119,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => {
+          const value = request.headers[name.toLowerCase()];
+          return Array.isArray(value) ? value[0] : value;
+        },
+      });
 
       // Set context in request object
       request.requestContext = requestContext;

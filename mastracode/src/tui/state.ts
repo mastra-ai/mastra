@@ -33,6 +33,11 @@ import type { UserMessageComponent } from './components/user-message.js';
 
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+
+export interface PendingSignalMessage {
+  component: Component;
+  text: string;
+}
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -100,8 +105,10 @@ export interface TUIState {
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: HarnessMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
-  /** Position hint for task_write inline rendering when streaming */
-  taskWriteInsertIndex: number;
+  /** Task tools are hidden on success but promoted to normal tool boxes on errors */
+  pendingTaskToolIds: Set<string>;
+  /** Position hint for inline task-tool rendering when streaming */
+  taskToolInsertIndex: number;
   /** Track all tool IDs seen during current stream (prevents duplicates) */
   seenToolCallIds: Set<string>;
   /** Track subagent tool call IDs to skip in trailing content logic */
@@ -155,6 +162,8 @@ export interface TUIState {
   pendingQueuedActions: Array<'message' | 'slash'>;
   /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
+  /** Pending signal messages waiting for the stream echo */
+  pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
@@ -239,7 +248,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Agent / streaming
     isInitialized: false,
     pendingTools: new Map(),
-    taskWriteInsertIndex: -1,
+    pendingTaskToolIds: new Set(),
+    taskToolInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),
     currentRunSystemReminderKeys: new Set(),
@@ -266,6 +276,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     followUpComponents: [],
+    pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,
 

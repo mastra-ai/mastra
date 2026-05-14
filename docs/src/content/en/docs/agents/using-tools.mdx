@@ -242,6 +242,14 @@ export const weatherTool = createTool({
 })
 ```
 
+## Transform tool payloads for UI and transcripts
+
+Use `transform` when a tool returns raw data your application needs, but browser-facing streams or user-visible transcript messages should receive a smaller or safer shape. `transform` is separate from `toModelOutput`: `toModelOutput` shapes the payload sent back to the model, while `transform` shapes tool input, output, errors, approval payloads, and suspension payloads for `display` and `transcript` targets.
+
+If a transform is configured and it fails, Mastra does not fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
+
+See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
+
 ## Control tool selection
 
 Pass `toolChoice` or `activeTools` to `.generate()` or `.stream()` to control which tools the agent uses at runtime.

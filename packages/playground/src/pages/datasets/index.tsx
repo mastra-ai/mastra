@@ -1,15 +1,12 @@
 import {
-  ButtonWithTooltip,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, DatabaseIcon, Plus } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { CreateDatasetDialog, DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
@@ -72,7 +69,7 @@ export default function Datasets() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -80,7 +77,7 @@ export default function Datasets() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="datasets" />
       </NoDataPageLayout>
     );
@@ -88,7 +85,7 @@ export default function Datasets() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load datasets" message={error.message} />
       </NoDataPageLayout>
     );
@@ -97,7 +94,7 @@ export default function Datasets() {
   if (datasets.length === 0 && !isLoading && page === 0) {
     return (
       <>
-        <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+        <NoDataPageLayout>
           <NoDatasetsInfo onCreateClick={openCreateDialog} />
         </NoDataPageLayout>
         <CreateDatasetDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
@@ -118,29 +115,6 @@ export default function Datasets() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <DatabaseIcon /> Datasets
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip onClick={openCreateDialog} tooltipContent="Create a dataset">
-              <Plus />
-            </ButtonWithTooltip>
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/evals/datasets/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Datasets documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
         <DatasetsToolbar
           search={search}
           onSearchChange={handleSearchChange}
@@ -153,6 +127,7 @@ export default function Datasets() {
           tagOptions={datasetTagOptions}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
+          onCreateClick={openCreateDialog}
         />
       </PageLayout.TopArea>
 

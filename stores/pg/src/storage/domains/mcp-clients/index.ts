@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/mcp-clients';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'servers'] as const;
 
@@ -368,7 +368,14 @@ export class MCPClientsPG extends MCPClientsStorage {
         [...queryParams, limitValue, offset],
       );
 
-      const mcpClients = (dataResult || []).map(row => this.parseMCPClientRow(row));
+      const mcpClients = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseMCPClientRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map mcp client row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         mcpClients,
@@ -576,7 +583,14 @@ export class MCPClientsPG extends MCPClientsStorage {
         [mcpClientId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map mcp client version row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         versions,
@@ -669,41 +683,13 @@ export class MCPClientsPG extends MCPClientsStorage {
   // Private Helper Methods
   // ==========================================================================
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
-    if (typeof value !== 'string') return value;
-
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
-    }
-  }
-
   private parseMCPClientRow(row: any): StorageMCPClientType {
     return {
       id: row.id as string,
       status: row.status as StorageMCPClientType['status'],
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
-      metadata: this.parseJson(row.metadata, 'metadata'),
+      metadata: parseJsonResilient(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };
@@ -716,8 +702,8 @@ export class MCPClientsPG extends MCPClientsStorage {
       versionNumber: row.versionNumber as number,
       name: row.name as string,
       description: row.description as string | undefined,
-      servers: this.parseJson(row.servers, 'servers'),
-      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      servers: parseJsonResilient(row.servers, 'servers'),
+      changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),
     };

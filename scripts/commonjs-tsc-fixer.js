@@ -1,6 +1,6 @@
 import { readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 
 /** Convert Windows backslashes to posix forward slashes */
 function slash(p) {

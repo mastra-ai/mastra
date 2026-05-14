@@ -139,7 +139,7 @@ export interface ObservabilityInstanceConfig {
 export interface ObservabilityRegistryConfig {
   /**
    * Enables default exporters, with sampling: always, and sensitive data filtering
-   * @deprecated Use explicit `configs` with DefaultExporter, CloudExporter, and SensitiveDataFilter instead.
+   * @deprecated Use explicit `configs` with MastraStorageExporter, MastraPlatformExporter, and SensitiveDataFilter instead.
    * This option will be removed in a future version.
    */
   default?: {

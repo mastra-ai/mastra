@@ -46,6 +46,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   const { state } = ctx;
   state.chatContainer.clear();
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   state.allToolComponents = [];
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();
@@ -56,7 +57,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }
-  state.taskWriteInsertIndex = -1;
+  state.taskToolInsertIndex = -1;
 
   ctx.updateStatusLine();
   await ctx.renderExistingMessages();

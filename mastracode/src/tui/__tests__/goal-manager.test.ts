@@ -165,7 +165,7 @@ describe('GoalManager', () => {
     );
     expect(turnsUsedWhileJudging).toBe(0);
     expect(manager.getGoal()?.turnsUsed).toBe(1);
-    expect(result.continuation).toContain('<system-reminder type="goal-judge">');
+    expect(result.continuation).toContain('[Goal attempt 1/50]');
     expect(result.continuation).toContain('Need one more step.');
   });
 

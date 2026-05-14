@@ -4,7 +4,7 @@ import { MastraEditor } from '@mastra/editor';
 import { ComposioToolProvider } from '@mastra/editor/composio';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from '@mastra/duckdb';
-import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
 
 import { mastraAuth, rbacProvider, fgaProvider } from './auth';
@@ -178,7 +178,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },

@@ -2425,4 +2425,60 @@ describe('ProcessorRunner', () => {
       expect(mockLogger.error).toHaveBeenCalled();
     });
   });
+
+  describe('processor sendSignal', () => {
+    it('adds a signal message, rotates the response id, and writes a data part', async () => {
+      const rotateResponseMessageId = vi.fn(() => 'response-2');
+      const chunks: unknown[] = [];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'signal-processor',
+            processInputStep: async ({ sendSignal }) => {
+              await sendSignal?.({
+                type: 'system-reminder',
+                contents: 'remember this',
+                metadata: { type: 'test-reminder' },
+              });
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        messageId: 'response-1',
+        rotateResponseMessageId,
+        writer: {
+          custom: async chunk => {
+            chunks.push(chunk);
+          },
+        },
+      });
+
+      const signalMessage = messageList.get.all.db().at(-1);
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+      expect(signalMessage?.role).toBe('signal');
+      expect(signalMessage?.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'remember this' }));
+      expect(chunks).toEqual([
+        expect.objectContaining({
+          type: 'data-system-reminder',
+          data: expect.objectContaining({
+            type: 'system-reminder',
+            contents: 'remember this',
+            metadata: { type: 'test-reminder' },
+          }),
+        }),
+      ]);
+    });
+  });
 });

@@ -1,4 +1,6 @@
+import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/di';
+import type { Event } from '@mastra/core/events';
 import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
@@ -1189,4 +1191,176 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       return handleError(error, 'Error observing workflow stream');
     }
   },
+});
+
+// ============================================================================
+// Worker Step Execution Endpoint
+// Used by standalone OrchestrationWorker instances with HttpRemoteStrategy.
+// ============================================================================
+
+// `workflowId` and `runId` are taken from path params (single source of
+// truth); they are intentionally omitted from the request body schema.
+const stepExecutionBodySchema = z.object({
+  stepId: z.string(),
+  executionPath: z.array(z.number().int().nonnegative()),
+  stepResults: z.record(z.string(), z.any()),
+  state: z.record(z.string(), z.any()),
+  requestContext: z.record(z.string(), z.any()),
+  input: z.any().optional(),
+  resumeData: z.any().optional(),
+  retryCount: z.number().int().nonnegative().optional(),
+  foreachIdx: z.number().int().nonnegative().optional(),
+  format: z.enum(['legacy', 'vnext']).optional(),
+  perStep: z.boolean().optional(),
+  validateInputs: z.boolean().optional(),
+});
+
+type StepExecutionBody = z.infer<typeof stepExecutionBodySchema>;
+
+interface StepExecutionHandlerArgs extends StepExecutionBody {
+  mastra: Mastra;
+  workflowId: string;
+  runId: string;
+}
+
+// Reuse the InProcessStrategy across requests for a given Mastra instance.
+// The strategy is stateless beyond its mastra reference, but allocating it
+// per request triggers a dynamic import on the hot path.
+//
+// The dynamic import is required by `pnpm --filter ./packages/server
+// check:core-imports`: `@mastra/core/worker` is a new subpath that older
+// peer-dep floors don't expose, so a static import would fail the check.
+// Once the floor is bumped, this can become a static import.
+type StepStrategy = { executeStep: (p: unknown) => Promise<unknown> };
+const strategyByMastra = new WeakMap<Mastra, StepStrategy>();
+
+async function getStepStrategy(mastra: Mastra): Promise<StepStrategy> {
+  let cached = strategyByMastra.get(mastra);
+  if (!cached) {
+    const { InProcessStrategy } = await import('@mastra/core/worker');
+    cached = new InProcessStrategy({ mastra }) as unknown as StepStrategy;
+    strategyByMastra.set(mastra, cached);
+  }
+  return cached;
+}
+
+// Step execution returns the worker's StepResult. Its shape is dynamic
+// (depends on the step's output schema), so we use a permissive z.any().
+const stepExecutionResponseSchema = z.any();
+
+export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workflows/:workflowId/runs/:runId/steps/execute',
+  responseType: 'json',
+  pathParamSchema: workflowRunPathParams,
+  bodySchema: stepExecutionBodySchema,
+  responseSchema: stepExecutionResponseSchema,
+  summary: 'Execute a workflow step',
+  description:
+    'Internal endpoint used by standalone OrchestrationWorker instances to execute workflow steps remotely via HttpRemoteStrategy.',
+  tags: ['Workflows', 'Worker'],
+  requiresAuth: true,
+  handler: (async ({ mastra, workflowId, runId, ...body }: StepExecutionHandlerArgs) => {
+    try {
+      // Auth is enforced by the framework via `requiresAuth: true` and the
+      // deployer's `authenticateToken` provider. Note that when NO auth
+      // provider is configured, the framework currently treats the route
+      // as public (see ServerAdapter.checkRouteAuth). Operators deploying
+      // standalone workers must configure an auth provider to gate this
+      // endpoint — there is no implicit fail-closed.
+      const strategy = await getStepStrategy(mastra);
+      const result = await strategy.executeStep({
+        workflowId,
+        runId,
+        stepId: body.stepId,
+        executionPath: body.executionPath,
+        stepResults: body.stepResults,
+        state: body.state,
+        requestContext: body.requestContext,
+        input: body.input,
+        resumeData: body.resumeData,
+        retryCount: body.retryCount,
+        foreachIdx: body.foreachIdx,
+        format: body.format,
+        perStep: body.perStep,
+        validateInputs: body.validateInputs,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error executing workflow step');
+    }
+  }) as any,
+});
+
+// Wire shape of an Event delivered through a push-mode broker. Validates the
+// fields `WorkflowEventProcessor` depends on; broker envelopes routinely carry
+// extra metadata that isn't part of `Event` itself, so we passthrough the rest.
+// `createdAt` is an ISO timestamp on the wire — the handler converts it to a
+// `Date` before forwarding to `Mastra.handleWorkflowEvent`.
+const workflowEventSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  data: z.unknown(),
+  runId: z.string(),
+  createdAt: z.string(),
+  index: z.number().optional(),
+  deliveryAttempt: z.number().optional(),
+});
+
+const receiveWorkflowEventBodySchema = z.object({
+  event: workflowEventSchema.passthrough(),
+});
+
+const receiveWorkflowEventResponseSchema = z.object({
+  ok: z.boolean(),
+  retry: z.boolean().optional(),
+});
+
+interface ReceiveWorkflowEventHandlerArgs {
+  mastra: Mastra;
+  event: Event;
+}
+
+/**
+ * Generic push receive endpoint for workflow events. A push-mode broker
+ * (GCP Pub/Sub push subscription, SNS, EventBridge) — or a per-broker adapter
+ * that decodes the broker's envelope first — POSTs each event here and the
+ * response code tells the broker whether to retry:
+ *
+ *   - 200/204 → ack
+ *   - 5xx     → transient, retry with backoff
+ *   - 4xx     → poison, drop / send to DLQ
+ *
+ * Auth is enforced through the framework's standard `requiresAuth` flow.
+ * Operators MUST configure an `authenticateToken` provider that recognizes
+ * whatever credential the broker attaches (e.g. a Google-signed OIDC token
+ * for GCP Pub/Sub push). Without an auth provider the endpoint is effectively
+ * public — same caveat as `EXECUTE_WORKFLOW_STEP_ROUTE`.
+ */
+export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workflows/events',
+  responseType: 'json',
+  bodySchema: receiveWorkflowEventBodySchema,
+  responseSchema: receiveWorkflowEventResponseSchema,
+  summary: 'Receive a workflow event from a push-mode broker',
+  description:
+    'Push-mode entry point for workflow events. Brokers (GCP Pub/Sub push, SNS, EventBridge) POST each event here; Mastra processes it through the same pipeline as pull-mode workers.',
+  tags: ['Workflows', 'Worker'],
+  requiresAuth: true,
+  handler: (async ({ mastra, event }: ReceiveWorkflowEventHandlerArgs) => {
+    try {
+      // The wire schema carries `createdAt` as a string; coerce to Date here
+      // before handing off to the in-process pipeline, which expects an `Event`.
+      const rawCreatedAt = (event as unknown as { createdAt: unknown }).createdAt;
+      const createdAt = rawCreatedAt instanceof Date ? rawCreatedAt : new Date(rawCreatedAt as string);
+      if (Number.isNaN(createdAt.getTime())) {
+        throw new HTTPException(400, { message: 'Invalid createdAt' });
+      }
+      return await mastra.handleWorkflowEvent({ ...event, createdAt });
+    } catch (error) {
+      return handleError(error, 'Error receiving workflow event');
+    }
+  }) as any,
 });

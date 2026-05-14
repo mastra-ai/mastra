@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import fs from 'fs/promises';
 import path from 'path';
 import { statSync } from 'fs';

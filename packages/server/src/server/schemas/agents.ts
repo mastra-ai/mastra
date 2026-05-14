@@ -2,6 +2,153 @@ import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
+
+const commonMessageFieldsSchema = {
+  id: z.string().optional(),
+  name: z.string().optional(),
+  metadata: jsonRecordSchema.optional(),
+  providerMetadata: jsonRecordSchema.optional(),
+  providerOptions: jsonRecordSchema.optional(),
+  experimental_providerMetadata: jsonRecordSchema.optional(),
+};
+
+const textContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('text'),
+  text: z.string(),
+});
+
+const imageContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('image'),
+  image: z.union([z.string(), jsonRecordSchema]),
+  mediaType: z.string().optional(),
+  mimeType: z.string().optional(),
+});
+
+const fileContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('file'),
+  data: z.union([z.string(), jsonRecordSchema]).optional(),
+  file: z.union([z.string(), jsonRecordSchema]).optional(),
+  url: z.string().optional(),
+  mediaType: z.string().optional(),
+  mimeType: z.string().optional(),
+  filename: z.string().optional(),
+});
+
+const toolCallContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('tool-call'),
+  toolCallId: z.string(),
+  toolName: z.string(),
+  args: jsonValueSchema.optional(),
+  input: jsonValueSchema.optional(),
+});
+
+const toolResultContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('tool-result'),
+  toolCallId: z.string(),
+  toolName: z.string().optional(),
+  result: jsonValueSchema.optional(),
+  output: jsonValueSchema.optional(),
+});
+
+const messageContentPartSchema = z.union([
+  textContentPartSchema,
+  imageContentPartSchema,
+  fileContentPartSchema,
+  toolCallContentPartSchema,
+  toolResultContentPartSchema,
+]);
+const messageContentSchema = z.union([z.string(), z.array(messageContentPartSchema)]);
+
+const modelMessageSchema = z.object({
+  ...commonMessageFieldsSchema,
+  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  content: messageContentSchema,
+});
+
+const uiMessageSchema = z.object({
+  ...commonMessageFieldsSchema,
+  role: z.enum(['system', 'user', 'assistant', 'tool', 'data']),
+  content: messageContentSchema.optional(),
+  parts: z.array(messageContentPartSchema).optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+});
+
+const mastraDBMessagePartSchema = z.object({ type: z.string() }).passthrough();
+const mastraDBMessageContentSchema = z
+  .object({
+    format: z.literal(2),
+    parts: z.array(mastraDBMessagePartSchema),
+    content: messageContentSchema.optional(),
+    experimental_attachments: z.array(jsonRecordSchema).optional(),
+    toolInvocations: z.array(jsonRecordSchema).optional(),
+    reasoning: z.string().optional(),
+    annotations: z.array(jsonValueSchema).optional(),
+    metadata: jsonRecordSchema.optional(),
+    providerMetadata: jsonRecordSchema.optional(),
+  })
+  .passthrough();
+const mastraDBMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(['system', 'user', 'assistant', 'signal']),
+  createdAt: z.union([z.string(), z.date()]),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  type: z.string().optional(),
+  content: mastraDBMessageContentSchema,
+});
+
+const messageInputSchema = z.union([modelMessageSchema, uiMessageSchema, mastraDBMessageSchema]);
+const messageListInputSchema = z.union([
+  z.string(),
+  z.array(z.string()),
+  messageInputSchema,
+  z.array(messageInputSchema),
+]);
+
+const signalAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]),
+);
+
+const baseSignalSchema = z.object({
+  id: z.string().optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+  metadata: jsonRecordSchema.optional(),
+  attributes: signalAttributesSchema.optional(),
+});
+
+const userMessageSignalSchema = baseSignalSchema.extend({
+  type: z.literal('user-message'),
+  contents: messageListInputSchema,
+});
+
+const contextSignalSchema = baseSignalSchema.extend({
+  type: z.string().refine(type => type !== 'user-message', {
+    message: 'non-user-message signals must not use type "user-message"',
+  }),
+  contents: z.string(),
+});
+
+const agentSignalSchema = z.union([userMessageSignalSchema, contextSignalSchema]);
+
 // Path parameter schemas
 export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
@@ -512,6 +659,43 @@ export const enhanceInstructionsResponseSchema = z.object({
 export const observeAgentBodySchema = z.object({
   runId: z.string().describe('The run ID to observe/reconnect to'),
   offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+});
+
+const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
+const signalIdleBehaviorSchema = z.enum(['wake', 'persist', 'discard']);
+
+const sendAgentSignalBaseBodySchema = z.object({
+  signal: agentSignalSchema,
+  ifActive: z
+    .object({
+      behavior: signalActiveBehaviorSchema.optional(),
+    })
+    .optional(),
+});
+
+export const sendAgentSignalBodySchema = z.union([
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string(),
+    resourceId: z.string().optional(),
+    threadId: z.string().optional(),
+    ifIdle: z.undefined().optional(),
+  }),
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string().optional(),
+    resourceId: z.string(),
+    threadId: z.string(),
+    ifIdle: z
+      .object({
+        behavior: signalIdleBehaviorSchema.optional(),
+        streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+      })
+      .optional(),
+  }),
+]);
+
+export const subscribeAgentThreadBodySchema = z.object({
+  resourceId: z.string().optional(),
+  threadId: z.string(),
 });
 
 /**

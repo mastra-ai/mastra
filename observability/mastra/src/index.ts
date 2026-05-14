@@ -22,5 +22,9 @@ export * from './exporters';
 export * from './span_processors';
 export * from './model-tracing';
 
+// Feature flags — see ./features.ts for the safe access pattern when the
+// dependency may be older than this export.
+export * from './features';
+
 // Export tracing options builder utilities
 export * from './tracing-options';
