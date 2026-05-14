@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.34.0-alpha.2
+
+### Patch Changes
+
+- Fixed listMessages perPage=0 behavior in the in-memory store to match other adapters. ([#16602](https://github.com/mastra-ai/mastra/pull/16602))
+
 ## 1.34.0-alpha.1
 
 ### Minor Changes
