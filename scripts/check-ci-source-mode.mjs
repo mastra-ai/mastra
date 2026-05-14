@@ -6,10 +6,10 @@ const checkedWorkflows = [
   '.github/workflows/prebuild.yml',
   '.github/workflows/test-suite.yml',
   '.github/workflows/vitest-all.yml',
-  '.github/workflows/secrets.e2e.yml',
-  '.github/workflows/secrets.test-memory.yml',
-  '.github/workflows/secrets.test-combined-stores.yml',
-  '.github/workflows/secrets.test-workspaces.yml',
+  // Secret-bearing workflow_run jobs intentionally keep their existing build
+  // steps. Running source-mode edits in those privileged workflows triggers
+  // CodeQL's untrusted-checkout protection because they execute PR code with
+  // secrets available.
   '.github/workflows/test-workspaces.yml',
 ];
 
