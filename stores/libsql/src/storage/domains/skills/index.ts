@@ -7,7 +7,7 @@ import {
   calculatePagination,
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
-  TABLE_STARS,
+  TABLE_FAVORITES,
   SKILLS_SCHEMA,
   SKILL_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
@@ -68,7 +68,7 @@ export class SkillsLibSQL extends SkillsStorage {
     await this.#db.alterTable({
       tableName: TABLE_SKILLS,
       schema: SKILLS_SCHEMA,
-      ifNotExists: ['visibility', 'starCount'],
+      ifNotExists: ['visibility', 'favoriteCount'],
     });
 
     await this.#db.alterTable({
@@ -129,7 +129,7 @@ export class SkillsLibSQL extends SkillsStorage {
           activeVersionId: null,
           authorId: skill.authorId ?? null,
           visibility: visibility ?? null,
-          starCount: 0,
+          favoriteCount: 0,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
         },
@@ -322,8 +322,8 @@ export class SkillsLibSQL extends SkillsStorage {
         visibility,
         status,
         entityIds,
-        pinStarredFor,
-        starredOnly,
+        pinFavoritedFor,
+        favoritedOnly,
       } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -365,20 +365,20 @@ export class SkillsLibSQL extends SkillsStorage {
       // Note: metadata filter is ignored for skills since the entity table doesn't have a metadata column.
       // Metadata lives on the version table.
 
-      // Optional LEFT JOIN on stars for starred-first ordering / starredOnly filter.
-      const joinUserId = pinStarredFor;
+      // Optional LEFT JOIN on favorites for favorited-first ordering / favoritedOnly filter.
+      const joinUserId = pinFavoritedFor;
       const useJoin = Boolean(joinUserId);
 
       let joinClause = '';
       const joinParams: InValue[] = [];
       if (useJoin && joinUserId) {
-        joinClause = `LEFT JOIN "${TABLE_STARS}" st ON st."entityType" = 'skill' AND st."entityId" = s_e.id AND st."userId" = ?`;
+        joinClause = `LEFT JOIN "${TABLE_FAVORITES}" st ON st."entityType" = 'skill' AND st."entityId" = s_e.id AND st."userId" = ?`;
         joinParams.push(joinUserId);
-        if (starredOnly) {
+        if (favoritedOnly) {
           conditions.push('st."userId" IS NOT NULL');
         }
-      } else if (starredOnly) {
-        // Defensive: starredOnly with no userId can never match a real row.
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
         conditions.push('1=0');
       }
 
@@ -682,7 +682,7 @@ export class SkillsLibSQL extends SkillsStorage {
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
       visibility: (row.visibility as StorageSkillType['visibility']) ?? undefined,
-      starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };

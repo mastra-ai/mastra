@@ -466,10 +466,10 @@ export interface StorageAgentType {
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   /**
-   * Denormalized count of stars on this agent. Maintained by the stars
+   * Denormalized count of favorites on this agent. Maintained by the favorites
    * storage domain. Optional; treat undefined as 0 for legacy rows.
    */
-  starCount?: number;
+  favoriteCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -556,24 +556,24 @@ export type StorageListAgentsInput = {
    */
   status?: 'draft' | 'published' | 'archived';
   /**
-   * Restrict results to this set of agent IDs. Used by the stars feature
-   * to fetch a specific subset of starred agents. When provided as an
+   * Restrict results to this set of agent IDs. Used by the favorites feature
+   * to fetch a specific subset of favorited agents. When provided as an
    * empty array, the result is empty.
    */
   entityIds?: string[];
   /**
-   * When set, agents starred by this user are returned first, ordered
+   * When set, agents favorited by this user are returned first, ordered
    * by `(is_starred DESC, <existing orderBy>, id ASC)` over the full
    * candidate set before pagination. Implementations that don't support
-   * starred-first sort treat this as undefined.
+   * favorited-first sort treat this as undefined.
    */
-  pinStarredFor?: string;
+  pinFavoritedFor?: string;
   /**
-   * When true, only agents starred by `pinStarredFor` are returned.
-   * Requires `pinStarredFor` to be set. SQL backends collapse this into
-   * the same JOIN used for starred-first sort.
+   * When true, only agents favorited by `pinFavoritedFor` are returned.
+   * Requires `pinFavoritedFor` to be set. SQL backends collapse this into
+   * the same JOIN used for favorited-first sort.
    */
-  starredOnly?: boolean;
+  favoritedOnly?: boolean;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
@@ -1932,10 +1932,10 @@ export interface StorageSkillType {
    */
   visibility?: StorageVisibility;
   /**
-   * Denormalized count of stars on this skill. Maintained by the stars
+   * Denormalized count of favorites on this skill. Maintained by the favorites
    * storage domain. Optional; treat undefined as 0 for legacy rows.
    */
-  starCount?: number;
+  favoriteCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2008,24 +2008,24 @@ export type StorageListSkillsInput = {
    */
   metadata?: Record<string, unknown>;
   /**
-   * Restrict results to this set of skill IDs. Used by the stars feature
-   * to fetch a specific subset of starred skills. When provided as an
+   * Restrict results to this set of skill IDs. Used by the favorites feature
+   * to fetch a specific subset of favorited skills. When provided as an
    * empty array, the result is empty.
    */
   entityIds?: string[];
   /**
-   * When set, skills starred by this user are returned first, ordered
+   * When set, skills favorited by this user are returned first, ordered
    * by `(is_starred DESC, <existing orderBy>, id ASC)` over the full
    * candidate set before pagination. Implementations that don't support
-   * starred-first sort treat this as undefined.
+   * favorited-first sort treat this as undefined.
    */
-  pinStarredFor?: string;
+  pinFavoritedFor?: string;
   /**
-   * When true, only skills starred by `pinStarredFor` are returned.
-   * Requires `pinStarredFor` to be set. SQL backends collapse this into
-   * the same JOIN used for starred-first sort.
+   * When true, only skills favorited by `pinFavoritedFor` are returned.
+   * Requires `pinFavoritedFor` to be set. SQL backends collapse this into
+   * the same JOIN used for favorited-first sort.
    */
-  starredOnly?: boolean;
+  favoritedOnly?: boolean;
 };
 
 /** Paginated list output for thin skill records */
@@ -2624,60 +2624,60 @@ export interface ExperimentReviewCounts {
 }
 
 // ============================================
-// Stars Storage Types
+// Favorites Storage Types
 // ============================================
 
 /**
- * Entity types that can be starred.
+ * Entity types that can be favorited.
  * Currently agents and skills; extend here when other entities opt in.
  */
-export type StorageStarEntityType = 'agent' | 'skill';
+export type StorageFavoriteEntityType = 'agent' | 'skill';
 
-export const STORAGE_STAR_ENTITY_TYPES = ['agent', 'skill'] as const satisfies readonly StorageStarEntityType[];
+export const STORAGE_STAR_ENTITY_TYPES = ['agent', 'skill'] as const satisfies readonly StorageFavoriteEntityType[];
 
 /**
- * A single star row: one user starring one entity. Composite primary key is
- * `(userId, entityType, entityId)`. Idempotent — re-starring is a no-op.
+ * A single favorite row: one user favoriting one entity. Composite primary key is
+ * `(userId, entityType, entityId)`. Idempotent — re-favoriting is a no-op.
  */
-export interface StorageStarType {
+export interface StorageFavoriteType {
   /** Caller identifier (matches authorId conventions used elsewhere). */
   userId: string;
-  /** Type of entity being starred. */
-  entityType: StorageStarEntityType;
-  /** ID of the entity being starred. */
+  /** Type of entity being favorited. */
+  entityType: StorageFavoriteEntityType;
+  /** ID of the entity being favorited. */
   entityId: string;
-  /** Timestamp the star was created. */
+  /** Timestamp the favorite was created. */
   createdAt: Date;
 }
 
-/** Identifier for a star row, used by lookup and delete operations. */
-export type StorageStarKey = {
+/** Identifier for a favorite row, used by lookup and delete operations. */
+export type StorageFavoriteKey = {
   userId: string;
-  entityType: StorageStarEntityType;
+  entityType: StorageFavoriteEntityType;
   entityId: string;
 };
 
 /**
- * Input to look up which entities in a candidate set are starred by a given
+ * Input to look up which entities in a candidate set are favorited by a given
  * user. Used to annotate list responses without N+1 queries.
  */
-export type StorageIsStarredBatchInput = {
+export type StorageIsFavoritedBatchInput = {
   userId: string;
-  entityType: StorageStarEntityType;
+  entityType: StorageFavoriteEntityType;
   entityIds: string[];
 };
 
-/** Input to list all entity IDs starred by a given user, optionally scoped by entity type. */
-export type StorageListStarsInput = {
+/** Input to list all entity IDs favorited by a given user, optionally scoped by entity type. */
+export type StorageListFavoritesInput = {
   userId: string;
-  entityType: StorageStarEntityType;
+  entityType: StorageFavoriteEntityType;
 };
 
 /**
- * Input to remove all stars for a given entity. Called by hard-delete handlers
- * so star rows do not orphan the deleted entity.
+ * Input to remove all favorites for a given entity. Called by hard-delete handlers
+ * so favorite rows do not orphan the deleted entity.
  */
-export type StorageDeleteStarsForEntityInput = {
-  entityType: StorageStarEntityType;
+export type StorageDeleteFavoritesForEntityInput = {
+  entityType: StorageFavoriteEntityType;
   entityId: string;
 };

@@ -1,104 +1,104 @@
-import type { AgentsStorage, MastraStorage, SkillsStorage, StarsStorage } from '@mastra/core/storage';
+import type { AgentsStorage, MastraStorage, SkillsStorage, FavoritesStorage } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSampleAgent, createSampleSkill } from './data';
 
-export function createStarsTests({ storage }: { storage: MastraStorage }) {
-  const describeStars = storage.stores?.stars ? describe : describe.skip;
+export function createFavoritesTests({ storage }: { storage: MastraStorage }) {
+  const describeFavorites = storage.stores?.favorites ? describe : describe.skip;
 
-  let starsStorage: StarsStorage;
+  let favoritesStorage: FavoritesStorage;
   let agentsStorage: AgentsStorage;
   let skillsStorage: SkillsStorage;
 
-  describeStars('Stars Storage', () => {
+  describeFavorites('Favorites Storage', () => {
     beforeAll(async () => {
-      const stars = await storage.getStore('stars');
+      const favorites = await storage.getStore('favorites');
       const agents = await storage.getStore('agents');
       const skills = await storage.getStore('skills');
-      if (!stars) throw new Error('Stars storage not found');
+      if (!favorites) throw new Error('Favorites storage not found');
       if (!agents) throw new Error('Agents storage not found');
       if (!skills) throw new Error('Skills storage not found');
-      starsStorage = stars;
+      favoritesStorage = favorites;
       agentsStorage = agents;
       skillsStorage = skills;
     });
 
     beforeEach(async () => {
-      await starsStorage.dangerouslyClearAll();
+      await favoritesStorage.dangerouslyClearAll();
       await agentsStorage.dangerouslyClearAll();
       await skillsStorage.dangerouslyClearAll();
     });
 
-    describe('star / unstar', () => {
-      it('starring an agent increments starCount and is idempotent', async () => {
+    describe('favorite / unfavorite', () => {
+      it('favoriting an agent increments favoriteCount and is idempotent', async () => {
         const agent = createSampleAgent();
         await agentsStorage.create({ agent });
 
-        const first = await starsStorage.star({
+        const first = await favoritesStorage.favorite({
           userId: 'u1',
           entityType: 'agent',
           entityId: agent.id,
         });
-        expect(first).toEqual({ starred: true, starCount: 1 });
+        expect(first).toEqual({ favorited: true, favoriteCount: 1 });
 
-        const second = await starsStorage.star({
+        const second = await favoritesStorage.favorite({
           userId: 'u1',
           entityType: 'agent',
           entityId: agent.id,
         });
-        expect(second).toEqual({ starred: true, starCount: 1 });
+        expect(second).toEqual({ favorited: true, favoriteCount: 1 });
 
         const stored = await agentsStorage.getById(agent.id);
-        expect(stored?.starCount).toBe(1);
+        expect(stored?.favoriteCount).toBe(1);
       });
 
-      it('starring the same entity from two users reaches starCount=2', async () => {
+      it('favoriting the same entity from two users reaches favoriteCount=2', async () => {
         const agent = createSampleAgent();
         await agentsStorage.create({ agent });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: agent.id });
-        const result = await starsStorage.star({
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: agent.id });
+        const result = await favoritesStorage.favorite({
           userId: 'u2',
           entityType: 'agent',
           entityId: agent.id,
         });
 
-        expect(result).toEqual({ starred: true, starCount: 2 });
+        expect(result).toEqual({ favorited: true, favoriteCount: 2 });
       });
 
-      it('unstar decrements counter and is idempotent', async () => {
+      it('unfavorite decrements counter and is idempotent', async () => {
         const agent = createSampleAgent();
         await agentsStorage.create({ agent });
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: agent.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: agent.id });
 
-        const first = await starsStorage.unstar({
+        const first = await favoritesStorage.unfavorite({
           userId: 'u1',
           entityType: 'agent',
           entityId: agent.id,
         });
-        expect(first).toEqual({ starred: false, starCount: 0 });
+        expect(first).toEqual({ favorited: false, favoriteCount: 0 });
 
-        const second = await starsStorage.unstar({
+        const second = await favoritesStorage.unfavorite({
           userId: 'u1',
           entityType: 'agent',
           entityId: agent.id,
         });
-        expect(second).toEqual({ starred: false, starCount: 0 });
+        expect(second).toEqual({ favorited: false, favoriteCount: 0 });
       });
 
-      it('unstar clamps starCount at 0 when never starred', async () => {
+      it('unfavorite clamps favoriteCount at 0 when never favorited', async () => {
         const agent = createSampleAgent();
         await agentsStorage.create({ agent });
 
-        const result = await starsStorage.unstar({
+        const result = await favoritesStorage.unfavorite({
           userId: 'u1',
           entityType: 'agent',
           entityId: agent.id,
         });
-        expect(result.starCount).toBe(0);
+        expect(result.favoriteCount).toBe(0);
       });
 
-      it('throws when starring a non-existent entity', async () => {
-        await expect(starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: 'missing' })).rejects.toThrow();
+      it('throws when favoriting a non-existent entity', async () => {
+        await expect(favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: 'missing' })).rejects.toThrow();
       });
 
       it('separates agent and skill counters even when ids collide', async () => {
@@ -106,32 +106,32 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent: createSampleAgent({ id: sharedId }) });
         await skillsStorage.create({ skill: createSampleSkill({ id: sharedId }) });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: sharedId });
-        const skillResult = await starsStorage.star({
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: sharedId });
+        const skillResult = await favoritesStorage.favorite({
           userId: 'u1',
           entityType: 'skill',
           entityId: sharedId,
         });
-        expect(skillResult.starCount).toBe(1);
+        expect(skillResult.favoriteCount).toBe(1);
 
         const storedAgent = await agentsStorage.getById(sharedId);
         const storedSkill = await skillsStorage.getById(sharedId);
-        expect(storedAgent?.starCount).toBe(1);
-        expect(storedSkill?.starCount).toBe(1);
+        expect(storedAgent?.favoriteCount).toBe(1);
+        expect(storedSkill?.favoriteCount).toBe(1);
       });
     });
 
-    describe('isStarred / isStarredBatch', () => {
-      it('reports starred state per user', async () => {
+    describe('isFavorited / isFavoritedBatch', () => {
+      it('reports favorited state per user', async () => {
         const agent = createSampleAgent();
         await agentsStorage.create({ agent });
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: agent.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: agent.id });
 
-        expect(await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(true);
-        expect(await starsStorage.isStarred({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
+        expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(true);
+        expect(await favoritesStorage.isFavorited({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
       });
 
-      it('isStarredBatch returns only the starred subset', async () => {
+      it('isFavoritedBatch returns only the favorited subset', async () => {
         const a1 = createSampleAgent();
         const a2 = createSampleAgent();
         const a3 = createSampleAgent();
@@ -139,10 +139,10 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent: a2 });
         await agentsStorage.create({ agent: a3 });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a1.id });
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a3.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a1.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a3.id });
 
-        const result = await starsStorage.isStarredBatch({
+        const result = await favoritesStorage.isFavoritedBatch({
           userId: 'u1',
           entityType: 'agent',
           entityIds: [a1.id, a2.id, a3.id, 'missing'],
@@ -151,8 +151,8 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         expect(result).toEqual(new Set([a1.id, a3.id]));
       });
 
-      it('isStarredBatch returns empty set for empty input', async () => {
-        const result = await starsStorage.isStarredBatch({
+      it('isFavoritedBatch returns empty set for empty input', async () => {
+        const result = await favoritesStorage.isFavoritedBatch({
           userId: 'u1',
           entityType: 'agent',
           entityIds: [],
@@ -161,7 +161,7 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
       });
     });
 
-    describe('listStarredIds', () => {
+    describe('listFavoritedIds', () => {
       it('returns only the caller’s entity IDs scoped by entity type', async () => {
         const a1 = createSampleAgent();
         const a2 = createSampleAgent();
@@ -170,13 +170,13 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent: a2 });
         await skillsStorage.create({ skill: s1 });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a1.id });
-        await starsStorage.star({ userId: 'u1', entityType: 'skill', entityId: s1.id });
-        await starsStorage.star({ userId: 'u2', entityType: 'agent', entityId: a2.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a1.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'skill', entityId: s1.id });
+        await favoritesStorage.favorite({ userId: 'u2', entityType: 'agent', entityId: a2.id });
 
-        const u1Agents = await starsStorage.listStarredIds({ userId: 'u1', entityType: 'agent' });
-        const u1Skills = await starsStorage.listStarredIds({ userId: 'u1', entityType: 'skill' });
-        const u2Agents = await starsStorage.listStarredIds({ userId: 'u2', entityType: 'agent' });
+        const u1Agents = await favoritesStorage.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+        const u1Skills = await favoritesStorage.listFavoritedIds({ userId: 'u1', entityType: 'skill' });
+        const u2Agents = await favoritesStorage.listFavoritedIds({ userId: 'u2', entityType: 'agent' });
 
         expect(u1Agents.sort()).toEqual([a1.id]);
         expect(u1Skills.sort()).toEqual([s1.id]);
@@ -184,39 +184,39 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
       });
     });
 
-    describe('deleteStarsForEntity (cascade)', () => {
-      it('removes all star rows for the entity', async () => {
+    describe('deleteFavoritesForEntity (cascade)', () => {
+      it('removes all favorite rows for the entity', async () => {
         const agent = createSampleAgent();
         await agentsStorage.create({ agent });
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: agent.id });
-        await starsStorage.star({ userId: 'u2', entityType: 'agent', entityId: agent.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: agent.id });
+        await favoritesStorage.favorite({ userId: 'u2', entityType: 'agent', entityId: agent.id });
 
-        const removed = await starsStorage.deleteStarsForEntity({
+        const removed = await favoritesStorage.deleteFavoritesForEntity({
           entityType: 'agent',
           entityId: agent.id,
         });
         expect(removed).toBe(2);
 
-        expect(await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(false);
-        expect(await starsStorage.isStarred({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
+        expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(false);
+        expect(await favoritesStorage.isFavorited({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
       });
 
-      it('does not touch stars for other entities', async () => {
+      it('does not touch favorites for other entities', async () => {
         const a1 = createSampleAgent();
         const a2 = createSampleAgent();
         await agentsStorage.create({ agent: a1 });
         await agentsStorage.create({ agent: a2 });
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a1.id });
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a2.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a1.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a2.id });
 
-        await starsStorage.deleteStarsForEntity({ entityType: 'agent', entityId: a1.id });
+        await favoritesStorage.deleteFavoritesForEntity({ entityType: 'agent', entityId: a1.id });
 
-        expect(await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: a2.id })).toBe(true);
+        expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: a2.id })).toBe(true);
       });
     });
 
     describe('agents.list integration', () => {
-      it('starredOnly + pinStarredFor returns only the user’s stars', async () => {
+      it('favoritedOnly + pinFavoritedFor returns only the user’s favorites', async () => {
         const a1 = createSampleAgent();
         const a2 = createSampleAgent();
         const a3 = createSampleAgent();
@@ -224,12 +224,12 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent: a2 });
         await agentsStorage.create({ agent: a3 });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a1.id });
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a3.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a1.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a3.id });
 
         const result = await agentsStorage.list({
-          starredOnly: true,
-          pinStarredFor: 'u1',
+          favoritedOnly: true,
+          pinFavoritedFor: 'u1',
           page: 0,
           perPage: 50,
         });
@@ -238,7 +238,7 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         expect(result.total).toBe(2);
       });
 
-      it('pinStarredFor places starred agents first', async () => {
+      it('pinFavoritedFor places favorited agents first', async () => {
         const a1 = createSampleAgent();
         const a2 = createSampleAgent();
         const a3 = createSampleAgent();
@@ -246,10 +246,10 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent: a2 });
         await agentsStorage.create({ agent: a3 });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: a2.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: a2.id });
 
         const result = await agentsStorage.list({
-          pinStarredFor: 'u1',
+          pinFavoritedFor: 'u1',
           page: 0,
           perPage: 50,
         });
@@ -285,17 +285,17 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
     });
 
     describe('skills.list integration', () => {
-      it('starredOnly + pinStarredFor returns only the user’s stars', async () => {
+      it('favoritedOnly + pinFavoritedFor returns only the user’s favorites', async () => {
         const s1 = createSampleSkill();
         const s2 = createSampleSkill();
         await skillsStorage.create({ skill: s1 });
         await skillsStorage.create({ skill: s2 });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'skill', entityId: s1.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'skill', entityId: s1.id });
 
         const result = await skillsStorage.list({
-          starredOnly: true,
-          pinStarredFor: 'u1',
+          favoritedOnly: true,
+          pinFavoritedFor: 'u1',
           page: 0,
           perPage: 50,
         });
@@ -304,16 +304,16 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         expect(result.total).toBe(1);
       });
 
-      it('pinStarredFor places starred skills first', async () => {
+      it('pinFavoritedFor places favorited skills first', async () => {
         const s1 = createSampleSkill();
         const s2 = createSampleSkill();
         await skillsStorage.create({ skill: s1 });
         await skillsStorage.create({ skill: s2 });
 
-        await starsStorage.star({ userId: 'u1', entityType: 'skill', entityId: s2.id });
+        await favoritesStorage.favorite({ userId: 'u1', entityType: 'skill', entityId: s2.id });
 
         const result = await skillsStorage.list({
-          pinStarredFor: 'u1',
+          pinFavoritedFor: 'u1',
           page: 0,
           perPage: 50,
         });

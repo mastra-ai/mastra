@@ -1,34 +1,34 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  StarsStorage,
+  FavoritesStorage,
   createStorageErrorId,
   TABLE_AGENTS,
   TABLE_SKILLS,
-  TABLE_STARS,
-  STARS_SCHEMA,
+  TABLE_FAVORITES,
+  FAVORITES_SCHEMA,
 } from '@mastra/core/storage';
 import type {
-  StorageDeleteStarsForEntityInput,
-  StorageIsStarredBatchInput,
-  StorageListStarsInput,
-  StorageStarEntityType,
-  StorageStarKey,
+  StorageDeleteFavoritesForEntityInput,
+  StorageIsFavoritedBatchInput,
+  StorageListFavoritesInput,
+  StorageFavoriteEntityType,
+  StorageFavoriteKey,
 } from '@mastra/core/storage';
-import type { StarToggleResult } from '@mastra/core/storage/domains/stars';
+import type { FavoriteToggleResult } from '@mastra/core/storage/domains/favorites';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 
 /**
- * Maps a star entity type to its parent entity table.
+ * Maps a favorite entity type to its parent entity table.
  */
-const ENTITY_TABLE: Record<StorageStarEntityType, typeof TABLE_AGENTS | typeof TABLE_SKILLS> = {
+const ENTITY_TABLE: Record<StorageFavoriteEntityType, typeof TABLE_AGENTS | typeof TABLE_SKILLS> = {
   agent: TABLE_AGENTS,
   skill: TABLE_SKILLS,
 };
 
-export class StarsLibSQL extends StarsStorage {
+export class FavoritesLibSQL extends FavoritesStorage {
   #db: LibSQLDB;
   #client: Client;
 
@@ -41,22 +41,22 @@ export class StarsLibSQL extends StarsStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({
-      tableName: TABLE_STARS,
-      schema: STARS_SCHEMA,
+      tableName: TABLE_FAVORITES,
+      schema: FAVORITES_SCHEMA,
       compositePrimaryKey: ['userId', 'entityType', 'entityId'],
     });
 
     // Lookup index for entity-scoped queries (cascade delete, count rebuild).
     await this.#client.execute(
-      `CREATE INDEX IF NOT EXISTS idx_stars_entity ON "${TABLE_STARS}" ("entityType", "entityId")`,
+      `CREATE INDEX IF NOT EXISTS idx_favorites_entity ON "${TABLE_FAVORITES}" ("entityType", "entityId")`,
     );
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#db.deleteData({ tableName: TABLE_STARS });
+    await this.#db.deleteData({ tableName: TABLE_FAVORITES });
   }
 
-  async star(input: StorageStarKey): Promise<StarToggleResult> {
+  async favorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const { userId, entityType, entityId } = input;
     const entityTable = ENTITY_TABLE[entityType];
 
@@ -65,7 +65,7 @@ export class StarsLibSQL extends StarsStorage {
       try {
         // Verify entity exists; throw before any mutation if not.
         const entityRow = await tx.execute({
-          sql: `SELECT "starCount" FROM "${entityTable}" WHERE id = ?`,
+          sql: `SELECT "favoriteCount" FROM "${entityTable}" WHERE id = ?`,
           args: [entityId],
         });
         if (!entityRow.rows?.[0]) {
@@ -80,26 +80,26 @@ export class StarsLibSQL extends StarsStorage {
 
         // Idempotent insert.
         const inserted = await tx.execute({
-          sql: `INSERT OR IGNORE INTO "${TABLE_STARS}" ("userId", "entityType", "entityId", "createdAt") VALUES (?, ?, ?, ?)`,
+          sql: `INSERT OR IGNORE INTO "${TABLE_FAVORITES}" ("userId", "entityType", "entityId", "createdAt") VALUES (?, ?, ?, ?)`,
           args: [userId, entityType, entityId, new Date().toISOString()],
         });
 
         // Only bump counter when we actually inserted a new row.
         if ((inserted.rowsAffected ?? 0) > 0) {
           await tx.execute({
-            sql: `UPDATE "${entityTable}" SET "starCount" = COALESCE("starCount", 0) + 1 WHERE id = ?`,
+            sql: `UPDATE "${entityTable}" SET "favoriteCount" = COALESCE("favoriteCount", 0) + 1 WHERE id = ?`,
             args: [entityId],
           });
         }
 
         const after = await tx.execute({
-          sql: `SELECT "starCount" FROM "${entityTable}" WHERE id = ?`,
+          sql: `SELECT "favoriteCount" FROM "${entityTable}" WHERE id = ?`,
           args: [entityId],
         });
-        const starCount = Number(after.rows?.[0]?.starCount ?? 0);
+        const favoriteCount = Number(after.rows?.[0]?.favoriteCount ?? 0);
 
         await tx.commit();
-        return { starred: true, starCount };
+        return { favorited: true, favoriteCount };
       } catch (error) {
         if (!tx.closed) {
           await tx.rollback();
@@ -120,7 +120,7 @@ export class StarsLibSQL extends StarsStorage {
     }
   }
 
-  async unstar(input: StorageStarKey): Promise<StarToggleResult> {
+  async unfavorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const { userId, entityType, entityId } = input;
     const entityTable = ENTITY_TABLE[entityType];
 
@@ -128,7 +128,7 @@ export class StarsLibSQL extends StarsStorage {
       const tx = await this.#client.transaction('write');
       try {
         const entityRow = await tx.execute({
-          sql: `SELECT "starCount" FROM "${entityTable}" WHERE id = ?`,
+          sql: `SELECT "favoriteCount" FROM "${entityTable}" WHERE id = ?`,
           args: [entityId],
         });
         if (!entityRow.rows?.[0]) {
@@ -142,26 +142,26 @@ export class StarsLibSQL extends StarsStorage {
         }
 
         const deleted = await tx.execute({
-          sql: `DELETE FROM "${TABLE_STARS}" WHERE "userId" = ? AND "entityType" = ? AND "entityId" = ?`,
+          sql: `DELETE FROM "${TABLE_FAVORITES}" WHERE "userId" = ? AND "entityType" = ? AND "entityId" = ?`,
           args: [userId, entityType, entityId],
         });
 
         // Only decrement when we actually removed a row, clamp at 0.
         if ((deleted.rowsAffected ?? 0) > 0) {
           await tx.execute({
-            sql: `UPDATE "${entityTable}" SET "starCount" = MAX(COALESCE("starCount", 0) - 1, 0) WHERE id = ?`,
+            sql: `UPDATE "${entityTable}" SET "favoriteCount" = MAX(COALESCE("favoriteCount", 0) - 1, 0) WHERE id = ?`,
             args: [entityId],
           });
         }
 
         const after = await tx.execute({
-          sql: `SELECT "starCount" FROM "${entityTable}" WHERE id = ?`,
+          sql: `SELECT "favoriteCount" FROM "${entityTable}" WHERE id = ?`,
           args: [entityId],
         });
-        const starCount = Number(after.rows?.[0]?.starCount ?? 0);
+        const favoriteCount = Number(after.rows?.[0]?.favoriteCount ?? 0);
 
         await tx.commit();
-        return { starred: false, starCount };
+        return { favorited: false, favoriteCount };
       } catch (error) {
         if (!tx.closed) {
           await tx.rollback();
@@ -182,10 +182,10 @@ export class StarsLibSQL extends StarsStorage {
     }
   }
 
-  async isStarred(input: StorageStarKey): Promise<boolean> {
+  async isFavorited(input: StorageFavoriteKey): Promise<boolean> {
     try {
       const result = await this.#client.execute({
-        sql: `SELECT 1 FROM "${TABLE_STARS}" WHERE "userId" = ? AND "entityType" = ? AND "entityId" = ? LIMIT 1`,
+        sql: `SELECT 1 FROM "${TABLE_FAVORITES}" WHERE "userId" = ? AND "entityType" = ? AND "entityId" = ? LIMIT 1`,
         args: [input.userId, input.entityType, input.entityId],
       });
       return (result.rows?.length ?? 0) > 0;
@@ -202,7 +202,7 @@ export class StarsLibSQL extends StarsStorage {
     }
   }
 
-  async isStarredBatch(input: StorageIsStarredBatchInput): Promise<Set<string>> {
+  async isFavoritedBatch(input: StorageIsFavoritedBatchInput): Promise<Set<string>> {
     const { userId, entityType, entityIds } = input;
     if (entityIds.length === 0) {
       return new Set();
@@ -212,7 +212,7 @@ export class StarsLibSQL extends StarsStorage {
       const placeholders = entityIds.map(() => '?').join(', ');
       const args: InValue[] = [userId, entityType, ...entityIds];
       const result = await this.#client.execute({
-        sql: `SELECT "entityId" FROM "${TABLE_STARS}" WHERE "userId" = ? AND "entityType" = ? AND "entityId" IN (${placeholders})`,
+        sql: `SELECT "entityId" FROM "${TABLE_FAVORITES}" WHERE "userId" = ? AND "entityType" = ? AND "entityId" IN (${placeholders})`,
         args,
       });
       const set = new Set<string>();
@@ -233,10 +233,10 @@ export class StarsLibSQL extends StarsStorage {
     }
   }
 
-  async listStarredIds(input: StorageListStarsInput): Promise<string[]> {
+  async listFavoritedIds(input: StorageListFavoritesInput): Promise<string[]> {
     try {
       const result = await this.#client.execute({
-        sql: `SELECT "entityId" FROM "${TABLE_STARS}" WHERE "userId" = ? AND "entityType" = ? ORDER BY "createdAt" DESC, "entityId" ASC`,
+        sql: `SELECT "entityId" FROM "${TABLE_FAVORITES}" WHERE "userId" = ? AND "entityType" = ? ORDER BY "createdAt" DESC, "entityId" ASC`,
         args: [input.userId, input.entityType],
       });
       return (result.rows ?? []).map(row => row.entityId as string);
@@ -253,10 +253,10 @@ export class StarsLibSQL extends StarsStorage {
     }
   }
 
-  async deleteStarsForEntity(input: StorageDeleteStarsForEntityInput): Promise<number> {
+  async deleteFavoritesForEntity(input: StorageDeleteFavoritesForEntityInput): Promise<number> {
     try {
       const result = await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_STARS}" WHERE "entityType" = ? AND "entityId" = ?`,
+        sql: `DELETE FROM "${TABLE_FAVORITES}" WHERE "entityType" = ? AND "entityId" = ?`,
         args: [input.entityType, input.entityId],
       });
       return Number(result.rowsAffected ?? 0);

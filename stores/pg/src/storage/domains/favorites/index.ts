@@ -1,38 +1,38 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  StarsStorage,
+  FavoritesStorage,
   createStorageErrorId,
   TABLE_AGENTS,
   TABLE_SKILLS,
-  TABLE_STARS,
+  TABLE_FAVORITES,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
-  StorageDeleteStarsForEntityInput,
-  StorageIsStarredBatchInput,
-  StorageListStarsInput,
-  StorageStarEntityType,
-  StorageStarKey,
+  StorageDeleteFavoritesForEntityInput,
+  StorageIsFavoritedBatchInput,
+  StorageListFavoritesInput,
+  StorageFavoriteEntityType,
+  StorageFavoriteKey,
 } from '@mastra/core/storage';
-import type { StarToggleResult } from '@mastra/core/storage/domains/stars';
+import type { FavoriteToggleResult } from '@mastra/core/storage/domains/favorites';
 
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
 /**
- * Maps a star entity type to its parent entity table.
+ * Maps a favorite entity type to its parent entity table.
  */
-const ENTITY_TABLE: Record<StorageStarEntityType, typeof TABLE_AGENTS | typeof TABLE_SKILLS> = {
+const ENTITY_TABLE: Record<StorageFavoriteEntityType, typeof TABLE_AGENTS | typeof TABLE_SKILLS> = {
   agent: TABLE_AGENTS,
   skill: TABLE_SKILLS,
 };
 
-export class StarsPG extends StarsStorage {
+export class FavoritesPG extends FavoritesStorage {
   #db: PgDB;
   #schema: string;
 
-  static readonly MANAGED_TABLES = [TABLE_STARS] as const;
+  static readonly MANAGED_TABLES = [TABLE_FAVORITES] as const;
 
   constructor(config: PgDomainConfig) {
     super();
@@ -43,7 +43,7 @@ export class StarsPG extends StarsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    for (const tableName of StarsPG.MANAGED_TABLES) {
+    for (const tableName of FavoritesPG.MANAGED_TABLES) {
       statements.push(
         generateTableSQL({
           tableName,
@@ -55,40 +55,40 @@ export class StarsPG extends StarsStorage {
       );
     }
     // Lookup index for entity-scoped queries — must mirror init().
-    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(schemaName) });
-    statements.push(`CREATE INDEX IF NOT EXISTS idx_stars_entity ON ${fullStarsTable} ("entityType", "entityId")`);
+    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(schemaName) });
+    statements.push(`CREATE INDEX IF NOT EXISTS idx_favorites_entity ON ${fullStarsTable} ("entityType", "entityId")`);
     return statements;
   }
 
   async init(): Promise<void> {
     await this.#db.createTable({
-      tableName: TABLE_STARS,
-      schema: TABLE_SCHEMAS[TABLE_STARS],
+      tableName: TABLE_FAVORITES,
+      schema: TABLE_SCHEMAS[TABLE_FAVORITES],
       compositePrimaryKey: ['userId', 'entityType', 'entityId'],
     });
 
     // Lookup index for entity-scoped queries (cascade delete, count rebuild).
-    const fullTableName = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+    const fullTableName = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     await this.#db.client.none(
-      `CREATE INDEX IF NOT EXISTS idx_stars_entity ON ${fullTableName} ("entityType", "entityId")`,
+      `CREATE INDEX IF NOT EXISTS idx_favorites_entity ON ${fullTableName} ("entityType", "entityId")`,
     );
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const fullTableName = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+    const fullTableName = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     await this.#db.client.none(`DELETE FROM ${fullTableName}`);
   }
 
-  async star(input: StorageStarKey): Promise<StarToggleResult> {
+  async favorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const { userId, entityType, entityId } = input;
     const entityTable = ENTITY_TABLE[entityType];
-    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     const fullEntityTable = getTableName({ indexName: entityTable, schemaName: getSchemaName(this.#schema) });
 
     try {
       return await this.#db.client.tx(async t => {
         // Verify entity exists; throw before any mutation if not.
-        const entityRow = await t.oneOrNone(`SELECT "starCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
+        const entityRow = await t.oneOrNone(`SELECT "favoriteCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
         if (!entityRow) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'STAR', 'ENTITY_NOT_FOUND'),
@@ -109,14 +109,15 @@ export class StarsPG extends StarsStorage {
         );
 
         if (inserted) {
-          await t.none(`UPDATE ${fullEntityTable} SET "starCount" = COALESCE("starCount", 0) + 1 WHERE id = $1`, [
-            entityId,
-          ]);
+          await t.none(
+            `UPDATE ${fullEntityTable} SET "favoriteCount" = COALESCE("favoriteCount", 0) + 1 WHERE id = $1`,
+            [entityId],
+          );
         }
 
-        const after = await t.one(`SELECT "starCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
-        const starCount = Number(after.starCount ?? 0);
-        return { starred: true, starCount };
+        const after = await t.one(`SELECT "favoriteCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
+        const favoriteCount = Number(after.favoriteCount ?? 0);
+        return { favorited: true, favoriteCount };
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -132,15 +133,15 @@ export class StarsPG extends StarsStorage {
     }
   }
 
-  async unstar(input: StorageStarKey): Promise<StarToggleResult> {
+  async unfavorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const { userId, entityType, entityId } = input;
     const entityTable = ENTITY_TABLE[entityType];
-    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     const fullEntityTable = getTableName({ indexName: entityTable, schemaName: getSchemaName(this.#schema) });
 
     try {
       return await this.#db.client.tx(async t => {
-        const entityRow = await t.oneOrNone(`SELECT "starCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
+        const entityRow = await t.oneOrNone(`SELECT "favoriteCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
         if (!entityRow) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'UNSTAR', 'ENTITY_NOT_FOUND'),
@@ -158,14 +159,14 @@ export class StarsPG extends StarsStorage {
 
         if (deleted) {
           await t.none(
-            `UPDATE ${fullEntityTable} SET "starCount" = GREATEST(COALESCE("starCount", 0) - 1, 0) WHERE id = $1`,
+            `UPDATE ${fullEntityTable} SET "favoriteCount" = GREATEST(COALESCE("favoriteCount", 0) - 1, 0) WHERE id = $1`,
             [entityId],
           );
         }
 
-        const after = await t.one(`SELECT "starCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
-        const starCount = Number(after.starCount ?? 0);
-        return { starred: false, starCount };
+        const after = await t.one(`SELECT "favoriteCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
+        const favoriteCount = Number(after.favoriteCount ?? 0);
+        return { favorited: false, favoriteCount };
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -181,8 +182,8 @@ export class StarsPG extends StarsStorage {
     }
   }
 
-  async isStarred(input: StorageStarKey): Promise<boolean> {
-    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+  async isFavorited(input: StorageFavoriteKey): Promise<boolean> {
+    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       const result = await this.#db.client.oneOrNone(
         `SELECT 1 FROM ${fullStarsTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" = $3 LIMIT 1`,
@@ -202,12 +203,12 @@ export class StarsPG extends StarsStorage {
     }
   }
 
-  async isStarredBatch(input: StorageIsStarredBatchInput): Promise<Set<string>> {
+  async isFavoritedBatch(input: StorageIsFavoritedBatchInput): Promise<Set<string>> {
     const { userId, entityType, entityIds } = input;
     if (entityIds.length === 0) {
       return new Set();
     }
-    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       const placeholders = entityIds.map((_, i) => `$${i + 3}`).join(', ');
       const rows = await this.#db.client.manyOrNone<{ entityId: string }>(
@@ -232,8 +233,8 @@ export class StarsPG extends StarsStorage {
     }
   }
 
-  async listStarredIds(input: StorageListStarsInput): Promise<string[]> {
-    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+  async listFavoritedIds(input: StorageListFavoritesInput): Promise<string[]> {
+    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       const rows = await this.#db.client.manyOrNone<{ entityId: string }>(
         `SELECT "entityId" FROM ${fullStarsTable} WHERE "userId" = $1 AND "entityType" = $2 ORDER BY "createdAt" DESC, "entityId" ASC`,
@@ -253,8 +254,8 @@ export class StarsPG extends StarsStorage {
     }
   }
 
-  async deleteStarsForEntity(input: StorageDeleteStarsForEntityInput): Promise<number> {
-    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+  async deleteFavoritesForEntity(input: StorageDeleteFavoritesForEntityInput): Promise<number> {
+    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       // Use a CTE so the server returns the count without materializing each
       // deleted row. For a hot cascade path this is meaningfully cheaper than

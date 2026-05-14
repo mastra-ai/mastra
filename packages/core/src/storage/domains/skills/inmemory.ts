@@ -58,7 +58,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       activeVersionId: undefined,
       authorId: skill.authorId,
       visibility,
-      starCount: 0,
+      favoriteCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -214,7 +214,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       visibility,
       metadata,
       entityIds,
-      pinStarredFor,
+      pinFavoritedFor,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -234,7 +234,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     // Get all skills and apply filters
     let configs = Array.from(this.db.skills.values());
 
-    // Restrict to a set of IDs (used by ?starredOnly=true).
+    // Restrict to a set of IDs (used by ?favoritedOnly=true).
     // An empty array means "no candidates" -> empty result.
     if (entityIds !== undefined) {
       if (entityIds.length === 0) {
@@ -274,8 +274,8 @@ export class InMemorySkillsStorage extends SkillsStorage {
       });
     }
 
-    // Sort filtered configs (with optional starred-first compound sort)
-    const starredIds = pinStarredFor ? this.collectStarredIdsFor(pinStarredFor) : undefined;
+    // Sort filtered configs (with optional favorited-first compound sort)
+    const starredIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
     const sortedConfigs = this.sortConfigs(configs, field, direction, starredIds);
 
     // Deep clone to avoid mutation
@@ -431,7 +431,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     starredIds?: Set<string>,
   ): StorageSkillType[] {
     return configs.sort((a, b) => {
-      // Compound sort: starred first, then existing orderBy, then id ASC for stable pagination.
+      // Compound sort: favorited first, then existing orderBy, then id ASC for stable pagination.
       if (starredIds) {
         const aStar = starredIds.has(a.id) ? 1 : 0;
         const bStar = starredIds.has(b.id) ? 1 : 0;
@@ -450,17 +450,17 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   /**
-   * Collect the set of skill IDs starred by the given user. Returns an empty
-   * Set when the stars domain is not wired or the user has no stars.
+   * Collect the set of skill IDs favorited by the given user. Returns an empty
+   * Set when the favorites domain is not wired or the user has no favorites.
    */
-  private collectStarredIdsFor(userId: string): Set<string> {
-    const starred = new Set<string>();
-    for (const row of this.db.stars.values()) {
+  private collectFavoritedIdsFor(userId: string): Set<string> {
+    const favorited = new Set<string>();
+    for (const row of this.db.favorites.values()) {
       if (row.userId === userId && row.entityType === 'skill') {
-        starred.add(row.entityId);
+        favorited.add(row.entityId);
       }
     }
-    return starred;
+    return favorited;
   }
 
   private sortVersions(

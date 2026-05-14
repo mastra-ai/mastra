@@ -7,7 +7,7 @@ import {
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
   TABLE_SCHEMAS,
-  TABLE_STARS,
+  TABLE_FAVORITES,
 } from '@mastra/core/storage';
 import type {
   StorageSkillType,
@@ -96,7 +96,7 @@ export class SkillsPG extends SkillsStorage {
     await this.#db.alterTable({
       tableName: TABLE_SKILLS,
       schema: TABLE_SCHEMAS[TABLE_SKILLS],
-      ifNotExists: ['visibility', 'starCount'],
+      ifNotExists: ['visibility', 'favoriteCount'],
     });
     await this.#db.alterTable({
       tableName: TABLE_SKILL_VERSIONS,
@@ -165,7 +165,7 @@ export class SkillsPG extends SkillsStorage {
       // 1. Create the thin skill record (no metadata on entity)
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
-          id, status, "activeVersionId", "authorId", visibility, "starCount",
+          id, status, "activeVersionId", "authorId", visibility, "favoriteCount",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [skill.id, 'draft', null, skill.authorId ?? null, visibility ?? null, 0, nowIso, nowIso, nowIso, nowIso],
@@ -189,7 +189,7 @@ export class SkillsPG extends SkillsStorage {
         activeVersionId: undefined,
         authorId: skill.authorId,
         visibility,
-        starCount: 0,
+        favoriteCount: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -396,8 +396,8 @@ export class SkillsPG extends SkillsStorage {
       visibility,
       status,
       entityIds,
-      pinStarredFor,
-      starredOnly,
+      pinFavoritedFor,
+      favoritedOnly,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -429,14 +429,14 @@ export class SkillsPG extends SkillsStorage {
       }
 
       const tableName = getTableName({ indexName: TABLE_SKILLS, schemaName: getSchemaName(this.#schema) });
-      const starsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+      const starsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
 
-      // Build WHERE conditions (referenced via alias `s` for skills, `sr` for stars).
+      // Build WHERE conditions (referenced via alias `s` for skills, `sr` for favorites).
       const conditions: string[] = [];
       const queryParams: any[] = [];
       let paramIdx = 1;
 
-      const joinUserId = pinStarredFor;
+      const joinUserId = pinFavoritedFor;
       const useJoin = Boolean(joinUserId);
       let joinSqlIdx: number | null = null;
       if (useJoin) {
@@ -464,10 +464,10 @@ export class SkillsPG extends SkillsStorage {
         queryParams.push(...entityIds);
       }
 
-      if (useJoin && starredOnly) {
+      if (useJoin && favoritedOnly) {
         conditions.push('sr."userId" IS NOT NULL');
-      } else if (starredOnly) {
-        // Defensive: starredOnly with no userId can never match a real row.
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
         conditions.push('1=0');
       }
 
@@ -496,7 +496,7 @@ export class SkillsPG extends SkillsStorage {
         };
       }
 
-      // Compose ORDER BY: starred-first when JOIN active, then existing field, then id ASC tie-break.
+      // Compose ORDER BY: favorited-first when JOIN active, then existing field, then id ASC tie-break.
       const orderByParts: string[] = [];
       if (useJoin) {
         orderByParts.push(`(sr."userId" IS NOT NULL) DESC`);
@@ -844,7 +844,7 @@ export class SkillsPG extends SkillsStorage {
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
       visibility: row.visibility as StorageSkillType['visibility'],
-      starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };

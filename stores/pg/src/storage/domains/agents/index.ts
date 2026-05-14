@@ -7,7 +7,7 @@ import {
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
   TABLE_SCHEMAS,
-  TABLE_STARS,
+  TABLE_FAVORITES,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -99,7 +99,7 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
-      ifNotExists: ['status', 'authorId', 'visibility', 'starCount'],
+      ifNotExists: ['status', 'authorId', 'visibility', 'favoriteCount'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
@@ -344,7 +344,7 @@ export class AgentsPG extends AgentsStorage {
       authorId: row.authorId as string | undefined,
       visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: parseJsonResilient(row.metadata, 'metadata'),
-      starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
@@ -388,7 +388,7 @@ export class AgentsPG extends AgentsStorage {
       // 1. Create the thin agent record with status='draft' and activeVersionId=null
       await this.#db.client.none(
         `INSERT INTO ${agentsTable} (
-          id, status, "authorId", visibility, metadata, "starCount",
+          id, status, "authorId", visibility, metadata, "favoriteCount",
           "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
@@ -429,7 +429,7 @@ export class AgentsPG extends AgentsStorage {
         authorId: agent.authorId,
         visibility: visibility ?? undefined,
         metadata: agent.metadata,
-        starCount: 0,
+        favoriteCount: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -584,8 +584,8 @@ export class AgentsPG extends AgentsStorage {
       status,
       visibility,
       entityIds,
-      pinStarredFor,
-      starredOnly,
+      pinFavoritedFor,
+      favoritedOnly,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -617,7 +617,7 @@ export class AgentsPG extends AgentsStorage {
       }
 
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-      const starsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+      const starsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
 
       // Build WHERE conditions (referenced via alias `a`).
       const conditions: string[] = [];
@@ -625,7 +625,7 @@ export class AgentsPG extends AgentsStorage {
       let paramIdx = 1;
 
       // JOIN params come first in the query, but we build WHERE first and prepend later.
-      const joinUserId = pinStarredFor;
+      const joinUserId = pinFavoritedFor;
       const useJoin = Boolean(joinUserId);
       let joinSqlIdx: number | null = null;
       if (useJoin) {
@@ -658,10 +658,10 @@ export class AgentsPG extends AgentsStorage {
         queryParams.push(...entityIds);
       }
 
-      if (useJoin && starredOnly) {
+      if (useJoin && favoritedOnly) {
         conditions.push('s."userId" IS NOT NULL');
-      } else if (starredOnly) {
-        // Defensive: starredOnly with no userId can never match a real row.
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
         conditions.push('1=0');
       }
 
@@ -690,7 +690,7 @@ export class AgentsPG extends AgentsStorage {
         };
       }
 
-      // Compose ORDER BY: starred-first when JOIN active, then existing field, then id ASC tie-break.
+      // Compose ORDER BY: favorited-first when JOIN active, then existing field, then id ASC tie-break.
       const orderByParts: string[] = [];
       if (useJoin) {
         orderByParts.push(`(s."userId" IS NOT NULL) DESC`);
