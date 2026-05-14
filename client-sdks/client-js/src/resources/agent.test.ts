@@ -34,6 +34,19 @@ describe('Agent signal routes', () => {
     },
   };
 
+  const createSseResponse = (chunks: any[]) =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          }
+          controller.close();
+        },
+      }),
+      { headers: { 'Content-Type': 'text/event-stream' } },
+    );
+
   it('sends run-targeted signals with active behavior unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
@@ -198,17 +211,9 @@ describe('Agent signal routes', () => {
         messages: { nonUser: assistantMessages },
       },
     };
-    const controllableStream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(toolCallChunk)}\n\n`));
-        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(finishChunk)}\n\n`));
-        controller.close();
-      },
-    });
-    const response = new Response(controllableStream, {
-      headers: { 'Content-Type': 'text/event-stream' },
-    });
-    agent['request'] = vi.fn().mockResolvedValue(response) as (typeof agent)['request'];
+    agent['request'] = vi
+      .fn()
+      .mockResolvedValue(createSseResponse([toolCallChunk, finishChunk])) as (typeof agent)['request'];
     const streamUntilIdleSpy = vi
       .spyOn(agent, 'streamUntilIdle')
       .mockResolvedValue({ body: { cancel: vi.fn() } } as never);
@@ -271,6 +276,282 @@ describe('Agent signal routes', () => {
     expect(continuationCall[1]?.memory).toEqual({ thread: 'thread-123', resource: 'resource-123' });
   });
 
+  it('executes multiple client tools after one tool-calls finish', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const assistantMessages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'firstTool', args: { value: 'one' } },
+          { type: 'tool-call', toolCallId: 'call-2', toolName: 'secondTool', args: { value: 'two' } },
+        ],
+      },
+    ];
+    const chunks = [
+      {
+        type: 'tool-call',
+        runId: 'run-multi',
+        payload: { toolCallId: 'call-1', toolName: 'firstTool', args: { value: 'one' } },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-multi',
+        payload: { toolCallId: 'call-2', toolName: 'secondTool', args: { value: 'two' } },
+      },
+      {
+        type: 'finish',
+        runId: 'run-multi',
+        payload: { stepResult: { reason: 'tool-calls' }, messages: { nonUser: assistantMessages } },
+      },
+    ];
+    agent['request'] = vi.fn().mockResolvedValue(createSseResponse(chunks)) as (typeof agent)['request'];
+    const streamUntilIdleSpy = vi
+      .spyOn(agent, 'streamUntilIdle')
+      .mockResolvedValue({ body: { cancel: vi.fn() } } as never);
+    const firstExecute = vi.fn(async () => ({ first: true }));
+    const secondExecute = vi.fn(async () => ({ second: true }));
+
+    const subscribed = await agent.subscribeToThread({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      clientTools: {
+        firstTool: { id: 'firstTool', description: 'first', inputSchema: z.object({}), execute: firstExecute },
+        secondTool: { id: 'secondTool', description: 'second', inputSchema: z.object({}), execute: secondExecute },
+      },
+    } as SubscribeAgentThreadParams);
+
+    const received: any[] = [];
+    await subscribed.processDataStream({ onChunk: async chunk => void received.push(chunk) });
+
+    expect(firstExecute).toHaveBeenCalledTimes(1);
+    expect(secondExecute).toHaveBeenCalledTimes(1);
+    expect(received.filter(chunk => chunk.type === 'tool-result')).toHaveLength(2);
+    const [continuationMessages] = streamUntilIdleSpy.mock.calls.at(-1) as [any[]];
+    expect(continuationMessages).toEqual([
+      ...assistantMessages,
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'firstTool', result: { first: true } }],
+      },
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'call-2', toolName: 'secondTool', result: { second: true } }],
+      },
+    ]);
+  });
+
+  it('ignores unknown tools without starting a continuation', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    agent['request'] = vi.fn().mockResolvedValue(
+      createSseResponse([
+        {
+          type: 'tool-call',
+          runId: 'run-unknown',
+          payload: { toolCallId: 'call-unknown', toolName: 'serverOnlyTool', args: {} },
+        },
+        {
+          type: 'finish',
+          runId: 'run-unknown',
+          payload: {
+            stepResult: { reason: 'tool-calls' },
+            messages: {
+              nonUser: [
+                {
+                  role: 'assistant',
+                  content: [{ type: 'tool-call', toolCallId: 'call-unknown', toolName: 'serverOnlyTool', args: {} }],
+                },
+              ],
+            },
+          },
+        },
+      ]),
+    ) as (typeof agent)['request'];
+    const streamUntilIdleSpy = vi
+      .spyOn(agent, 'streamUntilIdle')
+      .mockResolvedValue({ body: { cancel: vi.fn() } } as never);
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+
+    const subscribed = await agent.subscribeToThread({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      clientTools: {
+        myTool: { id: 'myTool', description: 'known', inputSchema: z.object({}), execute: executeSpy },
+      },
+    } as SubscribeAgentThreadParams);
+
+    const received: any[] = [];
+    await subscribed.processDataStream({ onChunk: async chunk => void received.push(chunk) });
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(streamUntilIdleSpy).not.toHaveBeenCalled();
+    expect(received.find(chunk => chunk.type === 'tool-result')).toBeUndefined();
+  });
+
+  it('emits error tool-results when client tool execution throws', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const assistantMessages = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call-error', toolName: 'myTool', args: {} }],
+      },
+    ];
+    agent['request'] = vi.fn().mockResolvedValue(
+      createSseResponse([
+        { type: 'tool-call', runId: 'run-error', payload: { toolCallId: 'call-error', toolName: 'myTool', args: {} } },
+        {
+          type: 'finish',
+          runId: 'run-error',
+          payload: { stepResult: { reason: 'tool-calls' }, messages: { nonUser: assistantMessages } },
+        },
+      ]),
+    ) as (typeof agent)['request'];
+    const streamUntilIdleSpy = vi
+      .spyOn(agent, 'streamUntilIdle')
+      .mockResolvedValue({ body: { cancel: vi.fn() } } as never);
+
+    const subscribed = await agent.subscribeToThread({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      clientTools: {
+        myTool: {
+          id: 'myTool',
+          description: 'throws',
+          inputSchema: z.object({}),
+          execute: vi.fn(async () => {
+            throw new Error('boom');
+          }),
+        },
+      },
+    } as SubscribeAgentThreadParams);
+
+    const received: any[] = [];
+    await subscribed.processDataStream({ onChunk: async chunk => void received.push(chunk) });
+
+    const toolResult = received.find(chunk => chunk.type === 'tool-result');
+    expect(toolResult?.payload).toEqual({
+      toolCallId: 'call-error',
+      toolName: 'myTool',
+      result: { error: 'Error: boom' },
+    });
+    const [continuationMessages] = streamUntilIdleSpy.mock.calls.at(-1) as [any[]];
+    expect(continuationMessages.at(-1)).toEqual({
+      role: 'tool',
+      content: [
+        { type: 'tool-result', toolCallId: 'call-error', toolName: 'myTool', result: { error: 'Error: boom' } },
+      ],
+    });
+  });
+
+  it('scopes pending client tool calls by runId', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const assistantMessages = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call-a', toolName: 'myTool', args: { run: 'a' } }],
+      },
+    ];
+    agent['request'] = vi.fn().mockResolvedValue(
+      createSseResponse([
+        {
+          type: 'tool-call',
+          runId: 'run-a',
+          payload: { toolCallId: 'call-a', toolName: 'myTool', args: { run: 'a' } },
+        },
+        {
+          type: 'finish',
+          runId: 'run-b',
+          payload: {
+            stepResult: { reason: 'tool-calls' },
+            messages: {
+              nonUser: [
+                {
+                  role: 'assistant',
+                  content: [{ type: 'tool-call', toolCallId: 'call-b', toolName: 'myTool', args: { run: 'b' } }],
+                },
+              ],
+            },
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'run-a',
+          payload: { stepResult: { reason: 'tool-calls' }, messages: { nonUser: assistantMessages } },
+        },
+      ]),
+    ) as (typeof agent)['request'];
+    const streamUntilIdleSpy = vi
+      .spyOn(agent, 'streamUntilIdle')
+      .mockResolvedValue({ body: { cancel: vi.fn() } } as never);
+    const executeSpy = vi.fn(async args => ({ args }));
+
+    const subscribed = await agent.subscribeToThread({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      clientTools: {
+        myTool: { id: 'myTool', description: 'tool', inputSchema: z.object({}), execute: executeSpy },
+      },
+    } as SubscribeAgentThreadParams);
+
+    await subscribed.processDataStream({ onChunk: async () => {} });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect((executeSpy.mock.calls[0] as any[])[0]).toEqual({ run: 'a' });
+    expect(streamUntilIdleSpy).toHaveBeenCalledTimes(1);
+    const [continuationMessages] = streamUntilIdleSpy.mock.calls.at(-1) as [any[]];
+    expect(continuationMessages[0]).toEqual(assistantMessages[0]);
+  });
+
+  it('continues receiving later run chunks through the same subscription stream', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const assistantMessages = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'myTool', args: {} }],
+      },
+    ];
+    const continuationTextChunk = { type: 'text-delta', runId: 'run-continuation', payload: { text: 'done' } };
+    const continuationFinishChunk = {
+      type: 'finish',
+      runId: 'run-continuation',
+      payload: { stepResult: { reason: 'stop' }, messages: { nonUser: [] } },
+    };
+    agent['request'] = vi.fn().mockResolvedValue(
+      createSseResponse([
+        { type: 'tool-call', runId: 'run-first', payload: { toolCallId: 'call-1', toolName: 'myTool', args: {} } },
+        {
+          type: 'finish',
+          runId: 'run-first',
+          payload: { stepResult: { reason: 'tool-calls' }, messages: { nonUser: assistantMessages } },
+        },
+        continuationTextChunk,
+        continuationFinishChunk,
+      ]),
+    ) as (typeof agent)['request'];
+    const streamUntilIdleSpy = vi
+      .spyOn(agent, 'streamUntilIdle')
+      .mockResolvedValue({ body: { cancel: vi.fn() } } as never);
+
+    const subscribed = await agent.subscribeToThread({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      clientTools: {
+        myTool: {
+          id: 'myTool',
+          description: 'tool',
+          inputSchema: z.object({}),
+          execute: vi.fn(async () => ({ ok: true })),
+        },
+      },
+    } as SubscribeAgentThreadParams);
+
+    const received: any[] = [];
+    await subscribed.processDataStream({ onChunk: async chunk => void received.push(chunk) });
+
+    expect(streamUntilIdleSpy).toHaveBeenCalledTimes(1);
+    expect(received).toContainEqual(continuationTextChunk);
+    expect(received).toContainEqual(continuationFinishChunk);
+  });
+
   it('does not execute client tools when no clientTools are provided', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
 
@@ -279,16 +560,7 @@ describe('Agent signal routes', () => {
       runId: 'run-abc',
       payload: { toolCallId: 'call-1', toolName: 'myTool', args: {} },
     };
-    const controllableStream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(toolCallChunk)}\n\n`));
-        controller.close();
-      },
-    });
-    const response = new Response(controllableStream, {
-      headers: { 'Content-Type': 'text/event-stream' },
-    });
-    agent['request'] = vi.fn().mockResolvedValue(response) as (typeof agent)['request'];
+    agent['request'] = vi.fn().mockResolvedValue(createSseResponse([toolCallChunk])) as (typeof agent)['request'];
     const streamUntilIdleSpy = vi
       .spyOn(agent, 'streamUntilIdle')
       .mockResolvedValue({ body: { cancel: vi.fn() } } as never);

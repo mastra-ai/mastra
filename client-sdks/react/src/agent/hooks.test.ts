@@ -101,6 +101,54 @@ describe('useChat forwards clientTools', () => {
     expect(params.clientTools).toBe(clientTools);
   });
 
+  it('forwards clientTools through thread subscription and sendSignal stream options', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          clientTools,
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+        modelSettings: {
+          maxSteps: 3,
+          instructions: 'use the client tool',
+        },
+        requestContext: { userId: 'user-123' } as any,
+      });
+    });
+
+    const subscribeCalls = subscribeToThreadMock.mock.calls as unknown as Array<[any]>;
+    expect(subscribeCalls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        clientTools,
+      }),
+    );
+
+    expect(sendSignalMock).toHaveBeenCalledTimes(1);
+    const signalCalls = sendSignalMock.mock.calls as unknown as Array<[any]>;
+    expect(signalCalls[0]?.[0].ifIdle.streamOptions).toEqual(
+      expect.objectContaining({
+        maxSteps: 3,
+        instructions: 'use the client tool',
+        requestContext: { userId: 'user-123' },
+        clientTools,
+      }),
+    );
+    expect(streamUntilIdleMock).not.toHaveBeenCalled();
+  });
+
   it('forwards hook-prop clientTools through the legacy streamUntilIdle path when no threadId is set', async () => {
     const { result } = renderHook(
       () =>
