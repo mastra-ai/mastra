@@ -23,6 +23,7 @@ vi.mock('../dev/dev.ts', () => ({
 
 describe('startDevServer - inspect flag integration', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
   });
 
