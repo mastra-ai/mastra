@@ -159,6 +159,103 @@ new InworldRealtimeVoice({
 
 `audio.input.turn_detection` defaults to `{ type: 'semantic_vad', eagerness: 'medium', create_response: true, interrupt_response: true }`. To override, set `session.audio.input.turn_detection` (or `providerData.audio.input.turn_detection`) to your own object. To disable turn detection entirely, set it to `null`.
 
+`eagerness` controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both.
+
+## Full CLI example
+
+A complete, terminal-based demo wiring `InworldRealtimeVoice` into a Mastra `Agent` with mic input, speaker output, semantic-VAD turn-taking, barge-in, and tool calling — all in one file.
+
+Prereqs: Node 22+, `sox` (provides `sox` and `play`; `brew install sox` on macOS), `INWORLD_API_KEY`.
+
+The same code as a clone-and-run repo: [github.com/cshape/inworld-mastra-cli-demo](https://github.com/cshape/inworld-mastra-cli-demo).
+
+```typescript
+import 'dotenv/config';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
+import { InworldRealtimeVoice } from '@mastra/voice-inworld-realtime';
+import { z } from 'zod';
+
+const getCurrentTime = createTool({
+  id: 'get-current-time',
+  description: 'Returns the current local time.',
+  inputSchema: z.object({}),
+  outputSchema: z.object({ time: z.string() }),
+  execute: async () => ({ time: new Date().toLocaleTimeString() }),
+});
+
+const voice = new InworldRealtimeVoice({
+  model: 'openai/gpt-5.4-nano',
+  speaker: 'Jason',
+  session: {
+    audio: {
+      input: {
+        transcription: { model: 'inworld/inworld-stt-1', language: 'en-US' },
+        turn_detection: { type: 'semantic_vad', eagerness: 'high', interrupt_response: true },
+      },
+      output: { model: 'inworld-tts-2', speed: 1.0 },
+    },
+    temperature: 0.7,
+    max_output_tokens: 150,
+  },
+});
+
+new Agent({
+  id: 'voice-demo',
+  name: 'Voice Demo',
+  instructions:
+    'You are a concise voice assistant. Reply in one or two short sentences. Use the get-current-time tool when asked the time.',
+  model: 'n/a',
+  tools: { getCurrentTime },
+  voice,
+});
+
+const SOX = ['-t', 'raw', '-r', '24000', '-e', 'signed', '-b', '16', '-c', '1', '-q', '-'];
+const players = new Map<string, ChildProcess>();
+
+voice.on('speaker', stream => {
+  // Any new response supersedes the prior one — kill leftover players so
+  // a missed barge-in can't leave two streams playing at once.
+  for (const p of players.values()) p.kill('SIGTERM');
+  players.clear();
+  const id = (stream as unknown as { id: string }).id;
+  const player = spawn('play', SOX, { stdio: ['pipe', 'ignore', 'ignore'] });
+  players.set(id, player);
+  // Swallow EPIPE when `play` exits while the PassThrough still has buffered frames.
+  player.stdin!.on('error', () => {});
+  stream.pipe(player.stdin!);
+  player.on('exit', () => players.delete(id));
+});
+
+voice.on('interrupted', ({ response_id }) => players.get(response_id)?.kill('SIGTERM'));
+
+let lastRole: 'user' | 'assistant' | null = null;
+voice.on('writing', ({ text, role }) => {
+  if (role !== lastRole) {
+    process.stdout.write(role === 'user' ? '\n[you] ' : '\n[bot] ');
+    lastRole = role;
+  }
+  process.stdout.write(text);
+});
+
+voice.on('tool-call-start', ({ toolName }) => console.log(`\n[tool] ${toolName}`));
+voice.on('error', err => console.error('\n[error]', err));
+
+await voice.connect();
+console.log('Connected. Use headphones for best experience. Speak when ready. Ctrl+C to exit.');
+
+const mic = spawn('sox', ['-d', ...SOX], { stdio: ['ignore', 'pipe', 'ignore'] });
+await voice.send(mic.stdout);
+
+process.on('SIGINT', () => {
+  mic.kill('SIGTERM');
+  for (const p of players.values()) p.kill('SIGTERM');
+  voice.close();
+  process.exit(0);
+});
+```
+
 ## Getting an API key
 
 Sign up at [platform.inworld.ai](https://platform.inworld.ai). The key it gives you is already Basic-encoded — paste it verbatim into `INWORLD_API_KEY`.

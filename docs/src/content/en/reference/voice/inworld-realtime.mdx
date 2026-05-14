@@ -196,7 +196,7 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
     name: 'audio.input.turn_detection',
     type: 'InworldTurnDetection | null',
     description:
-      'Voice activity / turn detection. Defaults to `{ type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }`. Supply your own object to override; set to `null` to disable turn detection entirely.',
+      'Voice activity / turn detection. Defaults to `{ type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }`. Supply your own object to override; set to `null` to disable turn detection entirely. The `eagerness` field controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both.',
     isOptional: true,
   },
   {

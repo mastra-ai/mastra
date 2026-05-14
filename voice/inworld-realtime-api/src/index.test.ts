@@ -299,6 +299,15 @@ describe('InworldRealtimeVoice', () => {
       const response = events.find(e => e.type === 'response.create');
       expect(response.response.audio.output.voice).toBe('Hades');
     });
+
+    it('should reject the pending speak() when close() runs mid-response', async () => {
+      await connectStubbed(voice);
+      const promise = voice.speak('Hello, world!');
+      // Let the speak() body run far enough to register the lifecycle awaiter.
+      await Promise.resolve();
+      voice.close();
+      await expect(promise).rejects.toThrow(/closed while a response was in flight/);
+    });
   });
 
   describe('send', () => {
@@ -363,6 +372,20 @@ describe('InworldRealtimeVoice', () => {
       expect(writingSpy).toHaveBeenCalledWith({ text: 'Hi', response_id: 'r-dup', role: 'assistant' });
     });
 
+    it('should dedupe writing when text-delta lands before audio-transcript-delta (text wins)', async () => {
+      await connectStubbed(voice);
+      const writingSpy = vi.fn();
+      voice.on('writing', writingSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      // Reverse the order that the round-1 fix assumed — text first.
+      client.emit('response.output_text.delta', { response_id: 'r-text-first', delta: 'Hi' });
+      client.emit('response.output_audio_transcript.delta', { response_id: 'r-text-first', delta: 'Hi' });
+
+      expect(writingSpy).toHaveBeenCalledTimes(1);
+      expect(writingSpy).toHaveBeenCalledWith({ text: 'Hi', response_id: 'r-text-first', role: 'assistant' });
+    });
+
     it('should still emit writing for text-only responses (no audio transcript)', async () => {
       await connectStubbed(voice);
       const writingSpy = vi.fn();
@@ -372,6 +395,151 @@ describe('InworldRealtimeVoice', () => {
       client.emit('response.output_text.delta', { response_id: 'r-text', delta: 'Hi' });
 
       expect(writingSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should treat input_audio_transcription.delta as a barge-in signal when an in-flight response is active', async () => {
+      // Semantic VAD can be slow/quiet to emit `speech_started`; STT deltas
+      // are a faster fallback. Verify we fire `interrupted` + `response.cancel`
+      // when a transcription delta lands during an active response.
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      const interruptedSpy = vi.fn();
+      voice.on('interrupted', interruptedSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('response.created', { response: { id: 'r-stt-interrupt' } });
+      const sentBefore = sentEvents(instance).length;
+      client.emit('conversation.item.input_audio_transcription.delta', { item_id: 'x', delta: 'he' });
+
+      expect(interruptedSpy).toHaveBeenCalledWith({ response_id: 'r-stt-interrupt' });
+      const cancels = sentEvents(instance)
+        .slice(sentBefore)
+        .filter(e => e.type === 'response.cancel');
+      expect(cancels).toHaveLength(1);
+    });
+
+    it('should dedupe interrupted across multiple barge-in signals for the same response', async () => {
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      const interruptedSpy = vi.fn();
+      voice.on('interrupted', interruptedSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('response.created', { response: { id: 'r-dedupe' } });
+      const sentBefore = sentEvents(instance).length;
+      client.emit('input_audio_buffer.speech_started', { type: 'input_audio_buffer.speech_started' });
+      client.emit('conversation.item.input_audio_transcription.delta', { item_id: 'x', delta: 'he' });
+      client.emit('conversation.item.input_audio_transcription.delta', { item_id: 'x', delta: 'hello' });
+
+      expect(interruptedSpy).toHaveBeenCalledTimes(1);
+      const cancels = sentEvents(instance)
+        .slice(sentBefore)
+        .filter(e => e.type === 'response.cancel');
+      expect(cancels).toHaveLength(1);
+    });
+
+    it('should send response.cancel when speech_started lands during an in-flight response', async () => {
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      const client = (voice as any).client as EventEmitter;
+
+      client.emit('response.created', { response: { id: 'r-cancel' } });
+      const sentBefore = sentEvents(instance).length;
+      client.emit('input_audio_buffer.speech_started', { type: 'input_audio_buffer.speech_started' });
+
+      const cancels = sentEvents(instance)
+        .slice(sentBefore)
+        .filter(e => e.type === 'response.cancel');
+      expect(cancels).toHaveLength(1);
+      expect(cancels[0]).toMatchObject({ type: 'response.cancel', response_id: 'r-cancel' });
+    });
+
+    it('should NOT send response.cancel when user opts out via interrupt_response: false', async () => {
+      const v = new InworldRealtimeVoice({
+        apiKey: 'k',
+        session: { audio: { input: { turn_detection: { type: 'semantic_vad', interrupt_response: false } } } },
+      });
+      await connectStubbed(v);
+      const { instance } = getLastInstance();
+      const client = (v as any).client as EventEmitter;
+
+      client.emit('response.created', { response: { id: 'r-no-cancel' } });
+      const sentBefore = sentEvents(instance).length;
+      client.emit('input_audio_buffer.speech_started', { type: 'input_audio_buffer.speech_started' });
+
+      const cancels = sentEvents(instance)
+        .slice(sentBefore)
+        .filter(e => e.type === 'response.cancel');
+      expect(cancels).toHaveLength(0);
+      v.disconnect();
+    });
+
+    it('should emit writing/role=user from input_audio_transcription.completed', async () => {
+      await connectStubbed(voice);
+      const writingSpy = vi.fn();
+      voice.on('writing', writingSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('conversation.item.input_audio_transcription.completed', {
+        item_id: 'item-1',
+        transcript: 'hello there',
+      });
+
+      expect(writingSpy).toHaveBeenCalledWith({ text: 'hello there', response_id: 'item-1', role: 'user' });
+    });
+
+    it('should ignore input_audio_transcription deltas and emit only the final transcript on completed', async () => {
+      // Inworld sends rolling-rewrite deltas (each delta is the full transcript
+      // so far), so emitting them would duplicate text. Verify that only the
+      // `.completed` event produces a user-side `writing`.
+      await connectStubbed(voice);
+      const writingSpy = vi.fn();
+      voice.on('writing', writingSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('conversation.item.input_audio_transcription.delta', { item_id: 'item-2', delta: 'Hey,' });
+      client.emit('conversation.item.input_audio_transcription.delta', { item_id: 'item-2', delta: 'Hey, man.' });
+      client.emit('conversation.item.input_audio_transcription.delta', { item_id: 'item-2', delta: 'Hey, man! Hi.' });
+      client.emit('conversation.item.input_audio_transcription.completed', {
+        item_id: 'item-2',
+        transcript: 'Hey, man! Hi.',
+      });
+
+      const userTexts = writingSpy.mock.calls
+        .map((c: any[]) => c[0])
+        .filter((p: any) => p.role === 'user' && p.text !== '\n');
+      expect(userTexts.map((p: any) => p.text)).toEqual(['Hey, man! Hi.']);
+    });
+  });
+
+  describe('tool calls', () => {
+    it('should treat empty/missing arguments as {} for zero-arg tools', async () => {
+      const execute = vi.fn(async () => ({ time: '12:34' }));
+      voice.addTools({
+        'get-time': {
+          id: 'get-time',
+          description: 'get time',
+          inputSchema: undefined as any,
+          execute,
+        } as any,
+      });
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      const client = (voice as any).client as EventEmitter;
+
+      client.emit('response.done', {
+        response: {
+          id: 'r-tool',
+          output: [{ type: 'function_call', call_id: 'call-1', name: 'get-time', arguments: '' }],
+        },
+      });
+      await new Promise(r => setImmediate(r));
+
+      expect(execute).toHaveBeenCalledWith({}, expect.objectContaining({ toolCallId: 'call-1' }));
+      const outputs = sentEvents(instance).filter(e => e.type === 'conversation.item.create');
+      expect(outputs).toHaveLength(1);
+      expect(outputs[0].item).toMatchObject({ type: 'function_call_output', call_id: 'call-1' });
+      expect(JSON.parse(outputs[0].item.output)).toEqual({ time: '12:34' });
     });
   });
 

@@ -139,8 +139,15 @@ export class InworldRealtimeVoice extends MastraVoice {
   private sessionId: string;
   /** response_ids currently between `response.created` and `response.done`. */
   private activeResponseIds: Set<string> = new Set();
-  /** response_ids that already emitted a `writing` chunk via the audio transcript stream — used to suppress duplicate emits from `output_text.delta`. */
-  private textEmittedResponseIds: Set<string> = new Set();
+  /**
+   * Per-response lock for the `writing` stream. Whichever of
+   * `output_audio_transcript` or `output_text` fires its first delta wins, and
+   * the other is suppressed for that response_id. Order-symmetric: works
+   * regardless of which stream the server flushes first.
+   */
+  private writingSource: Map<string, 'audio_transcript' | 'text'> = new Map();
+  /** Reject closures for `speak()` calls awaiting a response lifecycle. Drained on `close()`/`disconnect()`. */
+  private pendingLifecycleRejecters: Set<(err: Error) => void> = new Set();
 
   constructor(private options: InworldRealtimeVoiceOptions = {}) {
     super();
@@ -168,12 +175,13 @@ export class InworldRealtimeVoice extends MastraVoice {
     if (!this.ws) return;
     this.ws.close();
     this.state = 'close';
+    this.rejectPendingLifecycles();
     // Detach all internal routing handlers so the next `connect()` does not
     // double-fire on `client.emit`. Consumer-facing listeners on `this.events`
     // persist across reconnects.
     this.client.removeAllListeners();
     this.activeResponseIds.clear();
-    this.textEmittedResponseIds.clear();
+    this.writingSource.clear();
   }
 
   addInstructions(instructions?: string) {
@@ -246,6 +254,12 @@ export class InworldRealtimeVoice extends MastraVoice {
         this.client.removeListener('response.done', onDone);
         this.client.removeListener('error', onError);
         this.client.removeListener('interrupted', onInterrupt);
+        this.pendingLifecycleRejecters.delete(rejectWith);
+      };
+
+      const rejectWith = (err: Error) => {
+        cleanup();
+        reject(err);
       };
 
       const onCreated = (ev: any) => {
@@ -261,15 +275,14 @@ export class InworldRealtimeVoice extends MastraVoice {
 
       const onInterrupt = (ev: { response_id: string }) => {
         if (!pinnedId || ev.response_id !== pinnedId) return;
-        cleanup();
-        reject(new Error(`Response ${pinnedId} was interrupted by user speech`));
+        rejectWith(new Error(`Response ${pinnedId} was interrupted by user speech`));
       };
 
       const onError = (err: unknown) => {
-        cleanup();
-        reject(err instanceof Error ? err : new Error(String(err)));
+        rejectWith(err instanceof Error ? err : new Error(String(err)));
       };
 
+      this.pendingLifecycleRejecters.add(rejectWith);
       this.client.on('response.created', onCreated);
       this.client.on('response.done', onDone);
       this.client.on('error', onError);
@@ -479,9 +492,22 @@ export class InworldRealtimeVoice extends MastraVoice {
   disconnect() {
     this.state = 'close';
     this.ws?.close();
+    this.rejectPendingLifecycles();
     this.client.removeAllListeners();
     this.activeResponseIds.clear();
-    this.textEmittedResponseIds.clear();
+    this.writingSource.clear();
+  }
+
+  /**
+   * Reject any in-flight `speak()` awaiters. Called from `close()`/`disconnect()`
+   * so a consumer cleanup pattern never hangs waiting for a `response.done`
+   * that will never arrive.
+   */
+  private rejectPendingLifecycles(): void {
+    if (this.pendingLifecycleRejecters.size === 0) return;
+    const err = new Error('Inworld realtime voice closed while a response was in flight');
+    for (const rej of this.pendingLifecycleRejecters) rej(err);
+    this.pendingLifecycleRejecters.clear();
   }
 
   async send(audioData: NodeJS.ReadableStream | Int16Array, eventId?: string): Promise<void> {
@@ -557,7 +583,7 @@ export class InworldRealtimeVoice extends MastraVoice {
     // Consumer-facing handlers on `this.events` are intentionally preserved.
     this.client.removeAllListeners();
     this.activeResponseIds.clear();
-    this.textEmittedResponseIds.clear();
+    this.writingSource.clear();
 
     this.ws.on('message', message => {
       const data = JSON.parse(message.toString());
@@ -602,21 +628,41 @@ export class InworldRealtimeVoice extends MastraVoice {
       this.emit('conversation.item.done', ev);
     });
 
-    // Barge-in. Inworld emits `speech_started`/`speech_stopped` from the VAD
-    // edges; we forward those raw and synthesize an `interrupted` per
-    // in-flight response_id so consumers can stop audio playback without
-    // tracking response state themselves.
-    this.client.on('input_audio_buffer.speech_started', ev => {
-      this.emit('speech-started', ev);
+    // Barge-in. We fire `interrupted` (and a server-side `response.cancel`)
+    // for each in-flight response from multiple "user is speaking now" signals,
+    // because semantic_vad doesn't always emit `speech_started` quickly enough
+    // when the bot's own audio is bleeding into the mic. The dedupe set keeps
+    // us from emitting twice per response when several signals fire in a row.
+    const interruptedFor = new Set<string>();
+    const fireInterruptedForActive = () => {
+      if (this.activeResponseIds.size === 0) return;
+      const td = this.userTurnDetection() ?? DEFAULT_TURN_DETECTION;
+      const shouldCancel = td?.interrupt_response !== false;
       for (const responseId of this.activeResponseIds) {
+        if (interruptedFor.has(responseId)) continue;
+        interruptedFor.add(responseId);
         const payload = { response_id: responseId };
         this.emit('interrupted', payload);
         // Internal channel for `speak()`'s awaiter (see awaitResponseLifecycle).
         this.client.emit('interrupted', payload);
+        if (shouldCancel) {
+          this.sendEvent('response.cancel', { response_id: responseId });
+        }
       }
+    };
+
+    this.client.on('input_audio_buffer.speech_started', ev => {
+      this.emit('speech-started', ev);
+      fireInterruptedForActive();
     });
     this.client.on('input_audio_buffer.speech_stopped', ev => {
       this.emit('speech-stopped', ev);
+    });
+    // STT deltas are a near-realtime "user is talking" signal that fires even
+    // when semantic_vad has suppressed `speech_started`. Treat the first one
+    // during an active response as a barge-in trigger.
+    this.client.on('conversation.item.input_audio_transcription.delta', () => {
+      fireInterruptedForActive();
     });
 
     // GA spec audio deltas (NOT preview-spec `response.audio.delta`).
@@ -636,24 +682,43 @@ export class InworldRealtimeVoice extends MastraVoice {
 
     // Inworld can emit both `output_audio_transcript.delta` AND
     // `output_text.delta` for the same response when audio+text modalities
-    // are both active. Pin the response_id on the first audio-transcript
-    // chunk and suppress the parallel text-delta stream to avoid duplicate
-    // `writing` emits. Text-only responses still emit normally.
+    // are both active. Lock the canonical `writing` source on the first
+    // delta seen for the response_id (symmetric: whichever stream arrives
+    // first wins). The trailing `\n` on `.done` follows the same lock so it
+    // only fires for the chosen source.
     this.client.on('response.output_audio_transcript.delta', ev => {
-      this.textEmittedResponseIds.add(ev.response_id);
+      const src = this.writingSource.get(ev.response_id);
+      if (src === undefined) this.writingSource.set(ev.response_id, 'audio_transcript');
+      else if (src !== 'audio_transcript') return;
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.output_audio_transcript.done', ev => {
+      if (this.writingSource.get(ev.response_id) !== 'audio_transcript') return;
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
     });
 
     this.client.on('response.output_text.delta', ev => {
-      if (this.textEmittedResponseIds.has(ev.response_id)) return;
+      const src = this.writingSource.get(ev.response_id);
+      if (src === undefined) this.writingSource.set(ev.response_id, 'text');
+      else if (src !== 'text') return;
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.output_text.done', ev => {
-      if (this.textEmittedResponseIds.has(ev.response_id)) return;
+      if (this.writingSource.get(ev.response_id) !== 'text') return;
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
+    });
+
+    // User-side ASR. Only emitted when `audio.input.transcription` is set in
+    // the session config (e.g. `{ model: 'inworld/inworld-stt-1' }`). The OpenAI
+    // Realtime GA spec describes `.delta` events as additive chunks, but Inworld
+    // currently sends rolling-rewrite deltas (each one is the full transcript
+    // so far). Streaming those naively would duplicate text, so we ignore deltas
+    // and emit the final transcript once on `.completed`.
+    this.client.on('conversation.item.input_audio_transcription.completed', ev => {
+      if (typeof ev.transcript === 'string' && ev.transcript.length > 0) {
+        this.emit('writing', { text: ev.transcript, response_id: ev.item_id, role: 'user' });
+      }
+      this.emit('writing', { text: '\n', response_id: ev.item_id, role: 'user' });
     });
 
     // Inworld uses the SINGULAR `function_call_arguments` (docs claim plural;
@@ -678,7 +743,8 @@ export class InworldRealtimeVoice extends MastraVoice {
       this.emit('response.done', ev);
       speakerStreams.delete(ev.response.id);
       this.activeResponseIds.delete(ev.response.id);
-      this.textEmittedResponseIds.delete(ev.response.id);
+      this.writingSource.delete(ev.response.id);
+      interruptedFor.delete(ev.response.id);
     });
 
     this.client.on('error', async ev => {
@@ -712,7 +778,9 @@ export class InworldRealtimeVoice extends MastraVoice {
 
   private async handleFunctionCall(output: any) {
     try {
-      const context = JSON.parse(output.arguments);
+      // Zero-arg tools come back with `arguments: ""` (or missing); treat
+      // that as `{}` so the Zod input parse doesn't blow up on no-args.
+      const context = JSON.parse(output.arguments || '{}');
       const tool = this.tools?.[output.name];
       if (!tool) {
         console.warn(`Tool "${output.name}" not found`);
