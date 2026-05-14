@@ -526,10 +526,10 @@ async function formatAgentList({
   // serialization — the agent will still be listed with safe defaults, and the
   // failure is logged so the user can see what went wrong in `mastra dev`.
   let metadata: Record<string, unknown> | undefined;
-  try {
-    metadata = await agent.getMetadata({ requestContext });
-  } catch (error) {
-    logger.warn('Error getting metadata for agent', { agentName: agent.name, error });
+  if (typeof agent.getMetadata === 'function') {
+    try {
+      metadata = await agent.getMetadata({ requestContext });
+    } catch {}
   }
 
   let instructions: SystemMessage | undefined;
@@ -805,7 +805,7 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
-  const metadata = await agent.getMetadata({ requestContext });
+  const metadata = typeof agent.getMetadata === 'function' ? await agent.getMetadata({ requestContext }) : undefined;
 
   const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
