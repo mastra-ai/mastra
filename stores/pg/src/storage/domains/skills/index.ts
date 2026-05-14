@@ -429,7 +429,7 @@ export class SkillsPG extends SkillsStorage {
       }
 
       const tableName = getTableName({ indexName: TABLE_SKILLS, schemaName: getSchemaName(this.#schema) });
-      const starsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+      const favoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
 
       // Build WHERE conditions (referenced via alias `s` for skills, `sr` for favorites).
       const conditions: string[] = [];
@@ -473,7 +473,7 @@ export class SkillsPG extends SkillsStorage {
 
       const joinClause =
         useJoin && joinSqlIdx !== null
-          ? `LEFT JOIN ${starsTable} sr ON sr."entityType" = 'skill' AND sr."entityId" = s.id AND sr."userId" = $${joinSqlIdx}`
+          ? `LEFT JOIN ${favoritesTable} sr ON sr."entityType" = 'skill' AND sr."entityId" = s.id AND sr."userId" = $${joinSqlIdx}`
           : '';
       const joinParams: any[] = useJoin && joinUserId ? [joinUserId] : [];
 

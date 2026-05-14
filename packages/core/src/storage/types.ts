@@ -563,7 +563,7 @@ export type StorageListAgentsInput = {
   entityIds?: string[];
   /**
    * When set, agents favorited by this user are returned first, ordered
-   * by `(is_starred DESC, <existing orderBy>, id ASC)` over the full
+   * by `(is_favorited DESC, <existing orderBy>, id ASC)` over the full
    * candidate set before pagination. Implementations that don't support
    * favorited-first sort treat this as undefined.
    */
@@ -2015,7 +2015,7 @@ export type StorageListSkillsInput = {
   entityIds?: string[];
   /**
    * When set, skills favorited by this user are returned first, ordered
-   * by `(is_starred DESC, <existing orderBy>, id ASC)` over the full
+   * by `(is_favorited DESC, <existing orderBy>, id ASC)` over the full
    * candidate set before pagination. Implementations that don't support
    * favorited-first sort treat this as undefined.
    */
@@ -2633,7 +2633,7 @@ export interface ExperimentReviewCounts {
  */
 export type StorageFavoriteEntityType = 'agent' | 'skill';
 
-export const STORAGE_STAR_ENTITY_TYPES = ['agent', 'skill'] as const satisfies readonly StorageFavoriteEntityType[];
+export const STORAGE_FAVORITE_ENTITY_TYPES = ['agent', 'skill'] as const satisfies readonly StorageFavoriteEntityType[];
 
 /**
  * A single favorite row: one user favoriting one entity. Composite primary key is

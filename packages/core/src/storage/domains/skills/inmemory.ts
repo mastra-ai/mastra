@@ -438,14 +438,14 @@ export class InMemorySkillsStorage extends SkillsStorage {
     configs: StorageSkillType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
-    starredIds?: Set<string>,
+    favoritedIds?: Set<string>,
   ): StorageSkillType[] {
     return configs.sort((a, b) => {
       // Compound sort: favorited first, then existing orderBy, then id ASC for stable pagination.
-      if (starredIds) {
-        const aStar = starredIds.has(a.id) ? 1 : 0;
-        const bStar = starredIds.has(b.id) ? 1 : 0;
-        if (aStar !== bStar) return bStar - aStar;
+      if (favoritedIds) {
+        const aFav = favoritedIds.has(a.id) ? 1 : 0;
+        const bFav = favoritedIds.has(b.id) ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
       }
 
       const aValue = a[field].getTime();

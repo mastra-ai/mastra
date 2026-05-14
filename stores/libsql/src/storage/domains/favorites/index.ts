@@ -70,7 +70,7 @@ export class FavoritesLibSQL extends FavoritesStorage {
         });
         if (!entityRow.rows?.[0]) {
           throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'STAR', 'ENTITY_NOT_FOUND'),
+            id: createStorageErrorId('LIBSQL', 'FAVORITE', 'ENTITY_NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             text: `${entityType} ${entityId} not found`,
@@ -110,7 +110,7 @@ export class FavoritesLibSQL extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'STAR', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'FAVORITE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityType, entityId },
@@ -133,7 +133,7 @@ export class FavoritesLibSQL extends FavoritesStorage {
         });
         if (!entityRow.rows?.[0]) {
           throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'UNSTAR', 'ENTITY_NOT_FOUND'),
+            id: createStorageErrorId('LIBSQL', 'UNFAVORITE', 'ENTITY_NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             text: `${entityType} ${entityId} not found`,
@@ -172,7 +172,7 @@ export class FavoritesLibSQL extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'UNSTAR', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'UNFAVORITE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityType, entityId },
@@ -193,7 +193,7 @@ export class FavoritesLibSQL extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'IS_STARRED', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'IS_FAVORITED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -224,7 +224,7 @@ export class FavoritesLibSQL extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'IS_STARRED_BATCH', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'IS_FAVORITED_BATCH', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -244,7 +244,7 @@ export class FavoritesLibSQL extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_STARRED_IDS', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'LIST_FAVORITED_IDS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -254,17 +254,31 @@ export class FavoritesLibSQL extends FavoritesStorage {
   }
 
   async deleteFavoritesForEntity(input: StorageDeleteFavoritesForEntityInput): Promise<number> {
+    const entityTable = ENTITY_TABLE[input.entityType];
     try {
-      const result = await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_FAVORITES}" WHERE "entityType" = ? AND "entityId" = ?`,
-        args: [input.entityType, input.entityId],
-      });
-      return Number(result.rowsAffected ?? 0);
+      const tx = await this.#client.transaction('write');
+      try {
+        const result = await tx.execute({
+          sql: `DELETE FROM "${TABLE_FAVORITES}" WHERE "entityType" = ? AND "entityId" = ?`,
+          args: [input.entityType, input.entityId],
+        });
+        // Reset the parent entity's favoriteCount so stale counts don't linger
+        // when the entity itself isn't being deleted in the same operation.
+        await tx.execute({
+          sql: `UPDATE "${entityTable}" SET "favoriteCount" = 0 WHERE id = ?`,
+          args: [input.entityId],
+        });
+        await tx.commit();
+        return Number(result.rowsAffected ?? 0);
+      } catch (txError) {
+        await tx.rollback();
+        throw txError;
+      }
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'DELETE_STARS_FOR_ENTITY', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'DELETE_FAVORITES_FOR_ENTITY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityType: input.entityType, entityId: input.entityId },

@@ -55,8 +55,10 @@ export class FavoritesPG extends FavoritesStorage {
       );
     }
     // Lookup index for entity-scoped queries — must mirror init().
-    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(schemaName) });
-    statements.push(`CREATE INDEX IF NOT EXISTS idx_favorites_entity ON ${fullStarsTable} ("entityType", "entityId")`);
+    const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(schemaName) });
+    statements.push(
+      `CREATE INDEX IF NOT EXISTS idx_favorites_entity ON ${fullFavoritesTable} ("entityType", "entityId")`,
+    );
     return statements;
   }
 
@@ -82,7 +84,7 @@ export class FavoritesPG extends FavoritesStorage {
   async favorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const { userId, entityType, entityId } = input;
     const entityTable = ENTITY_TABLE[entityType];
-    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+    const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     const fullEntityTable = getTableName({ indexName: entityTable, schemaName: getSchemaName(this.#schema) });
 
     try {
@@ -91,7 +93,7 @@ export class FavoritesPG extends FavoritesStorage {
         const entityRow = await t.oneOrNone(`SELECT "favoriteCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
         if (!entityRow) {
           throw new MastraError({
-            id: createStorageErrorId('PG', 'STAR', 'ENTITY_NOT_FOUND'),
+            id: createStorageErrorId('PG', 'FAVORITE', 'ENTITY_NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             text: `${entityType} ${entityId} not found`,
@@ -101,7 +103,7 @@ export class FavoritesPG extends FavoritesStorage {
 
         // Idempotent insert.
         const inserted = await t.oneOrNone(
-          `INSERT INTO ${fullStarsTable} ("userId", "entityType", "entityId", "createdAt", "createdAtZ")
+          `INSERT INTO ${fullFavoritesTable} ("userId", "entityType", "entityId", "createdAt", "createdAtZ")
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT ("userId", "entityType", "entityId") DO NOTHING
            RETURNING "userId"`,
@@ -123,7 +125,7 @@ export class FavoritesPG extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'STAR', 'FAILED'),
+          id: createStorageErrorId('PG', 'FAVORITE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityType, entityId },
@@ -136,7 +138,7 @@ export class FavoritesPG extends FavoritesStorage {
   async unfavorite(input: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const { userId, entityType, entityId } = input;
     const entityTable = ENTITY_TABLE[entityType];
-    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+    const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     const fullEntityTable = getTableName({ indexName: entityTable, schemaName: getSchemaName(this.#schema) });
 
     try {
@@ -144,7 +146,7 @@ export class FavoritesPG extends FavoritesStorage {
         const entityRow = await t.oneOrNone(`SELECT "favoriteCount" FROM ${fullEntityTable} WHERE id = $1`, [entityId]);
         if (!entityRow) {
           throw new MastraError({
-            id: createStorageErrorId('PG', 'UNSTAR', 'ENTITY_NOT_FOUND'),
+            id: createStorageErrorId('PG', 'UNFAVORITE', 'ENTITY_NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             text: `${entityType} ${entityId} not found`,
@@ -153,7 +155,7 @@ export class FavoritesPG extends FavoritesStorage {
         }
 
         const deleted = await t.oneOrNone(
-          `DELETE FROM ${fullStarsTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" = $3 RETURNING "userId"`,
+          `DELETE FROM ${fullFavoritesTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" = $3 RETURNING "userId"`,
           [userId, entityType, entityId],
         );
 
@@ -172,7 +174,7 @@ export class FavoritesPG extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'UNSTAR', 'FAILED'),
+          id: createStorageErrorId('PG', 'UNFAVORITE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityType, entityId },
@@ -183,10 +185,10 @@ export class FavoritesPG extends FavoritesStorage {
   }
 
   async isFavorited(input: StorageFavoriteKey): Promise<boolean> {
-    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+    const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       const result = await this.#db.client.oneOrNone(
-        `SELECT 1 FROM ${fullStarsTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" = $3 LIMIT 1`,
+        `SELECT 1 FROM ${fullFavoritesTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" = $3 LIMIT 1`,
         [input.userId, input.entityType, input.entityId],
       );
       return result !== null;
@@ -194,7 +196,7 @@ export class FavoritesPG extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'IS_STARRED', 'FAILED'),
+          id: createStorageErrorId('PG', 'IS_FAVORITED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -208,11 +210,11 @@ export class FavoritesPG extends FavoritesStorage {
     if (entityIds.length === 0) {
       return new Set();
     }
-    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+    const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       const placeholders = entityIds.map((_, i) => `$${i + 3}`).join(', ');
       const rows = await this.#db.client.manyOrNone<{ entityId: string }>(
-        `SELECT "entityId" FROM ${fullStarsTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" IN (${placeholders})`,
+        `SELECT "entityId" FROM ${fullFavoritesTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" IN (${placeholders})`,
         [userId, entityType, ...entityIds],
       );
       const set = new Set<string>();
@@ -224,7 +226,7 @@ export class FavoritesPG extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'IS_STARRED_BATCH', 'FAILED'),
+          id: createStorageErrorId('PG', 'IS_FAVORITED_BATCH', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -234,10 +236,10 @@ export class FavoritesPG extends FavoritesStorage {
   }
 
   async listFavoritedIds(input: StorageListFavoritesInput): Promise<string[]> {
-    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+    const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       const rows = await this.#db.client.manyOrNone<{ entityId: string }>(
-        `SELECT "entityId" FROM ${fullStarsTable} WHERE "userId" = $1 AND "entityType" = $2 ORDER BY "createdAt" DESC, "entityId" ASC`,
+        `SELECT "entityId" FROM ${fullFavoritesTable} WHERE "userId" = $1 AND "entityType" = $2 ORDER BY "createdAt" DESC, "entityId" ASC`,
         [input.userId, input.entityType],
       );
       return (rows ?? []).map(row => row.entityId);
@@ -245,7 +247,7 @@ export class FavoritesPG extends FavoritesStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'LIST_STARRED_IDS', 'FAILED'),
+          id: createStorageErrorId('PG', 'LIST_FAVORITED_IDS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -255,24 +257,31 @@ export class FavoritesPG extends FavoritesStorage {
   }
 
   async deleteFavoritesForEntity(input: StorageDeleteFavoritesForEntityInput): Promise<number> {
-    const fullStarsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+    const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+    const entityTable = ENTITY_TABLE[input.entityType];
+    const fullEntityTable = getTableName({ indexName: entityTable, schemaName: getSchemaName(this.#schema) });
     try {
-      // Use a CTE so the server returns the count without materializing each
-      // deleted row. For a hot cascade path this is meaningfully cheaper than
-      // round-tripping every userId back to the client.
-      const result = await this.#db.client.one<{ count: string }>(
-        `WITH deleted AS (
-           DELETE FROM ${fullStarsTable} WHERE "entityType" = $1 AND "entityId" = $2 RETURNING 1
-         )
-         SELECT COUNT(*)::text AS count FROM deleted`,
-        [input.entityType, input.entityId],
-      );
-      return Number(result.count);
+      return await this.#db.client.tx(async t => {
+        // Use a CTE so the server returns the count without materializing each
+        // deleted row. For a hot cascade path this is meaningfully cheaper than
+        // round-tripping every userId back to the client.
+        const result = await t.one<{ count: string }>(
+          `WITH deleted AS (
+             DELETE FROM ${fullFavoritesTable} WHERE "entityType" = $1 AND "entityId" = $2 RETURNING 1
+           )
+           SELECT COUNT(*)::text AS count FROM deleted`,
+          [input.entityType, input.entityId],
+        );
+        // Reset the parent entity's favoriteCount so stale counts don't linger
+        // when the entity itself isn't being deleted in the same operation.
+        await t.none(`UPDATE ${fullEntityTable} SET "favoriteCount" = 0 WHERE id = $1`, [input.entityId]);
+        return Number(result.count);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'DELETE_STARS_FOR_ENTITY', 'FAILED'),
+          id: createStorageErrorId('PG', 'DELETE_FAVORITES_FOR_ENTITY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityType: input.entityType, entityId: input.entityId },

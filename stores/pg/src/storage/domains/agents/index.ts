@@ -617,7 +617,7 @@ export class AgentsPG extends AgentsStorage {
       }
 
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-      const starsTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+      const favoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
 
       // Build WHERE conditions (referenced via alias `a`).
       const conditions: string[] = [];
@@ -667,7 +667,7 @@ export class AgentsPG extends AgentsStorage {
 
       const joinClause =
         useJoin && joinSqlIdx !== null
-          ? `LEFT JOIN ${starsTable} s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = $${joinSqlIdx}`
+          ? `LEFT JOIN ${favoritesTable} s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = $${joinSqlIdx}`
           : '';
       const joinParams: any[] = useJoin && joinUserId ? [joinUserId] : [];
 

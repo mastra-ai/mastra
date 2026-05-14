@@ -13,7 +13,7 @@ import { FavoritesStorage } from './base';
 /**
  * Build the composite key used by the in-memory favorites Map.
  */
-function starKey(userId: string, entityType: StorageFavoriteEntityType, entityId: string): string {
+function favoriteKey(userId: string, entityType: StorageFavoriteEntityType, entityId: string): string {
   return `${userId}\u0000${entityType}\u0000${entityId}`;
 }
 
@@ -50,7 +50,7 @@ export class InMemoryFavoritesStorage extends FavoritesStorage {
 
   async favorite({ userId, entityType, entityId }: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const entity = this.requireEntity(entityType, entityId);
-    const key = starKey(userId, entityType, entityId);
+    const key = favoriteKey(userId, entityType, entityId);
 
     if (this.db.favorites.has(key)) {
       return { favorited: true, favoriteCount: entity.favoriteCount ?? 0 };
@@ -73,7 +73,7 @@ export class InMemoryFavoritesStorage extends FavoritesStorage {
 
   async unfavorite({ userId, entityType, entityId }: StorageFavoriteKey): Promise<FavoriteToggleResult> {
     const entity = this.requireEntity(entityType, entityId);
-    const key = starKey(userId, entityType, entityId);
+    const key = favoriteKey(userId, entityType, entityId);
 
     if (!this.db.favorites.has(key)) {
       return { favorited: false, favoriteCount: entity.favoriteCount ?? 0 };
@@ -89,13 +89,13 @@ export class InMemoryFavoritesStorage extends FavoritesStorage {
   }
 
   async isFavorited({ userId, entityType, entityId }: StorageFavoriteKey): Promise<boolean> {
-    return this.db.favorites.has(starKey(userId, entityType, entityId));
+    return this.db.favorites.has(favoriteKey(userId, entityType, entityId));
   }
 
   async isFavoritedBatch({ userId, entityType, entityIds }: StorageIsFavoritedBatchInput): Promise<Set<string>> {
     const result = new Set<string>();
     for (const entityId of entityIds) {
-      if (this.db.favorites.has(starKey(userId, entityType, entityId))) {
+      if (this.db.favorites.has(favoriteKey(userId, entityType, entityId))) {
         result.add(entityId);
       }
     }

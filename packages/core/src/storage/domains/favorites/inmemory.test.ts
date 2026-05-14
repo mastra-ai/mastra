@@ -54,7 +54,7 @@ describe('InMemoryFavoritesStorage', () => {
   });
 
   describe('favorite / unfavorite', () => {
-    it('starring an agent increments favoriteCount and is idempotent', async () => {
+    it('favoriting an agent increments favoriteCount and is idempotent', async () => {
       await seedAgent(agents, 'a1');
 
       const first = await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a1' });
@@ -67,7 +67,7 @@ describe('InMemoryFavoritesStorage', () => {
       expect(agent?.favoriteCount).toBe(1);
     });
 
-    it('starring the same entity from two users increments to 2', async () => {
+    it('favoriting the same entity from two users increments to 2', async () => {
       await seedAgent(agents, 'a1');
 
       await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a1' });
@@ -95,7 +95,7 @@ describe('InMemoryFavoritesStorage', () => {
       expect(result.favoriteCount).toBe(0);
     });
 
-    it('throws when starring an entity that does not exist', async () => {
+    it('throws when favoriting an entity that does not exist', async () => {
       await expect(favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'missing' })).rejects.toThrow(
         /agent with id missing does not exist/,
       );
@@ -268,7 +268,7 @@ describe('InMemoryFavoritesStorage', () => {
       for (const id of ids) {
         await seedAgent(agents, id, 'owner', { createdAt: t });
       }
-      // Star a few; pagination must still be deterministic.
+      // Favorite a few; pagination must still be deterministic.
       await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a05' });
       await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: 'a02' });
 
