@@ -1,5 +1,31 @@
 # mastracode
 
+## 0.19.0-alpha.0
+
+### Minor Changes
+
+- Improved OpenAI Codex OAuth support in Mastra Code. When you select the Codex provider in `/login` or during onboarding, Mastra Code now asks how to sign in — **Browser (local callback)** or **Device code (headless)** — so the device-code flow is discoverable without setting an env var. `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` still works as a preselect for scripted environments. ([#16548](https://github.com/mastra-ai/mastra/pull/16548))
+
+  HTTP MCP server config can now pass OAuth client metadata to `@mastra/mcp` and store per-server OAuth state without sharing tokens across projects:
+
+  ```json
+  {
+    "mcpServers": {
+      "remote-api": {
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "redirectUrl": "http://localhost:3000/oauth/callback"
+        }
+      }
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6)]:
+  - @mastra/core@1.34.0-alpha.0
+
 ## 0.18.1
 
 ### Patch Changes
