@@ -30,10 +30,10 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
             // so toggling collapse never shifts surrounding rows.
             'size-9',
             isCollapsed ? 'mx-auto' : 'ml-auto',
-            'hover:bg-surface4 hover:text-neutral5',
+            'hover:bg-sidebar-nav-hover hover:text-neutral6',
             'transition-all duration-normal ease-out-custom',
             'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
-            '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal',
+            '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-neutral3 [&:hover_svg]:text-neutral5 [&_svg]:transition-transform [&_svg]:duration-normal',
             className,
           )}
         >

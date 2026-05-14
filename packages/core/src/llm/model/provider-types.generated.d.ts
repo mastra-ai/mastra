@@ -1115,6 +1115,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/qwen3p6-plus',
     'accounts/fireworks/routers/kimi-k2p5-turbo',
   ];
+  readonly ambient: readonly ['moonshotai/kimi-k2.6', 'zai-org/GLM-5.1-FP8'];
   readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'kimi-k2-thinking'];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly 'opencode-go': readonly [
@@ -2603,6 +2604,7 @@ export type ProviderModelsMap = {
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model'];
   readonly 'wafer.ai': readonly ['GLM-5.1', 'Qwen3.5-397B-A17B'];
+  readonly xpersona: readonly ['xpersona-frieren-coder'];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'meta-llama/Llama-3.3-70B-Instruct',
