@@ -1,6 +1,7 @@
 ---
 "@mastra/core": patch
 "@mastra/server": patch
+"@mastra/client-js": patch
 "@mastra/duckdb": patch
 "@mastra/clickhouse": patch
 ---
