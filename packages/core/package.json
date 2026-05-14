@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.34.0-alpha.0",
+  "version": "1.34.0-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -97,6 +97,16 @@
       "require": {
         "types": "./dist/auth/ee/index.d.ts",
         "default": "./dist/auth/ee/index.cjs"
+      }
+    },
+    "./agent-builder/ee": {
+      "import": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.cjs"
       }
     },
     "./background-tasks": {
