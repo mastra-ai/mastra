@@ -253,9 +253,10 @@ export interface AgentConfig<
    */
   description?: string;
   /**
-   * Static metadata for classifying or filtering the agent in clients.
+   * Metadata for classifying or filtering the agent in clients. Can be a static
+   * record or a function that resolves the metadata from the request context.
    */
-  metadata?: Record<string, unknown>;
+  metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   /**
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.

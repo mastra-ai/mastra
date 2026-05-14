@@ -7,9 +7,11 @@ packages:
 
 # Agent.getMetadata()
 
-The `.getMetadata()` method retrieves static metadata configured for an agent. Use metadata to classify agents in clients without encoding that data in the agent ID or name.
+The `.getMetadata()` method retrieves metadata configured for an agent. Use metadata to classify agents in clients without encoding that data in the agent ID or name. Metadata can be a static record or a function resolved from the request context.
 
 ## Usage example
+
+Static metadata:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -25,9 +27,37 @@ export const supportAgent = new Agent({
 const metadata = supportAgent.getMetadata()
 ```
 
+Dynamic metadata resolved from the request context:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You help customers with support requests.',
+  model: 'openai/gpt-5.4',
+  metadata: ({ requestContext }) => ({
+    type: 'support',
+    tenant: requestContext.get('tenant'),
+  }),
+})
+
+const metadata = await supportAgent.getMetadata({ requestContext })
+```
+
 ## Parameters
 
-This method takes no parameters.
+<PropertiesTable
+  content={[
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    isOptional: true,
+    description: 'Request context passed to dynamic metadata functions. Ignored when metadata is static.',
+  },
+]}
+/>
 
 ## Returns
 
@@ -35,8 +65,9 @@ This method takes no parameters.
   content={[
   {
     name: 'metadata',
-    type: 'Record<string, unknown> | undefined',
-    description: 'The metadata configured for the agent, or `undefined` if no metadata was configured.',
+    type: 'Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined>',
+    description:
+      'The metadata configured for the agent, or `undefined` if no metadata was configured. Returns a `Promise` when metadata is defined as a function.',
   },
 ]}
 />

@@ -519,13 +519,19 @@ async function formatAgentList({
   const logger = mastra.getLogger();
 
   const description = agent.getDescription();
-  const metadata = agent.getMetadata();
 
   // Per-agent dynamic getters can throw (e.g. when their callbacks destructure
   // fields from `requestContext` that aren't present under the active preset).
   // Wrap each independent getter so a single failure doesn't abort the whole
   // serialization — the agent will still be listed with safe defaults, and the
   // failure is logged so the user can see what went wrong in `mastra dev`.
+  let metadata: Record<string, unknown> | undefined;
+  try {
+    metadata = await agent.getMetadata({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting metadata for agent', { agentName: agent.name, error });
+  }
+
   let instructions: SystemMessage | undefined;
   try {
     instructions = await agent.getInstructions({ requestContext });
@@ -799,7 +805,7 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
-  const metadata = agent.getMetadata();
+  const metadata = await agent.getMetadata({ requestContext });
 
   const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);

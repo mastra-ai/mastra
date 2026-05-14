@@ -278,9 +278,10 @@ Returns an `AgentThreadSubscription` object with these members:
   },
   {
     name: 'metadata',
-    type: 'Record<string, unknown>',
+    type: 'Record<string, unknown> | ({ requestContext: RequestContext }) => Record<string, unknown> | Promise<Record<string, unknown>>',
     isOptional: true,
-    description: 'Optional static metadata for classifying or filtering the agent in clients.',
+    description:
+      'Optional metadata for classifying or filtering the agent in clients. Can be a static record or a function that resolves the metadata from the request context.',
   },
   {
     name: 'instructions',

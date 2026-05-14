@@ -5374,6 +5374,25 @@ describe('Agent Tests', () => {
 
       expect(agent.getMetadata()).toEqual(metadata);
     });
+
+    it('resolves dynamic metadata from the request context', async () => {
+      const agent = new Agent({
+        id: 'dynamic-metadata-agent',
+        name: 'dynamic-metadata-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-5',
+        metadata: ({ requestContext }) => ({
+          type: 'support',
+          tenant: requestContext.get('tenant'),
+        }),
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', 'acme');
+
+      const result = await agent.getMetadata({ requestContext });
+      expect(result).toEqual({ type: 'support', tenant: 'acme' });
+    });
   });
 
   describe('prepareStep', () => {

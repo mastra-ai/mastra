@@ -248,7 +248,7 @@ export class Agent<
   public source?: DefinitionSource;
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
-  readonly #metadata?: Record<string, unknown>;
+  readonly #metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
@@ -1569,16 +1569,36 @@ export class Agent<
   }
 
   /**
-   * Returns static metadata configured for the agent.
+   * Returns metadata configured for the agent. Metadata can be static or
+   * resolved dynamically from the request context.
    *
-   * @example
+   * @example Static
    * ```typescript
    * const metadata = agent.getMetadata();
    * console.log(metadata?.type); // 'support'
    * ```
+   *
+   * @example Dynamic
+   * ```typescript
+   * const metadata = await agent.getMetadata({ requestContext });
+   * console.log(metadata?.tenant); // resolved from requestContext
+   * ```
    */
-  public getMetadata(): Record<string, unknown> | undefined {
-    return this.#metadata;
+  public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+    | Record<string, unknown>
+    | undefined
+    | Promise<Record<string, unknown> | undefined> {
+    if (this.#metadata === undefined) {
+      return undefined;
+    }
+    if (typeof this.#metadata !== 'function') {
+      return this.#metadata;
+    }
+    const result = this.#metadata({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
+    return resolveMaybePromise(result, m => m);
   }
 
   /**
