@@ -1089,6 +1089,47 @@ export interface StoredMCPClientToolsConfig {
 }
 
 /**
+ * One OAuth bucket bound to one tool service on one agent.
+ *
+ * Part of the Agent Builder integrations shape
+ * (`StoredAgentSnapshot.toolIntegrations`).
+ */
+export interface StoredIntegrationConnection {
+  /**
+   * Identity binding kind.
+   *
+   * - `'author'` — uses the agent author's connection (v1 default).
+   * - `'invoker'` — uses the end-user's connection (v1.5, reserved).
+   * - `'platform'` — uses a shared platform account (v2, reserved).
+   */
+  kind: 'author' | 'invoker' | 'platform';
+  /** Parent tool service slug. Denormalized for callsite clarity. */
+  toolService: string;
+  /**
+   * Provider-opaque identifier for the OAuth bucket.
+   *
+   * Required for `'author'` and `'platform'`; reserved (empty) for `'invoker'`.
+   */
+  connectionId: string;
+  /**
+   * Display label and LLM disambiguator. Required, non-empty, ≤ 32 chars,
+   * `[A-Za-z0-9 _-]+`. Case-insensitive unique within `connections[toolService]`.
+   */
+  label: string;
+}
+
+/** Per-tool override stored alongside the selected tool slug. */
+export interface StoredIntegrationToolMeta {
+  description?: string;
+}
+
+/** Stored shape for one tool integration's configuration on one agent. */
+export interface StoredToolIntegrationConfig {
+  tools: Record<string, StoredIntegrationToolMeta>;
+  connections: Record<string, StoredIntegrationConnection[]>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -1171,6 +1212,7 @@ export interface StoredAgentResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1266,6 +1308,7 @@ export interface CreateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1299,6 +1342,7 @@ export interface UpdateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1564,6 +1608,7 @@ export interface AgentVersionResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;

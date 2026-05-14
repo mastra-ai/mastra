@@ -1586,6 +1586,113 @@ export type PostAgentsAgentIdClone_Response = {
           }[]
       )
     | undefined;
+  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  toolIntegrations?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolService: string;
+                  connectionId: string;
+                  label: string;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
@@ -23585,6 +23692,113 @@ export type GetStoredAgents_Response = {
             }[]
         )
       | undefined;
+    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    toolIntegrations?:
+      | (
+          | {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            }
+          | {
+              value: {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolService: string;
+                      connectionId: string;
+                      label: string;
+                    }[];
+                  };
+                };
+              };
+              rules?:
+                | {
+                    operator: 'AND' | 'OR';
+                    conditions: (
+                      | {
+                          field: string;
+                          operator:
+                            | 'equals'
+                            | 'not_equals'
+                            | 'contains'
+                            | 'not_contains'
+                            | 'greater_than'
+                            | 'less_than'
+                            | 'greater_than_or_equal'
+                            | 'less_than_or_equal'
+                            | 'in'
+                            | 'not_in'
+                            | 'exists'
+                            | 'not_exists';
+                          value?: unknown | undefined;
+                        }
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }[];
+                              }
+                          )[];
+                        }
+                    )[];
+                  }
+                | undefined;
+            }[]
+        )
+      | undefined;
     /** Map of stored MCP client IDs to their tool configurations — static or conditional */
     mcpClients?:
       | (
@@ -27965,6 +28179,113 @@ export type GetStoredAgentsStoredAgentId_Response = {
           }[]
       )
     | undefined;
+  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  toolIntegrations?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolService: string;
+                  connectionId: string;
+                  label: string;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
@@ -32215,6 +32536,113 @@ export type PostStoredAgents_Body = {
           }[]
       )
     | undefined;
+  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  toolIntegrations?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolService: string;
+                  connectionId: string;
+                  label: string;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
@@ -36374,6 +36802,113 @@ export type PostStoredAgents_Response = {
                       };
                     }
                   | undefined;
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
+  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  toolIntegrations?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolService: string;
+                  connectionId: string;
+                  label: string;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
               };
             };
             rules?:
@@ -40707,6 +41242,115 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  toolIntegrations?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolService: string;
+                      connectionId: string;
+                      label: string;
+                    }[];
+                  };
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools: {
+                      [key: string]: {
+                        description?: string | undefined;
+                      };
+                    };
+                    connections: {
+                      [key: string]: {
+                        kind: 'author' | 'invoker' | 'platform';
+                        toolService: string;
+                        connectionId: string;
+                        label: string;
+                      }[];
+                    };
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
   mcpClients?:
     | (
         | (
@@ -44904,6 +45548,113 @@ export type PatchStoredAgentsStoredAgentId_Response =
                           };
                         }
                       | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined;
+      /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+      toolIntegrations?:
+        | (
+            | {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolService: string;
+                      connectionId: string;
+                      label: string;
+                    }[];
+                  };
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools: {
+                      [key: string]: {
+                        description?: string | undefined;
+                      };
+                    };
+                    connections: {
+                      [key: string]: {
+                        kind: 'author' | 'invoker' | 'platform';
+                        toolService: string;
+                        connectionId: string;
+                        label: string;
+                      }[];
+                    };
                   };
                 };
                 rules?:
@@ -49269,6 +50020,113 @@ export type GetStoredAgentsAgentIdVersions_Response = {
             }[]
         )
       | undefined;
+    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    toolIntegrations?:
+      | (
+          | {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            }
+          | {
+              value: {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolService: string;
+                      connectionId: string;
+                      label: string;
+                    }[];
+                  };
+                };
+              };
+              rules?:
+                | {
+                    operator: 'AND' | 'OR';
+                    conditions: (
+                      | {
+                          field: string;
+                          operator:
+                            | 'equals'
+                            | 'not_equals'
+                            | 'contains'
+                            | 'not_contains'
+                            | 'greater_than'
+                            | 'less_than'
+                            | 'greater_than_or_equal'
+                            | 'less_than_or_equal'
+                            | 'in'
+                            | 'not_in'
+                            | 'exists'
+                            | 'not_exists';
+                          value?: unknown | undefined;
+                        }
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }[];
+                              }
+                          )[];
+                        }
+                    )[];
+                  }
+                | undefined;
+            }[]
+        )
+      | undefined;
     /** Map of stored MCP client IDs to their tool configurations — static or conditional */
     mcpClients?:
       | (
@@ -52930,6 +53788,115 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                           };
                         }
                       | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  toolIntegrations?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolService: string;
+                      connectionId: string;
+                      label: string;
+                    }[];
+                  };
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools: {
+                      [key: string]: {
+                        description?: string | undefined;
+                      };
+                    };
+                    connections: {
+                      [key: string]: {
+                        kind: 'author' | 'invoker' | 'platform';
+                        toolService: string;
+                        connectionId: string;
+                        label: string;
+                      }[];
+                    };
                   };
                 };
                 rules?:
@@ -56747,6 +57714,113 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
             }[]
         )
       | undefined;
+    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    toolIntegrations?:
+      | (
+          | {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            }
+          | {
+              value: {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolService: string;
+                      connectionId: string;
+                      label: string;
+                    }[];
+                  };
+                };
+              };
+              rules?:
+                | {
+                    operator: 'AND' | 'OR';
+                    conditions: (
+                      | {
+                          field: string;
+                          operator:
+                            | 'equals'
+                            | 'not_equals'
+                            | 'contains'
+                            | 'not_contains'
+                            | 'greater_than'
+                            | 'less_than'
+                            | 'greater_than_or_equal'
+                            | 'less_than_or_equal'
+                            | 'in'
+                            | 'not_in'
+                            | 'exists'
+                            | 'not_exists';
+                          value?: unknown | undefined;
+                        }
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }[];
+                              }
+                          )[];
+                        }
+                    )[];
+                  }
+                | undefined;
+            }[]
+        )
+      | undefined;
     /** Map of stored MCP client IDs to their tool configurations — static or conditional */
     mcpClients?:
       | (
@@ -60363,6 +61437,113 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                         };
                       }
                     | undefined;
+                };
+              };
+              rules?:
+                | {
+                    operator: 'AND' | 'OR';
+                    conditions: (
+                      | {
+                          field: string;
+                          operator:
+                            | 'equals'
+                            | 'not_equals'
+                            | 'contains'
+                            | 'not_contains'
+                            | 'greater_than'
+                            | 'less_than'
+                            | 'greater_than_or_equal'
+                            | 'less_than_or_equal'
+                            | 'in'
+                            | 'not_in'
+                            | 'exists'
+                            | 'not_exists';
+                          value?: unknown | undefined;
+                        }
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }[];
+                              }
+                          )[];
+                        }
+                    )[];
+                  }
+                | undefined;
+            }[]
+        )
+      | undefined;
+    /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+    toolIntegrations?:
+      | (
+          | {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            }
+          | {
+              value: {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolService: string;
+                      connectionId: string;
+                      label: string;
+                    }[];
+                  };
                 };
               };
               rules?:
@@ -64153,6 +65334,113 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
           }[]
       )
     | undefined;
+  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  toolIntegrations?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolService: string;
+                  connectionId: string;
+                  label: string;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
@@ -67829,6 +69117,113 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                       };
                     }
                   | undefined;
+              };
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
+  /** v1 Agent Builder integrations shape (provider-agnostic). Coexists with `integrationTools` until cleanup. */
+  toolIntegrations?:
+    | (
+        | {
+            [key: string]: {
+              tools: {
+                [key: string]: {
+                  description?: string | undefined;
+                };
+              };
+              connections: {
+                [key: string]: {
+                  kind: 'author' | 'invoker' | 'platform';
+                  toolService: string;
+                  connectionId: string;
+                  label: string;
+                }[];
+              };
+            };
+          }
+        | {
+            value: {
+              [key: string]: {
+                tools: {
+                  [key: string]: {
+                    description?: string | undefined;
+                  };
+                };
+                connections: {
+                  [key: string]: {
+                    kind: 'author' | 'invoker' | 'platform';
+                    toolService: string;
+                    connectionId: string;
+                    label: string;
+                  }[];
+                };
               };
             };
             rules?:

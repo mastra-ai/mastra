@@ -4,6 +4,7 @@ import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
 import type { ProcessorPhase } from '../processor-provider';
+import type { ToolIntegrationConfig } from '../tool-integration';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -413,6 +414,13 @@ export interface StorageAgentSnapshotType {
    * Static or conditional on request context.
    */
   integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
+  /**
+   * Agent Builder tool integrations (provider-agnostic).
+   *
+   * Keyed by integration id (e.g. `'composio'`). Coexists with the legacy
+   * `integrationTools` field above; the legacy field is deprecated.
+   */
+  toolIntegrations?: StorageConditionalField<Record<string, ToolIntegrationConfig>>;
   /** Processor graph for input processing — static or conditional on request context */
   inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Processor graph for output processing — static or conditional on request context */

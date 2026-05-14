@@ -441,6 +441,16 @@
         "default": "./dist/tool-provider/index.cjs"
       }
     },
+    "./tool-integration": {
+      "import": {
+        "types": "./dist/tool-integration/index.d.ts",
+        "default": "./dist/tool-integration/index.js"
+      },
+      "require": {
+        "types": "./dist/tool-integration/index.d.ts",
+        "default": "./dist/tool-integration/index.cjs"
+      }
+    },
     "./tools": {
       "import": {
         "types": "./dist/tools/index.d.ts",
