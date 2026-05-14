@@ -10,23 +10,12 @@ import type { BaseMessageListInput } from './message-list/types';
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
 /**
- * A single content part in a signal payload. Either a text part or an inline
- * file part. Signals represent a single user turn, so anything richer (tool
- * calls, reasoning) is not a signal and should go through the agent stream
- * directly.
- *
- * Field naming matches AI SDK v4 (`mimeType`) which is also the storage
- * convention (`MastraMessagePart`), so there's no field translation between
- * what callers pass in and what gets persisted. At the input boundary file
- * `data` is `DataContent | URL`; internally it's always normalized to a string
- * (base64 for binary, stringified URL for URL instances) so DB rows stay
- * JSON-safe.
+ * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SignalPart = TextPart | (Omit<FilePart, 'data'> & { data: string });
 
 /**
- * Canonical input shape for `signal.contents`. Either a plain text string or
- * an array of text/file parts for multimodal content.
+ * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 
