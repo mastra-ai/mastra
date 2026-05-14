@@ -2070,8 +2070,7 @@ Notes:
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
     if (omConfig?.retrieval) {
-      const retrievalScope =
-        typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
+      const retrievalScope = typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'thread') : 'thread';
       tools.recall = recallTool(mergedConfig, { retrievalScope });
     }
 
