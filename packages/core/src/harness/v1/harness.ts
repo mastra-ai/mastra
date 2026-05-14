@@ -31,6 +31,7 @@ import type {
   TokenUsage,
 } from '../../storage/domains/harness';
 import {
+  HarnessStorageAttachmentInUseError,
   HarnessStorageLeaseConflictError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
@@ -40,6 +41,7 @@ import { InMemoryStore } from '../../storage/mock';
 import type { Workspace } from '../../workspace';
 
 import {
+  HarnessAttachmentInUseError,
   HarnessConfigError,
   HarnessModelNotFoundError,
   HarnessSessionClosedError,
@@ -1385,10 +1387,17 @@ export class Harness {
       const session = await this.session(
         opts.resourceId ? { sessionId: opts.sessionId, resourceId: opts.resourceId } : { sessionId: opts.sessionId },
       );
-      await storage.deleteAttachment({
-        sessionId: session.id,
-        attachmentId: opts.attachmentId,
-      });
+      try {
+        await storage.deleteAttachment({
+          sessionId: session.id,
+          attachmentId: opts.attachmentId,
+        });
+      } catch (err) {
+        if (err instanceof HarnessStorageAttachmentInUseError) {
+          throw new HarnessAttachmentInUseError(err.sessionId, err.attachmentId, err.references);
+        }
+        throw err;
+      }
     },
   };
 

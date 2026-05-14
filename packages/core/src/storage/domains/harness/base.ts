@@ -1,12 +1,14 @@
 import { StorageDomain } from '../base';
 import type {
   AcquireSessionLeaseInput,
+  AttachmentReference,
   AttachmentRecord,
   ListSessionsInput,
   LoadedAttachment,
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
+  SaveAttachmentReferenceInput,
   SaveAttachmentResult,
   SaveSessionOptions,
   SaveSessionResult,
@@ -45,6 +47,34 @@ export class HarnessStorageLeaseConflictError extends Error {
     public readonly expiresAt: number,
   ) {
     super(`Session "${sessionId}" lease held by "${heldBy}" until ${new Date(expiresAt).toISOString()}`);
+  }
+}
+
+/**
+ * Thrown by guarded attachment delete when durable references still point at
+ * the bytes. The harness layer maps this to the public
+ * `HarnessAttachmentInUseError`.
+ */
+export class HarnessStorageAttachmentInUseError extends Error {
+  readonly name = 'HarnessStorageAttachmentInUseError';
+  readonly code = 'harness.storage.attachment_in_use' as const;
+  constructor(
+    public readonly sessionId: string,
+    public readonly attachmentId: string,
+    public readonly references: AttachmentReference[],
+  ) {
+    super(`Attachment "${attachmentId}" for session "${sessionId}" is still referenced`);
+  }
+}
+
+export class HarnessStorageAttachmentUnavailableError extends Error {
+  readonly name = 'HarnessStorageAttachmentUnavailableError';
+  readonly code = 'harness.storage.attachment_unavailable' as const;
+  constructor(
+    public readonly sessionId: string,
+    public readonly attachmentId: string,
+  ) {
+    super(`Attachment "${attachmentId}" for session "${sessionId}" is not available`);
   }
 }
 
@@ -138,6 +168,19 @@ export abstract class HarnessStorage extends StorageDomain {
   abstract saveSession(record: SessionRecord, opts: SaveSessionOptions): Promise<SaveSessionResult>;
 
   /**
+   * CAS write of a session record plus durable attachment reference rows in
+   * one adapter operation. Used by queue admission so a racing attachment
+   * delete either happens before the queued item exists, or observes the new
+   * reference and fails. Implementations must also reject if any referenced
+   * attachment row is missing. The session record must already exist.
+   */
+  abstract saveSessionWithAttachmentReferences(
+    record: SessionRecord,
+    opts: SaveSessionOptions,
+    references: SaveAttachmentReferenceInput[],
+  ): Promise<SaveSessionResult>;
+
+  /**
    * Hard-delete of a single session record. The harness layer's
    * `harness.deleteSession(...)` walks the `parentSessionId` chain and
    * calls this method once per descendant — adapters do NOT implement
@@ -209,13 +252,15 @@ export abstract class HarnessStorage extends StorageDomain {
 
   /**
    * Delete a single attachment. No-op when the row is missing.
+   * Throws `HarnessStorageAttachmentInUseError` while references remain.
    */
   abstract deleteAttachment(opts: { sessionId: string; attachmentId: string }): Promise<void>;
 
   /**
    * Delete all attachments owned by a session. Called from `deleteSession`
    * implementations so the index does not leak rows when a session is torn
-   * down.
+   * down. Referenced rows are skipped; force cleanup belongs to the lifecycle
+   * delete lane.
    */
   abstract deleteAttachmentsForSession(opts: { sessionId: string }): Promise<void>;
 
@@ -224,6 +269,18 @@ export abstract class HarnessStorage extends StorageDomain {
    * metadata listings (e.g. message rendering).
    */
   abstract getAttachmentRecord(opts: { sessionId: string; attachmentId: string }): Promise<AttachmentRecord | null>;
+
+  /**
+   * Register durable references to attachment bytes. Source ids are scoped by
+   * source: queued item id for `queued_item`, message id for
+   * `message_history`, run id for `current_run`, and source-specific row ids
+   * for channel/wakeup/outbox references.
+   */
+  abstract recordAttachmentReferences(references: SaveAttachmentReferenceInput[]): Promise<void>;
+
+  abstract deleteAttachmentReferences(references: SaveAttachmentReferenceInput[]): Promise<void>;
+
+  abstract listAttachmentReferences(opts: { sessionId: string; attachmentId: string }): Promise<AttachmentReference[]>;
 
   // -------------------------------------------------------------------------
   // Test-only

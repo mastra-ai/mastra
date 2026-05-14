@@ -47,6 +47,7 @@ export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 // Harness tables (HARNESS_V1_SPEC.md §5)
 export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
+export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -83,7 +84,8 @@ export type TABLE_NAMES =
   | typeof TABLE_CHANNEL_INSTALLATIONS
   | typeof TABLE_CHANNEL_CONFIG
   | typeof TABLE_HARNESS_SESSIONS
-  | typeof TABLE_HARNESS_ATTACHMENTS;
+  | typeof TABLE_HARNESS_ATTACHMENTS
+  | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -673,6 +675,14 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     created_at: { type: 'bigint', nullable: false },
     data_b64: { type: 'text', nullable: false },
   },
+  [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
+    session_id: { type: 'text', nullable: false },
+    attachment_id: { type: 'text', nullable: false },
+    source: { type: 'text', nullable: false },
+    source_id: { type: 'text', nullable: false },
+    retained_until: { type: 'bigint', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+  },
 };
 
 /**
@@ -684,6 +694,10 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_HARNESS_ATTACHMENTS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
     compositePrimaryKey: ['session_id', 'attachment_id'],
+  },
+  [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
+    compositePrimaryKey: ['session_id', 'attachment_id', 'source', 'source_id'],
   },
 };
 

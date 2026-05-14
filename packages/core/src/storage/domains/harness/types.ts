@@ -189,6 +189,15 @@ export interface SessionWorkspaceState {
 
 export type AttachmentSource = 'inline' | 'preupload' | 'url' | 'provider';
 
+export type AttachmentReferenceSource =
+  | 'queued_item'
+  | 'queue_receipt'
+  | 'current_run'
+  | 'message_history'
+  | 'channel_inbox'
+  | 'wakeup'
+  | 'outbox';
+
 /**
  * Durable session state. Loaded on hydration, flushed under the session's
  * write lease (see HARNESS_V1_SPEC.md §5.8).
@@ -384,4 +393,16 @@ export interface LoadedAttachment {
   bytes: number;
   sha256: string;
   data: Uint8Array;
+}
+
+export interface AttachmentReference {
+  source: AttachmentReferenceSource;
+  sourceId: string;
+  retainedUntil?: number;
+}
+
+export interface SaveAttachmentReferenceInput extends AttachmentReference {
+  /** Session that owns the referenced attachment bytes. */
+  sessionId: string;
+  attachmentId: string;
 }

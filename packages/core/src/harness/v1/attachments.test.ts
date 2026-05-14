@@ -3,6 +3,12 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { setupHarness } from './__test-utils__';
+import {
+  HarnessAttachmentInUseError,
+  HarnessAttachmentUnavailableError,
+  HarnessQueueFullError,
+  HarnessValidationError,
+} from './errors';
 
 describe('Harness.attachments', () => {
   it('uploads attachments with digest metadata and deletes them by attachment id', async () => {
@@ -103,5 +109,110 @@ describe('Harness.attachments', () => {
         attachmentId: result.attachmentId,
       }),
     ).resolves.toBeNull();
+  });
+
+  it('guards uploaded attachments once a queued item references them', async () => {
+    const { harness, storage, agent } = setupHarness();
+    agent.enqueueRun({ finishReason: 'stop', text: 'queued reply' });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const result = await harness.attachments.upload({
+      sessionId: session.id,
+      data: new Uint8Array([1, 2, 3]),
+      filename: 'note.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    await session.queue({ content: 'use this', attachments: [result] });
+
+    await expect(
+      storage.listAttachmentReferences({ sessionId: session.id, attachmentId: result.attachmentId }),
+    ).resolves.toEqual([{ source: 'queued_item', sourceId: expect.any(String) }]);
+    await expect(
+      harness.attachments.delete({ sessionId: session.id, attachmentId: result.attachmentId }),
+    ).rejects.toBeInstanceOf(HarnessAttachmentInUseError);
+  });
+
+  it('rejects queue admission for cross-session or mismatched attachment refs', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const other = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const result = await harness.attachments.upload({
+      sessionId: session.id,
+      data: new Uint8Array([1, 2, 3]),
+      filename: 'note.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    await expect(other.queue({ content: 'bad', attachments: [result] })).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(
+      session.queue({ content: 'bad', attachments: [{ ...result, sha256: '0'.repeat(64) }] }),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(
+      session.queue({ content: 'bad', attachments: [{ attachmentId: 'missing', resourceId: 'u' }] }),
+    ).rejects.toBeInstanceOf(HarnessAttachmentUnavailableError);
+  });
+
+  it('rejects a queued turn when an admitted attachment digest changes before drain', async () => {
+    const { harness, storage, agent } = setupHarness();
+    let releaseManual!: () => void;
+    const manualGate = new Promise<void>(resolve => {
+      releaseManual = resolve;
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'manual', holdUntil: manualGate });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const result = await harness.attachments.upload({
+      sessionId: session.id,
+      data: new Uint8Array([1, 2, 3]),
+      filename: 'note.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    const manual = session.message({ content: 'hold drain' });
+    await new Promise(resolve => setImmediate(resolve));
+    const queued = session.queue({ content: 'use this', attachments: [result] });
+    await new Promise(resolve => setImmediate(resolve));
+
+    const record = await storage.getAttachmentRecord({ sessionId: session.id, attachmentId: result.attachmentId });
+    expect(record).not.toBeNull();
+    record!.sha256 = '0'.repeat(64);
+
+    releaseManual();
+
+    await expect(queued).rejects.toMatchObject({ reason: 'digest_mismatch', attachmentId: result.attachmentId });
+    await expect(manual).resolves.toMatchObject({ text: 'manual' });
+    expect(agent.streamCalls).toHaveLength(1);
+  });
+
+  it('does not record attachment references for queue items rejected by capacity', async () => {
+    const { harness, storage, agent } = setupHarness({ sessions: { maxQueueDepth: 1 } });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'r1',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'x' } },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const first = await harness.attachments.upload({
+      sessionId: session.id,
+      data: new Uint8Array([1]),
+      filename: 'first.bin',
+      contentType: 'application/octet-stream',
+    });
+    const second = await harness.attachments.upload({
+      sessionId: session.id,
+      data: new Uint8Array([2]),
+      filename: 'second.bin',
+      contentType: 'application/octet-stream',
+    });
+
+    const queued = session.queue({ content: 'first', attachments: [first] });
+    queued.catch(() => {});
+    await new Promise(resolve => setImmediate(resolve));
+
+    await expect(session.queue({ content: 'second', attachments: [second] })).rejects.toBeInstanceOf(
+      HarnessQueueFullError,
+    );
+    await expect(
+      storage.listAttachmentReferences({ sessionId: session.id, attachmentId: second.attachmentId }),
+    ).resolves.toEqual([]);
   });
 });

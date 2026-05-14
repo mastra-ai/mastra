@@ -573,6 +573,44 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         expect(await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).toBeNull();
       });
 
+      it('lists attachment references and blocks guarded delete while references remain', async () => {
+        if (!harness) return;
+        await harness.saveAttachment({
+          sessionId: 'session-1',
+          attachmentId: 'a1',
+          name: 'n',
+          mimeType: 'text/plain',
+          source: 'preupload',
+          data: new Uint8Array([1]),
+        });
+        await harness.recordAttachmentReferences([
+          {
+            sessionId: 'session-1',
+            attachmentId: 'a1',
+            source: 'queued_item',
+            sourceId: 'q1',
+          },
+        ]);
+
+        await expect(harness.listAttachmentReferences({ sessionId: 'session-1', attachmentId: 'a1' })).resolves.toEqual(
+          [{ source: 'queued_item', sourceId: 'q1' }],
+        );
+        await expect(harness.deleteAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).rejects.toMatchObject({
+          references: [{ source: 'queued_item', sourceId: 'q1' }],
+        });
+
+        await harness.deleteAttachmentReferences([
+          {
+            sessionId: 'session-1',
+            attachmentId: 'a1',
+            source: 'queued_item',
+            sourceId: 'q1',
+          },
+        ]);
+        await harness.deleteAttachment({ sessionId: 'session-1', attachmentId: 'a1' });
+        await expect(harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).resolves.toBeNull();
+      });
+
       it('deletes only attachments for the requested session in deleteAttachmentsForSession', async () => {
         if (!harness) return;
         await harness.saveAttachment({
@@ -591,10 +629,18 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           source: 'preupload',
           data: new Uint8Array([2]),
         });
+        await harness.recordAttachmentReferences([
+          {
+            sessionId: 'session-a',
+            attachmentId: 'a1',
+            source: 'queued_item',
+            sourceId: 'q1',
+          },
+        ]);
 
         await harness.deleteAttachmentsForSession({ sessionId: 'session-a' });
 
-        expect(await harness.loadAttachment({ sessionId: 'session-a', attachmentId: 'a1' })).toBeNull();
+        expect(await harness.loadAttachment({ sessionId: 'session-a', attachmentId: 'a1' })).not.toBeNull();
         expect(await harness.loadAttachment({ sessionId: 'session-b', attachmentId: 'a2' })).not.toBeNull();
       });
     });

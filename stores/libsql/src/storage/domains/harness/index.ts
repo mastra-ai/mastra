@@ -3,21 +3,26 @@ import { createHash } from 'node:crypto';
 import type { Client } from '@libsql/client';
 import {
   HarnessStorage,
+  HarnessStorageAttachmentInUseError,
+  HarnessStorageAttachmentUnavailableError,
   HarnessStorageLeaseConflictError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
   TABLE_CONFIGS,
+  TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_ATTACHMENTS,
   TABLE_HARNESS_SESSIONS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   AcquireSessionLeaseInput,
+  AttachmentReference,
   AttachmentRecord,
   ListSessionsInput,
   LoadedAttachment,
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
+  SaveAttachmentReferenceInput,
   SaveAttachmentInput,
   SaveAttachmentResult,
   SaveSessionOptions,
@@ -68,6 +73,12 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
       compositePrimaryKey: attachmentsConfig?.compositePrimaryKey,
     });
+    const attachmentRefsConfig = TABLE_CONFIGS[TABLE_HARNESS_ATTACHMENT_REFERENCES];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_ATTACHMENT_REFERENCES,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
+      compositePrimaryKey: attachmentRefsConfig?.compositePrimaryKey,
+    });
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_ATTACHMENTS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
@@ -77,6 +88,7 @@ export class HarnessLibSQL extends HarnessStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSIONS}`);
   }
@@ -203,6 +215,89 @@ export class HarnessLibSQL extends HarnessStorage {
     }
 
     return { version: nextVersion };
+  }
+
+  async saveSessionWithAttachmentReferences(
+    record: SessionRecord,
+    opts: SaveSessionOptions,
+    references: SaveAttachmentReferenceInput[],
+  ): Promise<SaveSessionResult> {
+    if (opts.ifVersion === 0) {
+      throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
+    }
+
+    const nextVersion = opts.ifVersion + 1;
+    const cols = sessionColumnValues(record, nextVersion);
+    const updateNames = cols.names.filter(n => n !== 'owner_id' && n !== 'lease_expires_at' && n !== 'id');
+    const updateValues = updateNames.map(n => cols.values[cols.names.indexOf(n)]);
+    const setClause = updateNames.map(n => `${n} = ?`).join(', ');
+
+    const tx = await this.#client.transaction('write');
+    try {
+      const updateResult = await tx.execute({
+        sql: `UPDATE ${TABLE_HARNESS_SESSIONS}
+              SET ${setClause}
+              WHERE id = ?
+                AND version = ?
+                AND (
+                  owner_id IS NULL
+                  OR lease_expires_at IS NULL
+                  OR lease_expires_at <= ?
+                  OR owner_id = ?
+                )`,
+        args: [...updateValues, record.id, opts.ifVersion, Date.now(), opts.ownerId],
+      });
+
+      if (updateResult.rowsAffected === 0) {
+        await tx.rollback();
+        await this.#throwSaveSessionConflict(record, opts);
+      }
+
+      const createdAt = Date.now();
+      for (const ref of references) {
+        const attachment = await tx.execute({
+          sql: `SELECT attachment_id
+                FROM ${TABLE_HARNESS_ATTACHMENTS}
+                WHERE session_id = ? AND attachment_id = ?
+                LIMIT 1`,
+          args: [ref.sessionId, ref.attachmentId],
+        });
+        if (attachment.rows.length === 0) {
+          throw new HarnessStorageAttachmentUnavailableError(ref.sessionId, ref.attachmentId);
+        }
+        await tx.execute({
+          sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+                (session_id, attachment_id, source, source_id, retained_until, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id, attachment_id, source, source_id) DO UPDATE SET
+                  retained_until = excluded.retained_until`,
+          args: [ref.sessionId, ref.attachmentId, ref.source, ref.sourceId, ref.retainedUntil ?? null, createdAt],
+        });
+      }
+
+      await tx.commit();
+      return { version: nextVersion };
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      throw err;
+    }
+  }
+
+  async #throwSaveSessionConflict(record: SessionRecord, opts: SaveSessionOptions): Promise<never> {
+    const existing = await this.loadSession({ sessionId: record.id });
+    if (!existing) {
+      throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
+    }
+    const now = Date.now();
+    const leaseHeld =
+      existing.ownerId !== undefined &&
+      existing.leaseExpiresAt !== undefined &&
+      existing.leaseExpiresAt > now &&
+      existing.ownerId !== opts.ownerId;
+    if (leaseHeld) {
+      throw new HarnessStorageLeaseConflictError(record.id, existing.ownerId!, existing.leaseExpiresAt!);
+    }
+    throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, existing.version);
   }
 
   async deleteSession({ sessionId }: { sessionId: string }): Promise<void> {
@@ -353,16 +448,33 @@ export class HarnessLibSQL extends HarnessStorage {
   }
 
   async deleteAttachment({ sessionId, attachmentId }: { sessionId: string; attachmentId: string }): Promise<void> {
-    await this.#client.execute({
+    const result = await this.#client.execute({
       sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}
-            WHERE session_id = ? AND attachment_id = ?`,
+            WHERE session_id = ? AND attachment_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES} refs
+                WHERE refs.session_id = ${TABLE_HARNESS_ATTACHMENTS}.session_id
+                  AND refs.attachment_id = ${TABLE_HARNESS_ATTACHMENTS}.attachment_id
+              )`,
       args: [sessionId, attachmentId],
     });
+    if (result.rowsAffected === 0) {
+      const references = await this.listAttachmentReferences({ sessionId, attachmentId });
+      if (references.length > 0) {
+        throw new HarnessStorageAttachmentInUseError(sessionId, attachmentId, references);
+      }
+    }
   }
 
   async deleteAttachmentsForSession({ sessionId }: { sessionId: string }): Promise<void> {
     await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENTS} WHERE session_id = ?`,
+      sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}
+            WHERE session_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES} refs
+                WHERE refs.session_id = ${TABLE_HARNESS_ATTACHMENTS}.session_id
+                  AND refs.attachment_id = ${TABLE_HARNESS_ATTACHMENTS}.attachment_id
+              )`,
       args: [sessionId],
     });
   }
@@ -392,6 +504,47 @@ export class HarnessLibSQL extends HarnessStorage {
       source: toAttachmentSource(row.source),
       createdAt: Number(row.created_at),
     };
+  }
+
+  async recordAttachmentReferences(references: SaveAttachmentReferenceInput[]): Promise<void> {
+    const createdAt = Date.now();
+    for (const ref of references) {
+      await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+              (session_id, attachment_id, source, source_id, retained_until, created_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(session_id, attachment_id, source, source_id) DO UPDATE SET
+                retained_until = excluded.retained_until`,
+        args: [ref.sessionId, ref.attachmentId, ref.source, ref.sourceId, ref.retainedUntil ?? null, createdAt],
+      });
+    }
+  }
+
+  async deleteAttachmentReferences(references: SaveAttachmentReferenceInput[]): Promise<void> {
+    for (const ref of references) {
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+              WHERE session_id = ? AND attachment_id = ? AND source = ? AND source_id = ?`,
+        args: [ref.sessionId, ref.attachmentId, ref.source, ref.sourceId],
+      });
+    }
+  }
+
+  async listAttachmentReferences({
+    sessionId,
+    attachmentId,
+  }: {
+    sessionId: string;
+    attachmentId: string;
+  }): Promise<AttachmentReference[]> {
+    const result = await this.#client.execute({
+      sql: `SELECT source, source_id, retained_until
+            FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+            WHERE session_id = ? AND attachment_id = ?
+            ORDER BY source ASC, source_id ASC`,
+      args: [sessionId, attachmentId],
+    });
+    return result.rows.map(rowToAttachmentReference);
   }
 
   async #backfillAttachmentMetadata(): Promise<void> {
@@ -570,4 +723,27 @@ function toAttachmentSource(value: unknown): AttachmentRecord['source'] {
     return value;
   }
   return 'preupload';
+}
+
+function rowToAttachmentReference(row: Record<string, unknown>): AttachmentReference {
+  return {
+    source: toAttachmentReferenceSource(row.source),
+    sourceId: String(row.source_id),
+    ...(row.retained_until == null ? {} : { retainedUntil: Number(row.retained_until) }),
+  };
+}
+
+function toAttachmentReferenceSource(value: unknown): AttachmentReference['source'] {
+  if (
+    value === 'queued_item' ||
+    value === 'queue_receipt' ||
+    value === 'current_run' ||
+    value === 'message_history' ||
+    value === 'channel_inbox' ||
+    value === 'wakeup' ||
+    value === 'outbox'
+  ) {
+    return value;
+  }
+  return 'queued_item';
 }

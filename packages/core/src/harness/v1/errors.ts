@@ -96,6 +96,30 @@ export class HarnessQueueFullError extends Error {
   }
 }
 
+export class HarnessAttachmentInUseError extends Error {
+  readonly name = 'HarnessAttachmentInUseError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly attachmentId: string,
+    public readonly references: ReadonlyArray<{ source: string; sourceId: string; retainedUntil?: number }>,
+  ) {
+    super(`Attachment "${attachmentId}" for session "${sessionId}" is still in use`);
+  }
+}
+
+export type HarnessAttachmentUnavailableReason = 'not_found' | 'digest_mismatch' | 'bytes_mismatch';
+
+export class HarnessAttachmentUnavailableError extends Error {
+  readonly name = 'HarnessAttachmentUnavailableError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly reason: HarnessAttachmentUnavailableReason,
+    public readonly attachmentId?: string,
+  ) {
+    super(`Attachment${attachmentId ? ` "${attachmentId}"` : ''} for session "${sessionId}" is unavailable: ${reason}`);
+  }
+}
+
 /**
  * `spawn_subagent` called from a session whose `subagentDepth` is at or
  * above `HarnessConfig.subagents.maxDepth`. Surfaces as a tool error

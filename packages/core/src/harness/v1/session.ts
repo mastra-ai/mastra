@@ -37,9 +37,12 @@ import type {
   GoalJudgeDecision,
   GoalState,
   HarnessStorage,
+  HarnessStorageAttachmentUnavailableError,
   PendingResume,
   PermissionRules,
+  PersistedAttachment,
   QueuedItem,
+  SaveAttachmentReferenceInput,
   SessionGrants,
   SessionRecord,
 } from '../../storage/domains/harness';
@@ -52,6 +55,7 @@ import type { StoredMessageRow } from '../_shared/message-conversion';
 import type { HarnessMessage } from '../types';
 
 import {
+  HarnessAttachmentUnavailableError,
   HarnessConfigError,
   HarnessOverrideConflictError,
   HarnessQueueFullError,
@@ -79,6 +83,7 @@ import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagen
 import type {
   AgentResult,
   AgentStream,
+  AttachmentRef,
   GoalOptions,
   HarnessMode,
   HarnessRequestContext,
@@ -178,6 +183,16 @@ function assertPolicy(method: string, value: unknown): asserts value is Permissi
   if (typeof value !== 'string' || !PERMISSION_POLICIES.includes(value as PermissionPolicy)) {
     throw new HarnessValidationError(method, `policy must be one of ${PERMISSION_POLICIES.join(' | ')}`);
   }
+}
+
+function isStorageAttachmentUnavailableError(err: unknown): err is HarnessStorageAttachmentUnavailableError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: unknown }).code === 'harness.storage.attachment_unavailable' &&
+    typeof (err as { sessionId?: unknown }).sessionId === 'string' &&
+    typeof (err as { attachmentId?: unknown }).attachmentId === 'string'
+  );
 }
 
 function truncateForJudge(value: string): string {
@@ -3096,28 +3111,42 @@ export class Session {
       throw new HarnessQueueFullError(this.id, cap);
     }
 
+    const attachments = await this._resolveAttachmentRefs('queue().attachments', opts.attachments ?? []);
     const item: QueuedItem = {
       id: `q-${randomUUID()}`,
       enqueuedAt: Date.now(),
       content: opts.content,
-      attachments: [],
+      attachments,
       ...(opts.model !== undefined ? { model: opts.model } : {}),
       ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
       ...(opts.yolo !== undefined ? { yolo: opts.yolo } : {}),
     };
+    const attachmentReferences = attachments
+      .filter((attachment): attachment is Extract<PersistedAttachment, { kind: 'ref' }> => attachment.kind === 'ref')
+      .map(attachment => ({
+        sessionId: attachment.ownerSessionId,
+        attachmentId: attachment.attachmentId,
+        source: 'queued_item' as const,
+        sourceId: item.id,
+      }));
 
-    // Atomic check + append: re-check capacity inside the updater so a
-    // concurrent in-process `queue()` cannot push us past the cap.
-    let admitted = true;
-    await this._flushUpdate(prev => {
-      if ((prev.pendingQueue?.length ?? 0) >= cap) {
-        admitted = false;
-        return prev;
+    try {
+      // Atomic check + append: re-check capacity inside the updater so a
+      // concurrent in-process `queue()` cannot push us past the cap.
+      await this._flushUpdate(
+        prev => {
+          if ((prev.pendingQueue?.length ?? 0) >= cap) {
+            throw new HarnessQueueFullError(this.id, cap);
+          }
+          return { ...prev, pendingQueue: [...(prev.pendingQueue ?? []), item] };
+        },
+        { attachmentReferences },
+      );
+    } catch (err) {
+      if (isStorageAttachmentUnavailableError(err)) {
+        throw new HarnessAttachmentUnavailableError(err.sessionId, 'not_found', err.attachmentId);
       }
-      return { ...prev, pendingQueue: [...(prev.pendingQueue ?? []), item] };
-    });
-    if (!admitted) {
-      throw new HarnessQueueFullError(this.id, cap);
+      throw err;
     }
 
     return new Promise<AgentResult>((resolve, reject) => {
@@ -3126,6 +3155,41 @@ export class Session {
       // settles the resolver via `_completeQueuedTurn` / `_failQueuedTurn`.
       void this._maybeDrainQueue();
     });
+  }
+
+  private async _resolveAttachmentRefs(field: string, refs: AttachmentRef[]): Promise<PersistedAttachment[]> {
+    const attachments: PersistedAttachment[] = [];
+    for (let i = 0; i < refs.length; i += 1) {
+      const ref = refs[i]!;
+      const ownerSessionId = ref.ownerSessionId ?? this.id;
+      if (ownerSessionId !== this.id) {
+        throw new HarnessValidationError(`${field}[${i}].ownerSessionId`, 'attachment must belong to this session');
+      }
+      const record = await this._storage.getAttachmentRecord({
+        sessionId: this.id,
+        attachmentId: ref.attachmentId,
+      });
+      if (!record) {
+        throw new HarnessAttachmentUnavailableError(this.id, 'not_found', ref.attachmentId);
+      }
+      if (ref.bytes !== undefined && ref.bytes !== record.bytes) {
+        throw new HarnessValidationError(`${field}[${i}].bytes`, 'attachment byte count does not match storage');
+      }
+      if (ref.sha256 !== undefined && ref.sha256 !== record.sha256) {
+        throw new HarnessValidationError(`${field}[${i}].sha256`, 'attachment digest does not match storage');
+      }
+      attachments.push({
+        kind: 'ref',
+        name: record.name,
+        mimeType: record.mimeType,
+        ownerSessionId: record.ownerSessionId,
+        attachmentId: record.attachmentId,
+        bytes: record.bytes,
+        sha256: record.sha256,
+        source: record.source,
+      });
+    }
+    return attachments;
   }
 
   /**
@@ -3193,6 +3257,7 @@ export class Session {
    * stays in place (suspended) or is removed (complete / error).
    */
   private async _runQueuedTurn(item: QueuedItem): Promise<FullOutput<unknown>> {
+    await this._validateQueuedAttachmentRefs(item);
     const effectiveModeId = item.mode ?? this._record.modeId;
     const mode = this._harness._getMode(effectiveModeId);
     const agent = this._harness.getAgentForMode(effectiveModeId);
@@ -3237,6 +3302,33 @@ export class Session {
       return full;
     } finally {
       this._endTurn(turnAbortController);
+    }
+  }
+
+  private async _validateQueuedAttachmentRefs(item: QueuedItem): Promise<void> {
+    for (const attachment of item.attachments) {
+      if (attachment.kind !== 'ref') continue;
+      const loaded = await this._storage.loadAttachment({
+        sessionId: attachment.ownerSessionId,
+        attachmentId: attachment.attachmentId,
+      });
+      if (!loaded) {
+        throw new HarnessAttachmentUnavailableError(attachment.ownerSessionId, 'not_found', attachment.attachmentId);
+      }
+      if (loaded.sha256 !== attachment.sha256) {
+        throw new HarnessAttachmentUnavailableError(
+          attachment.ownerSessionId,
+          'digest_mismatch',
+          attachment.attachmentId,
+        );
+      }
+      if (loaded.bytes !== attachment.bytes) {
+        throw new HarnessAttachmentUnavailableError(
+          attachment.ownerSessionId,
+          'bytes_mismatch',
+          attachment.attachmentId,
+        );
+      }
     }
   }
 
@@ -3300,16 +3392,23 @@ export class Session {
    * adopt the returned version. Single point of truth so every setter
    * stays consistent with the lease + version contract (§5.8).
    */
-  private _flushUpdate(update: (prev: SessionRecord) => SessionRecord): Promise<void> {
+  private _flushUpdate(
+    update: (prev: SessionRecord) => SessionRecord,
+    opts?: { attachmentReferences?: SaveAttachmentReferenceInput[] },
+  ): Promise<void> {
     const run = async (): Promise<void> => {
       const next: SessionRecord = {
         ...update(this._record),
         lastActivityAt: Date.now(),
       };
-      const saved = await this._storage.saveSession(next, {
+      const saveOpts = {
         ownerId: this._ownerId,
         ifVersion: this._record.version,
-      });
+      };
+      const saved =
+        opts?.attachmentReferences && opts.attachmentReferences.length > 0
+          ? await this._storage.saveSessionWithAttachmentReferences(next, saveOpts, opts.attachmentReferences)
+          : await this._storage.saveSession(next, saveOpts);
       this._record = { ...next, version: saved.version };
     };
     // Chain so concurrent callers serialize against the latest in-memory

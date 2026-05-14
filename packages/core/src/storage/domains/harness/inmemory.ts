@@ -3,17 +3,21 @@ import { createHash } from 'node:crypto';
 import type { InMemoryDB } from '../inmemory-db';
 import {
   HarnessStorage,
+  HarnessStorageAttachmentInUseError,
+  HarnessStorageAttachmentUnavailableError,
   HarnessStorageLeaseConflictError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
 } from './base';
 import type {
   AcquireSessionLeaseInput,
+  AttachmentReference,
   AttachmentRecord,
   ListSessionsInput,
   LoadedAttachment,
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
+  SaveAttachmentReferenceInput,
   SaveAttachmentInput,
   SaveAttachmentResult,
   SaveSessionOptions,
@@ -109,6 +113,47 @@ export class InMemoryHarness extends HarnessStorage {
     };
 
     this.db.harnessSessions.set(record.id, stored);
+    return { version: nextVersion };
+  }
+
+  async saveSessionWithAttachmentReferences(
+    record: SessionRecord,
+    opts: SaveSessionOptions,
+    references: SaveAttachmentReferenceInput[],
+  ): Promise<SaveSessionResult> {
+    const existing = this.db.harnessSessions.get(record.id);
+
+    if (existing) {
+      assertLeaseHolder(existing, opts.ownerId);
+
+      if (existing.version !== opts.ifVersion) {
+        throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, existing.version);
+      }
+    } else {
+      throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
+    }
+
+    for (const ref of references) {
+      if (!this.db.harnessAttachmentRecords.has(attachmentKey(ref.sessionId, ref.attachmentId))) {
+        throw new HarnessStorageAttachmentUnavailableError(ref.sessionId, ref.attachmentId);
+      }
+    }
+
+    const nextVersion = opts.ifVersion + 1;
+    const stored: SessionRecord = {
+      ...record,
+      version: nextVersion,
+      ownerId: existing.ownerId,
+      leaseExpiresAt: existing.leaseExpiresAt,
+    };
+    this.db.harnessSessions.set(record.id, stored);
+    for (const ref of references) {
+      this.db.harnessAttachmentReferences.set(attachmentReferenceKey(ref), {
+        source: ref.source,
+        sourceId: ref.sourceId,
+        ...(ref.retainedUntil !== undefined ? { retainedUntil: ref.retainedUntil } : {}),
+      });
+    }
     return { version: nextVersion };
   }
 
@@ -230,6 +275,10 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async deleteAttachment({ sessionId, attachmentId }: { sessionId: string; attachmentId: string }): Promise<void> {
+    const references = await this.listAttachmentReferences({ sessionId, attachmentId });
+    if (references.length > 0) {
+      throw new HarnessStorageAttachmentInUseError(sessionId, attachmentId, references);
+    }
     const key = attachmentKey(sessionId, attachmentId);
     this.db.harnessAttachmentRecords.delete(key);
     this.db.harnessAttachmentBytes.delete(key);
@@ -239,6 +288,9 @@ export class InMemoryHarness extends HarnessStorage {
     const prefix = `${sessionId}\u0000`;
     for (const key of this.db.harnessAttachmentRecords.keys()) {
       if (key.startsWith(prefix)) {
+        const [, attachmentId] = splitAttachmentKey(key);
+        const references = await this.listAttachmentReferences({ sessionId, attachmentId });
+        if (references.length > 0) continue;
         this.db.harnessAttachmentRecords.delete(key);
         this.db.harnessAttachmentBytes.delete(key);
       }
@@ -255,6 +307,37 @@ export class InMemoryHarness extends HarnessStorage {
     return this.db.harnessAttachmentRecords.get(attachmentKey(sessionId, attachmentId)) ?? null;
   }
 
+  async recordAttachmentReferences(references: SaveAttachmentReferenceInput[]): Promise<void> {
+    for (const ref of references) {
+      this.db.harnessAttachmentReferences.set(attachmentReferenceKey(ref), {
+        source: ref.source,
+        sourceId: ref.sourceId,
+        ...(ref.retainedUntil !== undefined ? { retainedUntil: ref.retainedUntil } : {}),
+      });
+    }
+  }
+
+  async deleteAttachmentReferences(references: SaveAttachmentReferenceInput[]): Promise<void> {
+    for (const ref of references) {
+      this.db.harnessAttachmentReferences.delete(attachmentReferenceKey(ref));
+    }
+  }
+
+  async listAttachmentReferences({
+    sessionId,
+    attachmentId,
+  }: {
+    sessionId: string;
+    attachmentId: string;
+  }): Promise<AttachmentReference[]> {
+    const prefix = `${sessionId}\u0000${attachmentId}\u0000`;
+    const refs: AttachmentReference[] = [];
+    for (const [key, ref] of this.db.harnessAttachmentReferences) {
+      if (key.startsWith(prefix)) refs.push({ ...ref });
+    }
+    return refs.sort((a, b) => a.source.localeCompare(b.source) || a.sourceId.localeCompare(b.sourceId));
+  }
+
   // -------------------------------------------------------------------------
   // Test-only
   // -------------------------------------------------------------------------
@@ -263,6 +346,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessSessions.clear();
     this.db.harnessAttachmentRecords.clear();
     this.db.harnessAttachmentBytes.clear();
+    this.db.harnessAttachmentReferences.clear();
   }
 }
 
@@ -277,6 +361,15 @@ export class InMemoryHarness extends HarnessStorage {
  */
 function attachmentKey(ownerSessionId: string, attachmentId: string): string {
   return `${ownerSessionId}\u0000${attachmentId}`;
+}
+
+function splitAttachmentKey(key: string): [string, string] {
+  const [ownerSessionId = '', attachmentId = ''] = key.split('\u0000');
+  return [ownerSessionId, attachmentId];
+}
+
+function attachmentReferenceKey(ref: SaveAttachmentReferenceInput): string {
+  return `${ref.sessionId}\u0000${ref.attachmentId}\u0000${ref.source}\u0000${ref.sourceId}`;
 }
 
 function sha256Hex(bytes: Uint8Array): string {
