@@ -4,6 +4,7 @@ import { buildConnectionSuffix, resolveStoredToolIntegrations } from './runtime'
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
+  ListConnectionsResult,
   ListToolsOpts,
   ListToolsResult,
   ListToolServicesResult,
@@ -58,6 +59,9 @@ function makeIntegration(overrides: Partial<ToolIntegration> = {}): ToolIntegrat
     async getHealth(): Promise<ToolIntegrationHealth> {
       return { ok: true };
     },
+    async listConnections(_opts): Promise<ListConnectionsResult> {
+      return { items: [] };
+    },
     ...overrides,
   };
 }
@@ -103,6 +107,26 @@ describe('resolveStoredToolIntegrations', () => {
     expect(Object.keys(out).sort()).toEqual(['gmail.fetch_emails', 'gmail.send_email']);
     expect(out['gmail.fetch_emails']!.description).toBe('base description for gmail.fetch_emails');
     expect(out['gmail.fetch_emails']!.id).toBe('gmail.fetch_emails');
+  });
+
+  it('groups slugs by ToolMeta.toolService when slugs are not dot-prefixed (Composio style)', async () => {
+    const stored: ToolIntegrations = {
+      composio: {
+        tools: {
+          GMAIL_FETCH_EMAILS: { toolService: 'gmail' },
+          GMAIL_SEND_EMAIL: { toolService: 'gmail' },
+          SLACK_SEND_MESSAGE: { toolService: 'slack' },
+        },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' }],
+          slack: [{ kind: 'author', toolService: 'slack', connectionId: 'ca_2', label: 'Team' }],
+        },
+      },
+    };
+    const integration = makeIntegration();
+    const out = await resolveStoredToolIntegrations(stored, () => integration);
+
+    expect(Object.keys(out).sort()).toEqual(['GMAIL_FETCH_EMAILS', 'GMAIL_SEND_EMAIL', 'SLACK_SEND_MESSAGE']);
   });
 
   it('two connections produce suffixed entries with routing hints', async () => {

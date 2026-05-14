@@ -202,7 +202,7 @@ describe('formValuesToSaveParams', () => {
       ]);
     });
 
-    it('strips the form-only toolService field from each tools[slug] entry', () => {
+    it('persists toolService on each tools[slug] entry so runtime fan-out can group by service', () => {
       const result = formValuesToSaveParams(
         {
           ...baseValues,
@@ -223,8 +223,8 @@ describe('formValuesToSaveParams', () => {
       );
 
       expect(result.toolIntegrations?.composio.tools).toEqual({
-        GMAIL_FETCH: { description: 'fetch' },
-        GMAIL_SEND: {},
+        GMAIL_FETCH: { toolService: 'gmail', description: 'fetch' },
+        GMAIL_SEND: { toolService: 'gmail' },
       });
     });
 

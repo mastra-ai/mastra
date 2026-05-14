@@ -78,7 +78,7 @@ export async function resolveStoredToolIntegrations(
       continue;
     }
 
-    const allSelectedSlugs = Object.keys(cfg.tools ?? {});
+    const tools = cfg.tools ?? {};
     const connectionsByService = cfg.connections ?? {};
 
     for (const [toolService, connections] of Object.entries(connectionsByService)) {
@@ -91,8 +91,14 @@ export async function resolveStoredToolIntegrations(
         );
       }
 
-      // Tools that belong to this service. Slugs are `<service>.<tool>`.
-      const slugsForService = allSelectedSlugs.filter(slug => slug.startsWith(`${toolService}.`));
+      // Group selected slugs by ToolMeta.toolService. Falls back to a
+      // slug-prefix match (`<service>.<tool>`) for providers that follow the
+      // dot convention but didn't write toolService on the meta entry.
+      const slugsForService = Object.entries(tools)
+        .filter(([slug, meta]) =>
+          meta?.toolService ? meta.toolService === toolService : slug.startsWith(`${toolService}.`),
+        )
+        .map(([slug]) => slug);
       if (slugsForService.length === 0) continue;
 
       const skipSuffix = connections.length === 1;

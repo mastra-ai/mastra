@@ -1120,6 +1120,11 @@ export interface StoredIntegrationConnection {
 
 /** Per-tool override stored alongside the selected tool slug. */
 export interface StoredIntegrationToolMeta {
+  /**
+   * Tool service this slug belongs to. The runtime groups selected slugs
+   * by this field when fanning out across connections.
+   */
+  toolService?: string;
   description?: string;
 }
 

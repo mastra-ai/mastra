@@ -47,10 +47,11 @@ function buildToolIntegrations(
   for (const [providerId, config] of Object.entries(value)) {
     const tools: Record<string, StoredIntegrationToolMeta> = {};
     for (const [slug, meta] of Object.entries(config.tools ?? {})) {
-      // Strip form-only `toolService` — storage keeps it on connections only.
-      const { toolService: _omit, ...rest } = meta;
-      void _omit;
-      tools[slug] = rest;
+      // Persist `toolService` on every tool entry. The runtime fan-out
+      // groups selected slugs by this field — it cannot assume a
+      // `<service>.<tool>` slug convention because providers like
+      // Composio return flat slugs (e.g. GMAIL_FETCH_EMAILS).
+      tools[slug] = meta;
     }
 
     const connections: Record<string, StoredIntegrationConnection[]> = {};

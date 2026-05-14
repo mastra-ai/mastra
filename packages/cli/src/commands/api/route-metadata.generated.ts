@@ -4266,6 +4266,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /tool-integrations/:integrationId/connections": {
+    "method": "GET",
+    "path": "/tool-integrations/:integrationId/connections",
+    "pathParams": [
+      "integrationId"
+    ],
+    "queryParams": [
+      "toolService"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "items"
+    }
+  },
   "GET /tool-integrations/:integrationId/health": {
     "method": "GET",
     "path": "/tool-integrations/:integrationId/health",

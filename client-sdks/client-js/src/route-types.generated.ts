@@ -1593,6 +1593,7 @@ export type PostAgentsAgentIdClone_Response = {
             [key: string]: {
               tools: {
                 [key: string]: {
+                  toolService?: string | undefined;
                   description?: string | undefined;
                 };
               };
@@ -1611,6 +1612,7 @@ export type PostAgentsAgentIdClone_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -23699,6 +23701,7 @@ export type GetStoredAgents_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -23717,6 +23720,7 @@ export type GetStoredAgents_Response = {
                 [key: string]: {
                   tools: {
                     [key: string]: {
+                      toolService?: string | undefined;
                       description?: string | undefined;
                     };
                   };
@@ -28186,6 +28190,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
             [key: string]: {
               tools: {
                 [key: string]: {
+                  toolService?: string | undefined;
                   description?: string | undefined;
                 };
               };
@@ -28204,6 +28209,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -32543,6 +32549,7 @@ export type PostStoredAgents_Body = {
             [key: string]: {
               tools: {
                 [key: string]: {
+                  toolService?: string | undefined;
                   description?: string | undefined;
                 };
               };
@@ -32561,6 +32568,7 @@ export type PostStoredAgents_Body = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -36880,6 +36888,7 @@ export type PostStoredAgents_Response = {
             [key: string]: {
               tools: {
                 [key: string]: {
+                  toolService?: string | undefined;
                   description?: string | undefined;
                 };
               };
@@ -36898,6 +36907,7 @@ export type PostStoredAgents_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -41249,6 +41259,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                 [key: string]: {
                   tools: {
                     [key: string]: {
+                      toolService?: string | undefined;
                       description?: string | undefined;
                     };
                   };
@@ -41267,6 +41278,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                   [key: string]: {
                     tools: {
                       [key: string]: {
+                        toolService?: string | undefined;
                         description?: string | undefined;
                       };
                     };
@@ -45626,6 +45638,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                 [key: string]: {
                   tools: {
                     [key: string]: {
+                      toolService?: string | undefined;
                       description?: string | undefined;
                     };
                   };
@@ -45644,6 +45657,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                   [key: string]: {
                     tools: {
                       [key: string]: {
+                        toolService?: string | undefined;
                         description?: string | undefined;
                       };
                     };
@@ -50027,6 +50041,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -50045,6 +50060,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                 [key: string]: {
                   tools: {
                     [key: string]: {
+                      toolService?: string | undefined;
                       description?: string | undefined;
                     };
                   };
@@ -53868,6 +53884,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                 [key: string]: {
                   tools: {
                     [key: string]: {
+                      toolService?: string | undefined;
                       description?: string | undefined;
                     };
                   };
@@ -53886,6 +53903,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                   [key: string]: {
                     tools: {
                       [key: string]: {
+                        toolService?: string | undefined;
                         description?: string | undefined;
                       };
                     };
@@ -57721,6 +57739,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -57739,6 +57758,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                 [key: string]: {
                   tools: {
                     [key: string]: {
+                      toolService?: string | undefined;
                       description?: string | undefined;
                     };
                   };
@@ -61515,6 +61535,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -61533,6 +61554,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                 [key: string]: {
                   tools: {
                     [key: string]: {
+                      toolService?: string | undefined;
                       description?: string | undefined;
                     };
                   };
@@ -65341,6 +65363,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
             [key: string]: {
               tools: {
                 [key: string]: {
+                  toolService?: string | undefined;
                   description?: string | undefined;
                 };
               };
@@ -65359,6 +65382,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };
@@ -69195,6 +69219,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
             [key: string]: {
               tools: {
                 [key: string]: {
+                  toolService?: string | undefined;
                   description?: string | undefined;
                 };
               };
@@ -69213,6 +69238,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
               [key: string]: {
                 tools: {
                   [key: string]: {
+                    toolService?: string | undefined;
                     description?: string | undefined;
                   };
                 };

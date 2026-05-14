@@ -34,6 +34,7 @@ export const connectionSchema = z.object({
 });
 
 const toolMetaSchema = z.object({
+  toolService: z.string().min(1).optional(),
   description: z.string().optional(),
 });
 

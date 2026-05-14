@@ -86,7 +86,9 @@ export function extractFormToolIntegrations(
 
     const tools: NonNullable<AgentBuilderEditFormValues['toolIntegrations']>[string]['tools'] = {};
     for (const [slug, meta] of Object.entries(config.tools ?? {})) {
-      const toolService = findServiceForSlug(slug);
+      // Prefer the stored `toolService` (canonical) and fall back to
+      // inferring from slug/connection shape for pre-fix stored data.
+      const toolService = meta?.toolService ?? findServiceForSlug(slug);
       if (!toolService) continue;
       tools[slug] = { toolService, ...(meta?.description ? { description: meta.description } : {}) };
     }

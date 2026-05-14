@@ -86,6 +86,13 @@ export interface Connection {
  * Per-tool override stored alongside the selected tool slug.
  */
 export interface ToolMeta {
+  /**
+   * Tool service this slug belongs to. Required for the runtime to group
+   * selected tools by service when fanning out across connections.
+   * Optional only for backward-compat with pre-fix stored data; new writes
+   * must include it.
+   */
+  toolService?: string;
   /** Optional description override surfaced to the LLM. */
   description?: string;
 }
