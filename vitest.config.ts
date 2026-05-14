@@ -11,6 +11,30 @@ const SOURCE_MODE_WORKSPACE_PATH_DEPS = [new RegExp(process.cwd().replace(/[.*+?
 const SOURCE_MODE_ALIASES = {
   '@internal/test-utils/setup': resolve(process.cwd(), 'packages/_test-utils/src/setup.ts'),
 };
+const SOURCE_MODE_PACKAGE_GLOBS = [
+  'packages/*/package.json',
+  'stores/*/package.json',
+  'deployers/*/package.json',
+  'client-sdks/*/package.json',
+  'server-adapters/*/package.json',
+  'speech/*/package.json',
+  'voice/*/package.json',
+  'observability/*/package.json',
+  'workflows/*/package.json',
+];
+const SOURCE_MODE_WORKSPACE_PACKAGES = new Map<string, { root: string; exports: Record<string, any> }>();
+
+if (SOURCE_MODE) {
+  for (const packageJsonPath of SOURCE_MODE_PACKAGE_GLOBS.flatMap(pattern => globSync(pattern))) {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+    if (typeof packageJson.name === 'string' && packageJson.exports) {
+      SOURCE_MODE_WORKSPACE_PACKAGES.set(packageJson.name, {
+        root: dirname(packageJsonPath),
+        exports: packageJson.exports,
+      });
+    }
+  }
+}
 const SOURCE_MODE_TEST_EXCLUDES = [
   '**/node_modules/**',
   '**/dist/**',
@@ -22,6 +46,48 @@ const SOURCE_MODE_TEST_EXCLUDES = [
   'packages/deployer/src/build/analyze/analyzeEntry.test.ts',
   'src/build/analyze/analyzeEntry.test.ts',
 ];
+
+function sourceModeExportTarget(source: string) {
+  for (const [packageName, packageConfig] of SOURCE_MODE_WORKSPACE_PACKAGES) {
+    if (source !== packageName && !source.startsWith(`${packageName}/`)) continue;
+
+    const subpath = source === packageName ? '.' : `.${source.slice(packageName.length)}`;
+    const exactExport = packageConfig.exports[subpath];
+    if (exactExport?.['mastra-source']) {
+      return resolve(packageConfig.root, exactExport['mastra-source']);
+    }
+
+    for (const [exportPath, exportConfig] of Object.entries(packageConfig.exports) as Array<
+      [string, Record<string, string>]
+    >) {
+      if (!exportPath.includes('*') || !exportConfig['mastra-source']) continue;
+
+      const [exportPrefix, exportSuffix] = exportPath.split('*');
+      if (!subpath.startsWith(exportPrefix) || !subpath.endsWith(exportSuffix)) continue;
+
+      const wildcard = subpath.slice(exportPrefix.length, subpath.length - exportSuffix.length);
+      return resolve(packageConfig.root, exportConfig['mastra-source'].replace('*', wildcard));
+    }
+  }
+
+  return null;
+}
+
+const sourceModeWorkspaceResolver = () => ({
+  name: 'mastra-source-mode-workspace-resolver',
+  enforce: 'pre' as const,
+  resolveId(source: string) {
+    if (
+      !SOURCE_MODE ||
+      (!SOURCE_MODE_WORKSPACE_DEPS.some(dep => dep.test(source)) && !source.startsWith('@internal/'))
+    ) {
+      return null;
+    }
+
+    const target = sourceModeExportTarget(source);
+    return target && existsSync(target) ? target : null;
+  },
+});
 
 const sourceModeRelativeResolver = () => ({
   name: 'mastra-source-mode-relative-resolver',
@@ -43,7 +109,7 @@ const sourceModeRelativeResolver = () => ({
 
 const SOURCE_MODE_CONFIG: UserWorkspaceConfig = SOURCE_MODE
   ? {
-      plugins: [sourceModeRelativeResolver()],
+      plugins: [sourceModeWorkspaceResolver(), sourceModeRelativeResolver()],
       resolve: {
         conditions: SOURCE_MODE_CONDITIONS,
       },
@@ -214,6 +280,11 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
       const config = loaded.config as UserWorkspaceConfig;
 
       if (!hasNestedProjects) {
+        if (SOURCE_MODE && projectDir.startsWith('packages/') && projectDir !== 'packages/editor') {
+          projects.push(projectDir);
+          continue;
+        }
+
         projects.push(
           withSourceModeConfig({
             ...config,
@@ -270,7 +341,9 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
 }
 
 export default defineConfig(async () => ({
+  ...SOURCE_MODE_CONFIG,
   test: {
+    ...SOURCE_MODE_CONFIG.test,
     projects: await discoverProjects(),
   },
 }));
