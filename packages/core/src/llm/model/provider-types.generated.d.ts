@@ -2604,6 +2604,7 @@ export type ProviderModelsMap = {
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model'];
   readonly 'wafer.ai': readonly ['GLM-5.1', 'Qwen3.5-397B-A17B'];
+  readonly xpersona: readonly ['xpersona-frieren-coder'];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'meta-llama/Llama-3.3-70B-Instruct',
