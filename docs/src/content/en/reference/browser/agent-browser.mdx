@@ -90,12 +90,19 @@ then interact with elements using their refs (e.g., @e5).`,
     description: 'Configuration for streaming browser frames to Studio.',
     isOptional: true,
   },
+  {
+    name: 'excludeTools',
+    type: 'BrowserToolName[]',
+    description:
+      'Tool names to exclude from the browser toolset. Use this to disable specific tools for models that do not support certain capabilities, such as vision.',
+    isOptional: true,
+  },
 ]}
 />
 
 ## Tools
 
-`AgentBrowser` provides 15 deterministic tools for browser automation. All tools that interact with elements use refs from the accessibility tree snapshot.
+`AgentBrowser` provides 16 deterministic tools for browser automation. All tools that interact with elements use refs from the accessibility tree snapshot.
 
 ### Core tools
 
@@ -108,6 +115,7 @@ then interact with elements using their refs (e.g., @e5).`,
 | `browser_press` | Press keyboard keys |
 | `browser_select` | Select option from dropdown |
 | `browser_scroll` | Scroll the page or element |
+| `browser_screenshot` | Capture a screenshot as PNG (viewport by default; set `fullPage: true` for full page) |
 | `browser_close` | Close the browser |
 
 ### Extended tools
@@ -121,6 +129,14 @@ then interact with elements using their refs (e.g., @e5).`,
 | `browser_tabs` | Manage browser tabs (list, new, switch, close) |
 | `browser_drag` | Drag and drop elements |
 | `browser_evaluate` | Execute JavaScript in the page (escape hatch) |
+
+To exclude specific tools, pass `excludeTools` in the constructor:
+
+```typescript
+const browser = new AgentBrowser({
+  excludeTools: ['browser_screenshot'],
+})
+```
 
 ## Tool reference
 
@@ -387,6 +403,22 @@ Execute JavaScript in the page context. Use as an escape hatch when other tools 
 | - | - | - |
 | `script` | `string` | JavaScript to execute (required) |
 | `returnValue` | `boolean` | Whether to return the result (optional) |
+
+### `browser_screenshot`
+
+Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `browser_snapshot` when you only need text or structured data.
+
+```text
+// Viewport only (default)
+{}
+
+// Full scrollable page
+{ "fullPage": true }
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `fullPage` | `boolean` | Capture the full scrollable page instead of just the viewport (optional, default: false) |
 
 ### `browser_close`
 

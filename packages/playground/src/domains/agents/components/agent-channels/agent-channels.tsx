@@ -2,7 +2,7 @@ import { Button, Skeleton, StatusBadge, Txt, toast } from '@mastra/playground-ui
 import {
   useChannelPlatforms,
   useChannelInstallations,
-  useConnectChannel,
+  useConnectChannelAction,
   useDisconnectChannel,
 } from '../../hooks/use-channels';
 import type { ChannelPlatformInfo } from '../../hooks/use-channels';
@@ -45,37 +45,13 @@ interface PlatformSectionProps {
 
 function PlatformSection({ platform, agentId }: PlatformSectionProps) {
   const { data: installations, isLoading } = useChannelInstallations(platform.id, agentId);
-  const { mutate: connect, isPending: isConnecting } = useConnectChannel(platform.id);
+  const { connect, isConnecting } = useConnectChannelAction(platform.id);
   const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel(platform.id);
 
   const activeInstallation = installations?.find(i => i.status === 'active');
 
   const handleConnect = () => {
-    connect(
-      { agentId },
-      {
-        onSuccess: result => {
-          switch (result.type) {
-            case 'oauth':
-              window.location.href = result.authorizationUrl;
-              break;
-            case 'deep_link': {
-              const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
-              if (!popup) {
-                toast.error('Popup blocked — please allow popups and try again');
-              }
-              break;
-            }
-            case 'immediate':
-              // No user action needed — just refetch installations
-              break;
-          }
-        },
-        onError: (err: Error & { body?: { error?: string } }) => {
-          toast.error(err.body?.error || err.message || 'Failed to connect channel');
-        },
-      },
-    );
+    connect(agentId);
   };
 
   const handleDisconnect = () => {

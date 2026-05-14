@@ -19,6 +19,7 @@ interface BackgroundTaskMetadataProps {
   backgroundTaskTaskId: string;
   backgroundTaskStartedAt: Date;
   backgroundTaskCompletedAt?: Date;
+  backgroundTaskSuspendedAt?: Date;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -27,23 +28,33 @@ const BackgroundTaskMetadata = ({
   backgroundTaskTaskId,
   backgroundTaskStartedAt,
   backgroundTaskCompletedAt,
+  backgroundTaskSuspendedAt,
   open,
   onOpenChange,
 }: BackgroundTaskMetadataProps) => {
-  const { data: task } = useGetBackgroundTaskById(backgroundTaskTaskId, !!backgroundTaskCompletedAt);
+  const { data: task } = useGetBackgroundTaskById(
+    backgroundTaskTaskId,
+    !!backgroundTaskCompletedAt || !!backgroundTaskSuspendedAt,
+  );
   const { tasks } = useBackgroundTaskStream({
     taskId: backgroundTaskTaskId,
-    enabled: !backgroundTaskCompletedAt,
+    enabled: !backgroundTaskCompletedAt && !backgroundTaskSuspendedAt,
   });
+
   const timeDiff = useTimeDiff({
     startedAt: new Date(backgroundTaskStartedAt).getTime(),
-    endedAt: backgroundTaskCompletedAt ? new Date(backgroundTaskCompletedAt).getTime() : undefined,
+    endedAt: backgroundTaskCompletedAt
+      ? new Date(backgroundTaskCompletedAt).getTime()
+      : backgroundTaskSuspendedAt
+        ? new Date(backgroundTaskSuspendedAt).getTime()
+        : undefined,
   });
 
   const backgroundTask = task || tasks[backgroundTaskTaskId];
 
   const args = backgroundTask?.args;
   const result = backgroundTask?.result as any;
+  const suspendPayload = backgroundTask?.suspendPayload;
 
   let argSlot = null;
 
@@ -61,6 +72,13 @@ const BackgroundTaskMetadata = ({
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
       <CodeEditor data={result} />
+    );
+
+  const suspendPayloadSlot =
+    typeof suspendPayload === 'string' ? (
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
+    ) : (
+      <CodeEditor data={suspendPayload} />
     );
 
   return (
@@ -82,6 +100,13 @@ const BackgroundTaskMetadata = ({
             {argSlot}
           </div>
 
+          {suspendPayloadSlot !== undefined && suspendPayload && (
+            <div className="space-y-2">
+              <Txt className="text-neutral3">Background Task Suspend Data</Txt>
+              {suspendPayloadSlot}
+            </div>
+          )}
+
           {resultSlot !== undefined && result && (
             <div className="space-y-2">
               <Txt className="text-neutral3">Background Task Result</Txt>
@@ -95,16 +120,15 @@ const BackgroundTaskMetadata = ({
 };
 
 export interface BackgroundTaskMetadataDialogTriggerProps {
-  backgroundTaskTaskId: string;
-  backgroundTaskStartedAt: Date;
-  backgroundTaskCompletedAt?: Date;
+  backgroundTask: {
+    taskId: string;
+    startedAt: Date;
+    completedAt?: Date;
+    suspendedAt?: Date;
+  };
 }
 
-export const BackgroundTaskMetadataDialogTrigger = ({
-  backgroundTaskTaskId,
-  backgroundTaskStartedAt,
-  backgroundTaskCompletedAt,
-}: BackgroundTaskMetadataDialogTriggerProps) => {
+export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: BackgroundTaskMetadataDialogTriggerProps) => {
   const [isOpen, setIsOpen] = useState(false);
   return (
     <>
@@ -114,7 +138,7 @@ export const BackgroundTaskMetadataDialogTrigger = ({
         tooltip="Show background task information"
         onClick={() => setIsOpen(s => !s)}
       >
-        {backgroundTaskCompletedAt ? (
+        {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
           <Share2 className="text-neutral3 size-5" />
         ) : (
           <Loader2Icon className="text-neutral3 size-5 animate-spin" />
@@ -122,9 +146,10 @@ export const BackgroundTaskMetadataDialogTrigger = ({
       </Button>
 
       <BackgroundTaskMetadata
-        backgroundTaskTaskId={backgroundTaskTaskId}
-        backgroundTaskStartedAt={backgroundTaskStartedAt}
-        backgroundTaskCompletedAt={backgroundTaskCompletedAt}
+        backgroundTaskTaskId={backgroundTask.taskId}
+        backgroundTaskStartedAt={backgroundTask.startedAt}
+        backgroundTaskCompletedAt={backgroundTask.completedAt}
+        backgroundTaskSuspendedAt={backgroundTask.suspendedAt}
         open={isOpen}
         onOpenChange={setIsOpen}
       />

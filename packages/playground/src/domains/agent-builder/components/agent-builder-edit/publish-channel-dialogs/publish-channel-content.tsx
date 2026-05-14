@@ -6,10 +6,9 @@ import {
   DialogHeader,
   DialogTitle,
   Txt,
-  toast,
 } from '@mastra/playground-ui';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useConnectChannel } from '@/domains/agents/hooks/use-channels';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-channels';
 import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
 interface PlatformCopy {
@@ -57,38 +56,13 @@ export function PublishChannelContent({
   onClose,
   onDisconnectRequest,
 }: PublishChannelContentProps) {
-  const { mutate: connect, isPending: isConnecting } = useConnectChannel(platform.id);
+  const { connect, isConnecting } = useConnectChannelAction(platform.id, { onClose });
   const copy = copyFor(platform.id);
   const activeInstallation =
     copy.requireActiveInstallation && installation?.status !== 'active' ? undefined : installation;
 
   const handleConnect = () => {
-    connect(
-      { agentId },
-      {
-        onSuccess: result => {
-          switch (result.type) {
-            case 'oauth':
-              window.location.href = result.authorizationUrl;
-              break;
-            case 'deep_link': {
-              const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
-              if (!popup) {
-                toast.error('Popup blocked — please allow popups and try again');
-              }
-              onClose();
-              break;
-            }
-            case 'immediate':
-              onClose();
-              break;
-          }
-        },
-        onError: (err: Error & { body?: { error?: string } }) => {
-          toast.error(err.body?.error || err.message || 'Failed to connect channel');
-        },
-      },
-    );
+    connect(agentId);
   };
 
   return (

@@ -23,4 +23,5 @@ export const coreFeatures = new Set<string>([
   'observability:v1.13.2',
   'channels',
   'deploy-diagnosis',
+  'model-inference-span',
 ]);

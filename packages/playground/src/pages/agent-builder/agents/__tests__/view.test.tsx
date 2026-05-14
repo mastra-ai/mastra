@@ -58,6 +58,11 @@ const useStoredAgentMock = vi.fn((..._args: unknown[]) => ({
 }));
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   useStoredAgent: (...args: unknown[]) => useStoredAgentMock(...args),
+  useStoredAgentMutations: () => ({
+    createStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    updateStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    deleteStoredAgent: { mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false },
+  }),
 }));
 
 vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
@@ -94,6 +99,17 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-p
 }));
 vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
+}));
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
+  useBuilderAgentAccess: () => ({
+    hasAccess: true,
+    canWrite: true,
+    canExecute: true,
+    canManageSkills: true,
+    canUseFavorites: true,
+    denialReason: null,
+  }),
 }));
 
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button', () => ({
@@ -143,10 +159,10 @@ describe('AgentBuilderAgentView', () => {
     cleanup();
   });
 
-  it('renders an Edit agent icon button for the owner', () => {
+  it('renders a mode-toggle button for the owner that switches to Edit mode', () => {
     const { getByTestId } = renderAt();
-    const button = getByTestId('agent-builder-view-edit');
-    expect(button.getAttribute('aria-label')).toBe('Edit agent');
+    const button = getByTestId('agent-builder-mode-toggle');
+    expect(button.getAttribute('aria-label')).toBe('Switch to Edit mode');
   });
 
   it('shows the Publish to channel button for the owner', () => {
@@ -155,10 +171,10 @@ describe('AgentBuilderAgentView', () => {
     expect(button.disabled).toBe(false);
   });
 
-  it('hides the Edit and Publish to channel buttons for non-owners', () => {
+  it('hides the mode-toggle and Publish to channel buttons for non-owners', () => {
     storedAgent = { ...storedAgent, authorId: 'someone-else' };
     const { queryByTestId } = renderAt();
-    expect(queryByTestId('agent-builder-view-edit')).toBeNull();
+    expect(queryByTestId('agent-builder-mode-toggle')).toBeNull();
     expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
   });
 
@@ -168,16 +184,15 @@ describe('AgentBuilderAgentView', () => {
     expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
   });
 
-  it('shows the current visibility as disabled', () => {
+  it('shows the Remove from library button when the agent is public', () => {
     const { getByTestId } = renderAt();
-    const trigger = getByTestId('agent-builder-visibility-trigger');
-    expect(trigger.textContent).toContain('Public');
-    expect(trigger.hasAttribute('disabled')).toBe(true);
+    const button = getByTestId('agent-builder-visibility-remove');
+    expect(button.textContent).toContain('Remove from library');
   });
 
-  it('navigates to the edit page when the edit button is clicked', () => {
+  it('navigates to the edit page when the mode-toggle is clicked', () => {
     const { getByTestId } = renderAt();
-    fireEvent.click(getByTestId('agent-builder-view-edit'));
+    fireEvent.click(getByTestId('agent-builder-mode-toggle'));
     expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/edit', { viewTransition: true });
   });
 

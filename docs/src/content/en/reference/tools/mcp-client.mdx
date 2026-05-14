@@ -1081,6 +1081,53 @@ await agent.generate('Hello!', {
 })
 ```
 
+## Handling auth failures inside custom fetch
+
+A custom `fetch` should not `throw` when authentication is unavailable. The Streamable HTTP transport in the MCP SDK opens a long-lived `GET /mcp` "standalone listener" stream in the background to receive server-pushed notifications. Errors on that stream are retried with exponential backoff, and a thrown `fetch` or a cleanly-closed stream can produce an indefinite reconnect loop at roughly one attempt per second.
+
+Return a synthetic `Response` instead. The [MCP Streamable HTTP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) defines `405 Method Not Allowed` as the signal a server returns when it does not offer the GET SSE stream, and the SDK honors it as a terminal status that stops the listener cleanly. Use this to disable the listener when your server does not push notifications.
+
+The following pattern waits for an auth token on POST requests, attaches it to outgoing headers, and short-circuits the GET listener with a synthetic 405:
+
+```typescript
+async function waitForToken(timeoutMs = 5000): Promise<string | null> {
+  // Replace with your token lookup. Return null if no token is available.
+  return getAuthToken({ timeoutMs })
+}
+
+const mcpClient = new MCPClient({
+  servers: {
+    apiServer: {
+      url: new URL('https://api.example.com/mcp'),
+      fetch: async (url, init) => {
+        const method = (init?.method || 'GET').toUpperCase()
+
+        // The SDK opens a background GET stream for server-pushed notifications.
+        // If your server does not use it, short-circuit with 405 to stop reconnect attempts.
+        if (method === 'GET') {
+          return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
+        }
+
+        // POST: wait for the token, then forward the request with an Authorization header.
+        const token = await waitForToken()
+        if (!token) {
+          // Forward the request without a token and let the server reject it.
+          // The SDK surfaces non-2xx POST responses as errors to the caller of
+          // tools/list, tools/call, etc., which is the desired behavior here.
+          return fetch(url, init)
+        }
+
+        const headers = new Headers(init?.headers)
+        headers.set('authorization', `Bearer ${token}`)
+        return fetch(url, { ...init, headers })
+      },
+    },
+  },
+})
+```
+
+Return `405` for the GET listener only when your server does not push notifications back to the client. If your server uses the standalone GET stream, attach the auth token on `GET` requests as well and let the request through.
+
 ## Using SSE request headers
 
 When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:

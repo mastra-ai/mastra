@@ -103,6 +103,7 @@ export const mastra = new Mastra({
           skills: true,
           model: true,
           browser: true,
+          avatarUpload: true,
         },
         skill: {
           stars: true,

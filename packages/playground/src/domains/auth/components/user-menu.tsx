@@ -1,6 +1,7 @@
 import { Button, Popover, PopoverContent, PopoverTrigger, Txt } from '@mastra/playground-ui';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, Settings, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 
 import { useAuthCapabilities, useLogout } from '../hooks';
 import { useRoleImpersonation } from '../hooks/use-role-impersonation';
@@ -101,7 +102,17 @@ export function UserMenu({ user }: UserMenuProps) {
           </div>
         )}
 
-        <div className="p-2">
+        <div className="p-2 flex flex-col gap-1">
+          <Button
+            as={Link}
+            to="/settings"
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={() => setOpen(false)}
+          >
+            <Settings className="h-4 w-4" />
+            Settings
+          </Button>
           <Button variant="ghost" onClick={handleLogout} disabled={isPending} className="w-full justify-start">
             {isPending ? 'Signing out...' : 'Sign out'}
           </Button>

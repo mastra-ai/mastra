@@ -9,11 +9,9 @@
  * import { createInngestAgent, serve as inngestServe } from '@mastra/inngest';
  * import { Mastra } from '@mastra/core/mastra';
  * import { Inngest } from 'inngest';
- * import { realtimeMiddleware } from '@inngest/realtime/middleware';
  *
  * const inngest = new Inngest({
  *   id: 'my-app',
- *   middleware: [realtimeMiddleware()],
  * });
  *
  * // 1. Create a regular Mastra agent

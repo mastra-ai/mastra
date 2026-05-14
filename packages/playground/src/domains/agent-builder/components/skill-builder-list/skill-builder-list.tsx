@@ -1,36 +1,18 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
-import { LockIcon, SearchIcon, SparklesIcon } from 'lucide-react';
+import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
-
-function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const diff = Date.now() - then;
-  if (diff < 0) return 'just now';
-  const minute = 60 * 1000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  const week = 7 * day;
-  const month = 30 * day;
-  const year = 365 * day;
-  if (diff < minute) return 'just now';
-  if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
-  if (diff < day) return `${Math.floor(diff / hour)}h ago`;
-  if (diff < week) return `${Math.floor(diff / day)}d ago`;
-  if (diff < month) return `${Math.floor(diff / week)}w ago`;
-  if (diff < year) return `${Math.floor(diff / month)}mo ago`;
-  return `${Math.floor(diff / year)}y ago`;
-}
+import { getSkillOrigin } from '@/domains/agents/utils/skill-origin';
 
 export type SkillBuilderListProps = {
   skills: StoredSkillResponse[];
   search?: string;
   onSkillClick?: (skill: StoredSkillResponse) => void;
+  showStars?: boolean;
 };
 
-export function SkillBuilderList({ skills, search, onSkillClick }: SkillBuilderListProps) {
+export function SkillBuilderList({ skills, search, onSkillClick, showStars = true }: SkillBuilderListProps) {
   const filtered = useMemo(() => {
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return skills;
@@ -58,9 +40,6 @@ export function SkillBuilderList({ skills, search, onSkillClick }: SkillBuilderL
       {filtered.map(skill => {
         const row = (
           <>
-            <div className="bg-surface3 p-2 rounded-md text-neutral5 flex items-center justify-center">
-              <SparklesIcon className="h-5 w-5" />
-            </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="text-ui-md text-neutral6 truncate">{skill.name}</div>
@@ -80,34 +59,69 @@ export function SkillBuilderList({ skills, search, onSkillClick }: SkillBuilderL
                     <TooltipContent>Only visible to you</TooltipContent>
                   </Tooltip>
                 )}
+                {(() => {
+                  const origin = getSkillOrigin(skill.metadata);
+                  if (!origin) return null;
+                  const isCopy = origin.type === 'library-copy';
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface5 text-neutral4 shrink-0"
+                          aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
+                          data-testid="skill-builder-origin-badge"
+                        >
+                          {isCopy ? <CopyIcon className="h-2.5 w-2.5" /> : <DownloadIcon className="h-2.5 w-2.5" />}
+                          {origin.type === 'skills-sh' ? 'skills.sh' : isCopy ? 'copied' : 'imported'}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {origin.type === 'skills-sh'
+                          ? `Imported from ${origin.owner}/${origin.repo}`
+                          : isCopy
+                            ? `Copied from "${origin.sourceSkillName}"`
+                            : 'Imported from external registry'}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })()}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>
               </div>
+              {showStars && (
+                <div className="mt-2 md:hidden">
+                  <SkillStarButton
+                    skillId={skill.id}
+                    isStarred={skill.isStarred}
+                    starCount={skill.starCount}
+                    size="sm"
+                  />
+                </div>
+              )}
             </div>
-            <div className="hidden sm:inline-flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
-              <span className="hidden lg:inline-flex">Updated {formatRelativeTime(skill.updatedAt)}</span>
-            </div>
-            <SkillStarButton
-              skillId={skill.id}
-              isStarred={skill.isStarred}
-              starCount={skill.starCount}
-              size="sm"
-              className="shrink-0"
-            />
+            {showStars && (
+              <SkillStarButton
+                skillId={skill.id}
+                isStarred={skill.isStarred}
+                starCount={skill.starCount}
+                size="sm"
+                className="shrink-0 hidden md:inline-flex"
+              />
+            )}
           </>
         );
 
         return onSkillClick ? (
           <button
             key={skill.id}
-            className="px-6 py-5 flex items-center gap-4 w-full text-left hover:bg-surface3/50 transition-colors"
+            className="px-6 py-5 flex items-start gap-4 w-full text-left hover:bg-surface3/50 transition-colors md:items-center"
             onClick={() => onSkillClick(skill)}
           >
             {row}
           </button>
         ) : (
-          <div key={skill.id} className="px-6 py-5 flex items-center gap-4">
+          <div key={skill.id} className="px-6 py-5 flex items-start gap-4 md:items-center">
             {row}
           </div>
         );

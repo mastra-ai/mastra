@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
-import { computeNextFireAt } from '@mastra/core/workflows';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+// `computeNextFireAt` is new in @mastra/core@1.32.0; route it through a shim
+// that tolerates older cores (see ./schedules-workflows-shim.ts).
 import { HTTPException } from '../http-exception';
 import {
   listSchedulesQuerySchema,
@@ -11,6 +12,7 @@ import {
   listScheduleTriggersResponseSchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { computeNextFireAt } from './schedules-workflows-shim';
 
 type RunSummary = {
   status: WorkflowRunState['status'];

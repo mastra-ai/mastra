@@ -9,6 +9,7 @@ export type AgentBuilderListProps = {
   agents: StoredAgentResponse[];
   search?: string;
   rowTestId?: string;
+  showStars?: boolean;
 };
 
 export type AgentBuilderListSkeletonProps = {
@@ -43,7 +44,7 @@ function PrivateVisibilityIcon() {
   );
 }
 
-export function AgentBuilderList({ agents, search, rowTestId }: AgentBuilderListProps) {
+export function AgentBuilderList({ agents, search, rowTestId, showStars = true }: AgentBuilderListProps) {
   const { Link } = useLinkComponent();
 
   const filtered = useMemo(() => {
@@ -69,7 +70,7 @@ export function AgentBuilderList({ agents, search, rowTestId }: AgentBuilderList
   }
 
   return (
-    <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
+    <div className="bg-surface2 border h-full border-border1 rounded-xl divide-y divide-border1 overflow-y-auto content-start">
       {filtered.map(agent => {
         const avatar = getAvatarUrl(agent);
 
@@ -90,17 +91,21 @@ export function AgentBuilderList({ agents, search, rowTestId }: AgentBuilderList
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
               </div>
-              <div className="mt-2 md:hidden">
-                <StarButton agentId={agent.id} isStarred={agent.isStarred} starCount={agent.starCount} size="sm" />
-              </div>
+              {showStars && (
+                <div className="mt-2 md:hidden">
+                  <StarButton agentId={agent.id} isStarred={agent.isStarred} starCount={agent.starCount} size="sm" />
+                </div>
+              )}
             </div>
-            <StarButton
-              agentId={agent.id}
-              isStarred={agent.isStarred}
-              starCount={agent.starCount}
-              size="sm"
-              className="shrink-0 hidden md:inline-flex"
-            />
+            {showStars && (
+              <StarButton
+                agentId={agent.id}
+                isStarred={agent.isStarred}
+                starCount={agent.starCount}
+                size="sm"
+                className="shrink-0 hidden md:inline-flex"
+              />
+            )}
           </Link>
         );
       })}

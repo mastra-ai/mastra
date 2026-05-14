@@ -3,6 +3,13 @@ import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';
 import { cleanup, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// jsdom doesn't provide ResizeObserver — stub it for ScrollArea
+globalThis.ResizeObserver ??= class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof globalThis.ResizeObserver;
 import { AgentBuilderSidebar } from '../agent-builder-sidebar';
 import { LinkComponentProvider } from '@/lib/framework';
 
@@ -17,6 +24,17 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
     model: false,
     stars: false,
     browser: false,
+  }),
+}));
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
+  useBuilderAgentAccess: () => ({
+    hasAccess: true,
+    canWrite: true,
+    canExecute: true,
+    canManageSkills: true,
+    canUseFavorites: true,
+    denialReason: null,
   }),
 }));
 

@@ -1,8 +1,8 @@
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   executeToolContextBodySchema,

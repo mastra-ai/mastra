@@ -1,8 +1,9 @@
-import { EmptyState, Spinner, Toaster, TooltipProvider } from '@mastra/playground-ui';
-import { AlertTriangle, LockIcon, Settings } from 'lucide-react';
+import { Button, EmptyState, Spinner, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { AlertTriangle, ArrowLeft, Eye, LockIcon, Settings } from 'lucide-react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { useRoleImpersonation } from '@/domains/auth/hooks/use-role-impersonation';
 import { isAuthenticated } from '@/domains/auth/types';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { LinkComponentProvider } from '@/lib/framework';
@@ -49,15 +50,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
   }
 
   if (denialReason === 'permission-denied') {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <EmptyState
-          iconSlot={<LockIcon />}
-          titleSlot="Access Denied"
-          descriptionSlot="You don't have permission to access the Agent Builder."
-        />
-      </div>
-    );
+    return <AccessDeniedScreen />;
   }
 
   if (denialReason === 'error') {
@@ -106,3 +99,33 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
     </TooltipProvider>
   );
 };
+
+function AccessDeniedScreen() {
+  const { isImpersonating, impersonatedRole, stopImpersonation } = useRoleImpersonation();
+
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <EmptyState
+          iconSlot={<LockIcon />}
+          titleSlot="Access Denied"
+          descriptionSlot="You don't have permission to access the Agent Builder."
+        />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <a href="/agents">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to Studio
+            </a>
+          </Button>
+          {isImpersonating && (
+            <Button variant="default" size="sm" onClick={stopImpersonation}>
+              <Eye className="h-3.5 w-3.5" />
+              Exit {impersonatedRole?.name} preview
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

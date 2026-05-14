@@ -75,7 +75,16 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       throw new Error(`FilesystemSkillsStorage: skill with id ${id} not found`);
     }
 
-    const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
+    const { authorId, visibility, activeVersionId, status, ...rawConfigFields } = updates;
+
+    // Filter out undefined keys: callers may spread partial snapshots into
+    // update() and rely on "omit = no change" semantics. Without this, an
+    // undefined value would clobber the latest version's populated field
+    // when spread into newConfig below.
+    const configFields: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawConfigFields)) {
+      if (value !== undefined) configFields[key] = value;
+    }
 
     // Config field names from StorageSkillSnapshotType
     const configFieldNames = [

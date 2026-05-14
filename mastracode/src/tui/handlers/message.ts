@@ -47,6 +47,8 @@ type StreamedSystemReminderPart = {
   path?: string;
   precedesMessageId?: string;
   gapText?: string;
+  goalMaxTurns?: number;
+  judgeModelId?: string;
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
@@ -70,6 +72,8 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
     path: reminder.path,
     precedesMessageId: typeof reminder.precedesMessageId === 'string' ? reminder.precedesMessageId : undefined,
     gapText: typeof reminder.gapText === 'string' ? reminder.gapText : undefined,
+    goalMaxTurns: typeof reminder.goalMaxTurns === 'number' ? reminder.goalMaxTurns : undefined,
+    judgeModelId: typeof reminder.judgeModelId === 'string' ? reminder.judgeModelId : undefined,
   };
 }
 
@@ -85,6 +89,8 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     message: reminder.message,
     reminderType: reminder.reminderType,
     path: reminder.path,
+    goalMaxTurns: reminder.goalMaxTurns,
+    judgeModelId: reminder.judgeModelId,
   });
 }
 
@@ -175,6 +181,8 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
 
   for (const reminder of systemReminderParts) {
+    if (reminder.reminderType === 'goal-judge') continue;
+
     const reminderKey = `${message.id}:${reminder.reminderType ?? ''}:${reminder.path ?? ''}:${reminder.message}`;
     if (!state.currentRunSystemReminderKeys.has(reminderKey)) {
       state.currentRunSystemReminderKeys.add(reminderKey);
@@ -183,10 +191,17 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   }
 
   if (!state.streamingComponent) {
-    if (systemReminderParts.length > 0) {
-      state.ui.requestRender();
+    const trailingParts = getTrailingContentParts(message);
+    const hasToolCalls = message.content.some(content => content.type === 'tool_call');
+    if (trailingParts.length === 0 && !hasToolCalls) {
+      if (systemReminderParts.length > 0) {
+        state.ui.requestRender();
+      }
+      return;
     }
-    return;
+
+    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    ctx.addChildBeforeFollowUps(state.streamingComponent);
   }
 
   state.streamingMessage = message;
@@ -286,6 +301,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         );
       }
       state.pendingTools.clear();
+      state.pendingTaskToolIds?.clear();
     }
 
     state.streamingComponent = undefined;

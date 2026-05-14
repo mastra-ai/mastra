@@ -11,8 +11,10 @@ export const AgentBuilderLayout = () => {
           <div className="hidden md:block">
             <AgentBuilderSidebar />
           </div>
-          <div className="bg-transparent overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
-            <Outlet />
+          <div className="flex flex-col h-full min-h-0">
+            <div className="flex-1 min-h-0 bg-transparent overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+              <Outlet />
+            </div>
           </div>
         </div>
         <AgentBuilderMobileBottomBar />
@@ -23,7 +25,7 @@ export const AgentBuilderLayout = () => {
 
 export const AgentBuilderEditionLayout = () => {
   return (
-    <div className="bg-surface1 font-sans h-screen grid grid-rows-1">
+    <div className="bg-surface1 font-sans h-screen grid grid-rows-1 grid-cols-[minmax(0,1fr)]">
       <Outlet />
     </div>
   );

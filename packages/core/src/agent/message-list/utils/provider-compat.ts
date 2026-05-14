@@ -3,6 +3,8 @@ import type { ModelMessage, ToolResultPart } from '@internal/ai-sdk-v5';
 
 import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';
+import { getResponseProviderItemId } from './response-item-metadata';
+import type { ResponseItemIdProvider } from './response-item-metadata';
 
 /**
  * Tool result with input field (Anthropic requirement)
@@ -83,6 +85,76 @@ export function ensureAnthropicCompatibleMessages(
 }
 
 /**
+ * Removes orphan tool_use / tool_result blocks. Anthropic requires every tool_result
+ * to be in the message immediately after its matching tool_use, and every tool_use
+ * to have a matching tool_result in the next message. Recall windows can slice
+ * through a parallel tool-call group and leave behind half a pair.
+ */
+export function sanitizeOrphanedToolPairs(messages: ModelMessage[]): ModelMessage[] {
+  const filteredContents = messages.map(m => (Array.isArray(m.content) ? [...m.content] : null));
+
+  for (let i = 0; i < messages.length; i++) {
+    const current = messages[i]!;
+
+    if (current.role === 'assistant' && Array.isArray(current.content)) {
+      const useIds = new Set<string>();
+      const inlineResultIds = new Set<string>();
+      for (const part of current.content) {
+        if (part.type === 'tool-call') useIds.add(part.toolCallId);
+        else if (part.type === 'tool-result') inlineResultIds.add(part.toolCallId);
+      }
+
+      const next = messages[i + 1];
+      const nextResultIds = new Set<string>();
+      if (next && next.role === 'tool' && Array.isArray(next.content)) {
+        for (const part of next.content) {
+          if (part.type === 'tool-result') nextResultIds.add(part.toolCallId);
+        }
+      }
+
+      const validPairs = new Set([...useIds].filter(id => inlineResultIds.has(id) || nextResultIds.has(id)));
+
+      filteredContents[i] = filteredContents[i]!.filter(p => {
+        if (p.type !== 'tool-call') return true;
+        const tc = p as { toolCallId: string; providerExecuted?: boolean };
+        // Provider-executed tools may be deferred (e.g. Anthropic web_search): the tool_use
+        // can appear without a matching tool_result until the provider resumes on the next call.
+        return tc.providerExecuted === true || validPairs.has(tc.toolCallId);
+      });
+
+      if (next && next.role === 'tool' && Array.isArray(next.content)) {
+        filteredContents[i + 1] = filteredContents[i + 1]!.filter(
+          p => p.type !== 'tool-result' || validPairs.has((p as { toolCallId: string }).toolCallId),
+        );
+      }
+    } else if (current.role === 'tool' && Array.isArray(current.content)) {
+      const prev = messages[i - 1];
+      if (!prev || prev.role !== 'assistant' || !Array.isArray(prev.content)) {
+        filteredContents[i] = filteredContents[i]!.filter(p => p.type !== 'tool-result');
+      }
+    }
+  }
+
+  const result: ModelMessage[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const original = messages[i]!;
+    const filtered = filteredContents[i];
+    if (filtered == null) {
+      result.push(original);
+      continue;
+    }
+    if (filtered.length === 0) continue;
+    if (Array.isArray(original.content) && filtered.length === original.content.length) {
+      result.push(original);
+      continue;
+    }
+    result.push({ ...original, content: filtered } as ModelMessage);
+  }
+
+  return result;
+}
+
+/**
  * Enriches a single message's tool-result parts with input field
  */
 function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBMessage[]): ModelMessage {
@@ -105,13 +177,13 @@ function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBM
 }
 
 // ============================================================================
-// OpenAI Compatibility
+// OpenAI-compatible Responses Compatibility
 // ============================================================================
 
 /**
- * Checks if a message part has OpenAI reasoning itemId
+ * Checks if a message part has an OpenAI reasoning itemId.
  *
- * OpenAI reasoning items are tracked via `providerMetadata.openai.itemId` (e.g., `rs_...`).
+ * OpenAI Responses reasoning items are tracked via `providerMetadata.openai.itemId`.
  * Each reasoning item has a unique itemId that must be preserved for proper deduplication.
  *
  * @param part - A message part to check
@@ -120,32 +192,46 @@ function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBM
  * @see https://github.com/mastra-ai/mastra/issues/9005 - OpenAI reasoning items filtering
  */
 export function hasOpenAIReasoningItemId(part: unknown): boolean {
-  if (!part || typeof part !== 'object') return false;
-  const partAny = part as Record<string, unknown>;
-
-  if (!('providerMetadata' in partAny) || !partAny.providerMetadata) return false;
-  const metadata = partAny.providerMetadata as Record<string, unknown>;
-
-  if (!('openai' in metadata) || !metadata.openai) return false;
-  const openai = metadata.openai as Record<string, unknown>;
-
-  return 'itemId' in openai && typeof openai.itemId === 'string';
+  return Boolean(getOpenAIReasoningItemId(part));
 }
 
 /**
- * Extracts the OpenAI itemId from a message part if present
+ * Checks if a message part has an OpenAI-compatible Responses itemId.
+ *
+ * Provider-neutral Responses item IDs are tracked via provider metadata or
+ * provider options fields such as `openai.itemId` or `azure.itemId`.
+ */
+export function hasResponseProviderItemId(part: unknown): boolean {
+  return Boolean(getResponseProviderItemIdFromPart(part));
+}
+
+/**
+ * Extracts an OpenAI itemId from a message part if present.
+ *
+ * This only inspects `providerMetadata.openai.itemId`; use
+ * `getResponseProviderItemIdFromPart` for provider-aware Azure/OpenAI lookups.
  *
  * @param part - A message part to extract from
  * @returns The itemId string or undefined if not present
  */
 export function getOpenAIReasoningItemId(part: unknown): string | undefined {
-  if (!hasOpenAIReasoningItemId(part)) return undefined;
-
+  if (!part || typeof part !== 'object') return undefined;
   const partAny = part as Record<string, unknown>;
-  const metadata = partAny.providerMetadata as Record<string, unknown>;
-  const openai = metadata.openai as Record<string, unknown>;
+  const providerMetadata = partAny.providerMetadata as Record<string, unknown> | undefined;
+  const openaiMetadata = providerMetadata?.openai as Record<string, unknown> | undefined;
+  return typeof openaiMetadata?.itemId === 'string' ? openaiMetadata.itemId : undefined;
+}
 
-  return openai.itemId as string;
+export function getResponseProviderItemIdFromPart(
+  part: unknown,
+): { provider: ResponseItemIdProvider; itemId: string } | undefined {
+  if (!part || typeof part !== 'object') return undefined;
+  const partAny = part as Record<string, unknown>;
+
+  return (
+    getResponseProviderItemId(partAny.providerMetadata as Record<string, unknown> | undefined) ||
+    getResponseProviderItemId(partAny.providerOptions as Record<string, unknown> | undefined)
+  );
 }
 
 // ============================================================================
@@ -179,8 +265,10 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
       );
 
       if (toolCallPart && toolCallPart.type === 'tool-invocation') {
-        // Return the args even if it's undefined or empty object
-        return toolCallPart.toolInvocation.args || {};
+        const args = toolCallPart.toolInvocation.args || {};
+        if (typeof args === 'object' && Object.keys(args).length > 0) {
+          return args;
+        }
       }
     }
 
@@ -189,7 +277,10 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
       const toolInvocation = msg.content.toolInvocations.find(inv => inv.toolCallId === toolCallId);
 
       if (toolInvocation) {
-        return toolInvocation.args || {};
+        const args = toolInvocation.args || {};
+        if (typeof args === 'object' && Object.keys(args).length > 0) {
+          return args;
+        }
       }
     }
   }

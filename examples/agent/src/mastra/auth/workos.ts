@@ -10,6 +10,7 @@ export async function initWorkOS(): Promise<AuthResult> {
 
   const mastraAuth = new MastraAuthWorkos({
     redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+    fetchMemberships: true,
   });
 
   const rbacProvider = new MastraRBACWorkos({
@@ -19,36 +20,17 @@ export async function initWorkOS(): Promise<AuthResult> {
     roleMapping: {
       // Full access
       admin: ['*'],
-      // Another admin-level role (should be filtered from preview list)
-      superadmin: ['*'],
-      // Agent Builder access: CRUD agents/skills, workspace file I/O, chat history
-      member: [
-        // necessary
-        'stored-agents:*',
-        'stored-skills:*',
-        //not necessary, but lose out on some features (tools in tool list and chat history)
-        'tools:read',
-        'workflows:read',
-        'memory:read',
-      ],
-      // Can only view and run agents
-      operator: ['agents:read', 'agents:execute', 'tools:read', 'workflows:read'],
-      // Read-only access — no resources at all
-      viewer: [],
-      // Can only see observability
-      auditor: ['observability:read', 'logs:read'],
+      // Read and execute across all resources
+      member: ['*:read', '*:execute'],
+      // Read-only access to all resources
+      viewer: ['*:read'],
       // Minimal default - no access
       _default: [],
     },
   });
 
-  const organizationId = process.env.WORKOS_ORGANIZATION_ID;
-  if (!organizationId) {
-    throw new Error('WORKOS_ORGANIZATION_ID is required to enable WorkOS FGA');
-  }
-
   const fgaProvider = new MastraFGAWorkos({
-    organizationId,
+    organizationId: process.env.WORKOS_ORGANIZATION_ID,
     resourceMapping: {
       // Per-resource filtering: agent ID maps directly to WorkOS resource external ID
       agent: { fgaResourceType: 'agent' },

@@ -2,10 +2,12 @@ import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
+import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { SlashCommandComponent } from '../components/slash-command.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
-import { addUserMessage, renderExistingMessages } from '../render-messages.js';
+import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
 
 function createState(): TUIState {
@@ -20,6 +22,7 @@ function createState(): TUIState {
     pendingSubagents: new Map(),
     allShellComponents: [],
     messageComponentsById: new Map(),
+    pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
     harness: {
       getDisplayState: () => ({ isRunning: false }),
@@ -47,6 +50,21 @@ function createReminderMessage(
 }
 
 describe('addUserMessage', () => {
+  it('dedupes echoed slash command messages against the optimistic slash component', () => {
+    const state = createState();
+    const slashComp = new SlashCommandComponent('deploy', 'custom output');
+    state.allSlashCommandComponents.push(slashComp);
+    state.chatContainer.addChild(slashComp);
+
+    addUserMessage(
+      state,
+      createUserMessage('<slash-command name="deploy">\ncustom output\n</slash-command>', 'signal-slash'),
+    );
+
+    expect(state.chatContainer.children).toEqual([slashComp]);
+    expect(state.messageComponentsById.get('signal-slash')).toBe(slashComp);
+  });
+
   it('renders a persisted temporal-gap marker from canonical system reminder content', () => {
     const state = createState();
 
@@ -107,6 +125,71 @@ describe('addUserMessage', () => {
     expect(state.allSystemReminderComponents).toHaveLength(1);
   });
 
+  it('renders escaped legacy goal reminders as system reminders', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<system-reminder type="goal-judge">[Goal attempt 1/20] Continue &amp; handle &lt;tags&gt;</system-reminder>',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.allSystemReminderComponents).toHaveLength(1);
+    const rendered = state.allSystemReminderComponents[0]!.render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Goal');
+    expect(rendered).toContain('Continue & handle <tags>');
+  });
+
+  it('renders canonical initial goal reminders as system reminders', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createReminderMessage({
+        type: 'system_reminder',
+        reminderType: 'goal',
+        message: 'Finish the implementation.',
+        goalMaxTurns: 20,
+        judgeModelId: 'openai/gpt-5.5',
+      } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.allSystemReminderComponents).toHaveLength(1);
+    const rendered = state.allSystemReminderComponents[0]!.render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Goal (20 max attempts, judge: openai/gpt-5.5)');
+    expect(rendered).toContain('Finish the implementation.');
+    expect(rendered).not.toContain('Goal set');
+  });
+
+  it('inserts a goal reminder before an active streaming response', () => {
+    const state = createState();
+    const streamingComponent = new AssistantMessageComponent();
+    state.streamingComponent = streamingComponent;
+    state.chatContainer.addChild(streamingComponent);
+
+    addUserMessage(
+      state,
+      createReminderMessage({
+        type: 'system_reminder',
+        reminderType: 'goal',
+        message: 'Finish the implementation.',
+        goalMaxTurns: 20,
+        judgeModelId: 'openai/gpt-5.5',
+      } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(2);
+    expect(state.chatContainer.children[0]).toBe(state.allSystemReminderComponents[0]);
+    expect(state.chatContainer.children[1]).toBe(streamingComponent);
+  });
+
   it('keeps normal user text visible when it merely quotes a system-reminder tag', () => {
     const state = createState();
 
@@ -121,6 +204,48 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children[0]).toBeInstanceOf(UserMessageComponent);
     expect(state.allSystemReminderComponents).toHaveLength(0);
     expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[0]);
+  });
+
+  it('keeps pending signals pinned below streamed history', () => {
+    const state = createState();
+
+    addPendingUserMessage(state, 'pending-signal-1', 'pending');
+    addUserMessage(state, createUserMessage('streamed before pending', 'user-2'));
+
+    expect(state.pendingSignalMessageComponentsById.has('pending-signal-1')).toBe(true);
+    expect(state.messageComponentsById.has('user-2')).toBe(true);
+    expect(state.chatContainer.children).toEqual([
+      state.messageComponentsById.get('user-2'),
+      state.pendingSignalMessageComponentsById.get('pending-signal-1')?.component,
+    ]);
+  });
+
+  it('replaces a pending signal with the echoed user message once the stream is settled', () => {
+    const state = createState();
+
+    addPendingUserMessage(state, 'pending-signal-1', 'continue with this');
+    const pending = state.chatContainer.children[0];
+
+    addUserMessage(state, createUserMessage('continue with this', 'pending-signal-1'));
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(UserMessageComponent);
+    expect(state.chatContainer.children[0]).not.toBe(pending);
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.followUpComponents).toEqual([]);
+    expect(state.messageComponentsById.get('pending-signal-1')).toBe(state.chatContainer.children[0]);
+  });
+
+  it('ignores echoed idle signals that were already rendered directly', () => {
+    const state = createState();
+
+    addUserMessage(state, createUserMessage('render directly', 'signal-idle-1'));
+    const rendered = state.chatContainer.children[0];
+
+    addUserMessage(state, createUserMessage('render directly', 'signal-idle-1'));
+
+    expect(state.chatContainer.children).toEqual([rendered]);
+    expect(state.messageComponentsById.get('signal-idle-1')).toBe(rendered);
   });
 });
 

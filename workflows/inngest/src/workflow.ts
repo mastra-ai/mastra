@@ -205,9 +205,9 @@ export class InngestWorkflow<
         id: `workflow.${this.id}.cron`,
         retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        triggers: { cron: this.cronConfig?.cron ?? '' },
         ...this.flowControlConfig,
       },
-      { cron: this.cronConfig?.cron ?? '' },
       async () => {
         const run = await this.createRun();
         // @ts-expect-error - cron inputData type mismatch
@@ -221,7 +221,7 @@ export class InngestWorkflow<
     return this.cronFunction;
   }
 
-  getFunction() {
+  getFunction(): ReturnType<Inngest['createFunction']> {
     if (this.function) {
       return this.function;
     }
@@ -235,11 +235,11 @@ export class InngestWorkflow<
         id: `workflow.${this.id}`,
         retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
-      { event: `workflow.${this.id}` },
-      async ({ event, step, attempt, publish }) => {
+      async ({ event, step, attempt }) => {
         let {
           inputData,
           initialState,
@@ -259,8 +259,10 @@ export class InngestWorkflow<
           });
         }
 
-        // Create InngestPubSub instance with the publish function from Inngest context
-        const pubsub = new InngestPubSub(this.inngest, this.id, publish);
+        // Create InngestPubSub instance. Publishes go through `inngest.realtime.publish()`
+        // (Inngest SDK v4 client API), which auto-includes the current runId from the
+        // function's async context.
+        const pubsub = new InngestPubSub(this.inngest, this.id);
 
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
@@ -515,7 +517,7 @@ export class InngestWorkflow<
     });
   }
 
-  getFunctions() {
+  getFunctions(): ReturnType<Inngest['createFunction']>[] {
     return [
       this.getFunction(),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),

@@ -1,10 +1,10 @@
 import type { ListStoredAgentsParams, ListStoredSkillsParams, StoredSkillResponse } from '@mastra/client-js';
 import {
   EmptyState,
-  EntityListPageLayout,
   ErrorState,
   ListSearch,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui';
 import { SparklesIcon, StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
@@ -21,7 +22,6 @@ import {
   SkillBuilderListSkeleton,
 } from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
-import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
@@ -29,12 +29,17 @@ import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 type Tab = 'agents' | 'skills';
 
 export default function AgentBuilderFavoritePage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('agents');
-  const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
   const { data: currentUser } = useCurrentUser();
-  const isAdmin = currentUser?.permissions?.includes('*') ?? false;
+
+  const handleSkillClick = (skill: StoredSkillResponse) => {
+    const isOwner = !skill.authorId || currentUser?.id === skill.authorId;
+    const destination = isOwner ? 'edit' : 'view';
+    void navigate(`/agent-builder/skills/${skill.id}/${destination}`, { viewTransition: true });
+  };
 
   const agentListParams = useMemo<ListStoredAgentsParams>(
     () => ({
@@ -116,13 +121,13 @@ export default function AgentBuilderFavoritePage() {
         </div>
       );
     }
-    return <SkillBuilderList skills={skills} search={search} onSkillClick={setSelectedSkill} />;
+    return <SkillBuilderList skills={skills} search={search} onSkillClick={handleSkillClick} />;
   })();
 
   return (
     <>
-      <EntityListPageLayout className="px-4 md:px-10">
-        <EntityListPageLayout.Top>
+      <PageLayout className="px-4 md:px-10">
+        <PageLayout.TopArea>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
             <PageHeader>
               <PageHeader.Title>
@@ -160,20 +165,10 @@ export default function AgentBuilderFavoritePage() {
               <ListSearch onSearch={setSearch} label="Filter favorites" placeholder="Filter by name or description" />
             </div>
           </div>
-        </EntityListPageLayout.Top>
+        </PageLayout.TopArea>
 
         {body}
-      </EntityListPageLayout>
-
-      {selectedSkill && (
-        <SkillEditDialog
-          isOpen={!!selectedSkill}
-          onClose={() => setSelectedSkill(null)}
-          skill={selectedSkill}
-          currentUserId={currentUser?.id}
-          isAdmin={isAdmin}
-        />
-      )}
+      </PageLayout>
     </>
   );
 }

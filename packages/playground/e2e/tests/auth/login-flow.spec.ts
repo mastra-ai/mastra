@@ -152,7 +152,9 @@ test.describe('Login Flow', () => {
       await page.getByLabel(/Password/i).fill('password123');
       await page.getByRole('button', { name: /Sign in$/i }).click();
 
-      await expect(page).toHaveURL(requestedRoute);
+      await expect(page).toHaveURL(/\/login\?redirect=/);
+      const postLoginUrl = new URL(page.url());
+      expect(postLoginUrl.searchParams.get('redirect')).toBe(requestedRoute);
     });
 
     test('agent-builder route still renders when auth is disabled', async ({ page }) => {

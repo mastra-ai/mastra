@@ -110,6 +110,29 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface SubscribeAgentThreadParams {
+  resourceId?: string;
+  threadId: string;
+}
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -360,6 +383,23 @@ export type ResponsesOutputItemDoneEvent = {
   sequence_number?: number;
 };
 
+export type ResponsesFunctionCallArgumentsDeltaEvent = {
+  type: 'response.function_call_arguments.delta';
+  output_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesFunctionCallArgumentsDoneEvent = {
+  type: 'response.function_call_arguments.done';
+  output_index: number;
+  item_id: string;
+  name: string;
+  arguments: string;
+  sequence_number?: number;
+};
+
 export type ResponsesCompletedEvent = {
   type: 'response.completed';
   response: ResponsesResponse;
@@ -375,6 +415,8 @@ export type ResponsesStreamEvent =
   | ResponsesOutputTextDoneEvent
   | ResponsesContentPartDoneEvent
   | ResponsesOutputItemDoneEvent
+  | ResponsesFunctionCallArgumentsDeltaEvent
+  | ResponsesFunctionCallArgumentsDoneEvent
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
@@ -619,8 +661,10 @@ export interface ListMemoryThreadsParams {
   agentId?: string;
   page?: number;
   perPage?: number;
-  orderBy?: 'createdAt' | 'updatedAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -634,6 +678,11 @@ export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
+  /**
+   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
+   * to `getMemoryThread({ threadId, agentId })` is used.
+   */
+  agentId?: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -658,6 +707,11 @@ export interface CloneMemoryThreadParams {
       messageIds?: string[];
     };
   };
+  /**
+   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
+   * to `getMemoryThread({ threadId, agentId })` is used.
+   */
+  agentId?: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -1524,8 +1578,10 @@ export interface AgentVersionResponse {
 export interface ListAgentVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListAgentVersionsResponse {
@@ -1613,8 +1669,10 @@ export interface ScorerVersionResponse {
 export interface ListScorerVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListScorerVersionsResponse {
@@ -1947,7 +2005,8 @@ export interface CreateStoredSkillParams {
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name: string;
-  description?: string;
+  /** Required by the server: description of what the skill does and when to use it. */
+  description: string;
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
@@ -2629,8 +2688,10 @@ export interface PromptBlockVersionResponse {
 export interface ListPromptBlockVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListPromptBlockVersionsResponse {
@@ -2656,7 +2717,14 @@ export interface DeletePromptBlockVersionResponse {
   message: string;
 }
 
-export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+export type BackgroundTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -2831,4 +2899,123 @@ export interface BuilderPickerResponse {
   visibleTools: string[] | null;
   visibleAgents: string[] | null;
   visibleWorkflows: string[] | null;
+}
+
+/**
+ * Response from GET /editor/builder/infrastructure
+ *
+ * Agent Builder infrastructure configuration plus lightweight runtime resolution state.
+ */
+export interface InfrastructureStatusResponse {
+  channels: {
+    providers: Array<{
+      id: string;
+      name: string;
+      isConfigured: boolean;
+      routeCount: number;
+    }>;
+  };
+  browser: {
+    type: string | null;
+    provider: string | null;
+    env: string | null;
+    registered: boolean;
+    availableProviders: string[];
+    config: Array<{ key: string; value: string }>;
+  };
+  workspace: {
+    type: string | null;
+    workspaceId: string | null;
+    name: string | null;
+    source: string | null;
+    registered: boolean;
+    hasFilesystem: boolean;
+    hasSandbox: boolean;
+    filesystemProvider: string | null;
+    sandboxProvider: string | null;
+    config: Array<{ key: string; value: string }>;
+  };
+  registries: {
+    skillsSh: {
+      enabled: boolean;
+    };
+  };
+}
+
+// ============================================================================
+// Builder registries (skills.sh and other external skill catalogs)
+// ============================================================================
+
+/**
+ * One known skill registry surfaced from the Agent Builder config.
+ */
+export interface BuilderRegistryDescriptor {
+  id: string;
+  enabled: boolean;
+  label: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries`.
+ */
+export interface ListBuilderRegistriesResponse {
+  registries: BuilderRegistryDescriptor[];
+}
+
+/**
+ * Single skill summary returned from a registry search/popular endpoint.
+ * Wire shape matches the upstream skills.sh proxy.
+ */
+export interface BuilderRegistrySkillSummary {
+  id: string;
+  name: string;
+  installs: number;
+  /** Repository identifier in `owner/repo` or `owner/repo/path` form. */
+  topSource: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/search`.
+ */
+export interface BuilderRegistrySearchResponse {
+  query: string;
+  searchType: string;
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/popular`.
+ */
+export interface BuilderRegistryPopularResponse {
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/preview`.
+ */
+export interface BuilderRegistryPreviewResponse {
+  content: string;
+}
+
+/**
+ * Body for `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallBody {
+  owner: string;
+  repo: string;
+  skillName: string;
+  visibility?: 'private' | 'public';
+}
+
+/**
+ * Response from `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallResponse {
+  storedSkillId: string;
+  name: string;
+  filesWritten: number;
 }

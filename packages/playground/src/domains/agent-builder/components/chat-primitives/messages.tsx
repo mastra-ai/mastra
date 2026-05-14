@@ -3,10 +3,12 @@ import type { MastraUIMessage } from '@mastra/react';
 import { Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
+import { ConnectChannelMessage } from '../agent-builder-edit/connect-channel-message';
 import { AGENT_BUILDER_TOOL_NAME } from '../agent-builder-edit/hooks/use-agent-builder-tool';
+import { CONNECT_CHANNEL_TOOL_NAME } from '../agent-builder-edit/hooks/use-connect-channel-tool';
 import { Shimmer } from './shimmer';
 
-export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
+export const MessageRow = ({ message, agentId }: { message: MastraUIMessage; agentId?: string }) => {
   return (
     <>
       {message.parts.map((part, index) => {
@@ -28,16 +30,28 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
               return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
             }
 
+            if (part.toolName === CONNECT_CHANNEL_TOOL_NAME) {
+              const platform = (part.input as { platform?: string } | undefined)?.platform ?? 'slack';
+              return <ConnectChannelMessage key={key} platformId={platform} agentId={agentId} />;
+            }
+
             return <ToolExecutionMessage key={key} />;
           }
 
-          // TMP removed to see how it behaves
-          // case `tool-${AGENT_BUILDER_TOOL_NAME}`: {
-          //   const toolsAdded = part.input.tools ?? [];
-          //   return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
-          // }
+          case `tool-${AGENT_BUILDER_TOOL_NAME}`: {
+            const toolsAdded = (part.input as { tools?: { id: string; name: string }[] } | undefined)?.tools ?? [];
+            return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
+          }
+
+          case `tool-${CONNECT_CHANNEL_TOOL_NAME}`: {
+            const platform = (part.input as { platform?: string } | undefined)?.platform ?? 'slack';
+            return <ConnectChannelMessage key={key} platformId={platform} agentId={agentId} />;
+          }
 
           default: {
+            if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
+              return <ToolExecutionMessage key={key} />;
+            }
             return null;
           }
         }

@@ -59,6 +59,7 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
     // Model-related spans
     case SpanType.MODEL_GENERATION:
     case SpanType.MODEL_STEP:
+    case SpanType.MODEL_INFERENCE:
     case SpanType.MODEL_CHUNK:
       return (flags & InternalSpans.MODEL) !== 0;
 

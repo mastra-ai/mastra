@@ -134,8 +134,8 @@ export function getCurrentModel(model?: { provider?: string; modelId?: string })
 
 export { didProviderChange } from './model-context';
 
-function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
-  if (value === undefined) {
+function parseActivationTTL(value: number | string | false | undefined, fieldPath: string): number | undefined {
+  if (value === undefined || value === false) {
     return undefined;
   }
 
@@ -374,26 +374,21 @@ export class ObservationalMemory {
     this.onIndexObservations = config.onIndexObservations;
     this.mastra = config.mastra;
 
-    // Resolve "default" to the default model
-    const resolveModel = (m: typeof config.model) =>
-      m === 'default' ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model : m;
+    // Resolve "default" to the model default for the agent being configured.
+    const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
+      model === 'default' ? defaultModel : model;
 
-    // Require an explicit model — no silent default.
-    // Resolution order: top-level model → sub-config model → the other sub-config model → error
+    // Resolution order: top-level model → sub-config model → the other sub-config model → default.
     const observationModel =
-      resolveModel(config.model) ?? resolveModel(config.observation?.model) ?? resolveModel(config.reflection?.model);
+      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
     const reflectionModel =
-      resolveModel(config.model) ?? resolveModel(config.reflection?.model) ?? resolveModel(config.observation?.model);
-
-    if (!observationModel || !reflectionModel) {
-      throw new Error(
-        `Observational Memory requires a model to be set. Use \`observationalMemory: true\` for the default (google/gemini-2.5-flash), or set a model explicitly:\n\n` +
-          `  observationalMemory: {\n` +
-          `    model: "$provider/$model",\n` +
-          `  }\n\n` +
-          `See https://mastra.ai/docs/memory/observational-memory#models for model recommendations and alternatives.`,
-      );
-    }
+      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
 
     // Get base thresholds first (needed for shared budget calculation)
     const messageTokens = config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens;
@@ -454,6 +449,10 @@ export class ObservationalMemory {
       }
     }
 
+    const observationActivateAfterIdle = config.observation?.activateAfterIdle ?? config.activateAfterIdle;
+    const observationActivateAfterIdlePath =
+      config.observation?.activateAfterIdle !== undefined ? 'observation.activateAfterIdle' : 'activateAfterIdle';
+
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
@@ -481,8 +480,9 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
-      activateOnProviderChange: config.activateOnProviderChange ?? false,
+      activateAfterIdle: parseActivationTTL(observationActivateAfterIdle, observationActivateAfterIdlePath),
+      activateOnProviderChange:
+        config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -514,8 +514,8 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
-      activateOnProviderChange: config.activateOnProviderChange ?? false,
+      activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
+      activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -1315,6 +1315,10 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
+      if (msg.role === 'system') {
+        continue;
+      }
+
       // First check: skip if this message ID was already observed (safeguard against re-observation)
       if (observedMessageIds?.has(msg.id)) {
         continue;
@@ -1744,7 +1748,7 @@ export class ObservationalMemory {
       });
     }
 
-    return result.messages;
+    return result.messages.filter(msg => msg.role !== 'system');
   }
 
   /**

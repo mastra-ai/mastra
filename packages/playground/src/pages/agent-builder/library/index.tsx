@@ -1,10 +1,10 @@
-import type { ListStoredAgentsParams, ListStoredSkillsParams, StoredSkillResponse } from '@mastra/client-js';
+import type { ListStoredAgentsParams, ListStoredSkillsParams } from '@mastra/client-js';
 import {
   EmptyState,
-  EntityListPageLayout,
   ErrorState,
   ListSearch,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui';
 import { LibraryIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
@@ -20,21 +21,19 @@ import {
   SkillBuilderList,
   SkillBuilderListSkeleton,
 } from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
-import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 type Tab = 'agents' | 'skills';
 
 export default function AgentBuilderLibraryPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('agents');
-  const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
-  const { data: currentUser } = useCurrentUser();
-  const isAdmin = currentUser?.permissions?.includes('*') ?? false;
+  const { canUseFavorites } = useBuilderAgentAccess();
 
   const agentListParams = useMemo<ListStoredAgentsParams>(() => ({ visibility: 'public' }), []);
   const skillListParams = useMemo<ListStoredSkillsParams>(() => ({ visibility: 'public' }), []);
@@ -86,7 +85,9 @@ export default function AgentBuilderLibraryPage() {
           </div>
         );
       }
-      return <AgentBuilderList agents={agents} search={search} rowTestId="library-agent-row" />;
+      return (
+        <AgentBuilderList agents={agents} search={search} rowTestId="library-agent-row" showStars={canUseFavorites} />
+      );
     }
 
     // Skills tab
@@ -103,13 +104,20 @@ export default function AgentBuilderLibraryPage() {
         </div>
       );
     }
-    return <SkillBuilderList skills={skills} search={search} onSkillClick={setSelectedSkill} />;
+    return (
+      <SkillBuilderList
+        skills={skills}
+        search={search}
+        onSkillClick={skill => navigate(`/agent-builder/skills/${skill.id}/view`, { viewTransition: true })}
+        showStars={canUseFavorites}
+      />
+    );
   })();
 
   return (
     <>
-      <EntityListPageLayout className="px-4 md:px-10">
-        <EntityListPageLayout.Top>
+      <PageLayout className="px-4 md:px-10">
+        <PageLayout.TopArea>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
             <PageHeader>
               <PageHeader.Title>
@@ -145,20 +153,10 @@ export default function AgentBuilderLibraryPage() {
               <ListSearch onSearch={setSearch} label="Filter library" placeholder="Filter by name or description" />
             </div>
           </div>
-        </EntityListPageLayout.Top>
+        </PageLayout.TopArea>
 
         {body}
-      </EntityListPageLayout>
-
-      {selectedSkill && (
-        <SkillEditDialog
-          isOpen={!!selectedSkill}
-          onClose={() => setSelectedSkill(null)}
-          skill={selectedSkill}
-          currentUserId={currentUser?.id}
-          isAdmin={isAdmin}
-        />
-      )}
+      </PageLayout>
     </>
   );
 }

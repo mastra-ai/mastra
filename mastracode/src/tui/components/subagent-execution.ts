@@ -258,18 +258,24 @@ function summarizeArgs(args: unknown): string {
   const obj = args as Record<string, unknown>;
   const parts: string[] = [];
 
-  // Special handling for task_write tool
+  // Special handling for task list snapshots.
   if (obj.tasks && Array.isArray(obj.tasks)) {
+    const maxTasksInSummary = 5;
     const tasks = obj.tasks as Array<{
       content?: string;
       status?: string;
       activeForm?: string;
     }>;
-    const taskSummaries = tasks.map(t => {
+    const visibleTasks = tasks.slice(0, maxTasksInSummary);
+    const taskSummaries = visibleTasks.map(t => {
       const icon = t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '→' : '○';
       const content = t.content || t.activeForm || 'task';
       return `${icon} ${content}`;
     });
+    const extraCount = tasks.length - visibleTasks.length;
+    if (extraCount > 0) {
+      taskSummaries.push(`… +${extraCount} more`);
+    }
     return theme.fg('muted', taskSummaries.join(', '));
   }
 

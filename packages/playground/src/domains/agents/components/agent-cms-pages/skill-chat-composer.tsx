@@ -1,9 +1,7 @@
 import { Txt } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
 import { useChat } from '@mastra/react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Markdown from 'react-markdown';
 
 import {
   SKILL_BUILDER_INSTRUCTIONS,
@@ -13,6 +11,7 @@ import {
 } from '../../hooks/use-skill-builder-tool';
 import type { SkillBuilderCallbacks, SkillFormState } from '../../hooks/use-skill-builder-tool';
 import { ChatComposer } from '@/domains/agent-builder/components/chat-primitives/chat-composer';
+import { MessageList } from '@/domains/agent-builder/components/chat-primitives/message-list';
 
 const BUILDER_AGENT_ID = 'builder-agent';
 
@@ -25,6 +24,10 @@ export interface SkillChatComposerProps extends SkillBuilderCallbacks {
   onFieldsPopulated?: () => void;
   /** Current form state — exposed to the agent via a read tool */
   formState: SkillFormState;
+  /** Optional one-shot user message to send as soon as the chat mounts (starter prompt). */
+  initialUserMessage?: string;
+  /** Notifies parent whenever the agent's run state changes (streaming start/stop). */
+  onRunningChange?: (isRunning: boolean) => void;
 }
 
 export function SkillChatComposer({
@@ -32,6 +35,8 @@ export function SkillChatComposer({
   hasFields,
   onFieldsPopulated,
   formState,
+  initialUserMessage,
+  onRunningChange,
   ...callbacks
 }: SkillChatComposerProps) {
   const populatedRef = useRef(false);
@@ -67,6 +72,12 @@ export function SkillChatComposer({
   const threadId = useMemo(() => `skill-builder-${sessionKey}`, [sessionKey]);
 
   const { messages, sendMessage, isRunning, setMessages } = useChat({ agentId: BUILDER_AGENT_ID });
+
+  // Bubble run state up so parents can gate UI (e.g. revealing the form only
+  // after the agent's first turn completes with a title set).
+  useEffect(() => {
+    onRunningChange?.(isRunning);
+  }, [isRunning, onRunningChange]);
 
   // Reset messages when session changes (dialog open/close)
   const prevSessionRef = useRef(sessionKey);
@@ -104,33 +115,48 @@ export function SkillChatComposer({
     }
   }, []);
 
-  const hasMessages = messages.length > 0;
+  // Auto-send the starter prompt once on mount when provided.
+  const sentStarterRef = useRef(false);
+  useEffect(() => {
+    if (sentStarterRef.current) return;
+    const starter = initialUserMessage?.trim();
+    if (!starter) return;
+    sentStarterRef.current = true;
+    void sendMessage({
+      message: starter,
+      threadId,
+      clientTools,
+      modelSettings: { instructions: SKILL_BUILDER_INSTRUCTIONS },
+    });
+  }, [initialUserMessage, sendMessage, threadId, clientTools]);
+
+  const emptyState = (
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-center px-6 py-8">
+      <div className="rounded-full bg-accent5/10 p-3">
+        <Sparkles className="h-6 w-6 text-accent5" />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Txt variant="ui-md" className="text-neutral5 font-medium" as="p">
+          {hasFields ? 'Refine your skill' : 'Describe your skill'}
+        </Txt>
+        <Txt variant="ui-sm" className="text-neutral3" as="p">
+          {hasFields
+            ? 'Ask the agent to adjust the name, description, or instructions.'
+            : 'Tell the agent what this skill should do and it will fill in the details for you.'}
+        </Txt>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Empty state — only when no messages yet */}
-      {!hasMessages && (
-        <div className="flex flex-col items-center justify-center gap-3 text-center px-6 py-8">
-          <div className="rounded-full bg-accent5/10 p-3">
-            <Sparkles className="h-6 w-6 text-accent5" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Txt variant="ui-md" className="text-neutral5 font-medium" as="p">
-              {hasFields ? 'Refine your skill' : 'Describe your skill'}
-            </Txt>
-            <Txt variant="ui-sm" className="text-neutral3" as="p">
-              {hasFields
-                ? 'Ask the agent to adjust the name, description, or instructions.'
-                : 'Tell the agent what this skill should do and it will fill in the details for you.'}
-            </Txt>
-          </div>
-        </div>
-      )}
-
-      {/* Messages */}
-      {hasMessages && <SkillMessages messages={messages} isRunning={isRunning} />}
-
-      {/* Composer */}
+    <div className="flex h-full min-h-0 flex-col">
+      <MessageList
+        messages={messages}
+        isRunning={isRunning}
+        emptyState={emptyState}
+        skeletonTestId="skill-builder-conversation-messages-skeleton"
+        agentId={BUILDER_AGENT_ID}
+      />
       <ChatComposer
         draft={draft}
         onDraftChange={setDraft}
@@ -141,71 +167,10 @@ export function SkillChatComposer({
         isRunning={isRunning}
         placeholder={hasFields ? 'Ask the agent to refine…' : 'Describe your skill…'}
         tone="info"
+        inputTestId="skill-builder-conversation-input"
+        submitTestId="skill-builder-conversation-submit"
+        containerTestId="skill-builder-conversation-composer"
       />
-    </div>
-  );
-}
-
-/** Compact message list — renders inline, no flex-1 stretching */
-function SkillMessages({ messages, isRunning }: { messages: MastraUIMessage[]; isRunning: boolean }) {
-  const endRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [messages, isRunning]);
-
-  // Check if the assistant has any visible text content yet
-  const lastMessage = messages[messages.length - 1];
-  const hasAssistantText =
-    lastMessage?.role === 'assistant' && lastMessage.parts.some(p => p.type === 'text' && p.text?.trim());
-
-  return (
-    <div className="flex flex-col gap-3">
-      {messages.map(msg => (
-        <SkillMessageRow key={msg.id} message={msg} />
-      ))}
-      {isRunning && !hasAssistantText && <ThinkingIndicator />}
-      <div ref={endRef} />
-    </div>
-  );
-}
-
-function ThinkingIndicator() {
-  return (
-    <div className="flex items-center gap-2 text-neutral3 px-1">
-      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      <Txt variant="ui-sm" className="text-neutral3">
-        Building your skill…
-      </Txt>
-    </div>
-  );
-}
-
-function SkillMessageRow({ message }: { message: MastraUIMessage }) {
-  const textParts = message.parts.filter(p => p.type === 'text' && p.text?.trim());
-
-  if (textParts.length === 0) return null;
-
-  const isUser = message.role === 'user';
-
-  return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-          isUser ? 'bg-accent5/15 text-neutral5' : 'bg-surface3 text-neutral4'
-        }`}
-      >
-        {textParts.map((part, i) => {
-          const text = 'text' in part ? (part.text as string) : '';
-          return isUser ? (
-            <span key={i}>{text}</span>
-          ) : (
-            <Markdown key={i} components={{ p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p> }}>
-              {text}
-            </Markdown>
-          );
-        })}
-      </div>
     </div>
   );
 }

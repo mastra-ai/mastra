@@ -1,9 +1,13 @@
-import { Button, DropdownMenu, StatusBadge, toast } from '@mastra/playground-ui';
-import { ChevronDownIcon } from 'lucide-react';
+import { Button, DropdownMenu, StatusBadge } from '@mastra/playground-ui';
+import { ChevronDownIcon, SendIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useChannelInstallations, useChannelPlatforms, useConnectChannel } from '@/domains/agents/hooks/use-channels';
+import {
+  useChannelInstallations,
+  useChannelPlatforms,
+  useConnectChannelAction,
+} from '@/domains/agents/hooks/use-channels';
 import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
 export interface PublishToChannelButtonProps {
@@ -26,6 +30,7 @@ export function PublishToChannelButton({ agentId, disabled = false }: PublishToC
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button size="sm" variant="ghost" disabled={disabled} data-testid="agent-builder-publish-channel">
+            <SendIcon className="h-4 w-4" />
             Publish to…
             <ChevronDownIcon className="h-4 w-4" />
           </Button>
@@ -66,7 +71,7 @@ interface PublishChannelMenuItemProps {
 function PublishChannelMenuItem({ platform, agentId, onSelect }: PublishChannelMenuItemProps) {
   const { data: installations = [] } = useChannelInstallations(platform.id, agentId);
   const installation = installations.find(i => i.status === 'active');
-  const { mutate: connect, isPending: isConnecting } = useConnectChannel(platform.id);
+  const { connect, isConnecting } = useConnectChannelAction(platform.id);
 
   // Slack-specific shortcut: when the platform is configured but not yet
   // connected, the dialog adds nothing — the user's intent ("connect Slack")
@@ -82,28 +87,7 @@ function PublishChannelMenuItem({ platform, agentId, onSelect }: PublishChannelM
       return;
     }
 
-    connect(
-      { agentId },
-      {
-        onSuccess: result => {
-          if (result.type === 'oauth') {
-            window.location.href = result.authorizationUrl;
-            return;
-          }
-          if (result.type === 'deep_link') {
-            const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
-            if (!popup) {
-              toast.error('Popup blocked — please allow popups and try again');
-            }
-          }
-          // 'immediate' → installation list will be invalidated by the hook;
-          // no further UI action needed.
-        },
-        onError: (err: Error & { body?: { error?: string } }) => {
-          toast.error(err.body?.error || err.message || 'Failed to connect channel');
-        },
-      },
-    );
+    connect(agentId);
   };
 
   return (

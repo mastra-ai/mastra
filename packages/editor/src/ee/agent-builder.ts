@@ -62,6 +62,10 @@ export class EditorAgentBuilder implements IAgentBuilder {
     return this.options.configuration;
   }
 
+  getRegistries(): AgentBuilderOptions['registries'] {
+    return this.options.registries;
+  }
+
   getModelPolicyWarnings(): string[] {
     return [...this.modelPolicyWarnings, ...this.browserConfigWarnings];
   }

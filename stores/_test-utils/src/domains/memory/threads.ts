@@ -78,6 +78,51 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(result).toBeNull();
     });
 
+    describe('resourceId isolation in getThreadById', () => {
+      it('should return thread when resourceId matches (tenant match)', async () => {
+        const id = `thread-match-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId });
+        expect(result).not.toBeNull();
+        expect(result?.id).toBe(id);
+      });
+
+      it('should return null when resourceId does not match (tenant mismatch)', async () => {
+        const id = `thread-mismatch-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const otherResourceId = `tenant-other-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId: otherResourceId });
+        expect(result).toBeNull();
+      });
+
+      it('should treat an empty string resourceId as an explicit scope', async () => {
+        const id = `thread-empty-resourceId-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId: '' });
+        expect(result).toBeNull();
+      });
+
+      it('should return thread when resourceId is not provided (backwards compatibility)', async () => {
+        const id = `thread-no-resourceId-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id });
+        expect(result).not.toBeNull();
+        expect(result?.id).toBe(id);
+      });
+    });
+
     it('should get threads by resource ID', async () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };

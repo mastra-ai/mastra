@@ -105,7 +105,7 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Provides hints for tracing strategy selection by the DefaultExporter.
+   * Provides hints for tracing strategy selection by the MastraStorageExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
    */
   public get observabilityStrategy(): {
@@ -119,7 +119,7 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Provides hints for tracing strategy selection by the DefaultExporter.
+   * Provides hints for tracing strategy selection by the MastraStorageExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
    * @deprecated Use {@link observabilityStrategy} instead.
    * @see {@link observabilityStrategy} for the replacement property.

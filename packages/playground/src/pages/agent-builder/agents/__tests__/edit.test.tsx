@@ -58,8 +58,14 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter
 }));
 
 const useStoredAgentMock = vi.fn((..._args: unknown[]) => ({ data: storedAgent, isLoading: false }));
+const deleteStoredAgentMutateAsync = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   useStoredAgent: (...args: unknown[]) => useStoredAgentMock(...args),
+  useStoredAgentMutations: () => ({
+    createStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    updateStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    deleteStoredAgent: { mutateAsync: deleteStoredAgentMutateAsync, isPending: false },
+  }),
 }));
 
 vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
@@ -80,6 +86,17 @@ vi.mock('@/domains/workspace/hooks/use-stored-workspaces', () => ({
 
 vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
+}));
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
+  useBuilderAgentAccess: () => ({
+    hasAccess: true,
+    canWrite: true,
+    canExecute: true,
+    canManageSkills: true,
+    canUseFavorites: true,
+    denialReason: null,
+  }),
 }));
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
@@ -134,6 +151,7 @@ const renderAt = (path = '/agent-builder/agents/agent-123/edit') =>
         <Routes>
           <Route path="/agent-builder/agents/:id/edit" element={<AgentBuilderAgentEdit />} />
           <Route path="/agent-builder/agents/:id/view" element={<div data-testid="view-page" />} />
+          <Route path="/agent-builder/agents" element={<div data-testid="agents-list-page" />} />
         </Routes>
       </MemoryRouter>
     </TooltipProvider>,
@@ -144,6 +162,8 @@ describe('AgentBuilderAgentEdit', () => {
     navigateMock.mockReset();
     saveMock.mockClear();
     useStoredAgentMock.mockClear();
+    deleteStoredAgentMutateAsync.mockClear();
+    deleteStoredAgentMutateAsync.mockResolvedValue(undefined);
     storedAgent = null;
     currentUser = { id: 'current-user' };
     isCurrentUserLoading = false;
@@ -153,32 +173,10 @@ describe('AgentBuilderAgentEdit', () => {
     cleanup();
   });
 
-  describe('create mode (no stored agent)', () => {
-    it('renders only the primary Create button (no Cancel)', () => {
-      const { queryByTestId, getByTestId } = renderAt();
-      expect(getByTestId('agent-builder-edit-save').textContent).toContain('Create');
-      expect(queryByTestId('agent-builder-edit-cancel')).toBeNull();
-    });
-
-    it('navigates to the view page after a successful save', async () => {
-      const { getByTestId } = renderAt();
-      fireEvent.click(getByTestId('agent-builder-edit-save'));
-
-      await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(navigateMock).toHaveBeenCalled());
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
-    });
-
-    it('does not render the Publish to channel button in create mode', () => {
-      const { queryByTestId } = renderAt();
-      expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
-    });
-
-    it('renders Chat and Configuration tabs in create mode', () => {
-      const { getByTestId } = renderAt();
-      expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
-      expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
-    });
+  it('redirects to the agents list when no stored agent exists', () => {
+    storedAgent = null;
+    const { getByTestId } = renderAt();
+    expect(getByTestId('agents-list-page')).not.toBeNull();
   });
 
   describe('edit mode (stored agent present)', () => {
@@ -193,10 +191,10 @@ describe('AgentBuilderAgentEdit', () => {
       };
     });
 
-    it('renders Save in the top right (no Cancel)', () => {
-      const { getByTestId, queryByTestId } = renderAt();
+    it('does not render Cancel or Save buttons (autosaved)', () => {
+      const { queryByTestId } = renderAt();
       expect(queryByTestId('agent-builder-edit-cancel')).toBeNull();
-      expect(getByTestId('agent-builder-edit-save').textContent).toContain('Save');
+      expect(queryByTestId('agent-builder-edit-save')).toBeNull();
     });
 
     it('shows the Publish to channel button for the owner when the agent is public', () => {
@@ -230,45 +228,38 @@ describe('AgentBuilderAgentEdit', () => {
       expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
     });
 
-    it('back arrow navigates to the view page without saving', () => {
+    it('back arrow navigates to the agents list without saving', () => {
       const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Back to agent chat'));
+      fireEvent.click(getByLabelText('Agents list'));
 
       expect(saveMock).not.toHaveBeenCalled();
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
 
-    it('Save navigates to the view page after a successful save', async () => {
+    it('autosaves edits without navigating away', async () => {
       const { getByTestId } = renderAt();
-      fireEvent.click(getByTestId('agent-builder-edit-save'));
+      fireEvent.change(getByTestId('agent-configure-name'), { target: { value: 'Renamed' } });
 
-      await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(navigateMock).toHaveBeenCalled());
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
+      await waitFor(() => expect(saveMock).toHaveBeenCalled());
+      expect(navigateMock).not.toHaveBeenCalledWith('/agent-builder/agents/agent-123/view', expect.anything());
     });
 
     it('reads the latest draft so freshly saved edits appear', () => {
       renderAt();
-      expect(useStoredAgentMock).toHaveBeenCalledWith(
-        'agent-123',
-        expect.objectContaining({ status: 'draft', enabled: true }),
-      );
+      expect(useStoredAgentMock).toHaveBeenCalledWith('agent-123', expect.objectContaining({ status: 'draft' }));
     });
 
-    it('saves edits made in the configure panel', async () => {
+    it('autosaves edits made in the configure panel', async () => {
       const { getByTestId } = renderAt();
       fireEvent.change(getByTestId('agent-configure-name'), { target: { value: 'Updated name' } });
       fireEvent.change(getByTestId('agent-configure-description'), { target: { value: 'Updated description' } });
 
-      fireEvent.click(getByTestId('agent-builder-edit-save'));
-
-      await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
-      expect(saveMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'Updated name',
-          description: 'Updated description',
-        }),
-      );
+      await waitFor(() => expect(saveMock).toHaveBeenCalled());
+      const lastCall = saveMock.mock.calls[saveMock.mock.calls.length - 1]![0];
+      expect(lastCall).toMatchObject({
+        name: 'Updated name',
+        description: 'Updated description',
+      });
     });
 
     it('waits for the current user before redirecting an owned agent', () => {
@@ -309,6 +300,19 @@ describe('AgentBuilderAgentEdit', () => {
       expect(configureTab.getAttribute('aria-selected')).toBe('true');
     });
 
+    it('renders the Delete agent button in edit mode and triggers the mutation + redirect on confirm', async () => {
+      const { getByTestId } = renderAt();
+      const deleteButton = getByTestId('agent-builder-delete-agent');
+      fireEvent.click(deleteButton);
+
+      const confirm = getByTestId('agent-builder-delete-agent-confirm');
+      fireEvent.click(confirm);
+
+      await waitFor(() => expect(deleteStoredAgentMutateAsync).toHaveBeenCalledTimes(1));
+      expect(deleteStoredAgentMutateAsync).toHaveBeenCalledWith(undefined);
+      await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/agent-builder/agents', { viewTransition: true }));
+    });
+
     it('redirects non-owners to the view page after current user loads', () => {
       storedAgent = {
         id: 'agent-123',
@@ -329,13 +333,7 @@ describe('AgentBuilderAgentEdit', () => {
   });
 
   describe('back arrow', () => {
-    it('navigates to the agents list in create mode', () => {
-      const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Agents list'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
-    });
-
-    it('navigates to the view page in edit mode', () => {
+    it('navigates to the agents list in edit mode', () => {
       storedAgent = {
         id: 'agent-123',
         name: 'Existing',
@@ -345,8 +343,8 @@ describe('AgentBuilderAgentEdit', () => {
         workflows: [],
       };
       const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Back to agent chat'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
+      fireEvent.click(getByLabelText('Agents list'));
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
   });
 });

@@ -1,11 +1,13 @@
-import { XIcon } from 'lucide-react';
+import { LockIcon, XIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
+import { ButtonsGroup, ButtonsGroupText } from '../ButtonsGroup';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
-import { formElementSizes } from '@/ds/primitives/form-element';
 
 export type PropertyFilterAppliedProps = {
   fields: PropertyFilterField[];
@@ -17,6 +19,15 @@ export type PropertyFilterAppliedProps = {
    * its input so the user can start typing immediately.
    */
   autoFocusFieldId?: string;
+  /**
+   * Field ids whose pills must remain visible and read-only — value stays
+   * displayed but cannot be edited or removed. Use when an upstream context
+   * (e.g. agent-scoped traces tab) pre-applies a filter that the user must
+   * not be able to clear.
+   */
+  lockedFieldIds?: readonly string[];
+  /** Tooltip content shown on hover/focus of any locked pill. */
+  lockedTooltipContent?: ReactNode;
 };
 
 function stringifyTokenValue(value: string | string[]) {
@@ -24,13 +35,53 @@ function stringifyTokenValue(value: string | string[]) {
   return value;
 }
 
-const PILL_CLASS = 'inline-flex';
-const SHARED_LABEL_OPERATOR_CLASSES = `${formElementSizes.md} border-y-2 border-border1 px-[.75em] text-neutral3 whitespace-nowrap flex items-center`;
-const LABEL_CLASS = `${SHARED_LABEL_OPERATOR_CLASSES} text-ui-md rounded-l-lg border-l-2 border-r-1`;
-const OPERATOR_CLASS = `${SHARED_LABEL_OPERATOR_CLASSES} text-ui-md `;
-const REMOVE_CLASS = 'rounded-tl-none rounded-bl-none border-l-transparent';
-const INPUT_CLASS = 'rounded-none';
-const VALUE_BUTTON_CLASS = 'rounded-none';
+const DEFAULT_LOCKED_TOOLTIP = 'This filter is set by the current context and cannot be removed here.';
+
+function lookupOptionLabel(field: PropertyFilterField, value: string | string[]): string {
+  if (field.kind === 'pick-multi' && field.options) {
+    if (Array.isArray(value)) {
+      if (value.length === 0) return 'Any';
+      return value.map(v => field.options.find(o => o.value === v)?.label ?? v).join(', ');
+    }
+    return field.options.find(o => o.value === value)?.label ?? value;
+  }
+  return stringifyTokenValue(value);
+}
+
+type LockedTokenPillProps = {
+  field: PropertyFilterField;
+  value: string | string[];
+  tooltipContent: ReactNode;
+};
+
+function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps) {
+  const display = lookupOptionLabel(field, value);
+  const lockA11yLabel = `${field.label} filter is locked by context`;
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <ButtonsGroup
+            spacing="close"
+            data-locked-field-id={field.id}
+            data-property-filter-pill="locked"
+            tabIndex={0}
+            aria-label={lockA11yLabel}
+          >
+            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
+            <ButtonsGroupText size="md">is</ButtonsGroupText>
+            <ButtonsGroupText size="md">{display}</ButtonsGroupText>
+            <ButtonsGroupText size="md">
+              <LockIcon />
+            </ButtonsGroupText>
+          </ButtonsGroup>
+        </TooltipTrigger>
+        <TooltipContent>{tooltipContent}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 type TextTokenPillProps = {
   field: Extract<PropertyFilterField, { kind: 'text' }>;
@@ -58,16 +109,15 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
   }, [autoFocus]);
 
   return (
-    <div className={PILL_CLASS}>
-      <span className={LABEL_CLASS}>{field.label}</span>
-      <span className={OPERATOR_CLASS}>is</span>
+    <ButtonsGroup spacing="close">
+      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
+      <ButtonsGroupText size="md">is</ButtonsGroupText>
       <Input
         ref={inputRef}
         size="md"
         disabled={disabled}
         value={draft}
         placeholder={field.placeholder ?? `Enter ${field.label}`}
-        className={INPUT_CLASS}
         onChange={e => {
           const next = e.target.value;
           setDraft(next);
@@ -91,14 +141,13 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
-        className={REMOVE_CLASS}
         size="md"
         onMouseDown={e => e.preventDefault()}
         onClick={onRemove}
       >
         <XIcon />
       </Button>
-    </div>
+    </ButtonsGroup>
   );
 }
 
@@ -115,18 +164,12 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
   const [open, setOpen] = useState(false);
 
   return (
-    <div className={PILL_CLASS}>
-      <span className={LABEL_CLASS}>{field.label}</span>
-      <span className={OPERATOR_CLASS}>is</span>
+    <ButtonsGroup spacing="close">
+      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
+      <ButtonsGroupText size="md">is</ButtonsGroupText>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            disabled={disabled}
-            size="md"
-            className={VALUE_BUTTON_CLASS}
-            // className="px-2.5 py-1.5 max-w-[20rem] truncate text-left hover:bg-surface5 hover:text-neutral6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button type="button" disabled={disabled} size="md">
             {stringifyTokenValue(token.value)}
           </Button>
         </PopoverTrigger>
@@ -138,13 +181,12 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
-        className={REMOVE_CLASS}
         size="md"
         onClick={onRemove}
       >
         <XIcon />
       </Button>
-    </div>
+    </ButtonsGroup>
   );
 }
 
@@ -162,8 +204,12 @@ export function PropertyFilterApplied({
   onTokensChange,
   disabled,
   autoFocusFieldId,
+  lockedFieldIds,
+  lockedTooltipContent = DEFAULT_LOCKED_TOOLTIP,
 }: PropertyFilterAppliedProps) {
   if (tokens.length === 0) return null;
+
+  const lockedSet = new Set(lockedFieldIds ?? []);
 
   const replaceTokenAt = (index: number, next: PropertyFilterToken) => {
     const copy = [...tokens];
@@ -180,6 +226,17 @@ export function PropertyFilterApplied({
       {tokens.map((token, index) => {
         const field = fields.find(f => f.id === token.fieldId);
         if (!field) return null;
+
+        if (lockedSet.has(token.fieldId)) {
+          return (
+            <LockedTokenPill
+              key={`${token.fieldId}-${index}`}
+              field={field}
+              value={token.value}
+              tooltipContent={lockedTooltipContent}
+            />
+          );
+        }
 
         if (field.kind === 'text' && typeof token.value === 'string') {
           return (
@@ -220,21 +277,20 @@ export function PropertyFilterApplied({
         }
 
         return (
-          <div key={`${token.fieldId}-${index}`} className={PILL_CLASS}>
-            <span className={LABEL_CLASS}>{field.label}</span>
-            <span className={OPERATOR_CLASS}>is</span>
-            <span className="px-2.5 py-1.5 max-w-[20rem] truncate">{stringifyTokenValue(token.value)}</span>
+          <ButtonsGroup spacing="close" key={`${token.fieldId}-${index}`}>
+            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
+            <ButtonsGroupText size="md">is</ButtonsGroupText>
+            <ButtonsGroupText size="md">{stringifyTokenValue(token.value)}</ButtonsGroupText>
             <Button
               type="button"
               disabled={disabled}
               size="md"
               aria-label={`Remove ${field.label} filter`}
-              className={REMOVE_CLASS}
               onClick={() => removeTokenAt(index)}
             >
               <XIcon />
             </Button>
-          </div>
+          </ButtonsGroup>
         );
       })}
     </div>

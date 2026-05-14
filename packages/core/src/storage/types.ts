@@ -2181,6 +2181,8 @@ export interface UpdateWorkflowStateOptions {
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+  activePaths?: Array<number>;
+  activeStepsPath?: Record<string, number[]>;
   /**
    * Tracing context for span continuity during suspend/resume.
    * Persisted when workflow suspends to enable linking resumed spans

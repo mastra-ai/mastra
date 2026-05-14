@@ -12,6 +12,42 @@ vi.mock('@/domains/builder/hooks/use-builder-settings', () => ({
   useBuilderSettings: vi.fn(),
 }));
 
+/** Helper to build a usePermissions mock with sensible defaults */
+function mockPermissions(
+  overrides: {
+    rbacEnabled?: boolean;
+    permissions?: string[];
+  } = {},
+) {
+  const { rbacEnabled = true, permissions = [] } = overrides;
+
+  const hasPermission = (p: string) => permissions.includes(p) || permissions.includes('*');
+  const hasAnyPermission = (ps: string[]) => ps.some(p => hasPermission(p));
+  const hasAllPermissions = (ps: string[]) => ps.every(p => hasPermission(p));
+
+  (usePermissions as Mock).mockReturnValue({
+    rbacEnabled,
+    permissions,
+    hasPermission,
+    hasAnyPermission,
+    hasAllPermissions,
+  });
+}
+
+function mockSettings(
+  overrides: {
+    data?: Record<string, unknown> | null;
+    isLoading?: boolean;
+    error?: Error | null;
+  } = {},
+) {
+  (useBuilderSettings as Mock).mockReturnValue({
+    data: overrides.data ?? null,
+    isLoading: overrides.isLoading ?? false,
+    error: overrides.error ?? null,
+  });
+}
+
 describe('useBuilderAgentAccess', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -21,17 +57,9 @@ describe('useBuilderAgentAccess', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns permission-denied when missing stored-agents:read', () => {
-    (usePermissions as Mock).mockReturnValue({
-      rbacEnabled: true,
-      hasAllPermissions: (permissions: string[]) => !permissions.includes('stored-agents:read'),
-    });
-
-    (useBuilderSettings as Mock).mockReturnValue({
-      data: null,
-      isLoading: false,
-      error: null,
-    });
+  it('returns permission-denied when user has neither read nor write', () => {
+    mockPermissions({ rbacEnabled: true, permissions: [] });
+    mockSettings();
 
     const result = useBuilderAgentAccess();
 
@@ -42,36 +70,45 @@ describe('useBuilderAgentAccess', () => {
     expect(result.isLoading).toBe(false);
   });
 
-  it('returns permission-denied when missing stored-agents:write', () => {
-    (usePermissions as Mock).mockReturnValue({
-      rbacEnabled: true,
-      hasAllPermissions: (permissions: string[]) => !permissions.includes('stored-agents:write'),
-    });
-
-    (useBuilderSettings as Mock).mockReturnValue({
+  it('grants access with read-only (operator role)', () => {
+    mockPermissions({ rbacEnabled: true, permissions: ['stored-agents:read'] });
+    mockSettings({
       data: { enabled: true, features: { agent: { tools: true } } },
-      isLoading: false,
-      error: null,
     });
 
     const result = useBuilderAgentAccess();
 
     expect(useBuilderSettings).toHaveBeenCalledWith({ enabled: true });
-    expect(result.denialReason).toBe('permission-denied');
-    expect(result.canAccessAgentBuilder).toBe(false);
-    expect(result.hasRequiredPermissions).toBe(false);
+    expect(result.denialReason).toBeNull();
+    expect(result.canAccessAgentBuilder).toBe(true);
+    expect(result.hasRequiredPermissions).toBe(true);
+    // Read-only: can execute but not write
+    expect(result.canWrite).toBe(false);
+    expect(result.canExecute).toBe(true);
+  });
+
+  it('grants full access with both read and write (member role)', () => {
+    mockPermissions({
+      rbacEnabled: true,
+      permissions: ['stored-agents:read', 'stored-agents:write', 'stored-skills:read'],
+    });
+    mockSettings({
+      data: { enabled: true, features: { agent: { tools: true } } },
+    });
+
+    const result = useBuilderAgentAccess();
+
+    expect(result.canAccessAgentBuilder).toBe(true);
+    expect(result.canWrite).toBe(true);
+    expect(result.canExecute).toBe(true);
+    expect(result.canManageSkills).toBe(true);
+    expect(result.canUseFavorites).toBe(true);
   });
 
   it('returns not-configured when builder is disabled', () => {
-    (usePermissions as Mock).mockReturnValue({
-      rbacEnabled: false,
-      hasAllPermissions: () => true,
-    });
-
-    (useBuilderSettings as Mock).mockReturnValue({
+    mockPermissions({ rbacEnabled: false });
+    mockSettings({
       data: { enabled: false, features: { agent: { tools: true } } },
-      isLoading: false,
-      error: null,
     });
 
     const result = useBuilderAgentAccess();
@@ -82,15 +119,9 @@ describe('useBuilderAgentAccess', () => {
   });
 
   it('returns not-configured when agent feature is missing', () => {
-    (usePermissions as Mock).mockReturnValue({
-      rbacEnabled: false,
-      hasAllPermissions: () => true,
-    });
-
-    (useBuilderSettings as Mock).mockReturnValue({
+    mockPermissions({ rbacEnabled: false });
+    mockSettings({
       data: { enabled: true, features: {} },
-      isLoading: false,
-      error: null,
     });
 
     const result = useBuilderAgentAccess();
@@ -101,17 +132,9 @@ describe('useBuilderAgentAccess', () => {
   });
 
   it('returns error when settings fetch fails', () => {
-    (usePermissions as Mock).mockReturnValue({
-      rbacEnabled: false,
-      hasAllPermissions: () => true,
-    });
-
+    mockPermissions({ rbacEnabled: false });
     const error = new Error('Failed to fetch');
-    (useBuilderSettings as Mock).mockReturnValue({
-      data: null,
-      isLoading: false,
-      error,
-    });
+    mockSettings({ error });
 
     const result = useBuilderAgentAccess();
 
@@ -121,18 +144,15 @@ describe('useBuilderAgentAccess', () => {
   });
 
   it('returns access and features when all checks pass', () => {
-    (usePermissions as Mock).mockReturnValue({
+    mockPermissions({
       rbacEnabled: true,
-      hasAllPermissions: () => true,
+      permissions: ['stored-agents:read', 'stored-agents:write'],
     });
-
-    (useBuilderSettings as Mock).mockReturnValue({
+    mockSettings({
       data: {
         enabled: true,
         features: { agent: { tools: true, memory: true, skills: false } },
       },
-      isLoading: false,
-      error: null,
     });
 
     const result = useBuilderAgentAccess();
@@ -146,15 +166,9 @@ describe('useBuilderAgentAccess', () => {
   });
 
   it('bypasses permission checks when rbac is disabled', () => {
-    (usePermissions as Mock).mockReturnValue({
-      rbacEnabled: false,
-      hasAllPermissions: () => false,
-    });
-
-    (useBuilderSettings as Mock).mockReturnValue({
+    mockPermissions({ rbacEnabled: false });
+    mockSettings({
       data: { enabled: true, features: { agent: { agents: true } } },
-      isLoading: false,
-      error: null,
     });
 
     const result = useBuilderAgentAccess();
@@ -163,22 +177,60 @@ describe('useBuilderAgentAccess', () => {
     expect(result.hasRequiredPermissions).toBe(true);
     expect(result.canAccessAgentBuilder).toBe(true);
     expect(result.denialReason).toBeNull();
+    // All granular flags true when rbac disabled
+    expect(result.canWrite).toBe(true);
+    expect(result.canExecute).toBe(true);
+    expect(result.canManageSkills).toBe(true);
+    expect(result.canUseFavorites).toBe(true);
   });
 
   it('returns loading only when the settings query is enabled', () => {
-    (usePermissions as Mock).mockReturnValue({
-      rbacEnabled: true,
-      hasAllPermissions: () => true,
-    });
+    // rbac enabled + no read permission → settings query disabled → not loading
+    mockPermissions({ rbacEnabled: true, permissions: [] });
+    mockSettings({ isLoading: true });
 
-    (useBuilderSettings as Mock).mockReturnValue({
-      data: null,
-      isLoading: true,
-      error: null,
+    const denied = useBuilderAgentAccess();
+    expect(denied.isLoading).toBe(false);
+
+    // rbac enabled + has read → settings query enabled → loading
+    mockPermissions({ rbacEnabled: true, permissions: ['stored-agents:read'] });
+    mockSettings({ isLoading: true });
+
+    const loading = useBuilderAgentAccess();
+    expect(loading.isLoading).toBe(true);
+  });
+
+  it('returns granular flags based on specific permissions', () => {
+    // User has read + skills but NOT write — can use favorites (derived from read access)
+    mockPermissions({
+      rbacEnabled: true,
+      permissions: ['stored-agents:read', 'stored-skills:read'],
+    });
+    mockSettings({
+      data: { enabled: true, features: { agent: { tools: true } } },
     });
 
     const result = useBuilderAgentAccess();
 
-    expect(result.isLoading).toBe(true);
+    expect(result.canAccessAgentBuilder).toBe(true);
+    expect(result.canWrite).toBe(false);
+    expect(result.canExecute).toBe(true);
+    expect(result.canManageSkills).toBe(true);
+    expect(result.canUseFavorites).toBe(true);
+  });
+
+  it('denies favorites when user has no read access to agents or skills', () => {
+    // User has only write (unusual but tests the boundary)
+    mockPermissions({
+      rbacEnabled: true,
+      permissions: ['stored-agents:write'],
+    });
+    mockSettings({
+      data: { enabled: true, features: { agent: { tools: true } } },
+    });
+
+    const result = useBuilderAgentAccess();
+
+    expect(result.canUseFavorites).toBe(false);
   });
 });

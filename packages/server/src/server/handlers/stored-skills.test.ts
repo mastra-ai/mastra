@@ -608,6 +608,37 @@ describe('Stored Skills Handlers', () => {
       });
     });
 
+    it('should not forward undefined config fields to storage on visibility-only update', async () => {
+      // Regression: previously the handler destructured every config key
+      // (name, description, instructions, license, files, metadata, …) and
+      // passed them as `undefined` to skillStore.update. The libsql driver
+      // then created a spurious new version with `undefined` values and threw
+      // "undefined cannot be passed as argument to the database".
+      mockSkillsData.set('sparse-skill', {
+        id: 'sparse-skill',
+        name: 'Sparse Skill',
+        instructions: 'original',
+        authorId: 'user-a',
+        visibility: 'private',
+      });
+
+      await UPDATE_STORED_SKILL_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user-a'),
+        storedSkillId: 'sparse-skill',
+        visibility: 'public',
+      });
+
+      expect(mockSkillsStore.update).toHaveBeenCalledTimes(1);
+      const updateArg = (mockSkillsStore.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+      // Only `id` and `visibility` should be on the storage call — no
+      // `undefined` keys that would trigger a version-create path.
+      expect(Object.keys(updateArg).sort()).toEqual(['id', 'visibility']);
+      for (const value of Object.values(updateArg)) {
+        expect(value).not.toBeUndefined();
+      }
+    });
+
     it('should allow unowned skills to be updated by anyone', async () => {
       mockSkillsData.set('unowned-skill', {
         id: 'unowned-skill',

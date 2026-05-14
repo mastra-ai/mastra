@@ -1,5 +1,5 @@
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   mcpServerDetailPathParams,

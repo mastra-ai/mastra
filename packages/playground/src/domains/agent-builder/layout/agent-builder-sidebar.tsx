@@ -1,25 +1,45 @@
 import { AgentIcon, LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
-import { Blocks, LibraryIcon, StarIcon } from 'lucide-react';
+import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { useAuthCapabilities } from '@/domains/auth/hooks';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
 import { useLinkComponent } from '@/lib/framework';
 
-const baseLinks: NavLink[] = [
-  { name: 'My agents', url: '/agent-builder/agents', icon: <AgentIcon />, isOnMastraPlatform: true },
-  { name: 'Favorites', url: '/agent-builder/favorite', icon: <StarIcon />, isOnMastraPlatform: true },
-  { name: 'Library', url: '/agent-builder/library', icon: <LibraryIcon />, isOnMastraPlatform: true },
-];
+const agentsLink: NavLink = {
+  name: 'My agents',
+  url: '/agent-builder/agents',
+  icon: <AgentIcon />,
+};
+
+const favoritesLink: NavLink = {
+  name: 'Favorites',
+  url: '/agent-builder/favorite',
+  icon: <StarIcon />,
+};
+
+const libraryLink: NavLink = {
+  name: 'Library',
+  url: '/agent-builder/library',
+  icon: <LibraryIcon />,
+};
 
 const skillsLink: NavLink = {
   name: 'Skills',
   url: '/agent-builder/skills',
   icon: <Blocks className="h-4 w-4" />,
-  isOnMastraPlatform: true,
+};
+
+const infrastructureLink: NavLink = {
+  name: 'Infrastructure',
+  url: '/agent-builder/infrastructure',
+  icon: <ServerCogIcon className="h-4 w-4" />,
 };
 
 type AgentBuilderSidebarProps = {
@@ -31,17 +51,24 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
   const { state: contextState } = useMainSidebar();
   const { pathname } = useLocation();
   const features = useBuilderAgentFeatures();
+  const { canManageSkills, canUseFavorites } = useBuilderAgentAccess();
+  const { hasPermission } = usePermissions();
+  const canViewInfrastructure = hasPermission('infrastructure:read');
   const state = forceExpanded ? 'default' : contextState;
   const { data: capabilities } = useAuthCapabilities();
   const isUserAuthenticated = capabilities && isAuthenticated(capabilities);
 
   const links = useMemo(() => {
-    const result = [...baseLinks];
-    if (features.skills) {
-      result.splice(1, 0, skillsLink); // Insert after "My agents", before "Favorites"
+    const result: NavLink[] = [agentsLink];
+    if (features.skills && canManageSkills) {
+      result.push(skillsLink);
     }
+    if (canUseFavorites) {
+      result.push(favoritesLink);
+    }
+    result.push(libraryLink);
     return result;
-  }, [features.skills]);
+  }, [features.skills, canManageSkills, canUseFavorites]);
 
   return (
     <MainSidebar className="h-full">
@@ -69,6 +96,8 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
         </div>
       )}
 
+      <ImpersonationBanner />
+
       <MainSidebar.Nav>
         <MainSidebar.NavSection>
           <MainSidebar.NavList>
@@ -91,6 +120,21 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
 
       {!forceExpanded && (
         <MainSidebar.Bottom>
+          {canViewInfrastructure && (
+            <>
+              <MainSidebar.NavSeparator />
+              <MainSidebar.NavSection>
+                <MainSidebar.NavList>
+                  <MainSidebar.NavLink
+                    LinkComponent={Link}
+                    state={state}
+                    link={infrastructureLink}
+                    isActive={pathname.startsWith(infrastructureLink.url)}
+                  />
+                </MainSidebar.NavList>
+              </MainSidebar.NavSection>
+            </>
+          )}
           <MainSidebar.NavSeparator />
           <div className="flex justify-end pb-3">
             <MainSidebar.Trigger />

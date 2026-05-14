@@ -1,6 +1,4 @@
-import { Button, Input, MarkdownRenderer, Textarea, Txt } from '@mastra/playground-ui';
-import { Eye, Pencil } from 'lucide-react';
-import { useState } from 'react';
+import { CodeEditor, Input, MarkdownRenderer, Txt } from '@mastra/playground-ui';
 
 export interface SkillSimpleFormProps {
   name: string;
@@ -21,9 +19,6 @@ export function SkillSimpleForm({
   onInstructionsChange,
   readOnly,
 }: SkillSimpleFormProps) {
-  // Default to preview when there's content, edit when empty
-  const [previewMode, setPreviewMode] = useState(!!instructions);
-
   return (
     <div className="flex flex-col gap-4 h-full">
       <div className="flex flex-col gap-1.5">
@@ -46,32 +41,11 @@ export function SkillSimpleForm({
       </div>
 
       <div className="flex flex-col gap-1.5 flex-1 min-h-0">
-        <div className="flex items-center justify-between">
-          <Txt as="label" variant="ui-sm" className="text-neutral3">
-            Instructions
-          </Txt>
-          {/* In read-only mode, always show rendered markdown — no toggle needed */}
-          {!readOnly && instructions && (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setPreviewMode(!previewMode)}
-              className="text-neutral3 hover:text-neutral5"
-            >
-              {previewMode ? (
-                <>
-                  <Pencil className="h-3 w-3" /> Edit
-                </>
-              ) : (
-                <>
-                  <Eye className="h-3 w-3" /> Preview
-                </>
-              )}
-            </Button>
-          )}
-        </div>
+        <Txt as="label" variant="ui-sm" className="text-neutral3">
+          Instructions
+        </Txt>
 
-        {previewMode || readOnly ? (
+        {readOnly ? (
           <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border1 bg-surface2 p-4">
             {instructions ? (
               <MarkdownRenderer>{instructions}</MarkdownRenderer>
@@ -82,12 +56,18 @@ export function SkillSimpleForm({
             )}
           </div>
         ) : (
-          <Textarea
-            value={instructions}
-            onChange={e => onInstructionsChange(e.target.value)}
-            placeholder="Write skill instructions in Markdown...&#10;&#10;Describe what the skill does, how it should behave, and any rules or constraints."
-            className="flex-1 min-h-[300px] resize-none font-mono text-sm"
-          />
+          <div className="flex-1 min-h-0 flex flex-col">
+            <CodeEditor
+              data-testid="skill-instructions-input"
+              value={instructions}
+              onChange={onInstructionsChange}
+              language="markdown"
+              editable
+              placeholder="You are a helpful assistant that…"
+              showCopyButton={false}
+              className="h-full w-full"
+            />
+          </div>
         )}
       </div>
     </div>

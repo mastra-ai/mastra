@@ -17,12 +17,20 @@ declare global {
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
+    MASTRA_AGENT_SIGNALS?: string;
   }
 }
 
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
-import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Outlet,
+  useNavigate,
+  redirect,
+  type LoaderFunctionArgs,
+} from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layout/agent-builder-root-layout';
 import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
@@ -35,8 +43,12 @@ import AgentBuilderCreate from './pages/agent-builder/agents/create';
 import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
 import AgentBuilderAgentView from './pages/agent-builder/agents/view';
 import AgentBuilderFavorite from './pages/agent-builder/favorite';
+import AgentBuilderInfrastructure from './pages/agent-builder/infrastructure';
 import AgentBuilderLibrary from './pages/agent-builder/library';
 import AgentBuilderSkills from './pages/agent-builder/skills';
+import AgentBuilderSkillsCreate from './pages/agent-builder/skills/create';
+import AgentBuilderSkillsEdit from './pages/agent-builder/skills/edit';
+import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -234,6 +246,10 @@ const routes = [
         element: <AgentBuilderEditionLayout />,
         children: [
           { path: 'create', element: <AgentBuilderCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/agents/${params.id}/view`),
+          },
           { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
           { path: ':id/view', element: <AgentBuilderAgentView /> },
         ],
@@ -245,6 +261,29 @@ const routes = [
           {
             index: true,
             element: <AgentBuilderSkills />,
+          },
+        ],
+      },
+      {
+        path: 'skills',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderSkillsCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/skills/${params.id}/edit`),
+          },
+          { path: ':id/edit', element: <AgentBuilderSkillsEdit /> },
+          { path: ':id/view', element: <AgentBuilderSkillsView /> },
+        ],
+      },
+      {
+        path: 'infrastructure',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderInfrastructure />,
           },
         ],
       },
@@ -409,6 +448,7 @@ function App() {
     () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
     [baseUrl, apiPrefix],
   );
+  const studioHeaders = useMemo(() => ({ ...headers, 'x-mastra-client-type': 'studio' }), [headers]);
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -423,7 +463,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
+    <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
       <RoleImpersonationProvider>
         <PostHogProvider>
           <RouterProvider router={router} />

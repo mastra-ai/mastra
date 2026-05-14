@@ -7,7 +7,7 @@ import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
-import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import type { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -178,7 +178,6 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...LOGS_ROUTES,
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
-  ...AGENT_BUILDER_ROUTES,
   ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,

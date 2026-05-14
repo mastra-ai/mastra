@@ -86,8 +86,10 @@ createDurableAgentTestSuite({
     // Model fallback runtime tests require mock model instances in registry (not serializable for Inngest)
     modelFallbackRuntime: true,
     // Workspace tests use core createDurableAgent (not InngestAgent) with getPubSub().
-    // The core DurableAgent runs locally and publishes to InngestPubSub which has no
-    // publishFn outside Inngest context, causing `for await (textStream)` to hang.
+    // The core DurableAgent runs locally and publishes through InngestPubSub via
+    // `inngest.realtime.publish()`. Outside an Inngest function context the runId is
+    // not auto-attached, so `for await (textStream)` can hang waiting for run-scoped
+    // events that never get routed to this run's subscribers.
     workspace: true,
   },
 });

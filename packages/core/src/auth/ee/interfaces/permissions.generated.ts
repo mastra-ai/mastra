@@ -21,6 +21,7 @@ export const RESOURCES = [
   'datasets',
   'embedders',
   'experiments',
+  'infrastructure',
   'logs',
   'mcp',
   'memory',
@@ -104,6 +105,8 @@ export const PERMISSION_PATTERNS = {
   'embedders:*': 'embedders:*',
   /** Full access to experiments */
   'experiments:*': 'experiments:*',
+  /** Full access to infrastructure */
+  'infrastructure:*': 'infrastructure:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -186,6 +189,8 @@ export const PERMISSION_PATTERNS = {
   'embedders:read': 'embedders:read',
   /** View experiments */
   'experiments:read': 'experiments:read',
+  /** View infrastructure */
+  'infrastructure:read': 'infrastructure:read',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -224,8 +229,6 @@ export const PERMISSION_PATTERNS = {
   'scores:write': 'scores:write',
   /** Delete stored agents */
   'stored-agents:delete': 'stored-agents:delete',
-  /** Execute stored agents */
-  'stored-agents:execute': 'stored-agents:execute',
   /** Publish, activate, or restore stored agents */
   'stored-agents:publish': 'stored-agents:publish',
   /** View stored agents */
@@ -350,6 +353,7 @@ export const PERMISSIONS = [
   'datasets:write',
   'embedders:read',
   'experiments:read',
+  'infrastructure:read',
   'logs:read',
   'mcp:execute',
   'mcp:read',
@@ -369,7 +373,6 @@ export const PERMISSIONS = [
   'scores:read',
   'scores:write',
   'stored-agents:delete',
-  'stored-agents:execute',
   'stored-agents:publish',
   'stored-agents:read',
   'stored-agents:share',
@@ -444,6 +447,8 @@ export const MastraFGAPermissions = {
   AGENTS_READ: 'agents:read',
   /** Create and modify agents */
   AGENTS_WRITE: 'agents:write',
+  /** View auth */
+  AUTH_READ: 'auth:read',
   /** View background tasks */
   BACKGROUND_TASKS_READ: 'background-tasks:read',
   /** View channels */
@@ -462,6 +467,8 @@ export const MastraFGAPermissions = {
   EMBEDDERS_READ: 'embedders:read',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
+  /** View infrastructure */
+  INFRASTRUCTURE_READ: 'infrastructure:read',
   /** View logs */
   LOGS_READ: 'logs:read',
   /** Execute MCP servers */
@@ -488,16 +495,66 @@ export const MastraFGAPermissions = {
   PROCESSORS_EXECUTE: 'processors:execute',
   /** View processors */
   PROCESSORS_READ: 'processors:read',
+  /** Execute schedules */
+  SCHEDULES_EXECUTE: 'schedules:execute',
+  /** View schedules */
+  SCHEDULES_READ: 'schedules:read',
+  /** Create and modify schedules */
+  SCHEDULES_WRITE: 'schedules:write',
   /** View evaluation scores */
   SCORES_READ: 'scores:read',
   /** Create and modify evaluation scores */
   SCORES_WRITE: 'scores:write',
   /** Delete stored agents */
   STORED_AGENTS_DELETE: 'stored-agents:delete',
+  /** Publish, activate, or restore stored agents */
+  STORED_AGENTS_PUBLISH: 'stored-agents:publish',
   /** View stored agents */
   STORED_AGENTS_READ: 'stored-agents:read',
+  /** Change visibility/audience (e.g. private↔public) stored agents */
+  STORED_AGENTS_SHARE: 'stored-agents:share',
   /** Create and modify stored agents */
   STORED_AGENTS_WRITE: 'stored-agents:write',
+  /** Delete stored MCP clients */
+  STORED_MCP_CLIENTS_DELETE: 'stored-mcp-clients:delete',
+  /** Publish, activate, or restore stored MCP clients */
+  STORED_MCP_CLIENTS_PUBLISH: 'stored-mcp-clients:publish',
+  /** View stored MCP clients */
+  STORED_MCP_CLIENTS_READ: 'stored-mcp-clients:read',
+  /** Create and modify stored MCP clients */
+  STORED_MCP_CLIENTS_WRITE: 'stored-mcp-clients:write',
+  /** Delete stored prompt blocks */
+  STORED_PROMPT_BLOCKS_DELETE: 'stored-prompt-blocks:delete',
+  /** Publish, activate, or restore stored prompt blocks */
+  STORED_PROMPT_BLOCKS_PUBLISH: 'stored-prompt-blocks:publish',
+  /** View stored prompt blocks */
+  STORED_PROMPT_BLOCKS_READ: 'stored-prompt-blocks:read',
+  /** Create and modify stored prompt blocks */
+  STORED_PROMPT_BLOCKS_WRITE: 'stored-prompt-blocks:write',
+  /** Delete stored scorers */
+  STORED_SCORERS_DELETE: 'stored-scorers:delete',
+  /** Publish, activate, or restore stored scorers */
+  STORED_SCORERS_PUBLISH: 'stored-scorers:publish',
+  /** View stored scorers */
+  STORED_SCORERS_READ: 'stored-scorers:read',
+  /** Create and modify stored scorers */
+  STORED_SCORERS_WRITE: 'stored-scorers:write',
+  /** Delete stored skills */
+  STORED_SKILLS_DELETE: 'stored-skills:delete',
+  /** Publish, activate, or restore stored skills */
+  STORED_SKILLS_PUBLISH: 'stored-skills:publish',
+  /** View stored skills */
+  STORED_SKILLS_READ: 'stored-skills:read',
+  /** Change visibility/audience (e.g. private↔public) stored skills */
+  STORED_SKILLS_SHARE: 'stored-skills:share',
+  /** Create and modify stored skills */
+  STORED_SKILLS_WRITE: 'stored-skills:write',
+  /** Delete stored workspaces */
+  STORED_WORKSPACES_DELETE: 'stored-workspaces:delete',
+  /** View stored workspaces */
+  STORED_WORKSPACES_READ: 'stored-workspaces:read',
+  /** Create and modify stored workspaces */
+  STORED_WORKSPACES_WRITE: 'stored-workspaces:write',
   /** View system info */
   SYSTEM_READ: 'system:read',
   /** View tool-providers */
