@@ -143,6 +143,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ambient',
+          label: 'Ambient',
+        },
+        {
+          type: 'doc',
           id: 'providers/auriko',
           label: 'Auriko',
         },
