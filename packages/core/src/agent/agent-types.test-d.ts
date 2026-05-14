@@ -161,11 +161,13 @@ describe('Agent Type Tests', () => {
     // at compile time. The runtime then crashed inside `agent.listTools()` because
     // no runtime type-guard matches a bare function.
     //
-    // Fix: require `id: string` on the V5 variant of `ProviderDefinedTool`. Plain
-    // functions do not declare an `id` property on their type, so TypeScript now
-    // rejects them. This mirrors the existing runtime check in
-    // `isProviderDefinedTool` (`toolchecks.ts`), which already requires
-    // `id: string`.
+    // Fix: narrow the `ProviderDefinedTool` branch *locally* inside `ToolsInput`
+    // to require `id: string`. Plain functions do not declare an `id` property on
+    // their type, so TypeScript now rejects them. This mirrors the existing
+    // runtime check in `isProviderDefinedTool` (`toolchecks.ts`), which already
+    // requires `id: string`. The public `ProviderDefinedTool` type in
+    // `@internal/external-types` stays unchanged — tightening it is deferred to
+    // the next major (see the TODO there).
     it('should reject a function value as an individual tool entry', () => {
       const realTool = createTool({
         id: 'my-tool',

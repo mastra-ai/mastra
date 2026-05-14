@@ -30,13 +30,15 @@ export type ProviderDefinedTool =
     }
   | {
       // ToolV5 structure
-      // `id` is required so that plain functions (which have no `id` property
-      // on their type) are rejected at compile time. This matches the runtime
-      // check in `isProviderDefinedTool`, which also requires `id: string`.
-      // Real provider tools (e.g. `google.tools.googleSearch()`,
-      // `openai.tools.webSearch()`) always carry an `id` of the form
-      // `'<provider>.<tool_name>'`, so this tightening is backwards-compatible.
-      id: string;
+      // TODO(v2): make `id` non-optional in a breaking change. The runtime
+      // check in `isProviderDefinedTool` already requires `id: string`, and
+      // every real provider tool (e.g. `google.tools.googleSearch()`,
+      // `openai.tools.webSearch()`) carries an `id` of the form
+      // `'<provider>.<tool_name>'`. Tightening here would let TypeScript
+      // catch bare function values at compile time instead of relying on the
+      // narrower `ToolsInput` intersection, but it is a public-type change
+      // and deferred to the next major.
+      id?: string;
       inputSchema?: unknown;
       description?: string;
       type?: string;
