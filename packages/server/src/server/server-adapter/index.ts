@@ -100,7 +100,7 @@ export interface ParsedRequestParams {
 }
 
 function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
-  return route.requiresAuth === true;
+  return route.requiresAuth !== false;
 }
 
 function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
@@ -132,7 +132,7 @@ function getToolRoutePermission(path: string): MastraFGAPermissionInput {
 }
 
 function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
-  if (!isProtectedFGARoute(route)) {
+  if (!isProtectedFGARoute(route) || !route.path || !route.method) {
     return null;
   }
 

@@ -1,7 +1,10 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
+import { FGADeniedError } from '@mastra/core/auth/ee';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 
 // Use globalThis to share mock between factory (hoisted) and test code
 vi.mock('@workos-inc/node', () => {
@@ -41,9 +44,6 @@ vi.mock('@mastra/core/auth/ee', () => ({
     }
   },
 }));
-
-import { FGADeniedError } from '@mastra/core/auth/ee';
-import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 
 // Access the shared mock (set during vi.mock factory execution)
 const mockAuthorization = (globalThis as any).__mockAuthorization;

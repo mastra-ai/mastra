@@ -75,6 +75,23 @@ describe('FGA Middleware - checkRouteFGA', () => {
     expect(fgaProvider.check).not.toHaveBeenCalled();
   });
 
+  it('should treat routes without requiresAuth as protected for FGA coverage', async () => {
+    const fgaProvider = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const route = { method: 'GET', path: '/custom' } as any;
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(mastra, route, requestContext as any, {});
+
+    expect(result).toMatchObject({
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: route FGA metadata is required',
+    });
+    expect(fgaProvider.check).not.toHaveBeenCalled();
+  });
+
   it('should use a global route FGA resolver when route metadata is absent', async () => {
     const resolveRouteFGA = vi.fn().mockReturnValue({
       resourceType: 'agent',
