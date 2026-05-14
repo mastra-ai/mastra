@@ -168,7 +168,17 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           return { taskId, outcome: 'cancelled' as const };
         }
 
-        if (error?.name === 'AbortError' || error?.message === 'Task cancelled') {
+        // Treat any aborted-signal exit as a timeout. The cancel path is
+        // already handled by the storage-status check above, so if we reach
+        // here with `signal.aborted`, it's the timeout abort. The
+        // `AbortError` / message checks are belt-and-braces for executors
+        // that throw their own abort error instead of propagating ours.
+        if (
+          abortController.signal.aborted ||
+          error?.name === 'AbortError' ||
+          error?.message === 'Task cancelled' ||
+          error?.message?.startsWith('Task timed out after ')
+        ) {
           return { taskId, outcome: 'timed_out' as const };
         }
 

@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Refactored the internal background-task workflow into a nested workflow of `run-attempt` and `classify-outcome` steps inside a `dountil` loop. Each retry attempt is now an observable workflow step in run history and event traces, replacing the prior single-step body that hid retries inside an internal for-loop. No public API or behavior changes.
+Improved background-task observability.
+
+Retry attempts now appear as separate workflow steps in run history and event traces, making retry progression easier to debug. No public API changes.
