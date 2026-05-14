@@ -84,6 +84,19 @@ describe('InworldRealtimeVoice', () => {
       expect(opts.headers.Authorization).toBe('Basic pre-encoded-key');
     });
 
+    it('should throw when no apiKey is configured', async () => {
+      const prev = process.env.INWORLD_API_KEY;
+      delete process.env.INWORLD_API_KEY;
+      try {
+        const v = new InworldRealtimeVoice();
+        v.waitForOpen = () => Promise.resolve();
+        v.waitForSessionCreated = () => Promise.resolve();
+        await expect(v.connect()).rejects.toThrow(/INWORLD_API_KEY/);
+      } finally {
+        if (prev !== undefined) process.env.INWORLD_API_KEY = prev;
+      }
+    });
+
     it('should target the Inworld realtime URL by default', async () => {
       const v = new InworldRealtimeVoice({ apiKey: 'k' });
       v.waitForOpen = () => Promise.resolve();

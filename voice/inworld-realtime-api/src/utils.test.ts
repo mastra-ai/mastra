@@ -22,8 +22,7 @@ describe('transformTools', () => {
       const transformed = transformTools({ zodTool: tool });
 
       expect(transformed).toHaveLength(1);
-      const { inworldTool } = transformed[0];
-      expect(inworldTool).toMatchObject({
+      expect(transformed[0]).toMatchObject({
         type: 'function',
         name: 'zodTool',
         description: 'A tool with Zod schema',
@@ -58,8 +57,7 @@ describe('transformTools', () => {
       const transformed = transformTools({ jsonTool: tool });
 
       expect(transformed).toHaveLength(1);
-      const { inworldTool } = transformed[0];
-      expect(inworldTool).toMatchObject({
+      expect(transformed[0]).toMatchObject({
         type: 'function',
         name: 'jsonTool',
         description: 'A tool with JSON schema',
@@ -75,19 +73,15 @@ describe('transformTools', () => {
     });
   });
 
-  describe('Tool Execution Tests', () => {
-    it('should create an adapter function for tool execution', async () => {
-      const tool = createTool({
-        id: 'messageTool',
-        description: 'A tool that processes a message',
-        inputSchema: z.object({ message: z.string() }),
-        outputSchema: z.string(),
-        execute: async input => `Processed: ${input.message}`,
-      });
+  describe('Tool filtering', () => {
+    it('should skip tools without an execute function', () => {
+      const tool = {
+        id: 'inertTool',
+        description: 'A tool with no execute',
+        parameters: { type: 'object', properties: {} },
+      } as any;
 
-      const transformed = transformTools({ messageTool: tool });
-      const result = await transformed[0].execute({ message: 'Hello' });
-      expect(result).toBe('Processed: Hello');
+      expect(transformTools({ inertTool: tool })).toHaveLength(0);
     });
   });
 });

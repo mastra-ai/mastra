@@ -13,8 +13,9 @@ type StreamWithId = PassThrough & { id: string };
 
 type EventMap = {
   transcribing: [{ text: string }];
-  writing: [{ text: string }];
-  speaking: [{ audio: string }];
+  writing: [{ text: string; response_id?: string; role?: 'assistant' | 'user' }];
+  speaking: [{ audio: Buffer; response_id: string }];
+  'speaking.done': [{ response_id: string }];
   speaker: [StreamWithId];
   error: [Error];
 } & {
@@ -234,10 +235,13 @@ export class InworldRealtimeVoice extends MastraVoice {
    */
   async connect({ requestContext }: { requestContext?: RequestContext } = {}) {
     const baseUrl = this.options.url || DEFAULT_URL;
-    const url = this.options.model
-      ? `${baseUrl}?model=${encodeURIComponent(this.options.model)}`
-      : `${baseUrl}?model=${encodeURIComponent(DEFAULT_MODEL)}`;
+    const url = `${baseUrl}?model=${encodeURIComponent(this.options.model ?? DEFAULT_MODEL)}`;
     const apiKey = this.options.apiKey || process.env.INWORLD_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        'Missing Inworld API key. Pass `apiKey` to InworldRealtimeVoice or set INWORLD_API_KEY. Keys ship pre-Basic-encoded; paste verbatim.',
+      );
+    }
     this.requestContext = requestContext;
 
     this.ws = new WebSocket(url, undefined, {
@@ -253,11 +257,10 @@ export class InworldRealtimeVoice extends MastraVoice {
     const ready = this.waitForSessionCreated();
     await opened;
 
-    const inworldTools = transformTools(this.tools);
     this.updateConfig({
       model: this.options.model || DEFAULT_MODEL,
       instructions: this.instructions,
-      tools: inworldTools.map(t => t.inworldTool),
+      tools: transformTools(this.tools),
       audio: { output: { voice: this.speaker } },
     });
 

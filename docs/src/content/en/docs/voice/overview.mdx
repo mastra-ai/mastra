@@ -11,6 +11,7 @@ packages:
   - "@mastra/voice-elevenlabs"
   - "@mastra/voice-google"
   - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-inworld-realtime"
   - "@mastra/voice-murf"
   - "@mastra/voice-openai"
   - "@mastra/voice-openai-realtime"
@@ -720,6 +721,48 @@ For detailed configuration options and advanced features, check out [Speech to S
 
     Visit the [AWS Nova Sonic Reference](/reference/voice/aws-nova-sonic) for more information on the AWS Nova Sonic voice provider.
   </TabItem>
+
+  <TabItem value="inworld-realtime" label="Inworld Realtime">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+    import { InworldRealtimeVoice } from '@mastra/voice-inworld-realtime'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: 'openai/gpt-5.4',
+      voice: new InworldRealtimeVoice({
+        apiKey: process.env.INWORLD_API_KEY,
+        model: 'anthropic/claude-sonnet-4-6',
+        speaker: 'Dennis',
+      }),
+    })
+
+    // Connect before using speak/send
+    await voiceAgent.voice.connect()
+
+    // Listen for agent audio (PCM stream)
+    voiceAgent.voice.on('speaker', stream => {
+      playAudio(stream)
+    })
+
+    // Listen for text responses and transcriptions
+    voiceAgent.voice.on('writing', ({ text, role }) => {
+      console.log(`${role}: ${text}`)
+    })
+
+    // Initiate the conversation
+    await voiceAgent.voice.speak('How can I help you today?')
+
+    // Send continuous audio from the microphone
+    const micStream = getMicrophoneStream()
+    await voiceAgent.voice.send(micStream)
+    ```
+
+    Visit the [Inworld Realtime Reference](/reference/voice/inworld-realtime) for more information on the Inworld Realtime voice provider.
+  </TabItem>
 </Tabs>
 
 ## Voice configuration
@@ -1011,6 +1054,23 @@ Each voice provider can be configured with different models and options. Below a
     ```
 
     Visit the [AWS Nova Sonic Reference](/reference/voice/aws-nova-sonic) for more information on the AWS Nova Sonic voice provider.
+  </TabItem>
+
+  <TabItem value="inworld-realtime" label="Inworld Realtime">
+    ```typescript
+    // Inworld Realtime Voice Configuration
+    const voice = new InworldRealtimeVoice({
+      apiKey: process.env.INWORLD_API_KEY,
+      model: 'anthropic/claude-sonnet-4-6',
+      speaker: 'Dennis',
+      // Inworld-specific session knobs (MCP tool routing, playback speed, ...)
+      providerData: {
+        audio: { output: { speed: 1.1 } },
+      },
+    })
+    ```
+
+    Visit the [Inworld Realtime Reference](/reference/voice/inworld-realtime) for more information on the Inworld Realtime voice provider.
   </TabItem>
 
   <TabItem value="aisdk" label="AI SDK">

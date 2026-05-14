@@ -2,8 +2,6 @@ import { Readable } from 'node:stream';
 import type { ToolsInput } from '@mastra/core/agent';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-export type InworldExecuteFunction = (args: any) => Promise<any>;
-
 type ToolDefinition = {
   type: 'function';
   name: string;
@@ -16,60 +14,41 @@ type ToolDefinition = {
 type TTools = ToolsInput;
 
 /**
- * Transforms a Mastra tools record into Inworld realtime tool definitions plus
- * adapter execute functions. Inworld's realtime tool schema matches OpenAI's
- * GA shape (`{type:'function', name, description, parameters}`), so the
- * transformation is provider-agnostic.
+ * Transforms a Mastra tools record into Inworld realtime tool definitions.
+ * Inworld's realtime tool schema matches OpenAI's GA shape
+ * (`{ type: 'function', name, description, parameters }`), so the transformation
+ * is provider-agnostic. Execution itself goes through the Mastra tool's own
+ * `execute` (called in `handleFunctionCall`), so no adapter is built here.
  */
-export const transformTools = (tools?: TTools) => {
-  const inworldTools: { inworldTool: ToolDefinition; execute: InworldExecuteFunction }[] = [];
+export const transformTools = (tools?: TTools): ToolDefinition[] => {
+  const inworldTools: ToolDefinition[] = [];
   for (const [name, tool] of Object.entries(tools || {})) {
     let parameters: { [key: string]: any };
 
     if ('inputSchema' in tool && tool.inputSchema) {
-      if (isZodObject(tool.inputSchema)) {
-        parameters = zodSchemaToJson(tool.inputSchema);
-      } else {
-        parameters = tool.inputSchema as Record<string, unknown>;
-      }
+      parameters = isZodObject(tool.inputSchema)
+        ? zodSchemaToJson(tool.inputSchema)
+        : (tool.inputSchema as Record<string, unknown>);
     } else if ('parameters' in tool) {
-      if (isZodObject(tool.parameters)) {
-        parameters = zodSchemaToJson(tool.parameters);
-      } else {
-        parameters = tool.parameters as Record<string, unknown>;
-      }
+      parameters = isZodObject(tool.parameters)
+        ? zodSchemaToJson(tool.parameters)
+        : (tool.parameters as Record<string, unknown>);
     } else {
       console.warn(`Tool ${name} has neither inputSchema nor parameters, skipping`);
       continue;
     }
-    const inworldTool: ToolDefinition = {
+
+    if (!tool.execute) {
+      console.warn(`Tool ${name} has no execute function, skipping`);
+      continue;
+    }
+
+    inworldTools.push({
       type: 'function',
       name,
       description: tool.description || `Tool: ${name}`,
       parameters,
-    };
-
-    if (tool.execute) {
-      const executeAdapter = async (args: any) => {
-        try {
-          if (!tool.execute) {
-            throw new Error(`Tool ${name} has no execute function`);
-          }
-
-          const options = {
-            toolCallId: 'unknown',
-            messages: [],
-          };
-          return await tool.execute(args, options);
-        } catch (error) {
-          console.error(`Error executing tool ${name}:`, error);
-          throw error;
-        }
-      };
-      inworldTools.push({ inworldTool, execute: executeAdapter });
-    } else {
-      console.warn(`Tool ${name} has no execute function, skipping`);
-    }
+    });
   }
   return inworldTools;
 };
