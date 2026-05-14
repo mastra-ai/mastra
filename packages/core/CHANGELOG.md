@@ -1,5 +1,41 @@
 # @mastra/core
 
+## 1.34.0-alpha.1
+
+### Minor Changes
+
+- Changed background process output retention. ([#16574](https://github.com/mastra-ai/mastra/pull/16574))
+
+  **Before:** Spawned process handles retained all stdout and stderr, which could grow without bound for long-running background processes.
+
+  **After:** Spawned process handles now retain the latest 1 MiB of stdout and stderr per stream by default. Pass `maxRetainedBytes` to `processes.spawn()` to customize the limit, use `0` to disable retained polling output, or use `Infinity` to keep the previous retain-all behavior.
+
+  ```ts
+  const handle = await sandbox.processes.spawn('npm run dev', {
+    maxRetainedBytes: 512 * 1024,
+  });
+  ```
+
+  Streaming callbacks and reader streams still receive every chunk in full. Handles also expose truncation and dropped-byte counters so callers can detect when `stdout`, `stderr`, or `wait()` results only include retained output.
+
+  The built-in `executeCommand()` implementation still retains full output by default; pass `maxRetainedBytes` there only when you want bounded command results.
+
+### Patch Changes
+
+- Improved background-task observability. ([#16590](https://github.com/mastra-ai/mastra/pull/16590))
+
+  Retry attempts now appear as separate workflow steps in run history and event traces, making retry progression easier to debug. No public API changes.
+
+- Fixed durable agents that could drop object-form system instructions when provider options like `cacheControl` were used. These instructions are now preserved so provider-specific options are respected. ([#16599](https://github.com/mastra-ai/mastra/pull/16599))
+
+- **Fixed** non-deterministic ordering of cross-thread semantic recall messages. ([#16600](https://github.com/mastra-ai/mastra/pull/16600))
+
+  When messages recalled from other threads shared the same timestamp, they were rendered into the system prompt in whatever order the vector query returned them — driven by similarity scores that can vary between equivalent runs. This made any test or evaluation that snapshots prompt output (or hashes the outbound LLM request) flaky.
+
+  Recalled cross-thread messages are now sorted by createdAt, then threadId, then role (user → assistant → tool → system), then id before formatting, so the same set of recalled messages always produces the same prompt.
+
+- Fixed agent signals so standalone agents coordinate thread streams through a shared runtime. ([#16581](https://github.com/mastra-ai/mastra/pull/16581))
+
 ## 1.34.0-alpha.0
 
 ### Minor Changes

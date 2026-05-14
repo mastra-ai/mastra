@@ -26,6 +26,7 @@ export interface ApiCommandDescriptor {
   bodyParams: string[];
   defaultTimeoutMs?: number;
   examples?: ApiCommandExample[];
+  verbose?: Pick<ApiCommandDescriptor, 'path' | 'responseShape' | 'queryParams' | 'bodyParams'>;
 }
 
 export type ApiCommandInputMode = 'none' | 'optional' | 'required';
@@ -38,4 +39,5 @@ export interface ApiCommandActionOptions {
   pathParamsFromInput?: string[];
   defaultTimeoutMs?: number;
   examples?: ApiCommandExample[];
+  verboseRouteKey?: string;
 }
