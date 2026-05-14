@@ -143,6 +143,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ambient',
+          label: 'Ambient',
+        },
+        {
+          type: 'doc',
+          id: 'providers/auriko',
+          label: 'Auriko',
+        },
+        {
+          type: 'doc',
           id: 'providers/azure',
           label: 'Azure',
         },
@@ -175,6 +185,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/clarifai',
           label: 'Clarifai',
+        },
+        {
+          type: 'doc',
+          id: 'providers/claudinio',
+          label: 'Claudinio',
         },
         {
           type: 'doc',
@@ -595,6 +610,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi-token-plan-sgp',
           label: 'Xiaomi Token Plan (Singapore)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xpersona',
+          label: 'Xpersona',
         },
         {
           type: 'doc',

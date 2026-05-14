@@ -1,5 +1,37 @@
 # @mastra/server
 
+## 1.34.0-alpha.0
+
+### Patch Changes
+
+- Fixed agent signal wakeups so idle runs receive request context values while preserving server-owned resource identifiers. ([#16557](https://github.com/mastra-ai/mastra/pull/16557))
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6)]:
+  - @mastra/core@1.34.0-alpha.0
+
+## 1.33.1
+
+### Patch Changes
+
+- Fix: the A2A `message/send` endpoint now accepts file and data message parts in addition to text. External A2A clients can attach files — either as URIs or base64-encoded bytes — and send structured data parts to a Mastra agent without hitting a JSON-RPC `-32602` invalid-params error. Unknown part kinds continue to return invalid-params, so strict validation is preserved. ([#16498](https://github.com/mastra-ai/mastra/pull/16498))
+
+- Updated dependencies [[`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1), [`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb)]:
+  - @mastra/core@1.33.1
+
+## 1.33.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb)]:
+  - @mastra/core@1.33.1-alpha.1
+
+## 1.33.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1)]:
+  - @mastra/core@1.33.1-alpha.0
+
 ## 1.33.0
 
 ### Minor Changes
