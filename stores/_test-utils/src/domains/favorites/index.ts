@@ -98,7 +98,9 @@ export function createFavoritesTests({ storage }: { storage: MastraStorage }) {
       });
 
       it('throws when favoriting a non-existent entity', async () => {
-        await expect(favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: 'missing' })).rejects.toThrow();
+        await expect(
+          favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: 'missing' }),
+        ).rejects.toThrow();
       });
 
       it('separates agent and skill counters even when ids collide', async () => {
@@ -127,8 +129,12 @@ export function createFavoritesTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent });
         await favoritesStorage.favorite({ userId: 'u1', entityType: 'agent', entityId: agent.id });
 
-        expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(true);
-        expect(await favoritesStorage.isFavorited({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
+        expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(
+          true,
+        );
+        expect(await favoritesStorage.isFavorited({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(
+          false,
+        );
       });
 
       it('isFavoritedBatch returns only the favorited subset', async () => {
@@ -197,8 +203,12 @@ export function createFavoritesTests({ storage }: { storage: MastraStorage }) {
         });
         expect(removed).toBe(2);
 
-        expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(false);
-        expect(await favoritesStorage.isFavorited({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
+        expect(await favoritesStorage.isFavorited({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(
+          false,
+        );
+        expect(await favoritesStorage.isFavorited({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(
+          false,
+        );
       });
 
       it('does not touch favorites for other entities', async () => {
