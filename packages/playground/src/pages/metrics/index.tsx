@@ -2,14 +2,12 @@ import type { DatePreset, PropertyFilterToken } from '@mastra/playground-ui';
 import {
   Notice,
   Button,
-  ButtonWithTooltip,
   DateRangeSelector,
   EmptyState,
   ErrorState,
   MetricsFlexGrid,
   MetricsProvider,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   PropertyFilterCreator,
@@ -32,7 +30,7 @@ import {
   useServiceNames,
   useTags,
 } from '@mastra/playground-ui';
-import { BarChart3Icon, BookIcon, CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
@@ -215,7 +213,7 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -223,7 +221,7 @@ function MetricsContent() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="metrics" />
       </NoDataPageLayout>
     );
@@ -231,7 +229,7 @@ function MetricsContent() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load metrics" message={error.message} />
       </NoDataPageLayout>
     );
@@ -241,14 +239,7 @@ function MetricsContent() {
     <PageLayout width="wide" height="full">
       <PageLayout.TopArea>
         <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title>
-                <BarChart3Icon /> Metrics
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end items-center gap-2">
+          <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
             <DateRangeSelector />
             <PropertyFilterCreator
               fields={filterFields}
@@ -257,15 +248,6 @@ function MetricsContent() {
               disabled={isMetricsLoading}
               onStartTextFilter={setAutoFocusFilterFieldId}
             />
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/observability/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Metrics documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
           </PageLayout.Column>
         </PageLayout.Row>
 
