@@ -55,7 +55,7 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
         }),
       );
 
-      return results.flat().toSorted((a: AgentExperiment, b: AgentExperiment) => {
+      return results.flat().sort((a, b) => {
         const dateA = a.startedAt ? new Date(a.startedAt).getTime() : 0;
         const dateB = b.startedAt ? new Date(b.startedAt).getTime() : 0;
         return dateB - dateA;
