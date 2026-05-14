@@ -9,7 +9,6 @@ import color from 'picocolors';
 import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
-import { getAnalytics } from '../../analytics/index';
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { getToken, loadCredentials } from '../auth/credentials.js';
@@ -33,7 +32,17 @@ export interface ObservabilityPromptResult {
   token?: string;
 }
 
-export async function promptForObservability(command?: 'create' | 'init'): Promise<ObservabilityPromptResult> {
+interface ObservabilitySelectionEvent {
+  command?: 'create' | 'init';
+  enabled: boolean;
+  answer: 'yes' | 'no';
+  selection_method: 'interactive';
+}
+
+export async function promptForObservability(
+  command?: 'create' | 'init',
+  onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void,
+): Promise<ObservabilityPromptResult> {
   // Loop so that if the browser-based auth flow fails (user closed the browser
   // tab, timed out, network error, …) we re-ask the same question instead of
   // leaving the user stuck. Picking "No" is always a clean escape hatch.
@@ -49,11 +58,12 @@ export async function promptForObservability(command?: 'create' | 'init'): Promi
 
     if (p.isCancel(choice)) return {};
 
-    const enabled = choice === 'yes';
-    getAnalytics()?.trackEvent('cli_observability_selected', {
+    const answer = choice === 'yes' ? 'yes' : 'no';
+    const enabled = answer === 'yes';
+    onObservabilitySelected?.({
       command,
       enabled,
-      answer: choice,
+      answer,
       selection_method: 'interactive',
     });
 
@@ -745,6 +755,7 @@ interface InteractivePromptArgs {
   options?: {
     command?: 'create' | 'init';
     showBanner?: boolean;
+    onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void;
   };
   skip?: {
     directory?: boolean;
@@ -758,7 +769,7 @@ interface InteractivePromptArgs {
 }
 
 export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
-  const { skip = {}, options: { command, showBanner = true } = {} } = args;
+  const { skip = {}, options: { command, showBanner = true, onObservabilitySelected } = {} } = args;
 
   if (showBanner) {
     p.intro(color.inverse(' Mastra Init '));
@@ -807,7 +818,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
       },
       observability: async () => {
         if (skip?.observability) return undefined;
-        return promptForObservability(command);
+        return promptForObservability(command, onObservabilitySelected);
       },
       configureMastraToolingForAgents: async () => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };

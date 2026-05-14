@@ -43,7 +43,13 @@ export const initProject = async (args: InitArgs) => {
       await checkAndInstallCoreDeps(Boolean(args?.example || args?.default), versionTag);
 
       if (!Object.keys(args).length) {
-        const result = await interactivePrompt({ options: { command: 'init' }, skip: { gitInit: skipGitInit } });
+        const result = await interactivePrompt({
+          options: {
+            command: 'init',
+            onObservabilitySelected: event => analytics.trackEvent('cli_observability_selected', event),
+          },
+          skip: { gitInit: skipGitInit },
+        });
         await init({
           ...result,
           llmApiKey: result?.llmApiKey as string,
