@@ -173,7 +173,9 @@ describe('DevBundler', () => {
       const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
       process.env.MASTRA_SOURCE_MODE = '1';
       const devBundler = new DevBundler();
+      const fsExtra = await import('fs-extra');
       const { createWatcher } = await import('@mastra/deployer/build');
+      vi.mocked(fsExtra.pathExists as unknown as () => Promise<boolean>).mockResolvedValue(true);
 
       const tmpDir = '.test-tmp';
       try {
@@ -181,6 +183,30 @@ describe('DevBundler', () => {
 
         const inputOptions = vi.mocked(createWatcher).mock.calls[0][0] as { input: { index: string } };
         expect(inputOptions.input.index).toMatch(/packages\/cli\/src\/public\/templates\/dev\.entry\.js$/);
+      } finally {
+        if (originalSourceMode === undefined) {
+          delete process.env.MASTRA_SOURCE_MODE;
+        } else {
+          process.env.MASTRA_SOURCE_MODE = originalSourceMode;
+        }
+        await remove(tmpDir);
+      }
+    });
+
+    it('should fall back to the packaged template path when source files are unavailable in source mode', async () => {
+      const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
+      process.env.MASTRA_SOURCE_MODE = '1';
+      const devBundler = new DevBundler();
+      const fsExtra = await import('fs-extra');
+      const { createWatcher } = await import('@mastra/deployer/build');
+      vi.mocked(fsExtra.pathExists as unknown as () => Promise<boolean>).mockResolvedValue(false);
+
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+
+        const inputOptions = vi.mocked(createWatcher).mock.calls[0][0] as { input: { index: string } };
+        expect(inputOptions.input.index).toMatch(/(dist|src\/commands\/dev)\/templates\/dev\.entry\.js$/);
       } finally {
         if (originalSourceMode === undefined) {
           delete process.env.MASTRA_SOURCE_MODE;

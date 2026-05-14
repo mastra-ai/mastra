@@ -44,17 +44,25 @@ export class DevBundler extends Bundler {
     return Promise.resolve([]);
   }
 
-  private async getSourceModeStudioPath(): Promise<string> {
-    const playgroundPackageJsonPath = fileURLToPath(import.meta.resolve('@internal/playground/package.json'));
-    const playgroundRoot = dirname(playgroundPackageJsonPath);
-    const playgroundDist = join(playgroundRoot, 'dist');
+  private async getSourceModeStudioPath(packagedStudioPath: string): Promise<string> {
+    try {
+      const playgroundPackageJsonPath = fileURLToPath(import.meta.resolve('@internal/playground/package.json'));
+      const playgroundRoot = dirname(playgroundPackageJsonPath);
+      const playgroundDist = join(playgroundRoot, 'dist');
 
-    if (!(await fsExtra.pathExists(join(playgroundDist, 'index.html')))) {
-      devLogger.info('Building Studio assets for source mode...');
-      await execa('pnpm', ['--dir', playgroundRoot, 'build'], { stdio: 'inherit' });
+      if (!(await fsExtra.pathExists(join(playgroundDist, 'index.html')))) {
+        devLogger.info('Building Studio assets for source mode...');
+        await execa('pnpm', ['--dir', playgroundRoot, 'build'], { stdio: 'inherit' });
+      }
+
+      return playgroundDist;
+    } catch (error) {
+      if (await fsExtra.pathExists(join(packagedStudioPath, 'index.html'))) {
+        return packagedStudioPath;
+      }
+
+      throw error;
     }
-
-    return playgroundDist;
   }
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -64,10 +72,11 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+    const packagedStudioPath = join(dirname(__dirname), 'dist', 'studio');
     const studioSourcePath =
       process.env.MASTRA_SOURCE_MODE === '1'
-        ? await this.getSourceModeStudioPath()
-        : join(dirname(__dirname), join('dist', 'studio'));
+        ? await this.getSourceModeStudioPath(packagedStudioPath)
+        : packagedStudioPath;
 
     await fsExtra.copy(studioSourcePath, studioServePath, {
       overwrite: true,
@@ -86,6 +95,11 @@ export class DevBundler extends Bundler {
     const envFiles = await this.getEnvFiles();
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
     const sourcemapEnabled = !!bundlerOptions?.sourcemap;
+    const sourceModeTemplatePath = join(packageRoot, 'src', 'public', 'templates', 'dev.entry.js');
+    const templatePath =
+      process.env.MASTRA_SOURCE_MODE === '1' && (await fsExtra.pathExists(sourceModeTemplatePath))
+        ? sourceModeTemplatePath
+        : join(__dirname, 'templates', 'dev.entry.js');
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
@@ -149,10 +163,7 @@ export class DevBundler extends Bundler {
           },
         ],
         input: {
-          index:
-            process.env.MASTRA_SOURCE_MODE === '1'
-              ? join(packageRoot, 'src', 'public', 'templates', 'dev.entry.js')
-              : join(__dirname, 'templates', 'dev.entry.js'),
+          index: templatePath,
           ...toolsInputOptions,
         },
       },
