@@ -1161,6 +1161,51 @@ describe('toUIMessage', () => {
       });
     });
 
+    it('should start a new assistant message on reasoning-start when the last message is a completionResult', () => {
+      const chunk: ChunkType = {
+        type: 'reasoning-start',
+        payload: {
+          id: 'reasoning-after-completion',
+          providerMetadata: { provider: { name: 'anthropic' } },
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-completion',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Task complete.',
+            },
+          ],
+          metadata: {
+            mode: 'network',
+            completionResult: {
+              passed: true,
+            },
+          },
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('msg-completion');
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[1].role).toBe('assistant');
+      expect(result[1].parts).toHaveLength(1);
+      expect(result[1].parts[0]).toEqual({
+        type: 'reasoning',
+        text: '',
+        state: 'streaming',
+        providerMetadata: { provider: { name: 'anthropic' } },
+      });
+    });
+
     it('should create separate reasoning parts when interleaved with tool calls and text', () => {
       const conversation: MastraUIMessage[] = [
         {
