@@ -3,5 +3,3 @@
 ---
 
 Added `visibility` and `starCount` fields on the stored agents and skills schemas.
-
-Requires `@mastra/core` `>=1.34.0-0` so the new `@mastra/core/storage/domains/stars` subpath is available.
