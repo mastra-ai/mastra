@@ -121,6 +121,10 @@ export interface BackgroundProcessExitMeta extends BackgroundProcessMeta {
   exitCode: number;
   stdout: string;
   stderr: string;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+  stdoutDroppedBytes?: number;
+  stderrDroppedBytes?: number;
 }
 
 /**

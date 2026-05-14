@@ -33,14 +33,14 @@ export function SectionCard({
       className={cn(
         'overflow-hidden rounded-2xl border',
         fillHeight && 'flex h-full flex-col',
-        danger ? 'border-accent2/25' : 'border-border2/40',
+        danger ? 'border-accent2/25' : 'border-section-card bg-section-card',
         className,
       )}
     >
       <div
         className={cn(
           'flex flex-col gap-3 px-7 pt-7 pb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-6',
-          danger ? 'bg-accent2/[0.08]' : 'bg-surface2',
+          danger ? 'bg-accent2/[0.08]' : 'bg-section-card-header',
         )}
       >
         <div className="min-w-0">
