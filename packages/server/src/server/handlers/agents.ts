@@ -805,7 +805,12 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
-  const metadata = typeof agent.getMetadata === 'function' ? await agent.getMetadata({ requestContext }) : undefined;
+  let metadata: Record<string, unknown> | undefined;
+  if (typeof agent.getMetadata === 'function') {
+    try {
+      metadata = await agent.getMetadata({ requestContext });
+    } catch {}
+  }
 
   const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);

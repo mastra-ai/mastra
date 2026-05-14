@@ -1215,6 +1215,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : undefined;
 
+    let resolvedMetadata = options.metadata;
+    if (resolvedMetadata === undefined && typeof agent.getMetadata === 'function') {
+      try {
+        resolvedMetadata = await agent.getMetadata({ requestContext });
+      } catch {}
+    }
+
     // 10. Create the stored agent
     const createInput: StorageCreateAgentInput = {
       id: options.newId,
@@ -1228,9 +1235,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       memory: memoryConfig,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
-      metadata:
-        options.metadata ??
-        (typeof agent.getMetadata === 'function' ? await agent.getMetadata({ requestContext }) : undefined),
+      metadata: resolvedMetadata,
       authorId: options.authorId,
     };
 
