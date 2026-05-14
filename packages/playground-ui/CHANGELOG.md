@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 27.1.0-alpha.2
+
+### Minor Changes
+
+- Added a List mode filter to the Observability traces page for switching between Traces and Branches mode, and changed the default to Traces mode. Previously, the page opened in Branches mode; now it opens in Traces mode, and users can switch modes via the new "List mode" property in the Add filter menu. For example: open Observability → Traces (now defaults to Traces) → Add filter → List mode → pick Branches or Traces. ([#16587](https://github.com/mastra-ai/mastra/pull/16587))
+
+### Patch Changes
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+  - @mastra/client-js@1.18.2-alpha.2
+  - @mastra/react@0.3.2-alpha.2
+
 ## 27.0.2-alpha.1
 
 ### Patch Changes
