@@ -87,6 +87,7 @@ describe('useChat forwards clientTools', () => {
           resourceId: 'resource-1',
           threadId: 'thread-1',
           clientTools,
+          enableThreadSignals: true,
         }),
       { wrapper },
     );
