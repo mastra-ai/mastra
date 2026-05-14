@@ -1,6 +1,6 @@
 import { getRegisteredProviders, parseModelString } from '../../llm/model/provider-registry.js';
 import type { MastraModelConfig } from '../../llm/model/shared.types.js';
-import type { StorageConditionalField, StorageModelConfig } from '../../storage/types.js';
+import type { StorageConditionalField, StorageConditionalVariant, StorageModelConfig } from '../../storage/types.js';
 
 export type ModelCandidateOrigin =
   | 'static'
@@ -37,6 +37,7 @@ export type ModelCandidateInput =
   | MastraModelConfig
   | StorageModelConfig
   | StorageConditionalField<StorageModelConfig>
+  | StorageConditionalVariant<string>[]
   | { provider?: unknown; modelId?: unknown; name?: unknown; id?: unknown; providerId?: unknown }
   | ((...args: unknown[]) => unknown)
   | null

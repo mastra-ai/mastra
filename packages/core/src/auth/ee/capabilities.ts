@@ -307,15 +307,17 @@ export async function buildCapabilities(
     if (hasAdminBypassPermissions(access.permissions)) {
       try {
         const allRoles = await rbacProvider.getAvailableRoles();
-        if (rbacProvider.getPermissionsForRole) {
-          const nonAdminRoles: { id: string; name: string }[] = [];
-          for (const role of allRoles) {
-            const rolePerms = await rbacProvider.getPermissionsForRole(role.id);
-            if (!hasAdminBypassPermissions(rolePerms)) {
-              nonAdminRoles.push(role);
-            }
-          }
-          availableRoles = nonAdminRoles;
+        const getPermissionsForRole = rbacProvider.getPermissionsForRole;
+        if (getPermissionsForRole) {
+          const rolePermissions = await Promise.all(
+            allRoles.map(async role => ({
+              role,
+              perms: await getPermissionsForRole(role.id),
+            })),
+          );
+          availableRoles = rolePermissions
+            .filter(({ perms }) => !hasAdminBypassPermissions(perms))
+            .map(({ role }) => role);
         } else {
           availableRoles = allRoles;
         }

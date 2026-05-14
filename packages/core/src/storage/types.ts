@@ -425,6 +425,8 @@ export interface StorageAgentSnapshotType {
   mcpClients?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** Workspace reference — ID of a stored workspace or inline config — static or conditional on request context */
   workspace?: StorageConditionalField<StorageWorkspaceRef>;
+  /** Browser reference — inline browser config — static or conditional on request context */
+  browser?: StorageConditionalField<StorageBrowserRef>;
   /** Skill entity IDs with optional per-skill overrides — static or conditional on request context */
   skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
   /** Skill format for system message injection (default: 'xml') */
