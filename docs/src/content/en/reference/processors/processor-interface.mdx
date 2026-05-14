@@ -41,10 +41,10 @@ The eight processor methods run at different points in the agent execution lifec
 │  │              ▼                                               │  │
 │  │        LLM Execution ──── API Error? ───┐                    │  │
 │  │              │                          │                    │  │
-│  │              │               ┌───────────┴──────────┐        │  │
-│  │              │               │  processAPIError     │        │  │
-│  │              │               └──────────────────────┘        │  │
-│  │              │                 (retry loops back to LLM)     │  │
+│  │              │              ┌───────────┴──────────┐         │  │
+│  │              │              │  processAPIError     │         │  │
+│  │              │              └──────────────────────┘         │  │
+│  │              │                (retry loops back to LLM)      │  │
 │  │              ▼                                               │  │
 │  │  ┌────────────────────────┐                                  │  │
 │  │  │  processOutputStream   │  ← Runs on EACH stream chunk     │  │
