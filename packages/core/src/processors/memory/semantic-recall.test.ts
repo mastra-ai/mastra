@@ -882,6 +882,74 @@ describe('SemanticRecall', () => {
       expect(msg2Content).toContain(inputMessages[0]!.content.content);
     });
 
+    it('should format same-timestamp cross-thread messages deterministically', async () => {
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        scope: 'resource',
+      });
+
+      const inputMessages: MastraDBMessage[] = [
+        createTestMessage('msg-new', 'user', 'Actually, my favorite color is red.', '2024-01-15T12:00:00.000Z'),
+      ];
+
+      const createdAt = new Date('2024-01-15T10:30:00.000Z');
+      const crossThreadUser: MastraDBMessage = {
+        ...createTestMessage('msg-other-user', 'user', 'My favorite color is blue.', createdAt),
+        threadId: 'other-thread-1',
+      };
+      const crossThreadAssistant: MastraDBMessage = {
+        ...createTestMessage(
+          'msg-other-assistant',
+          'assistant',
+          'Blue is often associated with calmness and serenity.',
+          createdAt,
+        ),
+        threadId: 'other-thread-1',
+      };
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3]],
+      });
+
+      vi.mocked(mockVector.query).mockResolvedValue([
+        {
+          id: 'msg-other-assistant',
+          score: 0.9,
+          metadata: { message_id: 'msg-other-assistant', thread_id: 'other-thread-1' },
+        },
+        { id: 'msg-other-user', score: 0.85, metadata: { message_id: 'msg-other-user', thread_id: 'other-thread-1' } },
+      ]);
+
+      vi.mocked(mockStorage.listMessages).mockResolvedValue({
+        messages: [crossThreadAssistant, crossThreadUser],
+        total: 2,
+        page: 1,
+        perPage: false,
+        hasMore: false,
+      });
+
+      const messageList = new MessageList();
+      messageList.add(inputMessages, 'input');
+
+      const result = await processor.processInput({
+        messages: inputMessages,
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      const promptMessages = Array.isArray(result) ? result : result.get.all.aiV4.prompt();
+      const content = promptMessages[0]!.content as string;
+      const userIndex = content.indexOf('User: My favorite color is blue.');
+      const assistantIndex = content.indexOf('Assistant: Blue is often associated with calmness and serenity.');
+
+      expect(userIndex).toBeGreaterThan(-1);
+      expect(assistantIndex).toBeGreaterThan(-1);
+      expect(userIndex).toBeLessThan(assistantIndex);
+    });
+
     it('should not add cross-thread messages when scope is thread', async () => {
       const processor = new SemanticRecall({
         storage: mockStorage,

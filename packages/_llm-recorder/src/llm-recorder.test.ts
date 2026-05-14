@@ -17,6 +17,7 @@
  * ```
  */
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,6 +31,31 @@ import {
   getActiveRecorder,
 } from './llm-recorder';
 import type { LLMRecording } from './llm-recorder';
+
+function stableSortKeysForTest(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableSortKeysForTest);
+  }
+
+  if (value !== null && typeof value === 'object' && value.constructor === Object) {
+    return Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = stableSortKeysForTest((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+  }
+
+  return value;
+}
+
+function hashRequestForTest(url: string, body: unknown): string {
+  const normalizedBody = stableSortKeysForTest(body);
+  return createHash('md5')
+    .update(`${url}:${typeof normalizedBody === 'string' ? normalizedBody : JSON.stringify(normalizedBody)}`)
+    .digest('hex')
+    .slice(0, 16);
+}
 
 /**
  * Mode detection tests
@@ -119,6 +145,160 @@ describe('transformRequest', () => {
     if (recorder.server) {
       recorder.start();
       recorder.stop();
+    }
+  });
+
+  it('uses transformed hashes for existing recordings in exact replay mode', async () => {
+    const originalMode = process.env.LLM_TEST_MODE;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-recorder-transform-'));
+    const name = 'transformed-hash-replay';
+    const filePath = path.join(tempDir, `${name}.json`);
+
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          meta: { name, createdAt: '2026-03-26T00:00:00.000Z' },
+          recordings: [
+            {
+              hash: 'stale-before-transform',
+              request: {
+                url: 'https://api.openai.com/v1/responses',
+                method: 'POST',
+                body: { model: 'gpt-4o', input: 'hello', timestamp: 'old' },
+                timestamp: 1,
+              },
+              response: {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'application/json' },
+                body: { id: 'transformed-match', output: [] },
+                isStreaming: false,
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    process.env.LLM_TEST_MODE = 'replay';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const recorder = setupLLMRecording({
+      name,
+      recordingsDir: tempDir,
+      exactMatch: true,
+      transformRequest: ({ url, body }) => {
+        const nextBody = { ...(body as Record<string, unknown>) };
+        delete nextBody.timestamp;
+        return { url, body: nextBody };
+      },
+    });
+    recorder.start();
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o', input: 'hello', timestamp: 'new' }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ id: 'transformed-match', output: [] });
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('No exact match for hash'));
+    } finally {
+      recorder.stop();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      if (originalMode === undefined) {
+        delete process.env.LLM_TEST_MODE;
+      } else {
+        process.env.LLM_TEST_MODE = originalMode;
+      }
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('keeps persisted hashes as exact replay keys when transformRequest is configured', async () => {
+    const originalMode = process.env.LLM_TEST_MODE;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-recorder-persisted-hash-'));
+    const name = 'persisted-hash-replay';
+    const filePath = path.join(tempDir, `${name}.json`);
+    const url = 'https://api.openai.com/v1/responses';
+    const actualBody = {
+      model: 'gpt-4o',
+      input: [
+        { role: 'system', content: 'You are helpful' },
+        { role: 'user', content: 'actual request' },
+      ],
+    };
+
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          meta: { name, createdAt: '2026-03-26T00:00:00.000Z' },
+          recordings: [
+            {
+              hash: hashRequestForTest(url, actualBody),
+              request: {
+                url,
+                method: 'POST',
+                body: {
+                  model: 'gpt-4o',
+                  input: [
+                    { role: 'system', content: 'You are helpful' },
+                    { role: 'user', content: 'persisted body from an older recorder' },
+                  ],
+                },
+                timestamp: 1,
+              },
+              response: {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'application/json' },
+                body: { id: 'persisted-hash-match', output: [] },
+                isStreaming: false,
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    process.env.LLM_TEST_MODE = 'replay';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const recorder = setupLLMRecording({
+      name,
+      recordingsDir: tempDir,
+      exactMatch: true,
+      transformRequest: ({ url, body }) => ({ url, body }),
+    });
+    recorder.start();
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(actualBody),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ id: 'persisted-hash-match', output: [] });
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('No exact match for hash'));
+    } finally {
+      recorder.stop();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      if (originalMode === undefined) {
+        delete process.env.LLM_TEST_MODE;
+      } else {
+        process.env.LLM_TEST_MODE = originalMode;
+      }
+      vi.restoreAllMocks();
     }
   });
 });

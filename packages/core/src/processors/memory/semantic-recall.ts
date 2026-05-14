@@ -244,6 +244,28 @@ export class SemanticRecall implements Processor {
     }
   }
 
+  private sortMessagesForRecall(messages: MastraDBMessage[]): MastraDBMessage[] {
+    const roleOrder: Record<string, number> = {
+      system: 0,
+      user: 1,
+      assistant: 2,
+      tool: 3,
+    };
+
+    return [...messages].sort((a, b) => {
+      const timeDelta = a.createdAt.getTime() - b.createdAt.getTime();
+      if (timeDelta !== 0) return timeDelta;
+
+      const threadDelta = (a.threadId ?? '').localeCompare(b.threadId ?? '');
+      if (threadDelta !== 0) return threadDelta;
+
+      const roleDelta = (roleOrder[a.role] ?? 99) - (roleOrder[b.role] ?? 99);
+      if (roleDelta !== 0) return roleDelta;
+
+      return (a.id ?? '').localeCompare(b.id ?? '');
+    });
+  }
+
   /**
    * Format cross-thread messages as a system message with timestamps and labels
    * Uses the exact formatting logic from main that was tested with longmemeval benchmark
@@ -252,7 +274,7 @@ export class SemanticRecall implements Processor {
     let result = ``;
 
     // Convert to v1 format like main did
-    const v1Messages = new MessageList().add(messages, 'memory').get.all.v1();
+    const v1Messages = new MessageList().add(this.sortMessagesForRecall(messages), 'memory').get.all.v1();
     let lastYmd: string | null = null;
 
     for (const msg of v1Messages) {
