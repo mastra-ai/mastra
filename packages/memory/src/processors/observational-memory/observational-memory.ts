@@ -1130,7 +1130,12 @@ export class ObservationalMemory {
   }
 
   /**
-   * Persist a marker to the last assistant message in storage.
+   * Persist a marker to the most recent message with a parts array in storage.
+   * Prefers the last assistant message, but falls back to any role (e.g. the
+   * user message on step 0 of the very first turn, before any assistant
+   * message exists yet) so that lifecycle markers are not silently dropped
+   * when observation fires on step 0.
+   *
    * Unlike persistMarkerToMessage, this fetches messages directly from the DB
    * so it works even when no MessageList is available (e.g. async buffering ops).
    * @internal Used by observation strategies. Do not call directly.
@@ -1147,25 +1152,24 @@ export class ObservationalMemory {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       const messages = result?.messages ?? [];
-      // Find the last assistant message
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          // Only push if the marker isn't already in the parts array.
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
+      const hasParts = (m: any) => m?.content?.parts && Array.isArray(m.content.parts);
+      const target =
+        messages.find(msg => msg?.role === 'assistant' && hasParts(msg)) ?? messages.find(msg => hasParts(msg));
+      if (!target) return;
+
+      // Only push if the marker isn't already in the parts array.
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        target.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+      if (!alreadyPresent) {
+        target.content.parts.push(marker as any);
       }
+      await this.messageHistory.persistMessages({
+        messages: [target],
+        threadId,
+        resourceId,
+      });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
