@@ -986,9 +986,10 @@ Lists observability traces. Pass optional JSON input for route-supported filters
 ```bash
 mastra api trace list [input]
 mastra api trace list '{"page":0,"perPage":20}' --pretty
+mastra api trace list '{"page":0,"perPage":20}' --verbose --pretty
 ```
 
-`trace list` returns full root span records. For debugging large traces without overfetching, use `trace get` first and then fetch a specific span with `trace span` only when you need full span payloads.
+`trace list` returns lightweight root span records by default so you can page through traces without fetching large input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full root span records.
 
 #### `mastra api trace get`
 

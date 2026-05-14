@@ -13,6 +13,7 @@ import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import {
   LIST_TRACES_ROUTE,
+  LIST_TRACES_LIGHT_ROUTE,
   LIST_BRANCHES_ROUTE,
   GET_BRANCH_ROUTE,
   GET_TRACE_ROUTE,
@@ -43,6 +44,7 @@ const createMockObservabilityStore = () => ({
   getSpan: vi.fn(),
   getBranch: vi.fn(),
   listTraces: vi.fn(),
+  listTracesLight: vi.fn(),
   listBranches: vi.fn(),
   listLogs: vi.fn(),
   listScores: vi.fn(),
@@ -626,6 +628,80 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing traces');
+    });
+  });
+
+  describe('LIST_TRACES_LIGHT_ROUTE', () => {
+    it('should return paginated lightweight results', async () => {
+      const mockResult = {
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        spans: [
+          {
+            traceId: 'test-trace-123',
+            spanId: 'test-span-456',
+            parentSpanId: null,
+            name: 'test-span',
+            spanType: SpanType.GENERIC,
+            isEvent: false,
+            startedAt: new Date('2024-01-01T00:00:00Z'),
+            endedAt: new Date('2024-01-01T00:01:00Z'),
+            error: null,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+            createdAt: new Date('2024-01-01T00:00:00Z'),
+            updatedAt: null,
+          },
+        ],
+      };
+
+      (mockObservabilityStore.listTracesLight as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        entityType: 'AGENT',
+        page: 1,
+        perPage: 10,
+        field: 'startedAt',
+        direction: 'DESC',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listTracesLight).toHaveBeenCalledWith({
+        filters: { entityType: 'AGENT' },
+        pagination: { page: 1, perPage: 10 },
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+      expect(mockObservabilityStore.listTraces).not.toHaveBeenCalled();
+    });
+
+    it('falls back to listTraces when the store predates listTracesLight', async () => {
+      const fullResult = {
+        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        spans: [],
+      };
+
+      // Simulate an older `@mastra/core` whose `ObservabilityStorage` base
+      // class doesn't expose `listTracesLight` at all.
+      const original = mockObservabilityStore.listTracesLight;
+      // @ts-expect-error - intentionally remove method to simulate old core
+      delete mockObservabilityStore.listTracesLight;
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(fullResult);
+
+      try {
+        const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+        });
+
+        expect(result).toEqual(fullResult);
+        expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
+          filters: {},
+          pagination: {},
+          orderBy: {},
+        });
+      } finally {
+        mockObservabilityStore.listTracesLight = original;
+      }
     });
   });
 
