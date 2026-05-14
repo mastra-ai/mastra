@@ -67,6 +67,7 @@ export class DevBundler extends Bundler {
   ): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
+    const packageRoot = dirname(dirname(dirname(__dirname)));
 
     const envFiles = await this.getEnvFiles();
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
@@ -136,7 +137,7 @@ export class DevBundler extends Bundler {
         input: {
           index:
             process.env.MASTRA_SOURCE_MODE === '1'
-              ? join(dirname(dirname(__dirname)), 'public', 'templates', 'dev.entry.js')
+              ? join(packageRoot, 'src', 'public', 'templates', 'dev.entry.js')
               : join(__dirname, 'templates', 'dev.entry.js'),
           ...toolsInputOptions,
         },

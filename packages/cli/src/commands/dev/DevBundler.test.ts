@@ -108,6 +108,28 @@ describe('DevBundler', () => {
       }
     });
 
+    it('should use the source template path from the package root in source mode', async () => {
+      const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
+      process.env.MASTRA_SOURCE_MODE = '1';
+      const devBundler = new DevBundler();
+      const { createWatcher } = await import('@mastra/deployer/build');
+
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+
+        const inputOptions = vi.mocked(createWatcher).mock.calls[0][0] as { input: { index: string } };
+        expect(inputOptions.input.index).toMatch(/packages\/cli\/src\/public\/templates\/dev\.entry\.js$/);
+      } finally {
+        if (originalSourceMode === undefined) {
+          delete process.env.MASTRA_SOURCE_MODE;
+        } else {
+          process.env.MASTRA_SOURCE_MODE = originalSourceMode;
+        }
+        await remove(tmpDir);
+      }
+    });
+
     it('should default to development when NODE_ENV is not set', async () => {
       // Arrange
       delete process.env.NODE_ENV;
