@@ -405,10 +405,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         hasStoredToolIntegrations;
 
       if (isDynamicTools) {
-        // Wrap in a dynamic function that merges at request time
-        const originalTools = fork.listTools.bind(fork);
+        // Wrap in a dynamic function that merges at request time.
+        // Snapshot the raw tools value BEFORE __setTools replaces it —
+        // otherwise calling listTools() inside toolsFn would re-enter
+        // toolsFn and recurse infinitely.
+        const rawCodeTools = fork.__getRawTools();
         const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
-          const codeTools = await originalTools({ requestContext });
+          const codeTools = (await fork.__resolveRawTools(rawCodeTools, requestContext)) as ToolsInput;
           const ctx = requestContext.toJSON();
 
           const resolvedToolsConfig = hasConditionalTools
