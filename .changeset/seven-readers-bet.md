@@ -1,5 +1,5 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
 Added an opt-in foundation for building agent-builder admin policies and role-aware capabilities, available under two new entry points.
