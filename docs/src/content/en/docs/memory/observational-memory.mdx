@@ -416,6 +416,40 @@ OM caches token estimates in message metadata to reduce repeat counting work dur
 - Message and conversation overhead are still recalculated on every pass. The cache only stores payload estimates, so counting semantics stay the same.
 - `data-*` and `reasoning` parts are still skipped and aren't cached.
 
+### Caller-supplied token estimates for file parts
+
+You can attach a token estimate directly to an `image` or `file` part using `providerMetadata.mastra.tokenEstimate`. The Token Counter honors this value verbatim and skips its own estimator:
+
+```typescript
+const filePart = {
+  type: 'file',
+  data: 'storage://bucket/large-report.pdf',
+  mimeType: 'application/pdf',
+  filename: 'large-report.pdf',
+  providerMetadata: {
+    mastra: {
+      tokenEstimate: {
+        v: 0,
+        source: 'client',
+        key: 'client',
+        tokens: 100_000,
+      },
+    },
+  },
+}
+```
+
+The `tokenEstimate` object follows the same shape the Token Counter uses internally for cached estimates:
+
+- `v` — cache schema version. Set to `0`. Caller-supplied entries are exempt from the framework's version check, so the value isn't read.
+- `source` — cache lineage marker. Must be `'client'`. This is what tells the Token Counter the entry is authoritative and should be honored verbatim instead of being recomputed or overwritten.
+- `key` — content fingerprint slot. Set to `'client'`. Framework entries use a content hash here so they invalidate when the payload changes; the `'client'` sentinel keeps caller estimates stable across writes.
+- `tokens` — the token count to use. Must be a finite non-negative number.
+
+Additional notes:
+
+- The estimate is only honored on `image` and `file` parts. `text` and `tool-invocation` parts are always counted normally, even if they carry a `tokenEstimate`.
+
 ## Async buffering
 
 Without async buffering, the Observer runs synchronously when the message threshold is reached — the agent pauses mid-conversation while the Observer LLM call completes. With async buffering (enabled by default), observations are pre-computed in the background as the conversation grows. When the threshold is hit, buffered observations activate instantly with no pause.
