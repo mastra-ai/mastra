@@ -53,7 +53,7 @@ export function validateLicense(licenseKey?: string): LicenseInfo {
 
   return {
     valid: true,
-    features: ['user', 'session', 'sso', 'rbac', 'acl', 'fga'],
+    features: ['user', 'session', 'sso', 'rbac', 'acl', 'fga', 'agent-builder'],
     tier: 'enterprise',
   };
 }

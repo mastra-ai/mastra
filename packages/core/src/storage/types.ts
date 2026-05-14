@@ -2162,6 +2162,67 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
 }
 
 // ============================================
+// Browser Configuration Types
+// ============================================
+
+/**
+ * Browser configuration stored in agent snapshots.
+ *
+ * Only stable, declarative configuration is persisted here. Runtime/security
+ * concerns (cdpUrl, scope, profile, executablePath) belong in the BrowserProvider
+ * registration where they're set per-instance via `createBrowser`.
+ *
+ * Runtime-only options (onLaunch, onClose, cdpUrl as function) are never stored.
+ */
+export interface StorageBrowserConfig {
+  /** Provider type identifier (e.g., 'stagehand', 'playwright') — resolved by the editor's browser registry */
+  provider: string;
+
+  /**
+   * Whether to run the browser in headless mode (no visible UI).
+   * @default true
+   */
+  headless?: boolean;
+
+  /**
+   * Browser viewport dimensions.
+   * Controls the size of the browser window and how websites render.
+   */
+  viewport?: {
+    width: number;
+    height: number;
+  };
+
+  /**
+   * Default timeout in milliseconds for browser operations.
+   * @default 10000 (10 seconds)
+   */
+  timeout?: number;
+
+  /**
+   * Screencast options for streaming browser frames.
+   */
+  screencast?: {
+    /** Image format (default: 'jpeg') */
+    format?: 'jpeg' | 'png';
+    /** JPEG quality 0-100 (default: 80) */
+    quality?: number;
+    /** Max width in pixels (default: 1280) */
+    maxWidth?: number;
+    /** Max height in pixels (default: 720) */
+    maxHeight?: number;
+    /** Capture every Nth frame (default: 1) */
+    everyNthFrame?: number;
+  };
+}
+
+/**
+ * Browser reference configuration stored in agent snapshots.
+ * Provides inline browser config that the editor resolves at hydration time.
+ */
+export type StorageBrowserRef = { type: 'inline'; config: StorageBrowserConfig };
+
+// ============================================
 // Dataset Types
 // ============================================
 

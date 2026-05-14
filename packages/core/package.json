@@ -91,6 +91,16 @@
         "default": "./dist/auth/ee/index.cjs"
       }
     },
+    "./agent-builder/ee": {
+      "import": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.cjs"
+      }
+    },
     "./background-tasks": {
       "import": {
         "types": "./dist/background-tasks/index.d.ts",
@@ -700,6 +710,16 @@
       "require": {
         "types": "./dist/storage/domains/skills/index.d.ts",
         "default": "./dist/storage/domains/skills/index.cjs"
+      }
+    },
+    "./storage/domains/stars": {
+      "import": {
+        "types": "./dist/storage/domains/stars/index.d.ts",
+        "default": "./dist/storage/domains/stars/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/domains/stars/index.d.ts",
+        "default": "./dist/storage/domains/stars/index.cjs"
       }
     },
     "./storage/domains/workspaces": {
