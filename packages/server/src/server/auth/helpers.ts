@@ -4,7 +4,13 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_AUTH_TOKEN_KEY } from '../constants';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+  MASTRA_AUTH_TOKEN_KEY,
+} from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -269,6 +275,8 @@ export interface AuthMiddlewareContext {
   rawRequest: unknown;
   token: string | null;
   buildAuthorizeContext: () => unknown;
+  /** When true, force authentication even if the path matches a public pattern. */
+  requiresAuth?: boolean;
 }
 
 export type AuthResult =
@@ -321,7 +329,18 @@ export function supportsSessionRefresh(
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
  */
 export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
-  const { path, method, getHeader, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
+  const {
+    path,
+    method,
+    getHeader,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest,
+    token,
+    requiresAuth,
+  } = ctx;
 
   // ── Skip checks (evaluated once) ──
 
@@ -337,7 +356,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     return pass;
   }
 
-  if (canAccessPublicly(path, method, authConfig)) {
+  // When a route explicitly requires auth (requiresAuth: true), skip the
+  // public-path bypass so the user is still authenticated and permissions
+  // are injected into the request context.
+  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
     return pass;
   }
 
@@ -402,7 +424,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
     }
 
-    requestContext.set('user', user);
+    requestContext.set(MASTRA_USER_KEY, user);
 
     // Store the raw auth token so downstream code (e.g., editor MCP client
     // resolution) can forward it when connecting to auth-protected MCP servers.
@@ -449,10 +471,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
         } else {
           const permissions = await rbacProvider.getPermissions(user as EEUser);
-          requestContext.set('userPermissions', permissions);
+          requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
 
           const roles = await rbacProvider.getRoles(user as EEUser);
-          requestContext.set('userRoles', roles);
+          requestContext.set(MASTRA_USER_ROLES_KEY, roles);
         }
       }
     } catch (rbacError) {

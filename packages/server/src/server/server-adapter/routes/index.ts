@@ -134,11 +134,15 @@ export type ServerRoute<
    * If set, the user must have this permission to access the route.
    * Uses the format: `resource:action` or `resource:action:resourceId`
    *
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (logical OR). This is useful for routes that serve multiple resource types,
+   * e.g. a streaming endpoint used by both runtime and stored agents.
+   *
    * @example
    * requiresPermission: MastraFGAPermissions.AGENTS_READ
    * requiresPermission: MastraFGAPermissions.WORKFLOWS_EXECUTE
    */
-  requiresPermission?: MastraFGAPermissionInput;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /**
    * FGA authorization config for this route (EE feature).
    * If set, the user must have the specified permission on the resource.
