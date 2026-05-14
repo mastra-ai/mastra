@@ -10,8 +10,6 @@ export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
 /**
  * Text part of a signal's contents.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalTextPart = {
   type: 'text';
@@ -19,17 +17,16 @@ export type AgentSignalTextPart = {
 };
 
 /**
- * File/image part of a signal's contents. Mirrors the canonical
- * `MastraMessagePart` file shape (AI SDK v4 naming with `mimeType`).
- * `data` is a string (base64-encoded payload or URL) to keep the part
- * round-trippable through DB storage and UI rendering without re-encoding.
- *
- * @experimental Agent signals are experimental and may change in a future release.
+ * File/image part of a signal's contents. Uses AI SDK v5 naming
+ * (`mediaType`) so signal call sites can construct parts without
+ * translating between SDK versions. `data` is a string (base64-encoded
+ * payload or URL) to keep the part round-trippable through DB storage
+ * and UI rendering without re-encoding.
  */
 export type AgentSignalFilePart = {
   type: 'file';
   data: string;
-  mimeType: string;
+  mediaType: string;
   filename?: string;
 };
 
@@ -38,8 +35,6 @@ export type AgentSignalFilePart = {
  * turn, so the contents are either a plain text string or a parts array of
  * text + file/image parts. Anything richer (tool calls, reasoning, multiple
  * turns) is not a signal and should go through the agent stream directly.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalContents = string | Array<AgentSignalTextPart | AgentSignalFilePart>;
 
@@ -163,7 +158,18 @@ export function signalToXmlMarkup(signal: {
 // same walked representation instead of each re-walking the raw input with its own duck-typing.
 function normalizeContents(contents: AgentSignalContents): MastraDBMessage[] {
   const parts: MastraMessagePart[] =
-    typeof contents === 'string' ? [{ type: 'text', text: contents }] : contents.map(part => ({ ...part }));
+    typeof contents === 'string'
+      ? [{ type: 'text', text: contents }]
+      : contents.map(part =>
+          part.type === 'file'
+            ? {
+                type: 'file',
+                data: part.data,
+                mimeType: part.mediaType,
+                ...(part.filename ? { filename: part.filename } : {}),
+              }
+            : { type: 'text', text: part.text },
+        );
   return [
     {
       id: crypto.randomUUID(),
@@ -256,7 +262,20 @@ function signalToLLMMessage(
   // attributes need surfacing. Non-user-message signals always wrap — the XML wrapper is what
   // tells the model "this is framework context, not a user/assistant turn".
   if (isUserMessage && !hasAttrs) {
-    return [{ role: 'user', content: signal.contents } satisfies CoreMessage];
+    const content =
+      typeof signal.contents === 'string'
+        ? signal.contents
+        : signal.contents.map(part =>
+            part.type === 'file'
+              ? {
+                  type: 'file' as const,
+                  data: part.data,
+                  mimeType: part.mediaType,
+                  ...(part.filename ? { filename: part.filename } : {}),
+                }
+              : { type: 'text' as const, text: part.text },
+          );
+    return [{ role: 'user', content } satisfies CoreMessage];
   }
 
   // Text-only fast path: emit a single wrapped user message. user role because providers reject

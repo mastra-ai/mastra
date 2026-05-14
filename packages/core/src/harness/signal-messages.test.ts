@@ -540,7 +540,7 @@ describe('Harness signal messages', () => {
           type: 'user-message',
           contents: [
             { type: 'text', text: 'Review this' },
-            { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mimeType: 'text/plain', filename: 'note.txt' },
+            { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
           ],
           createdAt: '2026-05-04T00:00:00.000Z',
         },

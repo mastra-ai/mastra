@@ -39,7 +39,7 @@ describe('Harness signal history rendering', () => {
             type: 'user-message',
             contents: [
               { type: 'text', text: 'hello from signal' },
-              { type: 'file', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
+              { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
             ],
             createdAt: new Date('2024-01-01T00:00:00.000Z'),
           },

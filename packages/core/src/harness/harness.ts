@@ -115,22 +115,15 @@ function signalContentsToHarnessContent(contents: unknown): HarnessMessageConten
       if (record.type === 'text' && typeof record.text === 'string') {
         return [{ type: 'text', text: record.text }];
       }
-      if (record.type === 'file' && typeof record.data === 'string') {
-        const mimeType =
-          typeof record.mimeType === 'string'
-            ? record.mimeType
-            : typeof record.mediaType === 'string'
-              ? record.mediaType
-              : undefined;
-        if (!mimeType) return [];
-        if (mimeType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType }];
+      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
+        if (record.mediaType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
         }
         return [
           {
             type: 'file',
             data: record.data,
-            mediaType: mimeType,
+            mediaType: record.mediaType,
             filename: typeof record.filename === 'string' ? record.filename : undefined,
           },
         ];
@@ -1790,7 +1783,7 @@ export class Harness<TState = {}> {
         return {
           type: 'file' as const,
           data: f.data,
-          mimeType: f.mediaType,
+          mediaType: f.mediaType,
           filename: f.filename,
         };
       });
