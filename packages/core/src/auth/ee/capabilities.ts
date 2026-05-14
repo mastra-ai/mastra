@@ -94,6 +94,8 @@ export interface AuthenticatedCapabilities extends PublicAuthCapabilities {
   capabilities: CapabilityFlags;
   /** User's access (if RBAC available) */
   access: UserAccess | null;
+  /** Available roles in the system (only present for admin users) */
+  availableRoles?: { id: string; name: string }[];
 }
 
 /**
@@ -128,6 +130,13 @@ function isMastraCloudAuth(auth: unknown): boolean {
 function isSimpleAuth(auth: unknown): boolean {
   if (!auth || typeof auth !== 'object') return false;
   return 'isSimpleAuth' in auth && (auth as { isSimpleAuth: boolean }).isSimpleAuth === true;
+}
+
+/**
+ * Check if a set of permissions includes admin bypass (`*` or `*:*`).
+ */
+function hasAdminBypassPermissions(permissions: string[]): boolean {
+  return permissions.some(p => p === '*' || p === '*:*');
 }
 
 /**
@@ -290,6 +299,41 @@ export async function buildCapabilities(
     }
   }
 
+  // Expose available roles for admin users (for "View as role" feature).
+  // Exclude roles with admin-bypass permissions since previewing as admin
+  // is the same as the current experience.
+  let availableRoles: { id: string; name: string }[] | undefined;
+  if (access && rbacProvider?.getAvailableRoles) {
+    if (hasAdminBypassPermissions(access.permissions)) {
+      try {
+        const allRoles = await rbacProvider.getAvailableRoles();
+        const getPermissionsForRole = rbacProvider.getPermissionsForRole;
+        if (getPermissionsForRole) {
+          // Use allSettled so one failing role lookup doesn't drop the whole picker.
+          const rolePermissions = await Promise.allSettled(
+            allRoles.map(async role => ({
+              role,
+              perms: await getPermissionsForRole(role.id),
+            })),
+          );
+          availableRoles = rolePermissions.flatMap(result => {
+            if (result.status !== 'fulfilled') {
+              console.warn('[auth/ee] failed to list permissions for role:', result.reason);
+              return [];
+            }
+            return hasAdminBypassPermissions(result.value.perms) ? [] : [result.value.role];
+          });
+        } else {
+          availableRoles = allRoles;
+        }
+      } catch (error) {
+        // Degrade gracefully: omit availableRoles so the "View as role" feature
+        // simply doesn't show options. Log so operators can diagnose RBAC issues.
+        console.warn('[auth/ee] failed to list available roles for admin user:', error);
+      }
+    }
+  }
+
   return {
     enabled: true,
     login,
@@ -301,5 +345,6 @@ export async function buildCapabilities(
     },
     capabilities,
     access,
+    availableRoles,
   };
 }
