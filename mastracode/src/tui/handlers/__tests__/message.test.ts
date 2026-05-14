@@ -117,7 +117,7 @@ describe('handleMessageUpdate system reminders', () => {
     expect(rendered).toContain('test2');
   });
 
-  it('renders streamed pending GitHub notices with compact user-facing text', () => {
+  it('renders streamed pending GitHub notices with count in the title and no body text', () => {
     handleMessageUpdate(
       ctx,
       createAssistantMessage([
@@ -137,10 +137,12 @@ describe('handleMessageUpdate system reminders', () => {
       .render(100)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('GitHub notifications pending');
-    expect(rendered).toContain('mastra-ai/mastra #16515');
     expect(rendered).toContain('1 pending GitHub notification');
+    expect(rendered).toContain('mastra-ai/mastra #16515');
+    expect(rendered.split('\n')[0]!.trimEnd().length).toBeLessThan(40);
+    expect(rendered).not.toContain('GitHub notifications pending');
     expect(rendered).not.toContain('Call the github tool');
+    expect(rendered).not.toContain('new GitHub notification is pending');
   });
 
   it('does not render streamed goal-judge continuation signals because the judge result is already shown', () => {

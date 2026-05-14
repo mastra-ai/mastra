@@ -7,7 +7,12 @@ import type { Agent } from '../agent';
 import { createSignal, isMastraSignalMessage, mastraDBMessageToSignal } from '../agent/signals';
 import type { CreatedAgentSignal } from '../agent/signals';
 import { BaseProcessor } from '../processors';
-import type { ProcessInputStepArgs, ProcessInputStepResult, ProcessOutputResultArgs } from '../processors';
+import type {
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+  ProcessOutputResultArgs,
+  ProcessOutputStepArgs,
+} from '../processors';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import { createTool } from '../tools';
 
@@ -23,6 +28,7 @@ const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const DEFAULT_PENDING_FLUSH_MS = 5 * 60_000;
+const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
 const MAX_PROCESSED_SIGNAL_IDS = 200;
 const DEFAULT_AUTHORIZED_PERMISSIONS = ['admin', 'maintain', 'write'] as const;
 
@@ -140,6 +146,7 @@ export interface GithubPRSubscriptionMetadata {
   lastCommentTimestamp?: string;
   lastReviewTimestamp?: string;
   lastErrorFingerprint?: string;
+  nextPollAt?: string;
 }
 
 export interface GithubSignalsThreadMetadata {
@@ -328,6 +335,18 @@ function truncateProcessedSignalIds(ids: string[]) {
 
 function stableFingerprint(value: unknown): string {
   return JSON.stringify(value, Object.keys(value as Record<string, unknown>).sort());
+}
+
+function getCommandErrorMessage(error: unknown) {
+  return stripAnsi(error instanceof Error ? error.message : String(error));
+}
+
+function isGithubRateLimitError(message: string) {
+  return /API rate limit exceeded|rate limit exceeded|HTTP 403/i.test(message);
+}
+
+function getCommandErrorFingerprint(message: string) {
+  return stableFingerprint({ message: isGithubRateLimitError(message) ? 'github-rate-limit' : message });
 }
 
 function stripAnsi(value: string) {
@@ -636,6 +655,8 @@ export class GithubSignals {
     const registeredAgent = this.#agents.get(subscription.agentId);
     if (!registeredAgent) return;
 
+    if (subscription.nextPollAt && new Date(subscription.nextPollAt).getTime() > this.#options.now().getTime()) return;
+
     try {
       const snapshot = await this.#loadPullRequestSnapshot(subscription);
       await this.#emitSnapshotNotifications(registeredAgent, subscription, snapshot);
@@ -746,25 +767,36 @@ export class GithubSignals {
     const latestReviewTimestamp = getLatestTimestamp(newReviews, review => review.submittedAt);
     if (latestReviewTimestamp) subscription.lastReviewTimestamp = latestReviewTimestamp;
 
+    subscription.lastErrorFingerprint = undefined;
+    subscription.nextPollAt = undefined;
     subscription.updatedAt = this.#options.now().toISOString();
     this.#activeSubscriptions.set(subscription.key, subscription);
     await subscription.persistence?.update(subscription);
   }
 
   async #emitCommandError(registeredAgent: RegisteredGithubAgent, subscription: ActiveSubscription, error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    const fingerprint = stableFingerprint({ message });
-    if (fingerprint === subscription.lastErrorFingerprint) return;
+    const message = getCommandErrorMessage(error);
+    const fingerprint = getCommandErrorFingerprint(message);
+    const isRateLimit = isGithubRateLimitError(message);
+    if (isRateLimit) {
+      subscription.nextPollAt = new Date(this.#options.now().getTime() + RATE_LIMIT_BACKOFF_MS).toISOString();
+    }
 
-    await this.#handleNotification(registeredAgent, subscription, {
-      kind: 'command-error',
-      title: `GitHub polling error`,
-      details: message,
-    });
+    const shouldNotify = fingerprint !== subscription.lastErrorFingerprint;
     subscription.lastErrorFingerprint = fingerprint;
     subscription.updatedAt = this.#options.now().toISOString();
     this.#activeSubscriptions.set(subscription.key, subscription);
     await subscription.persistence?.update(subscription);
+
+    if (!shouldNotify) return;
+
+    await this.#handleNotification(registeredAgent, subscription, {
+      kind: 'command-error',
+      title: isRateLimit ? `GitHub polling paused` : `GitHub polling error`,
+      details: isRateLimit
+        ? `GitHub API rate limit exceeded. Polling is paused for this PR until ${subscription.nextPollAt}.`
+        : message,
+    });
   }
 
   async #isAuthorizedAuthor(subscription: GithubPRSubscriptionMetadata, user: string | undefined) {
@@ -904,6 +936,29 @@ export class GithubSignals {
     }
   }
 
+  async sendSubscriptionHint(context: ActiveThreadContext) {
+    const registeredAgent = this.#agents.get(context.agentId);
+    if (!registeredAgent) return false;
+
+    const result = registeredAgent.agent.sendSignal(
+      createSignal({
+        type: 'system-reminder',
+        contents:
+          'The system detected you may be working on a PR. Subscribe to updates using the github subscribe tool.',
+        attributes: { type: GITHUB_SUBSCRIPTION_HINT_SIGNAL },
+      }),
+      {
+        resourceId: context.resourceId,
+        threadId: context.threadId,
+        ifIdle: { behavior: 'persist' },
+        ifActive: { behavior: 'deliver' },
+      },
+    );
+    await result.persisted;
+    await result.started;
+    return true;
+  }
+
   async #sendNotification(
     registeredAgent: RegisteredGithubAgent,
     subscription: GithubPRSubscriptionMetadata,
@@ -948,13 +1003,18 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined> {
-    if (args.stepNumber !== 0) return this.#toolResult(args);
-
     const context = this.#getThreadContext(args);
     if (context) this.#owner.markActive(context);
-    await this.#processSignals(args);
-    await this.#maybeSendSubscriptionHint(args);
+
+    if (args.stepNumber === 0) {
+      await this.#processSignals(args);
+    }
     return this.#toolResult(args);
+  }
+
+  async processOutputStep(args: ProcessOutputStepArgs) {
+    await this.#maybeSendSubscriptionHint(args, [args.toolCalls, args.text]);
+    return args.messages;
   }
 
   async processOutputResult(args: ProcessOutputResultArgs) {
@@ -983,9 +1043,12 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
     }
   }
 
-  async #maybeSendSubscriptionHint(args: ProcessInputStepArgs) {
+  async #maybeSendSubscriptionHint(
+    args: Pick<ProcessInputStepArgs, 'messages' | 'requestContext' | 'sendSignal'>,
+    evidence: unknown[] = args.messages,
+  ) {
     const context = this.#getThreadContext(args);
-    if (!context || !args.sendSignal) return;
+    if (!context) return;
 
     const memory = await this.mastra?.getStorage()?.getStore('memory');
     if (!memory) return;
@@ -994,16 +1057,15 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
     if (!thread) return;
 
     const githubMetadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
-    if (githubMetadata.subscriptionHintShown || Object.keys(githubMetadata.subscriptions).length > 0) return;
-    if (!hasGithubSubscriptionHint(args.messages) && !hasPrWorkEvidence(args.messages)) return;
-    if (hasGithubSubscriptionHint(args.messages)) return;
+    const subscriptionCount = Object.keys(githubMetadata.subscriptions).length;
+    const hasExistingHint = hasGithubSubscriptionHint(evidence);
+    const hasEvidence = hasPrWorkEvidence(evidence);
+    if (githubMetadata.subscriptionHintShown || subscriptionCount > 0) return;
+    if (hasExistingHint) return;
+    if (!hasEvidence) return;
 
-    const signal = createSignal({
-      type: 'system-reminder',
-      contents: 'The system detected you may be working on a PR. Subscribe to updates using the github subscribe tool.',
-      attributes: { type: GITHUB_SUBSCRIPTION_HINT_SIGNAL },
-    });
-    await args.sendSignal(signal);
+    const sent = await this.#owner.sendSubscriptionHint(context);
+    if (!sent) return;
     githubMetadata.subscriptionHintShown = true;
     await memory.updateThread({
       id: thread.id,
@@ -1081,6 +1143,7 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
     } else {
       const existing = githubMetadata.subscriptions[key];
       delete githubMetadata.subscriptions[key];
+      if (existing) githubMetadata.subscriptionHintShown = false;
       this.#owner.removeSubscription(existing ?? { ...baseSubscription });
     }
 
@@ -1149,11 +1212,11 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
   }
 }
 
-function hasGithubSubscriptionHint(messages: Array<Record<string, unknown>>) {
+function hasGithubSubscriptionHint(messages: unknown[]) {
   return messages.some(message => messageContains(message, GITHUB_SUBSCRIPTION_HINT_SIGNAL));
 }
 
-function hasPrWorkEvidence(messages: Array<Record<string, unknown>>) {
+function hasPrWorkEvidence(messages: unknown[]) {
   return messages.some(message =>
     messageContains(
       message,

@@ -126,6 +126,32 @@ async function processSignals(
   });
 }
 
+async function processOutputStep(
+  github: GithubSignals,
+  harness: ReturnType<typeof createHarness>,
+  messages: any[],
+  step: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
+) {
+  github.processor.__registerMastra(harness.mastra as any);
+  return github.processor.processOutputStep?.({
+    stepNumber: 0,
+    messages,
+    messageList: harness.messageList as any,
+    requestContext: harness.requestContext,
+    systemMessages: [],
+    state: {},
+    usage: {} as any,
+    steps: [],
+    abort: (() => {
+      throw new Error('aborted');
+    }) as any,
+    retryCount: 0,
+    ...step,
+    ...overrides,
+  } as any);
+}
+
 describe('GithubSignals', () => {
   it('creates subscribe, unsubscribe, and compact notification signals', () => {
     const subscribe = ghSignals.prSubscribe({ prNumber: 123, repo: 'mastra-ai/mastra' });
@@ -613,10 +639,12 @@ describe('GithubSignals', () => {
     });
 
     await processSignals(github, harness, [subscribe]);
+    (harness.thread.metadata as any).mastra.githubSignals.subscriptionHintShown = true;
     expect(vi.getTimerCount()).toBe(1);
     await processSignals(github, harness, [subscribe, unsubscribe]);
 
     expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions).toEqual({});
+    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptionHintShown).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
     vi.useRealTimers();
   });
@@ -935,7 +963,9 @@ describe('GithubSignals', () => {
     await github.poll();
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({ attributes: { type: 'github-pending-notifications' } });
+    expect((sendSignal.mock.calls[0] as any[])?.[0]).toMatchObject({
+      attributes: { type: 'github-pending-notifications' },
+    });
     expect((harness.thread.metadata as any).mastra.githubSignals.subscriptions['mastra-ai/mastra:123']).toMatchObject({
       lastCommentTimestamp: '2026-01-02T00:02:00.000Z',
     });
@@ -949,30 +979,98 @@ describe('GithubSignals', () => {
       commandRunner: createSnapshotCommandRunner([createSnapshot()]),
     });
     github.processor.__registerMastra(harness.mastra as any);
-    const sendSignal = vi.fn(async signal => signal);
-    const messages = [
-      {
-        id: 'msg-1',
-        role: 'assistant',
-        resourceId: 'resource-1',
-        threadId: 'thread-1',
-        content: [
-          { type: 'tool-call', toolName: 'execute_command', args: { command: 'git push origin feat/github-signals' } },
-        ],
-      },
-    ];
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
 
-    await processSignals(github, harness, messages, { sendSignal });
-    await processSignals(github, harness, messages, { sendSignal });
+    await processOutputStep(github, harness, [], {
+      toolCalls: [{ toolName: 'execute_command', args: { command: 'git push origin feat/github-signals' } }],
+    });
+    await processOutputStep(github, harness, [], {
+      toolCalls: [{ toolName: 'execute_command', args: { command: 'git push origin feat/github-signals' } }],
+    });
+
+    const unsubscribe = ghSignals.prUnsubscribe({ prNumber: 123, repo: 'mastra-ai/mastra' }).toDBMessage({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+    await processSignals(github, harness, [unsubscribe]);
+    await processOutputStep(github, harness, [], {
+      toolCalls: [{ toolName: 'execute_command', args: { command: 'git push origin feat/github-signals' } }],
+    });
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal).toHaveBeenCalledWith(
+    expect((sendSignal.mock.calls[0] as any[])?.[0]).toMatchObject({
+      type: 'system-reminder',
+      attributes: { type: 'github-subscription-hint' },
+    });
+    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptionHintShown).toBe(true);
+  });
+
+  it('backs off and dedupes GitHub rate limit failures', async () => {
+    let now = new Date('2026-01-01T00:00:00.000Z');
+    const commandRunner = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error(
+          'Command failed: gh api repos/mastra-ai/mastra/pulls/123\ngh: API rate limit exceeded for user ID 14190743. request ID A (HTTP 403)',
+        ),
+      )
+      .mockRejectedValueOnce(
+        new Error(
+          'Command failed: gh api repos/mastra-ai/mastra/pulls/123\ngh: API rate limit exceeded for user ID 14190743. request ID B (HTTP 403)',
+        ),
+      );
+    const persistence = { update: vi.fn() };
+    const github = new GithubSignals({
+      repo: 'mastra-ai/mastra',
+      commandRunner,
+      now: () => now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription(
+      {
+        agentId: 'agent-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      persistence,
+    );
+
+    await github.poll();
+    await github.poll();
+
+    expect(commandRunner).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    const [notification] = sendSignal.mock.calls[0] as any[];
+    expect(notification).toMatchObject({
+      type: 'system-reminder',
+      contents: 'GitHub API rate limit exceeded. Polling is paused for this PR until 2026-01-01T01:00:00.000Z.',
+      attributes: { type: 'github-command-error', kind: 'command-error', title: 'GitHub polling paused' },
+    });
+    expect(persistence.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        type: 'system-reminder',
-        attributes: { type: 'github-subscription-hint' },
+        lastErrorFingerprint: JSON.stringify({ message: 'github-rate-limit' }),
+        nextPollAt: '2026-01-01T01:00:00.000Z',
       }),
     );
-    expect((harness.thread.metadata as any).mastra.githubSignals.subscriptionHintShown).toBe(true);
+
+    now = new Date('2026-01-01T01:00:01.000Z');
+    await github.poll();
+
+    expect(commandRunner).toHaveBeenCalledTimes(2);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(persistence.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        lastErrorFingerprint: JSON.stringify({ message: 'github-rate-limit' }),
+        nextPollAt: '2026-01-01T02:00:01.000Z',
+      }),
+    );
+    github.destroy();
   });
 
   it('dedupes command failures', async () => {

@@ -98,14 +98,14 @@ export class SystemReminderComponent extends Container {
       goalMaxTurns: this.goalMaxTurns,
       judgeModelId: this.judgeModelId,
       title: this.title,
+      count: this.count,
     });
     const title = accent ? chalk.hex(accent).bold(titleText) : theme.bold(theme.fg('toolTitle', titleText));
     const metadataColor = (text: string) => theme.fg('dim', text);
     const bodyColor = (text: string) => theme.fg('text', text);
     const hintColor = (text: string) => theme.fg('dim', text);
     const termWidth = getTermWidth();
-    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
-    const horizontal = '─'.repeat(innerWidth + 1);
+    const maxInnerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
 
     const metadataLines = [
       this.path ? formatReminderPath(this.path) : undefined,
@@ -121,7 +121,15 @@ export class SystemReminderComponent extends Container {
       }),
     ].filter((line): line is string => Boolean(line));
 
-    const wrappedMessageLines = wrapLines(this.messageLines, innerWidth);
+    const messageLines = getDisplayMessageLines(this.reminderType, this.messageLines);
+    const contentWidth = Math.max(
+      20,
+      ...[titleText, ...metadataLines, ...messageLines].map(line => stripAnsi(line).length),
+    );
+    const innerWidth = Math.min(maxInnerWidth, contentWidth);
+    const horizontal = '─'.repeat(innerWidth + 1);
+
+    const wrappedMessageLines = messageLines.length > 0 ? wrapLines(messageLines, innerWidth) : [];
     const shouldCollapse = wrappedMessageLines.length > MAX_COLLAPSED_LINES;
     const visibleMessageLines =
       shouldCollapse && !this.expanded ? wrappedMessageLines.slice(0, MAX_COLLAPSED_LINES) : wrappedMessageLines;
@@ -137,11 +145,11 @@ export class SystemReminderComponent extends Container {
       this.addChild(new Text(renderRow('', innerWidth, border), BOX_INDENT, 0));
     }
 
-    for (const line of getDisplayMessageLines(this.reminderType, visibleMessageLines, { count: this.count })) {
+    for (const line of visibleMessageLines) {
       this.addChild(new Text(renderRow(bodyColor(line), innerWidth, border), BOX_INDENT, 0));
     }
 
-    if (shouldCollapse && !this.expanded) {
+    if (shouldCollapse && !this.expanded && visibleMessageLines.length > 0) {
       const remaining = wrappedMessageLines.length - visibleMessageLines.length;
       const hint = hintColor(`... ${remaining} more lines (ctrl+e to expand)`);
       this.addChild(new Text(renderRow(hint, innerWidth, border), BOX_INDENT, 0));
@@ -183,8 +191,9 @@ function resolveReminderMessage(message: string | undefined, path: string | unde
 function getReminderTitle(
   reminderType: string | undefined,
   path: string | undefined,
-  metadata: { goalMaxTurns?: number; judgeModelId?: string; title?: string } = {},
+  metadata: { goalMaxTurns?: number; judgeModelId?: string; title?: string; count?: number } = {},
 ): string {
+  if (reminderType === 'github-pending-notifications') return getPendingGithubReminderTitle(metadata.count);
   if (isGithubReminderType(reminderType)) return metadata.title ?? getGithubReminderTitle(reminderType);
   if (reminderType === 'goal') {
     const details = [
@@ -217,8 +226,12 @@ function getGithubReminderTitle(reminderType: string | undefined): string {
   if (reminderType === 'github-comment') return 'GitHub comment';
   if (reminderType === 'github-review') return 'GitHub review';
   if (reminderType === 'github-command-error') return 'GitHub polling error';
-  if (reminderType === 'github-pending-notifications') return 'GitHub notifications pending';
+  if (reminderType === 'github-pending-notifications') return getPendingGithubReminderTitle();
   return 'GitHub notification';
+}
+
+function getPendingGithubReminderTitle(count = 0): string {
+  return `${count} pending GitHub ${count === 1 ? 'notification' : 'notifications'}`;
 }
 
 function getGithubMetadataLines(metadata: {
@@ -242,14 +255,9 @@ function getGithubMetadataLines(metadata: {
   ].filter((line): line is string => Boolean(line));
 }
 
-function getDisplayMessageLines(
-  reminderType: string | undefined,
-  messageLines: string[],
-  metadata: { count?: number },
-): string[] {
-  if (reminderType !== 'github-pending-notifications') return messageLines;
-  const count = metadata.count ?? 0;
-  return [`${count} pending GitHub ${count === 1 ? 'notification' : 'notifications'}`];
+function getDisplayMessageLines(reminderType: string | undefined, messageLines: string[]): string[] {
+  if (reminderType === 'github-pending-notifications') return [];
+  return messageLines;
 }
 
 function getLoadingMessage(reminderType: string | undefined, path: string | undefined): string {

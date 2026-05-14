@@ -367,6 +367,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       githubSignals.processor,
       new ProviderHistoryCompat(),
     ],
+    outputProcessors: [githubSignals.processor],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 

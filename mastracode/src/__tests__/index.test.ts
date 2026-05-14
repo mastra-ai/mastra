@@ -402,9 +402,10 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }> }
+      | { inputProcessors?: Array<{ id?: string }>; outputProcessors?: Array<{ id?: string }> }
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
+    expect(agentConfig?.outputProcessors?.map(processor => processor.id)).toContain('github-signals');
     expect(githubSignalsAddAgentMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'code-agent' }),
       expect.objectContaining({ getStreamOptions: expect.any(Function) }),

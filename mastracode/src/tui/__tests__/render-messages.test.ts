@@ -168,7 +168,7 @@ describe('addUserMessage', () => {
     expect(rendered).not.toContain('Goal set');
   });
 
-  it('renders pending GitHub notices with compact user-facing text', () => {
+  it('renders pending GitHub notices with count in the title and no body text', () => {
     const state = createState();
 
     addUserMessage(
@@ -187,10 +187,12 @@ describe('addUserMessage', () => {
     const rendered = state.allSystemReminderComponents[0]!.render(100)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('GitHub notifications pending');
-    expect(rendered).toContain('mastra-ai/mastra #16515');
     expect(rendered).toContain('2 pending GitHub notifications');
+    expect(rendered).toContain('mastra-ai/mastra #16515');
+    expect(rendered.split('\n')[0]!.trimEnd().length).toBeLessThan(40);
+    expect(rendered).not.toContain('GitHub notifications pending');
     expect(rendered).not.toContain('Call the github tool');
+    expect(rendered).not.toContain('new GitHub notifications are pending');
   });
 
   it('inserts a goal reminder before an active streaming response', () => {
