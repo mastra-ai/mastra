@@ -24,7 +24,7 @@ export type CodeEditorLanguage = 'json' | 'markdown';
 function buildDarkTheme(): Extension {
   const baseTheme = draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.8rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -78,7 +78,7 @@ function buildDarkTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',
@@ -119,7 +119,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.8rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -154,7 +154,7 @@ function buildLightTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',

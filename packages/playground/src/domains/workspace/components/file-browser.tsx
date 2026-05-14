@@ -511,7 +511,7 @@ function HighlightedCode({ content, language }: { content: string; language: str
       }}
       codeTagProps={{
         style: {
-          fontFamily: 'var(--geist-mono), ui-monospace, monospace',
+          fontFamily: 'var(--font-mono)',
         },
       }}
     >
