@@ -3,4 +3,4 @@
 "@mastra/server": patch
 ---
 
-Expose `GET /observability/traces/light` from the OSS server and storage layer to fetch paginated trace-list rows without span payload data.
+Expose `GET /observability/traces/light` and storage support for fetching paginated trace-list rows without span payload data.
