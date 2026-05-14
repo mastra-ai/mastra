@@ -43,14 +43,14 @@ export function isModelAllowed(allowed: ProviderModelEntry[] | undefined, candid
   if (allowed === undefined) return true;
   if (allowed.length === 0) return true;
 
-  const hasActiveEntry = allowed.some(entry => {
+  const activeEntries = allowed.filter(entry => {
     if ('kind' in entry && entry.kind === 'custom') return true;
     return isProviderRegistered(entry.provider);
   });
 
-  if (!hasActiveEntry) return false;
+  if (activeEntries.length === 0) return false;
 
-  return allowed.some(entry => matchesProvider(entry, candidate));
+  return activeEntries.some(entry => matchesProvider(entry, candidate));
 }
 
 /**
