@@ -399,16 +399,17 @@ run the per-section commands in `references/<section>.md`.
 
 ## Builder Studio routes
 
-| Feature                 | Route                           |
-| ----------------------- | ------------------------------- |
-| Agent Builder shell     | `/agent-builder`                |
-| Agents (default view)   | `/agent-builder`                |
-| Agent detail / edit     | `/agent-builder/agents/:id`     |
-| Skills                  | `/agent-builder/skills`         |
-| Library (public skills) | `/agent-builder/library`        |
-| Skill detail            | `/agent-builder/skills/:id`     |
-| Workspaces              | `/agent-builder/workspaces`     |
-| Infrastructure (admin)  | `/agent-builder/infrastructure` |
+| Feature                 | Route                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| Agent Builder shell     | `/agent-builder`                                                                           |
+| Agents (default view)   | `/agent-builder`                                                                           |
+| Agent detail (view)     | `/agent-builder/agents/:id/view` (bare `:id` redirects to `/view`)                         |
+| Agent detail (edit)     | `/agent-builder/agents/:id/edit`                                                           |
+| Skills                  | `/agent-builder/skills`                                                                    |
+| Library (public skills) | `/agent-builder/library`                                                                   |
+| Skill detail            | `/agent-builder/skills/:id/edit` (owner) or `/agent-builder/skills/:id/view` (non-owner)   |
+| Workspaces              | `/agent-builder/workspaces`                                                                |
+| Infrastructure          | `/agent-builder/infrastructure` (readable by every default role — see `infrastructure.md`) |
 
 Mobile renders a bottom-bar with the same primary entries.
 

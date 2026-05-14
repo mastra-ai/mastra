@@ -9,7 +9,7 @@ Test stored workspace create, read, update, and delete via API.
 Resolve the builder workspace ID (used in steps 2 and 6):
 
 ```bash
-WORKSPACE_ID=$(curl -s $BASE/stored/workspaces | jq -r '.workspaces[] | select(.metadata.source == "builder") | .id' | head -1)
+WORKSPACE_ID=$(curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces | jq -r '.workspaces[] | select(.metadata.source == "builder") | .id' | head -1)
 ```
 
 ## Steps
@@ -17,7 +17,7 @@ WORKSPACE_ID=$(curl -s $BASE/stored/workspaces | jq -r '.workspaces[] | select(.
 ### 1. List Workspaces
 
 ```bash
-curl -s $BASE/stored/workspaces | jq .
+curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces | jq .
 ```
 
 **Verify:**
@@ -28,7 +28,7 @@ curl -s $BASE/stored/workspaces | jq .
 ### 2. Get Single Workspace
 
 ```bash
-curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
+curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 **Verify:**
@@ -91,7 +91,7 @@ curl -s -X DELETE ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/smoke-
 ### 6. Verify Builder Workspace is Untouched
 
 ```bash
-curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
+curl -s ${COOKIE:+-H "Cookie: $COOKIE"} $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 - [ ] Builder workspace still exists, unchanged

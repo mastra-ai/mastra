@@ -49,7 +49,7 @@ Navigate to `http://localhost:4111/agent-builder/skills`.
 - [ ] `+ New skill` button top-right
 - [ ] Each skill row shows name, description (if set), and a star button
 - [ ] Clicking a row navigates to `/agent-builder/skills/<id>/edit` (NOT an inline detail panel)
-- [ ] Canonical detail routes are `/agent-builder/skills/<id>/edit` (owner) and `/agent-builder/skills/<id>/view` (non-owner). The bare `/agent-builder/skills/<id>` path is not a registered route — navigate via the list, not by typing the URL.
+- [ ] Canonical detail routes are `/agent-builder/skills/<id>/edit` (owner) and `/agent-builder/skills/<id>/view` (non-owner). The bare `/agent-builder/skills/<id>` path redirects to `/edit` — prefer navigating via the list, since the redirect target doesn't depend on ownership.
 
 ### 3. Create Skill via UI _(Core)_
 
