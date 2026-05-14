@@ -162,6 +162,16 @@ export const LIST_TRACES_LIGHT_ROUTE = createRoute({
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
 
       const observabilityStore = await getObservabilityStore(mastra);
+      // `listTracesLight` was added in `@mastra/core` alongside this route.
+      // When this `@mastra/server` is paired with an older `@mastra/core`,
+      // the base `ObservabilityStorage` class doesn't declare
+      // `listTracesLight` at all, so calling it on a store instance throws
+      // `TypeError: ... is not a function`. Detect that case and fall back
+      // to the full `listTraces` call so consumers still get a response.
+      const store = observabilityStore as { listTracesLight?: unknown };
+      if (typeof store.listTracesLight !== 'function') {
+        return await observabilityStore.listTraces({ filters, pagination, orderBy });
+      }
       return await observabilityStore.listTracesLight({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing lightweight traces');

@@ -272,6 +272,36 @@ describe('api command executor', () => {
     });
   });
 
+  it('falls back to the verbose trace list when the lightweight route is missing on the server', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'Not found' }, { status: 404 })).mockResolvedValueOnce(
+      jsonResponse({
+        spans: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }],
+        pagination: { total: 1, page: 0, perPage: 1, hasMore: false },
+      }),
+    );
+
+    await executeDescriptor(API_COMMANDS.traceList, [], '{"page":0,"perPage":1}', {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://observability.mastra.ai/api/observability/traces/light?page=0&perPage=1',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://observability.mastra.ai/api/observability/traces?page=0&perPage=1',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      data: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }],
+      page: { total: 1, page: 0, perPage: 1, hasMore: false },
+    });
+  });
+
   it('gets lightweight trace details by default, full trace details with --verbose, and a specific trace span', async () => {
     fetchMock
       .mockResolvedValueOnce(

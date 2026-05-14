@@ -674,6 +674,35 @@ describe('Observability Handlers', () => {
       });
       expect(mockObservabilityStore.listTraces).not.toHaveBeenCalled();
     });
+
+    it('falls back to listTraces when the store predates listTracesLight', async () => {
+      const fullResult = {
+        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        spans: [],
+      };
+
+      // Simulate an older `@mastra/core` whose `ObservabilityStorage` base
+      // class doesn't expose `listTracesLight` at all.
+      const original = mockObservabilityStore.listTracesLight;
+      // @ts-expect-error - intentionally remove method to simulate old core
+      delete mockObservabilityStore.listTracesLight;
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(fullResult);
+
+      try {
+        const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+        });
+
+        expect(result).toEqual(fullResult);
+        expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
+          filters: {},
+          pagination: {},
+          orderBy: {},
+        });
+      } finally {
+        mockObservabilityStore.listTracesLight = original;
+      }
+    });
   });
 
   describe('LIST_BRANCHES_ROUTE', () => {

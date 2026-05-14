@@ -583,6 +583,21 @@ function isUnauthorizedError(error: unknown): boolean {
   return error instanceof ApiCliError && error.code === 'HTTP_ERROR' && error.details.status === 401;
 }
 
+/**
+ * True when the request hit an endpoint that the server doesn't know about.
+ *
+ * Used to detect cases like running a new CLI against an older `@mastra/server`
+ * that hasn't shipped the lightweight route yet, so we can transparently fall
+ * back to the verbose equivalent instead of failing the command outright.
+ */
+function isNotFoundError(error: unknown): boolean {
+  return (
+    error instanceof ApiCliError &&
+    error.code === 'HTTP_ERROR' &&
+    (error.details.status === 404 || error.details.status === 405)
+  );
+}
+
 async function shutdownApiAnalytics(analytics: ReturnType<typeof getAnalytics>): Promise<void> {
   if (!analytics) {
     return;
@@ -640,14 +655,37 @@ export async function executeDescriptor(
       input: requestInput,
     };
     let response: unknown;
+    let effectiveDescriptor = requestDescriptor;
     try {
       response = await requestApi(requestOptions);
     } catch (error) {
-      if (!target.fallbackHeaders || !isUnauthorizedError(error)) throw error;
-      response = await requestApi({ ...requestOptions, headers: target.fallbackHeaders });
+      if (target.fallbackHeaders && isUnauthorizedError(error)) {
+        response = await requestApi({ ...requestOptions, headers: target.fallbackHeaders });
+      } else if (!options.verbose && descriptor.verbose && isNotFoundError(error)) {
+        // The default route is unavailable on this server (e.g. a new CLI
+        // talking to an older `@mastra/server` that hasn't shipped the
+        // lightweight endpoint). Transparently retry against the verbose
+        // route so the command still succeeds.
+        const verboseDescriptor = { ...descriptor, ...descriptor.verbose };
+        const verboseInput = parseInput(verboseDescriptor, inputText);
+        const verbosePathParams = resolvePathParams(verboseDescriptor, positionalValues, verboseInput);
+        const verboseRequestInput = stripPathParamsFromInput(verboseInput, verbosePathParams);
+        response = await requestApi({
+          ...requestOptions,
+          descriptor: verboseDescriptor,
+          pathParams: verbosePathParams,
+          input: verboseRequestInput,
+        });
+        effectiveDescriptor = verboseDescriptor;
+      } else {
+        throw error;
+      }
     }
-    const normalized = normalizeData(requestDescriptor, normalizeResponse(response));
-    writeJson(normalizeSuccess(normalized, requestDescriptor.list, requestDescriptor.responseShape), options.pretty);
+    const normalized = normalizeData(effectiveDescriptor, normalizeResponse(response));
+    writeJson(
+      normalizeSuccess(normalized, effectiveDescriptor.list, effectiveDescriptor.responseShape),
+      options.pretty,
+    );
   } catch (error) {
     const apiError = error instanceof ApiCliError ? error : toApiCliError(error);
     writeJson(errorEnvelope(apiError), options.pretty, process.stderr);
