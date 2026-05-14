@@ -5,6 +5,7 @@ import { FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } 
 import { useEffect, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
+import { useToolIntegrationsBridge } from '../../hooks/use-tool-integrations-bridge';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { downscaleImageToDataUrl } from '../../utils/downscale-avatar';
@@ -481,6 +482,8 @@ function DetailPane({
   availableAgentTools,
   availableSkills,
 }: DetailPaneProps) {
+  const { toolIntegrationServices, handleConnectionsChange } = useToolIntegrationsBridge();
+
   return (
     <div className="h-full w-full min-w-0 overflow-hidden">
       {activeDetail === 'instructions' && (
@@ -492,7 +495,13 @@ function DetailPane({
         />
       )}
       {activeDetail === 'tools' && features.tools && (
-        <ToolsDetail onClose={onClose} editable={editable} availableAgentTools={availableAgentTools} />
+        <ToolsDetail
+          onClose={onClose}
+          editable={editable}
+          availableAgentTools={availableAgentTools}
+          toolIntegrationServices={toolIntegrationServices}
+          onConnectionsChange={handleConnectionsChange}
+        />
       )}
       {activeDetail === 'skills' && features.skills && (
         <SkillsDetail onClose={onClose} editable={editable} availableSkills={availableSkills} />

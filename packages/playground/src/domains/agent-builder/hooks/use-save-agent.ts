@@ -35,6 +35,7 @@ export function useSaveAgent({
       const metadataField = params.metadata ? { metadata: params.metadata } : {};
 
       try {
+        const toolIntegrationsField = params.toolIntegrations ? { toolIntegrations: params.toolIntegrations } : {};
         const updated = await updateStoredAgent.mutateAsync({
           name: params.name,
           description: params.description,
@@ -48,6 +49,7 @@ export function useSaveAgent({
           ...workspaceField,
           ...browserField,
           ...metadataField,
+          ...toolIntegrationsField,
         });
         if (!silent) toast.success('Agent updated');
         onSuccess?.(agentId);

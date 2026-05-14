@@ -170,4 +170,91 @@ describe('formValuesToSaveParams', () => {
 
     expect(result.skills).toEqual({ 'skill-a': {} });
   });
+
+  describe('toolIntegrations', () => {
+    it('omits toolIntegrations when the form value is empty', () => {
+      const result = formValuesToSaveParams(baseValues, [], []);
+      expect(result.toolIntegrations).toBeUndefined();
+    });
+
+    it('hardcodes kind=author on every emitted connection', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [
+                  // Force a non-author kind through .passthrough — mapper must rewrite.
+                  { kind: 'invoker', toolService: 'gmail', connectionId: 'c1', label: 'a' } as never,
+                ],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      expect(result.toolIntegrations?.composio.connections.gmail).toEqual([
+        { kind: 'author', toolService: 'gmail', connectionId: 'c1', label: 'a' },
+      ]);
+    });
+
+    it('strips the form-only toolService field from each tools[slug] entry', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: {
+                GMAIL_FETCH: { toolService: 'gmail', description: 'fetch' },
+                GMAIL_SEND: { toolService: 'gmail' },
+              },
+              connections: {
+                gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: 'a' }],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      expect(result.toolIntegrations?.composio.tools).toEqual({
+        GMAIL_FETCH: { description: 'fetch' },
+        GMAIL_SEND: {},
+      });
+    });
+
+    it('preserves unknown passthrough fields on connections through the mapper', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [
+                  {
+                    kind: 'author',
+                    toolService: 'gmail',
+                    connectionId: 'c1',
+                    label: 'a',
+                    metadata: { foo: 'bar' },
+                  } as never,
+                ],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      const conn = result.toolIntegrations?.composio.connections.gmail?.[0] as unknown as Record<string, unknown>;
+      expect(conn?.metadata).toEqual({ foo: 'bar' });
+    });
+  });
 });

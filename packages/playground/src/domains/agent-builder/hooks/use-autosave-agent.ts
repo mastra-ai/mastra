@@ -2,6 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useDebouncedCallback } from 'use-debounce';
+import { AgentBuilderEditFormSchema } from '../schemas';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 import { useSaveAgent } from './use-save-agent';
@@ -46,6 +47,15 @@ export function useAutosaveAgent({
   const performSave = useCallback(async () => {
     const seq = ++requestSeqRef.current;
     const values = latestValuesRef.current;
+    // Gate autosave on schema validity. When `superRefine` rules fail (e.g. a
+    // tool is selected but its toolService has zero connections, or a label is
+    // a duplicate) we keep the previous state instead of pushing a known-bad
+    // payload to the server. The UI shows inline errors per row.
+    const parsed = AgentBuilderEditFormSchema.safeParse(values);
+    if (!parsed.success) {
+      setStatus('idle');
+      return;
+    }
     clearSavedTimer();
     setStatus('saving');
     setLastError(null);
