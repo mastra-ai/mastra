@@ -55,6 +55,7 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type {
   ConditionFunction,
   ExecuteFunction,
+  ExecuteFunctionParams,
   InnerOutput,
   LoopConditionFunction,
   Step,
@@ -111,25 +112,31 @@ export type AgentStepOptions<TOUTPUT> = Omit<
   | 'scorers'
 >;
 
-export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
+export function mapVariable<
+  TStep extends Step<string, any, any, any, any, any>,
+  TPath extends PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.',
+>({
   step,
   path,
 }: {
   step: TStep;
-  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
+  path: TPath;
 }): {
   step: TStep;
-  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
+  path: TPath;
 };
-export function mapVariable<TWorkflow extends AnyWorkflow>({
+export function mapVariable<
+  TWorkflow extends AnyWorkflow,
+  TPath extends PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.',
+>({
   initData: TWorkflow,
   path,
 }: {
   initData: TWorkflow;
-  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
+  path: TPath;
 }): {
   initData: TWorkflow;
-  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
+  path: TPath;
 };
 export function mapVariable(config: any): any {
   return config;
@@ -1509,6 +1516,73 @@ export function isProcessor(obj: unknown): obj is Processor {
  */
 export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
 
+type PathValue<T, TPath extends string> = T extends unknown
+  ? TPath extends '.'
+    ? T
+    : TPath extends `${infer TKey}.${infer TRest}`
+      ? TKey extends keyof T
+        ? PathValue<T[TKey], TRest>
+        : unknown
+      : TPath extends keyof T
+        ? T[TPath]
+        : unknown
+  : never;
+
+type StepReferenceOutput<TStep> = TStep extends readonly (infer TInnerStep)[]
+  ? StepReferenceOutput<TInnerStep>
+  : TStep extends Step<string, any, any, infer TOutput, any, any, any, any>
+    ? TOutput
+    : unknown;
+
+type WorkflowInput<TWorkflow> =
+  TWorkflow extends Workflow<any, any, any, any, infer TInput, any, any, any> ? TInput : unknown;
+
+type ObjectMapStepReference<TEngineType> = {
+  step:
+    | Step<string, any, any, any, any, any, TEngineType, any>
+    | readonly Step<string, any, any, any, any, any, TEngineType, any>[];
+  path: string;
+};
+
+type ObjectMapValueReference = { value: any; schema: PublicSchema<any> };
+
+type ObjectMapInitDataReference<TEngineType> = {
+  initData: Workflow<TEngineType, any, any, any, any, any, any>;
+  path: string;
+};
+
+type ObjectMapRequestContextReference = {
+  requestContextPath: string;
+  schema: PublicSchema<any>;
+};
+
+type ObjectMapEntry<TPrevSchema, TEngineType> =
+  | ObjectMapStepReference<TEngineType>
+  | ObjectMapValueReference
+  | ObjectMapInitDataReference<TEngineType>
+  | ObjectMapRequestContextReference
+  | DynamicMapping<TPrevSchema, any>;
+
+type ObjectMapConfig<TPrevSchema, TEngineType> = Record<string, ObjectMapEntry<TPrevSchema, TEngineType>>;
+
+type InferObjectMapEntry<TEntry, TPrevSchema> = TEntry extends { step: infer TStep; path: infer TPath extends string }
+  ? PathValue<StepReferenceOutput<TStep>, TPath>
+  : TEntry extends { initData: infer TWorkflow; path: infer TPath extends string }
+    ? PathValue<WorkflowInput<TWorkflow>, TPath>
+    : TEntry extends { requestContextPath: string; schema: infer TSchema extends PublicSchema<any> }
+      ? InferPublicSchema<TSchema>
+      : TEntry extends { value: any; schema: infer TSchema extends PublicSchema<any> }
+        ? InferPublicSchema<TSchema>
+        : TEntry extends {
+              fn: ExecuteFunction<any, TPrevSchema, infer TMapOutput, any, any, any, any>;
+            }
+          ? TMapOutput
+          : unknown;
+
+type InferObjectMapOutput<TMappingConfig, TPrevSchema> = {
+  [TKey in keyof TMappingConfig]: InferObjectMapEntry<TMappingConfig[TKey], TPrevSchema>;
+};
+
 /**
  * Registration slot for the evented `createWorkflow` factory.
  *
@@ -1607,7 +1681,7 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  (wf as any).commit();
   return wf;
 }
 
@@ -1888,28 +1962,31 @@ export class Workflow<
     });
   }
 
-  map(
+  map<TMapOutput>(
+    mappingConfig: (
+      params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
+    ) => Promise<TMapOutput | InnerOutput> | TMapOutput,
+    stepOptions?: { id?: string | null },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TMapOutput, TRequestContext>;
+  map<const TMappingConfig extends ObjectMapConfig<TPrevSchema, TEngineType>>(
+    mappingConfig: TMappingConfig,
+    stepOptions?: { id?: string | null },
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    InferObjectMapOutput<TMappingConfig, TPrevSchema>,
+    TRequestContext
+  >;
+  map<TMapOutput>(
     mappingConfig:
-      | {
-          [k: string]:
-            | {
-                step:
-                  | Step<string, any, any, any, any, any, TEngineType, any>
-                  | Step<string, any, any, any, any, any, TEngineType, any>[];
-                path: string;
-              }
-            | { value: any; schema: PublicSchema<any> }
-            | {
-                initData: Workflow<TEngineType, any, any, any, any, any, any>;
-                path: string;
-              }
-            | {
-                requestContextPath: string;
-                schema: PublicSchema<any>;
-              }
-            | DynamicMapping<TPrevSchema, any>;
-        }
-      | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
+      | Record<string, any>
+      | ((
+          params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
+        ) => Promise<TMapOutput | InnerOutput> | TMapOutput),
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Create an implicit step that handles the mapping
@@ -1941,7 +2018,7 @@ export class Workflow<
         TState,
         TInput,
         TOutput,
-        any,
+        TMapOutput,
         TRequestContext
       >;
     }
@@ -2329,7 +2406,7 @@ export class Workflow<
    * This method should be called after all steps have been added to the workflow
    * @returns A built workflow instance ready for execution
    */
-  commit() {
+  commit(..._: [TPrevSchema] extends [TOutput] ? [] : [never]) {
     this.executionGraph = this.buildExecutionGraph();
     this.committed = true;
     return this as unknown as Workflow<

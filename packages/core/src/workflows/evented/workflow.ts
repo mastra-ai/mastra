@@ -41,7 +41,7 @@ import { Workflow, Run } from '../../workflows';
 // Direct import (bypassing the index) avoids a cycle: the index does a
 // side-effect import of `./evented`, so going through it from here would
 // re-enter an in-flight module evaluation and put `eventedCreateWorkflow` in TDZ.
-import type { AgentStepOptions } from '../../workflows';
+import type { AgentStepOptions, AnyWorkflow } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
 import type {
@@ -99,7 +99,9 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  // Cast via AnyWorkflow to bypass commit()'s compile-time output-schema check.
+  // cloneWorkflow copies the step graph from an already-committed workflow, so the types are correct.
+  (wf as AnyWorkflow).commit();
   return wf;
 }
 
