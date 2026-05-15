@@ -189,6 +189,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
         const result = await this.workos.authorization.check(checkOptions);
         if (result.authorized) return;
       } catch (error: any) {
+        if (error instanceof FGADeniedError) throw error;
         if (isWorkOSResourceNotFoundError(error)) continue;
         lastError = error;
       }
