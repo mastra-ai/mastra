@@ -24,7 +24,9 @@ jobs:
       - name: Setup custom action
         uses: ./.github/workflows/shared-actions/set-pr-status
         with:
-          status: 'pending'
+          status: ${{ github.repository == 'mastra-ai/mastra' && 'pending' || 'success' }}
           context: ${{ matrix.description }}
+          description: ${{ github.repository == 'mastra-ai/mastra' && 'Waiting for secret-backed workflow' || 'Skipped in fork; upstream-only secret workflow' }}
           sha: ${{ github.event.pull_request.head.sha }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
