@@ -1965,8 +1965,10 @@ export class Harness<TState = {}> {
     }
 
     const signalMetadata = getRecordValue(msg.content.metadata?.signal);
-    // Prefer content.parts when present (canonical source post stash-drop). Fall back to
-    // legacy metadata.signal.contents stash for old rows, then to plain content.content.
+    // Prefer the legacy metadata.signal.contents stash when present so main-era rows
+    // (which stored the full multimodal payload there and only a flattened text
+    // projection in content.parts) round-trip losslessly. Fall back to content.parts
+    // for post-stash-drop rows, then to plain content.content.
     const signalSourceContents =
       signalMetadata?.contents ??
       (Array.isArray(msg.content.parts) && msg.content.parts.length > 0 ? msg.content.parts : undefined) ??
