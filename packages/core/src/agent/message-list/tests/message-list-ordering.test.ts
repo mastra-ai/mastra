@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createSignal, mastraDBMessageToSignal } from '../../signals';
 import type { MastraDBMessage } from '../../types';
 import type { MessageListInput } from '../index';
@@ -526,10 +526,11 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       });
     });
 
-    it('should add signals after the latest response part timestamp', () => {
+    it('should add signals after tool invocation updates', () => {
       const baseTime = Date.now() + 60_000;
       const responseTime = new Date(baseTime);
-      const toolPartTime = baseTime + 5_000;
+      const toolCallPartTime = baseTime + 1_000;
+      const toolResultPartTime = baseTime + 5_000;
       const signalTime = new Date(baseTime + 2_000);
       const list = new MessageList();
       const signal = createSignal({
@@ -549,13 +550,12 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
               { type: 'text', text: 'Before tool output' },
               {
                 type: 'tool-invocation',
-                createdAt: toolPartTime,
+                createdAt: toolCallPartTime,
                 toolInvocation: {
-                  state: 'result',
+                  state: 'call',
                   toolCallId: 'call-1',
                   toolName: 'gitStatus',
                   args: {},
-                  result: '(no output)',
                 },
               },
             ],
@@ -565,9 +565,26 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         'response',
       );
 
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(toolResultPartTime);
+        list.updateToolInvocation({
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'gitStatus',
+            args: {},
+            result: '(no output)',
+          },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+
       const signalForTranscript = list.addSignal(signal);
 
-      expect(signalForTranscript.createdAt.getTime()).toBe(toolPartTime + 1);
+      expect(signalForTranscript.createdAt.getTime()).toBe(toolResultPartTime + 1);
       expect(signalForTranscript.acceptedAt).toEqual(signalTime);
       expect(list.get.all.db().map(message => message.id)).toEqual([
         'assistant-with-late-tool-part',

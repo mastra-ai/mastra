@@ -99,7 +99,6 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -5372,14 +5371,6 @@ export class Agent<
       llm,
     };
 
-    const initialSignalEchoes =
-      methodType === 'stream'
-        ? (Array.isArray(options.messages) ? options.messages : [options.messages]).filter(isCreatedAgentSignal)
-        : [];
-    const initialSignalEchoesForRun =
-      initialSignalEchoes.length > 0
-        ? [...initialSignalEchoes, ...(options._initialSignalEchoes ?? [])]
-        : options._initialSignalEchoes;
     const toolPayloadTransform =
       normalizeToolPayloadTransformPolicy(options.transform ?? (options as any).toolPayloadProjection) ??
       this.#toolPayloadTransform ??
@@ -5418,7 +5409,6 @@ export class Agent<
           }),
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: this.#getThreadStreamRuntime().drainPendingSignals.bind(this.#getThreadStreamRuntime()),
-      initialSignalEchoes: initialSignalEchoesForRun,
     });
 
     const run = await executionWorkflow.createRun();

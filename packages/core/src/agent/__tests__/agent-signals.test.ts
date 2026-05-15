@@ -659,7 +659,7 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('drops a not-yet-visible current-step tool call when draining a follow-up signal', async () => {
+  it('preserves current-step tool calls before draining a follow-up signal', async () => {
     const prompts: any[][] = [];
     let callCount = 0;
     let continueToToolCall!: () => void;
@@ -763,9 +763,9 @@ describe('Agent signals', () => {
     await waitForCondition(() => callCount === 2);
     await runPromise;
 
-    expect(chunks.map(chunk => chunk.type)).not.toContain('tool-call');
+    expect(chunks.map(chunk => chunk.type)).toContain('tool-call');
     expect(JSON.stringify(prompts[1])).toContain('Actually stop and answer this instead');
-    expect(JSON.stringify(prompts[1])).not.toContain('stale-tool-call');
+    expect(JSON.stringify(prompts[1])).toContain('stale-tool-call');
 
     subscription.unsubscribe();
   });

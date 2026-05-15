@@ -1093,6 +1093,8 @@ export class MessageList {
               : {}),
             ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
           };
+          this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+          this.updateLastCreatedAt(msg);
 
           // `backgroundTasks` is a per-toolCallId record — merge instead of
           // overwrite so multiple concurrent background dispatches on the
