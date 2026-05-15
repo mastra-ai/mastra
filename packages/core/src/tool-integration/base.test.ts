@@ -137,7 +137,7 @@ describe('BaseToolIntegration', () => {
 
     it('filters individual tools by exact slug', async () => {
       const integration = new FakeIntegration(services, tools, {
-        allowedTools: ['gmail.send'],
+        allowedTools: { gmail: ['gmail.send'] },
       });
       const result = await integration.listTools({ toolService: 'gmail' });
       expect(result.data.map(t => t.slug)).toEqual(['gmail.send']);
@@ -145,10 +145,29 @@ describe('BaseToolIntegration', () => {
 
     it('supports suffix wildcards on tool slugs', async () => {
       const integration = new FakeIntegration(services, tools, {
-        allowedTools: ['gmail.*'],
+        allowedTools: { gmail: ['gmail.*'] },
       });
       const result = await integration.listTools({ toolService: 'gmail' });
       expect(result.data.map(t => t.slug)).toEqual(['gmail.fetch_emails', 'gmail.send']);
+    });
+
+    it('leaves services without an allowedTools entry unfiltered', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedTools: { gmail: ['gmail.send'] },
+      });
+      // gmail filtered to one tool, slack/github untouched
+      const result = await integration.listTools();
+      expect(result.data.map(t => t.slug).sort()).toEqual(
+        ['github.create_issue', 'gmail.send', 'slack.post_message'].sort(),
+      );
+    });
+
+    it('treats an explicit empty array as "no tools allowed" for that service', async () => {
+      const integration = new FakeIntegration(services, tools, {
+        allowedTools: { gmail: [] },
+      });
+      const result = await integration.listTools({ toolService: 'gmail' });
+      expect(result.data).toEqual([]);
     });
 
     it('forwards search and pagination opts to the adapter hook', async () => {

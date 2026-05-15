@@ -100,10 +100,10 @@ describe('ComposioToolIntegration — catalog allowlist', () => {
     expect(services.data.map(s => s.slug)).toEqual(['gmail']);
   });
 
-  it('listTools honors allowedTools glob (gmail.*)', async () => {
+  it('listTools honors per-service allowedTools entries', async () => {
     const integration = new ComposioToolIntegration({
       apiKey: 'k',
-      allowedTools: ['gmail.*'],
+      allowedTools: { gmail: ['gmail.*'] },
     });
 
     await integration.listTools({ toolService: 'gmail' }).catch(() => undefined);
@@ -117,10 +117,10 @@ describe('ComposioToolIntegration — catalog allowlist', () => {
     const tools = await integration.listTools({ toolService: 'gmail' });
     expect(tools.data.map(t => t.slug)).toEqual(['gmail.fetch_emails', 'gmail.send_email']);
 
-    // Now narrow.
+    // Now narrow to a single tool slug within gmail.
     const narrow = new ComposioToolIntegration({
       apiKey: 'k',
-      allowedTools: ['gmail.fetch_emails'],
+      allowedTools: { gmail: ['gmail.fetch_emails'] },
     });
     await narrow.listTools({ toolService: 'gmail' }).catch(() => undefined);
     const narrowRaw = composioInstances.filter(i => !i.hasProvider).at(-1)!;
@@ -130,6 +130,24 @@ describe('ComposioToolIntegration — catalog allowlist', () => {
     ]);
     const filtered = await narrow.listTools({ toolService: 'gmail' });
     expect(filtered.data.map(t => t.slug)).toEqual(['gmail.fetch_emails']);
+  });
+
+  it('listTools leaves services without an allowedTools entry unfiltered', async () => {
+    const integration = new ComposioToolIntegration({
+      apiKey: 'k',
+      allowedToolServices: ['gmail', 'slack'],
+      allowedTools: { gmail: ['gmail.send_email'] }, // slack intentionally omitted
+    });
+
+    await integration.listTools({ toolService: 'slack' }).catch(() => undefined);
+    const raw = getRawInstance();
+    raw.tools.getRawComposioTools.mockResolvedValue([
+      { slug: 'slack.post_message', name: 'Post', description: 'd', toolkit: { slug: 'slack' } },
+      { slug: 'slack.list_channels', name: 'List', description: 'd', toolkit: { slug: 'slack' } },
+    ]);
+
+    const slack = await integration.listTools({ toolService: 'slack' });
+    expect(slack.data.map(t => t.slug)).toEqual(['slack.post_message', 'slack.list_channels']);
   });
 
   it('listTools forwards search + pagination to getRawComposioTools and reports hasMore', async () => {

@@ -26,12 +26,21 @@ import type {
  * - suffix wildcard:  `'gmail.*'` (matches `gmail.fetch_emails`, `gmail.send`, ...)
  *
  * Full glob support (e.g. `'*.fetch_*'`) is out of scope for v1 and can land in v1.5.
+ *
+ * `allowedTools` is keyed by tool-service slug. If a service is listed in
+ * `allowedToolServices` but **not** present in `allowedTools`, all of its
+ * tools are included (no per-tool filtering). An explicit empty array
+ * (`allowedTools: { gmail: [] }`) filters everything out for that service.
  */
 export interface BaseToolIntegrationOptions {
   /** When set, `listToolServices()` keeps only services whose slug matches. */
   allowedToolServices?: readonly string[];
-  /** When set, `listTools()` keeps only tools whose slug matches. */
-  allowedTools?: readonly string[];
+  /**
+   * Per-service tool allowlist. Keys are tool-service slugs; values are
+   * patterns matched against tool slugs (exact or `prefix*`). Omitting a
+   * service leaves its tools unfiltered.
+   */
+  allowedTools?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -52,11 +61,11 @@ export abstract class BaseToolIntegration implements ToolIntegration {
   abstract readonly capabilities: ToolIntegrationCapabilities;
 
   protected readonly allowedToolServices: readonly string[];
-  protected readonly allowedTools: readonly string[];
+  protected readonly allowedTools: Readonly<Record<string, readonly string[]>>;
 
   constructor(options: BaseToolIntegrationOptions = {}) {
     this.allowedToolServices = options.allowedToolServices ?? [];
-    this.allowedTools = options.allowedTools ?? [];
+    this.allowedTools = options.allowedTools ?? {};
   }
 
   // ── catalog (filtered) ────────────────────────────────────────────────
@@ -83,10 +92,16 @@ export abstract class BaseToolIntegration implements ToolIntegration {
       };
     }
     const result = await this.listAllTools(opts);
-    if (this.allowedTools.length === 0) return result;
+    // Per-service allowlist: only filter tools whose service has an entry in
+    // `allowedTools`. Services without an entry pass through unfiltered.
+    if (Object.keys(this.allowedTools).length === 0) return result;
     return {
       ...result,
-      data: result.data.filter(tool => matchesAny(tool.slug, this.allowedTools)),
+      data: result.data.filter(tool => {
+        const patterns = this.allowedTools[tool.toolService];
+        if (patterns === undefined) return true;
+        return matchesAny(tool.slug, patterns);
+      }),
     };
   }
 
