@@ -1,5 +1,5 @@
 ---
-title: "OpenTelemetry exporter | Tracing | Observability"
+title: "OpenTelemetry exporter | Integrations | Observability"
 description: "Send traces and logs to any OpenTelemetry-compatible observability platform"
 packages:
   - "@mastra/observability"
@@ -12,7 +12,7 @@ The OpenTelemetry (OTEL) exporter sends your traces and logs to any OTEL-compati
 
 :::info Looking for bidirectional OTEL integration?
 
-If you have existing OpenTelemetry instrumentation and want Mastra traces to inherit context from active OTEL spans, see the [OpenTelemetry Bridge](/docs/observability/tracing/bridges/otel) instead.
+If you have existing OpenTelemetry instrumentation and want Mastra traces to inherit context from active OTEL spans, see the [OpenTelemetry Bridge](/docs/observability/integrations/bridges/otel) instead.
 
 :::
 
@@ -271,7 +271,7 @@ new OtelExporter({
 
 :::tip Laminar-Native Exporter
 
-For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/docs/observability/tracing/exporters/laminar) exporter instead. It provides optimized integration with Laminar's platform.
+For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/docs/observability/integrations/exporters/laminar) exporter instead. It provides optimized integration with Laminar's platform.
 
 :::
 
@@ -339,7 +339,7 @@ The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-
 
 :::tip Datadog-Native Exporter
 
-For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/docs/observability/tracing/exporters/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
+For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/docs/observability/integrations/exporters/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
 
 :::
 
@@ -489,6 +489,6 @@ Install the suggested package for your provider.
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [OpenTelemetry Bridge](/docs/observability/tracing/bridges/otel)
+- [OpenTelemetry Bridge](/docs/observability/integrations/bridges/otel)
 - [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai)
 - [OTEL Exporter Reference](/reference/observability/tracing/exporters/otel)

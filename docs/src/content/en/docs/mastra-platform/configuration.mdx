@@ -76,4 +76,4 @@ cp .mastra-project.production.json .mastra-project.json
 mastra studio deploy --env-file .env.production --yes
 ```
 
-Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/tracing/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` per environment so traces route to the matching platform project.
+Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/integrations/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` per environment so traces route to the matching platform project.
