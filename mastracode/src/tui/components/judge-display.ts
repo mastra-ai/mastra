@@ -67,7 +67,11 @@ export class JudgeDisplayComponent extends Container {
     }
 
     for (const line of this.activity) {
-      this.addChild(new Text(this.renderRow(chalk.dim(`• ${line}`), innerWidth, border), BOX_INDENT, 0));
+      this.addChild(new Text(this.renderRow(chalk.dim.italic(`• ${line}`), innerWidth, border), BOX_INDENT, 0));
+    }
+
+    if (this.activity.length > 0 && this.result) {
+      this.addChild(new Text(this.renderRow('', innerWidth, border), BOX_INDENT, 0));
     }
 
     if (this.result) {
