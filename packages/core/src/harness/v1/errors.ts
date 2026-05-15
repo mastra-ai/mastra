@@ -48,6 +48,19 @@ export class HarnessSessionClosedError extends Error {
 }
 
 /**
+ * The session has entered the durable closing phase. The record still
+ * occupies its active `(harnessName, resourceId, threadId)` key while close
+ * aborts/drains live work and cascades through descendants, but callers must
+ * not start new work or mutate session state.
+ */
+export class HarnessSessionClosingError extends Error {
+  readonly name = 'HarnessSessionClosingError';
+  constructor(public readonly sessionId: string) {
+    super(`Session "${sessionId}" is closing`);
+  }
+}
+
+/**
  * `harness.session(...)` could not acquire the session's write lease under
  * `lockMode: 'fail'`. Carries the current owner so callers can route the
  * request to the holding instance, and the TTL so callers can decide whether

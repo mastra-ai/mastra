@@ -97,6 +97,17 @@ export class HarnessStorageSessionNotFoundError extends Error {
   }
 }
 
+export class HarnessStorageParentSessionUnavailableError extends Error {
+  readonly name = 'HarnessStorageParentSessionUnavailableError';
+  readonly code = 'harness.storage.parent_session_unavailable' as const;
+  constructor(
+    public readonly parentSessionId: string,
+    public readonly reason: 'not_found' | 'closed' | 'closing',
+  ) {
+    super(`Parent session "${parentSessionId}" is unavailable for child admission: ${reason}`);
+  }
+}
+
 export class HarnessStorageAdmissionConflictError extends Error {
   readonly name = 'HarnessStorageAdmissionConflictError';
   readonly code = 'harness.storage.admission_conflict' as const;
@@ -206,8 +217,10 @@ export abstract class HarnessStorage extends StorageDomain {
   /**
    * Atomic active-session admission. Inserts `record` only when no active
    * record exists for `(harnessName, resourceId, threadId)`; otherwise returns
-   * the existing active row without overwriting it. A created row also receives
-   * the caller's initial lease.
+   * the existing active row without overwriting it. When `record.parentSessionId`
+   * is present, adapters must also verify the parent exists in the same
+   * harness/resource and is neither closing nor closed in the same atomic
+   * admission boundary. A created row also receives the caller's initial lease.
    */
   abstract createOrLoadActiveSession(
     record: SessionRecord,

@@ -14,6 +14,8 @@
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.
+ *   - 'closing' — close has started; new work is rejected while previously
+ *                 admitted flushes drain before the durable `closingAt` marker.
  *   - 'closed'  — `close()` has run; record has `closedAt` set in storage.
  *   - 'evicted' — flushed to storage and dropped from live map; the record
  *                 remains active and the session can be re-hydrated. Currently
@@ -68,6 +70,7 @@ import {
   HarnessOverrideConflictError,
   HarnessQueueFullError,
   HarnessSessionClosedError,
+  HarnessSessionClosingError,
   HarnessSkillArgsValidationError,
   HarnessSkillNotFoundError,
   HarnessValidationError,
@@ -162,7 +165,7 @@ const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
   'additionalProperties',
 ]);
 
-export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
+export type SessionLifecycleState = 'live' | 'closing' | 'closed' | 'evicted';
 
 /**
  * System prompt for the goal judge. Lifted verbatim from
@@ -445,8 +448,7 @@ export class Session {
   private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   /**
    * Outstanding `waitForIdle()` callers. On close/evict each waiter is
-   * rejected with `HarnessSessionClosedError` so callers don't hang on a
-   * dead session.
+   * rejected so callers don't hang on a dead session.
    */
   private readonly _idleWaiters = new Set<IdleWaiter>();
   /**
@@ -762,7 +764,8 @@ export class Session {
    *
    * Rejects with `HarnessValidationError` if `timeoutMs` is provided and
    * elapses before the session becomes idle. Rejects with
-   * `HarnessSessionClosedError` if the session closes while waiting.
+   * `HarnessSessionClosingError` if close starts while waiting, or
+   * `HarnessSessionClosedError` if the session reaches a terminal state first.
    *
    * Useful in tests and TUI flows that want to await a clean boundary
    * before tearing down or asserting final state.
@@ -813,6 +816,42 @@ export class Session {
     for (const w of waiters) w.check();
   }
 
+  /** @internal — close uses this after the durable closing marker commits. */
+  _waitForCloseDrain(closeDeadlineAt: number): Promise<void> {
+    if (!this.isBusy()) return Promise.resolve();
+    const timeoutMs = Math.max(0, closeDeadlineAt - Date.now());
+    if (timeoutMs === 0) return Promise.resolve();
+
+    return new Promise<void>(resolve => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiter: IdleWaiter = {
+        check: () => {
+          if (!this.isBusy()) {
+            cleanup();
+            resolve();
+            return true;
+          }
+          return false;
+        },
+        reject: () => {
+          cleanup();
+          resolve();
+        },
+        cleanup: () => {},
+      };
+      const cleanup = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        this._idleWaiters.delete(waiter);
+      };
+      waiter.cleanup = cleanup;
+      this._idleWaiters.add(waiter);
+      timer = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, timeoutMs);
+    });
+  }
+
   /**
    * Cancel the in-flight turn (if any). The agent receives the abort signal
    * and unwinds. No-op when no turn is running. The optional `reason` is
@@ -848,6 +887,11 @@ export class Session {
     return this._state === 'closed';
   }
 
+  /** True while close is draining admitted flushes or after the durable closing marker commits. */
+  get isClosing(): boolean {
+    return this._state === 'closing' || (this._record.closingAt !== undefined && this._record.closedAt === undefined);
+  }
+
   /** Read-only snapshot of the underlying record. */
   getRecord(): Readonly<SessionRecord> {
     return this._record;
@@ -858,10 +902,11 @@ export class Session {
   // -------------------------------------------------------------------------
 
   /**
-   * Soft-close: flush, set `closedAt`, release the lease, drop from the live
-   * map. Final — the same `sessionId` cannot be re-hydrated. Idempotent: a
-   * second call is a no-op once `closed`. The cascade through descendants
-   * (§5.5) is driven by the Harness, not by this method directly.
+   * Soft-close: reject new work, drain admitted flushes, persist `closingAt`,
+   * terminalize descendants, set `closedAt`, release the lease, and drop from
+   * the live map. Final — the same `sessionId` cannot be re-hydrated.
+   * Idempotent: a second call is a no-op once `closed`. The cascade through
+   * descendants (§5.5) is driven by the Harness, not by this method directly.
    *
    * @internal — public users go through `harness.closeSession({ sessionId })`
    * or `session.close()` (defined here) which currently delegates back to
@@ -5527,6 +5572,9 @@ export class Session {
   // -------------------------------------------------------------------------
 
   private _assertLive(_method: string): void {
+    if (this.isClosing) {
+      throw new HarnessSessionClosingError(this.id);
+    }
     if (this._state !== 'live') {
       throw new HarnessSessionClosedError(this.id);
     }
@@ -5541,6 +5589,12 @@ export class Session {
     update: (prev: SessionRecord) => SessionRecord,
     opts?: { attachmentReferences?: SaveAttachmentReferenceInput[] },
   ): Promise<void> {
+    if (this.isClosing) {
+      return Promise.reject(new HarnessSessionClosingError(this.id));
+    }
+    if (this._state !== 'live') {
+      return Promise.reject(new HarnessSessionClosedError(this.id));
+    }
     const run = async (): Promise<void> => {
       const next: SessionRecord = {
         ...update(this._record),
@@ -5651,16 +5705,100 @@ export class Session {
     return new RequestContext([['harness', harnessSlot]]);
   }
 
+  /** @internal — used by the Harness as soon as close starts. */
+  _beginClosing(): void {
+    if (this.isClosed) {
+      return;
+    }
+    this._state = 'closing';
+    this.abort({ reason: 'session_closed' });
+    this._rejectIdleWaiters(new HarnessSessionClosingError(this.id));
+  }
+
+  /** @internal — restore admission if close failed before the durable marker committed. */
+  _restoreLiveAfterFailedClose(): void {
+    if (this._state === 'closing' && this._record.closingAt === undefined && this._record.closedAt === undefined) {
+      this._state = 'live';
+    }
+  }
+
   /**
-   * @internal — used by the Harness during `close()` and `shutdown()` to
-   * mark this instance terminal. Does not touch storage or release the
-   * lease — those are the harness's job. Idempotent.
+   * @internal — used by the Harness after close starts. New work is rejected
+   * immediately while previously admitted flushes serialize before the marker.
+   */
+  _flushClosingMarker(params: { closeTimeoutMs: number }): Promise<SessionRecord> {
+    if (this.isClosed) {
+      return Promise.resolve(this._record);
+    }
+    this._beginClosing();
+
+    const run = async (): Promise<SessionRecord> => {
+      const closingAt = this._record.closingAt ?? Date.now();
+      const closeDeadlineAt = this._record.closeDeadlineAt ?? closingAt + params.closeTimeoutMs;
+      const next: SessionRecord = {
+        ...this._record,
+        closingAt,
+        closeDeadlineAt,
+        lastActivityAt: Date.now(),
+      };
+      const saved = await this._storage.saveSession(next, {
+        harnessName: this._record.harnessName,
+        ownerId: this._ownerId,
+        ifVersion: this._record.version,
+      });
+      this._record = { ...next, version: saved.version };
+      return this._record;
+    };
+    const next = this._flushChain.then(run, run);
+    this._flushChain = next.then(
+      () => {},
+      () => {},
+    );
+    return next;
+  }
+
+  /** @internal — used by the Harness after descendants are terminalized. */
+  _flushClosedMarker(closedAt: number): Promise<SessionRecord> {
+    const run = async (): Promise<SessionRecord> => {
+      if (this._record.closedAt !== undefined) {
+        return this._record;
+      }
+      const next: SessionRecord = {
+        ...this._record,
+        lastActivityAt: closedAt,
+        closedAt,
+      };
+      const saved = await this._storage.saveSession(next, {
+        harnessName: this._record.harnessName,
+        ownerId: this._ownerId,
+        ifVersion: this._record.version,
+      });
+      this._record = { ...next, version: saved.version };
+      return this._record;
+    };
+    const next = this._flushChain.then(run, run);
+    this._flushChain = next.then(
+      () => {},
+      () => {},
+    );
+    return next;
+  }
+
+  /**
+   * @internal — used by the Harness during `close()` to mark this instance
+   * terminal. Does not touch storage or release the lease — those are the
+   * harness's job. Idempotent.
    */
   _markClosed(updatedRecord: SessionRecord): void {
     this._record = updatedRecord;
     this._state = 'closed';
     this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
     this._rejectIdleWaiters(new HarnessSessionClosedError(this.id));
+  }
+
+  /** @internal — harness bridge subscription that remains valid while closing. */
+  _subscribeInternal(listener: HarnessEventListener): HarnessEventUnsubscribe {
+    return this._emitter.subscribe(listener);
   }
 
   /**

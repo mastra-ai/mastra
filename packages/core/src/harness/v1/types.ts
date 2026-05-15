@@ -346,6 +346,15 @@ export interface HarnessConfigCommon {
      * Capacity check + durable append are atomic per session. Defaults to 100.
      */
     maxQueueDepth?: number;
+
+    /**
+     * Milliseconds allowed after the durable `closingAt` marker commits for
+     * live sessions to drain aborted work before terminal `closedAt`. The
+     * runtime persists `closeDeadlineAt = closingAt + closeTimeoutMs` and
+     * reuses an existing deadline when repairing a partially completed close.
+     * Defaults to 30s.
+     */
+    closeTimeoutMs?: number;
   };
 
   /**

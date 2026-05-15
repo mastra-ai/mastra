@@ -64,6 +64,13 @@ export interface SessionCreatedEvent extends HarnessEventBase {
   modelId: string;
 }
 
+export interface SessionClosingEvent extends HarnessEventBase {
+  type: 'session_closing';
+  reason: 'requested' | 'shutdown';
+  closingAt: number;
+  closeDeadlineAt: number;
+}
+
 export interface SessionClosedEvent extends HarnessEventBase {
   type: 'session_closed';
   reason: 'requested' | 'shutdown';
@@ -518,6 +525,7 @@ export interface WorkspaceErrorEvent extends HarnessEventBase {
 
 export type HarnessEvent =
   | SessionCreatedEvent
+  | SessionClosingEvent
   | SessionClosedEvent
   | SessionEvictedEvent
   | ModeChangedEvent
@@ -713,6 +721,7 @@ export function sessionCreatedPayload(
 /** Harness-owned event types — exhaustive list per spec §6.2 / §10.2. */
 const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_created',
+  'session_closing',
   'session_closed',
   'session_evicted',
   'session_pin_overflow',

@@ -33,6 +33,7 @@ import type {
 import {
   HarnessStorageAttachmentInUseError,
   HarnessStorageLeaseConflictError,
+  HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
 } from '../../storage/domains/harness';
@@ -45,6 +46,7 @@ import {
   HarnessConfigError,
   HarnessModelNotFoundError,
   HarnessSessionClosedError,
+  HarnessSessionClosingError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
   HarnessStorageError,
@@ -87,9 +89,17 @@ import { WorkspaceRegistry } from './workspace-registry';
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
+const DEFAULT_CLOSE_TIMEOUT_MS = 30_000;
 const DEFAULT_SUBAGENT_MAX_DEPTH = 1;
 const DEFAULT_GOAL_MAX_TURNS = 50;
 const DEFAULT_PERMISSION_POLICY: PermissionPolicy = 'ask';
+
+type CloseTreeNode = {
+  record: SessionRecord;
+  depth: number;
+  live?: Session;
+  leaseAcquired: boolean;
+};
 
 function cloneHarnessSkill(skill: HarnessSkill): HarnessSkill {
   return {
@@ -182,6 +192,7 @@ export class Harness {
   private readonly _liveSessions = new Map<string, Session>();
   private readonly _leaseTtlMs: number;
   private readonly _maxQueueDepth: number;
+  private readonly _closeTimeoutMs: number;
   private readonly _subagentTypes: ReadonlyMap<string, SubagentDefinition>;
   private readonly _subagentMaxDepth: number;
   private readonly _goalDefaults: { defaultJudgeModel?: string; defaultMaxTurns: number };
@@ -193,6 +204,8 @@ export class Harness {
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
+  /** In-process close de-dupe by any session id currently covered by a close tree. */
+  private readonly _closePromises = new Map<string, Promise<void>>();
   /** Workspace registry — owns lifecycle across `shared`/`per-resource`/`per-session`. */
   readonly _workspaceRegistry: WorkspaceRegistry;
   /** Snapshot of the workspace kind for fast read paths. `undefined` when not configured. */
@@ -207,6 +220,10 @@ export class Harness {
     this._maxQueueDepth = config.sessions?.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
     if (this._maxQueueDepth < 1) {
       throw new HarnessConfigError('sessions.maxQueueDepth', 'must be a positive integer');
+    }
+    this._closeTimeoutMs = config.sessions?.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
+    if (this._closeTimeoutMs < 1) {
+      throw new HarnessConfigError('sessions.closeTimeoutMs', 'must be a positive integer');
     }
 
     // Subagent registry. Shape validation up front (uniqueness, mutual
@@ -521,10 +538,11 @@ export class Harness {
 
   /**
    * Subscribe to harness-scoped events. Includes lifecycle events for every
-   * live session (session_created, session_closed, session_evicted) and any
-   * harness-level custom events. Per-session turn events (agent_start,
-   * message_*, tool_*, suspension_*, mode_changed, model_changed) are
-   * forwarded here so a single subscriber can render the whole harness.
+   * live session (session_created, session_closing, session_closed,
+   * session_evicted) and any harness-level custom events. Per-session turn
+   * events (agent_start, message_*, tool_*, suspension_*, mode_changed,
+   * model_changed) are forwarded here so a single subscriber can render the
+   * whole harness.
    * Per-turn events also include `message_*` (assistant text streaming) and
    * `tool_input_*` (model-side argument streaming) — see §10.2.
    *
@@ -708,6 +726,9 @@ export class Harness {
         // Don't leak existence across tenants.
         throw new HarnessSessionNotFoundError(sessionId);
       }
+      if (live.isClosing) {
+        throw new HarnessSessionClosingError(sessionId);
+      }
       return live;
     }
 
@@ -719,6 +740,9 @@ export class Harness {
     }
     if (stored.closedAt !== undefined) {
       throw new HarnessSessionClosedError(sessionId);
+    }
+    if (stored.closingAt !== undefined) {
+      throw new HarnessSessionClosingError(sessionId);
     }
 
     return this._hydrate(storage, stored);
@@ -752,6 +776,9 @@ export class Harness {
     // In-memory hit by (threadId, resourceId)?
     for (const live of this._liveSessions.values()) {
       if (live.threadId === threadId && live.resourceId === resourceId) {
+        if (live.isClosing) {
+          throw new HarnessSessionClosingError(live.id);
+        }
         return live;
       }
     }
@@ -759,6 +786,9 @@ export class Harness {
     // Storage lookup — adapters filter out closed records.
     const stored = await storage.loadSessionByThread({ harnessName: this._harnessName, threadId, resourceId });
     if (stored) {
+      if (stored.closingAt !== undefined) {
+        throw new HarnessSessionClosingError(stored.id);
+      }
       return this._hydrate(storage, stored);
     }
 
@@ -786,6 +816,7 @@ export class Harness {
     let liveCandidate: Session | undefined;
     for (const live of this._liveSessions.values()) {
       if (live.resourceId !== resourceId) continue;
+      if (live.isClosing) continue;
       if (!liveCandidate || live.lastActivityAt > liveCandidate.lastActivityAt) {
         liveCandidate = live;
       }
@@ -793,11 +824,12 @@ export class Harness {
     if (liveCandidate) return liveCandidate;
 
     const summaries = await storage.listSessions({ harnessName: this._harnessName, resourceId, includeClosed: false });
-    const head = summaries[0];
-    if (head) {
-      // listSessions returns newest-first by lastActivityAt.
+    // listSessions returns newest-first by lastActivityAt. Closing records
+    // still occupy their active thread key, but resource-only resolution can
+    // skip them and create/hydrate another active session for the resource.
+    for (const head of summaries) {
       const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: head.id });
-      if (stored && stored.closedAt === undefined) {
+      if (stored && stored.closedAt === undefined && stored.closingAt === undefined) {
         return this._hydrate(storage, stored);
       }
     }
@@ -847,6 +879,7 @@ export class Harness {
     if (!mode) {
       throw new HarnessConfigError('session().modeId', `unknown mode "${modeId}"`);
     }
+    await this._assertParentAcceptsChild(storage, init.parentSessionId, init.resourceId);
 
     const record: SessionRecord = {
       id: sessionId,
@@ -878,6 +911,11 @@ export class Harness {
         initialLease: { ownerId: this.ownerId, ttlMs: this._leaseTtlMs },
       });
     } catch (err) {
+      if (err instanceof HarnessStorageParentSessionUnavailableError) {
+        if (err.reason === 'closing') throw new HarnessSessionClosingError(err.parentSessionId);
+        if (err.reason === 'closed') throw new HarnessSessionClosedError(err.parentSessionId);
+        throw new HarnessSessionNotFoundError(err.parentSessionId);
+      }
       // A version conflict on first insert means another writer beat us to
       // this id (only realistic for deterministic ids passed by the caller).
       if (err instanceof HarnessStorageVersionConflictError) {
@@ -887,10 +925,46 @@ export class Harness {
     }
 
     if (!admitted.created) {
+      if (admitted.record.closingAt !== undefined) {
+        throw new HarnessSessionClosingError(admitted.record.id);
+      }
       return this._hydrate(storage, admitted.record);
     }
 
     return this._publish(storage, admitted.record);
+  }
+
+  private async _assertParentAcceptsChild(
+    storage: HarnessStorage,
+    parentSessionId: string | undefined,
+    resourceId: string,
+  ): Promise<void> {
+    if (!parentSessionId) return;
+
+    const live = this._liveSessions.get(parentSessionId);
+    if (live) {
+      if (live.resourceId !== resourceId) {
+        throw new HarnessSessionNotFoundError(parentSessionId);
+      }
+      if (live.isClosing) {
+        throw new HarnessSessionClosingError(parentSessionId);
+      }
+      if (live.isClosed) {
+        throw new HarnessSessionClosedError(parentSessionId);
+      }
+      return;
+    }
+
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: parentSessionId });
+    if (!stored || stored.resourceId !== resourceId) {
+      throw new HarnessSessionNotFoundError(parentSessionId);
+    }
+    if (stored.closedAt !== undefined) {
+      throw new HarnessSessionClosedError(parentSessionId);
+    }
+    if (stored.closingAt !== undefined) {
+      throw new HarnessSessionClosingError(parentSessionId);
+    }
   }
 
   private async _hydrate(storage: HarnessStorage, stored: SessionRecord): Promise<Session> {
@@ -935,7 +1009,7 @@ export class Harness {
     // Bridge the session's events onto the harness-level emitter so a single
     // harness.subscribe() sees every session's turn activity. Forwarded
     // events keep their original id/timestamp/sessionId.
-    const bridge = session.subscribe(event => this._emitter.forward(event));
+    const bridge = session._subscribeInternal(event => this._emitter.forward(event));
     this._sessionEventBridges.set(record.id, bridge);
 
     // Surface session creation to harness-level subscribers AFTER the bridge
@@ -993,9 +1067,9 @@ export class Harness {
   // -------------------------------------------------------------------------
 
   /**
-   * Soft-close: flush, set closedAt, release lease, drop from live map.
-   * Cascades through parentSessionId — every descendant is closed too.
-   * Idempotent. See §5.5.
+   * Soft-close: reject new work, drain admitted flushes, persist closingAt,
+   * terminalize descendants bottom-up, set closedAt, release leases, and drop
+   * live instances. Idempotent. See §5.5.
    */
   async closeSession(opts: { sessionId: string }): Promise<void> {
     const storage = this._requireStorage('closeSession()');
@@ -1007,9 +1081,7 @@ export class Harness {
     const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored) throw new HarnessSessionNotFoundError(opts.sessionId);
     if (stored.closedAt !== undefined) return; // already closed → idempotent.
-    // Hydrate so we have the lease, then close.
-    const session = await this._hydrate(storage, stored);
-    await this._closeSession(session);
+    await this._closeSessionRecord(storage, stored);
   }
 
   /**
@@ -1019,44 +1091,224 @@ export class Harness {
     if (session.isClosed) return;
 
     const storage = this._requireStorage('closeSession()');
-    const now = Date.now();
-    const record = session.getRecord();
-    const closed: SessionRecord = {
-      ...record,
-      lastActivityAt: now,
-      closedAt: now,
-    };
+    await this._closeSessionRecord(storage, session.getRecord());
+  }
 
-    let saved;
-    try {
-      saved = await storage.saveSession(closed, {
-        harnessName: record.harnessName,
-        ownerId: this.ownerId,
-        ifVersion: record.version,
+  private async _closeSessionRecord(storage: HarnessStorage, rootRecord: SessionRecord): Promise<void> {
+    const existing = this._closePromises.get(rootRecord.id);
+    if (existing) return existing;
+
+    const closeIds = new Set<string>([rootRecord.id]);
+    this._liveSessions.get(rootRecord.id)?._beginClosing();
+    let closePromise!: Promise<void>;
+    closePromise = Promise.resolve()
+      .then(() => this._closeSessionRecordOnce(storage, rootRecord, closeIds, closePromise))
+      .catch(err => {
+        for (const id of closeIds) {
+          this._liveSessions.get(id)?._restoreLiveAfterFailedClose();
+        }
+        throw err;
+      })
+      .finally(() => {
+        for (const id of closeIds) {
+          if (this._closePromises.get(id) === closePromise) {
+            this._closePromises.delete(id);
+          }
+        }
       });
+    this._closePromises.set(rootRecord.id, closePromise);
+    return closePromise;
+  }
+
+  private async _closeSessionRecordOnce(
+    storage: HarnessStorage,
+    rootRecord: SessionRecord,
+    closeIds: Set<string>,
+    closePromise: Promise<void>,
+  ): Promise<void> {
+    const tree: CloseTreeNode[] = [];
+    try {
+      const root = await this._prepareCloseNode(storage, rootRecord, 0);
+      tree.push(root);
+      tree[0] = await this._markCloseNodeClosing(storage, root);
+
+      for (let index = 0; index < tree.length; index++) {
+        const node = tree[index]!;
+        const children = await storage.listSessions({
+          harnessName: node.record.harnessName,
+          resourceId: root.record.resourceId,
+          includeClosed: false,
+          parentSessionId: node.record.id,
+        });
+        for (const child of children) {
+          const stored = await storage.loadSession({ harnessName: node.record.harnessName, sessionId: child.id });
+          if (!stored || stored.closedAt !== undefined) continue;
+          const existingClose = this._closePromises.get(stored.id);
+          if (existingClose && existingClose !== closePromise) {
+            await existingClose;
+            continue;
+          }
+          closeIds.add(stored.id);
+          this._closePromises.set(stored.id, closePromise);
+          const childNode = await this._prepareCloseNode(storage, stored, node.depth + 1);
+          tree.push(childNode);
+          tree[tree.length - 1] = await this._markCloseNodeClosing(storage, childNode);
+        }
+      }
+
+      await this._drainCloseTree(tree);
+      await this._terminalizeCloseTree(storage, tree);
     } catch (err) {
-      throw new HarnessStorageError(session.id, 'flush', err);
+      await this._releaseCloseTreeLeases(storage, tree);
+      throw err;
     }
-    closed.version = saved.version;
+  }
 
-    // Cascade: close every direct child, recursively. The cascade is
-    // synchronous and durable per §5.5, so we walk before releasing the
-    // parent's lease — a crash in the middle leaves a partially-closed
-    // tree and the next deleteSession on the original target completes.
-    const children = await storage.listSessions({
-      harnessName: record.harnessName,
-      resourceId: record.resourceId,
-      includeClosed: false,
-      parentSessionId: record.id,
-    });
-    for (const child of children) {
-      await this.closeSession({ sessionId: child.id });
+  private async _prepareCloseNode(storage: HarnessStorage, record: SessionRecord, depth: number): Promise<CloseTreeNode> {
+    const live = this._liveSessions.get(record.id);
+    if (live) {
+      return {
+        record: live.getRecord(),
+        depth,
+        live,
+        leaseAcquired: false,
+      };
     }
 
+    const lease = await this._acquireLease(storage, record.id);
+    return {
+      record: {
+        ...record,
+        ownerId: this.ownerId,
+        leaseExpiresAt: lease.expiresAt,
+        version: lease.version,
+      },
+      depth,
+      leaseAcquired: true,
+    };
+  }
+
+  private async _markCloseNodeClosing(storage: HarnessStorage, node: CloseTreeNode): Promise<CloseTreeNode> {
+    const closingAt = node.record.closingAt ?? Date.now();
+    const closeDeadlineAt = node.record.closeDeadlineAt ?? closingAt + this._closeTimeoutMs;
+    if (node.live) {
+      let record: SessionRecord;
+      try {
+        record = await node.live._flushClosingMarker({ closeTimeoutMs: this._closeTimeoutMs });
+      } catch (err) {
+        throw new HarnessStorageError(node.record.id, 'flush', err);
+      }
+      this._emitSessionClosing(node.live, record);
+      return { ...node, record };
+    }
+
+    const next: SessionRecord = {
+      ...node.record,
+      closingAt,
+      closeDeadlineAt,
+      lastActivityAt: Date.now(),
+    };
+    try {
+      const saved = await storage.saveSession(next, {
+        harnessName: next.harnessName,
+        ownerId: this.ownerId,
+        ifVersion: node.record.version,
+      });
+      next.version = saved.version;
+    } catch (err) {
+      throw new HarnessStorageError(next.id, 'flush', err);
+    }
+
+    this._emitSessionClosing(undefined, next);
+    return { ...node, record: next };
+  }
+
+  private async _drainCloseTree(tree: CloseTreeNode[]): Promise<void> {
+    await Promise.all(
+      tree.map(node => {
+        if (!node.live) return undefined;
+        return node.live._waitForCloseDrain(node.record.closeDeadlineAt ?? Date.now());
+      }),
+    );
+  }
+
+  private async _terminalizeCloseTree(
+    storage: HarnessStorage,
+    tree: CloseTreeNode[],
+  ): Promise<void> {
+    const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
+    for (const node of bottomUp) {
+      if (node.record.closedAt !== undefined) {
+        await this._releaseClosedSessionResources(storage, node.record, node.live);
+        continue;
+      }
+      const closedAt = Date.now();
+      let closed: SessionRecord;
+      if (node.live) {
+        try {
+          closed = await node.live._flushClosedMarker(closedAt);
+        } catch (err) {
+          throw new HarnessStorageError(node.record.id, 'flush', err);
+        }
+      } else {
+        closed = {
+          ...node.record,
+          lastActivityAt: closedAt,
+          closedAt,
+        };
+        try {
+          const saved = await storage.saveSession(closed, {
+            harnessName: closed.harnessName,
+            ownerId: this.ownerId,
+            ifVersion: node.record.version,
+          });
+          closed.version = saved.version;
+        } catch (err) {
+          throw new HarnessStorageError(closed.id, 'flush', err);
+        }
+      }
+      await this._releaseClosedSessionResources(storage, closed, node.live);
+    }
+  }
+
+  private async _releaseCloseTreeLeases(storage: HarnessStorage, tree: CloseTreeNode[]): Promise<void> {
+    for (const node of tree) {
+      if (!node.leaseAcquired) continue;
+      try {
+        await storage.releaseSessionLease({
+          harnessName: node.record.harnessName,
+          sessionId: node.record.id,
+          ownerId: this.ownerId,
+        });
+      } catch {
+        // Best effort; the lease still expires by TTL.
+      }
+    }
+  }
+
+  private _emitSessionClosing(session: Session | undefined, record: SessionRecord): void {
+    const event = {
+      type: 'session_closing' as const,
+      reason: 'requested' as const,
+      closingAt: record.closingAt!,
+      closeDeadlineAt: record.closeDeadlineAt!,
+    };
+    if (session) {
+      session._emit(event);
+      return;
+    }
+    this._emitter.emit(event, { sessionId: record.id });
+  }
+
+  private async _releaseClosedSessionResources(
+    storage: HarnessStorage,
+    record: SessionRecord,
+    session: Session | undefined,
+  ): Promise<void> {
     try {
       await storage.releaseSessionLease({
         harnessName: record.harnessName,
-        sessionId: session.id,
+        sessionId: record.id,
         ownerId: this.ownerId,
       });
     } catch {
@@ -1068,7 +1320,7 @@ export class Harness {
     // `shared` is owned by the harness; nothing to release here.
     try {
       if (this._workspaceKind === 'per-session') {
-        await this._workspaceRegistry.releasePerSession({ sessionId: session.id });
+        await this._workspaceRegistry.releasePerSession({ sessionId: record.id });
       } else if (this._workspaceKind === 'per-resource') {
         await this._workspaceRegistry.releasePerResource({ resourceId: record.resourceId });
       }
@@ -1076,20 +1328,23 @@ export class Harness {
       // Best-effort — registry surfaces errors via workspace_error events.
     }
 
-    session._markClosed(closed);
+    if (session) {
+      session._markClosed(record);
+      // Emit session_closed BEFORE we tear down the per-session bridge so
+      // harness-level subscribers see the lifecycle event for this session.
+      // The session's own emitter is still wired and will publish to the
+      // bridge before the unsubscribe lands.
+      session._emit({ type: 'session_closed', reason: 'requested' });
+    } else {
+      this._emitter.emit({ type: 'session_closed', reason: 'requested' }, { sessionId: record.id });
+    }
 
-    // Emit session_closed BEFORE we tear down the per-session bridge so
-    // harness-level subscribers see the lifecycle event for this session.
-    // The session's own emitter is still wired and will publish to the
-    // bridge before the unsubscribe lands.
-    session._emit({ type: 'session_closed', reason: 'requested' });
-
-    const bridge = this._sessionEventBridges.get(session.id);
+    const bridge = this._sessionEventBridges.get(record.id);
     if (bridge) {
       bridge();
-      this._sessionEventBridges.delete(session.id);
+      this._sessionEventBridges.delete(record.id);
     }
-    this._liveSessions.delete(session.id);
+    this._liveSessions.delete(record.id);
   }
 
   /**
@@ -1136,6 +1391,15 @@ export class Harness {
       return;
     }
 
+    const pendingCloses = new Set<Promise<void>>();
+    for (const session of this._liveSessions.values()) {
+      const close = this._closePromises.get(session.id);
+      if (close) pendingCloses.add(close);
+    }
+    if (pendingCloses.size > 0) {
+      await Promise.allSettled(pendingCloses);
+    }
+
     // Release every held lease. We keep the records active in storage —
     // shutdown is not a close.
     const sessions = Array.from(this._liveSessions.values());
@@ -1175,8 +1439,8 @@ export class Harness {
   //
   // Threads are the durable artifact (message log + title), distinct from
   // the runtime Session. Every operation is resource-scoped — cross-resource
-  // existence is never leaked. `delete` cascades to the live session via
-  // `_closeSession` so the lease is released and child sessions are torn
+  // existence is never leaked. `delete` cascades through closeSession logic so
+  // leases are released and child sessions are torn
   // down before the thread + messages are removed.
   // -------------------------------------------------------------------------
 
@@ -1327,9 +1591,7 @@ export class Harness {
       });
       if (stored) {
         cascaded = true;
-        const live = this._liveSessions.get(stored.id);
-        const session = live ?? (await this._hydrate(storage, stored));
-        await this._closeSession(session);
+        await this._closeSessionRecord(storage, stored);
       }
 
       await memory.deleteThread({ threadId: opts.threadId });

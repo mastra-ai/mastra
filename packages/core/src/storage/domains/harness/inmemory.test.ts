@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryDB } from '../inmemory-db';
-import { HarnessStorageVersionConflictError } from './base';
+import { HarnessStorageParentSessionUnavailableError, HarnessStorageVersionConflictError } from './base';
 import { InMemoryHarness } from './inmemory';
 import type { SessionRecord } from './types';
 
@@ -32,6 +32,29 @@ describe('InMemoryHarness admission storage contract', () => {
       storage.saveSession(sampleSession({ id: 'second' }), { ownerId: 'h-2', ifVersion: 0 }),
     ).rejects.toBeInstanceOf(HarnessStorageVersionConflictError);
     await expect(storage.loadSession({ sessionId: 'second' })).resolves.toBeNull();
+  });
+
+  it('rejects child admission when the parent is closing', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ id: 'parent', closingAt: 1000, closeDeadlineAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await expect(
+      storage.createOrLoadActiveSession(
+        sampleSession({
+          id: 'child',
+          threadId: 'thread-child',
+          parentSessionId: 'parent',
+        }),
+        { initialLease: { ownerId: 'h-2', ttlMs: 30_000 } },
+      ),
+    ).rejects.toMatchObject({
+      name: 'HarnessStorageParentSessionUnavailableError',
+      reason: 'closing',
+    } satisfies Partial<HarnessStorageParentSessionUnavailableError>);
+    await expect(storage.loadSession({ sessionId: 'child' })).resolves.toBeNull();
   });
 
   it('isolates sessions by harness namespace', async () => {

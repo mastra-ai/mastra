@@ -275,7 +275,7 @@ describe('Session.waitForIdle()', () => {
     await turn;
   });
 
-  it('rejects with HarnessSessionClosedError when the session closes while waiting', async () => {
+  it('rejects with HarnessSessionClosingError when the session closes while waiting', async () => {
     const { harness, agent } = setup();
     let releaseGate!: () => void;
     agent.gate = new Promise<void>(r => (releaseGate = r));
@@ -288,7 +288,7 @@ describe('Session.waitForIdle()', () => {
     // Closing the session while a turn is still in flight should reject any
     // waiter so callers don't hang on a dead session.
     void session.close().catch(() => {});
-    await expect(idle).rejects.toMatchObject({ name: 'HarnessSessionClosedError' });
+    await expect(idle).rejects.toMatchObject({ name: 'HarnessSessionClosingError' });
 
     releaseGate();
     await turn.catch(() => {});

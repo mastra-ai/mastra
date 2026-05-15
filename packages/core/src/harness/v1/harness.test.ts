@@ -20,6 +20,7 @@ import { InMemoryStore } from '../../storage/mock';
 import {
   HarnessConfigError,
   HarnessSessionClosedError,
+  HarnessSessionClosingError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
 } from './errors';
@@ -102,6 +103,18 @@ describe('Harness v1 — construction', () => {
           agents: { default: makeAgent() },
           modes: [{ id: 'default', agentId: 'default' }],
           sessions: { storage: makeStorage() },
+        }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('throws HarnessConfigError for invalid close timeout', () => {
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          sessions: { storage: makeStorage(), closeTimeoutMs: 0 },
         }),
     ).toThrow(HarnessConfigError);
   });
@@ -337,6 +350,174 @@ describe('Harness v1 — lifecycle', () => {
     const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
     await s.close();
     await expect(s.close()).resolves.toBeUndefined();
+  });
+
+  it('persists closing markers before terminal close', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage, closeTimeoutMs: 250 } });
+    const events: Array<{ type: string; sessionId?: string; closingAt?: number; closeDeadlineAt?: number }> = [];
+    harness.subscribe(event => {
+      if (event.type === 'session_closing' || event.type === 'session_closed') {
+        events.push(event);
+      }
+    });
+
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    await s.close();
+
+    const stored = await harness.loadSession({ sessionId: s.id, includeClosed: true });
+    expect(stored?.closingAt).toBeDefined();
+    expect(stored?.closeDeadlineAt).toBe((stored?.closingAt ?? 0) + 250);
+    expect(stored?.closedAt).toBeDefined();
+
+    const closing = events.find(event => event.type === 'session_closing');
+    expect(closing).toMatchObject({
+      type: 'session_closing',
+      sessionId: s.id,
+      closingAt: stored?.closingAt,
+      closeDeadlineAt: stored?.closeDeadlineAt,
+    });
+  });
+
+  it('rejects live work after the closing marker commits', async () => {
+    const harness = makeHarness();
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const rejection = new Promise<unknown>(resolve => {
+      harness.subscribe(event => {
+        if (event.type === 'session_closing' && event.sessionId === s.id) {
+          resolve(s.setState({ closing: true }).catch(err => err));
+        }
+      });
+    });
+
+    await s.close();
+
+    await expect(rejection).resolves.toBeInstanceOf(HarnessSessionClosingError);
+  });
+
+  it('lets a concurrent close terminalize before shutdown releases the lease', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const originalSaveSession = storage.saveSession.bind(storage);
+    let releaseTerminalSave!: () => void;
+    let terminalSaveStarted!: () => void;
+    const terminalSaveGate = new Promise<void>(resolve => {
+      releaseTerminalSave = resolve;
+    });
+    const terminalSaveSeen = new Promise<void>(resolve => {
+      terminalSaveStarted = resolve;
+    });
+    storage.saveSession = (async (...args: Parameters<typeof storage.saveSession>) => {
+      const [record] = args;
+      if (record.id === s.id && record.closingAt !== undefined && record.closedAt !== undefined) {
+        terminalSaveStarted();
+        await terminalSaveGate;
+      }
+      return originalSaveSession(...args);
+    }) as typeof storage.saveSession;
+
+    const close = s.close();
+    await terminalSaveSeen;
+    const shutdown = harness.shutdown();
+
+    releaseTerminalSave();
+    await Promise.all([close, shutdown]);
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeDefined();
+  });
+
+  it('serializes admitted writes before close and rejects late child creation', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const originalSaveSession = storage.saveSession.bind(storage);
+    let releaseFirstSave!: () => void;
+    const firstSaveGate = new Promise<void>(resolve => {
+      releaseFirstSave = resolve;
+    });
+    let saveCount = 0;
+    storage.saveSession = (async (...args: Parameters<typeof storage.saveSession>) => {
+      saveCount += 1;
+      if (saveCount === 1) {
+        await firstSaveGate;
+      }
+      return originalSaveSession(...args);
+    }) as typeof storage.saveSession;
+
+    const admitted = s.setState({ admitted: true });
+    await Promise.resolve();
+    const closing = s.close();
+    const closingAgain = s.close();
+
+    await expect(
+      harness.session({
+        resourceId: 'r1',
+        threadId: { fresh: true },
+        parentSessionId: s.id,
+      }),
+    ).rejects.toBeInstanceOf(HarnessSessionClosingError);
+
+    releaseFirstSave();
+    await admitted;
+    await Promise.all([closing, closingAgain]);
+
+    const stored = await harness.loadSession({ sessionId: s.id, includeClosed: true });
+    expect(stored?.state).toMatchObject({ admitted: true });
+    expect(stored?.closingAt).toBeDefined();
+    expect(stored?.closedAt).toBeDefined();
+  });
+
+  it('terminalizes descendant sessions before the close target', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const closedSessionIds: string[] = [];
+    harness.subscribe(event => {
+      if (event.type === 'session_closed') closedSessionIds.push(event.sessionId!);
+    });
+
+    const parent = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+    const grandchild = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: child.id,
+    });
+
+    await parent.close();
+
+    expect(closedSessionIds).toEqual([grandchild.id, child.id, parent.id]);
+  });
+
+  it('repairs a stored closing marker without resetting the deadline', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage, closeTimeoutMs: 250 } });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const record = s.getRecord();
+    await storage.saveSession(
+      {
+        ...record,
+        closingAt: 1234,
+        closeDeadlineAt: 5678,
+        lastActivityAt: 1234,
+      },
+      { harnessName: record.harnessName, ownerId: harness.ownerId, ifVersion: record.version },
+    );
+    await harness.shutdown();
+
+    const harness2 = makeHarness({ sessions: { storage, closeTimeoutMs: 999 } });
+    await expect(harness2.session({ sessionId: s.id })).rejects.toBeInstanceOf(HarnessSessionClosingError);
+    await harness2.closeSession({ sessionId: s.id });
+
+    const stored = await harness2.loadSession({ sessionId: s.id, includeClosed: true });
+    expect(stored?.closingAt).toBe(1234);
+    expect(stored?.closeDeadlineAt).toBe(5678);
+    expect(stored?.closedAt).toBeDefined();
   });
 
   it('closeSession by id without holding a live instance still cascades', async () => {
