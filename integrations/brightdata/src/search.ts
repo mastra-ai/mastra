@@ -11,6 +11,10 @@ const inputSchema = z.object({
     .length(2)
     .optional()
     .describe('2-letter country code for geo-targeted results (e.g., "us", "gb")'),
+  language: z
+    .string()
+    .optional()
+    .describe('Language code for localized Google results (e.g., "en", "es", "fr")'),
   start: z
     .number()
     .int()
@@ -43,6 +47,7 @@ export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
       try {
         const rawResponse = await client.search.google(input.query, {
           country: input.country,
+          language: input.language,
           start: input.start,
         });
 

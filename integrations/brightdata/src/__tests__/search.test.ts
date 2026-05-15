@@ -52,7 +52,7 @@ describe('createBrightDataSearchTool', () => {
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
 
     const result = await tool.execute!(
-      { query: 'pizza restaurants', country: 'us', start: 10 },
+      { query: 'pizza restaurants', country: 'us', language: 'es', start: 10 },
       {} as any,
     );
 
@@ -66,6 +66,7 @@ describe('createBrightDataSearchTool', () => {
     expect(requestBody.url).toContain('https://www.google.com/search');
     expect(requestBody.url).toContain('q=pizza+restaurants');
     expect(requestBody.url).toContain('gl=us');
+    expect(requestBody.url).toContain('hl=es');
     expect(requestBody.url).toContain('start=10');
 
     expect(result).toEqual({
@@ -86,6 +87,7 @@ describe('createBrightDataSearchTool', () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
 
     expect(requestBody.url).toContain('q=simple+search');
+    expect(requestBody.url).toContain('hl=en');
     expect(requestBody.url).not.toContain('gl=');
     expect(requestBody.url).not.toContain('start=');
   });
