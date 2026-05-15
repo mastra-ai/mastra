@@ -175,8 +175,6 @@ function legacyPartToSignalPart(part: unknown): TextPart | FilePart | undefined 
   }
 
   // Legacy file/image parts used `mediaType`; image parts also used `image` instead of `data`.
-  // Binary data (Uint8Array/ArrayBuffer/Buffer) and URL instances don't survive JSON, so anything
-  // that round-tripped through storage is already a base64 or URL string.
   if (record.type === 'file' || record.type === 'image') {
     const data = record.type === 'image' ? (record.image ?? record.data) : record.data;
     if (typeof data !== 'string') return undefined;
