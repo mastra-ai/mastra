@@ -10758,6 +10758,33 @@ export interface PostAuthCredentialsSignUp_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /auth/roles/:roleId/permissions
+// ============================================================================
+export type GetAuthRolesRoleIdPermissions_PathParams = {
+  roleId: string;
+};
+
+export type GetAuthRolesRoleIdPermissions_Response = {
+  roleId: string;
+  permissions: string[];
+};
+
+export type GetAuthRolesRoleIdPermissions_Request = Simplify<
+  (GetAuthRolesRoleIdPermissions_PathParams extends never ? {} : { params: GetAuthRolesRoleIdPermissions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthRolesRoleIdPermissions_RouteContract {
+  pathParams: GetAuthRolesRoleIdPermissions_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAuthRolesRoleIdPermissions_Request;
+  response: GetAuthRolesRoleIdPermissions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows
 // ============================================================================
 export type GetWorkflows_QueryParams = {
@@ -78046,6 +78073,7 @@ export interface RouteTypes {
   'POST /auth/refresh': PostAuthRefresh_RouteContract;
   'POST /auth/credentials/sign-in': PostAuthCredentialsSignIn_RouteContract;
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
+  'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -78462,6 +78490,9 @@ export interface Client {
   };
   '/auth/refresh': {
     POST: PostAuthRefresh_RouteContract;
+  };
+  '/auth/roles/:roleId/permissions': {
+    GET: GetAuthRolesRoleIdPermissions_RouteContract;
   };
   '/auth/sso/callback': {
     GET: GetAuthSsoCallback_RouteContract;
