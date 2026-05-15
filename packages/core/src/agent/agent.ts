@@ -79,8 +79,10 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
+import type { Step } from '../workflows/step';
+import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import type { AnyWorkflow } from '../workflows/workflow';
+import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -99,7 +101,6 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -144,12 +145,65 @@ type ModelFallbacks = {
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
 
+type ProcessorLoadedToolsProvider = {
+  getLoadedToolsForRequestContext?: (args: {
+    requestContext: RequestContext;
+  }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
+};
+
+type ProcessorWorkflowChildrenContainer = {
+  steps?: Record<string, unknown> | unknown[];
+  children?: Record<string, unknown> | unknown[];
+  stepGraph?: Array<{
+    step?: unknown;
+    steps?: Array<{ step?: unknown } | unknown>;
+  }>;
+};
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
   }
 
   return cb(value as T);
+}
+
+function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
+  const workflowChildren = workflow as ProcessorWorkflowChildrenContainer;
+  const children: unknown[] = [];
+  const seen = new Set<unknown>();
+
+  const addChild = (child: unknown) => {
+    if (!child || seen.has(child)) {
+      return;
+    }
+    seen.add(child);
+    children.push(child);
+  };
+
+  const addChildren = (value: ProcessorWorkflowChildrenContainer['steps']) => {
+    if (Array.isArray(value)) {
+      value.forEach(addChild);
+      return;
+    }
+    Object.values(value ?? {}).forEach(addChild);
+  };
+
+  addChildren(workflowChildren.steps);
+  addChildren(workflowChildren.children);
+
+  for (const entry of workflowChildren.stepGraph ?? []) {
+    addChild(entry.step);
+    for (const stepEntry of entry.steps ?? []) {
+      addChild(
+        stepEntry && typeof stepEntry === 'object' && 'step' in stepEntry
+          ? (stepEntry as { step?: unknown }).step
+          : stepEntry,
+      );
+    }
+  }
+
+  return children;
 }
 
 function hasConfiguredProcessor(
@@ -248,6 +302,7 @@ export class Agent<
   public source?: DefinitionSource;
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
+  readonly #metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
@@ -322,6 +377,7 @@ export class Agent<
 
     this.#instructions = config.instructions;
     this.#description = config.description;
+    this.#metadata = config.metadata;
     this.#options = config.options;
 
     if (!config.model) {
@@ -877,6 +933,11 @@ export class Agent<
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        const toolProvider = processor as ProcessorLoadedToolsProvider;
+        if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+          (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+            toolProvider.getLoadedToolsForRequestContext.bind(processor);
+        }
       }
       workflow = workflow.then(step);
     }
@@ -1556,6 +1617,33 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Gets the metadata for this agent, resolving function-based metadata if necessary.
+   * Metadata is a classification bag for clients and is never read by the agent runtime.
+   *
+   * @example
+   * ```typescript
+   * const metadata = await agent.getMetadata();
+   * console.log(metadata?.type); // 'support'
+   * ```
+   */
+  public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+    | Record<string, unknown>
+    | undefined
+    | Promise<Record<string, unknown> | undefined> {
+    if (this.#metadata === undefined) {
+      return undefined;
+    }
+    if (typeof this.#metadata !== 'function') {
+      return this.#metadata;
+    }
+    const result = this.#metadata({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
+    return resolveMaybePromise(result, m => m);
   }
 
   /**
@@ -2906,6 +2994,99 @@ export class Agent<
     }
 
     return convertedBrowserTools;
+  }
+
+  /**
+   * Returns tools that input processors loaded into their own state.
+   * These tools need to be available before a resumed approval call enters toolCallStep.
+   * Otherwise the resumed workflow bypasses processInputStep and loses dynamic executors.
+   * @internal
+   */
+  private async listInputProcessorLoadedTools({
+    processors,
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    outputWriter,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+    ...rest
+  }: {
+    processors: InputProcessorOrWorkflow[];
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
+    autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    const convertedProcessorTools: Record<string, CoreTool> = {};
+
+    const collectLoadedTools = async (processor: InputProcessorOrWorkflow | unknown) => {
+      if (isProcessorWorkflow(processor)) {
+        for (const childProcessor of listProcessorWorkflowChildren(processor)) {
+          await collectLoadedTools(childProcessor);
+        }
+      }
+
+      const toolProvider = processor as ProcessorLoadedToolsProvider;
+
+      if (typeof toolProvider.getLoadedToolsForRequestContext !== 'function') {
+        return;
+      }
+
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext });
+      if (!loadedTools || Object.keys(loadedTools).length === 0) {
+        return;
+      }
+
+      const workspace = await this.getWorkspace({ requestContext });
+      const memory = await this.getMemory({ requestContext });
+      const model = await this.getModel({ requestContext });
+
+      for (const [toolName, tool] of Object.entries(loadedTools)) {
+        if (isMastraTool(tool) || isProviderTool(tool)) {
+          convertedProcessorTools[toolName] = makeCoreTool(
+            tool as unknown as ToolToConvert,
+            {
+              name: toolName,
+              runId,
+              threadId,
+              resourceId,
+              logger: this.logger,
+              mastra: mastraProxy as MastraUnion | undefined,
+              memory,
+              agentName: this.name,
+              agentId: this.id,
+              requestContext,
+              ...observabilityContext,
+              model,
+              outputWriter,
+              tracingPolicy: this.#options?.tracingPolicy,
+              requireApproval: (tool as any).requireApproval,
+              backgroundConfig: (tool as any).background,
+              workspace,
+            },
+            undefined,
+            autoResumeSuspendedTools,
+            backgroundTaskEnabled,
+          );
+        } else {
+          convertedProcessorTools[toolName] = tool as CoreTool;
+        }
+      }
+    };
+
+    for (const processor of processors) {
+      await collectLoadedTools(processor);
+    }
+
+    return convertedProcessorTools;
   }
 
   /**
@@ -4835,6 +5016,19 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
+    const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
+      processors: configuredInputProcessors,
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      outputWriter,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+    });
+
     const allTools = {
       ...assignedTools,
       ...memoryTools,
@@ -4846,6 +5040,7 @@ export class Agent<
       ...skillTools,
       ...channelTools,
       ...browserTools,
+      ...inputProcessorLoadedTools,
     };
     return this.formatTools(allTools);
   }
@@ -5372,14 +5567,6 @@ export class Agent<
       llm,
     };
 
-    const initialSignalEchoes =
-      methodType === 'stream'
-        ? (Array.isArray(options.messages) ? options.messages : [options.messages]).filter(isCreatedAgentSignal)
-        : [];
-    const initialSignalEchoesForRun =
-      initialSignalEchoes.length > 0
-        ? [...initialSignalEchoes, ...(options._initialSignalEchoes ?? [])]
-        : options._initialSignalEchoes;
     const toolPayloadTransform =
       normalizeToolPayloadTransformPolicy(options.transform ?? (options as any).toolPayloadProjection) ??
       this.#toolPayloadTransform ??
@@ -5418,7 +5605,6 @@ export class Agent<
           }),
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: this.#getThreadStreamRuntime().drainPendingSignals.bind(this.#getThreadStreamRuntime()),
-      initialSignalEchoes: initialSignalEchoesForRun,
     });
 
     const run = await executionWorkflow.createRun();

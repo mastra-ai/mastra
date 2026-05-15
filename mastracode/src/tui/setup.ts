@@ -41,6 +41,10 @@ export function setupKeyboardShortcuts(
     }
     state.lastCtrlCTime = now;
 
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
+
     if (state.pendingApprovalDismiss) {
       // Dismiss active approval dialog and abort
       state.pendingApprovalDismiss();
@@ -194,6 +198,17 @@ export function setupKeyboardShortcuts(
   });
 }
 
+function abortActiveGoalJudge(state: TUIState): boolean {
+  const activeGoalJudge = state.activeGoalJudge;
+  if (!activeGoalJudge) return false;
+
+  state.userInitiatedAbort = true;
+  activeGoalJudge.abortController.abort();
+  activeGoalJudge.component.setInterrupted();
+  state.ui.requestRender();
+  return true;
+}
+
 // =============================================================================
 // Layout
 // =============================================================================
@@ -324,7 +339,17 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'observability', description: 'Configure cloud observability' },
-    { name: 'goal', description: 'Set/manage persistent goal (Ralph loop)' },
+    {
+      name: 'goal',
+      description: 'Set/manage persistent goal (Ralph loop)',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'status', label: 'status', description: 'Show current goal status' },
+          { value: 'pause', label: 'pause', description: 'Pause the goal continuation loop' },
+          { value: 'resume', label: 'resume', description: 'Resume the current goal' },
+          { value: 'clear', label: 'clear', description: 'Clear the current goal' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
     { name: 'judge', description: 'Set goal judge defaults' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
@@ -423,6 +448,9 @@ export function setupKeyHandlers(
       process.exit(0);
     }
     state.lastCtrlCTime = now;
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }

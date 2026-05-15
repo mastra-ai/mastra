@@ -92,6 +92,29 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect([null, undefined]).toContain(resolved?.description);
         expect(resolved?.tools).toBeUndefined();
       });
+
+      // Regression: visibility, metadata, and favoriteCount must round-trip
+      // independently. A previous PG bug bound `visibility` twice in the
+      // INSERT, shifting subsequent column bindings — metadata received the
+      // visibility string, favoriteCount received the JSON-stringified metadata,
+      // etc. Asserting non-default values for all three catches the shift.
+      it('round-trips visibility, metadata, and favoriteCount independently on create', async () => {
+        const agent = createSampleAgent({
+          authorId: 'user-bind-regression',
+          visibility: 'public',
+          metadata: { team: 'platform', tier: 2 },
+        });
+
+        const created = await agentsStorage.create({ agent });
+        expect(created.visibility).toBe('public');
+        expect(created.metadata).toEqual({ team: 'platform', tier: 2 });
+        expect(created.favoriteCount).toBe(0);
+
+        const resolved = await agentsStorage.getByIdResolved(agent.id);
+        expect(resolved?.visibility).toBe('public');
+        expect(resolved?.metadata).toEqual({ team: 'platform', tier: 2 });
+        expect(resolved?.favoriteCount).toBe(0);
+      });
     });
 
     describe('getById', () => {

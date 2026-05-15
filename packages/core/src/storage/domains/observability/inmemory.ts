@@ -89,6 +89,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   SpanRecord,
   UpdateSpanArgs,
@@ -317,11 +318,14 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
-    // Parse args through schema to apply defaults
+  private getMatchingRootSpans(args: ListTracesArgs): {
+    paged: SpanRecord[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  } {
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-
-    // Collect all traces that match filters
     const matchingRootSpans: SpanRecord[] = [];
 
     for (const [, traceEntry] of this.db.traces) {
@@ -332,7 +336,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
     }
 
-    // Sort by orderBy field
     const { field: sortField, direction: sortDirection } = orderBy;
 
     matchingRootSpans.sort((a, b) => {
@@ -364,9 +367,39 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     const paged = matchingRootSpans.slice(start, end);
 
+    return { paged, total, page, perPage, hasMore: end < total };
+  }
+
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
+    const { paged, total, page, perPage, hasMore } = this.getMatchingRootSpans(args);
+
     return {
       spans: toTraceSpans(paged),
-      pagination: { total, page, perPage, hasMore: end < total },
+      pagination: { total, page, perPage, hasMore },
+    };
+  }
+
+  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    const { paged, total, page, perPage, hasMore } = this.getMatchingRootSpans(args);
+
+    return {
+      spans: paged.map(span => ({
+        traceId: span.traceId,
+        spanId: span.spanId,
+        parentSpanId: span.parentSpanId,
+        name: span.name,
+        spanType: span.spanType,
+        isEvent: span.isEvent,
+        startedAt: span.startedAt,
+        endedAt: span.endedAt,
+        error: span.error,
+        entityType: span.entityType,
+        entityId: span.entityId,
+        entityName: span.entityName,
+        createdAt: span.createdAt,
+        updatedAt: span.updatedAt,
+      })),
+      pagination: { total, page, perPage, hasMore },
     };
   }
 
