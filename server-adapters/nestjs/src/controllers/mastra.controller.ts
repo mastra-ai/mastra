@@ -53,6 +53,10 @@ export class MastraController {
 
     const routePath = getMastraRoutePath(path, this.options.prefix);
 
+    if (!routePath) {
+      throw new NotFoundException(`Route not found: ${method} ${path}`);
+    }
+
     // Reject paths with double slashes (e.g., /api//agents)
     if (routePath.includes('//')) {
       throw new NotFoundException(`Route not found: ${method} ${path}`);
