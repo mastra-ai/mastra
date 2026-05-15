@@ -8,7 +8,11 @@ import { createBackgroundTaskCheckStep } from './background-task-check-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
-import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
+import {
+  resolveConfiguredToolCallConcurrency,
+  resolveToolCallConcurrency,
+  updateToolCallForeachConcurrency,
+} from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
@@ -81,6 +85,12 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+        updateToolCallForeachConcurrency(toolCallForeachOptions, {
+          requireToolApproval: rest.requireToolApproval,
+          tools: (_internal?.stepTools as Tools | undefined) ?? rest.tools,
+          toolCalls: typedInputData.output.toolCalls,
+          configuredConcurrency: configuredToolCallConcurrency,
+        });
         return typedInputData.output.toolCalls || [];
       },
       { id: 'map-tool-calls' },

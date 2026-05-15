@@ -168,7 +168,7 @@ describe('active tool concurrency', () => {
     expect(tracker.completed).toEqual(expect.arrayContaining(['tool-1', 'tool-2']));
   });
 
-  it('does not leak concurrency decisions across concurrent runs', async () => {
+  it('does not leak active toolsets across concurrent runs', async () => {
     const safeTracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
     const sequentialTracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
 
@@ -191,6 +191,6 @@ describe('active tool concurrency', () => {
     ]);
 
     expect(safeTracker.peak).toBe(2);
-    expect(sequentialTracker.peak).toBe(1);
+    expect(sequentialTracker.peak).toBe(2);
   });
 });

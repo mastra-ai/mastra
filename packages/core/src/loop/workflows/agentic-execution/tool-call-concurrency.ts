@@ -1,4 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { getInternalToolExecutionHints, resolveInternalExecutionHint } from '../../../tools/internal-execution-hints';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 
 export type ToolCallForeachOptions = {
   concurrency: number;
@@ -39,24 +41,87 @@ export function effectiveToolSetRequiresSequentialExecution({
   });
 }
 
+type ToolCallLike = {
+  toolName: string;
+  args?: unknown;
+};
+
+function findToolForCall(tools: ToolSet | undefined, toolName: string) {
+  return (
+    tools?.[toolName] ||
+    findProviderToolByName(tools, toolName) ||
+    Object.values(tools || {})?.find((tool: any) => `id` in tool && tool.id === toolName)
+  );
+}
+
+function toolCallRequiresSequentialExecution({
+  requireToolApproval,
+  tool,
+  args,
+}: {
+  requireToolApproval?: boolean;
+  tool: unknown;
+  args: unknown;
+}): boolean {
+  const maybeTool = (tool ?? {}) as { hasSuspendSchema?: unknown; requireApproval?: unknown };
+  const internalExecutionHints = getInternalToolExecutionHints(tool);
+  const bypassGlobalToolApproval =
+    resolveInternalExecutionHint(internalExecutionHints?.bypassGlobalToolApproval, args) &&
+    !maybeTool.requireApproval &&
+    !maybeTool.hasSuspendSchema;
+  const safeForConcurrentExecution =
+    resolveInternalExecutionHint(internalExecutionHints?.safeForConcurrentExecution, args) && bypassGlobalToolApproval;
+
+  return (
+    !safeForConcurrentExecution &&
+    Boolean(requireToolApproval || maybeTool.requireApproval || maybeTool.hasSuspendSchema)
+  );
+}
+
+export function effectiveToolCallsRequireSequentialExecution({
+  requireToolApproval,
+  tools,
+  toolCalls,
+}: {
+  requireToolApproval?: boolean;
+  tools?: ToolSet;
+  toolCalls: readonly ToolCallLike[];
+}): boolean {
+  return toolCalls.some(toolCall =>
+    toolCallRequiresSequentialExecution({
+      requireToolApproval,
+      tool: findToolForCall(tools, toolCall.toolName),
+      args: toolCall.args,
+    }),
+  );
+}
+
 export function resolveToolCallConcurrency({
   requireToolApproval,
   tools,
   activeTools,
+  toolCalls,
   configuredConcurrency,
 }: {
   requireToolApproval?: boolean;
   tools?: ToolSet;
   activeTools?: readonly string[];
+  toolCalls?: readonly ToolCallLike[];
   configuredConcurrency: number;
 }): number {
-  return effectiveToolSetRequiresSequentialExecution({
-    requireToolApproval,
-    tools,
-    activeTools,
-  })
-    ? 1
-    : configuredConcurrency;
+  const requiresSequentialExecution = toolCalls
+    ? effectiveToolCallsRequireSequentialExecution({
+        requireToolApproval,
+        tools,
+        toolCalls,
+      })
+    : effectiveToolSetRequiresSequentialExecution({
+        requireToolApproval,
+        tools,
+        activeTools,
+      });
+
+  return requiresSequentialExecution ? 1 : configuredConcurrency;
 }
 
 export function updateToolCallForeachConcurrency(

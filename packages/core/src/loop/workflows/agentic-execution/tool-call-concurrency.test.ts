@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { setInternalToolExecutionHints } from '../../../tools/internal-execution-hints';
 import {
+  effectiveToolCallsRequireSequentialExecution,
   effectiveToolSetRequiresSequentialExecution,
   resolveConfiguredToolCallConcurrency,
   resolveToolCallConcurrency,
@@ -7,6 +9,20 @@ import {
 
 describe('tool call concurrency resolution', () => {
   const safeTool = {};
+  const approvalBypassSafeTool = setInternalToolExecutionHints(
+    {},
+    {
+      bypassGlobalToolApproval: true,
+      safeForConcurrentExecution: true,
+    },
+  );
+  const conditionalApprovalBypassSafeTool = setInternalToolExecutionHints(
+    {},
+    {
+      bypassGlobalToolApproval: args => !(args as { forked?: boolean }).forked,
+      safeForConcurrentExecution: args => !(args as { forked?: boolean }).forked,
+    },
+  );
   const approvalTool = { requireApproval: true };
   const suspendTool = { hasSuspendSchema: true };
 
@@ -80,6 +96,59 @@ describe('tool call concurrency resolution', () => {
         configuredConcurrency: 4,
       }),
     ).toBe(4);
+  });
+
+  it('keeps configured concurrency in approval mode when actual tool calls are approval-bypass safe', () => {
+    expect(
+      resolveToolCallConcurrency({
+        requireToolApproval: true,
+        tools: {
+          safe: approvalBypassSafeTool,
+          approval: approvalTool,
+        },
+        toolCalls: [{ toolName: 'safe', args: {} }],
+        configuredConcurrency: 4,
+      }),
+    ).toBe(4);
+  });
+
+  it('uses call args when resolving conditional approval-bypass safe tools', () => {
+    expect(
+      effectiveToolCallsRequireSequentialExecution({
+        requireToolApproval: true,
+        tools: {
+          subagent: conditionalApprovalBypassSafeTool,
+        },
+        toolCalls: [{ toolName: 'subagent', args: { forked: false } }],
+      }),
+    ).toBe(false);
+
+    expect(
+      effectiveToolCallsRequireSequentialExecution({
+        requireToolApproval: true,
+        tools: {
+          subagent: conditionalApprovalBypassSafeTool,
+        },
+        toolCalls: [{ toolName: 'subagent', args: { forked: true } }],
+      }),
+    ).toBe(true);
+  });
+
+  it('forces sequential execution in approval mode when any actual tool call is unsafe', () => {
+    expect(
+      resolveToolCallConcurrency({
+        requireToolApproval: true,
+        tools: {
+          safe: approvalBypassSafeTool,
+          approval: approvalTool,
+        },
+        toolCalls: [
+          { toolName: 'safe', args: {} },
+          { toolName: 'approval', args: {} },
+        ],
+        configuredConcurrency: 4,
+      }),
+    ).toBe(1);
   });
 
   it('honors configured concurrency of one for safe tools', () => {

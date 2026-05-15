@@ -10,6 +10,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
+import { getInternalToolExecutionHints, resolveInternalExecutionHint } from '../../../tools/internal-execution-hints';
 import {
   getTransformedToolPayload,
   hasTransformedToolPayload,
@@ -58,6 +59,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   agentId,
   mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  let unsafeToolCallQueue = Promise.resolve();
+
+  const runUnsafeToolCall = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const previous = unsafeToolCallQueue;
+    let release: () => void = () => {};
+    unsafeToolCallQueue = new Promise<void>(resolve => {
+      release = resolve;
+    });
+
+    await previous.catch(() => undefined);
+
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  };
+
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -347,8 +366,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       if (!tool.execute) {
         return inputData;
       }
+      const executeTool = tool.execute;
 
-      try {
+      const internalExecutionHints = getInternalToolExecutionHints(tool);
+      const globalRequireToolApproval = !!requestContext.get('__mastra_requireToolApproval');
+      const bypassGlobalToolApproval =
+        resolveInternalExecutionHint(internalExecutionHints?.bypassGlobalToolApproval, inputData.args) &&
+        !(tool as any).requireApproval &&
+        !(tool as any).hasSuspendSchema;
+      const safeForConcurrentExecution =
+        resolveInternalExecutionHint(internalExecutionHints?.safeForConcurrentExecution, inputData.args) &&
+        bypassGlobalToolApproval;
+      const shouldSerializeToolCall =
+        !safeForConcurrentExecution &&
+        (globalRequireToolApproval || !!(tool as any).requireApproval || !!(tool as any).hasSuspendSchema);
+
+      const executeToolCall = async () => {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
 
         let resumeDataFromArgs: any = undefined;
@@ -369,7 +402,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args and context
-        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
+        let toolRequiresApproval =
+          (bypassGlobalToolApproval ? false : requireToolApproval) || (tool as any).requireApproval;
         if ((tool as any).needsApprovalFn) {
           // Evaluate the function with parsed args and available context
           try {
@@ -1102,7 +1136,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        const rawResult = await tool.execute(args, toolOptions);
+        const rawResult = await executeTool(args, toolOptions);
         const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
@@ -1120,6 +1154,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         return { result, ...inputData };
+      };
+
+      const runToolCall = () => (shouldSerializeToolCall ? runUnsafeToolCall(executeToolCall) : executeToolCall());
+
+      try {
+        return await runToolCall();
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {
