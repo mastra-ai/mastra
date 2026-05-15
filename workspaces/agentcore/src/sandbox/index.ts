@@ -19,7 +19,6 @@ import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
   ExecuteCommandOptions,
-  InstructionsOption,
   MastraSandboxOptions,
   ProviderStatus,
   SandboxInfo,
@@ -33,6 +32,11 @@ const DEFAULT_ACCEPT = 'application/vnd.amazon.eventstream';
 const DEFAULT_CONTENT_TYPE = 'application/json';
 
 type AgentCoreRuntimeClient = Pick<BedrockAgentCoreClient, 'send' | 'destroy'>;
+type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
+type AgentCoreStreamException = {
+  name?: string;
+  message?: string;
+};
 
 type AgentCoreStreamEvent = {
   chunk?: {
@@ -46,6 +50,14 @@ type AgentCoreStreamEvent = {
       status?: string;
     };
   };
+  accessDeniedException?: AgentCoreStreamException;
+  internalServerException?: AgentCoreStreamException;
+  resourceNotFoundException?: AgentCoreStreamException;
+  serviceQuotaExceededException?: AgentCoreStreamException;
+  throttlingException?: AgentCoreStreamException;
+  validationException?: AgentCoreStreamException;
+  runtimeClientError?: AgentCoreStreamException;
+  $unknown?: [string, unknown];
 };
 
 class CommandOutputAccumulator extends ProcessHandle {
@@ -117,6 +129,39 @@ function toAgentCoreTimeoutSeconds(timeoutMs: number): number {
 
 function generateSessionId(): string {
   return randomUUID();
+}
+
+function getStreamException(event: AgentCoreStreamEvent): { key: string; value: unknown } | undefined {
+  const exceptionKeys = [
+    'accessDeniedException',
+    'internalServerException',
+    'resourceNotFoundException',
+    'serviceQuotaExceededException',
+    'throttlingException',
+    'validationException',
+    'runtimeClientError',
+  ] as const;
+
+  for (const key of exceptionKeys) {
+    const value = event[key];
+    if (value) return { key, value };
+  }
+
+  if (event.$unknown) {
+    return { key: event.$unknown[0], value: event.$unknown[1] };
+  }
+
+  return undefined;
+}
+
+function formatStreamException(key: string, value: unknown): string {
+  if (value && typeof value === 'object') {
+    const exception = value as AgentCoreStreamException;
+    const name = exception.name ?? key;
+    return exception.message ? `${name}: ${exception.message}` : name;
+  }
+
+  return `${key}: ${String(value)}`;
 }
 
 // =============================================================================
@@ -281,7 +326,13 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
     );
 
     for await (const event of response.stream ?? []) {
-      const chunk = (event as AgentCoreStreamEvent).chunk;
+      const streamEvent = event as AgentCoreStreamEvent;
+      const streamException = getStreamException(streamEvent);
+      if (streamException) {
+        throw new Error(`${LOG_PREFIX} ${formatStreamException(streamException.key, streamException.value)}`);
+      }
+
+      const chunk = streamEvent.chunk;
       if (!chunk) continue;
 
       if (chunk.contentDelta?.stdout) {

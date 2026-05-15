@@ -199,6 +199,28 @@ describe('AgentCoreRuntimeSandbox', () => {
     expect(mockSend.mock.calls[0]?.[1]).toEqual({ abortSignal: abortController.signal });
   });
 
+  it('surfaces AgentCore event stream errors', async () => {
+    mockSend.mockResolvedValueOnce({
+      stream: (async function* () {
+        yield {
+          validationException: {
+            name: 'ValidationException',
+            message: 'Command payload is invalid',
+          },
+        };
+      })(),
+    });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+      runtimeSessionId: '12345678-1234-1234-1234-123456789012',
+    });
+
+    await expect(sandbox.executeCommand('echo ok')).rejects.toThrow(
+      '[AgentCoreRuntimeSandbox] ValidationException: Command payload is invalid',
+    );
+  });
+
   it('rejects invalid environment variable names', async () => {
     const sandbox = new AgentCoreRuntimeSandbox({
       agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
