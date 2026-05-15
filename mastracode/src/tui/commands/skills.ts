@@ -1,22 +1,6 @@
-import type { Skill } from '@mastra/core/workspace';
+import { formatSkillActivation } from '@mastra/core/workspace';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import type { SlashCommandContext } from './types.js';
-
-function formatSkillForActivation(skill: Skill): string {
-  const parts = [skill.instructions];
-
-  if (skill.references?.length) {
-    parts.push(`\n\n## References\n${skill.references.map(reference => `- references/${reference}`).join('\n')}`);
-  }
-  if (skill.scripts?.length) {
-    parts.push(`\n\n## Scripts\n${skill.scripts.map(script => `- scripts/${script}`).join('\n')}`);
-  }
-  if (skill.assets?.length) {
-    parts.push(`\n\n## Assets\n${skill.assets.map(asset => `- assets/${asset}`).join('\n')}`);
-  }
-
-  return parts.join('');
-}
 
 async function resolveWorkspace(ctx: SlashCommandContext) {
   let workspace = ctx.getResolvedWorkspace();
@@ -83,7 +67,7 @@ export async function handleSkillsCommand(ctx: SlashCommandContext): Promise<voi
 export async function handleSkillCommand(ctx: SlashCommandContext, skillName: string, args: string[]): Promise<void> {
   const normalizedSkillName = skillName.trim();
   if (!normalizedSkillName) {
-    ctx.showError('Usage: /skill:<name>');
+    ctx.showError('Usage: /skill/<name>');
     return;
   }
 
@@ -110,13 +94,13 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
     }
 
     const trimmedArgs = args.join(' ').trim();
-    const content = `${formatSkillForActivation(skill)}${trimmedArgs ? `\n\nARGUMENTS: ${trimmedArgs}` : ''}`.trim();
+    const content = `${formatSkillActivation(skill)}${trimmedArgs ? `\n\nARGUMENTS: ${trimmedArgs}` : ''}`.trim();
     if (!content) {
-      ctx.showInfo(`Activated /skill:${skill.name} (no instructions)`);
+      ctx.showInfo(`Activated /skill/${skill.name} (no instructions)`);
       return;
     }
 
-    const component = new SlashCommandComponent(`skill:${skill.name}`, content);
+    const component = new SlashCommandComponent(`skill/${skill.name}`, content);
     ctx.state.allSlashCommandComponents.push(component);
     ctx.state.chatContainer.addChild(component);
     ctx.state.ui.requestRender();
@@ -131,7 +115,7 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
     });
   } catch (error) {
     ctx.showError(
-      `Error executing /skill:${normalizedSkillName}: ${error instanceof Error ? error.message : String(error)}`,
+      `Error executing /skill/${normalizedSkillName}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

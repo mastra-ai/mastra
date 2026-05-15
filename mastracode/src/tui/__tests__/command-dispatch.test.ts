@@ -125,11 +125,11 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
   });
 
-  it('routes /skill:name to handleSkillCommand', async () => {
+  it('routes /skill/name to handleSkillCommand', async () => {
     const state = { customSlashCommands: [] } as any;
     const ctx = {} as any;
 
-    const handled = await dispatchSlashCommand('/skill:github-triage focus tests', state, () => ctx);
+    const handled = await dispatchSlashCommand('/skill/github-triage focus tests', state, () => ctx);
 
     expect(handled).toBe(true);
     expect(mocks.handleSkillCommand).toHaveBeenCalledTimes(1);

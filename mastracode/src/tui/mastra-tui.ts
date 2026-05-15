@@ -59,6 +59,7 @@ import {
   buildLayout,
   setupAutocomplete,
   loadCustomSlashCommands,
+  refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToHarness,
   updateTerminalTitle,
@@ -457,8 +458,11 @@ export class MastraTUI {
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
-    // Setup autocomplete
+    // Setup autocomplete with whatever skills loaded synchronously. The
+    // workspace may not be resolved yet on cold start; once it is, refresh
+    // the provider so `/skill/<name>` entries appear without restart.
     setupAutocomplete(this.state);
+    void refreshSkillsAutocomplete(this.state);
 
     // Build UI layout
     buildLayout(this.state, () => this.refreshModelAuthStatus());

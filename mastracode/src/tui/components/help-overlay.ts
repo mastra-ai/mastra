@@ -29,7 +29,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/name', description: 'Rename current thread' },
     { key: '/resource', description: 'Show/switch resource ID' },
     { key: '/skills', description: 'List available skills' },
-    { key: '/skill:<name>', description: 'Activate a skill' },
+    { key: '/skill/<name>', description: 'Activate a skill' },
     { key: '/models', description: 'Switch model pack' },
     { key: '/custom-providers', description: 'Manage custom providers and models' },
     { key: '/subagents', description: 'Configure subagent models' },

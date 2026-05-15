@@ -106,8 +106,8 @@ export async function dispatchSlashCommand(
     return true;
   }
 
-  if (command.startsWith('skill:')) {
-    await handleSkillCommand(buildCtx(), command.slice('skill:'.length), args);
+  if (command.startsWith('skill/')) {
+    await handleSkillCommand(buildCtx(), command.slice('skill/'.length), args);
     return true;
   }
 

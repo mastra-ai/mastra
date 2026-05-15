@@ -286,7 +286,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
-    { name: 'skill:', description: 'Activate a skill by name' },
+    { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
@@ -354,7 +354,7 @@ export function setupAutocomplete(state: TUIState): void {
 
   for (const skill of state.skillCommands) {
     slashCommands.push({
-      name: `skill:${skill.name}`,
+      name: `skill/${skill.name}`,
       description: skill.description ? `Skill: ${skill.description}` : `Skill: ${skill.name}`,
     });
   }
@@ -399,8 +399,20 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
     state.customSlashCommands = [];
   }
 
+  await loadSkillCommands(state);
+}
+
+/**
+ * Populate `state.skillCommands` and `state.goalSkillCommands` from the
+ * workspace. Safe to call before the workspace is resolved (returns empty
+ * lists) and again later once it is (resolves and refreshes).
+ */
+export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
-    const workspace = state.harness.getWorkspace() ?? state.workspace;
+    let workspace = state.harness.getWorkspace() ?? state.workspace;
+    if (!workspace && state.harness.hasWorkspace()) {
+      workspace = await state.harness.resolveWorkspace();
+    }
     if (!workspace?.skills) {
       state.skillCommands = [];
       state.goalSkillCommands = [];
@@ -413,6 +425,16 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
     state.skillCommands = [];
     state.goalSkillCommands = [];
   }
+}
+
+/**
+ * Asynchronously refresh skills and rebuild the autocomplete provider.
+ * Called in the background after init so the initial autocomplete is
+ * available immediately and skill entries appear once they load.
+ */
+export async function refreshSkillsAutocomplete(state: TUIState): Promise<void> {
+  await loadSkillCommands(state);
+  setupAutocomplete(state);
 }
 
 // =============================================================================

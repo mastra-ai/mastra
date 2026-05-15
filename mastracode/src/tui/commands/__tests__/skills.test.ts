@@ -119,6 +119,6 @@ describe('handleSkillCommand', () => {
     await handleSkillCommand(ctx, '', []);
 
     expect(harness.sendMessage).not.toHaveBeenCalled();
-    expect(ctx.showError).toHaveBeenCalledWith('Usage: /skill:<name>');
+    expect(ctx.showError).toHaveBeenCalledWith('Usage: /skill/<name>');
   });
 });
