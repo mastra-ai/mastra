@@ -10,6 +10,7 @@ Added support for permission arrays in FGA checks and route configuration. When 
 - `FGARouteConfig.permission`
 - `FGARouteInfo.requiresPermission`
 - `FGADeniedError.permission`
+- `CheckFGAOptions.permission`
 
 Single-permission usage continues to work unchanged.
 
@@ -26,8 +27,3 @@ await fga.check({
   permission: ['agents:read', 'agents:execute'],
 });
 ```
-
-**Also in this release**
-
-- New `MASTRA_USER_KEY`, `MASTRA_USER_PERMISSIONS_KEY`, `MASTRA_USER_ROLES_KEY` constants for request-context lookups by downstream packages.
-- `getEffectivePermission()` now recognizes stored resource families (`stored-agents`, `stored-skills`, `stored-prompt-blocks`, `stored-mcp-clients`, `stored-scorers`, `stored-workspaces`) and `publish` / `activate` / `restore` action suffixes. Return type widened to `string | string[] | null` to support routes that map to multiple permissions.

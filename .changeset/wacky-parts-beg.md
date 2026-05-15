@@ -35,6 +35,28 @@ const res = await fetch('/api/auth/roles/admin/permissions', { credentials: 'inc
 
 **Namespaced request-context keys**
 
-`coreAuthMiddleware` now writes user state under namespaced keys (`mastra__user`, `mastra__userPermissions`, `mastra__userRoles`) instead of the previous bare keys (`user`, `userPermissions`, `userRoles`). This prevents collisions with caller-supplied request-context entries. Read these keys via the new `MASTRA_USER_KEY` / `MASTRA_USER_PERMISSIONS_KEY` / `MASTRA_USER_ROLES_KEY` constants exported from `@mastra/core`.
+`coreAuthMiddleware` now writes user state under namespaced keys (`mastra__user`, `mastra__userPermissions`, `mastra__userRoles`) instead of the previous bare keys (`user`, `userPermissions`, `userRoles`). This prevents collisions with caller-supplied request-context entries. Read these keys via the new `MASTRA_USER_KEY` / `MASTRA_USER_PERMISSIONS_KEY` / `MASTRA_USER_ROLES_KEY` constants exported from `@mastra/server/auth`.
 
-If you have custom middleware that reads `requestContext.get('user')` / `'userPermissions'` / `'userRoles'`, switch to the namespaced keys or the exported constants.
+If you have custom middleware that reads bare keys, switch to the namespaced constants:
+
+```ts
+// Before
+const user = requestContext.get('user');
+const permissions = requestContext.get('userPermissions') as string[] | undefined;
+const roles = requestContext.get('userRoles') as string[] | undefined;
+
+// After
+import {
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+} from '@mastra/server/auth';
+
+const user = requestContext.get(MASTRA_USER_KEY);
+const permissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
+const roles = requestContext.get(MASTRA_USER_ROLES_KEY) as string[] | undefined;
+```
+
+**Route permission derivation**
+
+`getEffectivePermission()` now recognizes stored resource families (`stored-agents`, `stored-skills`, `stored-prompt-blocks`, `stored-mcp-clients`, `stored-scorers`, `stored-workspaces`) and `publish` / `activate` / `restore` action suffixes on stored-resource routes. Return type widened to `string | string[] | null` to support routes that map to multiple permissions.

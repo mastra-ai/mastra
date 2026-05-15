@@ -11,7 +11,7 @@ export interface CheckFGAOptions {
   fgaProvider: IFGAProvider | undefined;
   user: any;
   resource: { type: string; id: string };
-  permission: MastraFGAPermissionInput;
+  permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   context?: FGACheckContext;
 }
 

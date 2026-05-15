@@ -117,11 +117,15 @@ export function deriveAction(method: string, path: string): string {
 
   // For POST requests, check if it's a publish, execute, or write operation.
   // Publish takes precedence over execute since these suffixes are distinct
-  // version-lifecycle operations on stored resources.
+  // version-lifecycle operations on stored resources. Restrict publish-suffix
+  // matching to /stored/* paths so unrelated routes that happen to end with
+  // /activate or /restore aren't accidentally classified as publish.
   if (upperMethod === 'POST') {
-    const isPublishOperation = PUBLISH_PATTERNS.some(pattern => path.endsWith(pattern));
-    if (isPublishOperation) {
-      return 'publish';
+    if (path.startsWith('/stored/')) {
+      const isPublishOperation = PUBLISH_PATTERNS.some(pattern => path.endsWith(pattern));
+      if (isPublishOperation) {
+        return 'publish';
+      }
     }
     const isExecuteOperation = EXECUTE_PATTERNS.some(pattern => path.includes(pattern));
     return isExecuteOperation ? 'execute' : 'write';

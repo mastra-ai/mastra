@@ -14,6 +14,10 @@ import {
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
+// Re-export request-context key constants so custom middleware can read namespaced
+// auth state without importing internal paths.
+export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
+
 /**
  * Check if a route is a registered custom route that requires authentication.
  * Returns true only if the route is explicitly registered with requiresAuth: true.
