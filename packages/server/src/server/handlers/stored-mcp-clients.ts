@@ -218,12 +218,16 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the MCP client with both metadata-level and config-level fields
       const updatedMCPClient = await mcpClientStore.update({
         id: storedMCPClientId,
         authorId,
-        metadata: scopeStoredResourceMetadata(metadata, scope),
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         servers,

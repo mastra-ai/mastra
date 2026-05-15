@@ -318,6 +318,10 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
@@ -325,7 +329,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const updatedAgent = await agentsStore.update({
         id: storedAgentId,
         authorId,
-        metadata: scopeStoredResourceMetadata(metadata, scope),
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         instructions,

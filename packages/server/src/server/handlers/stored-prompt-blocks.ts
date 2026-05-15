@@ -267,12 +267,16 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the prompt block with both metadata-level and config-level fields
       const updatedPromptBlock = await promptBlockStore.update({
         id: storedPromptBlockId,
         authorId,
-        metadata: scopeStoredResourceMetadata(metadata, scope),
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         content,

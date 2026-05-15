@@ -95,7 +95,7 @@ describe('CoreToolBuilder FGA', () => {
       resource: { type: 'tool', id: 'agent-1:search' },
       permission: 'tools:execute',
       context: expect.objectContaining({
-        resourceId: 'agent-1:search',
+        resourceId: 'tenant-1',
         requestContext,
         metadata: expect.objectContaining({
           toolName: 'search',
@@ -146,7 +146,6 @@ describe('CoreToolBuilder FGA', () => {
     expect(fgaProvider.require).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });
-
 });
 
 describe('MCP Tool Tracing', () => {

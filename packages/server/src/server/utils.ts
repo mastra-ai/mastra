@@ -63,7 +63,7 @@ export type StoredResourceLike = {
 };
 
 export async function getStoredResourceScope(
-  mastra: any,
+  mastra: Pick<Mastra, 'getServer'>,
   requestContext: RequestContext | undefined,
 ): Promise<StoredResourceScope | undefined> {
   const scopeConfig = mastra?.getServer?.()?.storedResources?.scope;
