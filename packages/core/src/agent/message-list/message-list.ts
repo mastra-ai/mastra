@@ -173,8 +173,9 @@ export class MessageList {
     return events;
   }
 
-  public addInterjectedSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
-    const createdAt = this.generateCreatedAt(options?.source ?? 'input', new Date());
+  public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
+    const source = options?.source ?? 'input';
+    const createdAt = this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
     const signalForTranscript = createSignal(
       signal.type === 'user-message'
@@ -198,7 +199,7 @@ export class MessageList {
           },
     );
 
-    this.add(signalForTranscript, options?.source ?? 'input');
+    this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
     return signalForTranscript;
   }
 
@@ -218,6 +219,11 @@ export class MessageList {
     }
 
     for (const message of messageArray) {
+      if (isCreatedAgentSignal(message) && messageSource === 'input') {
+        this.addSignal(message, { source: messageSource });
+        continue;
+      }
+
       const messageInput = isCreatedAgentSignal(message)
         ? message.toDBMessage(this.memoryInfo ?? undefined)
         : typeof message === `string`
@@ -1412,10 +1418,19 @@ export class MessageList {
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
     const signalMetadata =
       messageV2.role === 'signal'
-        ? (messageV2.content.metadata?.signal as { acceptedAt?: string } | undefined)
+        ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
         : undefined;
     if (messageSource === 'input' && messageV2.role === 'signal' && !signalMetadata?.acceptedAt) {
+      const acceptedAt = signalMetadata?.createdAt ?? messageV2.createdAt.toISOString();
       messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
+      messageV2.content.metadata = {
+        ...messageV2.content.metadata,
+        signal: {
+          ...signalMetadata,
+          createdAt: messageV2.createdAt.toISOString(),
+          acceptedAt,
+        },
+      };
     }
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);

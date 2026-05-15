@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSignal } from '../../signals';
+import { createSignal, mastraDBMessageToSignal } from '../../signals';
 import type { MastraDBMessage } from '../../types';
 import type { MessageListInput } from '../index';
 import { MessageList } from '../index';
@@ -441,7 +441,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       expect(generatedMessage?.createdAt.getTime()).toBe(latestTime.getTime() + 1);
     });
 
-    it('should add interjected signals after the current response while preserving acceptedAt', () => {
+    it('should add signals after the current response while preserving acceptedAt', () => {
       const responseTime = new Date('2024-01-01T10:00:00.000Z');
       const signalTime = new Date('2024-01-01T09:00:00.000Z');
       const list = new MessageList();
@@ -462,7 +462,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         'response',
       );
 
-      const signalForTranscript = list.addInterjectedSignal(signal);
+      const signalForTranscript = list.addSignal(signal);
 
       const storedSignal = list.get.all.db().at(-1)!;
       expect(signalForTranscript.createdAt.getTime()).toBeGreaterThan(responseTime.getTime());
@@ -474,7 +474,59 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       });
     });
 
-    it('should add interjected signals after the latest response part timestamp', () => {
+    it('should normalize regular input signals using transcript timestamps', () => {
+      const baseTime = Date.now() + 60_000;
+      const responseTime = new Date(baseTime);
+      const toolPartTime = baseTime + 5_000;
+      const signalTime = new Date(baseTime + 2_000);
+      const list = new MessageList();
+      const signal = createSignal({
+        id: 'regular-signal-after-tool-part',
+        type: 'user-message',
+        contents: 'Regular signal after tool output',
+        createdAt: signalTime,
+      });
+
+      list.add(
+        {
+          id: 'assistant-with-tool-part-before-regular-signal',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Before tool output' },
+              {
+                type: 'tool-invocation',
+                createdAt: toolPartTime,
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'gitStatus',
+                  args: {},
+                  result: '(no output)',
+                },
+              },
+            ],
+          },
+          createdAt: responseTime,
+        },
+        'response',
+      );
+      list.add(signal, 'input');
+
+      const storedSignal = list.get.all.db().at(-1)!;
+      const recalledSignal = mastraDBMessageToSignal(storedSignal);
+      expect(storedSignal.id).toBe(signal.id);
+      expect(storedSignal.createdAt.getTime()).toBe(toolPartTime + 1);
+      expect(recalledSignal.createdAt).toEqual(storedSignal.createdAt);
+      expect(recalledSignal.acceptedAt).toEqual(signalTime);
+      expect(storedSignal.content.metadata?.signal).toMatchObject({
+        createdAt: storedSignal.createdAt.toISOString(),
+        acceptedAt: signalTime.toISOString(),
+      });
+    });
+
+    it('should add signals after the latest response part timestamp', () => {
       const baseTime = Date.now() + 60_000;
       const responseTime = new Date(baseTime);
       const toolPartTime = baseTime + 5_000;
@@ -513,7 +565,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         'response',
       );
 
-      const signalForTranscript = list.addInterjectedSignal(signal);
+      const signalForTranscript = list.addSignal(signal);
 
       expect(signalForTranscript.createdAt.getTime()).toBe(toolPartTime + 1);
       expect(signalForTranscript.acceptedAt).toEqual(signalTime);

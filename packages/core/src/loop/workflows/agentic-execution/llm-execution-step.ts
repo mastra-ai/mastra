@@ -5,6 +5,7 @@ import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import { mastraDBMessageToSignal } from '../../../agent/signals';
 import type { CreatedAgentSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
@@ -691,7 +692,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
           for (const initialSignal of initialSignalEchoes) {
-            safeEnqueue(controller, initialSignal.toDataPart());
+            const signalMessage = messageList.get.all
+              .db()
+              .find(message => message.role === 'signal' && message.id === initialSignal.id);
+            safeEnqueue(
+              controller,
+              (signalMessage ? mastraDBMessageToSignal(signalMessage) : initialSignal).toDataPart(),
+            );
           }
 
           const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
@@ -699,8 +706,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             currentMessageId = _internal?.generateId?.() ?? generateId();
           }
           for (const pendingSignal of pendingSignals) {
-            messageList.add(pendingSignal, 'input');
-            safeEnqueue(controller, pendingSignal.toDataPart());
+            const signalForTranscript = messageList.addSignal(pendingSignal);
+            safeEnqueue(controller, signalForTranscript.toDataPart());
           }
 
           const currentStep: {
@@ -1241,7 +1248,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageList.markResponseMessageBoundary(currentStep.messageId);
               outputStream.messageId = rotateResponseMessageId();
               for (const signal of interjectedSignals) {
-                const signalForTranscript = messageList.addInterjectedSignal(signal);
+                const signalForTranscript = messageList.addSignal(signal);
                 safeEnqueue(controller, signalForTranscript.toDataPart());
               }
               runState.setState({

@@ -39,20 +39,28 @@ function nextTick() {
 }
 
 async function readNextRun(iterator: AsyncIterator<any>) {
+  const nextRun = await readNextRunWithParts(iterator);
+  if (nextRun.done) return nextRun;
+  return { value: { runId: nextRun.value.runId, text: nextRun.value.text, part: nextRun.value.part }, done: false };
+}
+
+async function readNextRunWithParts(iterator: AsyncIterator<any>) {
   let runId: string | undefined;
   let text = '';
+  const parts: any[] = [];
 
   while (true) {
     const next = await iterator.next();
     if (next.done) return next;
 
     const part = next.value;
+    parts.push(part);
     runId ??= part.runId;
     if (part.type === 'text-delta') {
       text += part.payload.text;
     }
     if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') {
-      return { value: { runId, text, part }, done: false };
+      return { value: { runId, text, part, parts }, done: false };
     }
   }
 }
@@ -254,7 +262,7 @@ describe('Agent signals', () => {
       threadId: 'idle-thread',
       resourceId: 'idle-user',
     });
-    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
 
     const signalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Hello from signal' },
@@ -268,7 +276,15 @@ describe('Agent signals', () => {
     const subscribedRun = await nextRun;
     expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
     expect(signalResult.signal.id).toBeDefined();
+    expect(signalResult.signal.acceptedAt).toBeInstanceOf(Date);
     expect(subscribedRun.value.text).toBe('signal response');
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-user-message');
+    expect(signalPart?.data).toMatchObject({
+      id: signalResult.signal.id,
+      contents: 'Hello from signal',
+      acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
+    });
+    expect(signalPart?.data.createdAt).toBeDefined();
 
     subscription.unsubscribe();
   });
@@ -624,18 +640,18 @@ describe('Agent signals', () => {
     const secondRecalledSignal = mastraDBMessageToSignal(secondSignal);
     expect(firstRecalledSignal.createdAt).toEqual(firstSignal.createdAt);
     expect(secondRecalledSignal.createdAt).toEqual(secondSignal.createdAt);
-    expect(firstRecalledSignal.acceptedAt).toEqual(firstSignalResult.signal.createdAt);
-    expect(secondRecalledSignal.acceptedAt).toEqual(secondSignalResult.signal.createdAt);
+    expect(firstRecalledSignal.acceptedAt).toEqual(firstSignalResult.signal.acceptedAt);
+    expect(secondRecalledSignal.acceptedAt).toEqual(secondSignalResult.signal.acceptedAt);
 
     const firstSignalMetadata = firstSignal.content.metadata?.signal as { createdAt?: string; acceptedAt?: string };
     const secondSignalMetadata = secondSignal.content.metadata?.signal as { createdAt?: string; acceptedAt?: string };
     expect(firstSignalMetadata).toMatchObject({
       createdAt: firstSignal.createdAt.toISOString(),
-      acceptedAt: firstSignalResult.signal.createdAt.toISOString(),
+      acceptedAt: firstSignalResult.signal.acceptedAt?.toISOString(),
     });
     expect(secondSignalMetadata).toMatchObject({
       createdAt: secondSignal.createdAt.toISOString(),
-      acceptedAt: secondSignalResult.signal.createdAt.toISOString(),
+      acceptedAt: secondSignalResult.signal.acceptedAt?.toISOString(),
     });
     expect(firstAssistant.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
     expect(secondAssistant.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
