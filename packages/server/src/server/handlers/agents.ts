@@ -63,6 +63,7 @@ import type { Context } from '../types';
 
 import { toSlug } from '../utils';
 
+import { matchesAuthorFilter, resolveAuthorFilter } from './authorship';
 import { handleError } from './error';
 import {
   sanitizeBody,
@@ -1010,8 +1011,16 @@ export const LIST_AGENTS_ROUTE = createRoute({
         }
 
         if (storedAgentsResult?.agents) {
+          // Hide other authors' private stored agents from the picker. Mirrors
+          // `/stored-agents` so the agent picker can't surface records that
+          // `/stored-agents/:id` would 404 on.
+          const authorFilter = requestContext
+            ? resolveAuthorFilter({ requestContext, resource: 'stored-agents' })
+            : { kind: 'unrestricted' as const };
+
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            if (!matchesAuthorFilter(storedAgentConfig, authorFilter)) continue;
             try {
               const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
