@@ -22,6 +22,7 @@ export interface AuthResult {
 export type AuthProviderType =
   | 'simple'
   | 'better-auth'
+  | 'clerk'
   | 'workos'
   | 'cloud'
   | 'composite'
