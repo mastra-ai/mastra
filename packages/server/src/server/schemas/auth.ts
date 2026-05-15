@@ -132,3 +132,19 @@ export const credentialsResponseSchema = z.object({
   user: authenticatedUserSchema,
   token: z.string().optional(),
 });
+
+// ============================================================================
+// User Listing Schemas
+// ============================================================================
+
+export const listUsersQuerySchema = z.object({
+  search: z.string().optional(),
+  limit: z.coerce.number().min(1).max(100).optional(),
+  offset: z.coerce.number().min(0).optional(),
+  role: z.string().optional(),
+});
+
+export const listUsersResponseSchema = z.object({
+  users: z.array(authenticatedUserSchema),
+  total: z.number(),
+});

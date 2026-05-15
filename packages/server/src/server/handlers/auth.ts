@@ -13,6 +13,7 @@ import type {
   ISessionProvider,
   ISSOProvider,
   ICredentialsProvider,
+  IUserListing,
   SSOCallbackResult,
 } from '@mastra/core/auth';
 import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
@@ -28,8 +29,9 @@ import {
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
   refreshResponseSchema,
+  listUsersQuerySchema,
 } from '../schemas/auth';
-import { createPublicRoute } from '../server-adapter/routes/route-builder';
+import { createPublicRoute, createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 type BuildCapabilitiesFn = (
@@ -683,6 +685,98 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// GET /auth/team - List team members (from studioAuth)
+// ============================================================================
+
+export const GET_TEAM_MEMBERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/team',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  queryParamSchema: listUsersQuerySchema,
+  summary: 'List team members',
+  description: 'Lists internal team members from the studio auth provider. Requires team:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, search, limit, offset, role } = ctx as any;
+
+    try {
+      // Get studio auth provider
+      const studioConfig = mastra.getStudio?.();
+      const auth = studioConfig?.auth;
+
+      if (!auth || !implementsInterface<IUserListing<EEUser>>(auth, 'listUsers')) {
+        throw new HTTPException(404, { message: 'Team member listing not available' });
+      }
+
+      const result = await auth.listUsers({ search, limit, offset, role });
+
+      return {
+        users: result.users.map((user: EEUser) => ({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+        })),
+        total: result.total,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to list team members', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
+      throw new HTTPException(500, { message: 'Failed to list team members' });
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/users - List customers (from server auth)
+// ============================================================================
+
+export const GET_USERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/users',
+  responseType: 'json',
+  requiresPermission: 'users:read',
+  queryParamSchema: listUsersQuerySchema,
+  summary: 'List users',
+  description: 'Lists external users/customers from the server auth provider. Requires users:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, search, limit, offset, role } = ctx as any;
+
+    try {
+      // Get server auth provider
+      const serverConfig = mastra.getServer?.();
+      const auth = serverConfig?.auth;
+
+      if (!auth || !implementsInterface<IUserListing<EEUser>>(auth, 'listUsers')) {
+        throw new HTTPException(404, { message: 'User listing not available' });
+      }
+
+      const result = await auth.listUsers({ search, limit, offset, role });
+
+      return {
+        users: result.users.map((user: EEUser) => ({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+        })),
+        total: result.total,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to list users', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
+      throw new HTTPException(500, { message: 'Failed to list users' });
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -695,4 +789,6 @@ export const AUTH_ROUTES = [
   POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
+  GET_TEAM_MEMBERS_ROUTE,
+  GET_USERS_ROUTE,
 ] as const;
