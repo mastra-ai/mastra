@@ -19,9 +19,9 @@ import {
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
+import type { ServerRoute } from './routes';
 import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
-import type { ServerRoute } from './routes';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';

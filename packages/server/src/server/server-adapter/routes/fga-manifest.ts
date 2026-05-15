@@ -1,8 +1,8 @@
 import type { FGARouteConfig, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 
 import { MASTRA_RESOURCE_ID_KEY } from '../../constants';
-import type { ServerRoute } from './index';
 import { getEffectivePermission } from './permissions';
+import type { ServerRoute } from './index';
 
 function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
   return route.requiresAuth !== false;
