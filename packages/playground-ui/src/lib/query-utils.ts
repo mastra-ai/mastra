@@ -69,8 +69,7 @@ export function is403ForbiddenError(error: unknown): boolean {
  *
  * The server's `handleError` strips the original MastraError's `code`/`id` before serializing,
  * so we can't match on the ID `OBSERVABILITY_STORAGE_LIST_BRANCHES_NOT_IMPLEMENTED` directly —
- * we match on the message text from `core/.../observability/base.ts` instead. Includes the
- * status check (500) to reduce false positives if the same phrase ever leaks elsewhere.
+ * we match on the message text from `core/.../observability/base.ts` instead.
  */
 export function isBranchesNotSupportedError(error: unknown): boolean {
   if (!error || typeof error !== 'object' || !('message' in error)) return false;
