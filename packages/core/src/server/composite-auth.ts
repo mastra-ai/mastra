@@ -14,15 +14,25 @@ type PrimitiveAuthUser = string | number | boolean | bigint | symbol | null | un
 
 // Type guards for interface detection
 function isSSOProvider(p: unknown): p is ISSOProvider {
-  return p !== null && typeof p === 'object' && 'getLoginUrl' in p && 'handleCallback' in p;
+  return (
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as any).getLoginUrl === 'function' &&
+    typeof (p as any).handleCallback === 'function'
+  );
 }
 
 function isSessionProvider(p: unknown): p is ISessionProvider {
-  return p !== null && typeof p === 'object' && 'validateSession' in p && 'createSession' in p;
+  return (
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as any).validateSession === 'function' &&
+    typeof (p as any).createSession === 'function'
+  );
 }
 
 function isUserProvider(p: unknown): p is IUserProvider {
-  return p !== null && typeof p === 'object' && 'getCurrentUser' in p;
+  return p !== null && typeof p === 'object' && typeof (p as any).getCurrentUser === 'function';
 }
 
 function isObjectLike(value: unknown): value is object {
