@@ -1,5 +1,8 @@
 ---
 '@mastra/core': minor
+'@mastra/server': minor
+'@mastra/client-js': minor
+'@mastra/react': minor
 ---
 
 Narrows `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`.
