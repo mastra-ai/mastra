@@ -564,8 +564,29 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'observability/config',
+          label: 'Config',
+        },
+        {
+          type: 'doc',
+          id: 'observability/storage',
+          label: 'Storage',
+        },
+        {
+          type: 'doc',
           id: 'observability/logging',
           label: 'Logging',
+        },
+        {
+          type: 'category',
+          label: 'Metrics',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/overview',
+              label: 'Overview',
+            },
+          ],
         },
         {
           type: 'category',
@@ -575,6 +596,17 @@ const sidebars = {
               type: 'doc',
               id: 'observability/tracing/overview',
               key: 'observability.tracing.overview',
+              label: 'Overview',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Integrations',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/integrations/overview',
               label: 'Overview',
             },
             {
@@ -669,17 +701,6 @@ const sidebars = {
                   label: 'SensitiveDataFilter',
                 },
               ],
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Metrics',
-          items: [
-            {
-              type: 'doc',
-              id: 'observability/metrics/overview',
-              label: 'Overview',
             },
           ],
         },

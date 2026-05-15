@@ -1,111 +1,62 @@
 ---
 title: "Tracing | Observability"
-description: "Set up Tracing for Mastra applications"
+description: "Record and inspect hierarchical execution for agents, workflows, tools, and model calls."
 packages:
   - "@mastra/observability"
 ---
 
 # Tracing
 
-Tracing provides specialized monitoring and debugging for the AI-related operations in your application. When enabled, Mastra automatically creates traces for agent runs, LLM generations, tool calls, and workflow steps with AI-specific context and metadata.
+Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
-Unlike traditional application tracing, Tracing focuses specifically on understanding your AI pipeline — capturing token usage, model parameters, tool execution details, and conversation flows. This makes it easier to debug issues, optimize performance, and understand how your AI systems behave in production.
+Unlike the shared setup pages under observability, this page focuses on trace-specific concepts: span hierarchy, sampling, metadata, filtering, trace IDs, and external trace context.
 
-## How it works
+## When to use tracing
 
-Traces are created by:
+- Debug unexpected agent or workflow behavior by inspecting the full execution path.
+- Follow model calls, tool calls, and workflow steps inside a single request.
+- Attach trace-specific metadata and tags for filtering and investigation.
+- Connect Mastra traces to an existing distributed tracing system.
 
-- **Configure exporters** → send trace data to observability platforms
-- **Set sampling strategies** → control which traces are collected
-- **Run agents and workflows** → Mastra auto-instruments them with Tracing
+## Get started
 
-## Configuration
+Set up shared observability first:
 
-### Basic Config
+- [Configuration](/docs/observability/config): Base observability config, multiple configs, and serverless flushing
+- [Storage](/docs/observability/storage): Storage routing for traces, logs, and metrics
+- [Integrations overview](/docs/observability/integrations/overview): Exporters, bridges, and processors
 
-```ts title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { LibSQLStore } from '@mastra/libsql'
-import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
-} from '@mastra/observability'
+Tracing starts automatically once observability is configured and agents or workflows begin running.
 
-export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [
-          new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
-        ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
-        ],
-      },
-    },
-  }),
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db', // Storage is required for tracing
-  }),
-})
-```
+## Moved setup topics
 
-This configuration includes:
+<div id="configuration" />
 
-- **Service Name**: `"mastra"` - identifies your service in traces
-- **Sampling**: `"always"` by default (100% of traces)
-- **Exporters**:
-  - `MastraStorageExporter` - Persists observability events to Mastra Storage
-  - `MastraPlatformExporter` - Sends observability events to Mastra platform (requires `MASTRA_PLATFORM_ACCESS_TOKEN`)
-- **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
+Shared observability setup now lives on dedicated top-level pages:
 
-## Exporters
+<div id="basic-config" />
 
-Exporters determine where your trace data is sent and how it's stored. They integrate with your existing observability stack, support data residency requirements, and can be optimized for cost and performance. You can use multiple exporters simultaneously to send the same trace data to different destinations — for example, storing detailed traces locally for debugging while sending sampled data to a cloud provider for production monitoring.
+- [Basic config](/docs/observability/config#basic-config): Configure the base observability instance, exporters, processors, and logging behavior.
 
-### Internal Exporters
+<div id="multi-config-setup" />
 
-Mastra provides two built-in exporters:
+- [Multi-config setup](/docs/observability/config#multi-config-setup): Choose between multiple observability configs at runtime.
 
-- **[Mastra Storage](/docs/observability/tracing/exporters/mastra-storage)**: Persists observability events to Mastra Storage for viewing in Studio
-- **[Mastra platform](/docs/observability/tracing/exporters/mastra-platform)**: Sends observability events to Mastra platform for production monitoring and collaboration
+<div id="maintaining-studio-access" />
 
-### External Exporters
+- [Maintaining Studio access](/docs/observability/config#maintaining-studio-access): Keep local Studio or Mastra platform visibility when adding external exporters.
 
-In addition to the internal exporters, Mastra supports integration with popular observability platforms. These exporters allow you to leverage your existing monitoring infrastructure and take advantage of platform-specific features like alerting, dashboards, and correlation with other application metrics.
+<div id="exporters" />
 
-- **[Arize](/docs/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
-- **[Braintrust](/docs/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
-- **[Datadog](/docs/observability/tracing/exporters/datadog)** - Sends traces to Datadog APM via OTLP for full-stack observability with AI tracing
-- **[Laminar](/docs/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
-- **[Langfuse](/docs/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
-- **[LangSmith](/docs/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
-- **[PostHog](/docs/observability/tracing/exporters/posthog)** - Sends traces to PostHog for AI analytics and product insights
-- **[Sentry](/docs/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
-- **[OpenTelemetry](/docs/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
+- [Exporters](/docs/observability/integrations/overview#exporters): Send observability data to storage, Mastra platform, or external providers.
 
-## Bridges
+<div id="bridges" />
 
-Bridges provide bidirectional integration with external tracing systems. Unlike exporters that send trace data to external platforms, bridges create native spans in external systems and inherit context from them. This enables Mastra operations to participate in existing distributed traces.
+- [Bridges](/docs/observability/integrations/overview#bridges): Connect Mastra to an existing distributed tracing context.
 
-- **[OpenTelemetry Bridge](/docs/observability/tracing/bridges/otel)** - Integrate with existing OpenTelemetry infrastructure
+<div id="flushing-traces-in-serverless-environments" />
 
-### Bridges vs Exporters
-
-| Feature | Bridges | Exporters |
-| - | - | - |
-| Creates native spans in external systems | Yes | No |
-| Inherits context from external systems | Yes | No |
-| Sends data to backends | Via external SDK | Directly |
-| Use case | Existing distributed tracing | Standalone Mastra tracing |
-
-You can use both together — a bridge for context propagation and exporters to send traces to additional destinations.
+- [Serverless runtimes](/docs/observability/config#flushing-traces-in-serverless-environments): Flush exporters before a serverless runtime pauses or exits.
 
 ## Sampling strategies
 
@@ -182,148 +133,6 @@ export const mastra = new Mastra({
   }),
 })
 ```
-
-## Multi-config setup
-
-Complex applications often require different tracing configurations for different scenarios. You might want detailed traces with full sampling during development, sampled traces sent to external providers in production, and specialized configurations for specific features or customer segments. The `configSelector` function enables dynamic configuration selection at runtime, allowing you to route traces based on request context, environment variables, feature flags, or any custom logic.
-
-This approach is particularly valuable when:
-
-- Running A/B tests with different observability requirements
-- Providing enhanced debugging for specific customers or support cases
-- Gradually rolling out new tracing providers without affecting existing monitoring
-- Optimizing costs by using different sampling rates for different request types
-- Maintaining separate trace streams for compliance or data residency requirements
-
-:::info
-
-Note that only a single config can be used for a specific execution. But a single config can send data to multiple exporters simultaneously.
-
-:::
-
-### Dynamic Configuration Selection
-
-Use `configSelector` to choose the appropriate tracing configuration based on request context:
-
-```ts title="src/mastra/index.ts"
-export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      langfuse: {
-        serviceName: 'langfuse-service',
-        exporters: [langfuseExporter],
-      },
-      braintrust: {
-        serviceName: 'braintrust-service',
-        exporters: [braintrustExporter],
-      },
-      debug: {
-        serviceName: 'debug-service',
-        sampling: { type: 'always' },
-        exporters: [new MastraStorageExporter()],
-      },
-    },
-    configSelector: (context, availableTracers) => {
-      // Use debug config for support requests
-      if (context.requestContext?.get('supportMode')) {
-        return 'debug'
-      }
-
-      // Route specific customers to different providers
-      const customerId = context.requestContext?.get('customerId')
-      if (customerId && premiumCustomers.includes(customerId)) {
-        return 'braintrust'
-      }
-
-      // Route specific requests to langfuse
-      if (context.requestContext?.get('useExternalTracing')) {
-        return 'langfuse'
-      }
-
-      throw new Error('no config found')
-    },
-  }),
-})
-```
-
-### Environment-Based Configuration
-
-A common pattern is to select configurations based on deployment environment:
-
-```ts title="src/mastra/index.ts"
-export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      development: {
-        serviceName: 'my-service-dev',
-        sampling: { type: 'always' },
-        exporters: [new MastraStorageExporter()],
-      },
-      staging: {
-        serviceName: 'my-service-staging',
-        sampling: { type: 'ratio', probability: 0.5 },
-        exporters: [langfuseExporter],
-      },
-      production: {
-        serviceName: 'my-service-prod',
-        sampling: { type: 'ratio', probability: 0.01 },
-        exporters: [mastraObserveExporter, langfuseExporter],
-      },
-    },
-    configSelector: (context, availableTracers) => {
-      const env = process.env.NODE_ENV || 'development'
-      return env
-    },
-  }),
-})
-```
-
-### Common Configuration Patterns & Troubleshooting
-
-#### Maintaining Studio access
-
-When adding external exporters, include `MastraStorageExporter` and `MastraPlatformExporter` to maintain access to Studio:
-
-```ts title="src/mastra/index.ts"
-import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
-} from '@mastra/observability'
-import { ArizeExporter } from '@mastra/arize'
-
-export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      production: {
-        serviceName: 'my-service',
-        exporters: [
-          new ArizeExporter({
-            endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
-            apiKey: process.env.PHOENIX_API_KEY,
-          }),
-          new MastraStorageExporter(), // Keep Studio access
-          new MastraPlatformExporter(), // Keep Cloud access
-        ],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
-})
-```
-
-This configuration sends traces to all three destinations simultaneously:
-
-- **Arize Phoenix/AX** for external observability
-- **MastraStorageExporter** for Studio
-- **MastraPlatformExporter** for hosted Studio dashboard
-
-:::info
-
-Remember: A single trace can be sent to multiple exporters. You don't need separate configs for each exporter unless you want different sampling rates or processors.
-
-:::
 
 ## Adding custom metadata
 
@@ -694,6 +503,8 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Filtering out spans based on criteria
 - Normalizing data formats
 - Enriching spans with business context
+
+For the broader exporter, bridge, and processor model, see [Integrations overview](/docs/observability/integrations/overview).
 
 ## Span filtering
 
@@ -1097,56 +908,6 @@ app.post('/api/analyze', async (req, res) => {
 ```
 
 This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
-
-## Flushing traces in serverless environments
-
-In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflare Workers, runtime instances can be reused across multiple requests. The `flush()` method allows you to ensure all buffered spans are exported before the runtime terminates, without shutting down the exporter (which would prevent future exports).
-
-:::note[Storage requirements]
-Serverless environments have ephemeral filesystems. Use external storage instead of local file storage (`file:./mastra.db`). See the [Vercel deployment guide](/guides/deployment/vercel#observability) for a complete setup example.
-:::
-
-### Using `flush()`
-
-Call `flush()` on the observability instance to flush all exporters:
-
-```ts
-// Get the observability instance from Mastra
-const observability = mastra.getObservability()
-
-// Flush all buffered spans to all exporters
-await observability.flush()
-```
-
-### When to Use `flush()`
-
-Use `flush()` in these scenarios:
-
-- **End of serverless function execution**: Ensure spans are exported before the runtime is paused or terminated
-- **Before long-running operations**: Flush accumulated spans before a potentially slow operation
-- **Periodic flushing**: In long-running processes, periodically flush to ensure timely data availability
-
-```ts
-// Example: Vercel serverless function
-export async function POST(req: Request) {
-  const result = await agent.generate([{ role: 'user', content: await req.text() }])
-
-  // Ensure spans are exported before function completes
-  const observability = mastra.getObservability()
-  await observability.flush()
-
-  return Response.json(result)
-}
-```
-
-### `flush()` vs `shutdown()`
-
-| Method | Behavior | Use Case |
-| - | - | - |
-| `flush()` | Exports buffered spans, keeps exporter active | Serverless environments, periodic flushing |
-| `shutdown()` | Exports buffered spans, releases resources | Application shutdown, graceful termination |
-
-Use `flush()` when you need to ensure data is exported but want to keep the exporter ready for future requests. Use `shutdown()` only when the application is terminating.
 
 ## What gets traced
 

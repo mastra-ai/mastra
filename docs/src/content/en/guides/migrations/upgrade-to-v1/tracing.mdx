@@ -118,7 +118,7 @@ Key changes:
 1. Use explicit `configs:` with `MastraStorageExporter`, `MastraPlatformExporter`, and `SensitiveDataFilter`
 1. Export types change from string literals (`'otlp'`) to exporter class instances (`new OtelExporter()`)
 
-See the [exporters documentation](/docs/observability/tracing/overview#exporters) for all available exporters.
+See the [exporters documentation](/docs/observability/integrations/overview#exporters) for all available exporters.
 
 ### From AI Tracing
 
@@ -263,7 +263,7 @@ To migrate, follow the "From OTEL-based Telemetry" section above. For detailed c
 
 The automatic detection of instrumentation files in `/mastra` (with `.ts`, `.js`, or `.mjs` extensions) has been removed. Custom instrumentation is no longer supported through separate files.
 
-To migrate, use the built-in exporter system or implement custom exporters using the `ObservabilityExporter` interface. See the [exporters documentation](/docs/observability/tracing/overview#exporters) for details.
+To migrate, use the built-in exporter system or implement custom exporters using the `ObservabilityExporter` interface. See the [exporters documentation](/docs/observability/integrations/overview#exporters) for details.
 
 ### `instrumentation.mjs` files
 
