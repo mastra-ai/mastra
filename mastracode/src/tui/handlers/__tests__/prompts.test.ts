@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
 import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
@@ -76,9 +77,13 @@ function createPlanApprovalCtx() {
       addChild: vi.fn(function (this: any, child: unknown) {
         this.children.push(child);
       }),
+      clear: vi.fn(function (this: any) {
+        this.children.length = 0;
+      }),
       invalidate: vi.fn(),
     },
     ui: { requestRender: vi.fn() },
+    pendingSubmitPlanComponents: new Map(),
   } as any;
   const ctx = {
     state,
@@ -119,6 +124,20 @@ describe('handlePlanApproval goal mode', () => {
 });
 
 describe('handlePlanApproval regular approval', () => {
+  it('activates an existing streamed submit_plan component in place', async () => {
+    const { state, ctx } = createPlanApprovalCtx();
+    const streamedComponent = PlanApprovalInlineComponent.createStreaming(state.ui);
+    streamedComponent.updateArgs({ title: 'Ship it', plan: 'Build the feature' });
+    state.lastSubmitPlanComponent = streamedComponent;
+    state.chatContainer.children.push(streamedComponent);
+
+    handlePlanApproval(ctx, 'plan-1', 'Ship it', 'Build the feature');
+
+    expect(state.chatContainer.children.filter((child: unknown) => child === streamedComponent)).toHaveLength(1);
+    expect(state.activeInlinePlanApproval).toBe(streamedComponent);
+    expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
+  });
+
   it('approves the plan and sends a single begin-executing system-reminder through harness.sendSignal', async () => {
     const { state, ctx, sendSignal } = createPlanApprovalCtx();
 

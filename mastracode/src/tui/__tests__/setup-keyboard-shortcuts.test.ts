@@ -8,11 +8,23 @@ vi.mock('node:fs', () => ({
   default: {},
 }));
 
-const autocompleteProviders: Array<{ commands: Array<{ name: string; description: string }> }> = [];
+const autocompleteProviders: Array<{
+  commands: Array<{
+    name: string;
+    description: string;
+    getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
+  }>;
+}> = [];
 
 vi.mock('@mariozechner/pi-tui', () => ({
   CombinedAutocompleteProvider: class {
-    constructor(commands: Array<{ name: string; description: string }>) {
+    constructor(
+      commands: Array<{
+        name: string;
+        description: string;
+        getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
+      }>,
+    ) {
       autocompleteProviders.push({ commands });
     }
   },
@@ -113,6 +125,16 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
     expect(commandNames).toContain('judge');
+    const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
+      | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
+      | undefined;
+    expect(goalCommand?.getArgumentCompletions?.('').map(command => command.value)).toEqual([
+      'status',
+      'pause',
+      'resume',
+      'clear',
+    ]);
+    expect(goalCommand?.getArgumentCompletions?.('pa').map(command => command.value)).toEqual(['pause']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
     expect(commandNames.indexOf('goal')).toBeLessThan(commandNames.indexOf('judge'));
     expect(commandNames).not.toContain('memory-gateway');
@@ -222,6 +244,29 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
     expect(queueFollowUpMessage).not.toHaveBeenCalled();
     expect(showInfo).toHaveBeenCalledWith(state, GOAL_JUDGE_INPUT_LOCK_MESSAGE);
+    expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('aborts an active goal judge even when the harness is idle', () => {
+    const { state, editor, actions } = createState(false);
+    const abortController = new AbortController();
+    const component = { setInterrupted: vi.fn() };
+    state.activeGoalJudge = { modelId: 'openai/gpt-5.5', abortController, component };
+    editor.getText.mockReturnValue('');
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(abortController.signal.aborted).toBe(true);
+    expect(component.setInterrupted).toHaveBeenCalledTimes(1);
+    expect(state.userInitiatedAbort).toBe(true);
+    expect(state.harness.abort).not.toHaveBeenCalled();
+    expect(editor.setText).not.toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
 
