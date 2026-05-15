@@ -3,8 +3,9 @@
  *
  * Programmatic skill execution against the code-registered and
  * workspace-discovered catalogues. Code skills resolve by name first.
- * Workspace skills resolve by frontmatter name or workspace-relative path
- * unless a code skill owns the same name.
+ * Workspace skills resolve by frontmatter name or workspace-relative path.
+ * Code skills own same-name refs, while explicit workspace paths still
+ * resolve shadowed workspace skills.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -57,7 +58,8 @@ class FakeWorkspaceSkills {
     this.getCalls.push(ref);
     // Resolution mirrors Flue's behaviour: either frontmatter name or the
     // workspace-relative path. The fake matches on both.
-    const e = this.entries.find(x => x.name === ref || (x.path ?? `skills/${x.name}`) === ref);
+    const pathRef = ref.replace(/\/SKILL\.md$/, '');
+    const e = this.entries.find(x => x.name === ref || (x.path ?? `skills/${x.name}`) === pathRef);
     if (!e) return null;
     return {
       name: e.name,
@@ -180,7 +182,7 @@ describe('Session.skills.use() (§4.6)', () => {
       {
         name: 'shared',
         description: 'Workspace shared',
-        path: 'skills/shared/SKILL.md',
+        path: 'skills/shared',
         instructions: 'Workspace body.',
       },
     ]);
@@ -196,12 +198,12 @@ describe('Session.skills.use() (§4.6)', () => {
     expect(fakeSkills.getCalls).toEqual([]);
   });
 
-  it('does not allow a shadowed workspace skill to bypass code precedence by path', async () => {
+  it('allows a shadowed workspace skill to resolve by path without weakening code name precedence', async () => {
     const fakeSkills = new FakeWorkspaceSkills([
       {
         name: 'shared',
         description: 'Workspace shared',
-        path: 'skills/shared/SKILL.md',
+        path: 'skills/shared',
         instructions: 'Workspace body.',
       },
     ]);
@@ -210,12 +212,18 @@ describe('Session.skills.use() (§4.6)', () => {
     ]);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-    await expect(session.skills.use('skills/shared/SKILL.md')).rejects.toMatchObject({
-      searchedSources: ['code-registered', 'workspace'],
-    });
+    const listed = await session.skills.list();
+    expect(listed.map(skill => skill.name)).toEqual(['shared']);
+    expect(await session.skills.get('shared')).toMatchObject({ name: 'shared', instructions: 'Code body.' });
+    expect(await session.skills.get('skills/shared')).toBeUndefined();
 
-    expect(agent.streamCalls).toHaveLength(0);
-    expect(fakeSkills.getCalls).toEqual(['skills/shared/SKILL.md']);
+    await session.skills.use('skills/shared/SKILL.md');
+    await session.skills.use('skills/shared');
+
+    expect(agent.streamCalls).toHaveLength(2);
+    expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('Workspace body.');
+    expect(extractSignalContents(agent.streamCalls[1]!.messages)).toBe('Workspace body.');
+    expect(fakeSkills.getCalls).toEqual(['skills/shared/SKILL.md', 'skills/shared']);
   });
 
   it('does not treat a code skill filePath as a use() alias', async () => {
@@ -223,7 +231,7 @@ describe('Session.skills.use() (§4.6)', () => {
       {
         name: 'deploy',
         description: 'Workspace deploy',
-        path: 'skills/deploy/SKILL.md',
+        path: 'skills/deploy',
         instructions: 'Workspace deploy body.',
       },
     ]);
@@ -249,7 +257,7 @@ describe('Session.skills.use() (§4.6)', () => {
       {
         name: 'format',
         description: 'Format files',
-        path: 'tools/format/SKILL.md',
+        path: 'tools/format',
         instructions: 'Format every file.',
       },
     ]);

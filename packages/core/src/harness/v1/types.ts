@@ -158,7 +158,9 @@ export type ModelAuthStatus = 'authenticated' | 'needs_auth' | 'unknown';
 // HarnessConfig registry and the session's configured `WorkspaceSkills`.
 // Static skills resolve by name; workspace skills resolve by name or path.
 // Static skills win on name conflicts so deployment-owned prompts can
-// intentionally override workspace-discovered prompts.
+// intentionally override workspace-discovered prompts. Explicit workspace
+// path refs remain available for callers that need to invoke a shadowed
+// workspace skill intentionally.
 // ---------------------------------------------------------------------------
 
 /**

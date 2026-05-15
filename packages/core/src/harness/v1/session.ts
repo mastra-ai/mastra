@@ -1061,7 +1061,9 @@ export class Session {
    * Reference resolution checks the static code registry first, then mirrors
    * Flue's workspace `session.skill(ref, ...)` behavior — either the
    * frontmatter `name` or a relative path under the workspace skill source
-   * resolves. `WorkspaceSkills.get(ref)` already supports both.
+   * resolves. `WorkspaceSkills.get(ref)` already supports both. A code skill
+   * owns its name, but does not hide an otherwise shadowed workspace skill's
+   * explicit path reference.
    */
   private async _skillsUse(ref: string, opts?: UseSkillOptions): Promise<AgentResult> {
     this._assertLive('skills.use()');
@@ -1094,10 +1096,6 @@ export class Session {
     if (!skill) {
       throw new HarnessSkillNotFoundError(ref, ['code-registered', 'workspace']);
     }
-    if (this._harness._getCodeSkill(skill.name)) {
-      throw new HarnessSkillNotFoundError(ref, ['code-registered', 'workspace']);
-    }
-
     const args = opts?.args;
     this._validateSkillArgs(skill.name, skill.metadata, args);
 
