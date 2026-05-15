@@ -176,6 +176,7 @@ program
   )
   .option('-s, --https', 'Enable local HTTPS')
   .option('--request-context-presets <file>', 'Path to request context presets JSON file')
+  .option('--source-mode', 'Resolve linked Mastra packages from source')
   .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 

@@ -653,8 +653,9 @@ describe('MCPClient', () => {
         id: 'complex-schema-test-client-log-handler-firecrawl',
         servers: {
           'firecrawl-mcp': {
-            command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/fire-crawl-complex-schema.ts')],
+            command: path.join(__dirname, '..', '..', 'node_modules', '.bin', 'tsx'),
+            args: [path.join(__dirname, '..', '__fixtures__/fire-crawl-complex-schema.ts')],
+            env: process.env,
             logger: mockLogHandler,
           },
         },
@@ -954,7 +955,11 @@ describe('MCPClient', () => {
       });
 
       try {
-        const toolsets = await mixedMcp.listToolsets();
+        const toolsets = await vi.waitFor(async () => {
+          const result = await mixedMcp.listToolsets();
+          expect(result).toMatchObject({ weather: { getWeather: expect.any(Object) } });
+          return result;
+        }, 10000);
 
         // Should still get weather toolset from the healthy server
         expect(toolsets).toHaveProperty('weather');

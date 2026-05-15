@@ -47,7 +47,7 @@ describe('Memory with LibSQL Integration', () => {
         id: randomUUID(),
       }),
       vector: new LibSQLVector({
-        url: 'file:libsql-test.db',
+        url: `file:${join(dbStoragePath, 'vector-test.db')}`,
         id: randomUUID(),
       }),
       embedder: fastembed,
@@ -67,7 +67,7 @@ describe('Memory with LibSQL Integration', () => {
         storageConfigForWorker: { url: `file:${join(dbStoragePath, 'libsql-test.db')}`, id: randomUUID() },
         memoryOptionsForWorker: memoryOptions,
         vectorConfigForWorker: {
-          url: 'file:libsql-test.db',
+          url: `file:${join(dbStoragePath, 'worker-vector-test.db')}`,
           id: randomUUID(),
         },
       },
@@ -78,7 +78,7 @@ describe('Memory with LibSQL Integration', () => {
     it('should return the LAST N messages when using lastMessages config without explicit orderBy', async () => {
       const memoryWithLimit = new Memory({
         storage: new LibSQLStore({
-          url: 'file:libsql-test.db',
+          url: `file:${join(dbStoragePath, 'limit-test.db')}`,
           id: randomUUID(),
         }),
         embedder: fastembed.small,

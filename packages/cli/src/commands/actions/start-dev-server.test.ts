@@ -17,9 +17,13 @@ const devMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../dev/dev', () => ({
   dev: devMock,
 }));
+vi.mock('../dev/dev.ts', () => ({
+  dev: devMock,
+}));
 
 describe('startDevServer - inspect flag integration', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
   });
 
@@ -107,6 +111,23 @@ describe('startDevServer - inspect flag integration', () => {
         expect.objectContaining({
           inspect: false,
           inspectBrk: '0.0.0.0:9229',
+        }),
+      );
+    });
+  });
+
+  describe('source mode', () => {
+    it('should pass sourceMode to dev function', async () => {
+      const { startDevServer } = await import('./start-dev-server');
+
+      await startDevServer({
+        sourceMode: true,
+        debug: false,
+      });
+
+      expect(devMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceMode: true,
         }),
       );
     });

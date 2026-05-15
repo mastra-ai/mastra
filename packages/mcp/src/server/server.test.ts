@@ -994,9 +994,10 @@ describe('MCPServer', () => {
       const existingConfig = new MCPClient({
         servers: {
           weather: {
-            command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__', 'server-weather.ts')],
+            command: path.join(__dirname, '..', '..', 'node_modules', '.bin', 'tsx'),
+            args: [path.join(__dirname, '..', '__fixtures__', 'server-weather.ts')],
             env: {
+              ...process.env,
               FAKE_CREDS: 'test',
             },
           },

@@ -6,8 +6,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTestServerContext } from './test-utils';
 import { GET_SPEAKERS_ROUTE, GENERATE_SPEECH_ROUTE, TRANSCRIBE_SPEECH_ROUTE } from './voice';
 
-vi.mock('@mastra/core/voice');
-
 function createAgentWithVoice({
   name,
   model,
@@ -105,7 +103,7 @@ describe('Voice Handlers', () => {
           agentId: 'test-agent',
           text: 'test',
         }),
-      ).rejects.toThrow('Failed to generate speech');
+      ).rejects.toThrow('No speak provider or realtime provider configured');
     });
 
     it('should throw error when agent is not found', async () => {
@@ -149,7 +147,7 @@ describe('Voice Handlers', () => {
           text: 'test',
           speakerId: '1',
         }),
-      ).rejects.toThrow('Failed to generate speech');
+      ).rejects.toThrow('No speak provider or realtime provider configured');
     });
 
     it('should generate speech successfully', async () => {

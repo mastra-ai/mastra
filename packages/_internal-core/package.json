@@ -9,6 +9,7 @@
   ],
   "exports": {
     "./storage": {
+      "mastra-source": "./src/storage/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"

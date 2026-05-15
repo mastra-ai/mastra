@@ -243,8 +243,11 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
     return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
   }
 
-  // Dynamic loading mode: sync global cache to local before loading
-  syncGlobalCacheToLocal();
+  // Dynamic loading mode: sync global cache to local before loading.
+  // Source-mode test runs must not create build artifacts.
+  if (process.env.MASTRA_SOURCE_MODE !== '1') {
+    syncGlobalCacheToLocal();
+  }
 
   // Dynamic loading mode: check in-memory cache first
   if (registryData) {

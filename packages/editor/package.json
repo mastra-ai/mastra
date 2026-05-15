@@ -8,6 +8,7 @@
   "type": "module",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -18,6 +19,7 @@
       }
     },
     "./composio": {
+      "mastra-source": "./src/composio.ts",
       "import": {
         "types": "./dist/composio.d.ts",
         "default": "./dist/composio.js"
@@ -28,6 +30,7 @@
       }
     },
     "./arcade": {
+      "mastra-source": "./src/arcade.ts",
       "import": {
         "types": "./dist/arcade.d.ts",
         "default": "./dist/arcade.js"
@@ -38,6 +41,7 @@
       }
     },
     "./storage": {
+      "mastra-source": "./src/storage/index.ts",
       "import": {
         "types": "./dist/storage/index.d.ts",
         "default": "./dist/storage/index.js"

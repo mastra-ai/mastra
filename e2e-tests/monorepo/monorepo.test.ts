@@ -30,7 +30,7 @@ process.once('SIGTERM', async () => {
   process.exit(143);
 });
 
-describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
   async function runBuild(path: string) {
@@ -110,6 +110,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         cancelSignal,
         gracefulCancel: true,
         env: {
+          ...process.env,
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           MASTRA_PORT: port.toString(),
         },
@@ -117,22 +118,42 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       activeProcesses.push({ controller, proc });
 
-      await new Promise<void>((resolve, reject) => {
-        proc!.stderr?.on('data', data => {
-          const errMsg = data?.toString();
-          if (errMsg && errMsg.includes('punycode')) {
-            // Ignore punycode warning
-            return;
-          }
-          reject(new Error('failed to start dev: ' + errMsg));
-        });
-        proc!.stdout?.on('data', data => {
-          process.stdout.write(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
-          }
-        });
+      let stderr = '';
+      proc!.stderr?.on('data', data => {
+        const errMsg = data?.toString();
+        if (errMsg && errMsg.includes('punycode')) {
+          // Ignore punycode warning
+          return;
+        }
+        stderr += errMsg;
       });
+      proc!.stdout?.on('data', data => {
+        process.stdout.write(data?.toString());
+      });
+
+      const maxAttempts = 60;
+      const delayMs = 1000;
+      for (let i = 0; i < maxAttempts; i++) {
+        if (proc.exitCode !== null) {
+          throw new Error('failed to start dev: ' + stderr);
+        }
+
+        try {
+          const res = await fetch(`http://localhost:${port}/api/tools`);
+          if (res.ok) {
+            console.log('Dev server is ready');
+            break;
+          }
+        } catch {
+          // Server not ready yet
+        }
+
+        if (i === maxAttempts - 1) {
+          throw new Error('Dev server failed to start within timeout: ' + stderr);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
     }, timeout);
 
     afterAll(async () => {

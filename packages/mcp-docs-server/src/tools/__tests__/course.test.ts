@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, test, beforeAll, afterAll, afterEach } from 'vitest';
-import { callTool, mcp, server } from './test-setup';
+import { callTool, docsReady, mcp, server } from './test-setup';
 
 let tools: any;
 
@@ -35,6 +35,7 @@ function completeCourses({
 
 describe('Course Tools', () => {
   beforeAll(async () => {
+    await docsReady;
     tools = await mcp.listTools(); // <-- must be after the mock!
   });
 

@@ -63,8 +63,17 @@ export async function getInputOptions(
           const filename = analyzedBundleInfo.dependencies.get(id)!;
           const absolutePath = join(workspaceRoot || projectRoot, filename);
 
-          // During `mastra dev` we want to keep deps as external
+          // During `mastra dev` we want to keep deps as external. In source mode,
+          // keep workspace package imports on their public export specifiers so the
+          // runtime resolves them through the package export map's mastra-source condition.
           if (isDev) {
+            if (process.env.MASTRA_SOURCE_MODE === '1' && (id.startsWith('@mastra/') || id.startsWith('@internal/'))) {
+              return {
+                id,
+                external: true,
+              };
+            }
+
             return {
               id: process.platform === 'win32' ? pathToFileURL(absolutePath).href : absolutePath,
               external: true,

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { fromPackageRoot, fromRepoRoot, log } from '../src/utils';
 
 const BUILD_DIR = fromRepoRoot('docs/build');
@@ -7,6 +8,8 @@ const MANIFEST_PATH = path.join(BUILD_DIR, 'llms-manifest.json');
 const COURSE_SOURCE = fromRepoRoot('docs/src/course');
 const DOCS_DEST = fromPackageRoot('.docs');
 const COURSE_DEST = path.join(DOCS_DEST, 'course');
+const PREPARE_LOCK_PATH = fromPackageRoot('.docs.prepare.lock');
+const PREPARED_MARKER_PATH = path.join(DOCS_DEST, '.prepared');
 
 // Top-level categories that should keep their index.md files
 const TOP_LEVEL_CATEGORIES = ['docs', 'guides', 'models', 'reference'];
@@ -29,6 +32,23 @@ async function loadManifest(): Promise<Manifest> {
   return JSON.parse(content) as Manifest;
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function acquirePrepareLock() {
+  while (true) {
+    try {
+      return await fs.open(PREPARE_LOCK_PATH, 'wx');
+    } catch (error: any) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+      await sleep(100);
+    }
+  }
+}
+
 // Copy a directory recursively (for course content which uses .md files directly)
 async function copyDir(src: string, dest: string) {
   await fs.mkdir(dest, { recursive: true });
@@ -44,6 +64,33 @@ async function copyDir(src: string, dest: string) {
       await fs.copyFile(srcPath, destPath);
     }
   }
+}
+
+async function copySourceDocsFallback() {
+  log('Docs build manifest not found, copying source docs fallback...');
+
+  const sourceContentDir = fromRepoRoot('docs/src/content/en');
+  await fs.rm(DOCS_DEST, { recursive: true, force: true });
+
+  async function copyDocs(src: string, dest: string) {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+
+      if (entry.isDirectory()) {
+        await copyDocs(srcPath, destPath);
+      } else if (entry.isFile() && (entry.name.endsWith('.md') || entry.name.endsWith('.mdx'))) {
+        const finalDestPath = destPath.replace(/\.mdx$/, '.md');
+        await fs.copyFile(srcPath, finalDestPath);
+      }
+    }
+  }
+
+  await copyDocs(sourceContentDir, DOCS_DEST);
+  log('✅ Source docs fallback copied');
 }
 
 /**
@@ -85,7 +132,16 @@ async function copyLlmsTxtFiles() {
   await fs.mkdir(DOCS_DEST, { recursive: true });
 
   // Load manifest
-  const manifest = await loadManifest();
+  let manifest: Manifest;
+  try {
+    manifest = await loadManifest();
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      await copySourceDocsFallback();
+      return;
+    }
+    throw error;
+  }
 
   // Collect unique entries (since same entry can appear in multiple packages)
   const uniqueEntries = new Map<string, ManifestEntry>();
@@ -140,15 +196,33 @@ async function copyCourseContent() {
 }
 
 export async function prepare() {
-  log('Preparing documentation...');
-  await copyLlmsTxtFiles();
-  await copyCourseContent();
-  log('Documentation preparation complete!');
+  const lock = await acquirePrepareLock();
+
+  try {
+    try {
+      await fs.access(PREPARED_MARKER_PATH);
+      await fs.access(COURSE_DEST);
+      return;
+    } catch {
+      // Prepare docs below when the marker or course content does not exist.
+    }
+
+    log('Preparing documentation...');
+    await copyLlmsTxtFiles();
+    await copyCourseContent();
+    await fs.writeFile(PREPARED_MARKER_PATH, new Date().toISOString());
+    log('Documentation preparation complete!');
+  } finally {
+    await lock.close();
+    await fs.rm(PREPARE_LOCK_PATH, { force: true });
+  }
 }
 
-try {
-  await prepare();
-} catch (error) {
-  console.error('Error preparing documentation:', error);
-  process.exit(1);
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
+  try {
+    await prepare();
+  } catch (error) {
+    console.error('Error preparing documentation:', error);
+    process.exit(1);
+  }
 }
