@@ -51,6 +51,10 @@ async function initAuth(): Promise<AuthResult> {
       const { initStudio } = await import('./studio');
       return initStudio();
     }
+    case 'supabase': {
+      const { initSupabase } = await import('./supabase');
+      return initSupabase();
+    }
     default:
       return {};
   }

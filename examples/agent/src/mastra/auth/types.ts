@@ -20,4 +20,5 @@ export type AuthProviderType =
   | 'composite'
   | 'auth0-okta'
   | 'okta'
-  | 'studio';
+  | 'studio'
+  | 'supabase';

@@ -683,6 +683,43 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// GET /auth/supabase/consent — OAuth Server consent page
+// ============================================================================
+
+export const GET_SUPABASE_CONSENT_ROUTE = createPublicRoute({
+  method: 'GET',
+  path: '/auth/supabase/consent',
+  responseType: 'datastream-response',
+  summary: 'Supabase OAuth consent page',
+  description:
+    'Serves the Supabase OAuth Server consent page. Required when using Supabase as an OAuth identity provider.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    try {
+      const { mastra, request } = ctx as any;
+      const auth = getAuthProvider(mastra);
+      if (!auth || typeof (auth as any).getConsentPageHtml !== 'function') {
+        throw new HTTPException(404, { message: 'Consent page not available' });
+      }
+
+      const url = new URL(request.url);
+      const authorizationId = url.searchParams.get('authorization_id');
+      if (!authorizationId) {
+        throw new HTTPException(400, { message: 'Missing authorization_id parameter' });
+      }
+
+      const html = (auth as any).getConsentPageHtml(authorizationId);
+      return new Response(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    } catch (error) {
+      return handleError(error, 'Failed to load consent page');
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -695,4 +732,5 @@ export const AUTH_ROUTES = [
   POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
+  GET_SUPABASE_CONSENT_ROUTE,
 ] as const;
