@@ -480,6 +480,22 @@ describe('Agent signals', () => {
       const rehydrated = mastraDBMessageToSignal(row);
       expect(rehydrated.contents).toBe('from canonical parts');
     });
+
+    it('prefers a valid multimodal stash over flattened-text content.parts (main-era rows)', () => {
+      // Main wrote the full original input to metadata.signal.contents and a flattened text
+      // projection to content.parts. If we preferred parts here we'd silently drop the file
+      // payload on rehydrate.
+      const row = buildLegacyDBRow([
+        { type: 'text', text: 'caption' },
+        { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
+      ]);
+      row.content.parts = [{ type: 'text', text: 'caption' }];
+      const rehydrated = mastraDBMessageToSignal(row);
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'caption' },
+        { type: 'file', data: 'BASE64', mimeType: 'image/png', filename: 'photo.png' },
+      ]);
+    });
   });
 
   it('rejects invalid XML names for contextual signal markup', () => {
