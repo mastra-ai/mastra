@@ -39,7 +39,7 @@ vi.mock('../status-line.js', () => ({
 
 import { showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
 
 function createState(isRunning: boolean) {
   const actions = new Map<string, () => unknown>();
@@ -123,6 +123,41 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames).toContain('goal/deploy');
     expect(commandNames).toContain('goal/review');
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
+  });
+
+  it('refreshes autocomplete after workspace skills resolve', async () => {
+    autocompleteProviders.length = 0;
+    const { state, editor } = createState(false);
+    state.customSlashCommands = [];
+    state.skillCommands = [];
+    state.goalSkillCommands = [];
+    state.harness.getWorkspace = vi.fn(() => undefined);
+    state.harness.hasWorkspace = vi.fn(() => true);
+    state.harness.resolveWorkspace = vi.fn(async () => ({
+      skills: {
+        list: vi.fn(async () => [
+          { name: 'review', description: 'Review code', path: '/skills/review' },
+          {
+            name: 'internal-helper',
+            description: 'Internal helper',
+            path: '/skills/internal-helper',
+            'user-invocable': false,
+          },
+        ]),
+      },
+    }));
+
+    setupAutocomplete(state);
+    await refreshSkillsAutocomplete(state);
+
+    expect(editor.setAutocompleteProvider).toHaveBeenCalledTimes(2);
+    expect(autocompleteProviders).toHaveLength(2);
+    const initialCommands = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
+    const refreshedCommands = autocompleteProviders[1]?.commands.map(command => command.name) ?? [];
+    expect(initialCommands).toContain('skill/');
+    expect(initialCommands).not.toContain('skill/review');
+    expect(refreshedCommands).toContain('skill/review');
+    expect(refreshedCommands).not.toContain('skill/internal-helper');
   });
 
   it('submits immediately on Enter when the harness is idle', () => {

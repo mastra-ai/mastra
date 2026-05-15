@@ -97,6 +97,28 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
   });
 
+  it('decodes the </skill> boundary token when replaying a persisted <skill> message', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<skill name="github-triage">\nUse <div>, A&B, "quotes". Embedded &lt;/skill&gt; stays out of the way.\n</skill>',
+        'escaped-skill',
+      ),
+    );
+
+    const skillComp = state.chatContainer.children[0] as SlashCommandComponent;
+    // General XML/HTML is passed through unchanged; only the &lt;/skill&gt;
+    // boundary token gets decoded back to a literal </skill>.
+    expect(
+      skillComp.matches(
+        'skill/github-triage',
+        'Use <div>, A&B, "quotes". Embedded </skill> stays out of the way.',
+      ),
+    ).toBe(true);
+  });
+
   it('renders a persisted temporal-gap marker from canonical system reminder content', () => {
     const state = createState();
 

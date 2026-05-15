@@ -265,6 +265,12 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   return false;
 }
 
+// Inverse of `escapeSkillBoundary` in commands/skills.ts. We only encode the
+// `</skill>` boundary on send, so we only need to decode it here.
+function unescapeSkillBoundary(text: string): string {
+  return text.replaceAll('&lt;/skill&gt;', '</skill>');
+}
+
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   if (state.messageComponentsById.has(message.id)) {
     return;
@@ -370,8 +376,9 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   // renders fresh on thread replay when no optimistic component exists.
   const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
   if (skillMatch) {
+    // Skill names are validated to `^[a-z0-9-]+$` at load, so no name unescape needed.
     const commandName = `skill/${skillMatch[1]!}`;
-    const skillContent = skillMatch[2]!.trim();
+    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
     const existingSkillComp = state.allSlashCommandComponents.find(
       component =>
         component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),

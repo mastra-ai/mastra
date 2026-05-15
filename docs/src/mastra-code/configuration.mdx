@@ -324,6 +324,8 @@ Use `/skill/<name>` to activate a specific skill in the current conversation:
 
 Mastra Code loads the skill instructions and sends them to the agent before the next response.
 
+Set `user-invocable: false` in `SKILL.md` frontmatter to hide a skill from `/skill/<name>` autocomplete, the `/skills` listing, and direct activation. The agent can still load that skill automatically when relevant.
+
 Add `metadata.goal: true` to expose a skill as a goal entry point under `/goal/<skill-name>`:
 
 ```md title=".mastracode/skills/release-check/SKILL.md"

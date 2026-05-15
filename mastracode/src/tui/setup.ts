@@ -11,7 +11,7 @@ import type { HarnessEventListener } from '@mastra/core/harness';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
-import { isUserInvokable } from './commands/skill-filters.js';
+import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
@@ -419,7 +419,7 @@ export async function loadSkillCommands(state: TUIState): Promise<void> {
       state.goalSkillCommands = [];
       return;
     }
-    const skills = (await workspace.skills.list()).filter(isUserInvokable);
+    const skills = (await workspace.skills.list()).filter(isUserInvocable);
     state.skillCommands = skills;
     state.goalSkillCommands = skills.filter(skill => skill.metadata?.goal === true);
   } catch {

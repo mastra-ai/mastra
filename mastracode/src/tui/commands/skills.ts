@@ -1,7 +1,17 @@
 import { formatSkillActivation } from '@mastra/core/workspace';
 import { SlashCommandComponent } from '../components/slash-command.js';
-import { isUserInvokable } from './skill-filters.js';
+import { isUserInvocable } from './skill-filters.js';
 import type { SlashCommandContext } from './types.js';
+
+// The persisted `<skill name="…">…</skill>` wrapper is parsed back out by
+// `render-messages.ts` to dedup against the optimistic SlashCommandComponent.
+// Neutralize any literal closing tag inside the body so the non-greedy regex
+// terminates only at the real boundary. We deliberately do NOT escape other
+// XML characters — skill instructions frequently contain legitimate `<div>`,
+// JSX, code, etc., and the model should see those literally.
+function escapeSkillBoundary(value: string): string {
+  return value.replaceAll('</skill>', '&lt;/skill&gt;');
+}
 
 async function resolveWorkspace(ctx: SlashCommandContext) {
   let workspace = ctx.getResolvedWorkspace();
@@ -39,13 +49,13 @@ export async function handleSkillsCommand(ctx: SlashCommandContext): Promise<voi
 
   try {
     const allSkills = await workspace.skills!.list();
-    const skills = allSkills.filter(isUserInvokable);
+    const skills = allSkills.filter(isUserInvocable);
 
     if (skills.length === 0) {
       ctx.showInfo(
         'No user-invokable skills found in configured directories.\n\n' +
           'Each skill needs a SKILL.md file with YAML frontmatter.\n' +
-          'Skills with `metadata.userInvokable: false` are hidden from this list.\n' +
+          'Skills with `user-invocable: false` are hidden from this list.\n' +
           'Install skills: npx add-skill <github-url>',
       );
       return;
@@ -89,8 +99,8 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
 
   try {
     const skill = await workspace.skills.get(normalizedSkillName);
-    if (!skill || !isUserInvokable(skill)) {
-      const skills = (await workspace.skills.list()).filter(isUserInvokable);
+    if (!skill || !isUserInvocable(skill)) {
+      const skills = (await workspace.skills.list()).filter(isUserInvocable);
       const available = skills.length ? ` Available skills: ${skills.map(s => s.name).join(', ')}` : '';
       ctx.showError(`Skill not found: ${normalizedSkillName}.${available}`);
       return;
@@ -113,8 +123,11 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
       ctx.state.pendingNewThread = false;
     }
 
+    // skill.name is spec-validated to `^[a-z0-9-]+$` so it cannot contain
+    // XML-special characters — no name escape needed. Only the body needs
+    // boundary protection (see `escapeSkillBoundary`).
     await ctx.harness.sendMessage({
-      content: `<skill name="${skill.name}">\n${content}\n</skill>`,
+      content: `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`,
     });
   } catch (error) {
     ctx.showError(
