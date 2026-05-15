@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FavoriteButton } from '../favorite-button';
 
 vi.mock('@/domains/agent-builder', () => ({
-  useBuilderAgentFeatures: () => ({ stars: true }),
+  useBuilderAgentFeatures: () => ({ favorites: true }),
 }));
 
 vi.mock('../../hooks/use-stored-agent-favorite', () => ({

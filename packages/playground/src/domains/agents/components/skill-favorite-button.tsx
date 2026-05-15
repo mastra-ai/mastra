@@ -24,7 +24,7 @@ const iconSizes = {
 /**
  * Toggles the favorite state for a stored skill. Mirrors the agent-list
  * `FavoriteButton` shell so the skill list matches the agent list visually.
- * Renders nothing if the EE `agent.stars` flag is off. Stops click
+ * Renders nothing if the EE `agent.favorites` flag is off. Stops click
  * propagation so it can sit inside a row that is itself a link.
  */
 export const SkillFavoriteButton = ({
@@ -39,13 +39,13 @@ export const SkillFavoriteButton = ({
   const toggle = useToggleStoredSkillFavorite(skillId);
   const { data: capabilities } = useAuthCapabilities();
 
-  if (!features.stars) return null;
+  if (!features.favorites) return null;
 
   const signedIn = capabilities ? isAuthenticated(capabilities) : false;
   const label = isFavorited ? 'Unstar skill' : 'Star skill';
   const disabledLabel = 'Sign in to star this skill';
   const hasCount = typeof favoriteCount === 'number' && favoriteCount > 0;
-  const starText = favoriteCount === 1 ? 'Star' : 'Stars';
+  const countLabel = favoriteCount === 1 ? 'Star' : 'Stars';
   const isDisabled = toggle.isPending || !signedIn;
 
   return (
@@ -74,7 +74,7 @@ export const SkillFavoriteButton = ({
         <span className="leading-none whitespace-nowrap">
           {hasCount ? (
             <>
-              <span className="tabular-nums">{favoriteCount}</span> {starText}
+              <span className="tabular-nums">{favoriteCount}</span> {countLabel}
             </>
           ) : (
             'Star'

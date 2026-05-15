@@ -42,7 +42,7 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
   requiresPermission: 'stored-skills:read',
   handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
-      await requireBuilderFeature(mastra, 'stars');
+      await requireBuilderFeature(mastra, 'favorites');
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
@@ -87,7 +87,7 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
   requiresPermission: 'stored-skills:read',
   handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
-      await requireBuilderFeature(mastra, 'stars');
+      await requireBuilderFeature(mastra, 'favorites');
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {

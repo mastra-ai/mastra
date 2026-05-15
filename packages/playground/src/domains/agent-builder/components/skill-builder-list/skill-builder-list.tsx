@@ -9,10 +9,10 @@ export type SkillBuilderListProps = {
   skills: StoredSkillResponse[];
   search?: string;
   onSkillClick?: (skill: StoredSkillResponse) => void;
-  showStars?: boolean;
+  showFavorites?: boolean;
 };
 
-export function SkillBuilderList({ skills, search, onSkillClick, showStars = true }: SkillBuilderListProps) {
+export function SkillBuilderList({ skills, search, onSkillClick, showFavorites = true }: SkillBuilderListProps) {
   const filtered = useMemo(() => {
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return skills;
@@ -89,7 +89,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>
               </div>
-              {showStars && (
+              {showFavorites && (
                 <div className="mt-2 md:hidden">
                   <SkillFavoriteButton
                     skillId={skill.id}
@@ -100,7 +100,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
                 </div>
               )}
             </div>
-            {showStars && (
+            {showFavorites && (
               <SkillFavoriteButton
                 skillId={skill.id}
                 isFavorited={skill.isFavorited}

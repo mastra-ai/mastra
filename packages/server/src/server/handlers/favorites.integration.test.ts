@@ -27,7 +27,7 @@ import { LIST_STORED_SKILLS_ROUTE, UPDATE_STORED_SKILL_ROUTE } from './stored-sk
 function createEditor(favoritesEnabled: boolean): Partial<IMastraEditor> {
   const builder: IAgentBuilder = {
     enabled: true,
-    getFeatures: () => ({ agent: { stars: favoritesEnabled } }),
+    getFeatures: () => ({ agent: { favorites: favoritesEnabled } }),
     getConfiguration: () => ({}),
   };
   return {

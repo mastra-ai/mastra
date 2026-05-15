@@ -6,7 +6,7 @@ import { getCallerAuthorId } from './authorship';
 import { isBuilderFeatureEnabled } from './editor-builder';
 
 /**
- * Result of `prepareFavoritesEnrichment` — `null` when the `stars` EE feature is off.
+ * Result of `prepareFavoritesEnrichment` — `null` when the `favorites` EE feature is off.
  * When non-null the caller may use `starredIds` to set `isFavorited` on records
  * and may pass `userId` along to storage list paths for pin-favorited-first
  * sorting (`pinFavoritedFor`).
@@ -29,7 +29,7 @@ export async function prepareFavoritesEnrichment(
   entityType: StorageFavoriteEntityType,
   entityIds: string[],
 ): Promise<FavoritesEnrichmentContext> {
-  if (!(await isBuilderFeatureEnabled(mastra, 'stars'))) return null;
+  if (!(await isBuilderFeatureEnabled(mastra, 'favorites'))) return null;
 
   const userId = getCallerAuthorId(requestContext);
   if (!userId) return null;

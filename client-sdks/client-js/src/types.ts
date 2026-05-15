@@ -1181,7 +1181,7 @@ export interface StoredAgentResponse {
   workspace?: ConditionalField<StoredWorkspaceRef>;
   browser?: ConditionalField<StoredBrowserRef>;
   requestContextSchema?: Record<string, unknown>;
-  // Favorites (EE feature, present when `stars` feature is enabled)
+  // Favorites (EE feature, present when `favorites` feature is enabled)
   isFavorited?: boolean;
   favoriteCount?: number;
 }
@@ -1961,7 +1961,7 @@ export interface StoredSkillResponse {
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
-  // Favorites (EE feature, present when `stars` feature is enabled)
+  // Favorites (EE feature, present when `favorites` feature is enabled)
   isFavorited?: boolean;
   favoriteCount?: number;
 }
@@ -2839,7 +2839,7 @@ export interface BuilderAgentFeatures {
   skills?: boolean;
   memory?: boolean;
   variables?: boolean;
-  stars?: boolean;
+  favorites?: boolean;
   avatarUpload?: boolean;
   browser?: boolean;
   /**

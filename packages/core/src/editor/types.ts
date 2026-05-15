@@ -344,7 +344,7 @@ export interface EditorIsFavoritedBatchInput {
 
 /**
  * Favorites namespace. Optional: only present on EE-enabled builds
- * with `features.agent.stars === true`.
+ * with `features.agent.favorites === true`.
  *
  * **Authorization layering**: the namespace verifies the target entity exists
  * (404 if missing) and performs the storage mutation. Visibility / ownership

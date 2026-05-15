@@ -42,7 +42,7 @@ export const FAVORITE_STORED_AGENT_ROUTE = createRoute({
   requiresPermission: 'stored-agents:read',
   handler: async ({ mastra, requestContext, storedAgentId }) => {
     try {
-      await requireBuilderFeature(mastra, 'stars');
+      await requireBuilderFeature(mastra, 'favorites');
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
@@ -87,7 +87,7 @@ export const UNFAVORITE_STORED_AGENT_ROUTE = createRoute({
   requiresPermission: 'stored-agents:read',
   handler: async ({ mastra, requestContext, storedAgentId }) => {
     try {
-      await requireBuilderFeature(mastra, 'stars');
+      await requireBuilderFeature(mastra, 'favorites');
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {

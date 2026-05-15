@@ -20,7 +20,7 @@ interface MockRecord {
   visibility?: 'public' | 'private';
 }
 
-function createBuilder(features: { stars?: boolean } | null): Partial<IMastraEditor> {
+function createBuilder(features: { favorites?: boolean } | null): Partial<IMastraEditor> {
   if (features === null) {
     return {};
   }
@@ -103,7 +103,7 @@ function createCtx(mastra: ReturnType<typeof createMastra>, callerId: string | n
 describe('Favorite route EE gating', () => {
   it('PUT /stored/agents/:id/favorite → 404 when favorites feature disabled', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', visibility: 'public' }]]);
-    const mastra = createMastra({ agents, editor: createBuilder({ stars: false }) });
+    const mastra = createMastra({ agents, editor: createBuilder({ favorites: false }) });
 
     await expect(
       FAVORITE_STORED_AGENT_ROUTE.handler({
@@ -129,7 +129,7 @@ describe('Favorite route EE gating', () => {
 
   it('PUT /stored/agents/:id/favorite → 200 happy path when feature enabled', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', visibility: 'public' }]]);
-    const mastra = createMastra({ agents, editor: createBuilder({ stars: true }) });
+    const mastra = createMastra({ agents, editor: createBuilder({ favorites: true }) });
 
     const result = await FAVORITE_STORED_AGENT_ROUTE.handler({
       ...createCtx(mastra, 'user-1'),
@@ -146,7 +146,7 @@ describe('Favorite route EE gating', () => {
 
   it('DELETE /stored/skills/:id/favorite → 200 happy path', async () => {
     const skills = new Map<string, MockRecord>([['s1', { id: 's1', visibility: 'public' }]]);
-    const mastra = createMastra({ skills, editor: createBuilder({ stars: true }) });
+    const mastra = createMastra({ skills, editor: createBuilder({ favorites: true }) });
 
     const result = await UNFAVORITE_STORED_SKILL_ROUTE.handler({
       ...createCtx(mastra, 'user-1'),
@@ -165,7 +165,7 @@ describe('Favorite route EE gating', () => {
 describe('Favorite route auth + visibility', () => {
   it('returns 401 when no caller id', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', visibility: 'public' }]]);
-    const mastra = createMastra({ agents, editor: createBuilder({ stars: true }) });
+    const mastra = createMastra({ agents, editor: createBuilder({ favorites: true }) });
 
     await expect(
       FAVORITE_STORED_AGENT_ROUTE.handler({
@@ -176,7 +176,7 @@ describe('Favorite route auth + visibility', () => {
   });
 
   it('returns 404 when entity does not exist', async () => {
-    const mastra = createMastra({ editor: createBuilder({ stars: true }) });
+    const mastra = createMastra({ editor: createBuilder({ favorites: true }) });
 
     await expect(
       FAVORITE_STORED_AGENT_ROUTE.handler({
@@ -188,7 +188,7 @@ describe('Favorite route auth + visibility', () => {
 
   it('returns 404 when caller cannot read a private entity owned by someone else', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', visibility: 'private', authorId: 'owner-2' }]]);
-    const mastra = createMastra({ agents, editor: createBuilder({ stars: true }) });
+    const mastra = createMastra({ agents, editor: createBuilder({ favorites: true }) });
 
     await expect(
       FAVORITE_STORED_AGENT_ROUTE.handler({

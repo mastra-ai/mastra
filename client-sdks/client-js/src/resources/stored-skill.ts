@@ -68,7 +68,7 @@ export class StoredSkill extends BaseResource {
 
   /**
    * Favorites this skill for the calling user. Idempotent.
-   * Requires the `skill.stars` builder feature flag to be enabled on the server.
+   * Requires the `skill.favorites` builder feature flag to be enabled on the server.
    */
   favorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
     return this.request(
@@ -81,7 +81,7 @@ export class StoredSkill extends BaseResource {
 
   /**
    * Unfavorites this skill for the calling user. Idempotent.
-   * Requires the `skill.stars` builder feature flag to be enabled on the server.
+   * Requires the `skill.favorites` builder feature flag to be enabled on the server.
    */
   unfavorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
     return this.request(

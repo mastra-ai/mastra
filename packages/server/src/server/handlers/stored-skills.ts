@@ -150,7 +150,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       });
 
       const callerId = getCallerAuthorId(requestContext);
-      const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
+      const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'favorites');
       const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
 
       // `?favoritedOnly=true` flow: fetch caller's favorited IDs, restrict the list

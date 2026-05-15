@@ -12,7 +12,7 @@ export const useBuilderAgentFeatures = () => {
     avatarUpload: features?.avatarUpload === true,
     skills: features?.skills === true,
     model: features?.model === true,
-    stars: features?.stars === true,
+    favorites: features?.favorites === true,
     browser: features?.browser === true,
   };
 };

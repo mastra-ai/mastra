@@ -22643,7 +22643,7 @@ export type GetStoredAgents_QueryParams = {
         [key: string]: unknown;
       }
     | undefined;
-  /** When true, return only agents favorited by the caller (requires the `stars` EE feature) */
+  /** When true, return only agents favorited by the caller (requires the `favorites` EE feature) */
   favoritedOnly?: boolean | undefined;
 };
 
@@ -75311,7 +75311,7 @@ export type GetStoredSkills_QueryParams = {
         [key: string]: unknown;
       }
     | undefined;
-  /** When true, return only skills favorited by the caller (requires the `stars` EE feature) */
+  /** When true, return only skills favorited by the caller (requires the `favorites` EE feature) */
   favoritedOnly?: boolean | undefined;
 };
 
@@ -78798,7 +78798,7 @@ export type GetEditorBuilderSettings_Response = {
               skills?: boolean | undefined;
               memory?: boolean | undefined;
               variables?: boolean | undefined;
-              stars?: boolean | undefined;
+              favorites?: boolean | undefined;
               avatarUpload?: boolean | undefined;
               browser?: boolean | undefined;
               model?: boolean | undefined;

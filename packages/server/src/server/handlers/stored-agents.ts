@@ -135,7 +135,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       });
 
       const callerId = getCallerAuthorId(requestContext);
-      const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
+      const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'favorites');
       const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
 
       // `?favoritedOnly=true`: fetch caller's favorited IDs, then refilter + recompute total.

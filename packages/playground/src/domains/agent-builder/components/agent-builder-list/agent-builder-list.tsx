@@ -9,7 +9,7 @@ export type AgentBuilderListProps = {
   agents: StoredAgentResponse[];
   search?: string;
   rowTestId?: string;
-  showStars?: boolean;
+  showFavorites?: boolean;
 };
 
 export type AgentBuilderListSkeletonProps = {
@@ -44,7 +44,7 @@ function PrivateVisibilityIcon() {
   );
 }
 
-export function AgentBuilderList({ agents, search, rowTestId, showStars = true }: AgentBuilderListProps) {
+export function AgentBuilderList({ agents, search, rowTestId, showFavorites = true }: AgentBuilderListProps) {
   const { Link } = useLinkComponent();
 
   const filtered = useMemo(() => {
@@ -91,7 +91,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showStars = true }
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
               </div>
-              {showStars && (
+              {showFavorites && (
                 <div className="mt-2 md:hidden">
                   <FavoriteButton
                     agentId={agent.id}
@@ -102,7 +102,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showStars = true }
                 </div>
               )}
             </div>
-            {showStars && (
+            {showFavorites && (
               <FavoriteButton
                 agentId={agent.id}
                 isFavorited={agent.isFavorited}

@@ -84,7 +84,7 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Favorites this agent for the calling user. Idempotent.
-   * Requires the `agent.stars` builder feature flag to be enabled on the server.
+   * Requires the `agent.favorites` builder feature flag to be enabled on the server.
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the new favorited state and updated favorite count
    */
@@ -99,7 +99,7 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Unfavorites this agent for the calling user. Idempotent.
-   * Requires the `agent.stars` builder feature flag to be enabled on the server.
+   * Requires the `agent.favorites` builder feature flag to be enabled on the server.
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the new favorited state and updated favorite count
    */

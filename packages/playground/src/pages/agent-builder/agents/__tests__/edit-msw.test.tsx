@@ -31,7 +31,7 @@ vi.mock('@/domains/agent-builder', () => ({
     skills: false,
     avatarUpload: false,
     model: false,
-    stars: false,
+    favorites: false,
     browser: false,
   }),
 }));

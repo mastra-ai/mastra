@@ -18,7 +18,7 @@ const allOff: Features = {
   avatarUpload: false,
   skills: false,
   model: false,
-  stars: false,
+  favorites: false,
   browser: false,
 };
 const allOn: Features = {
@@ -29,7 +29,7 @@ const allOn: Features = {
   avatarUpload: true,
   skills: true,
   model: true,
-  stars: true,
+  favorites: true,
   browser: true,
 };
 

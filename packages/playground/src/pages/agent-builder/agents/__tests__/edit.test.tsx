@@ -33,7 +33,7 @@ const builderFeatures = {
   skills: false,
   avatarUpload: false,
   model: false,
-  stars: false,
+  favorites: false,
   browser: false,
 };
 

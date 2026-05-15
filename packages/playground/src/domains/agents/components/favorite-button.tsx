@@ -23,7 +23,7 @@ const iconSizes = {
 
 /**
  * Toggles the favorite state for a stored agent. Renders nothing if the EE
- * `agent.stars` flag is off. Stops click propagation so it can sit inside a
+ * `agent.favorites` flag is off. Stops click propagation so it can sit inside a
  * row that is itself a link.
  */
 export const FavoriteButton = ({
@@ -38,12 +38,12 @@ export const FavoriteButton = ({
   const toggle = useToggleStoredAgentFavorite(agentId);
   const { data: capabilities } = useAuthCapabilities();
 
-  if (!features.stars) return null;
+  if (!features.favorites) return null;
 
   const signedIn = capabilities ? isAuthenticated(capabilities) : false;
   const label = isFavorited ? 'Unstar agent' : 'Star agent';
   const disabledLabel = 'Sign in to star this agent';
-  const starText = favoriteCount === 1 ? 'Star' : 'Stars';
+  const countLabel = favoriteCount === 1 ? 'Star' : 'Stars';
   const isDisabled = toggle.isPending || !signedIn;
 
   return (
@@ -70,7 +70,7 @@ export const FavoriteButton = ({
       />
       {showCount && typeof favoriteCount === 'number' && (
         <span className="leading-none whitespace-nowrap">
-          <span className="tabular-nums">{favoriteCount}</span> {starText}
+          <span className="tabular-nums">{favoriteCount}</span> {countLabel}
         </span>
       )}
     </Button>
