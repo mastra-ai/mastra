@@ -2,6 +2,7 @@ import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thr
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
+import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { IMastraLogger } from '../logger/logger';
@@ -923,8 +924,11 @@ export class AgentChannels {
    *     `ChatChannelProcessor` and other input processors.
    *   - `attributes` — serialized as XML on the signal element the LLM sees (e.g. on
    *     `<user-message messageId=... authorId=... />`). Strings only.
-   *   - `signalMetadata` — persisted on the signal's stored message so later turns / tools
-   *     can read structured author info from memory.
+   *   - `providerOptions` — written to the stored message's `content.providerMetadata`
+   *     under `mastra.channels.<platform>` so UI/query callers can read author/channel
+   *     facts off the message (e.g. show a Slack icon + author name) without unpacking
+   *     the signal envelope. The LLM ignores `providerOptions.mastra.*` since only
+   *     provider-keyed entries (openai, anthropic, …) are forwarded to the model.
    */
   private buildEventContext(params: {
     sdkThread: Thread;
@@ -935,7 +939,7 @@ export class AgentChannels {
   }): {
     channelContext: ChannelContext;
     attributes: Record<string, string | undefined>;
-    signalMetadata: Record<string, unknown>;
+    providerOptions: MastraProviderMetadata;
   } {
     const { sdkThread, platform, eventType, messageId, actor } = params;
     const adapter = this.adapters[platform]!;
@@ -969,24 +973,24 @@ export class AgentChannels {
       if (actor.isBot) attributes.isBot = 'true';
     }
 
-    const signalMetadata: Record<string, unknown> = {
+    const providerOptions: MastraProviderMetadata = {
       mastra: {
         channels: {
           [platform]: {
-            messageId,
+            ...(messageId !== undefined ? { messageId } : {}),
             author: {
               userId: actor.userId,
-              userName: actor.userName,
-              fullName: actor.fullName,
-              mention: actorMention,
-              isBot: actor.isBot,
+              ...(actor.userName !== undefined ? { userName: actor.userName } : {}),
+              ...(actor.fullName !== undefined ? { fullName: actor.fullName } : {}),
+              ...(actorMention !== undefined ? { mention: actorMention } : {}),
+              ...(actor.isBot !== undefined ? { isBot: actor.isBot } : {}),
             },
           },
         },
       },
     };
 
-    return { channelContext, attributes, signalMetadata };
+    return { channelContext, attributes, providerOptions };
   }
 
   /**
@@ -1158,7 +1162,7 @@ export class AgentChannels {
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
 
-    const { channelContext, attributes, signalMetadata } = this.buildEventContext({
+    const { channelContext, attributes, providerOptions } = this.buildEventContext({
       sdkThread,
       platform,
       eventType: sdkThread.isDM ? 'message' : 'mention',
@@ -1199,7 +1203,7 @@ export class AgentChannels {
         type: 'user-message',
         contents: signalContents,
         attributes,
-        metadata: signalMetadata,
+        providerOptions,
       },
       {
         resourceId: threadResourceId,
