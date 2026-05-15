@@ -14,8 +14,8 @@
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.
- *   - 'closing' — close has started; new work is rejected while previously
- *                 admitted flushes drain before the durable `closingAt` marker.
+ *   - 'closing' — the durable close marker has committed; new work is rejected
+ *                 while previously admitted turns drain until the close deadline.
  *   - 'closed'  — `close()` has run; record has `closedAt` set in storage.
  *   - 'evicted' — flushed to storage and dropped from live map; the record
  *                 remains active and the session can be re-hydrated. Currently
@@ -546,6 +546,11 @@ export class Session {
     this.createdAt = internals.record.createdAt;
 
     this._record = internals.record;
+    if (this._record.closedAt !== undefined) {
+      this._state = 'closed';
+    } else if (this._record.closingAt !== undefined) {
+      this._state = 'closing';
+    }
     this._harness = internals.harness;
     this._storage = internals.storage;
     this._ownerId = internals.ownerId;
@@ -820,7 +825,6 @@ export class Session {
   _waitForCloseDrain(closeDeadlineAt: number): Promise<void> {
     if (!this.isBusy()) return Promise.resolve();
     const timeoutMs = Math.max(0, closeDeadlineAt - Date.now());
-    if (timeoutMs === 0) return Promise.resolve();
 
     return new Promise<void>(resolve => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -845,10 +849,18 @@ export class Session {
       };
       waiter.cleanup = cleanup;
       this._idleWaiters.add(waiter);
-      timer = setTimeout(() => {
+      if (timeoutMs === 0) {
+        this.abort({ reason: 'session_close_timeout' });
         cleanup();
         resolve();
-      }, timeoutMs);
+      } else {
+        timer = setTimeout(() => {
+          timer = undefined;
+          this.abort({ reason: 'session_close_timeout' });
+          cleanup();
+          resolve();
+        }, timeoutMs);
+      }
     });
   }
 
@@ -902,9 +914,9 @@ export class Session {
   // -------------------------------------------------------------------------
 
   /**
-   * Soft-close: reject new work, drain admitted flushes, persist `closingAt`,
-   * terminalize descendants, set `closedAt`, release the lease, and drop from
-   * the live map. Final — the same `sessionId` cannot be re-hydrated.
+   * Soft-close: persist `closingAt`, reject new work, drain admitted turns
+   * until the close deadline, terminalize descendants, set `closedAt`, release
+   * the lease, and drop from the live map. Final — the same `sessionId` cannot be re-hydrated.
    * Idempotent: a second call is a no-op once `closed`. The cascade through
    * descendants (§5.5) is driven by the Harness, not by this method directly.
    *
@@ -5711,7 +5723,6 @@ export class Session {
       return;
     }
     this._state = 'closing';
-    this.abort({ reason: 'session_closed' });
     this._rejectIdleWaiters(new HarnessSessionClosingError(this.id));
   }
 

@@ -17,6 +17,7 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
 
+import { MockAgent } from './__test-utils__';
 import {
   HarnessConfigError,
   HarnessSessionClosedError,
@@ -39,6 +40,20 @@ function makeStorage() {
   const db = new InMemoryDB();
   const storage = new InMemoryHarness({ db });
   return storage;
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+class AbortIgnoringMockAgent extends MockAgent {
+  override async stream(messages: any, options?: any): Promise<any> {
+    return super.stream(messages, { ...options, abortSignal: undefined });
+  }
 }
 
 function makeHarness(overrides?: Partial<ConstructorParameters<typeof Harness>[0]>) {
@@ -108,15 +123,17 @@ describe('Harness v1 — construction', () => {
   });
 
   it('throws HarnessConfigError for invalid close timeout', () => {
-    expect(
-      () =>
-        new Harness({
-          agents: { default: makeAgent() },
-          modes: [{ id: 'default', agentId: 'default' }],
-          defaultModeId: 'default',
-          sessions: { storage: makeStorage(), closeTimeoutMs: 0 },
-        }),
-    ).toThrow(HarnessConfigError);
+    for (const closeTimeoutMs of [0, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(
+        () =>
+          new Harness({
+            agents: { default: makeAgent() },
+            modes: [{ id: 'default', agentId: 'default' }],
+            defaultModeId: 'default',
+            sessions: { storage: makeStorage(), closeTimeoutMs },
+          }),
+      ).toThrow(HarnessConfigError);
+    }
   });
 
   it('throws HarnessConfigError when transitionsTo references an unknown mode', () => {
@@ -428,26 +445,89 @@ describe('Harness v1 — lifecycle', () => {
     expect(stored?.closedAt).toBeDefined();
   });
 
+  it('aborts an active turn at the close deadline before terminalizing', async () => {
+    const storage = makeStorage();
+    const agent = new MockAgent({ id: 'default' });
+    const hold = deferred();
+    const abortSeen = deferred();
+    agent.enqueueRun({
+      holdUntil: hold.promise,
+      onAbort: reason => {
+        expect(reason).toBe('session_close_timeout');
+        abortSeen.resolve();
+      },
+    });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 1 },
+    });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+
+    const message = s.message({ content: 'slow' });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.isRunning()).toBe(true);
+
+    await s.close();
+    await abortSeen.promise;
+    await expect(message).resolves.toMatchObject({ finishReason: 'aborted' });
+    expect(s.isRunning()).toBe(false);
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeDefined();
+  });
+
+  it('bounds close when an active turn ignores the abort signal', async () => {
+    const storage = makeStorage();
+    const agent = new AbortIgnoringMockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 1 },
+    });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const message = s.message({ content: 'slow' });
+    void message.catch(() => {});
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.isRunning()).toBe(true);
+
+    await s.close();
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeDefined();
+  });
+
   it('serializes admitted writes before close and rejects late child creation', async () => {
     const storage = makeStorage();
     const harness = makeHarness({ sessions: { storage } });
     const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
     const originalSaveSession = storage.saveSession.bind(storage);
-    let releaseFirstSave!: () => void;
-    const firstSaveGate = new Promise<void>(resolve => {
-      releaseFirstSave = resolve;
+    let releaseAdmittedSave!: () => void;
+    let admittedSaveStarted!: () => void;
+    const admittedSaveGate = new Promise<void>(resolve => {
+      releaseAdmittedSave = resolve;
     });
-    let saveCount = 0;
+    const admittedSaveSeen = new Promise<void>(resolve => {
+      admittedSaveStarted = resolve;
+    });
+    let admittedSaveGated = false;
     storage.saveSession = (async (...args: Parameters<typeof storage.saveSession>) => {
-      saveCount += 1;
-      if (saveCount === 1) {
-        await firstSaveGate;
+      const [record] = args;
+      const state = record.state as { admitted?: unknown } | undefined;
+      if (!admittedSaveGated && record.id === s.id && state?.admitted === true && record.closingAt === undefined) {
+        admittedSaveGated = true;
+        admittedSaveStarted();
+        await admittedSaveGate;
       }
       return originalSaveSession(...args);
     }) as typeof storage.saveSession;
 
     const admitted = s.setState({ admitted: true });
-    await Promise.resolve();
+    await admittedSaveSeen;
     const closing = s.close();
     const closingAgain = s.close();
 
@@ -459,7 +539,7 @@ describe('Harness v1 — lifecycle', () => {
       }),
     ).rejects.toBeInstanceOf(HarnessSessionClosingError);
 
-    releaseFirstSave();
+    releaseAdmittedSave();
     await admitted;
     await Promise.all([closing, closingAgain]);
 

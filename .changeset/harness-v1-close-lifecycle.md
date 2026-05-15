@@ -2,15 +2,15 @@
 '@mastra/core': minor
 ---
 
-Added Harness v1 close lifecycle markers and closing-state handling.
+Added a graceful shutdown phase for Harness v1 sessions.
 
 Sessions now enter a durable `closingAt` phase before terminal `closedAt`.
-During close, new work is rejected with `HarnessSessionClosingError`,
-previously admitted live-session flushes drain before the close marker, and
-descendants are marked closing top-down before terminalizing bottom-up.
+During close, new work is rejected with `HarnessSessionClosingError` while
+already-admitted work gets a bounded window to finish.
 
-`HarnessEvent` now includes `session_closing`, and `HarnessConfig.sessions`
-accepts `closeTimeoutMs` to bound the drain window before terminal close.
+`HarnessEvent` now includes `session_closing`, child sessions close with their
+parent, and `HarnessConfig.sessions` accepts `closeTimeoutMs` to configure the
+close window.
 
 ```ts
 const harness = new Harness({

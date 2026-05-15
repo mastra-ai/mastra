@@ -222,7 +222,7 @@ export class Harness {
       throw new HarnessConfigError('sessions.maxQueueDepth', 'must be a positive integer');
     }
     this._closeTimeoutMs = config.sessions?.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
-    if (this._closeTimeoutMs < 1) {
+    if (!Number.isInteger(this._closeTimeoutMs) || this._closeTimeoutMs < 1) {
       throw new HarnessConfigError('sessions.closeTimeoutMs', 'must be a positive integer');
     }
 
@@ -1067,9 +1067,9 @@ export class Harness {
   // -------------------------------------------------------------------------
 
   /**
-   * Soft-close: reject new work, drain admitted flushes, persist closingAt,
-   * terminalize descendants bottom-up, set closedAt, release leases, and drop
-   * live instances. Idempotent. See §5.5.
+   * Soft-close: persist closingAt, reject new work, drain admitted turns until
+   * each close deadline, terminalize descendants bottom-up, set closedAt,
+   * release leases, and drop live instances. Idempotent. See §5.5.
    */
   async closeSession(opts: { sessionId: string }): Promise<void> {
     const storage = this._requireStorage('closeSession()');
@@ -1391,11 +1391,7 @@ export class Harness {
       return;
     }
 
-    const pendingCloses = new Set<Promise<void>>();
-    for (const session of this._liveSessions.values()) {
-      const close = this._closePromises.get(session.id);
-      if (close) pendingCloses.add(close);
-    }
+    const pendingCloses = new Set(this._closePromises.values());
     if (pendingCloses.size > 0) {
       await Promise.allSettled(pendingCloses);
     }

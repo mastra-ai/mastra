@@ -221,6 +221,9 @@ export abstract class HarnessStorage extends StorageDomain {
    * is present, adapters must also verify the parent exists in the same
    * harness/resource and is neither closing nor closed in the same atomic
    * admission boundary. A created row also receives the caller's initial lease.
+   *
+   * Throws `HarnessStorageParentSessionUnavailableError` from
+   * `createOrLoadActiveSession` when parent verification fails.
    */
   abstract createOrLoadActiveSession(
     record: SessionRecord,

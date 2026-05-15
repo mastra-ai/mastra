@@ -349,10 +349,10 @@ export interface HarnessConfigCommon {
 
     /**
      * Milliseconds allowed after the durable `closingAt` marker commits for
-     * live sessions to drain aborted work before terminal `closedAt`. The
+     * live sessions to drain admitted work before terminal `closedAt`. The
      * runtime persists `closeDeadlineAt = closingAt + closeTimeoutMs` and
      * reuses an existing deadline when repairing a partially completed close.
-     * Defaults to 30s.
+     * Must be a positive integer. Defaults to 30_000 ms (30s).
      */
     closeTimeoutMs?: number;
   };
