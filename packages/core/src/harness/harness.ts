@@ -116,22 +116,23 @@ function signalContentsToHarnessContent(contents: unknown): HarnessMessageConten
         return [{ type: 'text', text: record.text }];
       }
       if (record.type === 'file' && typeof record.data === 'string') {
-        // Accept both mimeType (v4/internal) and mediaType (v5 wire shape).
-        const mimeType =
-          typeof record.mimeType === 'string'
-            ? record.mimeType
-            : typeof record.mediaType === 'string'
-              ? record.mediaType
+        // Public signal contents and main-era stashes use mediaType (v5). Internal
+        // MastraMessagePart storage rows still carry mimeType (v4 UI part shape).
+        const mediaType =
+          typeof record.mediaType === 'string'
+            ? record.mediaType
+            : typeof record.mimeType === 'string'
+              ? record.mimeType
               : undefined;
-        if (mimeType === undefined) return [];
-        if (mimeType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType }];
+        if (mediaType === undefined) return [];
+        if (mediaType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType: mediaType }];
         }
         return [
           {
             type: 'file',
             data: record.data,
-            mediaType: mimeType,
+            mediaType,
             filename: typeof record.filename === 'string' ? record.filename : undefined,
           },
         ];
