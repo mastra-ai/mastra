@@ -1,5 +1,19 @@
 # mastracode
 
+## 0.19.1-alpha.3
+
+### Patch Changes
+
+- Improve goal mode UX: ([#16654](https://github.com/mastra-ai/mastra/pull/16654))
+  - Add `/goal` actions and built-in subcommand autocomplete.
+  - Add goal-aware planning guidance so submitted plans can be used as executable goals.
+  - Let the judge evaluate full assistant responses and verify work with readonly workspace tools.
+  - Stream muted judge activity into the goal box and support Ctrl+C judge aborts.
+  - Show duration-based goal status and clearer plan approval rendering with streamed plan previews.
+
+- Updated dependencies [[`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0-alpha.3
+
 ## 0.19.1-alpha.2
 
 ### Patch Changes
