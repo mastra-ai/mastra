@@ -144,6 +144,24 @@ describe('storedAgentToFormValues', () => {
       expect(conn?.metadata).toEqual({ foo: 'bar' });
     });
 
+    it('tolerates a stored connection that has no label', () => {
+      const result = storedAgentToFormValues({
+        id: 'agent-1',
+        name: 'A',
+        toolIntegrations: {
+          composio: {
+            tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+            connections: {
+              gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1' }],
+            },
+          },
+        },
+      } as never);
+
+      const conn = result.toolIntegrations?.composio.connections.gmail?.[0];
+      expect(conn).toEqual({ kind: 'author', toolService: 'gmail', connectionId: 'c1' });
+    });
+
     it('returns undefined for a conditional variant array', () => {
       const result = storedAgentToFormValues({
         id: 'agent-1',

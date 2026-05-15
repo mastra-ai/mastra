@@ -83,14 +83,35 @@ describe('ConnectionPicker', () => {
     expect(screen.getByText(/no connections yet/i)).toBeTruthy();
   });
 
-  it('rejects empty labels inline', () => {
+  it('does not require a label when there is only one connection', () => {
     renderPicker({
       initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Work' }],
     });
     const input = screen.getByTestId(`connection-label-${TOOL_SERVICE}-0`) as HTMLInputElement;
     fireEvent.change(input, { target: { value: '' } });
-    expect(screen.getByText(/label is required/i)).toBeTruthy();
-    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.queryByText(/label is required/i)).toBeNull();
+    expect(input.getAttribute('aria-invalid')).not.toBe('true');
+  });
+
+  it('requires a non-empty label on every row once a second connection is added', () => {
+    renderPicker({
+      initial: [
+        { connectionId: 'c1', toolService: TOOL_SERVICE },
+        { connectionId: 'c2', toolService: TOOL_SERVICE, label: 'Personal' },
+      ],
+    });
+    expect(screen.getByText(/label is required when you have multiple connections/i)).toBeTruthy();
+    expect(
+      (screen.getByTestId(`connection-label-${TOOL_SERVICE}-0`) as HTMLInputElement).getAttribute('aria-invalid'),
+    ).toBe('true');
+  });
+
+  it('hides the label input on the single-connection happy path', () => {
+    renderPicker({
+      initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE }],
+    });
+    expect(screen.queryByTestId(`connection-label-${TOOL_SERVICE}-0`)).toBeNull();
+    expect(screen.getByTestId(`connection-summary-${TOOL_SERVICE}-0`)).toBeTruthy();
   });
 
   it('rejects case-insensitive duplicate labels inline', () => {

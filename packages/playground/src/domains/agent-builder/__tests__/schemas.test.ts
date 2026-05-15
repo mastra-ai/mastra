@@ -81,7 +81,22 @@ describe('AgentBuilderEditFormSchema', () => {
       expect(result.success).toBe(true);
     });
 
-    it('rejects empty labels', () => {
+    it('accepts a missing label when there is only one connection', () => {
+      const result = AgentBuilderEditFormSchema.safeParse({
+        ...base,
+        toolIntegrations: {
+          composio: {
+            tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+            connections: {
+              gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1' }],
+            },
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts an empty label when there is only one connection', () => {
       const result = AgentBuilderEditFormSchema.safeParse({
         ...base,
         toolIntegrations: {
@@ -89,6 +104,24 @@ describe('AgentBuilderEditFormSchema', () => {
             tools: { GMAIL_FETCH: { toolService: 'gmail' } },
             connections: {
               gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: '' }],
+            },
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects empty labels once there are two connections', () => {
+      const result = AgentBuilderEditFormSchema.safeParse({
+        ...base,
+        toolIntegrations: {
+          composio: {
+            tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+            connections: {
+              gmail: [
+                { kind: 'author', toolService: 'gmail', connectionId: 'c1', label: '' },
+                { kind: 'author', toolService: 'gmail', connectionId: 'c2', label: 'second' },
+              ],
             },
           },
         },

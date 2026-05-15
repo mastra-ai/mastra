@@ -75,11 +75,12 @@ export interface Connection {
    */
   connectionId: string;
   /**
-   * Display label and LLM disambiguator. Required, non-empty, ≤ 32 chars,
-   * `[A-Za-z0-9 _-]+`. Case-insensitive uniqueness is enforced within
-   * `connections[toolService]`.
+   * Display label and LLM disambiguator. Optional when this is the only
+   * connection for a `toolService`; required (non-empty, ≤ 32 chars,
+   * `[A-Za-z0-9 _-]+`, case-insensitively unique) once there are ≥ 2
+   * connections sharing the same `toolService`.
    */
-  label: string;
+  label?: string;
 }
 
 /**

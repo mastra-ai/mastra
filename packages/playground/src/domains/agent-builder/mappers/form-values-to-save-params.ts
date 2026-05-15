@@ -56,10 +56,18 @@ function buildToolIntegrations(
 
     const connections: Record<string, StoredIntegrationConnection[]> = {};
     for (const [toolService, list] of Object.entries(config.connections ?? {})) {
-      connections[toolService] = list.map(connection => ({
-        ...connection,
-        kind: 'author' as const,
-      }));
+      connections[toolService] = list.map(connection => {
+        const trimmed = connection.label?.trim();
+        // Drop empty/whitespace-only labels so storage only carries meaningful values.
+        // The form / server enforce label *requirement* via superRefine; here we just
+        // normalize the payload.
+        const { label: _label, ...rest } = connection;
+        return {
+          ...rest,
+          kind: 'author' as const,
+          ...(trimmed ? { label: trimmed } : {}),
+        };
+      });
     }
 
     result[providerId] = { tools, connections };

@@ -1113,10 +1113,12 @@ export interface StoredIntegrationConnection {
    */
   connectionId: string;
   /**
-   * Display label and LLM disambiguator. Required, non-empty, ≤ 32 chars,
-   * `[A-Za-z0-9 _-]+`. Case-insensitive unique within `connections[toolService]`.
+   * Display label and LLM disambiguator. Optional when this is the only
+   * connection on a `toolService`; required (non-empty, ≤ 32 chars,
+   * `[A-Za-z0-9 _-]+`, case-insensitively unique) once ≥ 2 connections share
+   * the same `toolService`.
    */
-  label: string;
+  label?: string;
 }
 
 /** Per-tool override stored alongside the selected tool slug. */

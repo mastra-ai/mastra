@@ -84,6 +84,11 @@ describe('buildConnectionSuffix', () => {
     const used = new Set<string>();
     expect(buildConnectionSuffix('!!!', used)).toBe('CONN');
   });
+
+  it('falls back to CONN when label is undefined', () => {
+    const used = new Set<string>();
+    expect(buildConnectionSuffix(undefined, used)).toBe('CONN');
+  });
 });
 
 describe('resolveStoredToolIntegrations', () => {
@@ -107,6 +112,22 @@ describe('resolveStoredToolIntegrations', () => {
     expect(Object.keys(out).sort()).toEqual(['gmail.fetch_emails', 'gmail.send_email']);
     expect(out['gmail.fetch_emails']!.description).toBe('base description for gmail.fetch_emails');
     expect(out['gmail.fetch_emails']!.id).toBe('gmail.fetch_emails');
+  });
+
+  it('single connection without a label keeps the original slug', async () => {
+    const stored: ToolIntegrations = {
+      composio: {
+        tools: { 'gmail.fetch_emails': {} },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1' }],
+        },
+      },
+    };
+    const integration = makeIntegration();
+    const out = await resolveStoredToolIntegrations(stored, () => integration);
+
+    expect(Object.keys(out)).toEqual(['gmail.fetch_emails']);
+    expect(out['gmail.fetch_emails']!.description).toBe('base description for gmail.fetch_emails');
   });
 
   it('groups slugs by ToolMeta.toolService when slugs are not dot-prefixed (Composio style)', async () => {

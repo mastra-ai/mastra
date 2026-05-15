@@ -24,7 +24,12 @@ export const connectionFormSchema = z
     kind: z.literal('author'),
     toolService: z.string().min(1),
     connectionId: z.string().min(1),
-    label: z.string().min(1).max(LABEL_MAX_LEN).regex(LABEL_REGEX),
+    /**
+     * Optional in storage. The form still validates format when present
+     * but only *requires* a label once ≥ 2 connections share a
+     * `toolService` (enforced in the top-level `superRefine`).
+     */
+    label: z.string().max(LABEL_MAX_LEN).regex(LABEL_REGEX).optional().or(z.literal('')),
   })
   .passthrough();
 
@@ -79,22 +84,36 @@ export const AgentBuilderEditFormSchema = z
     if (!integrations) return;
 
     for (const [providerId, config] of Object.entries(integrations)) {
-      // Label uniqueness (case-insensitive) AND connectionId uniqueness per toolService.
+      // Label rules:
+      //  - Single connection per toolService: label is optional.
+      //  - Two or more connections: every entry needs a non-empty,
+      //    case-insensitively unique label.
       // connectionId duplicates would pin the same OAuth bucket twice, doubling LLM
-      // surface area without adding capability — block at validation time.
+      // surface area without adding capability — always block.
       for (const [toolService, connections] of Object.entries(config.connections ?? {})) {
         const seenLabels = new Map<string, number>();
         const seenConnectionIds = new Map<string, number>();
+        const requireLabels = connections.length >= 2;
         connections.forEach((connection, index) => {
-          const labelKey = connection.label.toLowerCase();
-          if (seenLabels.has(labelKey)) {
+          const trimmed = connection.label?.trim() ?? '';
+
+          if (requireLabels && trimmed.length === 0) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `Duplicate label "${connection.label}" on ${toolService} (case-insensitive)`,
+              message: `Connection label is required on ${toolService} when there are two or more connections`,
               path: ['toolIntegrations', providerId, 'connections', toolService, index, 'label'],
             });
-          } else {
-            seenLabels.set(labelKey, index);
+          } else if (requireLabels) {
+            const labelKey = trimmed.toLowerCase();
+            if (seenLabels.has(labelKey)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Duplicate label "${connection.label}" on ${toolService} (case-insensitive)`,
+                path: ['toolIntegrations', providerId, 'connections', toolService, index, 'label'],
+              });
+            } else {
+              seenLabels.set(labelKey, index);
+            }
           }
 
           if (seenConnectionIds.has(connection.connectionId)) {

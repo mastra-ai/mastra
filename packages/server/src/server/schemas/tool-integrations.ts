@@ -10,9 +10,11 @@ import { z } from 'zod/v4';
  * Rules:
  *  - **Additive-only.** No version field. Future fields are introduced
  *    as optional and existing fields are never removed in v1.x.
- *  - `label` is required, ≤ 32 chars, `[A-Za-z0-9 _-]+`.
- *  - `label` is **case-insensitively unique** within
- *    `connections[toolService]`.
+ *  - `label` is optional when there is exactly one connection for a
+ *    `toolService`. Once two or more connections share a `toolService`,
+ *    every connection must carry a non-empty, ≤ 32 char,
+ *    `[A-Za-z0-9 _-]+` label that is case-insensitively unique within
+ *    that service.
  *  - `kind` accepts all three values for forward-compat; v1 only writes
  *    `'author'`.
  */
@@ -30,7 +32,7 @@ export const connectionSchema = z.object({
   kind: z.enum(['author', 'invoker', 'platform']),
   toolService: z.string().min(1),
   connectionId: z.string(),
-  label: labelSchema,
+  label: labelSchema.optional(),
 });
 
 const toolMetaSchema = z.object({
@@ -51,10 +53,22 @@ export const toolIntegrationConfigSchema = z
   })
   .superRefine((value, ctx) => {
     for (const [toolService, connections] of Object.entries(value.connections)) {
+      // Single connection per service: label is optional, skip both checks.
+      if (connections.length < 2) continue;
+
       const seen = new Map<string, number>(); // lowercased label -> first index
       for (let i = 0; i < connections.length; i++) {
         const conn = connections[i]!;
-        const key = conn.label.toLocaleLowerCase();
+        const trimmed = conn.label?.trim() ?? '';
+        if (trimmed.length === 0) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['connections', toolService, i, 'label'],
+            message: `Connection label is required on toolService "${toolService}" once it has two or more connections`,
+          });
+          continue;
+        }
+        const key = trimmed.toLocaleLowerCase();
         const prevIndex = seen.get(key);
         if (prevIndex !== undefined) {
           ctx.addIssue({

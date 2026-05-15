@@ -16,8 +16,8 @@ import type {
 } from './tool-integration';
 
 describe('ToolIntegration — type contracts', () => {
-  it('Connection.label is a required string', () => {
-    expectTypeOf<Connection['label']>().toEqualTypeOf<string>();
+  it('Connection.label is an optional string (required at runtime only when ≥2 connections share a toolService)', () => {
+    expectTypeOf<Connection['label']>().toEqualTypeOf<string | undefined>();
   });
 
   it('Connection.kind enumerates the three modes (only `author` written in v1)', () => {

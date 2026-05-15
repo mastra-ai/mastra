@@ -22,7 +22,12 @@ type ConnectionField = {
 export interface PickerConnection {
   connectionId: string;
   toolService: string;
-  label: string;
+  /**
+   * Optional when this is the only connection on `toolService`. Required
+   * (non-empty, unique within the service) once a second connection is
+   * added — see `validateLabels`.
+   */
+  label?: string;
 }
 
 export interface ConnectionPickerProps {
@@ -49,12 +54,19 @@ interface LabelError {
 const validateLabels = (connections: PickerConnection[]): LabelError[] => {
   const errors: LabelError[] = [];
   const seen = new Map<string, number>();
+  // Single-connection rows may omit a label — runtime falls back to a
+  // generic suffix. Once two or more connections share a `toolService`
+  // we *require* a unique, well-formed label on each row to keep tool
+  // names disambiguated for the LLM.
+  const labelRequired = connections.length >= 2;
 
   connections.forEach((conn, index) => {
     const raw = conn.label ?? '';
     const trimmed = raw.trim();
     if (trimmed.length === 0) {
-      errors.push({ index, message: 'Label is required' });
+      if (labelRequired) {
+        errors.push({ index, message: 'Label is required when you have multiple connections' });
+      }
       return;
     }
     if (trimmed.length > MAX_LABEL) {
@@ -146,13 +158,19 @@ export const ConnectionPicker = ({
     return map;
   }, [connections]);
 
+  // Labels become *required* once we'd cross into multi-connection territory
+  // for this `toolService` (i.e. pinning would result in ≥2 connections).
+  const labelWouldBeRequired = connections.length >= 1;
+
   const validateDraft = (label: string): string | undefined => {
     const trimmed = label.trim();
-    if (trimmed.length === 0) return 'Label is required';
+    if (trimmed.length === 0) {
+      return labelWouldBeRequired ? 'Label is required when you have multiple connections' : undefined;
+    }
     if (trimmed.length > MAX_LABEL) return `Label must be ≤${MAX_LABEL} characters`;
     if (!LABEL_RE.test(trimmed)) return 'Use letters, numbers, spaces, _ or -';
     const key = trimmed.toLowerCase();
-    if (connections.some(c => c.label.trim().toLowerCase() === key)) {
+    if (connections.some(c => (c.label ?? '').trim().toLowerCase() === key)) {
       return 'Duplicate label';
     }
     return undefined;
@@ -161,7 +179,7 @@ export const ConnectionPicker = ({
   const handlePinExisting = (connectionId: string) => {
     const label = (drafts[connectionId] ?? '').trim();
     if (validateDraft(label)) return;
-    onChange([...connections, { connectionId, toolService, label }]);
+    onChange([...connections, { connectionId, toolService, ...(label ? { label } : {}) }]);
     setDrafts(prev => {
       const next = { ...prev };
       delete next[connectionId];
@@ -184,7 +202,11 @@ export const ConnectionPicker = ({
       ...(config ? { config } : {}),
     });
     if (result.status !== 'completed') return;
-    onChange([...connections, { connectionId: result.connectionId, toolService, label: '' }]);
+    // Don't pre-seed an empty label string. When we land in single-connection
+    // territory the row stays unlabeled (valid). When the user is adding a
+    // second connection the row will render empty and validateLabels will
+    // surface the now-required label error.
+    onChange([...connections, { connectionId: result.connectionId, toolService }]);
     setShowFieldForm(false);
     setFieldValues({});
   };
@@ -338,6 +360,11 @@ export const ConnectionPicker = ({
       ) : (
         connections.map((conn, index) => {
           const error = errorsByIndex.get(index);
+          // Hide the label input entirely when there's a single, valid,
+          // unlabeled connection. Adding a second row will flip
+          // `connections.length >= 2` and bring the inputs back so the user
+          // can label both.
+          const showLabelInput = connections.length >= 2 || Boolean(conn.label) || Boolean(error);
           return (
             <div
               key={conn.connectionId}
@@ -345,21 +372,37 @@ export const ConnectionPicker = ({
               data-testid={`connection-row-${toolService}-${index}`}
             >
               <div className="flex-1">
-                <Input
-                  size="sm"
-                  value={conn.label}
-                  placeholder={multipleAllowed ? 'Label (e.g. Work, Personal)' : 'Label'}
-                  onChange={e => handleLabelChange(index, e.target.value)}
-                  disabled={disabled}
-                  error={Boolean(error)}
-                  aria-invalid={Boolean(error)}
-                  aria-describedby={error ? `connection-row-${toolService}-${index}-error` : undefined}
-                  data-testid={`connection-label-${toolService}-${index}`}
-                />
-                {error && (
-                  <p id={`connection-row-${toolService}-${index}-error`} className="text-error text-ui-xs mt-1 block">
-                    {error}
-                  </p>
+                {showLabelInput ? (
+                  <>
+                    <Input
+                      size="sm"
+                      value={conn.label ?? ''}
+                      placeholder={multipleAllowed ? 'Label (e.g. Work, Personal)' : 'Label'}
+                      onChange={e => handleLabelChange(index, e.target.value)}
+                      disabled={disabled}
+                      error={Boolean(error)}
+                      aria-invalid={Boolean(error)}
+                      aria-describedby={error ? `connection-row-${toolService}-${index}-error` : undefined}
+                      data-testid={`connection-label-${toolService}-${index}`}
+                    />
+                    {error && (
+                      <p
+                        id={`connection-row-${toolService}-${index}-error`}
+                        className="text-error text-ui-xs mt-1 block"
+                      >
+                        {error}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <Txt
+                    as="span"
+                    variant="ui-sm"
+                    className="text-text-muted"
+                    data-testid={`connection-summary-${toolService}-${index}`}
+                  >
+                    Connected
+                  </Txt>
                 )}
               </div>
               <Button

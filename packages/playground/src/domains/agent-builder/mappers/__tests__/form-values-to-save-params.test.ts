@@ -256,5 +256,52 @@ describe('formValuesToSaveParams', () => {
       const conn = result.toolIntegrations?.composio.connections.gmail?.[0] as unknown as Record<string, unknown>;
       expect(conn?.metadata).toEqual({ foo: 'bar' });
     });
+
+    it('omits label from storage when it is absent or empty/whitespace', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: '   ' }],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      const conn = result.toolIntegrations?.composio.connections.gmail?.[0];
+      expect(conn).toEqual({ kind: 'author', toolService: 'gmail', connectionId: 'c1' });
+      expect(conn).not.toHaveProperty('label');
+    });
+
+    it('trims a labeled connection before persisting', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: '  Work  ' }],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      expect(result.toolIntegrations?.composio.connections.gmail?.[0]).toEqual({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'c1',
+        label: 'Work',
+      });
+    });
   });
 });

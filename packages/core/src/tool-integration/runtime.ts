@@ -32,9 +32,9 @@ export interface ResolveStoredToolIntegrationsOpts {
  * - On collision with `usedSuffixes`, append `_2`, `_3`, ... until unique.
  * - The returned suffix is added to `usedSuffixes` in place.
  */
-export function buildConnectionSuffix(label: string, usedSuffixes: Set<string>): string {
+export function buildConnectionSuffix(label: string | undefined, usedSuffixes: Set<string>): string {
   const base =
-    label
+    (label ?? '')
       .toUpperCase()
       .replace(/[^A-Z0-9_]/g, '_')
       .replace(/_+/g, '_')
@@ -149,7 +149,7 @@ export async function resolveStoredToolIntegrations(
 }
 
 function appendRoutingHint(description: string, connection: Connection): string {
-  const hint = `Routes through connection: ${connection.label}`;
+  const hint = `Routes through connection: ${connection.label ?? connection.connectionId}`;
   if (!description) return hint;
   return `${description}\n\n${hint}`;
 }

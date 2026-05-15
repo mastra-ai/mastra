@@ -42,7 +42,7 @@ describe('tool-integrations schemas (v1 Agent Builder tool integrations)', () =>
       expect(result.success).toBe(false);
     });
 
-    it('rejects an empty label', () => {
+    it('rejects an empty string label (empty != absent)', () => {
       const result = connectionSchema.safeParse({
         kind: 'author',
         toolService: 'gmail',
@@ -50,6 +50,15 @@ describe('tool-integrations schemas (v1 Agent Builder tool integrations)', () =>
         label: '',
       });
       expect(result.success).toBe(false);
+    });
+
+    it('accepts a connection with no label (absent)', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+      });
+      expect(result.success).toBe(true);
     });
 
     it('rejects a label longer than 32 chars', () => {
@@ -97,6 +106,32 @@ describe('tool-integrations schemas (v1 Agent Builder tool integrations)', () =>
         },
       });
       expect(result.success).toBe(true);
+    });
+
+    it('accepts a single connection per tool service without a label', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: { 'gmail.fetch_emails': {} },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1' }],
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects two connections on the same tool service when labels are absent', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: {},
+        connections: {
+          gmail: [
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_1' },
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_2' },
+          ],
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some(i => i.path.includes('label'))).toBe(true);
+      }
     });
 
     it('rejects duplicate labels within one tool service (case-insensitive)', () => {
