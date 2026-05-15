@@ -130,6 +130,15 @@ describe('getBrightDataClient', () => {
     });
   });
 
+  it('should allow callers to override the Google results language', async () => {
+    const client = getBrightDataClient({ apiKey: 'test-key' });
+
+    await client.search.google('pizza', { language: 'es' });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(requestBody.url).toContain('hl=es');
+  });
+
   it('should return a client object', () => {
     const client = getBrightDataClient({ apiKey: 'test-key' });
     expect(client).toBeDefined();

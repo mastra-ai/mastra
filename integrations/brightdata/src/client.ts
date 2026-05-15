@@ -24,6 +24,7 @@ interface RequestOptions {
 }
 
 interface SearchOptions extends RequestOptions {
+  language?: string;
   start?: number;
 }
 
@@ -97,7 +98,7 @@ function buildGoogleSearchUrl(query: string, options: SearchOptions = {}) {
   const url = new URL('https://www.google.com/search');
   url.searchParams.set('q', query.trim());
   url.searchParams.set('brd_json', '1');
-  url.searchParams.set('hl', 'en');
+  url.searchParams.set('hl', options.language ?? 'en');
 
   if (options.country) {
     url.searchParams.set('gl', options.country);
