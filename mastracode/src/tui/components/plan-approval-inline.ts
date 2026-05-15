@@ -4,9 +4,20 @@
  * directly in the conversation flow.
  */
 
-import { Box, Container, getEditorKeybindings, Input, Markdown, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
-import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme } from '../theme.js';
+import {
+  Box,
+  Container,
+  getEditorKeybindings,
+  Input,
+  Markdown,
+  SelectList,
+  Spacer,
+  Text,
+  visibleWidth,
+} from '@mariozechner/pi-tui';
+import type { Component, Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
+import chalk from 'chalk';
+import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
 
 export interface PlanApprovalInlineOptions {
   planId: string;
@@ -15,6 +26,29 @@ export interface PlanApprovalInlineOptions {
   onApprove: () => void;
   onGoal: () => void;
   onReject: (feedback?: string) => void;
+}
+
+class PlanContentBox implements Component {
+  constructor(private plan: string) {}
+
+  invalidate(): void {}
+
+  render(width: number): string[] {
+    const availableWidth = Math.max(24, width - BOX_INDENT);
+    const innerWidth = Math.max(20, availableWidth - 4);
+    const markdown = new Markdown(this.plan, 0, 0, getMarkdownTheme(), {
+      color: (text: string) => theme.fg('text', text),
+    });
+    const rendered = markdown.render(innerWidth).flatMap(line => (line.length > 0 ? [line] : ['']));
+    const border = (text: string) => chalk.hex(mastra.purple)(text);
+    const top = `${border('╭')}${border('─'.repeat(innerWidth + 2))}${border('╮')}`;
+    const bottom = `${border('╰')}${border('─'.repeat(innerWidth + 2))}${border('╯')}`;
+    const body = rendered.map(line => {
+      const padding = ' '.repeat(Math.max(0, innerWidth - visibleWidth(line)));
+      return `${border('│')} ${line}${padding} ${border('│')}`;
+    });
+    return [top, ...body, bottom];
+  }
 }
 
 export class PlanApprovalInlineComponent extends Container implements Focusable {
@@ -48,23 +82,13 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.planTitle = options.title;
     this.planContent = options.plan;
 
-    // Main content box - no background, paddingX=1 to align with user message box
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
     this.addChild(new Spacer(1));
 
-    // Plan title header
-    this.contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${options.title}`)), 0, 0));
-    this.contentBox.addChild(new Spacer(1));
+    this.renderPlanHeader();
+    this.renderPlanContent();
 
-    // Render plan as markdown
-    const md = new Markdown(options.plan, 1, 0, getMarkdownTheme(), {
-      color: (text: string) => theme.fg('text', text),
-    });
-    this.contentBox.addChild(md);
-    this.contentBox.addChild(new Spacer(1));
-
-    // Action selector
     const items: SelectItem[] = [
       {
         value: 'approve',
@@ -96,6 +120,22 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(this.selectList);
     this.contentBox.addChild(new Spacer(1));
     this.contentBox.addChild(new Text(theme.fg('dim', 'Up/Down navigate  Enter select  Esc reject'), 0, 0));
+  }
+
+  private renderPlanHeader(prefix = ''): void {
+    this.contentBox.addChild(new Text(`${prefix}${theme.bold(theme.fg('accent', `Plan: ${this.planTitle}`))}`, 0, 0));
+    this.contentBox.addChild(new Spacer(1));
+  }
+
+  private renderPlanContent(): void {
+    this.contentBox.addChild(new PlanContentBox(this.planContent));
+    this.contentBox.addChild(new Spacer(1));
+  }
+
+  private renderFeedback(feedback?: string): void {
+    if (!feedback) return;
+    this.contentBox.addChild(new Text(theme.fg('warning', `Requested changes: ${feedback}`), 0, 0));
+    this.contentBox.addChild(new Spacer(1));
   }
 
   private handleSelection(value: string): void {
@@ -134,7 +174,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private handleReject(feedback?: string): void {
     if (this.resolved) return;
     this.resolved = true;
-    this.showResult(feedback ? `Rejected — ${feedback}` : 'Rejected', false);
+    this.showResult(feedback ? 'Changes requested' : 'Rejected', false, feedback);
     this.onReject(feedback);
   }
 
@@ -142,16 +182,9 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.mode = 'feedback';
     this.selectList = undefined;
 
-    // Rebuild content box with feedback input while keeping the plan visible
     this.contentBox.clear();
-    this.contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${this.planTitle}`)), 0, 0));
-    this.contentBox.addChild(new Spacer(1));
-
-    const md = new Markdown(this.planContent, 1, 0, getMarkdownTheme(), {
-      color: (text: string) => theme.fg('text', text),
-    });
-    this.contentBox.addChild(md);
-    this.contentBox.addChild(new Spacer(1));
+    this.renderPlanHeader();
+    this.renderPlanContent();
 
     this.contentBox.addChild(new Text(theme.fg('accent', 'Provide feedback for revision:'), 0, 0));
     this.contentBox.addChild(new Spacer(1));
@@ -173,25 +206,15 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     );
   }
 
-  private showResult(status: string, isApproved: boolean): void {
+  private showResult(status: string, isApproved: boolean, feedback?: string): void {
     this.contentBox.clear();
 
-    // Status header with icon
     const icon = isApproved ? theme.fg('success', '✓') : theme.fg('error', '✗');
-    this.contentBox.addChild(
-      new Text(
-        `${icon} ${theme.bold(theme.fg('accent', `Plan: ${this.planTitle}`))} ${theme.fg('dim', `— ${status}`)}`,
-        0,
-        0,
-      ),
-    );
+    this.renderPlanHeader(`${icon} `);
+    this.contentBox.addChild(new Text(theme.fg('dim', status), 0, 0));
     this.contentBox.addChild(new Spacer(1));
-
-    // Re-render plan as markdown
-    const md = new Markdown(this.planContent, 1, 0, getMarkdownTheme(), {
-      color: (text: string) => theme.fg('text', text),
-    });
-    this.contentBox.addChild(md);
+    this.renderPlanContent();
+    this.renderFeedback(feedback);
   }
 
   handleInput(data: string): void {
@@ -228,24 +251,21 @@ export class PlanResultComponent extends Container {
     const contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(contentBox);
 
-    // Status header with icon
     const icon = options.isApproved ? theme.fg('success', '✓') : theme.fg('error', '✗');
-    const status = options.isApproved ? 'Approved' : options.feedback ? `Rejected — ${options.feedback}` : 'Rejected';
+    const status = options.isApproved ? 'Approved' : options.feedback ? 'Changes requested' : 'Rejected';
 
     contentBox.addChild(
-      new Text(
-        `${icon} ${theme.bold(theme.fg('accent', `Plan: ${options.title}`))} ${theme.fg('dim', `— ${status}`)}`,
-        0,
-        0,
-      ),
+      new Text(`${icon} ${theme.bold(theme.fg('accent', `Plan: ${options.title}`))} ${theme.fg('dim', `— ${status}`)}`, 0, 0),
     );
     contentBox.addChild(new Spacer(1));
+    contentBox.addChild(new PlanContentBox(options.plan));
+    contentBox.addChild(new Spacer(1));
 
-    // Render plan as markdown
-    const md = new Markdown(options.plan, 1, 0, getMarkdownTheme(), {
-      color: (text: string) => theme.fg('text', text),
-    });
-    contentBox.addChild(md);
+    if (options.feedback) {
+      contentBox.addChild(new Text(theme.fg('warning', `Requested changes: ${options.feedback}`), 0, 0));
+      contentBox.addChild(new Spacer(1));
+    }
+
     this.addChild(new Spacer(1));
   }
 }

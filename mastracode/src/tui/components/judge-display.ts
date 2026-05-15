@@ -15,8 +15,42 @@ const PAUSED_COLOR = '#f5a524';
 const WAITING_COLOR = '#8a8a8a';
 
 export class JudgeDisplayComponent extends Container {
-  constructor(result: GoalJudgeResult, turnsUsed: number, maxTurns: number) {
+  private result: GoalJudgeResult | null;
+  private turnsUsed: number;
+  private maxTurns: number;
+  private activity: string[] = [];
+
+  constructor(result: GoalJudgeResult | null = null, turnsUsed = 0, maxTurns = 0) {
     super();
+    this.result = result;
+    this.turnsUsed = turnsUsed;
+    this.maxTurns = maxTurns;
+    this.renderContent();
+  }
+
+  addActivity(line: string): void {
+    if (this.activity[this.activity.length - 1] !== line) {
+      this.activity.push(line);
+    }
+    if (this.activity.length > 6) {
+      this.activity = this.activity.slice(-6);
+    }
+    this.renderContent();
+  }
+
+  setResult(result: GoalJudgeResult, turnsUsed: number, maxTurns: number): void {
+    this.result = result;
+    this.turnsUsed = turnsUsed;
+    this.maxTurns = maxTurns;
+    this.renderContent();
+  }
+
+  setInterrupted(): void {
+    this.setResult({ decision: 'paused', reason: 'Judge evaluation was interrupted.' }, this.turnsUsed, this.maxTurns);
+  }
+
+  private renderContent(): void {
+    this.clear();
 
     const border = (char: string) => chalk.hex(JUDGE_COLOR)(char);
     const title = chalk.hex(JUDGE_COLOR).bold('Goal');
@@ -24,24 +58,43 @@ export class JudgeDisplayComponent extends Container {
     const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
     const horizontal = '─'.repeat(innerWidth + 1);
 
-    const decisionIcon =
-      result.decision === 'done' ? '●' : result.decision === 'paused' ? '!' : result.decision === 'waiting' ? '◌' : '○';
-    const decisionText = getDecisionText(result.decision);
-    const turnInfo = chalk.hex(MUTED_COLOR)(`(${turnsUsed}/${maxTurns})`);
-
     this.addChild(new Spacer(1));
     this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
-    this.addChild(
-      new Text(
-        this.renderRow(`${title}  ${decisionIcon} ${decisionText}  ${turnInfo}`, innerWidth, border),
-        BOX_INDENT,
-        0,
-      ),
-    );
-    for (const line of this.wrapLine(result.reason, innerWidth)) {
-      this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));
+    this.addChild(new Text(this.renderRow(this.renderHeader(title), innerWidth, border), BOX_INDENT, 0));
+
+    if (!this.result && this.activity.length === 0) {
+      this.addChild(new Text(this.renderRow(chalk.dim('evaluating…'), innerWidth, border), BOX_INDENT, 0));
     }
+
+    for (const line of this.activity) {
+      this.addChild(new Text(this.renderRow(chalk.dim(`• ${line}`), innerWidth, border), BOX_INDENT, 0));
+    }
+
+    if (this.result) {
+      for (const line of this.wrapLine(this.result.reason, innerWidth)) {
+        this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));
+      }
+    }
+
     this.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, BOX_INDENT, 0));
+  }
+
+  private renderHeader(title: string): string {
+    if (!this.result) {
+      return `${title}  ◌ ${chalk.hex(WAITING_COLOR).bold('evaluating')}`;
+    }
+
+    const decisionIcon =
+      this.result.decision === 'done'
+        ? '●'
+        : this.result.decision === 'paused'
+          ? '!'
+          : this.result.decision === 'waiting'
+            ? '◌'
+            : '○';
+    const decisionText = getDecisionText(this.result.decision);
+    const turnInfo = this.maxTurns > 0 ? chalk.hex(MUTED_COLOR)(`(${this.turnsUsed}/${this.maxTurns})`) : '';
+    return `${title}  ${decisionIcon} ${decisionText}${turnInfo ? `  ${turnInfo}` : ''}`;
   }
 
   private renderRow(text: string, width: number, border: (char: string) => string): string {

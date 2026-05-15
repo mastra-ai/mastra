@@ -18,6 +18,7 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
+import type { JudgeDisplayComponent } from './components/judge-display.js';
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
@@ -131,7 +132,7 @@ export interface TUIState {
   hideThinkingBlock: boolean;
   quietMode: boolean;
   /** Active goal judge status-line override while evaluating the last turn. */
-  activeGoalJudge?: { modelId: string };
+  activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
