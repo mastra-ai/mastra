@@ -736,9 +736,6 @@ it('reproduce issue #16383 - optional fields must appear in required for OpenAI 
 
   const result = zodToJsonSchema(schema) as any;
 
-  console.log(JSON.stringify(result, null, 2));
-
-  // Bug 1
   expect(result.required).toBeDefined();
 
   expect(result.required).toEqual(expect.arrayContaining(['name', 'nickname']));
@@ -747,7 +744,6 @@ it('reproduce issue #16383 - optional fields must appear in required for OpenAI 
 
   expect(nicknameProp).toBeDefined();
 
-  // Bug 2
   if (nicknameProp.anyOf) {
     expect(nicknameProp.anyOf).toEqual(
       expect.arrayContaining([
@@ -767,6 +763,5 @@ it('reproduce issue #16383 - optional fields must appear in required for OpenAI 
     expect(nicknameProp.type).not.toContain('boolean');
   }
 
-  // Bug 3
   expect(nicknameProp.description).toBe('The nickname');
 });
