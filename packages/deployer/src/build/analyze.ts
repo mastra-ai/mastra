@@ -230,6 +230,7 @@ async function validateOutput(
     output,
     reverseVirtualReferenceMap,
     usedExternals,
+    userExternals,
     outputDir,
     projectRoot,
     workspaceMap,
@@ -238,6 +239,7 @@ async function validateOutput(
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
     usedExternals: Record<string, Record<string, string>>;
+    userExternals: string[];
     outputDir: string;
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
@@ -290,7 +292,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
+      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...userExternals],
     });
   }
 
@@ -503,6 +505,7 @@ export async function analyzeBundle(
       output,
       reverseVirtualReferenceMap: fileNameToDependencyMap,
       usedExternals,
+      userExternals,
       outputDir,
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
