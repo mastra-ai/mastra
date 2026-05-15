@@ -18,6 +18,21 @@ export { ObservationalMemory } from './observational-memory';
 export { Extractor } from './extractor';
 export type { ExtractorConfig, ExtractorInjectionBehaviour, ExtractorOnExtractedContext } from './extractor';
 
+// Subconscious psyche API
+export { Subconscious } from './subconscious';
+export type {
+  PsycheDefinition,
+  PsycheExtractionOptions,
+  PsycheHandle,
+  PsycheName,
+  PsycheOnExtractedContext,
+  PsycheSelection,
+  SubconsciousOptions,
+  SubconsciousWorkspace,
+} from './subconscious';
+export { builtInPsycheDefinitions } from './subconscious-builtins';
+export type { BuiltInPsycheName } from './subconscious-builtins';
+
 // Constants
 export {
   OBSERVATIONAL_MEMORY_DEFAULTS,

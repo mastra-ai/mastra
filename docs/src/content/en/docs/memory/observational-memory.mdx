@@ -62,6 +62,145 @@ It uses background agents for managing memory. When no model is set, the default
 
 :::
 
+## Experimental Subconscious psyches
+
+`Subconscious` connects OM extractors to background psyche agents. A psyche receives structured extraction data and can maintain durable workspace artifacts, such as knowledge, skills, mental models, or policies.
+
+The following example uses the convenience `ObservationalMemory` wrapper from `@mastra/memory`:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ObservationalMemory, Subconscious } from '@mastra/memory'
+
+const subconscious = new Subconscious({
+  model: 'openai/gpt-5-mini',
+})
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
+  memory: new ObservationalMemory({
+    subconscious,
+    observation: { psyches: ['critic', 'learner', 'integrator'] },
+    reflection: { psyches: ['dreamer', 'modeler'] },
+  }),
+})
+```
+
+Built-in psyches include:
+
+- `learner`: skill candidates and updates to reusable skill procedures
+- `integrator`: knowledge deltas, important entities, relationships, and stale knowledge
+- `critic`: risks, contradictions, policy concerns, security concerns, and review flags
+- `dreamer`: hypotheses, unexpected connections, experiments, and provenance
+- `modeler`: belief updates, causal assumptions, stale assumptions, and open questions
+
+### Use workspace tools
+
+Pass a Mastra `Workspace` to give generated psyche agents read and write tools for durable files. By default, generated psyche agents can read, list, search, write, edit, and create directories. Delete and command execution tools are disabled unless you enable them explicitly.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+import { ObservationalMemory, Subconscious } from '@mastra/memory'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: process.cwd() }),
+})
+
+const subconscious = new Subconscious({
+  model: 'openai/gpt-5-mini',
+  workspace,
+})
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
+  memory: new ObservationalMemory({
+    subconscious,
+    observation: { psyches: ['critic', 'learner', 'integrator'] },
+  }),
+})
+```
+
+Built-in psyche agents receive workspace domain guidance. For example, `learner` writes to `skills/`, `integrator` writes to `knowledge/`, and `critic` writes to `review/`.
+
+### Customize extraction
+
+Use object form to override active psyches, schemas, instructions, models, or routing for one phase:
+
+```typescript
+import { z } from 'zod'
+
+const memory = new ObservationalMemory({
+  subconscious,
+  observation: {
+    psyches: {
+      active: ['critic'],
+      schemas: {
+        critic: z.object({
+          needsReview: z.boolean(),
+          reason: z.string(),
+        }),
+      },
+      instructions: {
+        critic: 'Only flag issues that need human review.',
+      },
+      onExtracted: async ({ extracted }) => {
+        // Replaces default signal routing for this extractor.
+        console.log(extracted.critic)
+      },
+    },
+  },
+})
+```
+
+You can also compose the extractor directly:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'openai/gpt-5-mini',
+      observation: {
+        extract: [subconscious.psyches(['critic', 'learner', 'integrator'])],
+      },
+    },
+  },
+})
+```
+
+### Use a custom psyche
+
+A custom psyche can provide its own schema and agent. Supplied agents are not mutated. If a custom agent needs workspace access, attach workspace tools to that agent or use `subconscious.workspaceToolsFor(name, requestContext)` when building its tools.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { z } from 'zod'
+
+const planner = new Agent({
+  name: 'planner-psyche',
+  instructions: 'Maintain planning notes from extracted observations.',
+  model: 'openai/gpt-5-mini',
+})
+
+const subconscious = new Subconscious({
+  model: 'openai/gpt-5-mini',
+  workspace,
+  psyches: {
+    planner: {
+      agent: planner,
+      schema: z.object({ nextSteps: z.array(z.string()) }),
+      extractionInstructions: 'Extract durable planning notes.',
+    },
+  },
+})
+```
+
+By default, psyche signals are persisted instead of waking agents immediately. Signal contents are JSON strings, and inbox threads use stable IDs like `subconscious:<resource-or-agent-id>:critic`. This is an experimental bridge from OM extractors to background agents, not a full Agent Co-op storage runtime.
+
 ## Temporal gap markers
 
 Temporal gap markers insert a short reminder before a new user message when enough time has passed since the previous message in the thread. They help the agent and the UI see that the conversation resumed after a meaningful pause.
@@ -470,6 +609,71 @@ For your use-case this may not be a problem, so your mileage may vary.
 In resource scope, unobserved messages across _all_ threads are processed together. For users with many existing threads, this can be slow. Use thread scope for existing apps.
 
 :::
+
+## Experimental Subconscious psyches
+
+Subconscious psyches let Observational Memory route extracted data to background agents that maintain a durable workspace. The main agent does not receive full workspace file contents automatically. Instead, Subconscious monitors psyche workspace tool activity, writes a compact `<subconscious>` observation back into OM, and the main agent can inspect referenced files with explicit workspace read tools.
+
+```typescript
+import { ObservationalMemory, Subconscious } from '@mastra/memory'
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+
+const subconscious = new Subconscious({
+  workspace: new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './.subconscious' }),
+  }),
+})
+
+const memory = new ObservationalMemory({
+  storage,
+  model: 'google/gemini-2.5-flash',
+  subconscious,
+  observation: {
+    psyches: ['critic', 'learner', 'integrator'],
+  },
+  reflection: {
+    psyches: ['dreamer', 'modeler'],
+  },
+})
+```
+
+Built-in psyches use separate workspace domains:
+
+- `learner` updates reusable skills under `skills/`.
+- `integrator` updates durable knowledge under `knowledge/`.
+- `critic` writes review notes under `review/`.
+- `dreamer` writes speculative artifacts under `artifacts/`.
+- `modeler` updates assumptions and open questions under `mental-model/`.
+
+When a psyche writes workspace files, OM stores a compact activity observation such as:
+
+```xml
+<subconscious>
+- learner created/updated skill `skills/source-research/SKILL.md`
+- integrator updated knowledge `knowledge/tyler-barnes.md`
+- critic created/updated review note `review/entity-disambiguation.md`
+</subconscious>
+```
+
+To let the main agent inspect those artifacts, add read-oriented workspace tools explicitly. Subconscious does not mutate user agents automatically.
+
+```typescript
+const tools = await subconscious.workspaceToolsForMainAgent(requestContext)
+```
+
+You can customize the hook and still use the scoped Subconscious runtime. The runtime is bound to the current OM extraction, so it can run the active psyches and write synthetic observations without passing storage or thread IDs manually.
+
+```typescript
+const extractor = subconscious.psyches({
+  active: ['critic', 'integrator'],
+  onExtracted: async ({ subconscious, extracted }) => {
+    const report = await subconscious.run(extracted)
+    await subconscious.writeObservations(report)
+  },
+})
+```
+
+Use custom `onExtracted` logic when you want to filter which activity reaches OM, write your own summary, or defer running a psyche. If no workspace changes occur, Subconscious skips the OM activity observation by default.
 
 ## Token budgets
 

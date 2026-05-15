@@ -44,7 +44,10 @@ import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compa
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
-import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import type {
+  ObservationalMemory as ObservationalMemoryEngine,
+  ObservationalMemoryConfig,
+} from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
 import {
   updateWorkingMemoryTool,
@@ -66,6 +69,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
+  subconscious?: ObservationalMemoryConfig['subconscious'];
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
@@ -218,12 +222,12 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  private _omEngine: Promise<ObservationalMemory | null> | undefined;
-  private _omEngineInstance: ObservationalMemory | null | undefined;
+  private _omEngine: Promise<ObservationalMemoryEngine | null> | undefined;
+  private _omEngineInstance: ObservationalMemoryEngine | null | undefined;
   private _mastraInstance: Mastra | undefined;
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */
-  get omEngine(): Promise<ObservationalMemory | null> {
+  get omEngine(): Promise<ObservationalMemoryEngine | null> {
     if (!this._omEngine) {
       this._omEngine = this._initOMEngine().then(engine => {
         this._omEngineInstance = engine;
@@ -1554,7 +1558,7 @@ ${workingMemory}`;
    * One-time initialization of the shared ObservationalMemory engine.
    * Called lazily by the `omEngine` getter on first access.
    */
-  private async _initOMEngine(): Promise<ObservationalMemory | null> {
+  private async _initOMEngine(): Promise<ObservationalMemoryEngine | null> {
     const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
     if (!omConfig) return null;
 
@@ -1607,6 +1611,7 @@ ${workingMemory}`;
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       mastra: this._mastraInstance,
+      subconscious: omConfig.subconscious,
       onIndexObservations,
       observation: omConfig.observation
         ? {
@@ -1624,6 +1629,7 @@ ${workingMemory}`;
             threadTitle: omConfig.observation.threadTitle,
             extract: omConfig.observation.extract,
             observeAttachments: omConfig.observation.observeAttachments,
+            psyches: omConfig.observation.psyches,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1636,6 +1642,7 @@ ${workingMemory}`;
             blockAfter: omConfig.reflection.blockAfter,
             instruction: omConfig.reflection.instruction,
             extract: omConfig.reflection.extract,
+            psyches: omConfig.reflection.psyches,
           }
         : undefined,
     });
@@ -2866,6 +2873,30 @@ Notes:
   }
 }
 
+export type ObservationalMemoryConstructorConfig = MemoryConstructorConfig &
+  MemoryObservationalMemoryOptions & {
+    enabled?: boolean;
+  };
+
+/**
+ * Convenience Memory wrapper that enables Observational Memory from top-level options.
+ *
+ * @experimental
+ */
+export class ObservationalMemory extends Memory {
+  constructor(config: ObservationalMemoryConstructorConfig = {}) {
+    const { options, enabled: _enabled, ...rest } = config;
+    const observationalMemory = rest as MemoryObservationalMemoryOptions;
+    super({
+      ...rest,
+      options: {
+        ...options,
+        observationalMemory,
+      },
+    });
+  }
+}
+
 // Re-export memory processors from @mastra/core for backward compatibility
 export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/processors';
 
@@ -2873,4 +2904,15 @@ export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/proc
 export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMetadata } from '@mastra/core/storage';
 
 // Observational Memory utilities
-export { getObservationsAsOf } from './processors/observational-memory';
+export { getObservationsAsOf, Subconscious } from './processors/observational-memory';
+export type {
+  BuiltInPsycheName,
+  PsycheDefinition,
+  PsycheExtractionOptions,
+  PsycheHandle,
+  PsycheName,
+  PsycheOnExtractedContext,
+  PsycheSelection,
+  SubconsciousOptions,
+  SubconsciousWorkspace,
+} from './processors/observational-memory';

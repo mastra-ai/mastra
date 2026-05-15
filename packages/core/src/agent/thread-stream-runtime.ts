@@ -918,7 +918,16 @@ export class AgentThreadStreamRuntime {
         runId,
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
-      .catch(() => {
+      .catch(error => {
+        if (typeof signal.type === 'string' && signal.type.startsWith('om.subconscious.')) {
+          console.error('[Subconscious] idle signal stream failed', {
+            signalType: signal.type,
+            runId,
+            resourceId,
+            threadId,
+            error,
+          });
+        }
         state.threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(state, runId);
         if (state.activeThreadRunIds.get(key) === runId) {

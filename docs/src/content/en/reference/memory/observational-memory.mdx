@@ -30,6 +30,29 @@ export const agent = new Agent({
 })
 ```
 
+## `Subconscious` experimental API
+
+`Subconscious` creates OM extractors for background psyche agents. Use it with the `ObservationalMemory` convenience wrapper or pass `subconscious.psyches(...)` directly in `observation.extract` or `reflection.extract`.
+
+```typescript
+import { ObservationalMemory, Subconscious } from '@mastra/memory'
+
+const subconscious = new Subconscious({
+  model: 'openai/gpt-5-mini',
+  workspace,
+})
+
+const memory = new ObservationalMemory({
+  subconscious,
+  observation: { psyches: ['critic', 'learner'] },
+  reflection: { psyches: ['dreamer', 'modeler'] },
+})
+```
+
+Built-in psyche names are `learner`, `critic`, `dreamer`, and `modeler`. Generated psyche agents receive workspace tools when `workspace` is provided. Safe file tools are enabled by default; delete and command execution tools are disabled unless enabled through `workspaceTools`.
+
+Default routing sends persisted signals with type `om.subconscious.<psyche>.extracted`. Signal `contents` is a JSON string, and inbox thread IDs use `subconscious:<resource-or-agent-id>:<psyche>`. A phase-level `onExtracted` callback replaces default routing.
+
 ## Configuration
 
 The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `google/gemini-2.5-flash` as the default model. When passing a config object, a `model` must be explicitly set — either at the top level, or on `observation.model` and/or `reflection.model`.
@@ -104,6 +127,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: 'false',
   },
   {
+    name: 'subconscious',
+    type: 'Subconscious',
+    description:
+      '**Experimental.** Subconscious instance used to compile `observation.psyches` and `reflection.psyches` into OM extractors. Generated psyche agents can receive workspace tools when the Subconscious is configured with a Workspace.',
+    isOptional: true,
+  },
+  {
     name: 'observation',
     type: 'ObservationalMemoryObservationConfig',
     description: 'Configuration for the observation step. Controls when the Observer agent runs and how it behaves.',
@@ -124,6 +154,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             type: 'string',
             description:
               "Custom instruction appended to the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities.",
+            isOptional: true,
+          },
+          {
+            name: 'psyches',
+            type: 'PsycheName[] | PsycheExtractionOptions',
+            description:
+              '**Experimental.** Psyches to activate during observation. Requires top-level `subconscious`. Array shorthand uses built-in or registered psyche defaults. Object form supports `active`, `schemas`, `instructions`, `models`, and `onExtracted` overrides.',
             isOptional: true,
           },
           {
@@ -279,6 +316,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             type: 'Array<Extractor<any>>',
             description:
               'Custom extractors that run after reflection. Values are schema-validated, persisted to `thread.metadata.mastra.om.extracted`, optionally carried forward into later extraction prompts, emitted as `data-om-extracted` stream parts, and passed to `onExtracted` hooks. Extractor sections are stripped from stored reflection text.',
+            isOptional: true,
+          },
+          {
+            name: 'psyches',
+            type: 'PsycheName[] | PsycheExtractionOptions',
+            description:
+              '**Experimental.** Psyches to activate during reflection. Requires top-level `subconscious`. Array shorthand uses built-in or registered psyche defaults. Object form supports `active`, `schemas`, `instructions`, `models`, and `onExtracted` overrides.',
             isOptional: true,
           },
           {

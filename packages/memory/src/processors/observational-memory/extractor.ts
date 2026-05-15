@@ -3,6 +3,8 @@ import type { ProcessorAgent } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 
+import type { ObservationModelContext } from './types';
+
 /**
  * How the extracted value should be reused on subsequent observer calls.
  *
@@ -73,6 +75,12 @@ export type ExtractorOnExtractedContext<T> = ExtractorOnExtractedObservationCont
 
   /** Runtime context from the agent request. */
   requestContext: RequestContext;
+
+  /** The resolved foreground model context for the actor turn that produced this extraction. */
+  currentModel?: ObservationModelContext;
+
+  /** @internal Append synthetic observations to this OM record. */
+  writeObservations?: (observations: string | string[]) => Promise<void>;
 
   /** The resource ID, when this thread belongs to one. */
   resourceId?: string;
@@ -569,6 +577,8 @@ export async function invokeExtractorHooks(
     resourceId?: string;
     mainAgent: ProcessorAgent;
     requestContext: RequestContext;
+    currentModel?: ObservationModelContext;
+    writeObservations?: (observations: string | string[]) => Promise<void>;
     previousValues?: {
       currentTask?: string;
       suggestedContinuation?: string;
@@ -580,7 +590,6 @@ export async function invokeExtractorHooks(
 ): Promise<Record<string, unknown>> {
   const normalizedValues: Record<string, unknown> = {};
   if (extractors.length === 0) return normalizedValues;
-
   await Promise.all(
     extractors.map(async extractor => {
       const current = getExtractedValueForExtractor(extractor, values);
@@ -603,6 +612,8 @@ export async function invokeExtractorHooks(
             threadId: ctx.threadId,
             mainAgent: ctx.mainAgent,
             requestContext: ctx.requestContext,
+            currentModel: ctx.currentModel,
+            writeObservations: ctx.writeObservations,
             resourceId: ctx.resourceId,
           } as ExtractorOnExtractedContext<any>);
           if (returned !== undefined && !isBuiltInExtractorSlug(extractor.slug)) {

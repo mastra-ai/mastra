@@ -1393,7 +1393,6 @@ export function parseObserverOutput(output: string): ObserverResult {
   const parsed = parseMemorySectionXml(output);
 
   const observations = sanitizeObservationLines(parsed.observations || '');
-
   return {
     observations,
     currentTask: parsed.currentTask || undefined,

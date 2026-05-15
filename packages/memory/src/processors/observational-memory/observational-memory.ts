@@ -537,8 +537,33 @@ export class ObservationalMemory {
       observeAttachments: config.observation?.observeAttachments ?? true,
     };
 
-    this.resolveObserverExtractors(config.observation?.extract);
-    this.resolveReflectorExtractors(config.reflection?.extract);
+    const observationExtractors = [
+      ...(config.observation?.extract ?? []),
+      ...(config.subconscious && config.observation?.psyches
+        ? [
+            config.subconscious.psyches(
+              Array.isArray(config.observation.psyches)
+                ? { active: config.observation.psyches, phase: 'observation' }
+                : { ...config.observation.psyches, phase: 'observation' },
+            ),
+          ]
+        : []),
+    ];
+    const reflectionExtractors = [
+      ...(config.reflection?.extract ?? []),
+      ...(config.subconscious && config.reflection?.psyches
+        ? [
+            config.subconscious.psyches(
+              Array.isArray(config.reflection.psyches)
+                ? { active: config.reflection.psyches, phase: 'reflection' }
+                : { ...config.reflection.psyches, phase: 'reflection' },
+            ),
+          ]
+        : []),
+    ];
+
+    this.resolveObserverExtractors(observationExtractors);
+    this.resolveReflectorExtractors(reflectionExtractors);
 
     // Resolve reflection config with defaults
     this.reflectionConfig = {
@@ -3449,6 +3474,7 @@ ${formattedMessages}
     agent?: ProcessorAgent;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
+    currentModel?: ObservationModelContext;
     observabilityContext?: ObservabilityContext;
   }): Promise<{
     observed: boolean;
@@ -3498,6 +3524,7 @@ ${formattedMessages}
           agent,
           requestContext,
           writer: opts.writer,
+          currentModel: opts.currentModel,
           observabilityContext: opts.observabilityContext,
         }).run();
         observed = result.observed;

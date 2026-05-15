@@ -178,6 +178,7 @@ export class ObservationStep {
           writer: this.turn.writer,
           agent: this.turn.agent,
           requestContext: this.turn.requestContext,
+          currentModel: this.turn.actorModelContext,
           observabilityContext: this.turn.observabilityContext,
         })
         .catch((err: Error) => {
@@ -372,6 +373,7 @@ export class ObservationStep {
       agent: this.turn.agent,
       requestContext: this.turn.requestContext,
       writer: this.turn.writer,
+      currentModel: this.turn.actorModelContext,
       observabilityContext: this.turn.observabilityContext,
     });
 

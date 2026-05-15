@@ -182,6 +182,17 @@ export abstract class ObservationStrategy {
    * Hook errors are swallowed (logged via `omError`) so a buggy user hook
    * never breaks the observation cycle.
    */
+  protected appendSyntheticObservations(processed: ProcessedObservation, observations: string | string[]): void {
+    const additions = (Array.isArray(observations) ? observations : [observations])
+      .map(observation => observation.trim())
+      .filter(Boolean);
+    if (additions.length === 0) return;
+
+    processed.observations = [processed.observations, ...additions].filter(Boolean).join('\n\n');
+    processed.observationTokens = this.tokenCounter.countString(processed.observations);
+    processed.cycleObservationTokens += this.tokenCounter.countString(additions.join('\n\n'));
+  }
+
   protected async applyExtractorHooks(processed: ProcessedObservation): Promise<void> {
     if (this.deps.extractors.length === 0) return;
 
@@ -210,6 +221,17 @@ export abstract class ObservationStrategy {
               resourceId: this.opts.resourceId,
               mainAgent: this.opts.agent!,
               requestContext: this.opts.requestContext ?? new RequestContext(),
+              currentModel: this.opts.currentModel,
+              writeObservations: observations => {
+                this.appendSyntheticObservations(processed, observations);
+                update.newObservations = [
+                  update.newObservations,
+                  ...(Array.isArray(observations) ? observations : [observations]),
+                ]
+                  .filter(Boolean)
+                  .join('\n\n');
+                return Promise.resolve();
+              },
               previousValues: {
                 currentTask: priorMeta?.currentTask,
                 suggestedContinuation: priorMeta?.suggestedResponse,
@@ -247,6 +269,17 @@ export abstract class ObservationStrategy {
         resourceId: this.opts.resourceId,
         mainAgent: this.opts.agent!,
         requestContext: this.opts.requestContext ?? new RequestContext(),
+        currentModel: this.opts.currentModel,
+        writeObservations: observations => {
+          this.appendSyntheticObservations(processed, observations);
+          processed.newObservations = [
+            processed.newObservations,
+            ...(Array.isArray(observations) ? observations : [observations]),
+          ]
+            .filter(Boolean)
+            .join('\n\n');
+          return Promise.resolve();
+        },
         previousValues: {
           currentTask: priorMeta?.currentTask,
           suggestedContinuation: priorMeta?.suggestedResponse,
