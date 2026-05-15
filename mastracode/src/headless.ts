@@ -628,7 +628,8 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
 
   // Cleanup
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void }).close;
+  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), closeSignalsPubSub?.()]);
 
   process.exit(exitCode);
 }

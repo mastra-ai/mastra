@@ -20,6 +20,7 @@ let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
+let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
@@ -46,6 +47,7 @@ async function tuiMain(pipedInput?: string | null) {
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
+  signalsPubSub = result.signalsPubSub;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -107,7 +109,8 @@ async function tuiMain(pipedInput?: string | null) {
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), closeSignalsPubSub?.()]);
 };
 
 process.on('beforeExit', () => {
