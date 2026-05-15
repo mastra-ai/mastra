@@ -8,8 +8,7 @@ import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from 
  */
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
-export type SignalPart = SignalTextPart | SignalFilePart;
-type SignalTextPart = { type: 'text'; text: string; providerOptions?: MastraProviderMetadata };
+export type SignalPart = TextPart | SignalFilePart;
 type SignalFilePart = {
   type: 'file';
   data: string;
