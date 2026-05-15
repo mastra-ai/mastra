@@ -73,7 +73,7 @@ For destinations and processors, see [Integrations overview](/docs/observability
 
 When you add external exporters, keep `MastraStorageExporter` for Studio observability and/or `MastraPlatformExporter` for hosted Mastra platform observability.
 
-This example shows only the observability config. You still need storage configured separately.
+This example shows only the observability config. Configure storage separately.
 
 ```ts title="src/mastra/observability.ts"
 import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability'
@@ -96,7 +96,9 @@ export const observability = new Observability({
 })
 ```
 
-## Flushing traces in serverless environments
+<div id="flushing-traces-in-serverless-environments" />
+
+## Flushing in serverless environments
 
 In serverless environments, flush observability exporters before the runtime pauses or exits:
 
@@ -136,7 +138,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Trace sampling is still documented in [Tracing](/docs/observability/tracing/overview), since it controls trace collection rather than shared observability setup.
+For trace sampling, see [Tracing](/docs/observability/tracing/overview).
 
 ## Related
 
