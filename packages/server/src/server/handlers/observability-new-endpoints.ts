@@ -67,12 +67,13 @@ import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { deltaCursorSchema, paginationArgsSchema } from './observability-list-query-schemas';
+import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   createObservabilityListQuerySchema,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
+  OBSERVABILITY_LIST_ENDPOINTS,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
@@ -130,11 +131,11 @@ export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
     const observabilityStore = await getObservabilityStore(mastra);
 
     if (mode === 'delta') {
-      assertObservabilityDeltaSupported(observabilityStore, 'logs');
+      assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.logs);
       return await observabilityStore.listLogs({
         mode,
         filters,
-        after: deltaCursorSchema.optional().parse(after),
+        after: typeof after === 'string' ? after : undefined,
         limit,
       });
     }
@@ -159,11 +160,11 @@ export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
     const observabilityStore = await getObservabilityStore(mastra);
 
     if (mode === 'delta') {
-      assertObservabilityDeltaSupported(observabilityStore, 'scores');
+      assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.scores);
       return await observabilityStore.listScores({
         mode,
         filters,
-        after: deltaCursorSchema.optional().parse(after),
+        after: typeof after === 'string' ? after : undefined,
         limit,
       });
     }
@@ -250,11 +251,11 @@ export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
     const observabilityStore = await getObservabilityStore(mastra);
 
     if (mode === 'delta') {
-      assertObservabilityDeltaSupported(observabilityStore, 'feedback');
+      assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.feedback);
       return await observabilityStore.listFeedback({
         mode,
         filters,
-        after: deltaCursorSchema.optional().parse(after),
+        after: typeof after === 'string' ? after : undefined,
         limit,
       });
     }
@@ -331,11 +332,11 @@ export const LIST_METRICS = createNewRoute(NEW_ROUTE_DEFS.LIST_METRICS, {
     const observabilityStore = await getObservabilityStore(mastra);
 
     if (mode === 'delta') {
-      assertObservabilityDeltaSupported(observabilityStore, 'metrics');
+      assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.metrics);
       return await observabilityStore.listMetrics({
         mode,
         filters,
-        after: deltaCursorSchema.optional().parse(after),
+        after: typeof after === 'string' ? after : undefined,
         limit,
       });
     }

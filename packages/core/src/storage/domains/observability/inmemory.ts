@@ -185,10 +185,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return cursorId;
   }
 
-  private currentObservabilityCursorId(): number {
-    return Math.max(0, this.db.observabilityNextCursorId - 1);
-  }
-
   private encodeDeltaCursor(cursorId?: number | null): string {
     return (cursorId ?? 0).toString();
   }

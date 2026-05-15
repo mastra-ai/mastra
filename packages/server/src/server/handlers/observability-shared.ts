@@ -16,7 +16,17 @@ export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling'
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 
-export type ObservabilityListEndpoint = 'traces' | 'branches' | 'logs' | 'metrics' | 'scores' | 'feedback';
+export const OBSERVABILITY_LIST_ENDPOINTS = {
+  traces: 'traces',
+  branches: 'branches',
+  logs: 'logs',
+  metrics: 'metrics',
+  scores: 'scores',
+  feedback: 'feedback',
+} as const;
+
+export type ObservabilityListEndpoint =
+  (typeof OBSERVABILITY_LIST_ENDPOINTS)[keyof typeof OBSERVABILITY_LIST_ENDPOINTS];
 
 type ObservabilityListCapabilities = {
   delta?: Partial<Record<ObservabilityListEndpoint, true>>;
@@ -294,8 +304,8 @@ export function createObservabilityListQuerySchema<
 
   const pageSchema = unwrapDefault(paginationShape.page);
   const perPageSchema = unwrapDefault(paginationShape.perPage);
-  const fieldSchema = unwrapDefault(orderByShape.field!);
-  const directionSchema = unwrapDefault(orderByShape.direction!);
+  const fieldSchema = orderByShape.field ? unwrapDefault(orderByShape.field) : z.never().optional();
+  const directionSchema = orderByShape.direction ? unwrapDefault(orderByShape.direction) : z.never().optional();
 
   return wrapSchemaForQueryParams(
     z

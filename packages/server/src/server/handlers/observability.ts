@@ -23,12 +23,13 @@ import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { deltaCursorSchema, paginationArgsSchema } from './observability-list-query-schemas';
+import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   createObservabilityListQuerySchema,
   getObservabilityStore,
   getStorage,
+  OBSERVABILITY_LIST_ENDPOINTS,
 } from './observability-shared';
 import {
   branchesFilterSchema,
@@ -148,20 +149,18 @@ export const LIST_TRACES_ROUTE = createRoute({
       const filters = pickParams(tracesFilterSchema, transformedParams);
       const observabilityStore = await getObservabilityStore(mastra);
       if (mode === 'delta') {
-        assertObservabilityDeltaSupported(observabilityStore, 'traces');
+        assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.traces);
         return await observabilityStore.listTraces({
           mode,
           filters,
-          after: deltaCursorSchema.optional().parse(after),
+          after: typeof after === 'string' ? after : undefined,
           limit,
         });
       }
 
       const pagination = pickParams(paginationArgsSchema, transformedParams);
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
-      return await observabilityStore.listTraces(
-        mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
-      );
+      return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing traces');
     }
@@ -222,20 +221,18 @@ export const LIST_BRANCHES_ROUTE = createRoute({
       const filters = pickParams(branchesFilterSchema, params);
       const observabilityStore = await getObservabilityStore(mastra);
       if (mode === 'delta') {
-        assertObservabilityDeltaSupported(observabilityStore, 'branches');
+        assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.branches);
         return await observabilityStore.listBranches({
           mode,
           filters,
-          after: deltaCursorSchema.optional().parse(after),
+          after: typeof after === 'string' ? after : undefined,
           limit,
         });
       }
 
       const pagination = pickParams(paginationArgsSchema, params);
       const orderBy = pickParams(branchesOrderBySchema, params);
-      return await observabilityStore.listBranches(
-        mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
-      );
+      return await observabilityStore.listBranches({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing branches');
     }
