@@ -61,6 +61,28 @@ describe('validate', () => {
     await expect(validate(filePath, { moduleResolveMapLocation: moduleMapPath })).rejects.toThrow();
   }, 10000);
 
+  it('should resolve named imports from stubbed externals', async () => {
+    const filePath = join(tempDir, 'stubbed-external.js');
+    await writeFile(
+      filePath,
+      `
+        import { pgTable, text } from 'custom-user-external/pg-core';
+
+        export const users = pgTable('users', { id: text('id') });
+      `,
+    );
+
+    await expect(
+      validate(filePath, {
+        moduleResolveMapLocation: moduleMapPath,
+        stubbedExternals: ['custom-user-external'],
+        stubbedExternalExports: {
+          'custom-user-external/pg-core': ['pgTable', 'text'],
+        },
+      }),
+    ).resolves.toBeUndefined();
+  }, 10000);
+
   it('should reject when file does not exist', async () => {
     const filePath = join(tempDir, 'does-not-exist.js');
 
