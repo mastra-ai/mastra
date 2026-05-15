@@ -170,6 +170,7 @@ export function serializeDurableState(params: {
 export function serializeDurableOptions(options: {
   maxSteps?: number;
   toolChoice?: any;
+  activeTools?: string[];
   temperature?: number;
   requireToolApproval?: boolean;
   toolCallConcurrency?: number;
@@ -199,6 +200,7 @@ export function serializeDurableOptions(options: {
   return {
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
+    activeTools: options.activeTools,
     temperature: options.temperature,
     requireToolApproval: options.requireToolApproval,
     toolCallConcurrency: options.toolCallConcurrency,
