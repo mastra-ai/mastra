@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.18.2-alpha.1
+
+### Patch Changes
+
+- Fixed thread deletion so it also clears thread-scoped observational memory. ([#16628](https://github.com/mastra-ai/mastra/pull/16628))
+
+- Updated dependencies [[`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04)]:
+  - @mastra/core@1.35.0-alpha.2
+
 ## 1.18.2-alpha.0
 
 ### Patch Changes
