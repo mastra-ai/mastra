@@ -402,6 +402,11 @@ export interface AgentConfig<
    */
   mastra?: Mastra;
   /**
+   * Pub/sub system for coordinating runtime services such as thread signals.
+   * When omitted, the agent uses its Mastra instance pubsub or the default in-memory pubsub.
+   */
+  pubsub?: PubSub;
+  /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
   agents?: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;

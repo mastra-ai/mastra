@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSub } from '../events/pubsub';
+import type { EventCallback } from '../events/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -16,6 +19,9 @@ import type {
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
+
+export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
 function callerSignalPayloadKey(signal: AgentSignal): string | undefined {
   try {
@@ -61,27 +67,82 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   streamOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
+type AgentThreadRuntimeState = {
+  threadRunsById: Map<string, AgentThreadRunRecord<any>>;
+  threadKeysByRunId: Map<string, string>;
+  activeThreadRunIds: Map<string, string>;
+  pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
+  pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
+  watchedThreadRunIds: Set<string>;
+  preparedRunsById: Map<string, PreparedThreadRun>;
+  abortedRunIds: Set<string>;
+  acceptedCallerSignals: Map<string, SendAgentSignalResult>;
+  callerSignalIdsByRunId: Map<string, Set<string>>;
+  pendingOutputWaiters: Map<string, Array<(out: MastraModelOutput<any>) => void>>;
+};
+
+type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
+
+type AgentThreadStreamRuntimeEvent =
+  | { type: 'run-registered'; runId: string }
+  | { type: 'run-completed'; runId: string }
+  | { type: 'run-aborted'; runId: string }
+  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string };
+
+function createRuntimeState(): AgentThreadRuntimeState {
+  return {
+    threadRunsById: new Map(),
+    threadKeysByRunId: new Map(),
+    activeThreadRunIds: new Map(),
+    pendingSignalsByThread: new Map(),
+    pendingIdleSignalsByThread: new Map(),
+    watchedThreadRunIds: new Set(),
+    preparedRunsById: new Map(),
+    abortedRunIds: new Set(),
+    acceptedCallerSignals: new Map(),
+    callerSignalIdsByRunId: new Map(),
+    pendingOutputWaiters: new Map(),
+  };
+}
+
 export class AgentThreadStreamRuntime {
-  #threadRunsById = new Map<string, AgentThreadRunRecord<any>>();
-  #threadKeysByRunId = new Map<string, string>();
-  #activeThreadRunIds = new Map<string, string>();
-  #threadRunSubscribers = new Map<string, Set<(run: AgentThreadRunRecord<any>) => void>>();
-  #pendingSignalsByThread = new Map<string, CreatedAgentSignal[]>();
-  #pendingIdleSignalsByThread = new Map<string, PendingIdleSignal<any>[]>();
-  #watchedThreadRunIds = new Set<string>();
-  #preparedRunsById = new Map<string, PreparedThreadRun>();
-  #abortedRunIds = new Set<string>();
-  #acceptedCallerSignals = new Map<string, SendAgentSignalResult>();
-  #callerSignalIdsByRunId = new Map<string, Set<string>>();
-  /**
-   * Per-run resolvers used by `waitForRunOutput()`. Populated lazily on the
-   * first `waitForRunOutput()` call and cleared when `registerRun()` resolves
-   * the matching entry (or when the run is cancelled).
-   */
-  #pendingOutputWaiters = new Map<string, Array<(out: MastraModelOutput<any>) => void>>();
+  #id = randomUUID();
+  #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
+
+  #getPubSub(pubsub?: PubSub): PubSub {
+    return pubsub ?? defaultAgentThreadPubSub;
+  }
+
+  #getState(pubsub?: PubSub): AgentThreadRuntimeState {
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    let state = this.#statesByPubSub.get(resolvedPubSub);
+    if (!state) {
+      state = createRuntimeState();
+      this.#statesByPubSub.set(resolvedPubSub, state);
+    }
+    return state;
+  }
 
   #threadKey(resourceId: string | undefined, threadId: string): string {
     return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+  }
+
+  #threadTopic(key: string): string {
+    return `${AGENT_THREAD_STREAM_TOPIC_PREFIX}.${encodeURIComponent(key)}`;
+  }
+
+  #serializeSignal(signal: CreatedAgentSignal): SerializableAgentSignal {
+    return signal;
+  }
+
+  #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
+    void this.#getPubSub(pubsub)
+      .publish(this.#threadTopic(key), {
+        type: event.type,
+        runId: event.runId,
+        data: event,
+      })
+      .catch(() => {});
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -95,10 +156,11 @@ export class AgentThreadStreamRuntime {
     return { threadId, resourceId };
   }
 
-  prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>): AgentExecutionOptions<OUTPUT> {
+  prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>, pubsub?: PubSub): AgentExecutionOptions<OUTPUT> {
     const { threadId } = this.#getThreadTarget(options);
     if (!threadId || !options.runId) return options;
 
+    const state = this.#getState(pubsub);
     const abortController = new AbortController();
     const upstreamAbortSignal = options.abortSignal;
     const abort = () => abortController.abort();
@@ -108,12 +170,12 @@ export class AgentThreadStreamRuntime {
       upstreamAbortSignal?.addEventListener('abort', abort, { once: true });
     }
 
-    this.#preparedRunsById.set(options.runId, {
+    state.preparedRunsById.set(options.runId, {
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
     });
 
-    if (this.#abortedRunIds.has(options.runId)) {
+    if (state.abortedRunIds.has(options.runId)) {
       abort();
     }
 
@@ -123,95 +185,74 @@ export class AgentThreadStreamRuntime {
     };
   }
 
-  abortRun(runId: string): boolean {
-    const preparedRun = this.#preparedRunsById.get(runId);
+  abortRun(runId: string, pubsub?: PubSub): boolean {
+    const state = this.#getState(pubsub);
+    const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
-      this.#abortedRunIds.add(runId);
+      state.abortedRunIds.add(runId);
       return false;
     }
 
     preparedRun.abortController.abort();
-    this.#abortedRunIds.add(runId);
+    state.abortedRunIds.add(runId);
+
+    const key = state.threadKeysByRunId.get(runId);
+    if (key) {
+      this.#publish(pubsub, key, { type: 'run-aborted', runId });
+    }
+
     return true;
   }
 
-  /**
-   * Returns the `MastraModelOutput` for a registered run, or `undefined` if the
-   * run has finished and been cleared. Used by signal-routed callers (e.g.
-   * harness v1 `Session.message()`) that send a signal — getting back a
-   * `runId` — and then need the matching output to drain events or await
-   * completion. Real subscribers should prefer `subscribeToThread` instead.
-   */
-  getRunOutput<OUTPUT = unknown>(runId: string): MastraModelOutput<OUTPUT> | undefined {
-    const record = this.#threadRunsById.get(runId);
-    return record?.output as MastraModelOutput<OUTPUT> | undefined;
-  }
-
-  /**
-   * Resolves with the `MastraModelOutput` for `runId` as soon as `registerRun`
-   * fires for it (or immediately if it has already been registered and the
-   * record has not yet been cleaned up). Used by signal-routed callers (e.g.
-   * harness v1 `Session.message()`) that receive a `runId` from `sendSignal`
-   * synchronously and need a handle to the output without polling.
-   *
-   * Note: if the run's output has already been registered AND finished AND
-   * cleaned up by the time this is called, the waiter never resolves. Callers
-   * should still pair this with a timeout or completion path of their own
-   * (the harness drives this off the per-run completion promise).
-   */
-  waitForRunOutput<OUTPUT = unknown>(runId: string): Promise<MastraModelOutput<OUTPUT>> {
-    const existing = this.#threadRunsById.get(runId);
-    if (existing) return Promise.resolve(existing.output as MastraModelOutput<OUTPUT>);
-    return new Promise<MastraModelOutput<OUTPUT>>(resolve => {
-      const waiters = this.#pendingOutputWaiters.get(runId) ?? [];
-      waiters.push(resolve as (out: MastraModelOutput<any>) => void);
-      this.#pendingOutputWaiters.set(runId, waiters);
-    });
-  }
-
-  abortThread(options: AgentSubscribeToThreadOptions): boolean {
+  abortThread(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): boolean {
+    const state = this.#getState(pubsub);
     const key = this.#threadKey(options.resourceId, options.threadId);
-    const activeRunId = this.#activeThreadRunIds.get(key);
+    const activeRunId = state.activeThreadRunIds.get(key);
     if (!activeRunId) return false;
-    return this.abortRun(activeRunId);
+    return this.abortRun(activeRunId, pubsub);
   }
 
   /** @internal */
   resetForTests() {
-    this.#preparedRunsById.forEach(preparedRun => {
+    for (const pubsub of [defaultAgentThreadPubSub]) {
+      this.#resetState(pubsub);
+      void (pubsub as { close?: () => Promise<void> }).close?.();
+    }
+    defaultAgentThreadPubSub = new EventEmitterPubSub();
+  }
+
+  #resetState(pubsub: PubSub) {
+    const state = this.#statesByPubSub.get(pubsub);
+    if (!state) return;
+
+    state.preparedRunsById.forEach(preparedRun => {
       preparedRun.abortController.abort();
       preparedRun.cleanup();
     });
-    this.#threadRunsById.clear();
-    this.#threadKeysByRunId.clear();
-    this.#activeThreadRunIds.clear();
-    this.#threadRunSubscribers.clear();
-    this.#pendingSignalsByThread.clear();
-    this.#pendingIdleSignalsByThread.clear();
-    this.#pendingOutputWaiters.clear();
-    this.#watchedThreadRunIds.clear();
-    this.#preparedRunsById.clear();
-    this.#abortedRunIds.clear();
-    this.#acceptedCallerSignals.clear();
-    this.#callerSignalIdsByRunId.clear();
+    state.threadRunsById.clear();
+    state.threadKeysByRunId.clear();
+    state.activeThreadRunIds.clear();
+    state.pendingSignalsByThread.clear();
+    state.pendingIdleSignalsByThread.clear();
+    state.watchedThreadRunIds.clear();
+    state.preparedRunsById.clear();
+    state.abortedRunIds.clear();
+    state.acceptedCallerSignals.clear();
+    state.callerSignalIdsByRunId.clear();
+    state.pendingOutputWaiters.clear();
   }
 
-  #cleanupPreparedRun(runId: string) {
-    this.#preparedRunsById.get(runId)?.cleanup();
-    this.#preparedRunsById.delete(runId);
-    this.#abortedRunIds.delete(runId);
+  #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
+    state.preparedRunsById.get(runId)?.cleanup();
+    state.preparedRunsById.delete(runId);
+    state.abortedRunIds.delete(runId);
   }
 
-  #forgetCallerSignalsForRun(runId: string) {
-    const callerSignalIds = this.#callerSignalIdsByRunId.get(runId);
+  #forgetCallerSignalsForRun(state: AgentThreadRuntimeState, runId: string) {
+    const callerSignalIds = state.callerSignalIdsByRunId.get(runId);
     if (!callerSignalIds) return;
-    this.#callerSignalIdsByRunId.delete(runId);
-    for (const callerSignalId of callerSignalIds) this.#acceptedCallerSignals.delete(callerSignalId);
-  }
-
-  #notifyThreadRun(record: AgentThreadRunRecord<any>) {
-    const key = this.#threadKey(record.resourceId, record.threadId);
-    this.#threadRunSubscribers.get(key)?.forEach(listener => listener(record));
+    state.callerSignalIdsByRunId.delete(runId);
+    for (const callerSignalId of callerSignalIds) state.acceptedCallerSignals.delete(callerSignalId);
   }
 
   async #persistSignal(
@@ -232,10 +273,12 @@ export class AgentThreadStreamRuntime {
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
+    pubsub?: PubSub,
   ) {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
     if (!threadId) return;
 
+    const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
@@ -246,45 +289,82 @@ export class AgentThreadStreamRuntime {
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
     };
 
-    this.#threadRunsById.set(output.runId, record);
-    this.#threadKeysByRunId.set(output.runId, key);
-    this.#activeThreadRunIds.set(key, output.runId);
-    const waiters = this.#pendingOutputWaiters.get(output.runId);
+    state.threadRunsById.set(output.runId, record);
+    state.threadKeysByRunId.set(output.runId, key);
+    state.activeThreadRunIds.set(key, output.runId);
+    const waiters = state.pendingOutputWaiters.get(output.runId);
     if (waiters) {
-      this.#pendingOutputWaiters.delete(output.runId);
+      state.pendingOutputWaiters.delete(output.runId);
       for (const resolve of waiters) resolve(output);
     }
-    this.#notifyThreadRun(record);
-    this.#watchThreadRunCompletion(key, record);
+    this.#publish(pubsub, key, { type: 'run-registered', runId: output.runId });
+    this.#watchThreadRunCompletion(state, pubsub, key, record);
   }
 
-  #watchThreadRunCompletion(key: string, record: AgentThreadRunRecord<any>) {
-    if (this.#watchedThreadRunIds.has(record.runId)) return;
-    this.#watchedThreadRunIds.add(record.runId);
+  /**
+   * Returns the `MastraModelOutput` for a registered run, or `undefined` if the
+   * run has finished and been cleared. Used by signal-routed callers that send
+   * a signal, receive a `runId`, and then need the matching output handle.
+   */
+  getRunOutput<OUTPUT = unknown>(runId: string, pubsub?: PubSub): MastraModelOutput<OUTPUT> | undefined {
+    const state = this.#getState(pubsub);
+    const record = state.threadRunsById.get(runId);
+    return record?.output as MastraModelOutput<OUTPUT> | undefined;
+  }
 
-    void record.output._waitUntilFinished().finally(() => {
-      this.#watchedThreadRunIds.delete(record.runId);
-      this.#threadRunsById.delete(record.runId);
-      this.#threadKeysByRunId.delete(record.runId);
-      this.#cleanupPreparedRun(record.runId);
-      this.#forgetCallerSignalsForRun(record.runId);
-      if (this.#activeThreadRunIds.get(key) === record.runId) {
-        this.#activeThreadRunIds.delete(key);
-      }
-      void this.#drainPendingSignals(key, record);
+  /**
+   * Resolves with the `MastraModelOutput` for `runId` as soon as `registerRun`
+   * registers it, or immediately if it is already registered and retained.
+   */
+  waitForRunOutput<OUTPUT = unknown>(runId: string, pubsub?: PubSub): Promise<MastraModelOutput<OUTPUT>> {
+    const state = this.#getState(pubsub);
+    const existing = state.threadRunsById.get(runId);
+    if (existing) return Promise.resolve(existing.output as MastraModelOutput<OUTPUT>);
+    return new Promise<MastraModelOutput<OUTPUT>>(resolve => {
+      const waiters = state.pendingOutputWaiters.get(runId) ?? [];
+      waiters.push(resolve as (out: MastraModelOutput<any>) => void);
+      state.pendingOutputWaiters.set(runId, waiters);
     });
   }
 
-  async #drainPendingSignals(key: string, previousRun: AgentThreadRunRecord<any>) {
-    if (this.#activeThreadRunIds.has(key)) {
+  #watchThreadRunCompletion(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    record: AgentThreadRunRecord<any>,
+  ) {
+    if (state.watchedThreadRunIds.has(record.runId)) return;
+    state.watchedThreadRunIds.add(record.runId);
+
+    void record.output._waitUntilFinished().finally(() => {
+      state.watchedThreadRunIds.delete(record.runId);
+      state.threadRunsById.delete(record.runId);
+      state.threadKeysByRunId.delete(record.runId);
+      this.#cleanupPreparedRun(state, record.runId);
+      this.#forgetCallerSignalsForRun(state, record.runId);
+      if (state.activeThreadRunIds.get(key) === record.runId) {
+        state.activeThreadRunIds.delete(key);
+      }
+      this.#publish(pubsub, key, { type: 'run-completed', runId: record.runId });
+      void this.#drainPendingSignals(state, pubsub, key, record);
+    });
+  }
+
+  async #drainPendingSignals(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    previousRun: AgentThreadRunRecord<any>,
+  ) {
+    if (state.activeThreadRunIds.has(key)) {
       return;
     }
 
-    const queue = this.#pendingSignalsByThread.get(key);
+    const queue = state.pendingSignalsByThread.get(key);
     const signal = queue?.shift();
     if (signal && queue) {
       if (queue.length === 0) {
-        this.#pendingSignalsByThread.delete(key);
+        state.pendingSignalsByThread.delete(key);
       }
 
       const output = await previousRun.agent.stream(signal, {
@@ -298,25 +378,33 @@ export class AgentThreadStreamRuntime {
       });
 
       if (queue.length > 0) {
-        const nextRecord = this.#threadRunsById.get(output.runId);
+        const nextRecord = state.threadRunsById.get(output.runId);
         if (nextRecord) {
-          this.#watchThreadRunCompletion(key, nextRecord);
+          this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
         }
       }
       return;
     }
 
-    const idleQueue = this.#pendingIdleSignalsByThread.get(key);
+    await this.#drainPendingIdleSignals(state, pubsub, key);
+  }
+
+  async #drainPendingIdleSignals(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
+    if (state.activeThreadRunIds.has(key)) {
+      return;
+    }
+
+    const idleQueue = state.pendingIdleSignalsByThread.get(key);
     const pendingIdle = idleQueue?.shift();
     if (!pendingIdle || !idleQueue) {
       return;
     }
     if (idleQueue.length === 0) {
-      this.#pendingIdleSignalsByThread.delete(key);
+      state.pendingIdleSignalsByThread.delete(key);
     }
 
-    this.#activeThreadRunIds.set(key, pendingIdle.runId);
-    this.#threadKeysByRunId.set(pendingIdle.runId, key);
+    state.activeThreadRunIds.set(key, pendingIdle.runId);
+    state.threadKeysByRunId.set(pendingIdle.runId, key);
     try {
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
@@ -325,57 +413,83 @@ export class AgentThreadStreamRuntime {
       });
 
       if ((idleQueue?.length ?? 0) > 0) {
-        const nextRecord = this.#threadRunsById.get(output.runId);
+        const nextRecord = state.threadRunsById.get(output.runId);
         if (nextRecord) {
-          this.#watchThreadRunCompletion(key, nextRecord);
+          this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
         }
       }
     } catch {
-      this.#threadKeysByRunId.delete(pendingIdle.runId);
-      this.#cleanupPreparedRun(pendingIdle.runId);
-      this.#forgetCallerSignalsForRun(pendingIdle.runId);
-      if (this.#activeThreadRunIds.get(key) === pendingIdle.runId) {
-        this.#activeThreadRunIds.delete(key);
+      state.threadKeysByRunId.delete(pendingIdle.runId);
+      this.#cleanupPreparedRun(state, pendingIdle.runId);
+      this.#forgetCallerSignalsForRun(state, pendingIdle.runId);
+      if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
+        state.activeThreadRunIds.delete(key);
       }
     }
   }
 
-  drainPendingSignals(runId: string) {
-    const record = this.#threadRunsById.get(runId);
-    const key = record ? this.#threadKey(record.resourceId, record.threadId) : this.#threadKeysByRunId.get(runId);
+  drainPendingSignals(runId: string, pubsub?: PubSub) {
+    const state = this.#getState(pubsub);
+    const record = state.threadRunsById.get(runId);
+    const key = record ? this.#threadKey(record.resourceId, record.threadId) : state.threadKeysByRunId.get(runId);
     if (!key) return [];
 
-    const queue = this.#pendingSignalsByThread.get(key);
+    const queue = state.pendingSignalsByThread.get(key);
     if (!queue || queue.length === 0) {
       return [];
     }
 
-    this.#pendingSignalsByThread.delete(key);
+    state.pendingSignalsByThread.delete(key);
     return queue;
   }
 
   async waitForCrossAgentThreadRun(
     agent: Agent<any, any, any, any>,
     options: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext },
+    pubsub?: PubSub,
   ) {
     const { threadId, resourceId } = this.#getThreadTarget(options);
     if (!threadId) return;
 
+    const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
     while (true) {
-      const activeRunId = this.#activeThreadRunIds.get(key);
-      const activeRecord = activeRunId ? this.#threadRunsById.get(activeRunId) : undefined;
-      if (!activeRecord || activeRecord.agent.id === agent.id || activeRecord.output.status !== 'running') return;
-      await activeRecord.output._waitUntilFinished().catch(() => {});
+      const activeRunId = state.activeThreadRunIds.get(key);
+      const activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+      if (!activeRunId || activeRecord?.agent.id === agent.id || activeRecord?.output.status !== 'running') return;
+      if (activeRecord) {
+        await activeRecord.output._waitUntilFinished().catch(() => {});
+        continue;
+      }
+      await this.#waitForRemoteRunToFinish(pubsub, key, activeRunId);
     }
+  }
+
+  async #waitForRemoteRunToFinish(pubsub: PubSub | undefined, key: string, runId: string) {
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const topic = this.#threadTopic(key);
+    await new Promise<void>(resolve => {
+      const onEvent: EventCallback = event => {
+        const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
+        if ((data?.type === 'run-completed' || data?.type === 'run-aborted') && data.runId === runId) {
+          void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
+          resolve();
+        }
+      };
+      void resolvedPubSub.subscribe(topic, onEvent).catch(() => resolve());
+    });
   }
 
   async subscribeToThread<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     options: AgentSubscribeToThreadOptions,
+    pubsub?: PubSub,
   ): Promise<AgentThreadSubscription<OUTPUT>> {
     void agent;
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
+    const topic = this.#threadTopic(key);
     const seenRunIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
     const waiters: Array<() => void> = [];
@@ -386,10 +500,10 @@ export class AgentThreadStreamRuntime {
     };
 
     const activeRunId = () => {
-      const runId = this.#activeThreadRunIds.get(key);
+      const runId = state.activeThreadRunIds.get(key);
       if (!runId) return null;
-      const record = this.#threadRunsById.get(runId);
-      if (!record) return null;
+      const record = state.threadRunsById.get(runId);
+      if (!record) return state.threadKeysByRunId.get(runId) === key ? null : runId;
       return record.output.status === 'running' ? runId : null;
     };
 
@@ -400,12 +514,36 @@ export class AgentThreadStreamRuntime {
       wake();
     };
 
-    const listeners = this.#threadRunSubscribers.get(key) ?? new Set<(run: AgentThreadRunRecord<any>) => void>();
-    listeners.add(enqueueRun);
-    this.#threadRunSubscribers.set(key, listeners);
+    const onEvent: EventCallback = event => {
+      const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
+      if (!data) return;
+      if (data.type === 'run-registered') {
+        state.activeThreadRunIds.set(key, data.runId);
+        const record = state.threadRunsById.get(data.runId);
+        if (record) enqueueRun(record);
+        wake();
+        return;
+      }
+      if (data.type === 'signal-enqueued') {
+        if (data.sourceId === this.#id) return;
+        const queue = state.pendingSignalsByThread.get(key) ?? [];
+        queue.push(createSignal(data.signal));
+        state.pendingSignalsByThread.set(key, queue);
+        return;
+      }
+      if (data.type === 'run-completed' || data.type === 'run-aborted') {
+        if (state.activeThreadRunIds.get(key) === data.runId) {
+          state.activeThreadRunIds.delete(key);
+        }
+        void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
+        wake();
+      }
+    };
+
+    await resolvedPubSub.subscribe(topic, onEvent);
 
     const currentRunId = activeRunId();
-    const currentRecord = currentRunId ? this.#threadRunsById.get(currentRunId) : undefined;
+    const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       enqueueRun(currentRecord);
     }
@@ -413,16 +551,13 @@ export class AgentThreadStreamRuntime {
     const unsubscribe = () => {
       if (done) return;
       done = true;
-      listeners.delete(enqueueRun);
-      if (listeners.size === 0) {
-        this.#threadRunSubscribers.delete(key);
-      }
+      void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
       wake();
     };
 
     return {
       activeRunId,
-      abort: () => this.abortThread(options),
+      abort: () => this.abortThread(options, resolvedPubSub),
       unsubscribe,
       stream: (async function* () {
         try {
@@ -460,7 +595,9 @@ export class AgentThreadStreamRuntime {
     agent: Agent<any, any, any, any>,
     signalInput: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
+    pubsub?: PubSub,
   ): SendAgentSignalResult {
+    const state = this.#getState(pubsub);
     const signal = createSignal(signalInput);
     const callerSignalId = signalInput.id;
     let key: string | undefined;
@@ -471,10 +608,10 @@ export class AgentThreadStreamRuntime {
     let activeRecord: AgentThreadRunRecord<any> | undefined;
     if (target.resourceId && target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
-      const activeRunId = this.#activeThreadRunIds.get(key);
-      activeRecord = activeRunId ? this.#threadRunsById.get(activeRunId) : undefined;
+      const activeRunId = state.activeThreadRunIds.get(key);
+      activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
       if (activeRecord && activeRecord.output.status !== 'running') {
-        this.#activeThreadRunIds.delete(key);
+        state.activeThreadRunIds.delete(key);
         activeRecord = undefined;
       }
 
@@ -490,13 +627,13 @@ export class AgentThreadStreamRuntime {
     }
 
     if (runId && !activeRecord) {
-      activeRecord = this.#threadRunsById.get(runId);
+      activeRecord = state.threadRunsById.get(runId);
     }
     if (!key && activeRecord) {
       key = this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
     }
     const isActiveTarget = Boolean(
-      runId && (activeRecord?.output.status === 'running' || (key && this.#activeThreadRunIds.get(key) === runId)),
+      runId && (activeRecord?.output.status === 'running' || (key && state.activeThreadRunIds.get(key) === runId)),
     );
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
@@ -509,15 +646,15 @@ export class AgentThreadStreamRuntime {
           )
         : undefined;
     if (callerSignalKey) {
-      const accepted = this.#acceptedCallerSignals.get(callerSignalKey);
+      const accepted = state.acceptedCallerSignals.get(callerSignalKey);
       if (accepted) return accepted;
     }
-    const acceptSignal = (result: SendAgentSignalResult): SendAgentSignalResult => {
-      if (callerSignalKey) {
-        this.#acceptedCallerSignals.set(callerSignalKey, result);
-        const signalIds = this.#callerSignalIdsByRunId.get(result.runId) ?? new Set<string>();
+    const acceptSignal = (result: SendAgentSignalResult, cache = true): SendAgentSignalResult => {
+      if (callerSignalKey && cache) {
+        state.acceptedCallerSignals.set(callerSignalKey, result);
+        const signalIds = state.callerSignalIdsByRunId.get(result.runId) ?? new Set<string>();
         signalIds.add(callerSignalKey);
-        this.#callerSignalIdsByRunId.set(result.runId, signalIds);
+        state.callerSignalIdsByRunId.set(result.runId, signalIds);
       }
       return result;
     };
@@ -541,26 +678,40 @@ export class AgentThreadStreamRuntime {
     }
 
     if (runId) {
-      activeRecord ??= this.#threadRunsById.get(runId);
+      activeRecord ??= state.threadRunsById.get(runId);
       if (activeRecord?.output.status === 'running') {
         key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
         if (activeRecord.agent.id === agent.id) {
           // Same-agent active run: queue the signal for in-loop draining so it becomes
           // the next model input instead of waiting for the run to finish.
-          const queue = this.#pendingSignalsByThread.get(key) ?? [];
+          const queue = state.pendingSignalsByThread.get(key) ?? [];
           queue.push(signal);
-          this.#pendingSignalsByThread.set(key, queue);
-          this.#watchThreadRunCompletion(key, activeRecord);
+          state.pendingSignalsByThread.set(key, queue);
+          this.#publish(pubsub, key, {
+            type: 'signal-enqueued',
+            runId,
+            signal: this.#serializeSignal(signal),
+            sourceId: this.#id,
+          });
+          this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
           return acceptSignal({ accepted: true, runId, signal });
         }
       }
 
-      if (key && this.#activeThreadRunIds.get(key) === runId) {
-        // Reserved run without a record yet: queue by thread key until registerRun()
-        // attaches the stream record and the execution loop can drain it.
-        const queue = this.#pendingSignalsByThread.get(key) ?? [];
-        queue.push(signal);
-        this.#pendingSignalsByThread.set(key, queue);
+      if (key && state.activeThreadRunIds.get(key) === runId) {
+        // Reserved local runs need a local queue until registerRun() attaches the stream record.
+        // Remote active runs only need the PubSub event; the owning process queues it locally.
+        if (state.threadKeysByRunId.get(runId) === key) {
+          const queue = state.pendingSignalsByThread.get(key) ?? [];
+          queue.push(signal);
+          state.pendingSignalsByThread.set(key, queue);
+        }
+        this.#publish(pubsub, key, {
+          type: 'signal-enqueued',
+          runId,
+          signal: this.#serializeSignal(signal),
+          sourceId: this.#id,
+        });
         return acceptSignal({ accepted: true, runId, signal });
       }
     }
@@ -569,7 +720,7 @@ export class AgentThreadStreamRuntime {
       throw new Error('No active agent run found for signal target');
     }
 
-    runId ??= randomUUID();
+    runId = randomUUID();
     if (idleBehavior !== 'wake') {
       if (idleBehavior === 'persist') {
         const persisted = this.#persistSignal(
@@ -580,28 +731,28 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
-        return acceptSignal({ accepted: true, runId, signal, persisted });
+        return acceptSignal({ accepted: true, runId, signal, persisted }, false);
       }
-      return acceptSignal({ accepted: true, runId, signal });
+      return acceptSignal({ accepted: true, runId, signal }, false);
     }
 
     key ??= this.#threadKey(resourceId, threadId);
-    if (this.#activeThreadRunIds.has(key)) {
+    if (state.activeThreadRunIds.has(key)) {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.
-      const idleQueue = this.#pendingIdleSignalsByThread.get(key) ?? [];
+      const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
       idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
-      this.#pendingIdleSignalsByThread.set(key, idleQueue);
+      state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
-        this.#watchThreadRunCompletion(key, activeRecord);
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }
       return acceptSignal({ accepted: true, runId, signal });
     }
 
     // No active same-agent run accepted the signal. Reserve the thread before starting
     // the idle stream so concurrent callers do not launch duplicate runs.
-    this.#activeThreadRunIds.set(key, runId);
-    this.#threadKeysByRunId.set(runId, key);
+    state.activeThreadRunIds.set(key, runId);
+    state.threadKeysByRunId.set(runId, key);
     const output = agent
       .stream(signal, {
         ...(target.ifIdle?.streamOptions as any),
@@ -609,11 +760,11 @@ export class AgentThreadStreamRuntime {
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
       .catch(err => {
-        this.#threadKeysByRunId.delete(runId);
-        this.#cleanupPreparedRun(runId);
-        this.#forgetCallerSignalsForRun(runId);
-        if (this.#activeThreadRunIds.get(key) === runId) {
-          this.#activeThreadRunIds.delete(key);
+        state.threadKeysByRunId.delete(runId);
+        this.#cleanupPreparedRun(state, runId);
+        this.#forgetCallerSignalsForRun(state, runId);
+        if (state.activeThreadRunIds.get(key) === runId) {
+          state.activeThreadRunIds.delete(key);
         }
         throw err;
       }) as Promise<MastraModelOutput<unknown>>;

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed agent signals so standalone agents coordinate thread streams through a shared runtime.
+Fixed agent signals so thread stream coordination is routed through PubSub, with in-memory defaults for standalone agents.
