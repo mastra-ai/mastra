@@ -92,7 +92,10 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
     throw new FGADeniedError(user, resource, permission, 'authenticated user is required');
   }
 
-  await fgaProvider.require(user, fgaContext ? { resource, permission, context: fgaContext } : { resource, permission });
+  await fgaProvider.require(
+    user,
+    fgaContext ? { resource, permission, context: fgaContext } : { resource, permission },
+  );
 }
 
 /**

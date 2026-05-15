@@ -327,9 +327,9 @@ describe('derivePermission', () => {
       expect(derivePermission({ path: '/stored/skills/:storedSkillId/publish', method: 'POST' })).toBe(
         'stored-skills:publish',
       );
-      expect(
-        derivePermission({ path: '/stored/agents/:agentId/versions/:versionId/activate', method: 'POST' }),
-      ).toBe('stored-agents:publish');
+      expect(derivePermission({ path: '/stored/agents/:agentId/versions/:versionId/activate', method: 'POST' })).toBe(
+        'stored-agents:publish',
+      );
       expect(derivePermission({ path: '/stored/scorers/:scorerId/versions/:versionId/restore', method: 'POST' })).toBe(
         'stored-scorers:publish',
       );

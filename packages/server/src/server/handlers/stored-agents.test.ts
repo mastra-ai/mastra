@@ -236,7 +236,9 @@ interface MockMastra {
   getServer: ReturnType<typeof vi.fn>;
 }
 
-function createMockMastra(options: { storage?: MockStorage; editor?: MockEditor; server?: Record<string, unknown> } = {}): MockMastra {
+function createMockMastra(
+  options: { storage?: MockStorage; editor?: MockEditor; server?: Record<string, unknown> } = {},
+): MockMastra {
   return {
     getStorage: vi.fn().mockReturnValue(options.storage),
     getEditor: vi.fn().mockReturnValue(options.editor),
