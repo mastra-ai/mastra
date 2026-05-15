@@ -1,7 +1,6 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
-import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -120,10 +119,10 @@ export const useChat = ({
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
 
-  type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
   type SignalContentPart =
     | { type: 'text'; text: string }
     | { type: 'file'; data: string; mimeType: string; filename?: string };
+  type UserMessageSignalContents = string | SignalContentPart[];
 
   const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
     if (data instanceof URL) return data.toString();

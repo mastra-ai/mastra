@@ -5412,52 +5412,35 @@ type PostAgentsAgentIdSignals_Body_Auxiliary_2 =
 
 export type PostAgentsAgentIdSignals_Body =
   | {
-      signal:
-        | {
-            id?: string | undefined;
-            createdAt?: (string | Date) | undefined;
-            metadata?:
+      signal: {
+        id?: string | undefined;
+        createdAt?: (string | Date) | undefined;
+        metadata?:
+          | {
+              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+            }
+          | undefined;
+        attributes?:
+          | {
+              [key: string]: string | number | boolean | null | undefined;
+            }
+          | undefined;
+        type: string;
+        contents:
+          | string
+          | (
               | {
-                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                  type: 'text';
+                  text: string;
                 }
-              | undefined;
-            attributes?:
               | {
-                  [key: string]: string | number | boolean | null | undefined;
+                  type: 'file';
+                  data: string;
+                  mimeType: string;
+                  filename?: string | undefined;
                 }
-              | undefined;
-            type: 'user-message';
-            contents:
-              | string
-              | (
-                  | {
-                      type: 'text';
-                      text: string;
-                    }
-                  | {
-                      type: 'file';
-                      data: string;
-                      mimeType: string;
-                      filename?: string | undefined;
-                    }
-                )[];
-          }
-        | {
-            id?: string | undefined;
-            createdAt?: (string | Date) | undefined;
-            metadata?:
-              | {
-                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-                }
-              | undefined;
-            attributes?:
-              | {
-                  [key: string]: string | number | boolean | null | undefined;
-                }
-              | undefined;
-            type: string;
-            contents: string;
-          };
+            )[];
+      };
       ifActive?:
         | {
             behavior?: ('deliver' | 'persist' | 'discard') | undefined;
@@ -5469,52 +5452,35 @@ export type PostAgentsAgentIdSignals_Body =
       ifIdle?: undefined | undefined;
     }
   | {
-      signal:
-        | {
-            id?: string | undefined;
-            createdAt?: (string | Date) | undefined;
-            metadata?:
+      signal: {
+        id?: string | undefined;
+        createdAt?: (string | Date) | undefined;
+        metadata?:
+          | {
+              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+            }
+          | undefined;
+        attributes?:
+          | {
+              [key: string]: string | number | boolean | null | undefined;
+            }
+          | undefined;
+        type: string;
+        contents:
+          | string
+          | (
               | {
-                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                  type: 'text';
+                  text: string;
                 }
-              | undefined;
-            attributes?:
               | {
-                  [key: string]: string | number | boolean | null | undefined;
+                  type: 'file';
+                  data: string;
+                  mimeType: string;
+                  filename?: string | undefined;
                 }
-              | undefined;
-            type: 'user-message';
-            contents:
-              | string
-              | (
-                  | {
-                      type: 'text';
-                      text: string;
-                    }
-                  | {
-                      type: 'file';
-                      data: string;
-                      mimeType: string;
-                      filename?: string | undefined;
-                    }
-                )[];
-          }
-        | {
-            id?: string | undefined;
-            createdAt?: (string | Date) | undefined;
-            metadata?:
-              | {
-                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-                }
-              | undefined;
-            attributes?:
-              | {
-                  [key: string]: string | number | boolean | null | undefined;
-                }
-              | undefined;
-            type: string;
-            contents: string;
-          };
+            )[];
+      };
       ifActive?:
         | {
             behavior?: ('deliver' | 'persist' | 'discard') | undefined;
