@@ -314,10 +314,9 @@ export class MessageList {
   }
 
   private convertSignalForModelPrompt(message: MastraDBMessage): MastraDBMessage[] {
-    // Signals are persisted losslessly as DB signal messages, but model providers
-    // only understand normal prompt messages. Convert the signal into its
-    // LLM-facing message content without mutating MessageList timestamp/id
-    // bookkeeping or changing the signal's chronological position.
+    // Model providers only understand normal prompt messages, so project the signal into
+    // its LLM-facing UserModelMessage. Preserve the original id/createdAt so MessageList's
+    // timestamp/ordering bookkeeping stays anchored to the persisted signal row.
     const signalMessage = mastraDBMessageToSignal(message).toLLMMessage();
     const createdAt = message.createdAt;
     const promptMessage = {
