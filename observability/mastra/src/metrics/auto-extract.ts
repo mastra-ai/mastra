@@ -41,6 +41,7 @@ export function emitAutoExtractedMetrics(span: AnySpan, metrics: MetricsContext)
   emitTokenMetrics(span, metrics);
 }
 
+/** Estimate costs and emit token usage metrics for a model-generation span. */
 function emitUsageMetrics(
   attrs: ModelGenerationAttributes,
   usage: NonNullable<ModelGenerationAttributes['usage']>,
