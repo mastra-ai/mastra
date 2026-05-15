@@ -121,4 +121,30 @@ describe('handleSkillCommand', () => {
     expect(harness.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('Usage: /skill/<name>');
   });
+
+  it('refuses to activate a skill marked metadata.userInvokable: false', async () => {
+    const workspace = {
+      skills: {
+        get: vi.fn().mockResolvedValue({
+          name: 'internal-helper',
+          instructions: 'should not be invoked',
+          metadata: { userInvokable: false },
+          references: [],
+          scripts: [],
+          assets: [],
+        }),
+        list: vi.fn().mockResolvedValue([
+          { name: 'review', path: '/skills/review' },
+          { name: 'internal-helper', path: '/skills/internal-helper', metadata: { userInvokable: false } },
+        ]),
+      },
+    };
+    const { ctx, harness } = createCtx({ workspace });
+
+    await handleSkillCommand(ctx, 'internal-helper', []);
+
+    expect(harness.sendMessage).not.toHaveBeenCalled();
+    // The non-user-invokable skill must also be hidden from the "Available skills" hint.
+    expect(ctx.showError).toHaveBeenCalledWith('Skill not found: internal-helper. Available skills: review');
+  });
 });

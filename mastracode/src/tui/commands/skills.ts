@@ -1,5 +1,6 @@
 import { formatSkillActivation } from '@mastra/core/workspace';
 import { SlashCommandComponent } from '../components/slash-command.js';
+import { isUserInvokable } from './skill-filters.js';
 import type { SlashCommandContext } from './types.js';
 
 async function resolveWorkspace(ctx: SlashCommandContext) {
@@ -37,12 +38,14 @@ export async function handleSkillsCommand(ctx: SlashCommandContext): Promise<voi
   }
 
   try {
-    const skills = await workspace.skills!.list();
+    const allSkills = await workspace.skills!.list();
+    const skills = allSkills.filter(isUserInvokable);
 
     if (skills.length === 0) {
       ctx.showInfo(
-        'No skills found in configured directories.\n\n' +
+        'No user-invokable skills found in configured directories.\n\n' +
           'Each skill needs a SKILL.md file with YAML frontmatter.\n' +
+          'Skills with `metadata.userInvokable: false` are hidden from this list.\n' +
           'Install skills: npx add-skill <github-url>',
       );
       return;
@@ -86,8 +89,8 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
 
   try {
     const skill = await workspace.skills.get(normalizedSkillName);
-    if (!skill) {
-      const skills = await workspace.skills.list();
+    if (!skill || !isUserInvokable(skill)) {
+      const skills = (await workspace.skills.list()).filter(isUserInvokable);
       const available = skills.length ? ` Available skills: ${skills.map(s => s.name).join(', ')}` : '';
       ctx.showError(`Skill not found: ${normalizedSkillName}.${available}`);
       return;

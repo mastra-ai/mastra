@@ -365,6 +365,29 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     return;
   }
 
+  // Check for persisted skill activation tags (sent by `/skill/<name>`).
+  // Dedupes against the optimistic component handleSkillCommand created, and
+  // renders fresh on thread replay when no optimistic component exists.
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
+  if (skillMatch) {
+    const commandName = `skill/${skillMatch[1]!}`;
+    const skillContent = skillMatch[2]!.trim();
+    const existingSkillComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSkillComp) {
+      state.messageComponentsById.set(message.id, existingSkillComp);
+      return;
+    }
+
+    const skillComp = new SlashCommandComponent(commandName, skillContent);
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
+    state.ui.requestRender();
+    return;
+  }
+
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
     const userComponent = new UserMessageComponent(prefix + displayText);
