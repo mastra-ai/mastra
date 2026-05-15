@@ -444,34 +444,49 @@ function coerceStringifiedJsonValues(schema: StandardSchemaWithJSON<unknown>, in
  * The LLM has no way of knowing the correct constant value, so it either omits
  * the field entirely or guesses incorrectly, causing validation to fail.
  * Since a `const` field has exactly one valid value, this function recursively
- * walks the JSON Schema, finds all properties with a `const` constraint, and
- * injects their values into the input before validation runs.
+ * walks the JSON Schema — including `oneOf`/`anyOf`/`allOf` branches and array
+ * item schemas — finds all properties with a `const` constraint, and injects
+ * their values into the input before validation runs.
+ *
+ * Note: `$ref` is not resolved here. If `standardSchemaToJSONSchema` emits refs,
+ * those branches will be skipped silently (TODO: resolve $defs if needed).
  *
  * @param schema The JSON Schema object to walk for const-constrained properties
  * @param input The input to process
  * @returns The input with all const-constrained field values injected
  */
-
 function injectConstFields(schema: Record<string, any>, input: unknown): unknown {
-  if (
-    schema.type !== 'object' ||
-    !schema.properties ||
-    input == null ||
-    typeof input !== 'object' ||
-    Array.isArray(input)
-  ) {
-    return input;
+  if (!schema || typeof schema !== 'object') return input;
+
+  // Only walk allOf — these branches all apply simultaneously and can be merged.
+  // oneOf/anyOf are mutually exclusive alternatives; injecting all of them
+  // would cause the last branch's const to overwrite earlier ones.
+  const allOf = schema['allOf'];
+  if (Array.isArray(allOf)) {
+    for (const branch of allOf) {
+      input = injectConstFields(branch as Record<string, any>, input);
+    }
   }
+
+  // Handle arrays — walk each item against the item schema.
+  if (schema.type === 'array' && schema.items && Array.isArray(input)) {
+    const itemSchema = Array.isArray(schema.items) ? schema.items[0] : schema.items;
+    return (input as unknown[]).map(item => injectConstFields(itemSchema as Record<string, any>, item));
+  }
+
+  if (schema.type !== 'object' || !schema.properties) return input;
+  if (input == null || typeof input !== 'object' || Array.isArray(input)) return input;
 
   const obj = { ...(input as Record<string, unknown>) };
 
   for (const [key, propSchema] of Object.entries(schema.properties)) {
-    if (typeof propSchema === 'object' && propSchema !== null && 'const' in propSchema) {
-      obj[key] = (propSchema as any).const;
-    } else if (typeof propSchema === 'object' && propSchema !== null && (propSchema as any).type === 'object') {
-      if (obj[key] !== undefined && obj[key] !== null) {
-        obj[key] = injectConstFields(propSchema as Record<string, any>, obj[key]);
-      }
+    if (!propSchema || typeof propSchema !== 'object') continue;
+    const ps = propSchema as Record<string, any>;
+
+    if ('const' in ps) {
+      obj[key] = ps.const;
+    } else if (obj[key] != null) {
+      obj[key] = injectConstFields(ps, obj[key]);
     }
   }
 
