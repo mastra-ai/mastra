@@ -112,6 +112,16 @@ export function signalToXmlMarkup(
   return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
 }
 
+function isAgentSignalContents(value: unknown): value is AgentSignalContents {
+  if (typeof value === 'string') return true;
+  if (!Array.isArray(value)) return false;
+  return value.every(part => {
+    if (!part || typeof part !== 'object') return false;
+    const type = (part as { type?: unknown }).type;
+    return type === 'text' || type === 'file';
+  });
+}
+
 function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
   return contents.map(part => {
@@ -290,9 +300,10 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
   const type = typeof signalMetadata?.type === 'string' ? signalMetadata.type : (message.type ?? 'user-message');
   // Reconstruct contents from content.parts — the canonical source. Legacy rows (pre stash
   // removal) preserved the original input shape on metadata.signal.contents; honour that
-  // fallback so existing DBs keep round-tripping.
-  const legacyContents =
-    signalMetadata && 'contents' in signalMetadata ? (signalMetadata.contents as AgentSignalContents) : undefined;
+  // fallback when it matches the narrowed AgentSignalContents shape and ignore anything else
+  // (e.g. CoreUserMessage wrappers stashed by earlier prototypes) so the DB row keeps loading.
+  const rawLegacyContents = signalMetadata && 'contents' in signalMetadata ? signalMetadata.contents : undefined;
+  const legacyContents = isAgentSignalContents(rawLegacyContents) ? rawLegacyContents : undefined;
   const partsContents = partsToSignalContents(storagePartsToSignalParts(message.content.parts));
   const contents = legacyContents ?? partsContents;
   const base = {

@@ -404,6 +404,28 @@ describe('Agent signals', () => {
     expect(fromDataPart.contents).toEqual(screenshotContents);
   });
 
+  it('ignores malformed legacy metadata.signal.contents when rehydrating a DB row', () => {
+    const reminder = createSignal({
+      id: 'signal-legacy',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      type: 'user-message',
+      contents: 'hello world',
+    });
+    const dbMessage = reminder.toDBMessage();
+    // Simulate a stale DB row whose stash field holds an unrelated object shape
+    // (e.g. a CoreUserMessage wrapper from an earlier prototype).
+    dbMessage.content.metadata = {
+      ...dbMessage.content.metadata,
+      signal: {
+        ...(dbMessage.content.metadata?.signal as Record<string, unknown>),
+        contents: { role: 'user', content: [{ type: 'text', text: 'hello world' }] },
+      },
+    };
+
+    const rehydrated = mastraDBMessageToSignal(dbMessage);
+    expect(rehydrated.contents).toBe('hello world');
+  });
+
   it('rejects invalid XML names for contextual signal markup', () => {
     expect(() =>
       createSignal({
