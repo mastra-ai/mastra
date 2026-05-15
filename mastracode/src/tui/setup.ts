@@ -326,6 +326,10 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'observability', description: 'Configure cloud observability' },
     { name: 'goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { name: 'judge', description: 'Set goal judge defaults' },
+    {
+      name: 'debug-chat-export',
+      description: 'Dump thread + OM records to disk for bug reports',
+    },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];

@@ -51,6 +51,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/observability', description: 'Configure cloud observability' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { key: '/judge', description: 'Set goal judge defaults' },
+    { key: '/debug-chat-export', description: 'Dump thread + OM records to disk for bug reports' },
   ];
 
   if (modes > 1) {

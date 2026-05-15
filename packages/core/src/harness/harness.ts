@@ -1392,6 +1392,23 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Get previous generations of the current thread's observational memory record.
+   * Returns records in reverse chronological order (newest first). The
+   * currently-active record (returned by `getObservationalMemoryRecord`) is
+   * excluded.
+   */
+  async getObservationalMemoryHistory(options?: { limit?: number }): Promise<ObservationalMemoryRecord[]> {
+    if (!this.currentThreadId) return [];
+
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      return await memoryStorage.getObservationalMemoryHistory(this.currentThreadId, this.resourceId, options?.limit);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Returns the observer model ID from state, falling back to omConfig defaults.
    */
   getObserverModelId(): string | undefined {
