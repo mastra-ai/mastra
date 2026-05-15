@@ -127,11 +127,13 @@ export class ObservationStep {
     );
 
     // ── Check thresholds + buffer trigger (all steps) ──────────
-    let statusSnapshot = await om.getStatus({
-      threadId,
-      resourceId,
-      messages: messageList.get.all.db(),
-    });
+    let statusSnapshot = await withOmDebugSpan('om.getStatus', this.turn.observabilityContext, () =>
+      om.getStatus({
+        threadId,
+        resourceId,
+        messages: messageList.get.all.db(),
+      }),
+    );
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
     if (statusSnapshot.shouldBuffer && !hasIncompleteToolCalls) {
@@ -243,11 +245,13 @@ export class ObservationStep {
       }
 
       // Re-fetch status after observation/cleanup for the snapshot
-      statusSnapshot = await om.getStatus({
-        threadId,
-        resourceId,
-        messages: messageList.get.all.db(),
-      });
+      statusSnapshot = await withOmDebugSpan('om.getStatus', this.turn.observabilityContext, () =>
+        om.getStatus({
+          threadId,
+          resourceId,
+          messages: messageList.get.all.db(),
+        }),
+      );
     }
 
     // ── Refresh cross-thread context (resource scope) ──────────
@@ -314,11 +318,13 @@ export class ObservationStep {
     await om.waitForBuffering(threadId, resourceId);
 
     // Re-check status with fresh state
-    const freshStatus = await om.getStatus({
-      threadId,
-      resourceId,
-      messages: messageList.get.all.db(),
-    });
+    const freshStatus = await withOmDebugSpan('om.getStatus', this.turn.observabilityContext, () =>
+      om.getStatus({
+        threadId,
+        resourceId,
+        messages: messageList.get.all.db(),
+      }),
+    );
 
     if (!freshStatus.shouldObserve) {
       return { succeeded: false, record: freshStatus.record };
