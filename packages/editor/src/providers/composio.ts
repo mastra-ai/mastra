@@ -9,12 +9,11 @@ import type {
 } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
 import type { StorageToolConfig } from '@mastra/core/storage';
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 
 import { Composio } from '@composio/core';
-import type { Tool as ComposioTool, ToolKitItem, ToolListParams as ComposioToolListParams } from '@composio/core';
-import { MastraProvider } from '@composio/mastra';
-import type { MastraTool, MastraToolCollection } from '@composio/mastra';
+import type { Tool as ComposioTool } from '@composio/core';
+
+import { ComposioToolIntegration } from './composio-integration';
 
 export interface ComposioToolProviderConfig {
   /** Composio API key */
@@ -22,17 +21,16 @@ export interface ComposioToolProviderConfig {
 }
 
 /**
- * Composio tool provider adapter.
+ * Legacy Composio adapter that conforms to the deprecated {@link ToolProvider}
+ * interface.
  *
- * Uses `@composio/core` + `@composio/mastra` SDKs for both tool discovery
- * and runtime resolution. Both packages are optional peer dependencies and
- * tree-shaken if this provider class isn't imported.
- *
- * Discovery methods (`listToolkits`, `listTools`, `getToolSchema`) use the
- * raw Composio client (no userId required).
- *
- * Runtime method (`resolveTools`) uses the MastraProvider so returned tools are
- * already in Mastra's `createTool()` format.
+ * @deprecated Use {@link ComposioToolIntegration} from `@mastra/editor/composio`.
+ * This class is a thin translation layer around `ComposioToolIntegration` kept
+ * for backwards compatibility with the `MastraEditorConfig.toolProviders`
+ * Record-shape config and the `editor.getToolProvider(id)` accessor. It is
+ * scheduled for removal in the next coordinated breaking-change release of
+ * `@mastra/editor`. New code should construct `ComposioToolIntegration`
+ * directly and register it via `toolIntegrations: [...]`.
  */
 export class ComposioToolProvider implements ToolProvider {
   readonly info: ToolProviderInfo = {
@@ -41,98 +39,53 @@ export class ComposioToolProvider implements ToolProvider {
     description: 'Access 10,000+ tools from 150+ apps via Composio',
   };
 
-  private apiKey: string;
-  private rawClient: Composio | null = null;
-  private mastraClient: Composio<MastraProvider> | null = null;
+  private readonly apiKey: string;
+  private readonly integration: ComposioToolIntegration;
+  private schemaClient: Composio | null = null;
 
   constructor(config: ComposioToolProviderConfig) {
     this.apiKey = config.apiKey;
+    this.integration = new ComposioToolIntegration({ apiKey: config.apiKey });
   }
 
-  /**
-   * Get or create a raw Composio client (no provider — for discovery only).
-   */
-  private getRawClient(): Composio {
-    if (!this.rawClient) {
-      this.rawClient = new Composio({ apiKey: this.apiKey });
-    }
-    return this.rawClient;
-  }
-
-  /**
-   * Get or create a Composio client with MastraProvider (for runtime tools).
-   */
-  private getMastraClient(): Composio<MastraProvider> {
-    if (!this.mastraClient) {
-      this.mastraClient = new Composio({
-        apiKey: this.apiKey,
-        provider: new MastraProvider(),
-      });
-    }
-    return this.mastraClient;
-  }
-
-  /**
-   * List available toolkits via `composio.toolkits.get({})`.
-   * Returns: `ToolKitListResponse` — an array of `{ slug, name, meta: { description, logo, ... } }`.
-   */
   async listToolkits(): Promise<ToolProviderListResult<ToolProviderToolkit>> {
-    const composio = this.getRawClient();
-    const toolkits: ToolKitItem[] = await composio.toolkits.get({});
-
-    const data: ToolProviderToolkit[] = toolkits.map(tk => ({
-      slug: tk.slug,
-      name: tk.name,
-      description: tk.meta?.description,
-      icon: tk.meta?.logo,
-    }));
-    return { data };
+    const { data } = await this.integration.listToolServices();
+    return {
+      data: data.map(service => ({
+        slug: service.slug,
+        name: service.name,
+        description: service.description,
+        icon: service.icon,
+      })),
+    };
   }
 
-  /**
-   * List available tools via `composio.tools.getRawComposioTools()`.
-   * No userId required — returns raw tool definitions for UI browsing.
-   */
   async listTools(options?: ListToolProviderToolsOptions): Promise<ToolProviderListResult<ToolProviderToolInfo>> {
-    const composio = this.getRawClient();
-
-    // ToolListParams is a discriminated union in TypeScript but the
-    // underlying Zod schema accepts `limit` on every variant.  We cast
-    // through the base type so `limit` is always forwarded.
-    const limit = options?.perPage;
-    const query: ComposioToolListParams = (
-      options?.toolkit
-        ? { toolkits: [options.toolkit], limit, search: options?.search }
-        : options?.search
-          ? { search: options.search, limit }
-          : { toolkits: [] as string[], limit }
-    ) as ComposioToolListParams;
-
-    const rawTools: ComposioTool[] = await composio.tools.getRawComposioTools(query);
-
-    const data: ToolProviderToolInfo[] = rawTools.map(tool => ({
-      slug: tool.slug,
-      name: tool.name ?? tool.slug,
-      description: tool.description,
-      toolkit: tool.toolkit?.slug,
-    }));
-
+    const result = await this.integration.listTools({
+      toolService: options?.toolkit,
+      search: options?.search,
+      page: options?.page,
+      perPage: options?.perPage,
+    });
     return {
-      data,
-      pagination: {
-        page: options?.page ?? 1,
-        perPage: limit,
-        hasMore: limit !== undefined && rawTools.length >= limit,
-      },
+      data: result.data.map(tool => ({
+        slug: tool.slug,
+        name: tool.name,
+        description: tool.description,
+        toolkit: tool.toolService,
+      })),
+      pagination: result.pagination,
     };
   }
 
   /**
-   * Get JSON schema for a specific tool via `composio.tools.getRawComposioToolBySlug()`.
+   * `getToolSchema` has no equivalent on `ToolIntegration`, so this is the
+   * one Composio SDK call site that lives directly on the shim. The client
+   * is constructed lazily and cached per instance.
    */
   async getToolSchema(toolSlug: string): Promise<Record<string, unknown> | null> {
     try {
-      const composio = this.getRawClient();
+      const composio = this.getSchemaClient();
       const tool: ComposioTool = await composio.tools.getRawComposioToolBySlug(toolSlug);
       if (!tool) return null;
       return (tool.inputParameters ?? {}) as Record<string, unknown>;
@@ -141,12 +94,6 @@ export class ComposioToolProvider implements ToolProvider {
     }
   }
 
-  /**
-   * Resolve executable tools in Mastra format via `composio.tools.get(userId, { tools: [...] })`.
-   *
-   * Uses MastraProvider so returned tools are `ReturnType<typeof createTool>` — compatible
-   * with Mastra's `ToolAction` interface.
-   */
   async resolveTools(
     toolSlugs: string[],
     toolConfigs?: Record<string, StorageToolConfig>,
@@ -154,27 +101,34 @@ export class ComposioToolProvider implements ToolProvider {
   ): Promise<Record<string, ToolAction<unknown, unknown>>> {
     if (toolSlugs.length === 0) return {};
 
-    const resourceId = options?.requestContext?.[MASTRA_RESOURCE_ID_KEY];
-    const userId = typeof resourceId === 'string' ? resourceId : (options?.userId ?? 'default');
-    const composio = this.getMastraClient();
-
-    // composio.tools.get returns MastraToolCollection = Record<string, MastraTool>
-    const mastraTools: MastraToolCollection = await composio.tools.get(userId, { tools: toolSlugs });
-
-    const result: Record<string, ToolAction<unknown, unknown>> = {};
-    const entries: [string, MastraTool][] = Object.entries(mastraTools ?? {});
-
-    for (const [key, tool] of entries) {
-      if (!tool) continue;
-      const slug = tool.id ?? key;
-      const descOverride = toolConfigs?.[slug]?.description;
-      if (descOverride) {
-        result[slug] = { ...tool, description: descOverride };
-      } else {
-        result[slug] = tool;
+    const toolMeta: Record<string, { description?: string }> = {};
+    if (toolConfigs) {
+      for (const [slug, cfg] of Object.entries(toolConfigs)) {
+        if (cfg?.description) toolMeta[slug] = { description: cfg.description };
       }
     }
 
-    return result;
+    // Legacy MCP-shaped path has no concept of a pinned connection. The
+    // integration's `resolveTools` falls back to user-scoped resolution
+    // when `connectionId` is empty, so the Composio backend picks the
+    // single active connected account for the resolved userId.
+    const authorId = typeof options?.userId === 'string' ? options.userId : undefined;
+
+    const resolved = await this.integration.resolveTools({
+      toolSlugs,
+      toolMeta,
+      connectionId: '',
+      authorId,
+      requestContext: options?.requestContext,
+    });
+
+    return resolved as Record<string, ToolAction<unknown, unknown>>;
+  }
+
+  private getSchemaClient(): Composio {
+    if (!this.schemaClient) {
+      this.schemaClient = new Composio({ apiKey: this.apiKey });
+    }
+    return this.schemaClient;
   }
 }
