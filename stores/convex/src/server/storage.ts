@@ -307,7 +307,7 @@ export async function handleTypedOperation(
           : JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(request.runId)));
 
       if (!snapshot.context) {
-        throw new Error(`Snapshot not found for runId ${request.runId}`);
+        throw new Error(`Snapshot for runId ${request.runId} is missing or has invalid context`);
       }
 
       const context = mergeWorkflowStepResult({
@@ -347,7 +347,7 @@ export async function handleTypedOperation(
           : JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(request.runId)));
 
       if (!snapshot.context) {
-        throw new Error(`Snapshot not found for runId ${request.runId}`);
+        throw new Error(`Snapshot for runId ${request.runId} is missing or has invalid context`);
       }
 
       const mergedSnapshot = { ...snapshot, ...JSON.parse(request.opts) };
