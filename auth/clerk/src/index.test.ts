@@ -22,6 +22,7 @@ describe('MastraAuthClerk', () => {
   const mockClerkClient = {
     users: {
       getOrganizationMembershipList: vi.fn(),
+      getUser: vi.fn(),
     },
   };
 
@@ -159,6 +160,130 @@ describe('MastraAuthClerk', () => {
       });
       const userWithoutOrg = { sub: 'user456' };
       expect(await clerk.authorizeUser(userWithoutOrg)).toBe(false);
+    });
+  });
+
+  describe('getCurrentUser', () => {
+    it('should return user from Authorization header token', async () => {
+      const mockPayload = { sub: 'user_123', email: 'test@example.com', name: 'Test User' };
+      (verifyJwks as any).mockResolvedValue(mockPayload);
+
+      const mockUserRecord = {
+        id: 'user_123',
+        emailAddresses: [{ emailAddress: 'test@example.com' }],
+        firstName: 'Test',
+        lastName: 'User',
+        imageUrl: 'https://img.clerk.com/avatar.png',
+        publicMetadata: {},
+      };
+      mockClerkClient.users.getUser.mockResolvedValue(mockUserRecord);
+
+      const auth = new MastraAuthClerk(mockOptions);
+      const request = new Request('http://localhost', {
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      const user = await auth.getCurrentUser(request);
+
+      expect(user).toEqual({
+        id: 'user_123',
+        email: 'test@example.com',
+        name: 'Test User',
+        avatarUrl: 'https://img.clerk.com/avatar.png',
+        metadata: {},
+      });
+    });
+
+    it('should return null when no token is present', async () => {
+      const auth = new MastraAuthClerk(mockOptions);
+      const request = new Request('http://localhost');
+
+      const user = await auth.getCurrentUser(request);
+      expect(user).toBeNull();
+    });
+
+    it('should return null when token verification fails', async () => {
+      (verifyJwks as any).mockRejectedValue(new Error('Invalid token'));
+
+      const auth = new MastraAuthClerk(mockOptions);
+      const request = new Request('http://localhost', {
+        headers: { Authorization: 'Bearer bad-token' },
+      });
+
+      const user = await auth.getCurrentUser(request);
+      expect(user).toBeNull();
+    });
+
+    it('should fall back to JWT claims when Clerk API fails', async () => {
+      const mockPayload = { sub: 'user_123', email: 'test@example.com', name: 'Test User' };
+      (verifyJwks as any).mockResolvedValue(mockPayload);
+      mockClerkClient.users.getUser.mockRejectedValue(new Error('API error'));
+
+      const auth = new MastraAuthClerk(mockOptions);
+      const request = new Request('http://localhost', {
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      const user = await auth.getCurrentUser(request);
+      expect(user).toEqual({
+        id: 'user_123',
+        email: 'test@example.com',
+        name: 'Test User',
+      });
+    });
+
+    it('should extract token from __session cookie', async () => {
+      const mockPayload = { sub: 'user_123' };
+      (verifyJwks as any).mockResolvedValue(mockPayload);
+      mockClerkClient.users.getUser.mockRejectedValue(new Error('API error'));
+
+      const auth = new MastraAuthClerk(mockOptions);
+      const request = new Request('http://localhost', {
+        headers: { Cookie: '__session=cookie-token; other=value' },
+      });
+
+      const user = await auth.getCurrentUser(request);
+      expect(verifyJwks).toHaveBeenCalledWith('cookie-token', mockOptions.jwksUri);
+      expect(user).toEqual({
+        id: 'user_123',
+        email: undefined,
+        name: undefined,
+      });
+    });
+  });
+
+  describe('getUser', () => {
+    it('should return user from Clerk API', async () => {
+      const mockUserRecord = {
+        id: 'user_123',
+        emailAddresses: [{ emailAddress: 'test@example.com' }],
+        firstName: 'Test',
+        lastName: 'User',
+        imageUrl: 'https://img.clerk.com/avatar.png',
+        publicMetadata: { role: 'admin' },
+      };
+      mockClerkClient.users.getUser.mockResolvedValue(mockUserRecord);
+
+      const auth = new MastraAuthClerk(mockOptions);
+      const user = await auth.getUser('user_123');
+
+      expect(mockClerkClient.users.getUser).toHaveBeenCalledWith('user_123');
+      expect(user).toEqual({
+        id: 'user_123',
+        email: 'test@example.com',
+        name: 'Test User',
+        avatarUrl: 'https://img.clerk.com/avatar.png',
+        metadata: { role: 'admin' },
+      });
+    });
+
+    it('should return null when user is not found', async () => {
+      mockClerkClient.users.getUser.mockRejectedValue(new Error('Not found'));
+
+      const auth = new MastraAuthClerk(mockOptions);
+      const user = await auth.getUser('nonexistent');
+
+      expect(user).toBeNull();
     });
   });
 
