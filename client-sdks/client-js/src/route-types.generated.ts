@@ -5440,6 +5440,13 @@ export type PostAgentsAgentIdSignals_Body =
                   filename?: string | undefined;
                 }
             )[];
+        providerOptions?:
+          | {
+              [key: string]: {
+                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+              };
+            }
+          | undefined;
       };
       ifActive?:
         | {
@@ -5480,6 +5487,13 @@ export type PostAgentsAgentIdSignals_Body =
                   filename?: string | undefined;
                 }
             )[];
+        providerOptions?:
+          | {
+              [key: string]: {
+                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+              };
+            }
+          | undefined;
       };
       ifActive?:
         | {

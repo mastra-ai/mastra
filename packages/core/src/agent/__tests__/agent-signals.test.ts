@@ -406,6 +406,38 @@ describe('Agent signals', () => {
     expect(fromDataPart.contents).toEqual(screenshotContents);
   });
 
+  it('threads providerOptions through LLM message, DB storage, and rehydration', () => {
+    const providerOptions = {
+      openai: { reasoningEffort: 'high' },
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+    };
+    const signal = createSignal({
+      type: 'user-message',
+      contents: 'hello',
+      providerOptions,
+    });
+
+    // LLM message: providerOptions on the CoreMessage so it flows to the model.
+    const llmMessage = signal.toLLMMessage();
+    expect(llmMessage).toMatchObject({ role: 'user', content: 'hello', providerOptions });
+
+    // DB storage: content.providerMetadata (canonical location, also surfaces to useChat).
+    const db = signal.toDBMessage();
+    expect(db.content.providerMetadata).toEqual(providerOptions);
+
+    // Round-trip: rehydrated signal carries providerOptions and re-emits it.
+    const rehydrated = mastraDBMessageToSignal(db);
+    expect(rehydrated.providerOptions).toEqual(providerOptions);
+    expect(rehydrated.toLLMMessage()).toMatchObject({ providerOptions });
+  });
+
+  it('omits providerOptions on LLM / DB output when not provided', () => {
+    const signal = createSignal({ type: 'user-message', contents: 'hi' });
+    const llmMessage = signal.toLLMMessage();
+    expect((llmMessage as { providerOptions?: unknown }).providerOptions).toBeUndefined();
+    expect(signal.toDBMessage().content.providerMetadata).toBeUndefined();
+  });
+
   describe('legacy metadata.signal.contents rehydration', () => {
     function buildLegacyDBRow(legacyContents: unknown) {
       const row = createSignal({

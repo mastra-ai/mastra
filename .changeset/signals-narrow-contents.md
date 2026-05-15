@@ -19,3 +19,5 @@ Before:
 
 After:
 `{ type: 'user-message', contents: [{ type: 'text', text: 'hi' }] }`
+
+Added an optional `providerOptions` field to `agent.sendSignal` that flows through to the resulting prompt turn (as `providerOptions` on the LLM message) and is persisted on the stored signal message (as `content.providerMetadata`).

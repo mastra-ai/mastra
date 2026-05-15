@@ -48,6 +48,7 @@ const userMessageSignalContentsSchema = z.union([
 const agentSignalSchema = baseSignalSchema.extend({
   type: z.string(),
   contents: userMessageSignalContentsSchema,
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
 });
 
 // Path parameter schemas

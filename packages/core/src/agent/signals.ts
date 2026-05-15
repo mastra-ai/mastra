@@ -2,7 +2,7 @@ import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { FilePart, TextPart } from '@internal/ai-sdk-v5';
 
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
-import type { MastraDBMessage, MastraMessagePart } from './message-list/state/types';
+import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from './message-list/state/types';
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -29,6 +29,12 @@ export type AgentSignalInput = {
   contents: AgentSignalContents;
   attributes?: Record<string, string | number | boolean | null | undefined>;
   metadata?: Record<string, unknown>;
+  /**
+   * Provider options attached to the resulting prompt turn. Surfaces as `providerOptions` on the
+   * v4 CoreMessage sent to the model and as `content.providerMetadata` on the persisted DB
+   * message (also visible to UI consumers via `useChat` message metadata).
+   */
+  providerOptions?: MastraProviderMetadata;
 };
 
 /**
@@ -288,7 +294,10 @@ function injectMarkerInline(signal: Pick<AgentSignalInput, 'type' | 'attributes'
 // Build the LLM-facing projection from the canonical parts. Returns a v4 CoreMessage with
 // role: 'user' (a prompt turn the model sees, not a signal row). The XML wrapper carries the
 // attributes inline so there's no metadata.signal here.
-function signalToLLMMessage(signal: Pick<AgentSignalInput, 'type' | 'attributes'>, parts: SignalPart[]): CoreMessage {
+function signalToLLMMessage(
+  signal: Pick<AgentSignalInput, 'type' | 'attributes' | 'providerOptions'>,
+  parts: SignalPart[],
+): CoreMessage {
   const isUserMessage = signal.type === 'user-message';
   const hasAttrs = hasMeaningfulAttributes(signal.attributes);
 
@@ -305,7 +314,11 @@ function signalToLLMMessage(signal: Pick<AgentSignalInput, 'type' | 'attributes'
     content = injectMarkerInline(signal, parts);
   }
 
-  return { role: 'user', content } as CoreMessage;
+  return {
+    role: 'user',
+    content,
+    ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
+  } as CoreMessage;
 }
 
 function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: SignalPart[]): AgentSignalDataPart {
@@ -337,6 +350,7 @@ function signalToDBMessage(
     content: {
       format: 2,
       parts: parts.length > 0 ? parts : [{ type: 'text', text: '' }],
+      ...(signal.providerOptions ? { providerMetadata: signal.providerOptions } : {}),
       metadata: {
         signal: {
           id: signal.id,
@@ -402,6 +416,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
   const legacyContents = legacyContentsToSignalContents(rawLegacyContents);
   const partsContents = partsToSignalContents(storagePartsToSignalParts(message.content.parts));
   const contents = legacyContents ?? partsContents;
+  const providerMetadata = message.content.providerMetadata;
   const base = {
     id: typeof signalMetadata?.id === 'string' ? signalMetadata.id : message.id,
     createdAt: typeof signalMetadata?.createdAt === 'string' ? signalMetadata.createdAt : message.createdAt,
@@ -414,6 +429,10 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
     metadata:
       signalMetadata?.metadata && typeof signalMetadata.metadata === 'object' && !Array.isArray(signalMetadata.metadata)
         ? (signalMetadata.metadata as AgentSignalInput['metadata'])
+        : undefined,
+    providerOptions:
+      providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
+        ? (providerMetadata as MastraProviderMetadata)
         : undefined,
   };
 
