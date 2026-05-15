@@ -34,6 +34,8 @@ export interface HarnessTestSetupOptions {
   toolCategoryResolver?: HarnessConfig['toolCategoryResolver'];
   /** Optional model catalog (§9). */
   models?: HarnessConfig['models'];
+  /** Optional code-registered skill catalog (§4.6/§9). */
+  skills?: HarnessConfig['skills'];
   /** Optional model auth-status resolver (§9). */
   modelAuthStatusResolver?: HarnessConfig['modelAuthStatusResolver'];
 }
@@ -65,6 +67,7 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
     ...(opts.defaultPermissionPolicy ? { defaultPermissionPolicy: opts.defaultPermissionPolicy } : {}),
     ...(opts.toolCategoryResolver ? { toolCategoryResolver: opts.toolCategoryResolver } : {}),
     ...(opts.models ? { models: opts.models } : {}),
+    ...(opts.skills ? { skills: opts.skills } : {}),
     ...(opts.modelAuthStatusResolver ? { modelAuthStatusResolver: opts.modelAuthStatusResolver } : {}),
   });
   const firstAgent = Object.values(agents)[0]!;

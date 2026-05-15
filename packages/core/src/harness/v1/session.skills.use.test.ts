@@ -1,12 +1,10 @@
 /**
  * Harness v1 — `session.skills.use()` (§4.6).
  *
- * Phase 2: programmatic skill execution against the workspace-discovered
- * catalog. Resolves by frontmatter name or workspace-relative path,
- * validates declared required args, appends a JSON code block carrying
- * validated args to the skill body, and dispatches as a single turn via
- * the signal-driven message path. Admission idempotency is deferred to a
- * follow-up slice.
+ * Programmatic skill execution against the code-registered and
+ * workspace-discovered catalogues. Code skills resolve by name first.
+ * Workspace skills resolve by frontmatter name or workspace-relative path
+ * unless a code skill owns the same name.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -23,6 +21,7 @@ import {
   HarnessValidationError,
 } from './errors';
 import { Harness } from './harness';
+import type { HarnessConfig, HarnessRequestContext } from './types';
 import type { WorkspaceProvider } from './workspace-provider';
 
 // ---------------------------------------------------------------------------
@@ -123,7 +122,10 @@ function resumableProviderFor(skills: FakeWorkspaceSkills | null): WorkspaceProv
   };
 }
 
-function makeHarnessWithSkills(skills: FakeWorkspaceSkills): {
+function makeHarnessWithSkills(
+  skills: FakeWorkspaceSkills,
+  codeSkills?: HarnessConfig['skills'],
+): {
   harness: Harness;
   agent: MockAgent;
 } {
@@ -136,6 +138,7 @@ function makeHarnessWithSkills(skills: FakeWorkspaceSkills): {
     defaultModeId: 'm',
     sessions: { storage },
     workspace: { kind: 'per-session', provider },
+    ...(codeSkills ? { skills: codeSkills } : {}),
   });
   return { harness, agent };
 }
@@ -158,6 +161,87 @@ describe('Session.skills.use() (§4.6)', () => {
     expect(agent.streamCalls).toHaveLength(1);
     expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('Reproduce the bug step by step.');
     expect(fakeSkills.getCalls).toEqual(['reproduce-bug']);
+  });
+
+  it('runs a code-registered skill without a workspace', async () => {
+    const { harness, agent } = setupHarness({
+      skills: [{ name: 'code-only', description: 'Code only', instructions: 'Run the code skill.' }],
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.skills.use('code-only');
+
+    expect(agent.streamCalls).toHaveLength(1);
+    expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('Run the code skill.');
+  });
+
+  it('prefers a code-registered skill when a workspace skill has the same name', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'shared',
+        description: 'Workspace shared',
+        path: 'skills/shared/SKILL.md',
+        instructions: 'Workspace body.',
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills, [
+      { name: 'shared', description: 'Code shared', instructions: 'Code body.' },
+    ]);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.skills.use('shared');
+
+    expect(agent.streamCalls).toHaveLength(1);
+    expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('Code body.');
+    expect(fakeSkills.getCalls).toEqual([]);
+  });
+
+  it('does not allow a shadowed workspace skill to bypass code precedence by path', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'shared',
+        description: 'Workspace shared',
+        path: 'skills/shared/SKILL.md',
+        instructions: 'Workspace body.',
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills, [
+      { name: 'shared', description: 'Code shared', instructions: 'Code body.' },
+    ]);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('skills/shared/SKILL.md')).rejects.toMatchObject({
+      searchedSources: ['code-registered', 'workspace'],
+    });
+
+    expect(agent.streamCalls).toHaveLength(0);
+    expect(fakeSkills.getCalls).toEqual(['skills/shared/SKILL.md']);
+  });
+
+  it('does not treat a code skill filePath as a use() alias', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'deploy',
+        description: 'Workspace deploy',
+        path: 'skills/deploy/SKILL.md',
+        instructions: 'Workspace deploy body.',
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills, [
+      {
+        name: 'code-deploy',
+        description: 'Code deploy',
+        filePath: 'deploy',
+        instructions: 'Code deploy body.',
+      },
+    ]);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.skills.use('deploy');
+
+    expect(agent.streamCalls).toHaveLength(1);
+    expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('Workspace deploy body.');
+    expect(fakeSkills.getCalls).toEqual(['deploy']);
   });
 
   it('resolves a skill by workspace-relative path', async () => {
@@ -216,12 +300,15 @@ describe('Session.skills.use() (§4.6)', () => {
     expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('Plain body.');
   });
 
-  it('throws HarnessSkillNotFoundError when no workspace skill matches the ref', async () => {
+  it('throws HarnessSkillNotFoundError when no skill matches the ref', async () => {
     const fakeSkills = new FakeWorkspaceSkills([{ name: 'exists', description: 'X', instructions: 'X.' }]);
     const { harness } = makeHarnessWithSkills(fakeSkills);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
     await expect(session.skills.use('does-not-exist')).rejects.toBeInstanceOf(HarnessSkillNotFoundError);
+    await expect(session.skills.use('does-not-exist')).rejects.toMatchObject({
+      searchedSources: ['code-registered', 'workspace'],
+    });
   });
 
   it('throws HarnessSkillNotFoundError when the session has no workspace configured', async () => {
@@ -229,6 +316,7 @@ describe('Session.skills.use() (§4.6)', () => {
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
     await expect(session.skills.use('whatever')).rejects.toBeInstanceOf(HarnessSkillNotFoundError);
+    await expect(session.skills.use('whatever')).rejects.toMatchObject({ searchedSources: ['code-registered'] });
   });
 
   it('throws HarnessSkillArgsValidationError when required args are missing', async () => {
@@ -248,6 +336,308 @@ describe('Session.skills.use() (§4.6)', () => {
     );
 
     // No turn started.
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects non-object args before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      { name: 'object-args', description: 'Object args', instructions: 'Object args body.' },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      session.skills.use('object-args', { args: [] as unknown as Record<string, unknown> }),
+    ).rejects.toMatchObject({
+      issues: ['args must be an object'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('validates type, enum, and additionalProperties before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'typed',
+        description: 'Typed',
+        instructions: 'Typed body.',
+        metadata: {
+          args: {
+            required: ['ticketId'],
+            additionalProperties: false,
+            properties: {
+              ticketId: { type: 'string' },
+              priority: { enum: ['low', 'high'] },
+              count: { type: 'integer' },
+            },
+          },
+        },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      session.skills.use('typed', { args: { ticketId: 123, priority: 'urgent', extra: true } }),
+    ).rejects.toMatchObject({
+      issues: ['ticketId must be string', 'priority must be one of ["low","high"]', 'unsupported arg: "extra"'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('accepts object enum values by structural equality', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'object-enum',
+        description: 'Object enum',
+        instructions: 'Object enum body.',
+        metadata: {
+          args: {
+            properties: {
+              target: { type: 'object', enum: [{ env: 'prod', flags: ['fast'] }] },
+            },
+          },
+        },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.skills.use('object-enum', { args: { target: { env: 'prod', flags: ['fast'] } } });
+
+    expect(agent.streamCalls).toHaveLength(1);
+  });
+
+  it('rejects undefined required and declared args', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'needs-defined',
+        description: 'Needs defined',
+        instructions: 'Defined body.',
+        metadata: { args: { required: ['ticketId'], properties: { ticketId: { type: 'string' } } } },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('needs-defined', { args: { ticketId: undefined } })).rejects.toMatchObject({
+      issues: ['ticketId must be JSON-serializable', 'missing required arg: "ticketId"', 'ticketId must be string'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('does not let returned code skill descriptor mutation weaken validation', async () => {
+    const { harness, agent } = setupHarness({
+      skills: [
+        {
+          name: 'immutable',
+          description: 'Immutable',
+          instructions: 'Immutable body.',
+          metadata: { args: { required: ['ticketId'] } },
+        },
+      ],
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const descriptor = await session.skills.get('immutable');
+    (descriptor!.metadata!.args as { required: string[] }).required = [];
+
+    await expect(session.skills.use('immutable', { args: {} })).rejects.toMatchObject({
+      issues: ['missing required arg: "ticketId"'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('enforces additionalProperties false even without declared properties', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'closed',
+        description: 'Closed',
+        instructions: 'Closed body.',
+        metadata: { args: { additionalProperties: false } },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('closed', { args: { extra: true } })).rejects.toMatchObject({
+      issues: ['unsupported arg: "extra"'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects unsupported schema types before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'unsupported-type',
+        description: 'Unsupported type',
+        instructions: 'Unsupported type body.',
+        metadata: { args: { type: 'date' } },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('unsupported-type')).rejects.toMatchObject({
+      issues: ['$.type must be a supported JSON schema type'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects non-plain args schema objects before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'non-plain-schema',
+        description: 'Non-plain schema',
+        instructions: 'Non-plain schema body.',
+        metadata: { args: new Date() },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('non-plain-schema')).rejects.toMatchObject({
+      issues: ['unsupported args schema: expected object'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects circular args schemas before dispatch', async () => {
+    const argsSchema: Record<string, unknown> = { properties: {} };
+    (argsSchema.properties as Record<string, unknown>).self = argsSchema;
+    const { harness, agent } = setupHarness({
+      skills: [
+        {
+          name: 'circular-schema',
+          description: 'Circular schema',
+          instructions: 'Circular schema body.',
+          metadata: { args: argsSchema },
+        },
+      ],
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('circular-schema', { args: {} })).rejects.toMatchObject({
+      issues: ['self must not contain circular args schema references'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects unsupported top-level args schema fields before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'minimum',
+        description: 'Minimum',
+        instructions: 'Minimum body.',
+        metadata: { args: { minimum: 1 } },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('minimum')).rejects.toMatchObject({
+      issues: ['$.minimum is not a supported args schema field'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects unsupported nested args schema fields even when args omit those properties', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'nested-shape',
+        description: 'Nested shape',
+        instructions: 'Nested shape body.',
+        metadata: {
+          args: {
+            properties: {
+              query: { type: 'string', pattern: '^PF-' },
+              tags: { type: 'array', items: { type: 'string', minLength: 1 } },
+            },
+          },
+        },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('nested-shape', { args: {} })).rejects.toMatchObject({
+      issues: [
+        'query.pattern is not a supported args schema field',
+        'tags[].minLength is not a supported args schema field',
+      ],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects non-JSON enum schema values before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      {
+        name: 'bad-enum',
+        description: 'Bad enum',
+        instructions: 'Bad enum body.',
+        metadata: { args: { properties: { value: { enum: [1n] } } } },
+      },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('bad-enum', { args: {} })).rejects.toMatchObject({
+      issues: ['value.enum[0] must be JSON-serializable'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects non-JSON args before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      { name: 'json-only', description: 'JSON only', instructions: 'JSON only body.' },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.skills.use('json-only', { args: { bad: 1n } })).rejects.toMatchObject({
+      issues: ['bad must be JSON-serializable'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('rejects own toJSON args before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      { name: 'no-to-json', description: 'No toJSON', instructions: 'No toJSON body.' },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      session.skills.use('no-to-json', { args: { value: { toJSON: () => 'hidden' } } }),
+    ).rejects.toMatchObject({
+      issues: ['value.toJSON is not supported in skill args'],
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('accepts JSON data fields named toJSON', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      { name: 'json-field', description: 'JSON field', instructions: 'JSON field body.' },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.skills.use('json-field', { args: { value: { toJSON: 'literal' } } });
+
+    expect(agent.streamCalls).toHaveLength(1);
+    expect(extractSignalContents(agent.streamCalls[0]!.messages)).toContain('"toJSON": "literal"');
+  });
+
+  it('rejects circular args before dispatch', async () => {
+    const fakeSkills = new FakeWorkspaceSkills([
+      { name: 'no-cycles', description: 'No cycles', instructions: 'No cycles body.' },
+    ]);
+    const { harness, agent } = makeHarnessWithSkills(fakeSkills);
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const args: Record<string, unknown> = {};
+    args.self = args;
+
+    await expect(session.skills.use('no-cycles', { args })).rejects.toMatchObject({
+      issues: ['self must not contain circular references'],
+    });
     expect(agent.streamCalls).toHaveLength(0);
   });
 
@@ -301,20 +691,16 @@ describe('Session.skills.use() (§4.6)', () => {
     expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('body');
   });
 
-  it('is also reachable as ctx.useSkill from within a tool', async () => {
-    // This is a structural smoke test: the request context plumbed to the
-    // built-in tools exposes `useSkill` as a thin proxy onto
-    // `session.skills.use`. We assert the proxy exists and delegates by
-    // calling through it directly with the same harness.
+  it('exposes ctx.useSkill through the per-turn request context', async () => {
     const fakeSkills = new FakeWorkspaceSkills([{ name: 'callme', description: 'd', instructions: 'CALLED' }]);
     const { harness, agent } = makeHarnessWithSkills(fakeSkills);
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
-    // _buildRequestContext is internal; the test approximation is that
-    // session.skills.use exists, accepts a ref, and produces a turn — the
-    // delegation surface (ctx.useSkill) is a one-liner over the same code
-    // path.
-    await session.skills.use('callme');
-    expect(extractSignalContents(agent.streamCalls[0]!.messages)).toBe('CALLED');
+    await session.message({ content: 'prime context' });
+    const harnessContext = agent.streamCalls[0]!.options.requestContext.get('harness') as HarnessRequestContext;
+    await harnessContext.useSkill('callme');
+
+    expect(agent.streamCalls).toHaveLength(2);
+    expect(extractSignalContents(agent.streamCalls[1]!.messages)).toBe('CALLED');
   });
 });

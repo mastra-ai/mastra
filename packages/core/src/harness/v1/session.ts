@@ -7,7 +7,7 @@
  *
  * The current local surface includes message/signal/queue turns, mode/model
  * and state mutation, display snapshots, message listing, pending inbox
- * responses, permissions, workspace-backed skills, subagents, goals, event
+ * responses, permissions, code/workspace skills, subagents, goals, event
  * forwarding, abort, and idle waiting. It is not yet the production remote or
  * recovery surface: durable admission/result rows, server routes, remote SDKs,
  * channels, wakeups, and request-context `registerQuestion` /
@@ -114,6 +114,14 @@ import type {
  */
 const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
 const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
+const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
+  'required',
+  'properties',
+  'type',
+  'enum',
+  'items',
+  'additionalProperties',
+]);
 
 export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
 
@@ -422,15 +430,12 @@ export class Session {
   // -------------------------------------------------------------------------
   // Skill discovery cache (§4.6).
   //
-  // Workspace skill discovery is async and lazy. We cache the resolved
-  // catalog for the lifetime of this in-memory Session instance. Concurrent
-  // `listSkills` / `getSkill` calls during a generation build share the
-  // same in-flight promise (single-flight), avoiding duplicate discovery
-  // work. `refreshSkills()` clears the cache so the next read re-runs
-  // discovery through the workspace skill source.
-  //
-  // Phase 1 caches workspace-only generations. Phase 2 will layer the
-  // code-registered ∪ workspace merge on top.
+  // Workspace skill discovery is async and lazy. We cache the merged code +
+  // workspace catalog for the lifetime of this in-memory Session instance.
+  // Concurrent `skills.list` / `skills.get` calls during a generation build
+  // share the same in-flight promise (single-flight), avoiding duplicate
+  // discovery work. `skills.refresh()` clears the cache so the next read
+  // re-runs discovery through the workspace skill source.
   // -------------------------------------------------------------------------
   private _skillsCache?: HarnessSkill[];
   private _skillsResolving?: Promise<HarnessSkill[]>;
@@ -924,26 +929,26 @@ export class Session {
   // -------------------------------------------------------------------------
   // Skills — §4.6.
   //
-  // Workspace-discovered skills are projected from the configured
-  // `WorkspaceSkills` source into `HarnessSkill` descriptors. Discovery
-  // runs asynchronously on the first `list` / `get` / `use` call per
-  // in-memory Session instance and the result is cached for the session's
+  // Code-registered skills are merged ahead of workspace-discovered skills.
+  // Workspace-discovered entries are projected from the configured
+  // `WorkspaceSkills` source into `HarnessSkill` descriptors. Discovery runs
+  // asynchronously on the first `list` / `get` / `use` call per in-memory
+  // Session instance and the merged result is cached for the session's
   // lifetime. Concurrent calls during a generation share a single-flight
-  // promise. `refresh()` drops the cache so the next call re-runs
-  // discovery.
+  // promise. `refresh()` drops the cache so the next call re-runs discovery.
   //
-  // `use(ref, opts?)` resolves a skill by frontmatter name or relative
-  // path under the workspace skill source, validates declared required
-  // args, appends a JSON code block carrying the validated args to the
-  // skill body, and delegates to the signal-driven message path. The
-  // returned `AgentResult` is the underlying turn's result. Admission
-  // idempotency is deferred to a follow-up slice.
+  // `use(ref, opts?)` resolves a code-registered or workspace skill by name
+  // or relative path, validates declared args, appends a JSON code block
+  // carrying the validated args to the skill body, and delegates to the
+  // signal-driven message path. The returned `AgentResult` is the underlying
+  // turn's result.
   // -------------------------------------------------------------------------
 
   /**
    * Skill discovery, inspection, and programmatic execution — see §4.6
    * and §4.2c.
    *
+   * Code-registered skills are merged ahead of workspace-discovered skills.
    * Workspace-discovered skills are projected into `HarnessSkill`
    * descriptors. Discovery runs asynchronously on the first `list` /
    * `get` / `use` call per in-memory Session instance and is cached for
@@ -955,14 +960,14 @@ export class Session {
     /**
      * List skills available to this session.
      *
-     * Returns an empty array when the session has no workspace configured.
-     * Otherwise delegates to the resolved workspace's `WorkspaceSkills`
-     * surface and projects each entry into a `HarnessSkill`.
+     * Returns code-registered skills plus workspace-discovered skills.
+     * If the session has no workspace configured, only code-registered
+     * skills are returned.
      */
     list: (): Promise<HarnessSkill[]> => this._skillsList(),
     /**
      * Look up a skill by name. Returns `undefined` when the name does not
-     * resolve. The only source consulted is the session's workspace.
+     * resolve in the code or workspace catalogues.
      */
     get: (name: string): Promise<HarnessSkill | undefined> => this._skillsGet(name),
     /**
@@ -972,16 +977,16 @@ export class Session {
      */
     refresh: (): Promise<void> => this._skillsRefresh(),
     /**
-     * Resolve a workspace skill by name or relative path, optionally
-     * validate provided arguments against the skill's declared
-     * `args.required[]` frontmatter, append a JSON code block of the
-     * validated args to the skill instructions, and dispatch the result
+     * Resolve a code-registered skill by name, or a workspace skill by name
+     * or relative path, optionally validate provided arguments against the
+     * skill's declared args schema, append a JSON code block of the validated
+     * args to the skill instructions, and dispatch the result
      * through the signal-driven message path as a single turn. Resolves
      * to the underlying turn's `AgentResult`.
      *
      * Throws {@link HarnessSkillNotFoundError} when `ref` does not match
-     * any workspace skill, and {@link HarnessSkillArgsValidationError}
-     * when required args are missing.
+     * any skill, and {@link HarnessSkillArgsValidationError} when declared
+     * args are invalid.
      */
     use: (ref: string, opts?: UseSkillOptions): Promise<AgentResult> => this._skillsUse(ref, opts),
   });
@@ -996,6 +1001,8 @@ export class Session {
     if (typeof name !== 'string' || name.length === 0) {
       throw new HarnessValidationError('skills.get()', 'name must be a non-empty string');
     }
+    const codeSkill = this._harness._getCodeSkill(name);
+    if (codeSkill) return codeSkill;
     const skills = await this._resolveSkills();
     return skills.find(s => s.name === name);
   }
@@ -1012,14 +1019,16 @@ export class Session {
   }
 
   /**
-   * Resolve a workspace skill by name or relative path, validate any
-   * declared required args, inject the validated args as a JSON code
-   * block into the skill instructions, and dispatch the result through
-   * `message()` as a single turn. Returns the underlying `AgentResult`.
+   * Resolve a code-registered skill by name, or a workspace skill by name or
+   * relative path, validate any declared args schema, inject the validated
+   * args as a JSON code block into the skill instructions, and dispatch the
+   * result through `message()` as a single turn. Returns the underlying
+   * `AgentResult`.
    *
-   * Reference resolution mirrors Flue's `session.skill(ref, ...)` — either
-   * the frontmatter `name` or a relative path under the workspace skill
-   * source resolves. `WorkspaceSkills.get(ref)` already supports both.
+   * Reference resolution checks the static code registry first, then mirrors
+   * Flue's workspace `session.skill(ref, ...)` behavior — either the
+   * frontmatter `name` or a relative path under the workspace skill source
+   * resolves. `WorkspaceSkills.get(ref)` already supports both.
    */
   private async _skillsUse(ref: string, opts?: UseSkillOptions): Promise<AgentResult> {
     this._assertLive('skills.use()');
@@ -1027,38 +1036,37 @@ export class Session {
       throw new HarnessValidationError('skills.use()', 'ref must be a non-empty string');
     }
 
+    const codeSkill = this._harness._getCodeSkill(ref);
+    if (codeSkill) {
+      this._validateSkillArgs(codeSkill.name, codeSkill.metadata, opts?.args);
+      const expandedContent = this._buildSkillPrompt(codeSkill.instructions, opts?.args);
+      return this.message({
+        content: expandedContent,
+        ...(opts?.modelOverride ? { model: opts.modelOverride } : {}),
+      });
+    }
+
     // Force workspace materialization. Unlike `list` / `get`, `use` must
     // produce a definitive answer (start a turn or refuse with a typed
-    // not-found error); provisional code-only results are not acceptable.
+    // not-found error).
     const workspace = await this.getWorkspace();
     const workspaceSkills = workspace?.skills;
     if (!workspaceSkills) {
-      throw new HarnessSkillNotFoundError(ref, []);
+      throw new HarnessSkillNotFoundError(ref, ['code-registered']);
     }
 
     // `WorkspaceSkills.get` accepts either the frontmatter `name` or a
     // relative path under the configured skill source.
     const skill = await workspaceSkills.get(ref);
     if (!skill) {
-      throw new HarnessSkillNotFoundError(ref, ['workspace']);
+      throw new HarnessSkillNotFoundError(ref, ['code-registered', 'workspace']);
+    }
+    if (this._harness._getCodeSkill(skill.name)) {
+      throw new HarnessSkillNotFoundError(ref, ['code-registered', 'workspace']);
     }
 
     const args = opts?.args;
-
-    // Phase 2 args validation: only enforce `args.required[]` (if the
-    // skill frontmatter declares it). Full schema validation lands with
-    // admission idempotency in a follow-up slice.
-    const requiredKeys = this._extractRequiredArgKeys(skill.metadata);
-    if (requiredKeys.length > 0) {
-      const provided = args ?? {};
-      const missing = requiredKeys.filter(k => !(k in provided));
-      if (missing.length > 0) {
-        throw new HarnessSkillArgsValidationError(
-          skill.name,
-          missing.map(k => `missing required arg: "${k}"`),
-        );
-      }
-    }
+    this._validateSkillArgs(skill.name, skill.metadata, args);
 
     // Build the expanded prompt: skill instructions + (optional) JSON
     // code block carrying validated args. Skill authors reference the
@@ -1072,17 +1080,275 @@ export class Session {
   }
 
   /**
-   * Pull `args.required[]` (a string array) out of skill frontmatter
-   * metadata, if declared. Returns an empty array when the skill does not
-   * declare required args. Defensive against malformed metadata.
+   * Validate `metadata.args` as a small JSON-schema-ish object. The harness
+   * supports the common prompt-arg fields used by workspace frontmatter:
+   * `required`, `properties`, `type`, `enum`, `items`, and
+   * `additionalProperties`. Unsupported or malformed schema shapes fail
+   * before a skill turn starts.
    */
-  private _extractRequiredArgKeys(metadata: Record<string, unknown> | undefined): string[] {
-    if (!metadata || typeof metadata !== 'object') return [];
+  private _validateSkillArgs(
+    skillName: string,
+    metadata: Record<string, unknown> | undefined,
+    args: Record<string, unknown> | undefined,
+  ): void {
+    if (args !== undefined && (!args || typeof args !== 'object' || Array.isArray(args))) {
+      throw new HarnessSkillArgsValidationError(skillName, ['args must be an object']);
+    }
+
+    const issues: string[] = [];
+    if (args !== undefined) {
+      this._validateJsonSerializableSkillArg('$', args, new WeakSet(), issues);
+    }
+    if (!metadata || typeof metadata !== 'object') {
+      if (issues.length > 0) throw new HarnessSkillArgsValidationError(skillName, issues);
+      return;
+    }
     const argsField = (metadata as Record<string, unknown>).args;
-    if (!argsField || typeof argsField !== 'object') return [];
-    const required = (argsField as Record<string, unknown>).required;
-    if (!Array.isArray(required)) return [];
-    return required.filter((k): k is string => typeof k === 'string' && k.length > 0);
+    if (argsField === undefined) {
+      if (issues.length > 0) throw new HarnessSkillArgsValidationError(skillName, issues);
+      return;
+    }
+    if (!this._isPlainRecord(argsField)) {
+      throw new HarnessSkillArgsValidationError(skillName, ['unsupported args schema: expected object']);
+    }
+
+    const issueCountBeforeSchemaShape = issues.length;
+    this._validateSkillArgSchemaShape('$', argsField, issues, new WeakSet());
+    if (issues.length > issueCountBeforeSchemaShape) {
+      throw new HarnessSkillArgsValidationError(skillName, issues);
+    }
+
+    this._validateSkillArgSchemaValue('$', args ?? {}, argsField, issues);
+    if (issues.length > 0) {
+      throw new HarnessSkillArgsValidationError(skillName, issues);
+    }
+  }
+
+  private _validateSkillArgSchemaShape(
+    path: string,
+    schema: Record<string, unknown>,
+    issues: string[],
+    seen: WeakSet<object>,
+  ): void {
+    if (seen.has(schema)) {
+      issues.push(`${path} must not contain circular args schema references`);
+      return;
+    }
+    seen.add(schema);
+
+    for (const key of Object.keys(schema)) {
+      if (!SUPPORTED_SKILL_ARG_SCHEMA_KEYS.has(key)) {
+        issues.push(`${path}.${key} is not a supported args schema field`);
+      }
+    }
+
+    const required = schema.required;
+    if (
+      required !== undefined &&
+      (!Array.isArray(required) || required.some(k => typeof k !== 'string' || k.length === 0))
+    ) {
+      issues.push(`${path}.required must be an array of non-empty strings`);
+    }
+
+    const enumValues = schema.enum;
+    if (enumValues !== undefined) {
+      if (!Array.isArray(enumValues)) {
+        issues.push(`${path}.enum must be an array`);
+      } else {
+        enumValues.forEach((candidate, index) => {
+          this._validateJsonSerializableSkillArg(`${path}.enum[${index}]`, candidate, new WeakSet(), issues);
+        });
+      }
+    }
+
+    const declaredType = schema.type;
+    if (declaredType !== undefined) {
+      this._validateSkillArgDeclaredType(path, declaredType, issues);
+    }
+
+    const properties = schema.properties;
+    if (properties !== undefined) {
+      if (!this._isPlainRecord(properties)) {
+        issues.push(`${path}.properties must be an object`);
+      } else {
+        for (const [key, childSchema] of Object.entries(properties)) {
+          if (!this._isPlainRecord(childSchema)) {
+            issues.push(`${path}.properties.${key} must be an object`);
+            continue;
+          }
+          this._validateSkillArgSchemaShape(path === '$' ? key : `${path}.${key}`, childSchema, issues, seen);
+        }
+      }
+    }
+
+    const additionalProperties = schema.additionalProperties;
+    if (additionalProperties !== undefined && additionalProperties !== true && additionalProperties !== false) {
+      issues.push(`${path}.additionalProperties must be boolean`);
+    }
+
+    const items = schema.items;
+    if (items !== undefined) {
+      if (!this._isPlainRecord(items)) {
+        issues.push(`${path}.items must be an object`);
+      } else {
+        this._validateSkillArgSchemaShape(`${path}[]`, items, issues, seen);
+      }
+    }
+
+    seen.delete(schema);
+  }
+
+  private _validateSkillArgSchemaValue(
+    path: string,
+    value: unknown,
+    schema: Record<string, unknown>,
+    issues: string[],
+  ): void {
+    const required = schema.required;
+    if (Array.isArray(required) && this._isPlainRecord(value)) {
+      for (const key of required) {
+        if (!Object.prototype.hasOwnProperty.call(value, key) || value[key] === undefined) {
+          issues.push(`missing required arg: "${path === '$' ? key : `${path}.${key}`}"`);
+        }
+      }
+    }
+
+    const enumValues = schema.enum;
+    if (Array.isArray(enumValues) && !enumValues.some(candidate => this._skillArgValuesEqual(candidate, value))) {
+      issues.push(`${path} must be one of ${JSON.stringify(enumValues)}`);
+    }
+
+    const declaredType = schema.type;
+    if (declaredType !== undefined && !this._matchesSkillArgType(value, declaredType, path, issues)) return;
+
+    const properties = schema.properties;
+    const additionalProperties = schema.additionalProperties;
+    if (this._isPlainRecord(properties) && this._isPlainRecord(value)) {
+      for (const [key, childSchema] of Object.entries(properties)) {
+        if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+        if (!this._isPlainRecord(childSchema)) continue;
+        this._validateSkillArgSchemaValue(path === '$' ? key : `${path}.${key}`, value[key], childSchema, issues);
+      }
+    }
+    if (additionalProperties === false && this._isPlainRecord(value)) {
+      const allowedKeys = this._isPlainRecord(properties) ? new Set(Object.keys(properties)) : new Set<string>();
+      for (const key of Object.keys(value)) {
+        if (!allowedKeys.has(key)) issues.push(`unsupported arg: "${path === '$' ? key : `${path}.${key}`}"`);
+      }
+    }
+
+    const items = schema.items;
+    if (this._isPlainRecord(items) && Array.isArray(value)) {
+      value.forEach((item, index) => {
+        this._validateSkillArgSchemaValue(`${path}[${index}]`, item, items, issues);
+      });
+    }
+  }
+
+  private _validateSkillArgDeclaredType(path: string, declaredType: unknown, issues: string[]): void {
+    const allowedTypes = Array.isArray(declaredType) ? declaredType : [declaredType];
+    const supported = new Set(['string', 'number', 'integer', 'boolean', 'object', 'array', 'null']);
+    if (allowedTypes.some(type => typeof type !== 'string' || !supported.has(type))) {
+      issues.push(`${path}.type must be a supported JSON schema type`);
+    }
+  }
+
+  private _matchesSkillArgType(value: unknown, declaredType: unknown, path: string, issues: string[]): boolean {
+    const allowedTypes = Array.isArray(declaredType) ? declaredType : [declaredType];
+    const supported = new Set(['string', 'number', 'integer', 'boolean', 'object', 'array', 'null']);
+    if (allowedTypes.some(type => typeof type !== 'string' || !supported.has(type))) {
+      issues.push(`${path}.type must be a supported JSON schema type`);
+      return false;
+    }
+
+    const actualMatches = allowedTypes.some(type => {
+      switch (type) {
+        case 'string':
+          return typeof value === 'string';
+        case 'number':
+          return typeof value === 'number' && Number.isFinite(value);
+        case 'integer':
+          return Number.isInteger(value);
+        case 'boolean':
+          return typeof value === 'boolean';
+        case 'object':
+          return this._isPlainRecord(value);
+        case 'array':
+          return Array.isArray(value);
+        case 'null':
+          return value === null;
+        default:
+          return false;
+      }
+    });
+    if (!actualMatches) {
+      issues.push(`${path} must be ${allowedTypes.join(' | ')}`);
+    }
+    return actualMatches;
+  }
+
+  private _isPlainRecord(value: unknown): value is Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+
+  private _skillArgValuesEqual(left: unknown, right: unknown): boolean {
+    if (Object.is(left, right)) return true;
+    if (Array.isArray(left) && Array.isArray(right)) {
+      return (
+        left.length === right.length && left.every((value, index) => this._skillArgValuesEqual(value, right[index]))
+      );
+    }
+    if (this._isPlainRecord(left) && this._isPlainRecord(right)) {
+      const leftKeys = Object.keys(left);
+      const rightKeys = Object.keys(right);
+      if (leftKeys.length !== rightKeys.length) return false;
+      return leftKeys.every(
+        key => Object.prototype.hasOwnProperty.call(right, key) && this._skillArgValuesEqual(left[key], right[key]),
+      );
+    }
+    return false;
+  }
+
+  private _validateJsonSerializableSkillArg(
+    path: string,
+    value: unknown,
+    seen: WeakSet<object>,
+    issues: string[],
+  ): void {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) issues.push(`${path} must be JSON-serializable`);
+      return;
+    }
+    if (value === undefined || typeof value === 'bigint' || typeof value === 'function' || typeof value === 'symbol') {
+      issues.push(`${path} must be JSON-serializable`);
+      return;
+    }
+    if (typeof value !== 'object') return;
+    if (
+      Object.prototype.hasOwnProperty.call(value, 'toJSON') &&
+      typeof (value as { toJSON?: unknown }).toJSON === 'function'
+    ) {
+      issues.push(`${path}.toJSON is not supported in skill args`);
+      return;
+    }
+    if (seen.has(value)) {
+      issues.push(`${path} must not contain circular references`);
+      return;
+    }
+    seen.add(value);
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => this._validateJsonSerializableSkillArg(`${path}[${index}]`, item, seen, issues));
+    } else if (this._isPlainRecord(value)) {
+      for (const [key, child] of Object.entries(value)) {
+        this._validateJsonSerializableSkillArg(path === '$' ? key : `${path}.${key}`, child, seen, issues);
+      }
+    } else {
+      issues.push(`${path} must be JSON-serializable`);
+    }
+    seen.delete(value);
   }
 
   /**
@@ -1105,31 +1371,34 @@ export class Session {
     if (this._skillsResolving) return this._skillsResolving;
 
     const build = async (): Promise<HarnessSkill[]> => {
+      const codeSkills = this._harness._listCodeSkills();
       const workspace = await this.getWorkspace();
       const workspaceSkills = workspace?.skills;
       if (!workspaceSkills) {
         // No workspace, or workspace has no skill source configured.
-        // Phase 2 will union this with code-registered skills.
-        return [];
+        return codeSkills;
       }
       const entries = await workspaceSkills.list();
-      const projected: HarnessSkill[] = entries.map(meta => ({
-        name: meta.name,
-        description: meta.description,
-        // `list()` returns metadata only; the instructions body lives in
-        // the skill's SKILL.md and is fetched via
-        // `workspace.skills.get(name)`. `use()` materializes instructions
-        // lazily; for the inspection surface we surface an empty string so
-        // the descriptor shape stays uniform.
-        instructions: '',
-        ...(meta.path ? { filePath: meta.path } : {}),
-        // Pass through arbitrary skill frontmatter metadata so callers can
-        // discover skill-level flags (e.g. `metadata.goal === true` for
-        // goal-mode skills). Workspace's `SkillMetadata.metadata` is
-        // typed `Record<string, unknown>` and is already JSON-serialisable.
-        ...(meta.metadata ? { metadata: meta.metadata } : {}),
-      }));
-      return projected;
+      const codeNames = new Set(codeSkills.map(skill => skill.name));
+      const projected = await Promise.all(
+        entries
+          .filter(meta => !codeNames.has(meta.name))
+          .map(async meta => {
+            const skill = await workspaceSkills.get(meta.path ?? meta.name);
+            return {
+              name: meta.name,
+              description: meta.description,
+              instructions: skill?.instructions ?? '',
+              ...(meta.path ? { filePath: meta.path } : {}),
+              // Pass through arbitrary skill frontmatter metadata so callers can
+              // discover skill-level flags (e.g. `metadata.goal === true` for
+              // goal-mode skills). Workspace's `SkillMetadata.metadata` is
+              // typed `Record<string, unknown>` and is already JSON-serialisable.
+              ...(meta.metadata ? { metadata: meta.metadata } : {}),
+            };
+          }),
+      );
+      return [...codeSkills, ...projected];
     };
 
     const pending = build();
@@ -1137,7 +1406,7 @@ export class Session {
     try {
       const result = await pending;
       // Only populate the cache when our own promise is still the
-      // session-tracked one. If `refreshSkills()` ran while we were
+      // session-tracked one. If `skills.refresh()` ran while we were
       // resolving, `_skillsResolving` was cleared (or replaced by a
       // newer build) and we must not stomp it.
       if (this._skillsResolving === pending) {
