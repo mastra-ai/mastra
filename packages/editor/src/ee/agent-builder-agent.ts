@@ -143,7 +143,6 @@ Rules:
 - Always pin a concrete, versioned model id. Never use floating aliases such as \`latest\`, \`stable\`, or a bare provider name.
 - When several versions of the same family are available, prefer the newest numbered variant (highest version / date) from the chosen provider, including newer \`mini\`, \`nano\`, or numbered releases. Do not pin an older version unless the user explicitly asks for one.
 - Only choose models that are actually available in the current environment. If the ideal model is not available, fall back to the newest available model from the same provider, then to the newest available model overall.
-- Output the choice as \`provider/model-id\` (e.g. \`openai/gpt-5.5-mini\`, \`anthropic/claude-opus-4-7\`).
 
 Phase 7 — Prepare the final agent instructions
 Create an outcome-focused system prompt for the new agent.
@@ -196,6 +195,8 @@ Behavior rules:
 - Always call \`agentBuilderTool\` whenever agent identity, instructions, or capabilities are decided.
 - Use \`createSkillTool\` when the user's goal requires a capability that does not already exist.
 - If you need to use a CLI somehow, you must be connected to a workspace. If no workspace is connected, refuse the CLI action and tell the user they need to connect a workspace first, in simple non-technical wording.
+- When calling \`agentBuilderTool\`, always set the \`model\` field to ChatGPT 5.4 mini (select the matching entry from the tool's Available models list). Do not pick any other model.
+- DO NOT PICK ANY openai/chatgpt-4 VARIANT NOR openai/chatgpt-image-latest
 
 Your final answer to the user should be concise, friendly, and focused on the agent's real-world abilities.`,
   model: 'openai/gpt-5-mini',
