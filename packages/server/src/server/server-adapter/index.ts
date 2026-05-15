@@ -122,9 +122,9 @@ function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
 }
 
 function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
-  return [getEffectivePermission(route), route.fga?.permission].filter(
-    (permission): permission is MastraFGAPermissionInput => Boolean(permission),
-  );
+  return [getEffectivePermission(route), route.fga?.permission]
+    .flatMap(value => (Array.isArray(value) ? value : [value]))
+    .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
 }
 
 function getToolRoutePermission(path: string): MastraFGAPermissionInput {
@@ -136,7 +136,7 @@ function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
     return null;
   }
 
-  const permission = getEffectivePermission(route) as MastraFGAPermissionInput | null;
+  const permission = getEffectivePermission(route);
   if (!permission) {
     return null;
   }
@@ -1092,7 +1092,7 @@ export async function checkRouteFGA(
   const effectivePermission = route.path ? getEffectivePermission(route) : null;
   const permission =
     fgaConfig.permission ||
-    (Array.isArray(effectivePermission) ? effectivePermission[0] : effectivePermission) ||
+    effectivePermission ||
     `${getFGAResourcePermissionSlug(fgaConfig.resourceType)}:${deriveFGAAction(route.method)}`;
 
   const authorized = await fgaProvider.check(user, {

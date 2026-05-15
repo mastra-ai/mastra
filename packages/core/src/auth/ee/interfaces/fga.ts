@@ -38,8 +38,12 @@ export interface FGACheckContext {
 export interface FGACheckParams {
   /** The resource being accessed */
   resource: { type: string; id: string };
-  /** The permission being checked */
-  permission: MastraFGAPermissionInput;
+  /**
+   * The permission(s) being checked.
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (the check passes if any single permission resolves to allow).
+   */
+  permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /** Optional provider-specific context for resource resolution */
   context?: FGACheckContext;
 }
@@ -56,8 +60,11 @@ export interface FGARouteConfig {
   resourceId?:
     | string
     | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
-  /** Permission to check for this route. Falls back to the route permission when omitted. */
-  permission?: MastraFGAPermissionInput;
+  /**
+   * Permission(s) to check for this route. Falls back to the route permission when omitted.
+   * When an array is provided, the user needs ANY ONE of the listed permissions.
+   */
+  permission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
 }
 
 /**
@@ -67,7 +74,11 @@ export interface FGARouteInfo {
   path: string;
   method: string;
   requiresAuth?: boolean;
-  requiresPermission?: MastraFGAPermissionInput;
+  /**
+   * Permission(s) required by this route.
+   * When an array is provided, the user needs ANY ONE of the listed permissions.
+   */
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   fga?: FGARouteConfig;
 }
 
