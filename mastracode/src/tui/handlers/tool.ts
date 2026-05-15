@@ -40,7 +40,11 @@ function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unkno
   ctx.addChildBeforeFollowUps(component as never);
 }
 
-function ensureSubmitPlanComponent(ctx: EventHandlerContext, toolCallId: string, args?: unknown): PlanApprovalInlineComponent {
+function ensureSubmitPlanComponent(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  args?: unknown,
+): PlanApprovalInlineComponent {
   const { state } = ctx;
   let component = state.pendingSubmitPlanComponents.get(toolCallId);
   if (!component) {

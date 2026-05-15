@@ -110,6 +110,10 @@ function formatGoalStatus(goal: GoalState): string {
   return `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]`;
 }
 
+function formatGoalStatusRow(goal: GoalState): string {
+  return formatGoalStatus(goal).replace(/\s+/g, ' ');
+}
+
 function showGoalStatus(ctx: SlashCommandContext): void {
   const goal = ctx.state.goalManager.getGoal();
   if (!goal) {
@@ -124,7 +128,7 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
   const items: SelectItem[] = [
     {
       value: 'status',
-      label: `  Status  ${theme.fg('dim', goal ? formatGoalStatus(goal) : 'No goal set')}`,
+      label: `  Status  ${theme.fg('dim', goal ? formatGoalStatusRow(goal) : 'No goal set')}`,
     },
   ];
 

@@ -383,7 +383,7 @@ export class GoalManager {
     }
 
     for await (const chunk of stream.fullStream) {
-      if (chunk?.type === 'tool-call' || chunk?.type === 'tool-result') {
+      if (chunk?.type === 'tool-call') {
         const toolName = getToolName(chunk);
         if (!toolName) continue;
         const line = formatJudgeActivity(toolName, parseToolInput(chunk));

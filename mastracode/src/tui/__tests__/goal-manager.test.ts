@@ -168,7 +168,8 @@ describe('GoalManager', () => {
     const result = await manager.evaluateAfterTurn(state);
 
     const expectedThreadId = `parent-thread-${goal.id}`;
-    expect(mocks.stream).toHaveBeenCalledWith(expect.stringContaining('Latest assistant message'),
+    expect(mocks.stream).toHaveBeenCalledWith(
+      expect.stringContaining('Latest assistant message'),
       expect.objectContaining({
         memory: { thread: expectedThreadId, resource: 'resource-1' },
         structuredOutput: { schema: expect.any(Object) },
@@ -285,9 +286,7 @@ describe('GoalManager', () => {
     expect(onActivity).toHaveBeenCalledWith('read src/file.ts');
     expect(onActivity).toHaveBeenCalledWith('search "TODO"');
     expect(onActivity).toHaveBeenCalledWith('find files **/*.ts');
-    expect(mocks.stream.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ abortSignal: abortController.signal }),
-    );
+    expect(mocks.stream.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ abortSignal: abortController.signal }));
   });
 
   it('includes guidance to wait after answering a user question', async () => {

@@ -133,7 +133,9 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).toContain('## Goal-Ready Plans');
-    expect(prompt).toContain('The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal');
+    expect(prompt).toContain(
+      'The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal',
+    );
     expect(prompt).toContain('**Start as goal**');
     expect(prompt).toContain('goal judge can tell when the work is done');
   });
