@@ -37,12 +37,17 @@ export async function checkFGA(options: CheckFGAOptions): Promise<void> {
 export class FGADeniedError extends Error {
   public readonly user: any;
   public readonly resource: { type: string; id: string };
-  public readonly permission: MastraFGAPermissionInput;
+  public readonly permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   public readonly status: number;
 
-  constructor(user: any, resource: { type: string; id: string }, permission: MastraFGAPermissionInput) {
+  constructor(
+    user: any,
+    resource: { type: string; id: string },
+    permission: MastraFGAPermissionInput | MastraFGAPermissionInput[],
+  ) {
     const userId = user?.id || user?.workosId || 'unknown';
-    super(`FGA authorization denied: user ${userId} cannot ${permission} on ${resource.type}:${resource.id}`);
+    const permissionLabel = Array.isArray(permission) ? `any of [${permission.join(', ')}]` : permission;
+    super(`FGA authorization denied: user ${userId} cannot ${permissionLabel} on ${resource.type}:${resource.id}`);
     this.name = 'FGADeniedError';
     this.user = user;
     this.resource = resource;

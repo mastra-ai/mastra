@@ -1,4 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
@@ -101,6 +102,151 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
+  return route.requiresAuth !== false;
+}
+
+function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
+  return `${route.method} ${route.path}`;
+}
+
+function getFGAProvider(mastra: any): IFGAProvider | undefined {
+  return mastra?.getServer?.()?.fga as IFGAProvider | undefined;
+}
+
+function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
+  return {
+    path: route.path,
+    method: route.method,
+    requiresAuth: route.requiresAuth,
+    requiresPermission: route.requiresPermission,
+    fga: route.fga,
+  };
+}
+
+function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
+  return [getEffectivePermission(route), route.fga?.permission]
+    .flatMap(value => (Array.isArray(value) ? value : [value]))
+    .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
+}
+
+function getToolRoutePermission(path: string): MastraFGAPermissionInput {
+  return path.includes('/execute') ? 'tools:execute' : 'tools:read';
+}
+
+function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
+  if (!isProtectedFGARoute(route) || !route.path || !route.method) {
+    return null;
+  }
+
+  const permission = getEffectivePermission(route) as MastraFGAPermissionInput | null;
+  if (!permission) {
+    return null;
+  }
+
+  const path = route.path;
+  if (path.startsWith('/agents/:agentId/tools/:toolId')) {
+    return {
+      resourceType: 'tool',
+      resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
+      permission: getToolRoutePermission(path),
+    };
+  }
+
+  if (path.startsWith('/agents/:agentId')) {
+    return { resourceType: 'agent', resourceIdParam: 'agentId', permission };
+  }
+
+  if (path.startsWith('/workflows/:workflowId')) {
+    return { resourceType: 'workflow', resourceIdParam: 'workflowId', permission };
+  }
+
+  if (path.startsWith('/tools/:toolId')) {
+    return { resourceType: 'tool', resourceIdParam: 'toolId', permission };
+  }
+
+  if (path.startsWith('/mcp/:serverId/tools/:toolId')) {
+    return {
+      resourceType: 'tool',
+      resourceId: ({ serverId, toolId }) => JSON.stringify([String(serverId), String(toolId)]),
+      permission: getToolRoutePermission(path),
+    };
+  }
+
+  if (path.startsWith('/mcp/:serverId')) {
+    return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
+  }
+
+  if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
+    return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
+  }
+
+  if (path === '/memory/threads' || path === '/memory/network/threads') {
+    return {
+      resourceType: 'thread',
+      resourceId: ({ threadId, resourceId }) => {
+        if (typeof threadId === 'string') return threadId;
+        return typeof resourceId === 'string' ? resourceId : undefined;
+      },
+      permission,
+    };
+  }
+
+  if (path === '/memory/save-messages' || path === '/memory/network/save-messages') {
+    return {
+      resourceType: 'thread',
+      resourceId: ({ messages }) => {
+        if (!Array.isArray(messages)) return undefined;
+        const threadId = messages.find(
+          message => message && typeof message === 'object' && 'threadId' in message,
+        )?.threadId;
+        return typeof threadId === 'string' ? threadId : undefined;
+      },
+      permission,
+    };
+  }
+
+  if (path === '/v1/responses') {
+    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
+  }
+
+  if (path.startsWith('/v1/responses/:responseId')) {
+    return { resourceType: 'response', resourceIdParam: 'responseId', permission };
+  }
+
+  if (path === '/v1/conversations') {
+    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
+  }
+
+  if (path.startsWith('/v1/conversations/:conversationId')) {
+    return { resourceType: 'conversation', resourceIdParam: 'conversationId', permission };
+  }
+
+  return null;
+}
+
+async function resolveRouteFGAConfig(
+  fgaProvider: IFGAProvider,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<FGARouteConfig | null | undefined> {
+  if (route.fga) {
+    return route.fga;
+  }
+
+  const resolvedConfig = await fgaProvider.resolveRouteFGA?.({
+    route: getFGARouteInfo(route),
+    params,
+    requestContext,
+  });
+  if (resolvedConfig) {
+    return resolvedConfig;
+  }
+
+  return getBuiltInRouteFGAConfig(route);
 }
 
 function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
@@ -528,6 +674,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
     await this.validateAgentBuilderLicense();
+    await this.validateFGAPolicyCoverage();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
   }
@@ -595,6 +742,49 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
+  }
+
+  /**
+   * Validate route-level FGA policy coverage when an FGA provider opts into
+   * startup checks.
+   */
+  async validateFGAPolicyCoverage(): Promise<void> {
+    const serverConfig = this.mastra.getServer();
+    const fgaProvider = serverConfig?.fga;
+    if (!fgaProvider) return;
+
+    const customRoutes = (this.customApiRoutes ?? serverConfig?.apiRoutes ?? []).filter(
+      route => !route._mastraInternal,
+    );
+    const routes = [...SERVER_ROUTES, ...customRoutes] as ServerRoute[];
+
+    if (fgaProvider.validatePermissions) {
+      const permissions = [...new Set(routes.flatMap(route => getRoutePermissions(route)))];
+      await fgaProvider.validatePermissions(permissions);
+    }
+
+    const auditMode = fgaProvider.auditProtectedRoutes ?? (fgaProvider.requireForProtectedRoutes ? 'warn' : false);
+    if (!auditMode || fgaProvider.resolveRouteFGA) return;
+
+    const missingRoutes = routes.filter(
+      route => isProtectedFGARoute(route) && !route.fga && !getBuiltInRouteFGAConfig(route),
+    );
+
+    if (missingRoutes.length === 0) return;
+
+    const routeList = missingRoutes.map(route => formatRoute(route as ServerRoute));
+    const message =
+      `[mastra/auth-ee] FGA is configured but ${missingRoutes.length} protected route` +
+      `${missingRoutes.length === 1 ? ' is' : 's are'} missing FGA metadata: ${routeList.join(', ')}`;
+
+    if (auditMode === 'error') {
+      throw new Error(message);
+    }
+
+    this.mastra.getLogger()?.warn(message, {
+      routes: routeList,
+      count: missingRoutes.length,
+    });
   }
 
   /**
@@ -914,11 +1104,20 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
-  const fgaConfig = route.fga;
-  if (!fgaConfig) return null;
-
-  const fgaProvider = mastra?.getServer?.()?.fga;
+  const fgaProvider = getFGAProvider(mastra);
   if (!fgaProvider) return null;
+
+  const fgaConfig = await resolveRouteFGAConfig(fgaProvider, route, requestContext, params);
+  if (!fgaConfig) {
+    if (fgaProvider.requireForProtectedRoutes && isProtectedFGARoute(route)) {
+      return {
+        status: 403,
+        error: 'Forbidden',
+        message: 'FGA authorization denied: route FGA metadata is required',
+      };
+    }
+    return null;
+  }
 
   const user = requestContext?.get('user');
   if (!user) {
