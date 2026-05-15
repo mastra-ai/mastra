@@ -68,6 +68,10 @@ vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   }),
 }));
 
+vi.mock('@/domains/agents/hooks/use-stored-agent-dependents', () => ({
+  useStoredAgentDependents: () => ({ data: { dependents: [] }, isLoading: false }),
+}));
+
 vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
   useTools: () => ({ data: {}, isPending: false }),
 }));

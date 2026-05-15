@@ -7,13 +7,27 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { VisibilitySelect } from '../visibility-select';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'agent-1';
+
+interface StubAgentOptions {
+  starCount?: number;
+}
+
+const stubAgentDetails = ({ starCount = 0 }: StubAgentOptions = {}) =>
+  server.use(
+    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () =>
+      HttpResponse.json({ id: AGENT_ID, name: 'My Agent', starCount, status: 'draft' }),
+    ),
+  );
+
+const stubAgentDependents = (dependents: Array<{ id: string; name: string }> = []) =>
+  server.use(http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/dependents`, () => HttpResponse.json({ dependents })));
 
 interface FormHarnessProps {
   defaultVisibility?: AgentBuilderEditFormValues['visibility'];
@@ -45,6 +59,14 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
 };
 
 describe('VisibilitySelect', () => {
+  beforeEach(() => {
+    // Default to "not starred / no dependents" so existing tests don't need to
+    // think about the impact warning surface. Tests that want other states
+    // override these with `server.use(...)`.
+    stubAgentDetails();
+    stubAgentDependents();
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -173,6 +195,46 @@ describe('VisibilitySelect', () => {
     expect(dialog.textContent).toContain('Remove this agent from your library?');
     expect(dialog.textContent).toContain('teammates will no longer be able to');
     expect(dialog.textContent).toContain('only person with access');
+  });
+
+  it('shows the impact warnings on Remove when the agent has stars or dependents', async () => {
+    stubAgentDetails({ starCount: 2 });
+    stubAgentDependents([
+      { id: 'parent-1', name: 'Concierge' },
+      { id: 'parent-2', name: 'Researcher' },
+    ]);
+
+    render(
+      <FormHarness defaultVisibility="public">
+        <VisibilitySelect agentId={AGENT_ID} />
+      </FormHarness>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-remove'));
+
+    const starred = await screen.findByTestId('agent-builder-agent-impact-starred-warning');
+    expect(starred.textContent).toContain('2 users');
+    expect(starred.textContent).toContain('hide it');
+    const dependents = await screen.findByTestId('agent-builder-agent-impact-dependents-warning');
+    expect(dependents.textContent).toContain('2 agents');
+    expect(dependents.textContent).toContain('Concierge');
+    expect(dependents.textContent).toContain('Researcher');
+  });
+
+  it('does not render impact warnings when going from private to public', async () => {
+    stubAgentDetails({ starCount: 5 });
+    stubAgentDependents([{ id: 'parent-1', name: 'Concierge' }]);
+
+    render(
+      <FormHarness>
+        <VisibilitySelect agentId={AGENT_ID} />
+      </FormHarness>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
+
+    await screen.findByTestId('agent-builder-visibility-confirm-dialog');
+    expect(screen.queryByTestId('agent-builder-agent-impact-warnings')).toBeNull();
   });
 
   it('reverts to the saved value when the PATCH fails', async () => {

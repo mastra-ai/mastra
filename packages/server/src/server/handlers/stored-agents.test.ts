@@ -12,6 +12,7 @@ import {
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
+  GET_STORED_AGENT_DEPENDENTS_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE,
 } from './stored-agents';
 
@@ -48,6 +49,7 @@ interface MockStoredAgent {
   authorId?: string;
   metadata?: Record<string, unknown>;
   activeVersionId?: string;
+  visibility?: 'private' | 'public';
 }
 
 // Define the mock agents store interface
@@ -82,12 +84,12 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
     listResolved: vi.fn().mockImplementation(
       async ({
         page = 1,
-        perPage = 20,
+        perPage: perPageInput = 20,
         authorId,
         metadata,
       }: {
         page?: number;
-        perPage?: number;
+        perPage?: number | false;
         authorId?: string;
         metadata?: Record<string, unknown>;
       } = {}) => {
@@ -106,6 +108,18 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
           });
         }
 
+        // `perPage: false` disables pagination (returns all rows).
+        if (perPageInput === false) {
+          return {
+            agents,
+            total: agents.length,
+            page,
+            perPage: false,
+            hasMore: false,
+          };
+        }
+
+        const perPage = perPageInput;
         const start = (page - 1) * perPage;
         const end = start + perPage;
         const paginatedAgents = agents.slice(start, end);
@@ -840,6 +854,265 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).status).toBe(404);
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
+    });
+  });
+
+  describe('GET_STORED_AGENT_DEPENDENTS_ROUTE', () => {
+    it('returns agents that reference the target as a sub-agent (static map)', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+      mockAgentsData.set('parent-1', {
+        id: 'parent-1',
+        name: 'Parent One',
+        model: { name: 'gpt-4', provider: 'openai' },
+        agents: { target: {} } as unknown as unknown[],
+      });
+      mockAgentsData.set('parent-2', {
+        id: 'parent-2',
+        name: 'Parent Two',
+        model: { name: 'gpt-4', provider: 'openai' },
+        agents: { other: {} } as unknown as unknown[],
+      });
+      mockAgentsData.set('parent-3', {
+        id: 'parent-3',
+        name: 'Parent Three',
+        model: { name: 'gpt-4', provider: 'openai' },
+        agents: { target: {}, other: {} } as unknown as unknown[],
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'target',
+      })) as { dependents: Array<{ id: string; name: string }> };
+
+      expect(result.dependents.map(d => d.id).sort()).toEqual(['parent-1', 'parent-3']);
+      expect(result.dependents.find(d => d.id === 'parent-1')?.name).toBe('Parent One');
+    });
+
+    it('detects conditional-variant agents field', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+      mockAgentsData.set('parent-variant', {
+        id: 'parent-variant',
+        name: 'Variant Parent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        agents: [{ value: { target: {} } }] as unknown as unknown[],
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'target',
+      })) as { dependents: Array<{ id: string }> };
+
+      expect(result.dependents.map(d => d.id)).toEqual(['parent-variant']);
+    });
+
+    it('returns empty list when no agents reference the target', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+      mockAgentsData.set('unrelated', {
+        id: 'unrelated',
+        name: 'Unrelated',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'target',
+      })) as { dependents: unknown[] };
+
+      expect(result.dependents).toEqual([]);
+    });
+
+    it('excludes the target itself from the dependents list', async () => {
+      mockAgentsData.set('self-ref', {
+        id: 'self-ref',
+        name: 'Self Reference',
+        model: { name: 'gpt-4', provider: 'openai' },
+        agents: { 'self-ref': {} } as unknown as unknown[],
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'self-ref',
+      })) as { dependents: unknown[] };
+
+      expect(result.dependents).toEqual([]);
+    });
+
+    it('throws 404 when the target agent does not exist', async () => {
+      try {
+        await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'missing',
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(404);
+      }
+    });
+
+    it('counts cross-workspace private dependents in hiddenCount when target is public', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'owner',
+        visibility: 'public',
+      });
+      // Caller-readable: caller's own private agent referencing the target.
+      mockAgentsData.set('caller-private', {
+        id: 'caller-private',
+        name: 'Caller Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'caller',
+        visibility: 'private',
+        agents: { target: {} } as unknown as unknown[],
+      });
+      // Caller-readable: another user's public agent referencing the target.
+      mockAgentsData.set('other-public', {
+        id: 'other-public',
+        name: 'Other Public',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'other',
+        visibility: 'public',
+        agents: { target: {} } as unknown as unknown[],
+      });
+      // Not caller-readable: another user's private agent referencing the target.
+      mockAgentsData.set('other-private', {
+        id: 'other-private',
+        name: 'Other Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'other',
+        visibility: 'private',
+        agents: { target: {} } as unknown as unknown[],
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'caller'),
+        storedAgentId: 'target',
+      })) as { dependents: Array<{ id: string }>; hiddenCount: number };
+
+      expect(result.dependents.map(d => d.id).sort()).toEqual(['caller-private', 'other-public']);
+      expect(result.hiddenCount).toBe(1);
+    });
+
+    it('does not surface hiddenCount for a private target', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'caller',
+        visibility: 'private',
+      });
+      // Another user's private agent referencing the target — not caller-readable
+      // and the target itself is private, so this must not bump hiddenCount.
+      mockAgentsData.set('other-private', {
+        id: 'other-private',
+        name: 'Other Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'other',
+        visibility: 'private',
+        agents: { target: {} } as unknown as unknown[],
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'caller'),
+        storedAgentId: 'target',
+      })) as { dependents: unknown[]; hiddenCount: number };
+
+      expect(result.dependents).toEqual([]);
+      expect(result.hiddenCount).toBe(0);
+    });
+
+    it('throws 404 when caller cannot read a private target (no leak via dependents)', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'owner',
+        visibility: 'private',
+      });
+      mockAgentsData.set('owner-parent', {
+        id: 'owner-parent',
+        name: 'Owner Parent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'owner',
+        visibility: 'private',
+        agents: { target: {} } as unknown as unknown[],
+      });
+
+      await expect(
+        GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'stranger'),
+          storedAgentId: 'target',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('allows admin to read dependents of a private target owned by another user', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'owner',
+        visibility: 'private',
+      });
+      mockAgentsData.set('owner-parent', {
+        id: 'owner-parent',
+        name: 'Owner Parent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'owner',
+        visibility: 'private',
+        agents: { target: {} } as unknown as unknown[],
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        storedAgentId: 'target',
+      })) as { dependents: Array<{ id: string }>; hiddenCount: number };
+
+      expect(result.dependents.map(d => d.id)).toEqual(['owner-parent']);
+      expect(result.hiddenCount).toBe(0);
+    });
+
+    it('does not promote a broad agents:read grant to admin bypass on the visibility split', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'owner',
+        visibility: 'public',
+      });
+      mockAgentsData.set('other-private', {
+        id: 'other-private',
+        name: 'Other Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'other',
+        visibility: 'private',
+        agents: { target: {} } as unknown as unknown[],
+      });
+
+      const result = (await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'reader', ['agents:read']),
+        storedAgentId: 'target',
+      })) as { dependents: Array<{ id: string }>; hiddenCount: number };
+
+      // A bare `agents:read` (no resource id, no admin form) lets the caller
+      // hit the route but should NOT widen the author filter — the other
+      // user's private dependent must stay hidden, only counted.
+      expect(result.dependents).toEqual([]);
+      expect(result.hiddenCount).toBe(1);
     });
   });
 

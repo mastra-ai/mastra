@@ -13,7 +13,9 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
+import { AgentImpactWarnings } from './agent-impact-warnings';
 import type { Visibility } from './visibility-select';
+import { useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agent-dependents';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 
 const COPY: Record<Visibility, { title: string; description: string; toast: string }> = {
@@ -41,6 +43,12 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
   const [pending, setPending] = useState<Visibility | null>(null);
   const isOpen = pending !== null;
+  // Only fetch dependents when the user is going public -> private. Going the
+  // other direction has no impact to warn about.
+  const showImpactWarnings = pending === 'private';
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId, {
+    enabled: showImpactWarnings,
+  });
 
   const handleCancel = () => {
     setPending(null);
@@ -73,6 +81,11 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
             </DialogHeader>
             <DialogBody>
               <p className="text-sm text-muted-foreground">{dialogCopy.description}</p>
+              {showImpactWarnings && (
+                <div className="mt-3">
+                  <AgentImpactWarnings agentId={agentId} variant="make-private" enabled={showImpactWarnings} />
+                </div>
+              )}
             </DialogBody>
             <DialogFooter>
               <Button
@@ -86,7 +99,7 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
               <Button
                 variant="default"
                 onClick={handleConfirm}
-                disabled={updateStoredAgent.isPending}
+                disabled={updateStoredAgent.isPending || (showImpactWarnings && isDependentsLoading)}
                 data-testid="agent-builder-visibility-confirm-yes"
               >
                 Confirm

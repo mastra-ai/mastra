@@ -10,11 +10,11 @@ import {
 } from '@mastra/playground-ui';
 import { useState } from 'react';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
+import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useLinkComponent } from '@/lib/framework';
-import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();

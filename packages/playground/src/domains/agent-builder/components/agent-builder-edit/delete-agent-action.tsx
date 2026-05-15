@@ -2,6 +2,8 @@ import { AlertDialog, Button, DropdownMenu, toast } from '@mastra/playground-ui'
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { AgentImpactWarnings } from './agent-impact-warnings';
+import { useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agent-dependents';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 
 interface UseDeleteAgentActionParams {
@@ -36,39 +38,55 @@ const useDeleteAgentAction = ({ agentId }: UseDeleteAgentActionParams) => {
 interface DeleteAgentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  agentId: string;
   agentName: string;
   isPending: boolean;
   onConfirm: () => void;
 }
 
-const DeleteAgentDialog = ({ open, onOpenChange, agentName, isPending, onConfirm }: DeleteAgentDialogProps) => (
-  <AlertDialog open={open} onOpenChange={onOpenChange}>
-    <AlertDialog.Content data-testid="agent-builder-delete-agent-dialog">
-      <AlertDialog.Header>
-        <AlertDialog.Title>Delete agent?</AlertDialog.Title>
-        <AlertDialog.Description>
-          This permanently deletes &quot;{agentName}&quot; and removes its conversation history. This cannot be undone.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel data-testid="agent-builder-delete-agent-cancel" disabled={isPending}>
-          Cancel
-        </AlertDialog.Cancel>
-        <AlertDialog.Action
-          data-testid="agent-builder-delete-agent-confirm"
-          disabled={isPending}
-          onClick={event => {
-            // Prevent default so the dialog stays open while the request is in flight.
-            event.preventDefault();
-            onConfirm();
-          }}
-        >
-          {isPending ? 'Deleting…' : 'Delete agent'}
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog>
-);
+const DeleteAgentDialog = ({
+  open,
+  onOpenChange,
+  agentId,
+  agentName,
+  isPending,
+  onConfirm,
+}: DeleteAgentDialogProps) => {
+  // Gate the confirm button on the dependents lookup so users always see the
+  // impact warning before they click delete.
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId, { enabled: open });
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialog.Content data-testid="agent-builder-delete-agent-dialog">
+        <AlertDialog.Header>
+          <AlertDialog.Title>Delete agent?</AlertDialog.Title>
+          <AlertDialog.Description>
+            This permanently deletes &quot;{agentName}&quot; and removes its conversation history. This cannot be
+            undone.
+          </AlertDialog.Description>
+        </AlertDialog.Header>
+        <AgentImpactWarnings agentId={agentId} variant="delete" enabled={open} />
+        <AlertDialog.Footer>
+          <AlertDialog.Cancel data-testid="agent-builder-delete-agent-cancel" disabled={isPending}>
+            Cancel
+          </AlertDialog.Cancel>
+          <AlertDialog.Action
+            data-testid="agent-builder-delete-agent-confirm"
+            disabled={isPending || isDependentsLoading}
+            onClick={event => {
+              // Prevent default so the dialog stays open while the request is in flight.
+              event.preventDefault();
+              onConfirm();
+            }}
+          >
+            {isPending ? 'Deleting…' : 'Delete agent'}
+          </AlertDialog.Action>
+        </AlertDialog.Footer>
+      </AlertDialog.Content>
+    </AlertDialog>
+  );
+};
 
 interface DeleteAgentEntryProps {
   agentId: string;
@@ -95,6 +113,7 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
       <DeleteAgentDialog
         open={open}
         onOpenChange={setOpen}
+        agentId={agentId}
         agentName={agentName}
         isPending={isPending}
         onConfirm={confirm}
@@ -123,6 +142,7 @@ export const DeleteAgentMenuItem = ({ agentId, agentName, disabled = false }: De
       <DeleteAgentDialog
         open={open}
         onOpenChange={setOpen}
+        agentId={agentId}
         agentName={agentName}
         isPending={isPending}
         onConfirm={confirm}

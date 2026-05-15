@@ -3,18 +3,11 @@ import { coreFeatures } from '@mastra/core/features';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import {
-  createBrowserRouter,
-  RouterProvider,
-  Outlet,
-  useNavigate,
-  redirect,
-  type LoaderFunctionArgs,
-} from 'react-router';
+import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import type { LoaderFunctionArgs, RouteObject } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layout/agent-builder-root-layout';
 import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
-import type { RouteObject } from 'react-router';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
