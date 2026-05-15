@@ -417,6 +417,45 @@ describe('Session.queue() — suspension', () => {
     expect(session.getRecord().pendingResume).toBeUndefined();
   });
 
+  it('keeps queued context while queued resume post-run side effects finish', async () => {
+    const { harness, agent } = setupHarness();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'r1',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'approve' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', runId: 'r1', text: 'resumed done' });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const runGoalJudge = (session as any)._runGoalJudge.bind(session);
+    let releaseGoalJudge!: () => void;
+    const goalJudgeGate = new Promise<void>(resolve => {
+      releaseGoalJudge = resolve;
+    });
+    let goalJudgeStarted = false;
+    (session as any)._runGoalJudge = async (...args: unknown[]) => {
+      goalJudgeStarted = true;
+      await goalJudgeGate;
+      return runGoalJudge(...args);
+    };
+
+    const first = session.queue({ content: 'first' });
+    await new Promise(resolve => setImmediate(resolve));
+    const queuedItemId = session.getRecord().pendingQueue[0]!.id;
+    const resumed = session.respondToToolApproval({ approved: true });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(goalJudgeStarted).toBe(true);
+    expect(session.getDisplayState().currentQueuedItemId).toBe(queuedItemId);
+
+    releaseGoalJudge();
+    const [resumeResult, firstResult] = await Promise.all([resumed, first]);
+
+    expect(resumeResult.text).toBe('resumed done');
+    expect(firstResult.text).toBe('resumed done');
+    expect(session.getDisplayState().currentQueuedItemId).toBeUndefined();
+    await session.close();
+  });
+
   it('resumes a suspended queued mode override through the queued mode agent', async () => {
     const agentA = new MockAgent({ id: 'agentA' });
     const agentB = new MockAgent({ id: 'agentB' });
@@ -670,11 +709,17 @@ describe('Session.queue() — suspension', () => {
       modes: [{ id: 'default', agentId: 'default' }],
       defaultModeId: 'default',
     });
+    const events: HarnessEvent[] = [];
+    replayHarness.subscribe(e => events.push(e));
 
     const replaySession = await replayHarness.session({ sessionId });
     await replaySession.waitForIdle({ timeoutMs: 1000 });
 
     expect(replayAgent.streamCalls).toHaveLength(0);
+    expect(replayAgent.resumeCalls).toHaveLength(0);
+    expect(events.find(e => e.type === 'queue_item_started')).toBeUndefined();
+    expect(events.find(e => e.type === 'queue_item_replayed')).toMatchObject({ queuedItemId });
+    expect(events.find(e => e.type === 'agent_end')).toMatchObject({ queuedItemId });
     expect(replaySession.getRecord().pendingResume).toBeUndefined();
     expect(replaySession.getRecord().pendingQueue).toEqual([]);
     expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({
@@ -818,11 +863,18 @@ describe('Session.queue() — suspension', () => {
       modes: [{ id: 'default', agentId: 'default' }],
       defaultModeId: 'default',
     });
+    const events: HarnessEvent[] = [];
+    replayHarness.subscribe(e => events.push(e));
     const replaySession = await replayHarness.session({ sessionId });
 
     const result = await replaySession.respondToToolApproval({ approved: true });
 
     expect(result.text).toBe('resumed done');
+    expect(events.find(e => e.type === 'suspension_resolved')).toMatchObject({ queuedItemId });
+    expect(events.find(e => e.type === 'agent_end')).toMatchObject({ queuedItemId });
+    expect(events.findIndex(e => e.type === 'agent_end')).toBeGreaterThan(
+      events.findIndex(e => e.type === 'suspension_resolved'),
+    );
     expect(replaySession.getRecord().pendingResume).toBeUndefined();
     expect(replaySession.getRecord().pendingQueue).toEqual([]);
     expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({
@@ -904,10 +956,14 @@ describe('Session.queue() — suspension', () => {
       modes: [{ id: 'default', agentId: 'default' }],
       defaultModeId: 'default',
     });
+    const events: HarnessEvent[] = [];
+    replayHarness.subscribe(e => events.push(e));
     const replaySession = await replayHarness.session({ sessionId });
     await replaySession.waitForIdle({ timeoutMs: 1000 });
 
     expect(replayAgent.resumeCalls).toHaveLength(0);
+    expect(events.find(e => e.type === 'queue_item_started')).toBeUndefined();
+    expect(events.find(e => e.type === 'queue_item_replayed')).toMatchObject({ queuedItemId });
     expect(replaySession.getRecord().pendingResume).toBeUndefined();
     expect(replaySession.getRecord().pendingQueue).toEqual([]);
     expect(replaySession.getRecord().queueAdmissionReceipts?.[queuedItemId]).toMatchObject({

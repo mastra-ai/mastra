@@ -408,6 +408,8 @@ export class Session {
   /** `queuedItem.source` of the turn currently running. Used by the goal
    *  judge loop to skip re-judging on goal-driven continuation turns. */
   private _currentQueuedItemSource?: 'user' | 'goal';
+  /** Hydrated queue items should emit `queue_item_replayed` once per session instance. */
+  private readonly _replayedQueuedItemIds = new Set<string>();
   /** True while `_maybeDrainQueue` is running so re-entrant kicks are no-ops. */
   private _draining = false;
   private _queuedResumeRecoveryTimer?: ReturnType<typeof setTimeout>;
@@ -3697,6 +3699,11 @@ export class Session {
       );
     }
 
+    const pendingQueuedItemId = this._queuedItemIdForPendingResume(pending);
+    if (pendingQueuedItemId !== undefined) {
+      this._ensureQueuedItemContext(pendingQueuedItemId);
+    }
+
     // Mark resumed under the lease BEFORE calling the agent (idempotency
     // marker per §5.4 / §5.7). On crash here, the next caller observes
     // resumedAt set and rejects rather than double-resuming.
@@ -3760,27 +3767,21 @@ export class Session {
     // queued terminal resume has already persisted its completed receipt before
     // this point, so crash recovery never sees "pending cleared, queue still
     // accepted".
-    const pendingQueuedItemId = this._queuedItemIdForPendingResume(pending);
     const completingQueuedItemId = full.finishReason !== 'suspended' ? pendingQueuedItemId : undefined;
     try {
-      let queuedResumeFinalized = false;
       if (completingQueuedItemId !== undefined) {
         if (modeFlipTarget && modeFlipTarget !== previousModeId) {
           await this._flushUpdate(prev => ({ ...prev, modeId: modeFlipTarget }));
         }
         const queuedItem = this._record.pendingQueue.find(item => item.id === completingQueuedItemId);
         if (queuedItem) {
-          await this._finalizeCompletedQueuedTurn(queuedItem, full, resumeModeId);
-        } else {
-          this._recordTurnCompletion(full);
-          this._emitTurnEvent({
-            type: 'agent_end',
-            reason: full.finishReason === 'error' ? 'error' : 'complete',
-            runId: full.runId,
-          });
-          await this._runGoalJudge(full, false);
+          try {
+            await this._markQueuedPostRunFinalized(completingQueuedItemId);
+          } catch (err) {
+            throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
+          }
         }
-        queuedResumeFinalized = true;
+        this._recordTurnCompletion(full);
       } else {
         this._recordTurnCompletion(full);
       }
@@ -3827,25 +3828,22 @@ export class Session {
       // The resumed run can itself suspend again (multi-step approval chains).
       // Mirror message()'s post-run hook so the next respond* call sees the
       // new pending record.
-      if (!queuedResumeFinalized) {
-        await this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId);
-      }
+      await this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId);
 
       // If the resumed run did NOT suspend again, the turn is complete from
       // the harness's perspective. Surface that to subscribers via agent_end.
       if (full.finishReason !== 'suspended') {
-        if (!queuedResumeFinalized) {
-          this._emitTurnEvent({
-            type: 'agent_end',
-            reason: full.finishReason === 'error' ? 'error' : 'complete',
-            runId: full.runId,
-          });
-        }
+        this._emitTurnEvent({
+          type: 'agent_end',
+          reason: full.finishReason === 'error' ? 'error' : 'complete',
+          runId: full.runId,
+        });
 
         // If this was the terminal completion of a queued turn, settle the
         // resolver, remove the head item, clear current, then kick the drain
         // for the next item.
         const wasGoalDriven = (this._currentQueuedItemSource ?? 'user') === 'goal';
+        await this._runGoalJudge(full, wasGoalDriven);
         if (completingQueuedItemId !== undefined) {
           this._currentQueuedItemId = undefined;
           this._currentQueuedItemSource = undefined;
@@ -3856,9 +3854,6 @@ export class Session {
           }
           this._notifyMaybeIdle();
           void this._maybeDrainQueue();
-        }
-        if (!queuedResumeFinalized) {
-          await this._runGoalJudge(full, wasGoalDriven);
         }
       }
     } catch (err) {
@@ -3894,23 +3889,23 @@ export class Session {
     if (pending?.resumedAt === undefined) return { status: 'none' };
     const queuedItemId = this._queuedItemIdForPendingResume(pending);
     if (queuedItemId === undefined) return { status: 'none' };
+    if (!this._queueResolvers.has(queuedItemId)) {
+      this._emitQueueItemReplayedOnce(queuedItemId);
+    }
+    this._ensureQueuedItemContext(queuedItemId);
 
     const currentReceipt = this._record.queueAdmissionReceipts?.[queuedItemId];
     if (currentReceipt?.status === 'completed') {
       const queuedItem = this._record.pendingQueue.find(item => item.id === queuedItemId);
-      if (queuedItem && currentReceipt.postRunFinalizedAt === undefined) {
+      const shouldRunPostRunSideEffects = queuedItem !== undefined && currentReceipt.postRunFinalizedAt === undefined;
+      if (shouldRunPostRunSideEffects) {
         try {
-          await this._finalizeCompletedQueuedTurn(
-            queuedItem,
-            currentReceipt.result as FullOutput<unknown>,
-            pending.modeId ?? currentReceipt.modeId ?? queuedItem.mode ?? this._record.modeId,
-          );
+          await this._markQueuedPostRunFinalized(queuedItemId);
         } catch (err) {
-          if (err instanceof QueuePostRunFinalizationPendingError) {
-            this._deferQueuedTurnRetry(err);
-            return { status: 'none' };
-          }
-          throw err;
+          this._deferQueuedTurnRetry(
+            new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err),
+          );
+          return { status: 'none' };
         }
       }
       await this._flushUpdate(prev => {
@@ -3930,6 +3925,13 @@ export class Session {
         delete next.pendingResume;
         return next;
       });
+      if (shouldRunPostRunSideEffects && queuedItem) {
+        await this._finalizeQueuedRunCompletion(
+          queuedItem,
+          currentReceipt.result as FullOutput<unknown>,
+          pending.modeId ?? currentReceipt.modeId ?? queuedItem.mode ?? this._record.modeId,
+        );
+      }
       this._currentQueuedItemId = undefined;
       this._currentQueuedItemSource = undefined;
       const resolver = this._queueResolvers.get(queuedItemId);
@@ -4383,11 +4385,11 @@ export class Session {
         this._currentQueuedItemId = head.id;
         this._currentQueuedItemSource = head.source ?? 'user';
         const isReplay = !this._queueResolvers.has(head.id);
-        this._emitter.emit(
-          isReplay
-            ? { type: 'queue_item_replayed', queuedItemId: head.id }
-            : { type: 'queue_item_started', queuedItemId: head.id },
-        );
+        if (isReplay) {
+          this._emitQueueItemReplayedOnce(head.id);
+        } else {
+          this._emitter.emit({ type: 'queue_item_started', queuedItemId: head.id });
+        }
 
         let suspended = false;
         try {
@@ -4981,6 +4983,19 @@ export class Session {
       const timer = setTimeout(() => void this._maybeDrainQueue(), delayMs);
       timer.unref?.();
     }
+  }
+
+  private _emitQueueItemReplayedOnce(queuedItemId: string): void {
+    if (this._replayedQueuedItemIds.has(queuedItemId)) return;
+    this._replayedQueuedItemIds.add(queuedItemId);
+    this._emitter.emit({ type: 'queue_item_replayed', queuedItemId });
+  }
+
+  private _ensureQueuedItemContext(queuedItemId: string): void {
+    if (this._currentQueuedItemId !== undefined) return;
+    const queuedItem = this._record.pendingQueue.find(item => item.id === queuedItemId);
+    this._currentQueuedItemId = queuedItemId;
+    this._currentQueuedItemSource = queuedItem?.source ?? 'user';
   }
 
   private _deferQueuedTurnRetry(err: QueuePostRunFinalizationPendingError): void {
