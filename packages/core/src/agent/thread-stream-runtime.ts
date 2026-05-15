@@ -17,6 +17,19 @@ import type {
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 
+function callerSignalPayloadKey(signal: AgentSignal): string | undefined {
+  try {
+    return JSON.stringify({
+      type: signal.type,
+      contents: signal.contents,
+      attributes: signal.attributes,
+      metadata: signal.metadata,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 function withThreadMemory(memory: unknown, resourceId: string, threadId: string) {
   return {
     ...((memory && typeof memory === 'object' ? memory : {}) as Record<string, unknown>),
@@ -58,6 +71,8 @@ export class AgentThreadStreamRuntime {
   #watchedThreadRunIds = new Set<string>();
   #preparedRunsById = new Map<string, PreparedThreadRun>();
   #abortedRunIds = new Set<string>();
+  #acceptedCallerSignals = new Map<string, SendAgentSignalResult>();
+  #callerSignalIdsByRunId = new Map<string, Set<string>>();
   /**
    * Per-run resolvers used by `waitForRunOutput()`. Populated lazily on the
    * first `waitForRunOutput()` call and cleared when `registerRun()` resolves
@@ -177,12 +192,21 @@ export class AgentThreadStreamRuntime {
     this.#watchedThreadRunIds.clear();
     this.#preparedRunsById.clear();
     this.#abortedRunIds.clear();
+    this.#acceptedCallerSignals.clear();
+    this.#callerSignalIdsByRunId.clear();
   }
 
   #cleanupPreparedRun(runId: string) {
     this.#preparedRunsById.get(runId)?.cleanup();
     this.#preparedRunsById.delete(runId);
     this.#abortedRunIds.delete(runId);
+  }
+
+  #forgetCallerSignalsForRun(runId: string) {
+    const callerSignalIds = this.#callerSignalIdsByRunId.get(runId);
+    if (!callerSignalIds) return;
+    this.#callerSignalIdsByRunId.delete(runId);
+    for (const callerSignalId of callerSignalIds) this.#acceptedCallerSignals.delete(callerSignalId);
   }
 
   #notifyThreadRun(record: AgentThreadRunRecord<any>) {
@@ -243,6 +267,7 @@ export class AgentThreadStreamRuntime {
       this.#threadRunsById.delete(record.runId);
       this.#threadKeysByRunId.delete(record.runId);
       this.#cleanupPreparedRun(record.runId);
+      this.#forgetCallerSignalsForRun(record.runId);
       if (this.#activeThreadRunIds.get(key) === record.runId) {
         this.#activeThreadRunIds.delete(key);
       }
@@ -308,6 +333,7 @@ export class AgentThreadStreamRuntime {
     } catch {
       this.#threadKeysByRunId.delete(pendingIdle.runId);
       this.#cleanupPreparedRun(pendingIdle.runId);
+      this.#forgetCallerSignalsForRun(pendingIdle.runId);
       if (this.#activeThreadRunIds.get(key) === pendingIdle.runId) {
         this.#activeThreadRunIds.delete(key);
       }
@@ -436,6 +462,7 @@ export class AgentThreadStreamRuntime {
     target: SendAgentSignalOptions<OUTPUT>,
   ): SendAgentSignalResult {
     const signal = createSignal(signalInput);
+    const callerSignalId = signalInput.id;
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -462,11 +489,38 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    if (runId && !activeRecord) {
+      activeRecord = this.#threadRunsById.get(runId);
+    }
+    if (!key && activeRecord) {
+      key = this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
+    }
     const isActiveTarget = Boolean(
       runId && (activeRecord?.output.status === 'running' || (key && this.#activeThreadRunIds.get(key) === runId)),
     );
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
+    const scopedRunId = target.runId;
+    const signalPayloadKey = callerSignalPayloadKey(signalInput);
+    const callerSignalKey =
+      callerSignalId !== undefined && signalPayloadKey !== undefined
+        ? [agent.id, resourceId ?? '', threadId ?? '', scopedRunId ?? '', callerSignalId, signalPayloadKey].join(
+            '\u0000',
+          )
+        : undefined;
+    if (callerSignalKey) {
+      const accepted = this.#acceptedCallerSignals.get(callerSignalKey);
+      if (accepted) return accepted;
+    }
+    const acceptSignal = (result: SendAgentSignalResult): SendAgentSignalResult => {
+      if (callerSignalKey) {
+        this.#acceptedCallerSignals.set(callerSignalKey, result);
+        const signalIds = this.#callerSignalIdsByRunId.get(result.runId) ?? new Set<string>();
+        signalIds.add(callerSignalKey);
+        this.#callerSignalIdsByRunId.set(result.runId, signalIds);
+      }
+      return result;
+    };
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
@@ -481,9 +535,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
-        return { accepted: true, runId: runId!, signal, persisted };
+        return acceptSignal({ accepted: true, runId: runId!, signal, persisted });
       }
-      return { accepted: true, runId: runId!, signal };
+      return acceptSignal({ accepted: true, runId: runId!, signal });
     }
 
     if (runId) {
@@ -497,7 +551,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           this.#pendingSignalsByThread.set(key, queue);
           this.#watchThreadRunCompletion(key, activeRecord);
-          return { accepted: true, runId, signal };
+          return acceptSignal({ accepted: true, runId, signal });
         }
       }
 
@@ -507,7 +561,7 @@ export class AgentThreadStreamRuntime {
         const queue = this.#pendingSignalsByThread.get(key) ?? [];
         queue.push(signal);
         this.#pendingSignalsByThread.set(key, queue);
-        return { accepted: true, runId, signal };
+        return acceptSignal({ accepted: true, runId, signal });
       }
     }
 
@@ -515,7 +569,7 @@ export class AgentThreadStreamRuntime {
       throw new Error('No active agent run found for signal target');
     }
 
-    runId = randomUUID();
+    runId ??= randomUUID();
     if (idleBehavior !== 'wake') {
       if (idleBehavior === 'persist') {
         const persisted = this.#persistSignal(
@@ -526,9 +580,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
-        return { accepted: true, runId, signal, persisted };
+        return acceptSignal({ accepted: true, runId, signal, persisted });
       }
-      return { accepted: true, runId, signal };
+      return acceptSignal({ accepted: true, runId, signal });
     }
 
     key ??= this.#threadKey(resourceId, threadId);
@@ -541,28 +595,31 @@ export class AgentThreadStreamRuntime {
       if (activeRecord) {
         this.#watchThreadRunCompletion(key, activeRecord);
       }
-      return { accepted: true, runId, signal };
+      return acceptSignal({ accepted: true, runId, signal });
     }
 
     // No active same-agent run accepted the signal. Reserve the thread before starting
     // the idle stream so concurrent callers do not launch duplicate runs.
     this.#activeThreadRunIds.set(key, runId);
     this.#threadKeysByRunId.set(runId, key);
-    void agent
+    const output = agent
       .stream(signal, {
         ...(target.ifIdle?.streamOptions as any),
         runId,
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
-      .catch(() => {
+      .catch(err => {
         this.#threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(runId);
+        this.#forgetCallerSignalsForRun(runId);
         if (this.#activeThreadRunIds.get(key) === runId) {
           this.#activeThreadRunIds.delete(key);
         }
-      });
+        throw err;
+      }) as Promise<MastraModelOutput<unknown>>;
+    void output.catch(() => {});
 
-    return { accepted: true, runId, signal };
+    return acceptSignal({ accepted: true, runId, signal, output });
   }
 }
 

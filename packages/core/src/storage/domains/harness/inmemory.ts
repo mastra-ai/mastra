@@ -12,6 +12,7 @@ import {
 } from './base';
 import type {
   AcquireSessionLeaseInput,
+  AgentSignalResultEvidence,
   AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
@@ -498,6 +499,10 @@ export class InMemoryHarness extends HarnessStorage {
     signalId: string;
   }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null> {
     const namespace = resolveHarnessName(harnessName, this.harnessName);
+    const retained = this.db.harnessMessageResultEvidence.get(messageEvidenceKey(namespace, sessionId, signalId));
+    if (retained && retained.resourceId === resourceId && retained.threadId === threadId) {
+      return cloneJson(retained);
+    }
     const tombstone = this.findTombstone(
       t =>
         t.harnessName === namespace &&
@@ -508,6 +513,33 @@ export class InMemoryHarness extends HarnessStorage {
         t.signalId === signalId,
     );
     return tombstone ? cloneJson(tombstone) : null;
+  }
+
+  async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<{ created: boolean }> {
+    const namespacedRecord = {
+      ...record,
+      harnessName: resolveHarnessName(record.harnessName, this.harnessName),
+    };
+    const key = messageEvidenceKey(namespacedRecord.harnessName, namespacedRecord.sessionId, namespacedRecord.signalId);
+    const existing = this.db.harnessMessageResultEvidence.get(key);
+    if (existing && !sameMessageEvidenceIdentity(existing, namespacedRecord)) {
+      throw new HarnessStorageAdmissionConflictError(
+        namespacedRecord.sessionId,
+        'message',
+        namespacedRecord.admissionId ?? namespacedRecord.signalId,
+      );
+    }
+    if (existing && isTerminalMessageEvidence(existing)) {
+      return { created: false };
+    }
+    this.db.harnessMessageResultEvidence.set(
+      key,
+      cloneJson({
+        ...namespacedRecord,
+        createdAt: existing?.createdAt ?? namespacedRecord.createdAt,
+      }),
+    );
+    return { created: existing === undefined };
   }
 
   async loadQueueResultEvidence({
@@ -557,6 +589,22 @@ export class InMemoryHarness extends HarnessStorage {
     storedAdmissionHash?: string;
   }> {
     const namespace = resolveHarnessName(harnessName, this.harnessName);
+    if (kind === 'message') {
+      for (const evidence of this.db.harnessMessageResultEvidence.values()) {
+        if (
+          evidence.harnessName !== namespace ||
+          evidence.sessionId !== sessionId ||
+          evidence.resourceId !== resourceId ||
+          evidence.admissionId !== admissionId
+        ) {
+          continue;
+        }
+        if (evidence.admissionHash !== attemptedAdmissionHash) {
+          return { status: 'conflict', evidence: cloneJson(evidence), storedAdmissionHash: evidence.admissionHash };
+        }
+        return { status: 'duplicate', evidence: cloneJson(evidence), storedAdmissionHash: evidence.admissionHash };
+      }
+    }
     if (kind === 'queue') {
       const session = this.db.harnessSessions.get(sessionKey(namespace, sessionId));
       if (session && session.resourceId !== resourceId) return { status: 'none' };
@@ -620,17 +668,26 @@ export class InMemoryHarness extends HarnessStorage {
   }): Promise<OperationAdmissionTombstone | null> {
     const namespace = resolveHarnessName(harnessName, this.harnessName);
     if (kind === 'message') {
-      return (
-        this.findTombstone(
-          t =>
-            t.harnessName === namespace &&
-            t.sessionId === sessionId &&
-            t.resourceId === resourceId &&
-            t.kind === 'message' &&
-            t.signalId === signalId &&
-            t.compactedAt <= now,
-        ) ?? null
-      );
+      const key = signalId ? messageEvidenceKey(namespace, sessionId, signalId) : undefined;
+      const retained = key ? this.db.harnessMessageResultEvidence.get(key) : undefined;
+      if (!retained || retained.resourceId !== resourceId || retained.status === 'pending') return null;
+      const tombstone: OperationAdmissionTombstone = {
+        kind: 'message',
+        harnessName: namespace,
+        sessionId,
+        resourceId,
+        threadId: retained.threadId,
+        ...(retained.admissionId !== undefined ? { admissionId: retained.admissionId } : {}),
+        ...(retained.admissionHash !== undefined ? { admissionHash: retained.admissionHash } : {}),
+        signalId: retained.signalId,
+        ...(retained.runId !== undefined ? { runId: retained.runId } : {}),
+        terminalAt: retained.updatedAt,
+        compactedAt: now,
+        expiresAt: now,
+      };
+      await this.writeOperationAdmissionTombstone(tombstone);
+      this.db.harnessMessageResultEvidence.delete(messageEvidenceKey(namespace, sessionId, retained.signalId));
+      return cloneJson(tombstone);
     }
 
     const key = sessionKey(namespace, sessionId);
@@ -676,6 +733,15 @@ export class InMemoryHarness extends HarnessStorage {
     resourceId: string;
   }): Promise<void> {
     const namespace = resolveHarnessName(harnessName, this.harnessName);
+    for (const [key, evidence] of this.db.harnessMessageResultEvidence) {
+      if (
+        evidence.harnessName === namespace &&
+        evidence.sessionId === sessionId &&
+        evidence.resourceId === resourceId
+      ) {
+        this.db.harnessMessageResultEvidence.delete(key);
+      }
+    }
     for (const [key, tombstone] of this.db.harnessOperationTombstones) {
       if (
         tombstone.harnessName === namespace &&
@@ -724,6 +790,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessAttachmentRecords.clear();
     this.db.harnessAttachmentBytes.clear();
     this.db.harnessAttachmentReferences.clear();
+    this.db.harnessMessageResultEvidence.clear();
     this.db.harnessOperationTombstones.clear();
   }
 }
@@ -759,6 +826,10 @@ function tombstoneKey(record: OperationAdmissionTombstone): string {
   return `${record.harnessName}\u0000${record.sessionId}\u0000${record.kind}\u0000${publicId ?? record.admissionId ?? record.compactedAt}`;
 }
 
+function messageEvidenceKey(harnessName: string, sessionId: string, signalId: string): string {
+  return `${harnessName}\u0000${sessionId}\u0000${signalId}`;
+}
+
 function resolveHarnessName(input: string | undefined, fallback: string): string {
   return input ?? fallback;
 }
@@ -784,6 +855,22 @@ function sameTombstoneIdentity(a: OperationAdmissionTombstone, b: OperationAdmis
     a.signalId === b.signalId &&
     a.runId === b.runId
   );
+}
+
+function sameMessageEvidenceIdentity(a: AgentSignalResultEvidence, b: AgentSignalResultEvidence): boolean {
+  return (
+    a.harnessName === b.harnessName &&
+    a.sessionId === b.sessionId &&
+    a.resourceId === b.resourceId &&
+    a.threadId === b.threadId &&
+    a.signalId === b.signalId &&
+    a.admissionId === b.admissionId &&
+    a.admissionHash === b.admissionHash
+  );
+}
+
+function isTerminalMessageEvidence(record: AgentSignalResultEvidence): boolean {
+  return record.status === 'completed' || record.status === 'failed';
 }
 
 function isTerminalQueueReceipt(receipt: QueueAdmissionReceipt): boolean {

@@ -1,6 +1,7 @@
 import { StorageDomain } from '../base';
 import type {
   AcquireSessionLeaseInput,
+  AgentSignalResultEvidence,
   AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
@@ -338,6 +339,8 @@ export abstract class HarnessStorage extends StorageDomain {
     threadId: string;
     signalId: string;
   }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null>;
+
+  abstract writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<{ created: boolean }>;
 
   abstract loadQueueResultEvidence(opts: {
     harnessName?: string;

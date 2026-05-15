@@ -123,6 +123,8 @@ export interface SendAgentSignalResult {
   accepted: true;
   runId: string;
   signal: CreatedAgentSignal;
+  /** Resolves with the stream output when this signal starts an idle thread run. */
+  output?: Promise<MastraModelOutput<unknown>>;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
 }

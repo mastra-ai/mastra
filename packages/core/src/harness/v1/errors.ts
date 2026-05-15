@@ -96,6 +96,18 @@ export class HarnessQueueFullError extends Error {
   }
 }
 
+export class HarnessAdmissionConflictError extends Error {
+  readonly name = 'HarnessAdmissionConflictError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly admissionId: string,
+    public readonly storedAdmissionHash: string,
+    public readonly attemptedAdmissionHash: string,
+  ) {
+    super(`Admission "${admissionId}" for session "${sessionId}" conflicts with stored evidence`);
+  }
+}
+
 export class HarnessAttachmentInUseError extends Error {
   readonly name = 'HarnessAttachmentInUseError';
   constructor(

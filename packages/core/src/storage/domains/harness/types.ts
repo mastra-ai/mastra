@@ -337,6 +337,17 @@ export interface AgentSignalAccepted {
   admissionHash?: string;
 }
 
+export type AgentSignalResultEvidence = AgentSignalResultStatus & {
+  harnessName: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  admissionId?: string;
+  admissionHash?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export interface QueueAdmissionReceipt {
   admissionId: string;
   admissionHash: string;
@@ -375,6 +386,7 @@ export interface OperationAdmissionTombstone {
 
 export type OperationAdmissionEvidence =
   | AgentSignalAccepted
+  | AgentSignalResultEvidence
   | AgentSignalResultStatus
   | QueueAdmissionReceipt
   | OperationAdmissionTombstone;

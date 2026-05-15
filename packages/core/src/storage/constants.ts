@@ -48,6 +48,7 @@ export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
 export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
+export const TABLE_HARNESS_MESSAGE_RESULTS = 'mastra_harness_message_results';
 export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
 
 /** Union of all core table name constants. */
@@ -87,6 +88,7 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_SESSIONS
   | typeof TABLE_HARNESS_ATTACHMENTS
   | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES
+  | typeof TABLE_HARNESS_MESSAGE_RESULTS
   | typeof TABLE_HARNESS_OPERATION_TOMBSTONES;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
@@ -692,6 +694,22 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     retained_until: { type: 'bigint', nullable: true },
     created_at: { type: 'bigint', nullable: false },
   },
+  [TABLE_HARNESS_MESSAGE_RESULTS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    signal_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: true },
+    admission_id: { type: 'text', nullable: true },
+    admission_hash: { type: 'text', nullable: true },
+    status: { type: 'text', nullable: false },
+    result: { type: 'jsonb', nullable: true },
+    error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     harness_name: { type: 'text', nullable: false },
@@ -727,6 +745,9 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
     compositePrimaryKey: ['harness_name', 'session_id', 'attachment_id', 'source', 'source_id'],
+  },
+  [TABLE_HARNESS_MESSAGE_RESULTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
   },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],

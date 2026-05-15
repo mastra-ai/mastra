@@ -21,6 +21,7 @@ import type {
 } from '../types';
 import type { AgentVersion } from './agents';
 import type {
+  AgentSignalResultEvidence,
   AttachmentRecord,
   AttachmentReference,
   OperationAdmissionTombstone,
@@ -95,6 +96,7 @@ export class InMemoryDB {
   readonly harnessAttachmentRecords = new Map<string, AttachmentRecord>();
   readonly harnessAttachmentBytes = new Map<string, Uint8Array>();
   readonly harnessAttachmentReferences = new Map<string, AttachmentReference>();
+  readonly harnessMessageResultEvidence = new Map<string, AgentSignalResultEvidence>();
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
 
   /**
@@ -139,6 +141,7 @@ export class InMemoryDB {
     this.harnessAttachmentRecords.clear();
     this.harnessAttachmentBytes.clear();
     this.harnessAttachmentReferences.clear();
+    this.harnessMessageResultEvidence.clear();
     this.harnessOperationTombstones.clear();
   }
 }

@@ -12,12 +12,14 @@ import {
   TABLE_CONFIGS,
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_SESSIONS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   AcquireSessionLeaseInput,
+  AgentSignalResultEvidence,
   AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
@@ -92,6 +94,7 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
       compositePrimaryKey: attachmentRefsConfig?.compositePrimaryKey,
     });
+    await this.#ensureMessageResultsTable();
     const tombstonesConfig = TABLE_CONFIGS[TABLE_HARNESS_OPERATION_TOMBSTONES];
     await this.#db.createTable({
       tableName: TABLE_HARNESS_OPERATION_TOMBSTONES,
@@ -125,8 +128,10 @@ export class HarnessLibSQL extends HarnessStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#ensureMessageResultsTable();
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSIONS}`);
   }
@@ -799,6 +804,16 @@ export class HarnessLibSQL extends HarnessStorage {
     signalId: string;
   }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null> {
     const namespace = this.#resolveHarnessName(harnessName);
+    await this.#ensureMessageResultsTable();
+    const retainedResult = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
+            WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?
+              AND signal_id = ?
+            LIMIT 1`,
+      args: [namespace, sessionId, resourceId, threadId, signalId],
+    });
+    const retained = retainedResult.rows[0];
+    if (retained) return rowToMessageResultEvidence(retained as Record<string, unknown>);
     const result = await this.#client.execute({
       sql: `SELECT * FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}
             WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?
@@ -808,6 +823,97 @@ export class HarnessLibSQL extends HarnessStorage {
     });
     const row = result.rows[0];
     return row ? rowToTombstone(row as Record<string, unknown>) : null;
+  }
+
+  async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<{ created: boolean }> {
+    await this.#ensureMessageResultsTable();
+    const namespacedRecord = { ...record, harnessName: this.#resolveHarnessName(record.harnessName) };
+    const id = messageEvidenceId(namespacedRecord);
+    const loadCurrent = async () => {
+      const current = await this.loadMessageResultEvidence({
+        harnessName: namespacedRecord.harnessName,
+        sessionId: namespacedRecord.sessionId,
+        resourceId: namespacedRecord.resourceId,
+        threadId: namespacedRecord.threadId,
+        signalId: namespacedRecord.signalId,
+      });
+      return current && 'status' in current ? current : null;
+    };
+    const tx = await this.#client.transaction('write');
+    let created = false;
+    try {
+      const existing = await tx.execute({
+        sql: `SELECT * FROM ${TABLE_HARNESS_MESSAGE_RESULTS} WHERE id = ? LIMIT 1`,
+        args: [id],
+      });
+      if (existing.rows[0]) {
+        const current = rowToMessageResultEvidence(existing.rows[0] as Record<string, unknown>);
+        if (!sameMessageEvidenceIdentity(current, namespacedRecord)) {
+          throw new HarnessStorageAdmissionConflictError(
+            namespacedRecord.sessionId,
+            'message',
+            namespacedRecord.admissionId ?? namespacedRecord.signalId,
+          );
+        }
+        if (isTerminalMessageEvidence(current)) {
+          await tx.commit();
+          return { created: false };
+        }
+        await tx.execute({
+          sql: `UPDATE ${TABLE_HARNESS_MESSAGE_RESULTS}
+                SET run_id = ?, status = ?, result = ?, error = ?, updated_at = ?
+                WHERE id = ?`,
+          args: [
+            namespacedRecord.runId ?? null,
+            namespacedRecord.status,
+            'result' in namespacedRecord ? JSON.stringify(namespacedRecord.result) : null,
+            'error' in namespacedRecord ? JSON.stringify(namespacedRecord.error) : null,
+            namespacedRecord.updatedAt,
+            id,
+          ],
+        });
+      } else {
+        created = true;
+        await tx.execute({
+          sql: `INSERT INTO ${TABLE_HARNESS_MESSAGE_RESULTS}
+                (id, harness_name, session_id, resource_id, thread_id, signal_id, run_id,
+                 admission_id, admission_hash, status, result, error, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            id,
+            namespacedRecord.harnessName,
+            namespacedRecord.sessionId,
+            namespacedRecord.resourceId,
+            namespacedRecord.threadId,
+            namespacedRecord.signalId,
+            namespacedRecord.runId ?? null,
+            namespacedRecord.admissionId ?? null,
+            namespacedRecord.admissionHash ?? null,
+            namespacedRecord.status,
+            'result' in namespacedRecord ? JSON.stringify(namespacedRecord.result) : null,
+            'error' in namespacedRecord ? JSON.stringify(namespacedRecord.error) : null,
+            namespacedRecord.createdAt,
+            namespacedRecord.updatedAt,
+          ],
+        });
+      }
+      await tx.commit();
+      return { created };
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      if (isUniqueConstraintError(err)) {
+        const current = await loadCurrent();
+        if (current && sameMessageEvidenceIdentity(current as AgentSignalResultEvidence, namespacedRecord)) {
+          return { created: false };
+        }
+        throw new HarnessStorageAdmissionConflictError(
+          namespacedRecord.sessionId,
+          'message',
+          namespacedRecord.admissionId ?? namespacedRecord.signalId,
+        );
+      }
+      throw err;
+    }
   }
 
   async loadQueueResultEvidence({
@@ -857,6 +963,25 @@ export class HarnessLibSQL extends HarnessStorage {
     storedAdmissionHash?: string;
   }> {
     const namespace = this.#resolveHarnessName(harnessName);
+    if (kind === 'message') await this.#ensureMessageResultsTable();
+    if (kind === 'message') {
+      const retained = await this.#client.execute({
+        sql: `SELECT * FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
+              WHERE harness_name = ? AND session_id = ? AND resource_id = ?
+                AND admission_id = ?
+              LIMIT 1`,
+        args: [namespace, sessionId, resourceId, admissionId],
+      });
+      const row = retained.rows[0];
+      if (row) {
+        const evidence = rowToMessageResultEvidence(row as Record<string, unknown>);
+        return {
+          status: evidence.admissionHash === attemptedAdmissionHash ? 'duplicate' : 'conflict',
+          evidence,
+          storedAdmissionHash: evidence.admissionHash,
+        };
+      }
+    }
     if (kind === 'queue') {
       const session = await this.loadSession({ harnessName: namespace, sessionId });
       if (session && session.resourceId !== resourceId) return { status: 'none' };
@@ -947,6 +1072,7 @@ export class HarnessLibSQL extends HarnessStorage {
     sessionId,
     resourceId,
     kind,
+    signalId,
     queuedItemId,
     now,
   }: {
@@ -958,8 +1084,41 @@ export class HarnessLibSQL extends HarnessStorage {
     queuedItemId?: string;
     now: number;
   }): Promise<OperationAdmissionTombstone | null> {
-    if (kind === 'message') return null;
     const namespace = this.#resolveHarnessName(harnessName);
+    if (kind === 'message') {
+      await this.#ensureMessageResultsTable();
+      const result = await this.#client.execute({
+        sql: `SELECT * FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
+              WHERE harness_name = ? AND session_id = ? AND resource_id = ?
+                AND signal_id = ?
+              LIMIT 1`,
+        args: [namespace, sessionId, resourceId, signalId ?? ''],
+      });
+      const row = result.rows[0];
+      if (!row) return null;
+      const retained = rowToMessageResultEvidence(row as Record<string, unknown>);
+      if (retained.status === 'pending') return null;
+      const tombstone: OperationAdmissionTombstone = {
+        kind: 'message',
+        harnessName: namespace,
+        sessionId,
+        resourceId,
+        threadId: retained.threadId,
+        ...(retained.admissionId !== undefined ? { admissionId: retained.admissionId } : {}),
+        ...(retained.admissionHash !== undefined ? { admissionHash: retained.admissionHash } : {}),
+        signalId: retained.signalId,
+        ...(retained.runId !== undefined ? { runId: retained.runId } : {}),
+        terminalAt: retained.updatedAt,
+        compactedAt: now,
+        expiresAt: now,
+      };
+      await this.writeOperationAdmissionTombstone(tombstone);
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS} WHERE id = ?`,
+        args: [messageEvidenceId(retained)],
+      });
+      return tombstone;
+    }
     return this.#withCompactionLock(`${namespace}\0${sessionId}`, async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const result = await this.#client.execute({
@@ -1017,6 +1176,12 @@ export class HarnessLibSQL extends HarnessStorage {
     sessionId: string;
     resourceId: string;
   }): Promise<void> {
+    await this.#ensureMessageResultsTable();
+    await this.#client.execute({
+      sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
+            WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
+      args: [this.#resolveHarnessName(harnessName), sessionId, resourceId],
+    });
     await this.#client.execute({
       sql: `DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}
             WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
@@ -1047,6 +1212,15 @@ export class HarnessLibSQL extends HarnessStorage {
 
   #resolveHarnessName(input?: string): string {
     return input ?? this.#harnessName;
+  }
+
+  async #ensureMessageResultsTable(): Promise<void> {
+    const messageResultsConfig = TABLE_CONFIGS[TABLE_HARNESS_MESSAGE_RESULTS];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_MESSAGE_RESULTS,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
+      compositePrimaryKey: messageResultsConfig?.compositePrimaryKey,
+    });
   }
 
   async #backfillAttachmentMetadata(): Promise<void> {
@@ -1325,9 +1499,45 @@ function rowToTombstone(row: Record<string, unknown>): OperationAdmissionTombsto
   };
 }
 
+function rowToMessageResultEvidence(row: Record<string, unknown>): AgentSignalResultEvidence {
+  const base = {
+    harnessName: String(row.harness_name),
+    sessionId: String(row.session_id),
+    resourceId: String(row.resource_id),
+    threadId: String(row.thread_id),
+    signalId: String(row.signal_id),
+    ...(row.run_id == null ? {} : { runId: String(row.run_id) }),
+    ...(row.admission_id == null ? {} : { admissionId: String(row.admission_id) }),
+    ...(row.admission_hash == null ? {} : { admissionHash: String(row.admission_hash) }),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+  const status = String(row.status);
+  if (status === 'completed') {
+    return {
+      ...base,
+      status: 'completed',
+      runId: base.runId ?? '',
+      result: parseJson(row.result),
+    };
+  }
+  if (status === 'failed') {
+    return {
+      ...base,
+      status: 'failed',
+      error: parseJson(row.error) ?? { code: 'harness.message_failed', message: 'Message failed' },
+    };
+  }
+  return { ...base, status: 'pending' };
+}
+
 function tombstoneId(record: OperationAdmissionTombstone): string {
   const publicId = record.kind === 'message' ? record.signalId : record.queuedItemId;
   return `${record.harnessName}\u0000${record.sessionId}\u0000${record.kind}\u0000${publicId ?? record.admissionId ?? record.compactedAt}`;
+}
+
+function messageEvidenceId(record: Pick<AgentSignalResultEvidence, 'harnessName' | 'sessionId' | 'signalId'>): string {
+  return `${record.harnessName}\u0000${record.sessionId}\u0000${record.signalId}`;
 }
 
 function sameTombstoneIdentity(a: OperationAdmissionTombstone, b: OperationAdmissionTombstone): boolean {
@@ -1343,6 +1553,22 @@ function sameTombstoneIdentity(a: OperationAdmissionTombstone, b: OperationAdmis
     a.signalId === b.signalId &&
     a.runId === b.runId
   );
+}
+
+function sameMessageEvidenceIdentity(a: AgentSignalResultEvidence, b: AgentSignalResultEvidence): boolean {
+  return (
+    a.harnessName === b.harnessName &&
+    a.sessionId === b.sessionId &&
+    a.resourceId === b.resourceId &&
+    a.threadId === b.threadId &&
+    a.signalId === b.signalId &&
+    a.admissionId === b.admissionId &&
+    a.admissionHash === b.admissionHash
+  );
+}
+
+function isTerminalMessageEvidence(record: AgentSignalResultEvidence): boolean {
+  return record.status === 'completed' || record.status === 'failed';
 }
 
 function isTerminalQueueReceipt(receipt: QueueAdmissionReceipt): boolean {

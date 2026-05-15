@@ -15,6 +15,7 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
 import { buildFakeOutput, extractSignalContents } from './__test-utils__/fake-output';
+import { HarnessAdmissionConflictError, HarnessValidationError } from './errors';
 import { Harness } from './harness';
 
 // ---------------------------------------------------------------------------
@@ -148,6 +149,86 @@ describe('Session.message() — default path', () => {
     expect(turnSignal.aborted).toBe(true);
     expect((turnSignal as { reason?: unknown }).reason).toBe('caller-cancelled');
   });
+
+  it('deduplicates an exact admissionId retry without accepting a second signal', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = await session.message({ content: 'hi', admissionId: 'admission-1' });
+    const second = await session.message({ content: 'hi', admissionId: 'admission-1' });
+
+    expect(first.text).toBe('hello back');
+    expect(second.text).toBe('hello back');
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('deduplicates concurrent exact admissionId retries before dispatching a second signal', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const [first, second] = await Promise.all([
+      session.message({ content: 'hi', admissionId: 'admission-1' }),
+      session.message({ content: 'hi', admissionId: 'admission-1' }),
+    ]);
+
+    expect(first.text).toBe('hello back');
+    expect(second.text).toBe('hello back');
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('rejects a same admissionId retry with different message inputs before a second signal', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'hi', admissionId: 'admission-1' });
+    await expect(session.message({ content: 'changed', admissionId: 'admission-1' })).rejects.toBeInstanceOf(
+      HarnessAdmissionConflictError,
+    );
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('rejects concurrent conflicting admissionId retries without dispatching a second signal', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const results = await Promise.allSettled([
+      session.message({ content: 'hi', admissionId: 'admission-1' }),
+      session.message({ content: 'changed', admissionId: 'admission-1' }),
+    ]);
+
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find(result => result.status === 'rejected');
+    expect(rejected?.reason).toBeInstanceOf(HarnessAdmissionConflictError);
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('rejects admissionId with non-hash-safe additionalTools', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      session.message({ content: 'hi', admissionId: 'admission-1', additionalTools: { local: {} as any } }),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
+  });
+
+  it('rejects an empty admissionId', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.message({ content: 'hi', admissionId: '' })).rejects.toBeInstanceOf(HarnessValidationError);
+  });
+
+  it('rejects a stream retry after a completed admissionId result', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'hi', admissionId: 'admission-1' });
+
+    await expect(session.message({ content: 'hi', admissionId: 'admission-1', stream: true })).rejects.toBeInstanceOf(
+      HarnessValidationError,
+    );
+    expect(agent.calls).toHaveLength(1);
+  });
 });
 
 describe('Session.message() — streaming path', () => {
@@ -194,6 +275,15 @@ describe('Session.message() — structured + sync path', () => {
     await expect(session.message({ content: 'go', stream: true, output: Schema, sync: true } as any)).rejects.toThrow(
       /mutually exclusive/,
     );
+  });
+
+  it('rejects admissionId on the sync structured-output path', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      session.message({ content: 'compute', admissionId: 'admission-1', output: Schema, sync: true } as any),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
   });
 });
 

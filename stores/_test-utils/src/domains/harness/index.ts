@@ -962,6 +962,94 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         ).resolves.toBeNull();
       });
 
+      it('writes retained message result evidence and resolves duplicate/conflict attempts', async () => {
+        if (!harness) return;
+        await harness.writeMessageResultEvidence({
+          harnessName: 'default',
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          signalId: 'signal-1',
+          runId: 'run-1',
+          admissionId: 'admission-1',
+          admissionHash: 'hash-1',
+          status: 'completed',
+          result: { text: 'done' },
+          createdAt: 1000,
+          updatedAt: 2000,
+        });
+
+        await expect(
+          harness.loadMessageResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            signalId: 'signal-1',
+          }),
+        ).resolves.toMatchObject({ status: 'completed', result: { text: 'done' } });
+        await expect(
+          harness.resolveOperationAdmissionEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            kind: 'message',
+            admissionId: 'admission-1',
+            attemptedAdmissionHash: 'hash-1',
+          }),
+        ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-1' });
+        await expect(
+          harness.resolveOperationAdmissionEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            kind: 'message',
+            admissionId: 'admission-1',
+            attemptedAdmissionHash: 'different-hash',
+          }),
+        ).resolves.toMatchObject({ status: 'conflict', storedAdmissionHash: 'hash-1' });
+      });
+
+      it('compacts terminal message evidence into tombstones', async () => {
+        if (!harness) return;
+        await harness.writeMessageResultEvidence({
+          harnessName: 'default',
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          signalId: 'signal-1',
+          runId: 'run-1',
+          admissionId: 'admission-1',
+          admissionHash: 'hash-1',
+          status: 'failed',
+          error: { code: 'harness.test', message: 'failed' },
+          createdAt: 1000,
+          updatedAt: 2000,
+        });
+
+        const compacted = await harness.compactOperationResultEvidence({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          kind: 'message',
+          signalId: 'signal-1',
+          now: 3000,
+        });
+
+        expect(compacted).toMatchObject({
+          kind: 'message',
+          admissionId: 'admission-1',
+          admissionHash: 'hash-1',
+          signalId: 'signal-1',
+          terminalAt: 2000,
+          compactedAt: 3000,
+        });
+        await expect(
+          harness.loadMessageResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            signalId: 'signal-1',
+          }),
+        ).resolves.toEqual(compacted);
+      });
+
       it('compacts terminal queue receipts into tombstones', async () => {
         if (!harness) return;
         await harness.saveSession(

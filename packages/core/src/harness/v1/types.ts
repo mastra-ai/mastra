@@ -799,6 +799,9 @@ interface MessageOptionsBase extends MessageOverrides {
   /** Free-form user content. The only required field. */
   content: string;
 
+  /** Optional idempotency key for retry-safe signal-driven messages. */
+  admissionId?: string;
+
   /** Optional pre-uploaded attachments to include with the user message. */
   attachments?: AttachmentRef[];
 
