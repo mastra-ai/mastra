@@ -79,10 +79,10 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult } from '../workflows/types';
 import type { AnyWorkflow } from '../workflows/workflow';
+import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';

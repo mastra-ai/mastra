@@ -22,8 +22,8 @@ import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/outp
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { resolveToolRequiresApproval } from '../../tools/approval';
 import type { IdGeneratorContext } from '../../types';
-import { createStep, createWorkflow } from '../../workflows/workflow';
 import type { Step, SuspendOptions } from '../../workflows/step';
+import { createStep, createWorkflow } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
 
 /**
