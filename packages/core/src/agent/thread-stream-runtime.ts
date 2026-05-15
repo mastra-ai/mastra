@@ -536,7 +536,7 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult {
     const state = this.#getState(pubsub);
-    const signal = createSignal(signalInput);
+    const signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';

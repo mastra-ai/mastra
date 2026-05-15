@@ -1,5 +1,85 @@
 # @mastra/core
 
+## 1.35.0-alpha.2
+
+### Minor Changes
+
+- Added a favorites storage domain that lets users mark stored agents and skills as favorites, plus `visibility` (`'private' | 'public'`) and `favoriteCount` fields on stored agents and skills so callers can list, filter, and order by favorite state. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+  Existing rows without `visibility` or `favoriteCount` continue to work; the new fields and APIs are opt-in.
+
+  **Example**
+
+  ```ts
+  const favorites = await storage.getStore('favorites');
+
+  await favorites?.favorite({ userId: 'u1', entityType: 'agent', entityId: 'agent-123' });
+
+  const favoritedIds = await favorites?.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+
+  // List agents the user has favorited, surfaced first
+  const { agents } = await storage.getStore('agents').list({
+    pinFavoritedFor: 'u1',
+    favoritedOnly: true,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a workspace PATCH bug in the inmemory workspace adapter: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined`. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Fixed scheduled workflows created from the public @mastra/core/workflows entry point so declared schedules are applied correctly. ([#16637](https://github.com/mastra-ai/mastra/pull/16637))
+
+## 1.35.0-alpha.1
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
 ## 1.34.1-alpha.0
 
 ### Patch Changes

@@ -80,8 +80,10 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
+import type { Step } from '../workflows/step';
+import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import type { AnyWorkflow } from '../workflows/workflow';
+import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -100,7 +102,6 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -5581,14 +5582,6 @@ export class Agent<
       llm,
     };
 
-    const initialSignalEchoes =
-      methodType === 'stream'
-        ? (Array.isArray(options.messages) ? options.messages : [options.messages]).filter(isCreatedAgentSignal)
-        : [];
-    const initialSignalEchoesForRun =
-      initialSignalEchoes.length > 0
-        ? [...initialSignalEchoes, ...(options._initialSignalEchoes ?? [])]
-        : options._initialSignalEchoes;
     const toolPayloadTransform =
       normalizeToolPayloadTransformPolicy(options.transform ?? (options as any).toolPayloadProjection) ??
       this.#toolPayloadTransform ??
@@ -5627,7 +5620,6 @@ export class Agent<
           }),
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: runId => this.#getThreadStreamRuntime().drainPendingSignals(runId, this.getPubSub()),
-      initialSignalEchoes: initialSignalEchoesForRun,
     });
 
     const run = await executionWorkflow.createRun();

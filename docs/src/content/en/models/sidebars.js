@@ -478,6 +478,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/orcarouter',
+          label: 'OrcaRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
         },
