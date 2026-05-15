@@ -61,7 +61,9 @@ export class FavoritesLibSQL extends FavoritesStorage {
       await tx.execute(`UPDATE "${TABLE_SKILLS}" SET "favoriteCount" = 0 WHERE "favoriteCount" > 0`);
       await tx.commit();
     } catch (error) {
-      await tx.rollback();
+      if (!tx.closed) {
+        await tx.rollback();
+      }
       throw error;
     }
   }
@@ -281,7 +283,9 @@ export class FavoritesLibSQL extends FavoritesStorage {
         await tx.commit();
         return Number(result.rowsAffected ?? 0);
       } catch (txError) {
-        await tx.rollback();
+        if (!tx.closed) {
+          await tx.rollback();
+        }
         throw txError;
       }
     } catch (error) {
