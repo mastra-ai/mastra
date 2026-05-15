@@ -109,6 +109,23 @@ describe('credentials auth — apiPrefix support (issue #16460)', () => {
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe('http://localhost:4000/mastra/auth/credentials/sign-in');
     });
+
+    it('should honor an explicitly empty apiPrefix for sign-in URL', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ user: { id: '1', email: 'a@b.c' } }));
+
+      const { makeCredentialsLoginRequest } = await import('../use-credentials-login');
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+          apiPrefix: '',
+        },
+      };
+
+      await makeCredentialsLoginRequest(mockClient as any, { email: 'a@b.c', password: 'pw' });
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('http://localhost:4000/auth/credentials/sign-in');
+    });
   });
 
   describe('Credentials sign-up URL construction', () => {
@@ -173,6 +190,27 @@ describe('credentials auth — apiPrefix support (issue #16460)', () => {
 
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe('http://localhost:4000/mastra/auth/credentials/sign-up');
+    });
+
+    it('should honor an explicitly empty apiPrefix for sign-up URL', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ user: { id: '1', email: 'a@b.c' } }));
+
+      const { makeCredentialsSignUpRequest } = await import('../use-credentials-signup');
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+          apiPrefix: '',
+        },
+      };
+
+      await makeCredentialsSignUpRequest(mockClient as any, {
+        email: 'a@b.c',
+        password: 'pw',
+        name: 'A',
+      });
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('http://localhost:4000/auth/credentials/sign-up');
     });
   });
 

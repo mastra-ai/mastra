@@ -67,8 +67,9 @@ export async function makeCredentialsSignUpRequest(
   { email, password, name }: CredentialsSignUpRequest,
 ): Promise<CredentialsSignUpResponse> {
   const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
-  const raw = (apiPrefix || '/api').trim();
-  const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
+  const raw = (apiPrefix ?? '/api').trim();
+  const normalized = raw === '' ? '' : raw.startsWith('/') ? raw : `/${raw}`;
+  const prefix = normalized.replace(/\/+$/, '');
 
   // Generic Mastra auth endpoint - works with any credentials provider
   const response = await fetch(`${baseUrl}${prefix}/auth/credentials/sign-up`, {
