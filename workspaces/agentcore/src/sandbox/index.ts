@@ -352,13 +352,14 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
     const executionTimeMs = Date.now() - startTime;
     const exitCode = output.exitCode ?? 1;
     const timedOut = stopStatus === 'TIMED_OUT';
+    const finalExitCode = timedOut ? 124 : exitCode;
     this._lastUsedAt = new Date();
 
     return {
       command: fullCommand,
       args,
-      success: exitCode === 0 && !timedOut,
-      exitCode: timedOut && exitCode === 0 ? 124 : exitCode,
+      success: finalExitCode === 0 && !timedOut,
+      exitCode: finalExitCode,
       stdout: output.stdout,
       stderr: output.stderr,
       executionTimeMs,

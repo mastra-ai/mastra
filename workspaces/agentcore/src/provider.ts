@@ -49,8 +49,10 @@ export const agentCoreRuntimeSandboxProvider: SandboxProvider<AgentCoreRuntimePr
       },
       commandTimeout: {
         type: 'number',
-        description: 'Default command timeout in milliseconds',
+        description: 'Default command timeout in milliseconds. Must be between 1 and 3,600,000.',
         default: 300_000,
+        minimum: 1,
+        maximum: 3_600_000,
       },
       stopSessionOnLifecycle: {
         type: 'boolean',

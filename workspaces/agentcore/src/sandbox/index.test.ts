@@ -183,6 +183,23 @@ describe('AgentCoreRuntimeSandbox', () => {
     expect(commandInputs[0]?.input.body).toEqual({ command: 'sleep 10', timeout: 1 });
   });
 
+  it('returns exit code 124 when AgentCore omits the timeout exit code', async () => {
+    mockSend.mockResolvedValueOnce({
+      stream: streamEvents([{ stderr: 'timeout' }, { status: 'TIMED_OUT' }]),
+    });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+      runtimeSessionId: '12345678-1234-1234-1234-123456789012',
+    });
+
+    const result = await sandbox.executeCommand('sleep 10', [], { timeout: 1000 });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(124);
+    expect(result.timedOut).toBe(true);
+  });
+
   it('passes abort signals to the AWS SDK client', async () => {
     mockSend.mockResolvedValueOnce({
       stream: streamEvents([{ exitCode: 0, status: 'COMPLETED' }]),

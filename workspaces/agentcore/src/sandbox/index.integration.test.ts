@@ -15,16 +15,24 @@ describeAgentCore('AgentCoreRuntimeSandbox integration', () => {
       runtimeSessionId: randomUUID(),
     });
 
-    const stdoutChunks: string[] = [];
-    const result = await sandbox.executeCommand('sh', ['-c', 'echo mastra-agentcore-ok && pwd'], {
-      timeout: 30_000,
-      onStdout: data => stdoutChunks.push(data),
-    });
+    try {
+      const stdoutChunks: string[] = [];
+      const result = await sandbox.executeCommand('sh', ['-c', 'echo mastra-agentcore-ok && pwd'], {
+        timeout: 30_000,
+        onStdout: data => stdoutChunks.push(data),
+      });
 
-    expect(result.success).toBe(true);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('mastra-agentcore-ok');
-    expect(stdoutChunks.join('')).toContain('mastra-agentcore-ok');
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('mastra-agentcore-ok');
+      expect(stdoutChunks.join('')).toContain('mastra-agentcore-ok');
+    } finally {
+      try {
+        await sandbox.stopRuntimeSession();
+      } finally {
+        await sandbox.destroy();
+      }
+    }
   });
 
   it('returns non-zero exits without throwing', async () => {
@@ -34,12 +42,20 @@ describeAgentCore('AgentCoreRuntimeSandbox integration', () => {
       runtimeSessionId: randomUUID(),
     });
 
-    const result = await sandbox.executeCommand('sh', ['-c', 'echo agentcore-error >&2; exit 7'], {
-      timeout: 30_000,
-    });
+    try {
+      const result = await sandbox.executeCommand('sh', ['-c', 'echo agentcore-error >&2; exit 7'], {
+        timeout: 30_000,
+      });
 
-    expect(result.success).toBe(false);
-    expect(result.exitCode).toBe(7);
-    expect(result.stderr).toContain('agentcore-error');
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(7);
+      expect(result.stderr).toContain('agentcore-error');
+    } finally {
+      try {
+        await sandbox.stopRuntimeSession();
+      } finally {
+        await sandbox.destroy();
+      }
+    }
   });
 });

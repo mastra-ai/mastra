@@ -25,6 +25,10 @@ describe('agentCoreRuntimeSandboxProvider', () => {
     expect(agentCoreRuntimeSandboxProvider.name).toBe('AgentCore Runtime Sandbox');
     expect(agentCoreRuntimeSandboxProvider.configSchema?.required).toEqual(['agentRuntimeArn']);
     expect(agentCoreRuntimeSandboxProvider.configSchema?.properties?.agentRuntimeArn).toBeDefined();
+    expect(agentCoreRuntimeSandboxProvider.configSchema?.properties?.commandTimeout).toMatchObject({
+      minimum: 1,
+      maximum: 3_600_000,
+    });
   });
 
   it('creates an AgentCoreRuntimeSandbox from serializable config', async () => {

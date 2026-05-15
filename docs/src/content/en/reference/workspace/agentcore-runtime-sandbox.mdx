@@ -149,7 +149,8 @@ if (!result?.success) {
       'Custom instructions that override the default instructions returned by `getInstructions()`. Pass a string to replace the defaults, or a function to extend them.',
     isOptional: true,
   },
-]}/>
+]}
+/>
 
 ## Properties
 
@@ -186,7 +187,8 @@ if (!result?.success) {
     type: 'string',
     description: 'AgentCore Runtime ARN where commands execute.',
   },
-]}/>
+]}
+/>
 
 ## Methods
 
@@ -264,9 +266,9 @@ Returns: `Promise<SandboxInfo>`.
 
 - **One-shot commands**: Each command runs to completion or timeout.
 - **No persistent shell**: Shell state does not carry over between commands. Encode state in each command, for example `cd /workspace && npm test`.
-- **No background processes**: The provider does not expose a `processes` manager.
-- **No stdin**: Runtime command execution does not provide an interactive stdin stream through this provider.
-- **No mounts**: Workspace filesystem mounting is not supported by this provider.
+- **Background processes are not supported**: The provider does not expose a `processes` manager.
+- **Interactive stdin is unavailable**: Runtime command execution does not provide an interactive stdin stream through this provider.
+- **Workspace filesystem mounts are unsupported**: Workspace filesystem mounting is not supported by this provider.
 - **Container-dependent tools**: Commands can only use tools installed in the AgentCore Runtime container image.
 
 ## Related
