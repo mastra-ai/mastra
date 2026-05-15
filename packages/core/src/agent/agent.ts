@@ -5628,7 +5628,7 @@ export class Agent<
             agentBackgroundConfig: this.#backgroundTasks,
           }),
       skipBgTaskWait: options._skipBgTaskWait,
-      drainPendingSignals: runId => this.#getThreadStreamRuntime().drainPendingSignals(runId, this.getPubSub()),
+      drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, this.getPubSub()),
       initialSignalEchoes: initialSignalEchoesForRun,
     });
 
@@ -6173,10 +6173,6 @@ export class Agent<
     return fullOutput;
   }
 
-  #getThreadStreamRuntime() {
-    return agentThreadStreamRuntime;
-  }
-
   /**
    * @internal Test-only hook for duck-typed agents (e.g. harness v1 MockAgent) that
    * override `stream()` without going through the real execution loop. Production
@@ -6188,7 +6184,7 @@ export class Agent<
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
   ): void {
-    this.#getThreadStreamRuntime().registerRun(this as Agent<any, any, any, any>, output, streamOptions, this.getPubSub());
+    agentThreadStreamRuntime.registerRun(this as Agent<any, any, any, any>, output, streamOptions, this.getPubSub());
   }
 
   /**
@@ -6198,7 +6194,7 @@ export class Agent<
    * `sendSignal()` returns a `runId` to drain events from the run's output.
    */
   getRunOutput<OUTPUT = TOutput>(runId: string): MastraModelOutput<OUTPUT> | undefined {
-    return this.#getThreadStreamRuntime().getRunOutput<OUTPUT>(runId, this.getPubSub());
+    return agentThreadStreamRuntime.getRunOutput<OUTPUT>(runId, this.getPubSub());
   }
 
   /**
@@ -6211,7 +6207,7 @@ export class Agent<
    * their own completion deadline (e.g. tied to the per-run completion path).
    */
   waitForRunOutput<OUTPUT = TOutput>(runId: string): Promise<MastraModelOutput<OUTPUT>> {
-    return this.#getThreadStreamRuntime().waitForRunOutput<OUTPUT>(runId, this.getPubSub());
+    return agentThreadStreamRuntime.waitForRunOutput<OUTPUT>(runId, this.getPubSub());
   }
 
   /**
@@ -6220,7 +6216,7 @@ export class Agent<
   async subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions,
   ): Promise<AgentThreadSubscription<OUTPUT>> {
-    return this.#getThreadStreamRuntime().subscribeToThread<OUTPUT>(
+    return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(
       this as Agent<any, any, any, any>,
       options,
       this.getPubSub(),
@@ -6228,23 +6224,18 @@ export class Agent<
   }
 
   abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
-    return this.#getThreadStreamRuntime().abortThread(options, this.getPubSub());
+    return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return this.#getThreadStreamRuntime().abortRun(runId, this.getPubSub());
+    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
   }
 
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
-    return this.#getThreadStreamRuntime().sendSignal(
-      this as Agent<any, any, any, any>,
-      signal,
-      target,
-      this.getPubSub(),
-    );
+    return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
   }
 
   async stream<
@@ -6330,7 +6321,7 @@ export class Agent<
       });
     }
 
-    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
       mergedOptions,
       this.getPubSub(),
@@ -6342,7 +6333,7 @@ export class Agent<
         source: 'agent',
         entityId: this.id,
       }) ?? randomUUID();
-    const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(mergedOptions, this.getPubSub());
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, this.getPubSub());
 
     const executeOptions = {
       ...preparedOptions,
@@ -6382,7 +6373,7 @@ export class Agent<
       });
     }
 
-    this.#getThreadStreamRuntime().registerRun(
+    agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -6613,12 +6604,12 @@ export class Agent<
 
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
-    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
       this.getPubSub(),
     );
-    const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
       this.getPubSub(),
     );
@@ -6661,7 +6652,7 @@ export class Agent<
       });
     }
 
-    this.#getThreadStreamRuntime().registerRun(
+    agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result as unknown as MastraModelOutput<OUTPUT>,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
