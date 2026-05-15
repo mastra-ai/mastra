@@ -259,6 +259,22 @@ describe('AgentCoreRuntimeSandbox', () => {
     await sandbox._destroy();
 
     expect(mockSend).not.toHaveBeenCalled();
+    expect(mockDestroy).not.toHaveBeenCalled();
+  });
+
+  it('destroys an owned AWS client after it has been used', async () => {
+    mockSend.mockResolvedValueOnce({
+      stream: streamEvents([{ exitCode: 0, status: 'COMPLETED' }]),
+    });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+      runtimeSessionId: '12345678-1234-1234-1234-123456789012',
+    });
+
+    await sandbox.executeCommand('echo ok');
+    await sandbox._destroy();
+
     expect(mockDestroy).toHaveBeenCalled();
   });
 

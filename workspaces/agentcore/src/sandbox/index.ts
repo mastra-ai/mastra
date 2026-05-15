@@ -163,8 +163,9 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
   readonly provider = 'agentcore';
   status: ProviderStatus = 'pending';
 
-  private readonly _client: AgentCoreRuntimeClient;
+  private _client?: AgentCoreRuntimeClient;
   private readonly _ownsClient: boolean;
+  private readonly _region?: string;
   private readonly _agentRuntimeArn: string;
   private readonly _runtimeSessionId: string;
   private readonly _qualifier?: string;
@@ -194,8 +195,9 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
     this._stopSessionOnLifecycle = options.stopSessionOnLifecycle ?? false;
     this._stopClientToken = options.stopClientToken;
     this._instructionsOverride = options.instructions;
-    this._client = options.client ?? new BedrockAgentCoreClient({ region: options.region });
+    this._client = options.client;
     this._ownsClient = !options.client;
+    this._region = options.region;
   }
 
   get runtimeSessionId(): string {
@@ -220,8 +222,9 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
       await this.stopRuntimeSession();
     }
 
-    if (this._ownsClient) {
+    if (this._ownsClient && this._client) {
       this._client.destroy();
+      this._client = undefined;
     }
   }
 
@@ -232,7 +235,7 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
    * shared with agent invocations outside the WorkspaceSandbox lifecycle.
    */
   async stopRuntimeSession(): Promise<void> {
-    await this._client.send(
+    await this._getClient().send(
       new StopRuntimeSessionCommand({
         agentRuntimeArn: this._agentRuntimeArn,
         runtimeSessionId: this._runtimeSessionId,
@@ -262,7 +265,7 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
       timeoutSeconds,
     });
 
-    const response = await this._client.send(
+    const response = await this._getClient().send(
       new InvokeAgentRuntimeCommandCommand({
         agentRuntimeArn: this._agentRuntimeArn,
         runtimeSessionId: this._runtimeSessionId,
@@ -353,5 +356,12 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
       '- Developer tools such as git, npm, Python, or Node must exist in the AgentCore container image.',
       '- AgentCore Code Interpreter is a separate service and is not part of this runtime sandbox.',
     ].join('\n');
+  }
+
+  private _getClient(): AgentCoreRuntimeClient {
+    if (!this._client) {
+      this._client = new BedrockAgentCoreClient({ region: this._region });
+    }
+    return this._client;
   }
 }
