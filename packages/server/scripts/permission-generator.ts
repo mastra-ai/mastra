@@ -42,11 +42,22 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   scores: 'evaluation scores',
   'stored-agents': 'stored agents',
   system: 'system info',
+  team: 'team members',
   tools: 'tools',
+  users: 'external users/customers',
   vector: 'vector stores',
   workflows: 'workflows',
   workspaces: 'workspaces',
 };
+
+/**
+ * Additional Studio-specific resources and permissions.
+ * These are not derived from API routes but are used for Studio UI RBAC.
+ */
+const STUDIO_PERMISSIONS: Array<{ resource: string; actions: string[] }> = [
+  { resource: 'team', actions: ['read', 'write'] },
+  { resource: 'users', actions: ['read'] },
+];
 
 /**
  * Generates a human-readable description for a permission pattern.
@@ -87,12 +98,16 @@ export interface PermissionData {
 /**
  * Derives permission data from SERVER_ROUTES using getEffectivePermission.
  * This ensures the generated permissions match runtime behavior exactly.
+ *
+ * Also includes STUDIO_PERMISSIONS for Studio UI-specific resources
+ * that aren't tied to API routes.
  */
 export function derivePermissionData(): PermissionData {
   const resourceSet = new Set<string>();
   const actionSet = new Set<string>();
   const permissionSet = new Set<string>();
 
+  // Add permissions from API routes
   for (const route of SERVER_ROUTES) {
     const permission = getEffectivePermission(route);
     if (permission) {
@@ -102,6 +117,15 @@ export function derivePermissionData(): PermissionData {
         actionSet.add(action);
         permissionSet.add(permission);
       }
+    }
+  }
+
+  // Add Studio-specific permissions (not tied to API routes)
+  for (const { resource, actions } of STUDIO_PERMISSIONS) {
+    resourceSet.add(resource);
+    for (const action of actions) {
+      actionSet.add(action);
+      permissionSet.add(`${resource}:${action}`);
     }
   }
 

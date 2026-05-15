@@ -13,7 +13,6 @@
  */
 export const RESOURCES = [
   'a2a',
-  'agent-builder',
   'agents',
   'background-tasks',
   'channels',
@@ -31,8 +30,10 @@ export const RESOURCES = [
   'stored',
   'stored-agents',
   'system',
+  'team',
   'tool-providers',
   'tools',
+  'users',
   'vector',
   'vectors',
   'workflows',
@@ -79,8 +80,6 @@ export const PERMISSION_PATTERNS = {
   '*:write': '*:write',
   /** Full access to agent-to-agent communication */
   'a2a:*': 'a2a:*',
-  /** Full access to agent builder */
-  'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
   /** Full access to background tasks */
@@ -115,10 +114,14 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:*': 'stored-agents:*',
   /** Full access to system info */
   'system:*': 'system:*',
+  /** Full access to team members */
+  'team:*': 'team:*',
   /** Full access to tool-providers */
   'tool-providers:*': 'tool-providers:*',
   /** Full access to tools */
   'tools:*': 'tools:*',
+  /** Full access to external users/customers */
+  'users:*': 'users:*',
   /** Full access to vector stores */
   'vector:*': 'vector:*',
   /** Full access to vectors */
@@ -131,12 +134,6 @@ export const PERMISSION_PATTERNS = {
   'a2a:read': 'a2a:read',
   /** Create and modify agent-to-agent communication */
   'a2a:write': 'a2a:write',
-  /** Execute agent builder */
-  'agent-builder:execute': 'agent-builder:execute',
-  /** View agent builder */
-  'agent-builder:read': 'agent-builder:read',
-  /** Create and modify agent builder */
-  'agent-builder:write': 'agent-builder:write',
   /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
@@ -215,12 +212,18 @@ export const PERMISSION_PATTERNS = {
   'stored:write': 'stored:write',
   /** View system info */
   'system:read': 'system:read',
+  /** View team members */
+  'team:read': 'team:read',
+  /** Create and modify team members */
+  'team:write': 'team:write',
   /** View tool-providers */
   'tool-providers:read': 'tool-providers:read',
   /** Execute tools */
   'tools:execute': 'tools:execute',
   /** View tools */
   'tools:read': 'tools:read',
+  /** View external users/customers */
+  'users:read': 'users:read',
   /** Delete vector stores */
   'vector:delete': 'vector:delete',
   /** Execute vector stores */
@@ -263,9 +266,6 @@ export type PermissionPattern = keyof typeof PERMISSION_PATTERNS;
 export const PERMISSIONS = [
   'a2a:read',
   'a2a:write',
-  'agent-builder:execute',
-  'agent-builder:read',
-  'agent-builder:write',
   'agents:create',
   'agents:delete',
   'agents:execute',
@@ -305,9 +305,12 @@ export const PERMISSIONS = [
   'stored:read',
   'stored:write',
   'system:read',
+  'team:read',
+  'team:write',
   'tool-providers:read',
   'tools:execute',
   'tools:read',
+  'users:read',
   'vector:delete',
   'vector:execute',
   'vector:read',
@@ -338,12 +341,6 @@ export const MastraFGAPermissions = {
   A2A_READ: 'a2a:read',
   /** Create and modify agent-to-agent communication */
   A2A_WRITE: 'a2a:write',
-  /** Execute agent builder */
-  AGENT_BUILDER_EXECUTE: 'agent-builder:execute',
-  /** View agent builder */
-  AGENT_BUILDER_READ: 'agent-builder:read',
-  /** Create and modify agent builder */
-  AGENT_BUILDER_WRITE: 'agent-builder:write',
   /** Create agents */
   AGENTS_CREATE: 'agents:create',
   /** Delete agents */
@@ -422,12 +419,18 @@ export const MastraFGAPermissions = {
   STORED_WRITE: 'stored:write',
   /** View system info */
   SYSTEM_READ: 'system:read',
+  /** View team members */
+  TEAM_READ: 'team:read',
+  /** Create and modify team members */
+  TEAM_WRITE: 'team:write',
   /** View tool-providers */
   TOOL_PROVIDERS_READ: 'tool-providers:read',
   /** Execute tools */
   TOOLS_EXECUTE: 'tools:execute',
   /** View tools */
   TOOLS_READ: 'tools:read',
+  /** View external users/customers */
+  USERS_READ: 'users:read',
   /** Delete vector stores */
   VECTOR_DELETE: 'vector:delete',
   /** Execute vector stores */
