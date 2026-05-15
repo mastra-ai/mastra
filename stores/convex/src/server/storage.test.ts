@@ -276,7 +276,24 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(testCtx.patch).not.toHaveBeenCalled();
   });
 
-  it('throws when the stored snapshot is missing context', async () => {
+  it('throws when a step result merge finds a stored snapshot with missing context', async () => {
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify({ runId: 'run-1', status: 'running' }));
+
+    await expect(
+      handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+        op: 'mergeWorkflowStepResult',
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        workflowName: 'workflow-a',
+        runId: 'run-1',
+        stepId: 'step-1',
+        result: JSON.stringify({ status: 'success' }),
+        requestContext: JSON.stringify({}),
+      }),
+    ).rejects.toThrow('Snapshot for runId run-1 is missing or has invalid context');
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('throws when a workflow state merge finds a stored snapshot with missing context', async () => {
     const testCtx = createWorkflowSnapshotCtx(JSON.stringify({ runId: 'run-1', status: 'running' }));
 
     await expect(
@@ -287,7 +304,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
         runId: 'run-1',
         opts: JSON.stringify({ status: 'success' }),
       }),
-    ).rejects.toThrow('Snapshot not found for runId run-1');
+    ).rejects.toThrow('Snapshot for runId run-1 is missing or has invalid context');
     expect(testCtx.patch).not.toHaveBeenCalled();
   });
 });

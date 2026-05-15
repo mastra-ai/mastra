@@ -173,7 +173,10 @@ export class ConvexDB extends MastraBase {
       result: JSON.stringify(result),
       requestContext: JSON.stringify(requestContext),
     });
-    return context ? JSON.parse(context) : {};
+    if (!context) {
+      throw new Error(`Convex workflow step merge returned no context for runId ${runId}`);
+    }
+    return JSON.parse(context);
   }
 
   public async mergeWorkflowState({
@@ -185,14 +188,17 @@ export class ConvexDB extends MastraBase {
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    const snapshot = await this.client.callStorage<string | undefined>({
+    const snapshot = await this.client.callStorage<string>({
       op: 'mergeWorkflowState',
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       workflowName,
       runId,
       opts: JSON.stringify(opts),
     });
-    return snapshot ? JSON.parse(snapshot) : undefined;
+    if (!snapshot) {
+      throw new Error(`Convex workflow state merge returned no snapshot for runId ${runId}`);
+    }
+    return JSON.parse(snapshot);
   }
 
   private normalizeRecord(tableName: TABLE_NAMES, record: Record<string, any>): Record<string, any> {
