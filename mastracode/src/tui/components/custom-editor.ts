@@ -563,6 +563,14 @@ export class CustomEditor extends Editor {
       }
     }
 
+    // Shift+Enter inserts a newline — must be checked before plain Enter.
+    // matchesKey covers Kitty/modifyOtherKeys; the `\n` fallback covers
+    // legacy terminals that send \n for Shift+Enter (\r for Enter).
+    if (matchesKey(data, 'shift+enter') || data === '\n') {
+      super.handleInput(data);
+      return;
+    }
+
     if (matchesKey(data, 'enter')) {
       // Let pi-tui handle \+Enter newline workaround
       const lines = (this as any).state?.lines;
