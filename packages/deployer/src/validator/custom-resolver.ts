@@ -118,7 +118,8 @@ export async function resolve(
   const stubbedExternals = getStubbedExternals();
   if (stubbedExternals.length > 0) {
     const isStubbed = stubbedExternals.some(ext => isDependencyPartOfPackage(specifier, ext));
-    if (isStubbed) {
+    const externalExports = getStubbedExternalExports()[specifier] ?? [];
+    if (isStubbed && !externalExports.includes('*')) {
       return { url: `${STUB_PREFIX}${specifier}`, shortCircuit: true };
     }
   }
@@ -157,7 +158,7 @@ export async function load(
 const __mastraStub = new Proxy(function () {
   return __mastraStub;
 }, {
-  get: () => __mastraStub,
+  get: (_target, property) => property === 'then' ? undefined : __mastraStub,
   apply: () => __mastraStub,
   construct: () => __mastraStub,
 });
