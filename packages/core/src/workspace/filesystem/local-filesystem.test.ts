@@ -110,6 +110,57 @@ describe('LocalFilesystem', () => {
 
       expect(content).toBe('content');
     });
+
+    // =========================================================================
+    // Unicode whitespace fallback
+    //
+    // LLMs commonly collapse rare Unicode whitespace (e.g. U+202F NARROW
+    // NO-BREAK SPACE used in macOS screenshot filenames) to a regular space
+    // when echoing filenames back in tool calls. If the exact path misses,
+    // try unambiguous unicode-whitespace siblings before throwing.
+    // =========================================================================
+
+    it('should resolve a filename that uses U+202F when the caller passes a regular space', async () => {
+      const actualName = 'Screenshot 2026-05-13 at 3.03.11\u202FPM.png';
+      await fs.writeFile(path.join(tempDir, actualName), 'image bytes');
+
+      const requestedName = 'Screenshot 2026-05-13 at 3.03.11 PM.png';
+      const content = await localFs.readFile(requestedName, { encoding: 'utf-8' });
+
+      expect(content).toBe('image bytes');
+    });
+
+    it('should resolve a filename that uses U+00A0 when the caller passes a regular space', async () => {
+      const actualName = 'My\u00A0File.txt';
+      await fs.writeFile(path.join(tempDir, actualName), 'hello');
+
+      const content = await localFs.readFile('My File.txt', { encoding: 'utf-8' });
+
+      expect(content).toBe('hello');
+    });
+
+    it('should throw FileNotFoundError when multiple unicode-whitespace variants exist (ambiguous)', async () => {
+      await fs.writeFile(path.join(tempDir, 'foo\u202Fbar.txt'), 'a');
+      await fs.writeFile(path.join(tempDir, 'foo\u00A0bar.txt'), 'b');
+
+      await expect(localFs.readFile('foo bar.txt')).rejects.toThrow(FileNotFoundError);
+    });
+
+    it('should throw FileNotFoundError when path has no space (no fallback attempted)', async () => {
+      await expect(localFs.readFile('nospace.txt')).rejects.toThrow(FileNotFoundError);
+    });
+
+    it('should not silently succeed when no matching sibling exists', async () => {
+      await fs.writeFile(path.join(tempDir, 'unrelated.txt'), 'x');
+
+      await expect(localFs.readFile('missing file.txt')).rejects.toThrow(FileNotFoundError);
+    });
+
+    it('should preserve IsDirectoryError when the unicode-whitespace match is a directory', async () => {
+      await fs.mkdir(path.join(tempDir, 'a\u202Fb'));
+
+      await expect(localFs.readFile('a b')).rejects.toThrow(IsDirectoryError);
+    });
   });
 
   // ===========================================================================
@@ -490,6 +541,23 @@ describe('LocalFilesystem', () => {
 
     it('should throw FileNotFoundError for missing path', async () => {
       await expect(localFs.stat('nonexistent')).rejects.toThrow(FileNotFoundError);
+    });
+
+    it('should resolve a filename that uses U+202F when the caller passes a regular space', async () => {
+      const actualName = 'Screenshot\u202F1.png';
+      await fs.writeFile(path.join(tempDir, actualName), 'data');
+
+      const stats = await localFs.stat('Screenshot 1.png');
+
+      expect(stats.name).toBe(actualName);
+      expect(stats.type).toBe('file');
+    });
+
+    it('should throw FileNotFoundError when stat fallback is ambiguous', async () => {
+      await fs.writeFile(path.join(tempDir, 'foo\u202Fbar.txt'), 'a');
+      await fs.writeFile(path.join(tempDir, 'foo\u00A0bar.txt'), 'b');
+
+      await expect(localFs.stat('foo bar.txt')).rejects.toThrow(FileNotFoundError);
     });
   });
 

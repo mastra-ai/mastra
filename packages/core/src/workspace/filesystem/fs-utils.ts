@@ -292,6 +292,55 @@ export async function fsExists(absolutePath: string): Promise<boolean> {
  * @returns File stat information
  * @throws {FileNotFoundError} if path doesn't exist
  */
+// =============================================================================
+// Unicode Whitespace Fallback
+// =============================================================================
+
+/**
+ * Unicode whitespace characters that LLMs commonly normalize to ASCII space
+ * when echoing filenames back in tool calls. macOS screenshots use U+202F
+ * (NARROW NO-BREAK SPACE) between the time and AM/PM, which is the most
+ * common offender.
+ */
+const UNICODE_SPACE_ALTERNATIVES = ['\u00A0', '\u202F', '\u2007', '\u2009', '\u200A', '\u2003', '\u2002'];
+
+const SPACE_CHARACTER_CLASS = `[ ${UNICODE_SPACE_ALTERNATIVES.join('')}]`;
+
+function escapeRegExpExceptSpace(str: string): string {
+  // Escape regex metacharacters, but keep ASCII spaces unescaped so we can
+  // substitute them with the unicode-space character class.
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * When an exact filesystem path doesn't exist, try to find a sibling whose
+ * name matches the basename if ASCII spaces are interpreted as any of a
+ * small whitelist of Unicode whitespace characters. Returns the resolved
+ * absolute path only if exactly one such sibling exists; otherwise returns
+ * undefined so the caller can throw FileNotFoundError unchanged.
+ *
+ * Skips entirely (returns undefined) when the basename contains no ASCII
+ * space, to keep the happy path cheap.
+ */
+export async function resolveUnicodeWhitespaceFallback(absolutePath: string): Promise<string | undefined> {
+  const base = path.basename(absolutePath);
+  if (!base.includes(' ')) return undefined;
+
+  const dir = path.dirname(absolutePath);
+  const pattern = new RegExp(`^${escapeRegExpExceptSpace(base).replace(/ /g, SPACE_CHARACTER_CLASS)}$`);
+
+  let entries: string[];
+  try {
+    entries = await fs.readdir(dir);
+  } catch {
+    return undefined;
+  }
+
+  const matches = entries.filter(name => name !== base && pattern.test(name));
+  if (matches.length !== 1) return undefined;
+  return path.join(dir, matches[0]!);
+}
+
 export async function fsStat(absolutePath: string, userPath: string): Promise<FsStatResult> {
   try {
     const stats = await fs.stat(absolutePath);
