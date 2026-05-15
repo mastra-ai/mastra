@@ -1,11 +1,10 @@
 import { Button, Checkbox, Txt } from '@mastra/playground-ui';
-import { LinkIcon, WrenchIcon, XIcon } from 'lucide-react';
+import { TriangleAlertIcon, WrenchIcon, XIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
-import { ConnectionPicker } from '@/domains/tool-integrations/components/connection-picker';
 import type { PickerConnection } from '@/domains/tool-integrations/components/connection-picker';
 import { HealthPill } from '@/domains/tool-integrations/components/health-pill';
 import type { AgentHealthResult } from '@/domains/tool-integrations/hooks/use-agent-health';
@@ -32,18 +31,11 @@ interface ToolsDetailProps {
   editable?: boolean;
   availableAgentTools?: AgentTool[];
   /**
-   * Grouped tool-integration services to render pickers for. Empty/omitted
-   * preserves legacy behaviour (checkbox list only).
+   * Grouped tool-integration services. Used to detect whether any selected
+   * integration tool needs a connection. Connection editing happens in the
+   * dedicated Connections panel.
    */
   toolIntegrationServices?: ToolIntegrationServiceGroup[];
-  /** Controlled write hook for connection edits per service. */
-  onConnectionsChange?: (integrationId: string, toolService: string, next: PickerConnection[]) => void;
-  /**
-   * Fires whenever the "connections are invalid" signal flips. Invalid means
-   * any service with selected tools has zero connections. Phase 7 wires this
-   * to the Save-disabled toggle.
-   */
-  onConnectionsInvalid?: (invalid: boolean) => void;
   /** Per-agent health rollup; rendered as a pill in the section header. */
   health?: AgentHealthResult;
   /**
@@ -56,6 +48,18 @@ interface ToolsDetailProps {
     toolService: string;
     description?: string;
   }) => void;
+  /**
+   * Called when the user clicks the "Set up" affordance on a row whose
+   * service has no active connection. Parent should open the Connections
+   * detail panel.
+   */
+  onOpenConnections?: () => void;
+  /**
+   * Fires whenever the "connections are invalid" signal flips. Invalid means
+   * any service with selected tools has zero connections. Phase 7 wires this
+   * to the Save-disabled toggle.
+   */
+  onConnectionsInvalid?: (invalid: boolean) => void;
 }
 
 export const ToolsDetail = ({
@@ -63,10 +67,10 @@ export const ToolsDetail = ({
   editable = true,
   availableAgentTools = [],
   toolIntegrationServices = [],
-  onConnectionsChange,
-  onConnectionsInvalid,
   health,
   onAddIntegrationTool,
+  onOpenConnections,
+  onConnectionsInvalid,
 }: ToolsDetailProps) => {
   const { setValue, getValues } = useFormContext<AgentBuilderEditFormValues>();
   const activeCount = availableAgentTools.filter(item => item.isChecked).length;
@@ -100,7 +104,7 @@ export const ToolsDetail = ({
   };
 
   // Lookup of toolIntegrationServices keyed by `providerId:toolService` so
-  // integration rows can render their picker inline.
+  // we can quickly tell if a row's service still needs a connection.
   const groupByService = useMemo(() => {
     const map = new Map<string, ToolIntegrationServiceGroup>();
     for (const group of toolIntegrationServices) {
@@ -108,10 +112,6 @@ export const ToolsDetail = ({
     }
     return map;
   }, [toolIntegrationServices]);
-
-  // Track which `(providerId:toolService)` groups have already rendered their
-  // inline picker, so we only show it once per service (under the first row).
-  const renderedServices = new Set<string>();
 
   const invalid = useMemo(
     () => toolIntegrationServices.some(group => group.hasSelectedTools && group.connections.length === 0),
@@ -155,79 +155,66 @@ export const ToolsDetail = ({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto py-2">
-        {availableAgentTools.length === 0 && toolIntegrationServices.length === 0 ? (
+        {availableAgentTools.length === 0 ? (
           <Txt variant="ui-sm" className="px-6 py-4 text-neutral3">
             No tools available in this project.
           </Txt>
         ) : (
-          <>
-            <ul className="flex flex-col">
-              {availableAgentTools.map(item => {
-                const serviceKey =
-                  item.type === 'integration' && item.providerId && item.toolService
-                    ? `${item.providerId}:${item.toolService}`
-                    : null;
-                const group = serviceKey ? groupByService.get(serviceKey) : undefined;
-                const showInlinePicker =
-                  item.type === 'integration' &&
-                  item.isChecked &&
-                  !!group &&
-                  !!serviceKey &&
-                  !renderedServices.has(serviceKey);
-                if (showInlinePicker && serviceKey) {
-                  renderedServices.add(serviceKey);
-                }
-                return (
-                  <li key={item.id}>
-                    <label
-                      className="flex cursor-pointer items-start gap-3 px-6 py-4 transition-colors hover:bg-surface2"
-                      aria-disabled={!editable}
-                    >
-                      <div className="mt-0.5">
-                        <Checkbox
-                          variant="neutral"
-                          checked={item.isChecked}
-                          onCheckedChange={next => toggle(item, next === true)}
-                          disabled={!editable}
-                        />
-                      </div>
-                      <div className="flex min-w-0 flex-1 flex-col">
-                        <Txt variant="ui-sm" className="font-medium text-neutral6">
+          <ul className="flex flex-col">
+            {availableAgentTools.map(item => {
+              const serviceKey =
+                item.type === 'integration' && item.providerId && item.toolService
+                  ? `${item.providerId}:${item.toolService}`
+                  : null;
+              const group = serviceKey ? groupByService.get(serviceKey) : undefined;
+              const needsSetup =
+                item.type === 'integration' && item.isChecked && !!group && group.connections.length === 0;
+              return (
+                <li key={item.id}>
+                  <label
+                    className="flex cursor-pointer items-start gap-3 px-6 py-4 transition-colors hover:bg-surface2"
+                    aria-disabled={!editable}
+                  >
+                    <div className="mt-0.5">
+                      <Checkbox
+                        variant="neutral"
+                        checked={item.isChecked}
+                        onCheckedChange={next => toggle(item, next === true)}
+                        disabled={!editable}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <div className="flex items-center gap-2">
+                        <Txt variant="ui-sm" className="font-medium text-neutral6 truncate">
                           {item.name}
                         </Txt>
-                        {item.description && (
-                          <Txt variant="ui-xs" className="mt-0.5 truncate text-neutral3">
-                            {item.description}
-                          </Txt>
+                        {needsSetup && (
+                          <button
+                            type="button"
+                            onClick={event => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onOpenConnections?.();
+                            }}
+                            className="inline-flex items-center gap-1 rounded-full bg-accent6Dark/40 px-2 py-0.5 text-accent6 hover:bg-accent6Dark/60"
+                            data-testid={`tools-detail-setup-${item.id}`}
+                          >
+                            <TriangleAlertIcon className="h-3 w-3" />
+                            <Txt variant="ui-xs">Set up connection</Txt>
+                          </button>
                         )}
                       </div>
-                    </label>
-                    {showInlinePicker && group && (
-                      <div
-                        className="flex flex-col gap-2 border-t border-border1 bg-surface2/40 px-6 py-3"
-                        data-testid={`tools-detail-service-${group.integrationId}-${group.toolService}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <LinkIcon className="h-3 w-3 text-neutral3" />
-                          <Txt variant="ui-xs" className="text-neutral3">
-                            {group.toolServiceDisplayName} · {group.integrationDisplayName}
-                          </Txt>
-                        </div>
-                        <ConnectionPicker
-                          integrationId={group.integrationId}
-                          toolService={group.toolService}
-                          multipleAllowed={group.multipleAllowed}
-                          connections={group.connections}
-                          disabled={!editable}
-                          onChange={next => onConnectionsChange?.(group.integrationId, group.toolService, next)}
-                        />
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </>
+                      {item.description && (
+                        <Txt variant="ui-xs" className="mt-0.5 truncate text-neutral3">
+                          {item.description}
+                        </Txt>
+                      )}
+                    </div>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </div>

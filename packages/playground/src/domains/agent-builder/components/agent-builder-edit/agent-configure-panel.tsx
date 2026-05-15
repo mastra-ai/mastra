@@ -1,19 +1,23 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Avatar, cn, Skeleton, Switch, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { FileText, Globe, LinkIcon, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { useToolIntegrationsBridge } from '../../hooks/use-tool-integrations-bridge';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { downscaleImageToDataUrl } from '../../utils/downscale-avatar';
+import { ConnectionsDetail } from './details/connections-detail';
 import { InstructionsDetail } from './details/instructions-detail';
 import { SkillsDetail } from './details/skills-detail';
+import type { ToolIntegrationServiceGroup } from './details/tools-detail';
 import { ToolsDetail } from './details/tools-detail';
 import { useBuilderModelPolicy } from '@/domains/builder';
 import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
+import type { PickerConnection } from '@/domains/tool-integrations/components/connection-picker';
+import type { AgentHealthResult } from '@/domains/tool-integrations/hooks/use-agent-health';
 import { useAgentHealth } from '@/domains/tool-integrations/hooks/use-agent-health';
 
 export interface AgentConfig {
@@ -27,7 +31,7 @@ export interface AgentConfig {
   browserEnabled?: boolean;
 }
 
-export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
+export type ActiveDetail = 'instructions' | 'tools' | 'connections' | 'skills' | null;
 
 interface BaseProps {
   availableAgentTools?: AgentTool[];
@@ -123,6 +127,20 @@ function ConfigurePanelContent({
   const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
   const totalToolsCount = availableAgentTools.length;
 
+  const { toolIntegrationServices, handleConnectionsChange, handleAddTools } = useToolIntegrationsBridge();
+  const toolIntegrationsForm = useWatch<AgentBuilderEditFormValues, 'toolIntegrations'>({
+    control: formMethods.control,
+    name: 'toolIntegrations',
+  });
+  const health = useAgentHealth(toolIntegrationsForm);
+
+  const connectionStats = useMemo(() => {
+    const services = toolIntegrationServices.filter(group => group.hasSelectedTools);
+    const connected = services.filter(group => group.connections.length > 0).length;
+    const needsConnect = services.some(group => group.connections.length === 0);
+    return { total: services.length, connected, needsConnect };
+  }, [toolIntegrationServices]);
+
   const selectedSkills = useWatch({ control: formMethods.control, name: 'skills' }) ?? {};
   const activeSkillsCount = availableSkills.filter(skill => selectedSkills[skill.id]).length;
   const totalSkillsCount = availableSkills.length;
@@ -183,6 +201,11 @@ function ConfigurePanelContent({
           onClose={closeDetail}
           availableAgentTools={availableAgentTools}
           availableSkills={availableSkills}
+          toolIntegrationServices={toolIntegrationServices}
+          onConnectionsChange={handleConnectionsChange}
+          onAddIntegrationTool={entry => handleAddTools([entry])}
+          onOpenConnections={() => onActiveDetailChange('connections')}
+          health={health}
         />
       </div>
 
@@ -255,6 +278,9 @@ function ConfigurePanelContent({
             instructionsDescription={instructionsDescription}
             activeToolsCount={activeToolsCount}
             totalToolsCount={totalToolsCount}
+            connectedConnectionsCount={connectionStats.connected}
+            totalConnectionsCount={connectionStats.total}
+            connectionsNeedSetup={connectionStats.needsConnect}
             activeSkillsCount={activeSkillsCount}
             totalSkillsCount={totalSkillsCount}
             activeDetail={activeDetail}
@@ -380,6 +406,9 @@ interface ConfigRowsProps {
   instructionsDescription: string;
   activeToolsCount: number;
   totalToolsCount: number;
+  connectedConnectionsCount: number;
+  totalConnectionsCount: number;
+  connectionsNeedSetup: boolean;
   activeSkillsCount: number;
   totalSkillsCount: number;
   activeDetail: ActiveDetail;
@@ -419,6 +448,9 @@ function ConfigRows({
   instructionsDescription,
   activeToolsCount,
   totalToolsCount,
+  connectedConnectionsCount,
+  totalConnectionsCount,
+  connectionsNeedSetup,
   activeSkillsCount,
   totalSkillsCount,
   activeDetail,
@@ -446,6 +478,28 @@ function ConfigRows({
           testId="agent-preview-tools-button"
         />
       )}
+      {features.tools && totalConnectionsCount > 0 && (
+        <ConfigRow
+          icon={<LinkIcon className="h-4 w-4" />}
+          label="Connections"
+          count={connectedConnectionsCount}
+          total={totalConnectionsCount}
+          accessory={
+            connectionsNeedSetup ? (
+              <span
+                className="ml-2 inline-flex items-center gap-1 rounded-full bg-accent6Dark/40 px-2 py-0.5 text-accent6"
+                data-testid="agent-preview-connections-needs"
+              >
+                <TriangleAlertIcon className="h-3 w-3" />
+                <Txt variant="ui-xs">Setup</Txt>
+              </span>
+            ) : null
+          }
+          isActive={activeDetail === 'connections'}
+          onClick={() => toggleDetail('connections')}
+          testId="agent-preview-connections-button"
+        />
+      )}
       {features.skills && (
         <ConfigRow
           icon={<Sparkles className="h-4 w-4" />}
@@ -471,6 +525,16 @@ interface DetailPaneProps {
   onClose: () => void;
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
+  toolIntegrationServices: ToolIntegrationServiceGroup[];
+  onConnectionsChange: (integrationId: string, toolService: string, next: PickerConnection[]) => void;
+  onAddIntegrationTool: (entry: {
+    providerId: string;
+    toolSlug: string;
+    toolService: string;
+    description?: string;
+  }) => void;
+  onOpenConnections: () => void;
+  health: AgentHealthResult;
 }
 
 function DetailPane({
@@ -482,18 +546,12 @@ function DetailPane({
   onClose,
   availableAgentTools,
   availableSkills,
+  toolIntegrationServices,
+  onConnectionsChange,
+  onAddIntegrationTool,
+  onOpenConnections,
+  health,
 }: DetailPaneProps) {
-  const { toolIntegrationServices, handleConnectionsChange, handleAddTools } = useToolIntegrationsBridge();
-  const toolIntegrations = useWatch<AgentBuilderEditFormValues, 'toolIntegrations'>({ name: 'toolIntegrations' });
-  const health = useAgentHealth(toolIntegrations);
-
-  const handleAddIntegrationTool = (entry: {
-    providerId: string;
-    toolSlug: string;
-    toolService: string;
-    description?: string;
-  }) => handleAddTools([entry]);
-
   return (
     <div className="h-full w-full min-w-0 overflow-hidden">
       {activeDetail === 'instructions' && (
@@ -510,8 +568,17 @@ function DetailPane({
           editable={editable}
           availableAgentTools={availableAgentTools}
           toolIntegrationServices={toolIntegrationServices}
-          onConnectionsChange={handleConnectionsChange}
-          onAddIntegrationTool={handleAddIntegrationTool}
+          onAddIntegrationTool={onAddIntegrationTool}
+          onOpenConnections={onOpenConnections}
+          health={health}
+        />
+      )}
+      {activeDetail === 'connections' && features.tools && (
+        <ConnectionsDetail
+          onClose={onClose}
+          editable={editable}
+          toolIntegrationServices={toolIntegrationServices}
+          onConnectionsChange={onConnectionsChange}
           health={health}
         />
       )}
@@ -528,12 +595,23 @@ interface ConfigRowProps {
   value?: string;
   count?: number;
   total?: number;
+  accessory?: React.ReactNode;
   isActive?: boolean;
   onClick: () => void;
   testId: string;
 }
 
-const ConfigRow = ({ icon, label, value, count, total, isActive = false, onClick, testId }: ConfigRowProps) => (
+const ConfigRow = ({
+  icon,
+  label,
+  value,
+  count,
+  total,
+  accessory,
+  isActive = false,
+  onClick,
+  testId,
+}: ConfigRowProps) => (
   <button
     type="button"
     onClick={onClick}
@@ -562,6 +640,7 @@ const ConfigRow = ({ icon, label, value, count, total, isActive = false, onClick
         {count} / {total}
       </Txt>
     )}
+    {accessory}
   </button>
 );
 

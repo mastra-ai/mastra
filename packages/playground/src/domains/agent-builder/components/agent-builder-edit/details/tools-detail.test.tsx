@@ -9,25 +9,12 @@ import type { AgentTool } from '../../../types/agent-tool';
 
 import { ToolsDetail } from './tools-detail';
 import type { ToolIntegrationServiceGroup } from './tools-detail';
-import type { PickerConnection } from '@/domains/tool-integrations/components/connection-picker';
-
-// ConnectionPicker triggers useAuthorize on Connect / Reauthorize; stub the
-// hook so tests don't need to drive the popup loop.
-vi.mock('@/domains/tool-integrations/hooks/use-authorize', () => ({
-  useAuthorize: () => ({ mutateAsync: vi.fn(), isPending: false }),
-}));
-
-// ConnectionPicker also queries existing provider connections; stub to avoid
-// requiring a QueryClientProvider in this unit harness.
-vi.mock('@/domains/tool-integrations/hooks/use-existing-connections', () => ({
-  useExistingConnections: () => ({ data: { items: [] }, isLoading: false }),
-}));
 
 interface HarnessProps {
   availableAgentTools?: AgentTool[];
   toolIntegrationServices?: ToolIntegrationServiceGroup[];
-  onConnectionsChange?: (integrationId: string, toolService: string, next: PickerConnection[]) => void;
   onConnectionsInvalid?: (invalid: boolean) => void;
+  onOpenConnections?: () => void;
   onClose?: () => void;
   defaultValues?: Partial<AgentBuilderEditFormValues>;
 }
@@ -35,8 +22,8 @@ interface HarnessProps {
 const Harness = ({
   availableAgentTools,
   toolIntegrationServices,
-  onConnectionsChange,
   onConnectionsInvalid,
+  onOpenConnections,
   onClose,
   defaultValues,
 }: HarnessProps) => {
@@ -57,8 +44,8 @@ const Harness = ({
           onClose={onClose ?? (() => {})}
           availableAgentTools={availableAgentTools}
           toolIntegrationServices={toolIntegrationServices}
-          onConnectionsChange={onConnectionsChange}
           onConnectionsInvalid={onConnectionsInvalid}
+          onOpenConnections={onOpenConnections}
         />
       </FormProvider>
     </TooltipProvider>
@@ -77,7 +64,7 @@ describe('ToolsDetail', () => {
     expect(screen.getByText(/no tools available/i)).toBeTruthy();
   });
 
-  it('renders an inline picker under each checked integration tool row', () => {
+  it('shows a "Set up connection" affordance on a checked integration tool with no connection', () => {
     renderPanel({
       availableAgentTools: [
         {
@@ -88,13 +75,33 @@ describe('ToolsDetail', () => {
           providerId: 'composio',
           toolService: 'gmail',
         },
+      ],
+      toolIntegrationServices: [
         {
-          id: 'integration:composio:GITHUB_CREATE_ISSUE',
-          name: 'GITHUB_CREATE_ISSUE',
+          integrationId: 'composio',
+          integrationDisplayName: 'Composio',
+          toolService: 'gmail',
+          toolServiceDisplayName: 'Gmail',
+          multipleAllowed: true,
+          hasSelectedTools: true,
+          connections: [],
+        },
+      ],
+    });
+
+    expect(screen.getByTestId('tools-detail-setup-integration:composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
+  });
+
+  it('does not show "Set up" when the integration tool has an active connection', () => {
+    renderPanel({
+      availableAgentTools: [
+        {
+          id: 'integration:composio:GMAIL_FETCH_EMAILS',
+          name: 'GMAIL_FETCH_EMAILS',
           isChecked: true,
           type: 'integration',
           providerId: 'composio',
-          toolService: 'github',
+          toolService: 'gmail',
         },
       ],
       toolIntegrationServices: [
@@ -107,25 +114,13 @@ describe('ToolsDetail', () => {
           hasSelectedTools: true,
           connections: [{ connectionId: 'c1', toolService: 'gmail', label: 'Work' }],
         },
-        {
-          integrationId: 'composio',
-          integrationDisplayName: 'Composio',
-          toolService: 'github',
-          toolServiceDisplayName: 'GitHub',
-          multipleAllowed: false,
-          hasSelectedTools: true,
-          connections: [],
-        },
       ],
     });
 
-    expect(screen.getByTestId('tools-detail-service-composio-gmail')).toBeTruthy();
-    expect(screen.getByTestId('tools-detail-service-composio-github')).toBeTruthy();
-    expect(screen.getByTestId('connection-picker-gmail')).toBeTruthy();
-    expect(screen.getByTestId('connection-picker-github-empty')).toBeTruthy();
+    expect(screen.queryByTestId('tools-detail-setup-integration:composio:GMAIL_FETCH_EMAILS')).toBeNull();
   });
 
-  it('does not render an inline picker when the integration tool is unchecked', () => {
+  it('does not show "Set up" when the integration tool is unchecked', () => {
     renderPanel({
       availableAgentTools: [
         {
@@ -150,47 +145,11 @@ describe('ToolsDetail', () => {
       ],
     });
 
-    expect(screen.queryByTestId('tools-detail-service-composio-gmail')).toBeNull();
+    expect(screen.queryByTestId('tools-detail-setup-integration:composio:GMAIL_FETCH_EMAILS')).toBeNull();
   });
 
-  it('renders the inline picker only once even when multiple tools share a service', () => {
-    renderPanel({
-      availableAgentTools: [
-        {
-          id: 'integration:composio:GMAIL_FETCH_EMAILS',
-          name: 'GMAIL_FETCH_EMAILS',
-          isChecked: true,
-          type: 'integration',
-          providerId: 'composio',
-          toolService: 'gmail',
-        },
-        {
-          id: 'integration:composio:GMAIL_SEND_EMAIL',
-          name: 'GMAIL_SEND_EMAIL',
-          isChecked: true,
-          type: 'integration',
-          providerId: 'composio',
-          toolService: 'gmail',
-        },
-      ],
-      toolIntegrationServices: [
-        {
-          integrationId: 'composio',
-          integrationDisplayName: 'Composio',
-          toolService: 'gmail',
-          toolServiceDisplayName: 'Gmail',
-          multipleAllowed: true,
-          hasSelectedTools: true,
-          connections: [{ connectionId: 'c1', toolService: 'gmail', label: 'Work' }],
-        },
-      ],
-    });
-
-    expect(screen.getAllByTestId('tools-detail-service-composio-gmail').length).toBe(1);
-  });
-
-  it('forwards picker edits through onConnectionsChange', () => {
-    const onConnectionsChange = vi.fn();
+  it('invokes onOpenConnections when the "Set up" affordance is clicked', () => {
+    const onOpenConnections = vi.fn();
     renderPanel({
       availableAgentTools: [
         {
@@ -210,15 +169,14 @@ describe('ToolsDetail', () => {
           toolServiceDisplayName: 'Gmail',
           multipleAllowed: true,
           hasSelectedTools: true,
-          connections: [{ connectionId: 'c1', toolService: 'gmail', label: 'Work' }],
+          connections: [],
         },
       ],
-      onConnectionsChange,
+      onOpenConnections,
     });
 
-    fireEvent.click(screen.getByTestId('connection-remove-gmail-0'));
-
-    expect(onConnectionsChange).toHaveBeenCalledWith('composio', 'gmail', []);
+    fireEvent.click(screen.getByTestId('tools-detail-setup-integration:composio:GMAIL_FETCH_EMAILS'));
+    expect(onOpenConnections).toHaveBeenCalledTimes(1);
   });
 
   it('fires onConnectionsInvalid(true) when a selected service has zero connections', () => {
@@ -294,41 +252,12 @@ describe('ToolsDetail', () => {
     expect(screen.getByText('1 / 2')).toBeTruthy();
   });
 
-  it('shows the empty connection prompt inline when an integration tool is checked but its service has no connection', () => {
-    renderPanel({
-      availableAgentTools: [
-        {
-          id: 'integration:composio:GMAIL_FETCH_EMAILS',
-          name: 'GMAIL_FETCH_EMAILS',
-          isChecked: true,
-          type: 'integration',
-          providerId: 'composio',
-          toolService: 'gmail',
-        },
-      ],
-      toolIntegrationServices: [
-        {
-          integrationId: 'composio',
-          integrationDisplayName: 'Composio',
-          toolService: 'gmail',
-          toolServiceDisplayName: 'Gmail',
-          multipleAllowed: true,
-          hasSelectedTools: true,
-          connections: [],
-        },
-      ],
-    });
-
-    expect(screen.getByTestId('connection-picker-gmail-empty')).toBeTruthy();
-    expect(screen.getByText(/no connections yet/i)).toBeTruthy();
-  });
-
   it('invokes onClose when the close button is clicked', async () => {
     const onClose = vi.fn();
     renderPanel({ onClose, availableAgentTools: [{ id: 't', name: 't', isChecked: false, type: 'tool' }] });
     await act(async () => {
       fireEvent.click(screen.getByTestId('tools-detail-close'));
     });
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
