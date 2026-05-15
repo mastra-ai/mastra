@@ -1,5 +1,87 @@
 # @mastra/core
 
+## 1.35.0
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+- Added a favorites storage domain that lets users mark stored agents and skills as favorites, plus `visibility` (`'private' | 'public'`) and `favoriteCount` fields on stored agents and skills so callers can list, filter, and order by favorite state. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+  Existing rows without `visibility` or `favoriteCount` continue to work; the new fields and APIs are opt-in.
+
+  **Example**
+
+  ```ts
+  const favorites = await storage.getStore('favorites');
+
+  await favorites?.favorite({ userId: 'u1', entityType: 'agent', entityId: 'agent-123' });
+
+  const favoritedIds = await favorites?.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+
+  // List agents the user has favorited, surfaced first
+  const { agents } = await storage.getStore('agents').list({
+    pinFavoritedFor: 'u1',
+    favoritedOnly: true,
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7))
+
+- Fixed a workspace PATCH bug in the inmemory workspace adapter: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined`. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Fixed active signals so they stay in the correct order when conversations are reloaded from memory. ([#16623](https://github.com/mastra-ai/mastra/pull/16623))
+
+- Fixed scheduled workflows created from the public @mastra/core/workflows entry point so declared schedules are applied correctly. ([#16637](https://github.com/mastra-ai/mastra/pull/16637))
+
+- Fixed a crash when importing `@mastra/core/workflows/workflow` from tests or apps, which previously failed with `TypeError: Class extends value undefined is not a constructor or null` (caused by a circular ESM import through the `workflows` barrel). ([#16661](https://github.com/mastra-ai/mastra/pull/16661))
+
 ## 1.35.0-alpha.3
 
 ### Patch Changes

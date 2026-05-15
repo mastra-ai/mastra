@@ -1,5 +1,60 @@
 # @mastra/server
 
+## 1.35.0
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0
+
 ## 1.35.0-alpha.3
 
 ### Patch Changes
