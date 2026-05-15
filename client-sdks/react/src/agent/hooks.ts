@@ -131,37 +131,35 @@ export const useChat = ({
   };
 
   const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
-    const parts: SignalContentPart[] = [];
-    for (const message of coreUserMessages) {
+    const parts = coreUserMessages.reduce<SignalContentPart[]>((allParts, message) => {
       if (typeof message.content === 'string') {
-        parts.push({ type: 'text', text: message.content });
-        continue;
+        allParts.push({ type: 'text', text: message.content });
+        return allParts;
       }
+
       for (const part of message.content) {
         if (part.type === 'text') {
-          parts.push({ type: 'text', text: part.text });
+          allParts.push({ type: 'text', text: part.text });
         } else if (part.type === 'file') {
-          parts.push({
+          allParts.push({
             type: 'file',
             data: normalizeSignalFileData(part.data),
             mimeType: part.mimeType,
             ...(part.filename ? { filename: part.filename } : {}),
-          } as SignalContentPart);
+          });
         } else if (part.type === 'image') {
-          parts.push({
+          allParts.push({
             type: 'file',
             data: normalizeSignalFileData(part.image),
             mimeType: part.mimeType ?? 'image/png',
-          } as SignalContentPart);
+          });
         }
       }
-    }
 
-    if (parts.length === 1 && parts[0]?.type === 'text') {
-      return parts[0].text;
-    }
+      return allParts;
+    }, []);
 
-    return parts;
+    return parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
   };
 
   const markThreadSignalsUnsupported = useCallback(() => {
