@@ -2,6 +2,7 @@ import type { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createStoredAgentBodySchema, updateStoredAgentBodySchema } from '../schemas/stored-agents';
 import type { ServerContext } from '../server-adapter';
@@ -213,16 +214,24 @@ function createMockStorage(agentsStore?: MockAgentsStore): MockStorage {
 interface MockEditor {
   agent: {
     clearCache: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
   };
   prompt: {
     preview: ReturnType<typeof vi.fn>;
   };
 }
 
-function createMockEditor(): MockEditor {
+function createMockEditor(agentsStore?: MockAgentsStore): MockEditor {
   return {
     agent: {
       clearCache: vi.fn(),
+      // Delegate to storage so existing assertions work
+      create: vi.fn().mockImplementation(async (input: unknown) => {
+        if (agentsStore) {
+          await agentsStore.create({ agent: input });
+        }
+        return {} as unknown;
+      }),
     },
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions'),
@@ -250,6 +259,15 @@ function createTestContext(mastra: MockMastra): ServerContext {
   };
 }
 
+function createAuthenticatedContext(mastra: MockMastra, userId: string, permissions: string[] = []): ServerContext {
+  const ctx = createTestContext(mastra);
+  ctx.requestContext.set(MASTRA_RESOURCE_ID_KEY, userId);
+  if (permissions.length > 0) {
+    ctx.requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+  }
+  return ctx;
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -266,7 +284,7 @@ describe('Stored Agents Handlers', () => {
     mockAgentsData = new Map();
     mockAgentsStore = createMockAgentsStore(mockAgentsData);
     mockStorage = createMockStorage(mockAgentsStore);
-    mockEditor = createMockEditor();
+    mockEditor = createMockEditor(mockAgentsStore);
     mockMastra = createMockMastra({ storage: mockStorage, editor: mockEditor });
   });
 
@@ -444,7 +462,6 @@ describe('Stored Agents Handlers', () => {
         description: 'A newly created agent',
         instructions: 'Be creative',
         model: { name: 'gpt-4', provider: 'openai' },
-        authorId: 'user123',
         metadata: { created: 'test' },
         tools: ['tool1'],
         defaultOptions: {
@@ -459,10 +476,12 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toMatchObject(agentData);
+      // No auth context → no authorId → defaults to public (unowned resources are public)
       expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'new-agent',
           name: 'New Agent',
+          visibility: 'public',
         }),
       });
     });
@@ -523,6 +542,47 @@ describe('Stored Agents Handlers', () => {
         expect(error).toBeInstanceOf(HTTPException);
         expect((error as HTTPException).status).toBe(409);
         expect((error as HTTPException).message).toBe('Agent with id existing-agent already exists');
+      }
+    });
+
+    it('should accept metadata with a small avatarUrl', async () => {
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const avatarUrl = `data:image/png;base64,${tinyPng}`;
+
+      const result = await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: 'avatar-agent',
+        name: 'Avatar Agent',
+        instructions: 'Test',
+        model: { name: 'gpt-4', provider: 'openai' },
+        metadata: { avatarUrl },
+      });
+
+      expect(result).toMatchObject({ id: 'avatar-agent' });
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
+        agent: expect.objectContaining({
+          metadata: { avatarUrl },
+        }),
+      });
+    });
+
+    it('should reject metadata with an oversized avatarUrl (413)', async () => {
+      const big = Buffer.alloc(600 * 1024, 0).toString('base64');
+      const avatarUrl = `data:image/png;base64,${big}`;
+
+      try {
+        await CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          id: 'big-avatar-agent',
+          name: 'Big Avatar Agent',
+          instructions: 'Test',
+          model: { name: 'gpt-4', provider: 'openai' },
+          metadata: { avatarUrl },
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(413);
       }
     });
   });
@@ -646,6 +706,106 @@ describe('Stored Agents Handlers', () => {
           semanticRecall: false,
         },
       });
+    });
+
+    it('should accept metadata with a small avatarUrl on update', async () => {
+      mockAgentsData.set('avatar-update-test', {
+        id: 'avatar-update-test',
+        name: 'Avatar Update Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-avatar-update-1',
+      });
+
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const avatarUrl = `data:image/png;base64,${tinyPng}`;
+
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'avatar-update-test',
+        metadata: { avatarUrl },
+      });
+
+      expect(result).toMatchObject({ id: 'avatar-update-test' });
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: { avatarUrl },
+        }),
+      );
+    });
+
+    it('should reject metadata with an oversized avatarUrl on update (413)', async () => {
+      mockAgentsData.set('avatar-update-big', {
+        id: 'avatar-update-big',
+        name: 'Big Avatar Update Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-avatar-update-big-1',
+      });
+
+      const big = Buffer.alloc(600 * 1024, 0).toString('base64');
+      const avatarUrl = `data:image/png;base64,${big}`;
+
+      try {
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'avatar-update-big',
+          metadata: { avatarUrl },
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(413);
+      }
+    });
+
+    it('should reject metadata with a malformed avatarUrl on update (400)', async () => {
+      mockAgentsData.set('avatar-update-bad', {
+        id: 'avatar-update-bad',
+        name: 'Bad Avatar Update Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-avatar-update-bad-1',
+      });
+
+      try {
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'avatar-update-bad',
+          metadata: { avatarUrl: 'not-a-data-url' },
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(400);
+      }
+    });
+
+    it('should auto-publish by updating activeVersionId when a new version is created', async () => {
+      const newVersionId = 'v-autopub-2';
+      mockAgentsData.set('autopub-test', {
+        id: 'autopub-test',
+        name: 'Original Name',
+        instructions: 'Original instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-autopub-1',
+      });
+
+      // listVersions is called multiple times: once by enforceRetentionLimit
+      // inside handleAutoVersioning, then again by the auto-publish code.
+      // Return the new version each time so auto-publish can activate it.
+      mockAgentsStore.listVersions.mockResolvedValue({
+        versions: [{ id: newVersionId, versionNumber: 2 }],
+        total: 2,
+      });
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'autopub-test',
+        name: 'Updated Name',
+        instructions: 'Updated instructions',
+      });
+
+      // Verify activeVersionId was updated to the latest version
+      const stored = mockAgentsData.get('autopub-test');
+      expect(stored?.activeVersionId).toBe(newVersionId);
     });
   });
 
@@ -778,6 +938,189 @@ describe('Stored Agents Handlers', () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Authorship & Visibility
+  // ---------------------------------------------------------------------------
+
+  describe('LIST visibility filtering', () => {
+    beforeEach(() => {
+      mockAgentsData.set('my-private', {
+        id: 'my-private',
+        name: 'My Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+      });
+      mockAgentsData.set('my-public', {
+        id: 'my-public',
+        name: 'My Public',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+      });
+      mockAgentsData.set('other-public', {
+        id: 'other-public',
+        name: 'Other Public',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-b',
+        visibility: 'public',
+      });
+      mockAgentsData.set('other-private', {
+        id: 'other-private',
+        name: 'Other Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-b',
+        visibility: 'private',
+      });
+      mockAgentsData.set('unowned', {
+        id: 'unowned',
+        name: 'Unowned Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+    });
+
+    it('should filter to owned + public for authenticated non-admin', async () => {
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user-a'),
+        page: 1,
+        status: 'published' as const,
+      });
+
+      const ids = result.agents.map((a: any) => a.id);
+      expect(ids).toContain('my-private');
+      expect(ids).toContain('my-public');
+      expect(ids).toContain('other-public');
+      expect(ids).toContain('unowned');
+      expect(ids).not.toContain('other-private');
+    });
+
+    it('should return all agents for admin', async () => {
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        page: 1,
+        status: 'published' as const,
+      });
+
+      expect(result.agents).toHaveLength(5);
+    });
+
+    it('should filter by visibility=public', async () => {
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user-a'),
+        page: 1,
+        status: 'published' as const,
+        visibility: 'public' as const,
+      });
+
+      const ids = result.agents.map((a: any) => a.id);
+      expect(ids).toContain('my-public');
+      expect(ids).toContain('other-public');
+      expect(ids).toContain('unowned');
+      expect(ids).not.toContain('my-private');
+      expect(ids).not.toContain('other-private');
+    });
+  });
+
+  describe('UPDATE write-access enforcement', () => {
+    it('should throw when non-owner tries to update', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+        activeVersionId: 'v-other-1',
+      });
+
+      await expect(
+        UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-b'),
+          storedAgentId: 'other-agent',
+          name: 'Hacked',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should allow admin to update any agent', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+        activeVersionId: 'v-other-1',
+      });
+
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        storedAgentId: 'other-agent',
+        name: 'Admin Updated',
+      });
+
+      expect(result).toMatchObject({
+        id: 'other-agent',
+        name: 'Admin Updated',
+      });
+    });
+
+    it('should throw when non-owner tries to update avatar via metadata', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+        activeVersionId: 'v-other-1',
+      });
+
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+      await expect(
+        UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-b'),
+          storedAgentId: 'other-agent',
+          metadata: { avatarUrl: `data:image/png;base64,${tinyPng}` },
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+  });
+
+  describe('DELETE write-access enforcement', () => {
+    it('should throw when non-owner tries to delete', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+      });
+
+      await expect(
+        DELETE_STORED_AGENT_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-b'),
+          storedAgentId: 'other-agent',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should allow admin to delete any agent', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+      });
+
+      const result = await DELETE_STORED_AGENT_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        storedAgentId: 'other-agent',
+      });
+
+      expect(result).toMatchObject({ success: true });
+    });
+  });
 });
 
 // =============================================================================
@@ -897,5 +1240,117 @@ describe('createStoredAgentBodySchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('Phase 6: UPDATE_STORED_AGENT_ROUTE allowlist enforcement', () => {
+  function makeBuilderEditor(opts: { allowed?: Array<{ provider: string; modelId?: string }> }) {
+    const allowed = opts.allowed?.map(a => ({
+      kind: 'known' as const,
+      provider: a.provider,
+      ...(a.modelId !== undefined ? { modelId: a.modelId } : {}),
+    }));
+    return {
+      hasEnabledBuilderConfig: () => true,
+      resolveBuilder: async () => ({
+        enabled: true,
+        getFeatures: () => ({ agent: { model: true } }),
+        getConfiguration: () => ({
+          agent: {
+            models: {
+              allowed,
+            },
+          },
+        }),
+      }),
+      agent: {
+        clearCache: vi.fn(),
+        create: vi.fn(),
+      },
+      prompt: { preview: vi.fn() },
+    };
+  }
+
+  it('rejects updates whose model is outside the allowlist with HTTP 422', async () => {
+    const data = new Map<string, MockStoredAgent>();
+    data.set('a1', {
+      id: 'a1',
+      name: 'A1',
+      model: { provider: 'openai', name: 'gpt-5.5' },
+    });
+    const agentsStore = createMockAgentsStore(data);
+    const storage = createMockStorage(agentsStore);
+    const editor = makeBuilderEditor({
+      allowed: [{ provider: 'openai', modelId: 'gpt-5.5' }],
+    });
+    const mastra = {
+      getStorage: vi.fn().mockReturnValue(storage),
+      getEditor: vi.fn().mockReturnValue(editor),
+    };
+
+    let caught: HTTPException | undefined;
+    try {
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra as unknown as MockMastra),
+        storedAgentId: 'a1',
+        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      });
+    } catch (e) {
+      caught = e as HTTPException;
+    }
+
+    expect(caught).toBeInstanceOf(HTTPException);
+    expect(caught?.status).toBe(422);
+
+    const body = await caught!.getResponse().json();
+    expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
+    expect(body.error.attempted).toMatchObject({ provider: 'anthropic', modelId: 'claude-opus-4-7' });
+  });
+
+  it('passes update when model matches the allowlist', async () => {
+    const data = new Map<string, MockStoredAgent>();
+    data.set('a1', {
+      id: 'a1',
+      name: 'A1',
+      model: { provider: 'openai', name: 'gpt-5.5' },
+    });
+    const agentsStore = createMockAgentsStore(data);
+    const storage = createMockStorage(agentsStore);
+    const editor = makeBuilderEditor({
+      allowed: [{ provider: 'openai' }],
+    });
+    const mastra = {
+      getStorage: vi.fn().mockReturnValue(storage),
+      getEditor: vi.fn().mockReturnValue(editor),
+    };
+
+    const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+      ...createTestContext(mastra as unknown as MockMastra),
+      storedAgentId: 'a1',
+      model: { provider: 'openai', name: 'gpt-4o-mini' },
+    });
+    expect(result).toMatchObject({ id: 'a1' });
+  });
+
+  it('skips enforcement when no builder is configured', async () => {
+    const data = new Map<string, MockStoredAgent>();
+    data.set('a1', {
+      id: 'a1',
+      name: 'A1',
+      model: { provider: 'openai', name: 'gpt-5.5' },
+    });
+    const agentsStore = createMockAgentsStore(data);
+    const storage = createMockStorage(agentsStore);
+    const mastra = {
+      getStorage: vi.fn().mockReturnValue(storage),
+      getEditor: vi.fn().mockReturnValue(undefined),
+    };
+
+    const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+      ...createTestContext(mastra as unknown as MockMastra),
+      storedAgentId: 'a1',
+      model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+    });
+    expect(result).toMatchObject({ id: 'a1' });
   });
 });

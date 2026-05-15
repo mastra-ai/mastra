@@ -96,6 +96,14 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // getPermissionsForRole. Per-status behavior is covered in
       // packages/server/src/server/handlers/auth.test.ts.
       '/auth/roles/:roleId/permissions',
+      // Star routes hard-require an authenticated caller (handler returns 401 when
+      // MASTRA_USER_KEY / MASTRA_RESOURCE_ID_KEY is absent). Both keys are reserved
+      // request-context keys only the auth middleware can set; the harness runs
+      // without auth. Per-status behavior is covered in
+      // packages/server/src/server/handlers/stars.test.ts and
+      // packages/server/src/server/handlers/stars.integration.test.ts.
+      '/stored/agents/:storedAgentId/star',
+      '/stored/skills/:storedSkillId/star',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [
@@ -106,6 +114,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/workspaces/:workspaceId/skills-sh/install',
       '/workspaces/:workspaceId/skills-sh/remove',
       '/workspaces/:workspaceId/skills-sh/update',
+      // Builder registry routes that require external API calls + builder config
+      '/editor/builder/registries',
+      '/editor/builder/registries/:registryId/search',
+      '/editor/builder/registries/:registryId/popular',
+      '/editor/builder/registries/:registryId/preview',
+      '/editor/builder/registries/:registryId/install',
       // observational memory routes require OM-enabled agent configuration
       '/memory/observational-memory',
       '/memory/observational-memory/buffer-status',

@@ -3070,11 +3070,13 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
       "perPage",
-      "status"
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -3124,6 +3126,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "defaultOptions",
       "description",
       "id",
@@ -3140,6 +3143,7 @@ export const API_ROUTE_METADATA = {
       "scorers",
       "skills",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3159,6 +3163,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "changeMessage",
       "defaultOptions",
       "description",
@@ -3175,6 +3180,7 @@ export const API_ROUTE_METADATA = {
       "scorers",
       "skills",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3302,6 +3308,34 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "agentId",
       "versionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/agents/:storedAgentId/favorite": {
+    "method": "PUT",
+    "path": "/stored/agents/:storedAgentId/favorite",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/agents/:storedAgentId/favorite": {
+    "method": "DELETE",
+    "path": "/stored/agents/:storedAgentId/favorite",
+    "pathParams": [
+      "storedAgentId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -4041,10 +4075,13 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
-      "perPage"
+      "perPage",
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -4079,6 +4116,7 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "id",
       "instructions",
       "license",
@@ -4086,7 +4124,8 @@ export const API_ROUTE_METADATA = {
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4106,13 +4145,15 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "instructions",
       "license",
       "metadata",
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4146,6 +4187,34 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/skills/:storedSkillId/favorite": {
+    "method": "PUT",
+    "path": "/stored/skills/:storedSkillId/favorite",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/skills/:storedSkillId/favorite": {
+    "method": "DELETE",
+    "path": "/stored/skills/:storedSkillId/favorite",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }

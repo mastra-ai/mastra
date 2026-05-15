@@ -374,6 +374,11 @@ export type PostAgentsAgentIdClone_Response = {
         [key: string]: unknown;
       }
     | undefined;
+  visibility?: ('private' | 'public') | undefined;
+  /** Number of users who have favorited this agent */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this agent */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the agent */
@@ -4431,6 +4436,153 @@ export type PostAgentsAgentIdClone_Response = {
                 }
               | undefined;
           }[]
+      )
+    | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
+  browser?:
+    | (
+        | (
+            | {
+                type: 'inline';
+                config: {
+                  /** Browser provider type (e.g., stagehand, playwright) */
+                  provider: string;
+                  /** Run browser in headless mode (default: true) */
+                  headless?: boolean | undefined;
+                  /** Browser viewport dimensions */
+                  viewport?:
+                    | {
+                        /** Viewport width in pixels */
+                        width: number;
+                        /** Viewport height in pixels */
+                        height: number;
+                      }
+                    | undefined;
+                  /** Default timeout in milliseconds (default: 10000) */
+                  timeout?: number | undefined;
+                  /** Screencast options for streaming browser frames */
+                  screencast?:
+                    | {
+                        /** Image format (default: jpeg) */
+                        format?: ('jpeg' | 'png') | undefined;
+                        /** JPEG quality 0-100 (default: 80) */
+                        quality?: number | undefined;
+                        /** Max width in pixels (default: 1280) */
+                        maxWidth?: number | undefined;
+                        /** Max height in pixels (default: 720) */
+                        maxHeight?: number | undefined;
+                        /** Capture every Nth frame (default: 1) */
+                        everyNthFrame?: number | undefined;
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  type: 'inline';
+                  config: {
+                    /** Browser provider type (e.g., stagehand, playwright) */
+                    provider: string;
+                    /** Run browser in headless mode (default: true) */
+                    headless?: boolean | undefined;
+                    /** Browser viewport dimensions */
+                    viewport?:
+                      | {
+                          /** Viewport width in pixels */
+                          width: number;
+                          /** Viewport height in pixels */
+                          height: number;
+                        }
+                      | undefined;
+                    /** Default timeout in milliseconds (default: 10000) */
+                    timeout?: number | undefined;
+                    /** Screencast options for streaming browser frames */
+                    screencast?:
+                      | {
+                          /** Image format (default: jpeg) */
+                          format?: ('jpeg' | 'png') | undefined;
+                          /** JPEG quality 0-100 (default: 80) */
+                          quality?: number | undefined;
+                          /** Max width in pixels (default: 1280) */
+                          maxWidth?: number | undefined;
+                          /** Max height in pixels (default: 720) */
+                          maxHeight?: number | undefined;
+                          /** Capture every Nth frame (default: 1) */
+                          everyNthFrame?: number | undefined;
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | boolean
+        | null
       )
     | undefined;
   /** JSON Schema defining valid request context variables */
@@ -22483,12 +22635,16 @@ export type GetStoredAgents_QueryParams = {
   status: ('draft' | 'published' | 'archived') | undefined;
   /** Filter agents by author identifier */
   authorId?: string | undefined;
+  /** Filter to only public agents */
+  visibility?: 'public' | undefined;
   /** Filter agents by metadata key-value pairs */
   metadata?:
     | {
         [key: string]: unknown;
       }
     | undefined;
+  /** When true, return only agents favorited by the caller (requires the `favorites` EE feature) */
+  favoritedOnly?: boolean | undefined;
 };
 
 export type GetStoredAgents_Response = {
@@ -22507,6 +22663,11 @@ export type GetStoredAgents_Response = {
           [key: string]: unknown;
         }
       | undefined;
+    visibility?: ('private' | 'public') | undefined;
+    /** Number of users who have favorited this agent */
+    favoriteCount?: number | undefined;
+    /** Whether the requesting user has favorited this agent */
+    isFavorited?: boolean | undefined;
     createdAt: Date;
     updatedAt: Date;
     /** Name of the agent */
@@ -26566,6 +26727,153 @@ export type GetStoredAgents_Response = {
             }[]
         )
       | undefined;
+    /** Browser configuration — object config, true (apply default), false/null (disable) */
+    browser?:
+      | (
+          | (
+              | {
+                  type: 'inline';
+                  config: {
+                    /** Browser provider type (e.g., stagehand, playwright) */
+                    provider: string;
+                    /** Run browser in headless mode (default: true) */
+                    headless?: boolean | undefined;
+                    /** Browser viewport dimensions */
+                    viewport?:
+                      | {
+                          /** Viewport width in pixels */
+                          width: number;
+                          /** Viewport height in pixels */
+                          height: number;
+                        }
+                      | undefined;
+                    /** Default timeout in milliseconds (default: 10000) */
+                    timeout?: number | undefined;
+                    /** Screencast options for streaming browser frames */
+                    screencast?:
+                      | {
+                          /** Image format (default: jpeg) */
+                          format?: ('jpeg' | 'png') | undefined;
+                          /** JPEG quality 0-100 (default: 80) */
+                          quality?: number | undefined;
+                          /** Max width in pixels (default: 1280) */
+                          maxWidth?: number | undefined;
+                          /** Max height in pixels (default: 720) */
+                          maxHeight?: number | undefined;
+                          /** Capture every Nth frame (default: 1) */
+                          everyNthFrame?: number | undefined;
+                        }
+                      | undefined;
+                  };
+                }
+              | {
+                  value: {
+                    type: 'inline';
+                    config: {
+                      /** Browser provider type (e.g., stagehand, playwright) */
+                      provider: string;
+                      /** Run browser in headless mode (default: true) */
+                      headless?: boolean | undefined;
+                      /** Browser viewport dimensions */
+                      viewport?:
+                        | {
+                            /** Viewport width in pixels */
+                            width: number;
+                            /** Viewport height in pixels */
+                            height: number;
+                          }
+                        | undefined;
+                      /** Default timeout in milliseconds (default: 10000) */
+                      timeout?: number | undefined;
+                      /** Screencast options for streaming browser frames */
+                      screencast?:
+                        | {
+                            /** Image format (default: jpeg) */
+                            format?: ('jpeg' | 'png') | undefined;
+                            /** JPEG quality 0-100 (default: 80) */
+                            quality?: number | undefined;
+                            /** Max width in pixels (default: 1280) */
+                            maxWidth?: number | undefined;
+                            /** Max height in pixels (default: 720) */
+                            maxHeight?: number | undefined;
+                            /** Capture every Nth frame (default: 1) */
+                            everyNthFrame?: number | undefined;
+                          }
+                        | undefined;
+                    };
+                  };
+                  rules?:
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: (
+                                | {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }[];
+                                  }
+                              )[];
+                            }
+                        )[];
+                      }
+                    | undefined;
+                }[]
+            )
+          | boolean
+          | null
+        )
+      | undefined;
     /** JSON Schema defining valid request context variables */
     requestContextSchema?:
       | {
@@ -26735,6 +27043,11 @@ export type GetStoredAgentsStoredAgentId_Response = {
         [key: string]: unknown;
       }
     | undefined;
+  visibility?: ('private' | 'public') | undefined;
+  /** Number of users who have favorited this agent */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this agent */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the agent */
@@ -30792,6 +31105,153 @@ export type GetStoredAgentsStoredAgentId_Response = {
                 }
               | undefined;
           }[]
+      )
+    | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
+  browser?:
+    | (
+        | (
+            | {
+                type: 'inline';
+                config: {
+                  /** Browser provider type (e.g., stagehand, playwright) */
+                  provider: string;
+                  /** Run browser in headless mode (default: true) */
+                  headless?: boolean | undefined;
+                  /** Browser viewport dimensions */
+                  viewport?:
+                    | {
+                        /** Viewport width in pixels */
+                        width: number;
+                        /** Viewport height in pixels */
+                        height: number;
+                      }
+                    | undefined;
+                  /** Default timeout in milliseconds (default: 10000) */
+                  timeout?: number | undefined;
+                  /** Screencast options for streaming browser frames */
+                  screencast?:
+                    | {
+                        /** Image format (default: jpeg) */
+                        format?: ('jpeg' | 'png') | undefined;
+                        /** JPEG quality 0-100 (default: 80) */
+                        quality?: number | undefined;
+                        /** Max width in pixels (default: 1280) */
+                        maxWidth?: number | undefined;
+                        /** Max height in pixels (default: 720) */
+                        maxHeight?: number | undefined;
+                        /** Capture every Nth frame (default: 1) */
+                        everyNthFrame?: number | undefined;
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  type: 'inline';
+                  config: {
+                    /** Browser provider type (e.g., stagehand, playwright) */
+                    provider: string;
+                    /** Run browser in headless mode (default: true) */
+                    headless?: boolean | undefined;
+                    /** Browser viewport dimensions */
+                    viewport?:
+                      | {
+                          /** Viewport width in pixels */
+                          width: number;
+                          /** Viewport height in pixels */
+                          height: number;
+                        }
+                      | undefined;
+                    /** Default timeout in milliseconds (default: 10000) */
+                    timeout?: number | undefined;
+                    /** Screencast options for streaming browser frames */
+                    screencast?:
+                      | {
+                          /** Image format (default: jpeg) */
+                          format?: ('jpeg' | 'png') | undefined;
+                          /** JPEG quality 0-100 (default: 80) */
+                          quality?: number | undefined;
+                          /** Max width in pixels (default: 1280) */
+                          maxWidth?: number | undefined;
+                          /** Max height in pixels (default: 720) */
+                          maxHeight?: number | undefined;
+                          /** Capture every Nth frame (default: 1) */
+                          everyNthFrame?: number | undefined;
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | boolean
+        | null
       )
     | undefined;
   /** JSON Schema defining valid request context variables */
@@ -30835,6 +31295,8 @@ export type PostStoredAgents_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Agent visibility: private (owner/admin only) or public (any reader) */
+  visibility?: ('private' | 'public') | undefined;
   /** Name of the agent */
   name: string;
   /** Description of the agent */
@@ -30922,90 +31384,93 @@ export type PostStoredAgents_Body = {
               | undefined;
           }
       )[];
-  /** Model configuration — static value or array of conditional variants */
-  model:
-    | {
-        /** Model provider (e.g., openai, anthropic) */
-        provider: string;
-        /** Model name (e.g., gpt-4o, claude-3-opus) */
-        name: string;
-        [x: string]: unknown;
-      }
-    | {
-        value: {
-          /** Model provider (e.g., openai, anthropic) */
-          provider: string;
-          /** Model name (e.g., gpt-4o, claude-3-opus) */
-          name: string;
-          [x: string]: unknown;
-        };
-        rules?:
-          | {
-              operator: 'AND' | 'OR';
-              conditions: (
-                | {
-                    field: string;
-                    operator:
-                      | 'equals'
-                      | 'not_equals'
-                      | 'contains'
-                      | 'not_contains'
-                      | 'greater_than'
-                      | 'less_than'
-                      | 'greater_than_or_equal'
-                      | 'less_than_or_equal'
-                      | 'in'
-                      | 'not_in'
-                      | 'exists'
-                      | 'not_exists';
-                    value?: unknown | undefined;
-                  }
-                | {
-                    operator: 'AND' | 'OR';
-                    conditions: (
-                      | {
-                          field: string;
-                          operator:
-                            | 'equals'
-                            | 'not_equals'
-                            | 'contains'
-                            | 'not_contains'
-                            | 'greater_than'
-                            | 'less_than'
-                            | 'greater_than_or_equal'
-                            | 'less_than_or_equal'
-                            | 'in'
-                            | 'not_in'
-                            | 'exists'
-                            | 'not_exists';
-                          value?: unknown | undefined;
-                        }
-                      | {
-                          operator: 'AND' | 'OR';
-                          conditions: {
-                            field: string;
-                            operator:
-                              | 'equals'
-                              | 'not_equals'
-                              | 'contains'
-                              | 'not_contains'
-                              | 'greater_than'
-                              | 'less_than'
-                              | 'greater_than_or_equal'
-                              | 'less_than_or_equal'
-                              | 'in'
-                              | 'not_in'
-                              | 'exists'
-                              | 'not_exists';
-                            value?: unknown | undefined;
-                          }[];
-                        }
-                    )[];
-                  }
-              )[];
-            }
-          | undefined;
-      }[];
+  /** Model configuration — static value or array of conditional variants. When omitted, the builder default model is applied server-side. */
+  model?:
+    | (
+        | {
+            /** Model provider (e.g., openai, anthropic) */
+            provider: string;
+            /** Model name (e.g., gpt-4o, claude-3-opus) */
+            name: string;
+            [x: string]: unknown;
+          }
+        | {
+            value: {
+              /** Model provider (e.g., openai, anthropic) */
+              provider: string;
+              /** Model name (e.g., gpt-4o, claude-3-opus) */
+              name: string;
+              [x: string]: unknown;
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
@@ -34892,6 +35357,153 @@ export type PostStoredAgents_Body = {
           }[]
       )
     | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
+  browser?:
+    | (
+        | (
+            | {
+                type: 'inline';
+                config: {
+                  /** Browser provider type (e.g., stagehand, playwright) */
+                  provider: string;
+                  /** Run browser in headless mode (default: true) */
+                  headless?: boolean | undefined;
+                  /** Browser viewport dimensions */
+                  viewport?:
+                    | {
+                        /** Viewport width in pixels */
+                        width: number;
+                        /** Viewport height in pixels */
+                        height: number;
+                      }
+                    | undefined;
+                  /** Default timeout in milliseconds (default: 10000) */
+                  timeout?: number | undefined;
+                  /** Screencast options for streaming browser frames */
+                  screencast?:
+                    | {
+                        /** Image format (default: jpeg) */
+                        format?: ('jpeg' | 'png') | undefined;
+                        /** JPEG quality 0-100 (default: 80) */
+                        quality?: number | undefined;
+                        /** Max width in pixels (default: 1280) */
+                        maxWidth?: number | undefined;
+                        /** Max height in pixels (default: 720) */
+                        maxHeight?: number | undefined;
+                        /** Capture every Nth frame (default: 1) */
+                        everyNthFrame?: number | undefined;
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  type: 'inline';
+                  config: {
+                    /** Browser provider type (e.g., stagehand, playwright) */
+                    provider: string;
+                    /** Run browser in headless mode (default: true) */
+                    headless?: boolean | undefined;
+                    /** Browser viewport dimensions */
+                    viewport?:
+                      | {
+                          /** Viewport width in pixels */
+                          width: number;
+                          /** Viewport height in pixels */
+                          height: number;
+                        }
+                      | undefined;
+                    /** Default timeout in milliseconds (default: 10000) */
+                    timeout?: number | undefined;
+                    /** Screencast options for streaming browser frames */
+                    screencast?:
+                      | {
+                          /** Image format (default: jpeg) */
+                          format?: ('jpeg' | 'png') | undefined;
+                          /** JPEG quality 0-100 (default: 80) */
+                          quality?: number | undefined;
+                          /** Max width in pixels (default: 1280) */
+                          maxWidth?: number | undefined;
+                          /** Max height in pixels (default: 720) */
+                          maxHeight?: number | undefined;
+                          /** Capture every Nth frame (default: 1) */
+                          everyNthFrame?: number | undefined;
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | boolean
+        | null
+      )
+    | undefined;
   /** JSON Schema defining valid request context variables for conditional rule evaluation */
   requestContextSchema?:
     | {
@@ -34911,6 +35523,11 @@ export type PostStoredAgents_Response = {
         [key: string]: unknown;
       }
     | undefined;
+  visibility?: ('private' | 'public') | undefined;
+  /** Number of users who have favorited this agent */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this agent */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the agent */
@@ -38968,6 +39585,153 @@ export type PostStoredAgents_Response = {
                 }
               | undefined;
           }[]
+      )
+    | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
+  browser?:
+    | (
+        | (
+            | {
+                type: 'inline';
+                config: {
+                  /** Browser provider type (e.g., stagehand, playwright) */
+                  provider: string;
+                  /** Run browser in headless mode (default: true) */
+                  headless?: boolean | undefined;
+                  /** Browser viewport dimensions */
+                  viewport?:
+                    | {
+                        /** Viewport width in pixels */
+                        width: number;
+                        /** Viewport height in pixels */
+                        height: number;
+                      }
+                    | undefined;
+                  /** Default timeout in milliseconds (default: 10000) */
+                  timeout?: number | undefined;
+                  /** Screencast options for streaming browser frames */
+                  screencast?:
+                    | {
+                        /** Image format (default: jpeg) */
+                        format?: ('jpeg' | 'png') | undefined;
+                        /** JPEG quality 0-100 (default: 80) */
+                        quality?: number | undefined;
+                        /** Max width in pixels (default: 1280) */
+                        maxWidth?: number | undefined;
+                        /** Max height in pixels (default: 720) */
+                        maxHeight?: number | undefined;
+                        /** Capture every Nth frame (default: 1) */
+                        everyNthFrame?: number | undefined;
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  type: 'inline';
+                  config: {
+                    /** Browser provider type (e.g., stagehand, playwright) */
+                    provider: string;
+                    /** Run browser in headless mode (default: true) */
+                    headless?: boolean | undefined;
+                    /** Browser viewport dimensions */
+                    viewport?:
+                      | {
+                          /** Viewport width in pixels */
+                          width: number;
+                          /** Viewport height in pixels */
+                          height: number;
+                        }
+                      | undefined;
+                    /** Default timeout in milliseconds (default: 10000) */
+                    timeout?: number | undefined;
+                    /** Screencast options for streaming browser frames */
+                    screencast?:
+                      | {
+                          /** Image format (default: jpeg) */
+                          format?: ('jpeg' | 'png') | undefined;
+                          /** JPEG quality 0-100 (default: 80) */
+                          quality?: number | undefined;
+                          /** Max width in pixels (default: 1280) */
+                          maxWidth?: number | undefined;
+                          /** Max height in pixels (default: 720) */
+                          maxHeight?: number | undefined;
+                          /** Capture every Nth frame (default: 1) */
+                          everyNthFrame?: number | undefined;
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | boolean
+        | null
       )
     | undefined;
   /** JSON Schema defining valid request context variables */
@@ -39015,6 +39779,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  visibility?: (('private' | 'public') | undefined) | undefined;
   name?: string | undefined;
   description?: (string | undefined) | undefined;
   instructions?:
@@ -43101,6 +43866,155 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  browser?:
+    | (
+        | (
+            | (
+                | {
+                    type: 'inline';
+                    config: {
+                      /** Browser provider type (e.g., stagehand, playwright) */
+                      provider: string;
+                      /** Run browser in headless mode (default: true) */
+                      headless?: boolean | undefined;
+                      /** Browser viewport dimensions */
+                      viewport?:
+                        | {
+                            /** Viewport width in pixels */
+                            width: number;
+                            /** Viewport height in pixels */
+                            height: number;
+                          }
+                        | undefined;
+                      /** Default timeout in milliseconds (default: 10000) */
+                      timeout?: number | undefined;
+                      /** Screencast options for streaming browser frames */
+                      screencast?:
+                        | {
+                            /** Image format (default: jpeg) */
+                            format?: ('jpeg' | 'png') | undefined;
+                            /** JPEG quality 0-100 (default: 80) */
+                            quality?: number | undefined;
+                            /** Max width in pixels (default: 1280) */
+                            maxWidth?: number | undefined;
+                            /** Max height in pixels (default: 720) */
+                            maxHeight?: number | undefined;
+                            /** Capture every Nth frame (default: 1) */
+                            everyNthFrame?: number | undefined;
+                          }
+                        | undefined;
+                    };
+                  }
+                | {
+                    value: {
+                      type: 'inline';
+                      config: {
+                        /** Browser provider type (e.g., stagehand, playwright) */
+                        provider: string;
+                        /** Run browser in headless mode (default: true) */
+                        headless?: boolean | undefined;
+                        /** Browser viewport dimensions */
+                        viewport?:
+                          | {
+                              /** Viewport width in pixels */
+                              width: number;
+                              /** Viewport height in pixels */
+                              height: number;
+                            }
+                          | undefined;
+                        /** Default timeout in milliseconds (default: 10000) */
+                        timeout?: number | undefined;
+                        /** Screencast options for streaming browser frames */
+                        screencast?:
+                          | {
+                              /** Image format (default: jpeg) */
+                              format?: ('jpeg' | 'png') | undefined;
+                              /** JPEG quality 0-100 (default: 80) */
+                              quality?: number | undefined;
+                              /** Max width in pixels (default: 1280) */
+                              maxWidth?: number | undefined;
+                              /** Max height in pixels (default: 720) */
+                              maxHeight?: number | undefined;
+                              /** Capture every Nth frame (default: 1) */
+                              everyNthFrame?: number | undefined;
+                            }
+                          | undefined;
+                      };
+                    };
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  }[]
+              )
+            | boolean
+            | null
+          )
+        | undefined
+      )
+    | undefined;
   requestContextSchema?:
     | (
         | {
@@ -43124,6 +44038,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
             [key: string]: unknown;
           }
         | undefined;
+      visibility?: ('private' | 'public') | undefined;
       createdAt: Date;
       updatedAt: Date;
     }
@@ -43138,6 +44053,11 @@ export type PatchStoredAgentsStoredAgentId_Response =
             [key: string]: unknown;
           }
         | undefined;
+      visibility?: ('private' | 'public') | undefined;
+      /** Number of users who have favorited this agent */
+      favoriteCount?: number | undefined;
+      /** Whether the requesting user has favorited this agent */
+      isFavorited?: boolean | undefined;
       createdAt: Date;
       updatedAt: Date;
       /** Name of the agent */
@@ -47195,6 +48115,153 @@ export type PatchStoredAgentsStoredAgentId_Response =
                     }
                   | undefined;
               }[]
+          )
+        | undefined;
+      /** Browser configuration — object config, true (apply default), false/null (disable) */
+      browser?:
+        | (
+            | (
+                | {
+                    type: 'inline';
+                    config: {
+                      /** Browser provider type (e.g., stagehand, playwright) */
+                      provider: string;
+                      /** Run browser in headless mode (default: true) */
+                      headless?: boolean | undefined;
+                      /** Browser viewport dimensions */
+                      viewport?:
+                        | {
+                            /** Viewport width in pixels */
+                            width: number;
+                            /** Viewport height in pixels */
+                            height: number;
+                          }
+                        | undefined;
+                      /** Default timeout in milliseconds (default: 10000) */
+                      timeout?: number | undefined;
+                      /** Screencast options for streaming browser frames */
+                      screencast?:
+                        | {
+                            /** Image format (default: jpeg) */
+                            format?: ('jpeg' | 'png') | undefined;
+                            /** JPEG quality 0-100 (default: 80) */
+                            quality?: number | undefined;
+                            /** Max width in pixels (default: 1280) */
+                            maxWidth?: number | undefined;
+                            /** Max height in pixels (default: 720) */
+                            maxHeight?: number | undefined;
+                            /** Capture every Nth frame (default: 1) */
+                            everyNthFrame?: number | undefined;
+                          }
+                        | undefined;
+                    };
+                  }
+                | {
+                    value: {
+                      type: 'inline';
+                      config: {
+                        /** Browser provider type (e.g., stagehand, playwright) */
+                        provider: string;
+                        /** Run browser in headless mode (default: true) */
+                        headless?: boolean | undefined;
+                        /** Browser viewport dimensions */
+                        viewport?:
+                          | {
+                              /** Viewport width in pixels */
+                              width: number;
+                              /** Viewport height in pixels */
+                              height: number;
+                            }
+                          | undefined;
+                        /** Default timeout in milliseconds (default: 10000) */
+                        timeout?: number | undefined;
+                        /** Screencast options for streaming browser frames */
+                        screencast?:
+                          | {
+                              /** Image format (default: jpeg) */
+                              format?: ('jpeg' | 'png') | undefined;
+                              /** JPEG quality 0-100 (default: 80) */
+                              quality?: number | undefined;
+                              /** Max width in pixels (default: 1280) */
+                              maxWidth?: number | undefined;
+                              /** Max height in pixels (default: 720) */
+                              maxHeight?: number | undefined;
+                              /** Capture every Nth frame (default: 1) */
+                              everyNthFrame?: number | undefined;
+                            }
+                          | undefined;
+                      };
+                    };
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  }[]
+              )
+            | boolean
+            | null
           )
         | undefined;
       /** JSON Schema defining valid request context variables */
@@ -69648,6 +70715,70 @@ export interface DeleteStoredAgentsAgentIdVersionsVersionId_RouteContract {
 }
 
 // ============================================================================
+// Route: PUT /stored/agents/:storedAgentId/favorite
+// ============================================================================
+export type PutStoredAgentsStoredAgentIdFavorite_PathParams = {
+  /** Unique identifier for the stored agent */
+  storedAgentId: string;
+};
+
+export type PutStoredAgentsStoredAgentIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
+};
+
+export type PutStoredAgentsStoredAgentIdFavorite_Request = Simplify<
+  (PutStoredAgentsStoredAgentIdFavorite_PathParams extends never
+    ? {}
+    : { params: PutStoredAgentsStoredAgentIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PutStoredAgentsStoredAgentIdFavorite_RouteContract {
+  pathParams: PutStoredAgentsStoredAgentIdFavorite_PathParams;
+  queryParams: never;
+  body: never;
+  request: PutStoredAgentsStoredAgentIdFavorite_Request;
+  response: PutStoredAgentsStoredAgentIdFavorite_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /stored/agents/:storedAgentId/favorite
+// ============================================================================
+export type DeleteStoredAgentsStoredAgentIdFavorite_PathParams = {
+  /** Unique identifier for the stored agent */
+  storedAgentId: string;
+};
+
+export type DeleteStoredAgentsStoredAgentIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
+};
+
+export type DeleteStoredAgentsStoredAgentIdFavorite_Request = Simplify<
+  (DeleteStoredAgentsStoredAgentIdFavorite_PathParams extends never
+    ? {}
+    : { params: DeleteStoredAgentsStoredAgentIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteStoredAgentsStoredAgentIdFavorite_RouteContract {
+  pathParams: DeleteStoredAgentsStoredAgentIdFavorite_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteStoredAgentsStoredAgentIdFavorite_Request;
+  response: DeleteStoredAgentsStoredAgentIdFavorite_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /stored/mcp-clients
 // ============================================================================
 export type GetStoredMcpClients_QueryParams = {
@@ -73417,6 +74548,8 @@ export type GetStoredWorkspaces_Response = {
     autoSync?: boolean | undefined;
     /** Operation timeout in milliseconds */
     operationTimeout?: number | undefined;
+    /** Whether this workspace is registered at runtime */
+    runtimeRegistered?: boolean | undefined;
   }[];
 };
 
@@ -74166,14 +75299,28 @@ export type GetStoredSkills_QueryParams = {
         direction?: ('ASC' | 'DESC') | undefined;
       }
     | undefined;
+  /** Filter skills by status */
+  status?: ('draft' | 'published' | 'archived') | undefined;
   /** Filter skills by author identifier */
   authorId?: string | undefined;
+  /** Filter to only public skills */
+  visibility?: 'public' | undefined;
   /** Filter skills by metadata key-value pairs */
   metadata?:
     | {
         [key: string]: unknown;
       }
     | undefined;
+  /** When true, return only skills favorited by the caller (requires the `favorites` EE feature) */
+  favoritedOnly?: boolean | undefined;
+};
+
+type GetStoredSkills_Response_Auxiliary_5 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: GetStoredSkills_Response_Auxiliary_5[] | undefined;
 };
 
 export type GetStoredSkills_Response = {
@@ -74187,6 +75334,11 @@ export type GetStoredSkills_Response = {
     status: string;
     activeVersionId?: string | undefined;
     authorId?: string | undefined;
+    visibility?: ('private' | 'public') | undefined;
+    /** Number of users who have favorited this skill */
+    favoriteCount?: number | undefined;
+    /** Whether the requesting user has favorited this skill */
+    isFavorited?: boolean | undefined;
     createdAt: Date;
     updatedAt: Date;
     /** Name of the skill */
@@ -74225,6 +75377,8 @@ export type GetStoredSkills_Response = {
     scripts?: string[] | undefined;
     /** List of asset file paths */
     assets?: string[] | undefined;
+    /** Full file tree structure for the skill */
+    files?: GetStoredSkills_Response_Auxiliary_5[] | undefined;
     /** Additional metadata for the skill */
     metadata?:
       | {
@@ -74261,12 +75415,25 @@ export type GetStoredSkillsStoredSkillId_PathParams = {
   storedSkillId: string;
 };
 
+type GetStoredSkillsStoredSkillId_Response_Auxiliary_4 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: GetStoredSkillsStoredSkillId_Response_Auxiliary_4[] | undefined;
+};
+
 export type GetStoredSkillsStoredSkillId_Response = {
   id: string;
   /** Skill status: draft, published, or archived */
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  visibility?: ('private' | 'public') | undefined;
+  /** Number of users who have favorited this skill */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this skill */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the skill */
@@ -74305,6 +75472,8 @@ export type GetStoredSkillsStoredSkillId_Response = {
   scripts?: string[] | undefined;
   /** List of asset file paths */
   assets?: string[] | undefined;
+  /** Full file tree structure for the skill */
+  files?: GetStoredSkillsStoredSkillId_Response_Auxiliary_4[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -74331,11 +75500,21 @@ export interface GetStoredSkillsStoredSkillId_RouteContract {
 // ============================================================================
 // Route: POST /stored/skills
 // ============================================================================
+type PostStoredSkills_Body_Auxiliary_4 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: PostStoredSkills_Body_Auxiliary_4[] | undefined;
+};
+
 export type PostStoredSkills_Body = {
   /** Unique identifier. If not provided, derived from name. */
   id?: string | undefined;
   /** Author identifier for multi-tenant filtering */
   authorId?: string | undefined;
+  /** Skill visibility: private (owner/admin only) or public (any reader) */
+  visibility?: ('private' | 'public') | undefined;
   /** Name of the skill */
   name: string;
   /** Description of what the skill does and when to use it */
@@ -74372,6 +75551,8 @@ export type PostStoredSkills_Body = {
   scripts?: string[] | undefined;
   /** List of asset file paths */
   assets?: string[] | undefined;
+  /** Full file tree structure for the skill */
+  files?: PostStoredSkills_Body_Auxiliary_4[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -74380,12 +75561,25 @@ export type PostStoredSkills_Body = {
     | undefined;
 };
 
+type PostStoredSkills_Response_Auxiliary_4 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: PostStoredSkills_Response_Auxiliary_4[] | undefined;
+};
+
 export type PostStoredSkills_Response = {
   id: string;
   /** Skill status: draft, published, or archived */
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  visibility?: ('private' | 'public') | undefined;
+  /** Number of users who have favorited this skill */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this skill */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the skill */
@@ -74424,6 +75618,8 @@ export type PostStoredSkills_Response = {
   scripts?: string[] | undefined;
   /** List of asset file paths */
   assets?: string[] | undefined;
+  /** Full file tree structure for the skill */
+  files?: PostStoredSkills_Response_Auxiliary_4[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -74459,8 +75655,17 @@ export type PatchStoredSkillsStoredSkillId_PathParams = {
   storedSkillId: string;
 };
 
+type PatchStoredSkillsStoredSkillId_Body_Auxiliary_4 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: PatchStoredSkillsStoredSkillId_Body_Auxiliary_4[] | undefined;
+};
+
 export type PatchStoredSkillsStoredSkillId_Body = {
   authorId?: (string | undefined) | undefined;
+  visibility?: (('private' | 'public') | undefined) | undefined;
   name?: string | undefined;
   description?: string | undefined;
   instructions?: string | undefined;
@@ -74491,6 +75696,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   references?: (string[] | undefined) | undefined;
   scripts?: (string[] | undefined) | undefined;
   assets?: (string[] | undefined) | undefined;
+  files?: (PatchStoredSkillsStoredSkillId_Body_Auxiliary_4[] | undefined) | undefined;
   metadata?:
     | (
         | {
@@ -74501,12 +75707,21 @@ export type PatchStoredSkillsStoredSkillId_Body = {
     | undefined;
 };
 
+type PatchStoredSkillsStoredSkillId_Response_Auxiliary_5 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: PatchStoredSkillsStoredSkillId_Response_Auxiliary_5[] | undefined;
+};
+
 export type PatchStoredSkillsStoredSkillId_Response =
   | {
       id: string;
       status: string;
       activeVersionId?: string | undefined;
       authorId?: string | undefined;
+      visibility?: ('private' | 'public') | undefined;
       createdAt: Date;
       updatedAt: Date;
     }
@@ -74516,6 +75731,11 @@ export type PatchStoredSkillsStoredSkillId_Response =
       status: string;
       activeVersionId?: string | undefined;
       authorId?: string | undefined;
+      visibility?: ('private' | 'public') | undefined;
+      /** Number of users who have favorited this skill */
+      favoriteCount?: number | undefined;
+      /** Whether the requesting user has favorited this skill */
+      isFavorited?: boolean | undefined;
       createdAt: Date;
       updatedAt: Date;
       /** Name of the skill */
@@ -74554,6 +75774,8 @@ export type PatchStoredSkillsStoredSkillId_Response =
       scripts?: string[] | undefined;
       /** List of asset file paths */
       assets?: string[] | undefined;
+      /** Full file tree structure for the skill */
+      files?: PatchStoredSkillsStoredSkillId_Response_Auxiliary_5[] | undefined;
       /** Additional metadata for the skill */
       metadata?:
         | {
@@ -74626,12 +75848,25 @@ export type PostStoredSkillsStoredSkillIdPublish_Body = {
   skillPath: string;
 };
 
+type PostStoredSkillsStoredSkillIdPublish_Response_Auxiliary_4 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: PostStoredSkillsStoredSkillIdPublish_Response_Auxiliary_4[] | undefined;
+};
+
 export type PostStoredSkillsStoredSkillIdPublish_Response = {
   id: string;
   /** Skill status: draft, published, or archived */
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  visibility?: ('private' | 'public') | undefined;
+  /** Number of users who have favorited this skill */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this skill */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the skill */
@@ -74670,6 +75905,8 @@ export type PostStoredSkillsStoredSkillIdPublish_Response = {
   scripts?: string[] | undefined;
   /** List of asset file paths */
   assets?: string[] | undefined;
+  /** Full file tree structure for the skill */
+  files?: PostStoredSkillsStoredSkillIdPublish_Response_Auxiliary_4[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -74696,6 +75933,70 @@ export interface PostStoredSkillsStoredSkillIdPublish_RouteContract {
   body: PostStoredSkillsStoredSkillIdPublish_Body;
   request: PostStoredSkillsStoredSkillIdPublish_Request;
   response: PostStoredSkillsStoredSkillIdPublish_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /stored/skills/:storedSkillId/favorite
+// ============================================================================
+export type PutStoredSkillsStoredSkillIdFavorite_PathParams = {
+  /** Unique identifier for the stored skill */
+  storedSkillId: string;
+};
+
+export type PutStoredSkillsStoredSkillIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
+};
+
+export type PutStoredSkillsStoredSkillIdFavorite_Request = Simplify<
+  (PutStoredSkillsStoredSkillIdFavorite_PathParams extends never
+    ? {}
+    : { params: PutStoredSkillsStoredSkillIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PutStoredSkillsStoredSkillIdFavorite_RouteContract {
+  pathParams: PutStoredSkillsStoredSkillIdFavorite_PathParams;
+  queryParams: never;
+  body: never;
+  request: PutStoredSkillsStoredSkillIdFavorite_Request;
+  response: PutStoredSkillsStoredSkillIdFavorite_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /stored/skills/:storedSkillId/favorite
+// ============================================================================
+export type DeleteStoredSkillsStoredSkillIdFavorite_PathParams = {
+  /** Unique identifier for the stored skill */
+  storedSkillId: string;
+};
+
+export type DeleteStoredSkillsStoredSkillIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
+};
+
+export type DeleteStoredSkillsStoredSkillIdFavorite_Request = Simplify<
+  (DeleteStoredSkillsStoredSkillIdFavorite_PathParams extends never
+    ? {}
+    : { params: DeleteStoredSkillsStoredSkillIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteStoredSkillsStoredSkillIdFavorite_RouteContract {
+  pathParams: DeleteStoredSkillsStoredSkillIdFavorite_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteStoredSkillsStoredSkillIdFavorite_Request;
+  response: DeleteStoredSkillsStoredSkillIdFavorite_Response;
   responseType: 'json';
 }
 
@@ -78238,6 +79539,8 @@ export interface RouteTypes {
   'POST /stored/agents/:agentId/versions/:versionId/activate': PostStoredAgentsAgentIdVersionsVersionIdActivate_RouteContract;
   'POST /stored/agents/:agentId/versions/:versionId/restore': PostStoredAgentsAgentIdVersionsVersionIdRestore_RouteContract;
   'DELETE /stored/agents/:agentId/versions/:versionId': DeleteStoredAgentsAgentIdVersionsVersionId_RouteContract;
+  'PUT /stored/agents/:storedAgentId/favorite': PutStoredAgentsStoredAgentIdFavorite_RouteContract;
+  'DELETE /stored/agents/:storedAgentId/favorite': DeleteStoredAgentsStoredAgentIdFavorite_RouteContract;
   'GET /stored/mcp-clients': GetStoredMcpClients_RouteContract;
   'GET /stored/mcp-clients/:storedMCPClientId': GetStoredMcpClientsStoredMCPClientId_RouteContract;
   'POST /stored/mcp-clients': PostStoredMcpClients_RouteContract;
@@ -78285,6 +79588,8 @@ export interface RouteTypes {
   'PATCH /stored/skills/:storedSkillId': PatchStoredSkillsStoredSkillId_RouteContract;
   'DELETE /stored/skills/:storedSkillId': DeleteStoredSkillsStoredSkillId_RouteContract;
   'POST /stored/skills/:storedSkillId/publish': PostStoredSkillsStoredSkillIdPublish_RouteContract;
+  'PUT /stored/skills/:storedSkillId/favorite': PutStoredSkillsStoredSkillIdFavorite_RouteContract;
+  'DELETE /stored/skills/:storedSkillId/favorite': DeleteStoredSkillsStoredSkillIdFavorite_RouteContract;
   'GET /tool-providers': GetToolProviders_RouteContract;
   'GET /tool-providers/:providerId/toolkits': GetToolProvidersProviderIdToolkits_RouteContract;
   'GET /tool-providers/:providerId/tools': GetToolProvidersProviderIdTools_RouteContract;
@@ -78861,6 +80166,10 @@ export interface Client {
     GET: GetStoredAgentsStoredAgentId_RouteContract;
     PATCH: PatchStoredAgentsStoredAgentId_RouteContract;
   };
+  '/stored/agents/:storedAgentId/favorite': {
+    DELETE: DeleteStoredAgentsStoredAgentIdFavorite_RouteContract;
+    PUT: PutStoredAgentsStoredAgentIdFavorite_RouteContract;
+  };
   '/stored/agents/preview-instructions': {
     POST: PostStoredAgentsPreviewInstructions_RouteContract;
   };
@@ -78950,6 +80259,10 @@ export interface Client {
     DELETE: DeleteStoredSkillsStoredSkillId_RouteContract;
     GET: GetStoredSkillsStoredSkillId_RouteContract;
     PATCH: PatchStoredSkillsStoredSkillId_RouteContract;
+  };
+  '/stored/skills/:storedSkillId/favorite': {
+    DELETE: DeleteStoredSkillsStoredSkillIdFavorite_RouteContract;
+    PUT: PutStoredSkillsStoredSkillIdFavorite_RouteContract;
   };
   '/stored/skills/:storedSkillId/publish': {
     POST: PostStoredSkillsStoredSkillIdPublish_RouteContract;
