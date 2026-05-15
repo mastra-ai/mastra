@@ -109,10 +109,7 @@ describe('addUserMessage', () => {
 
     const skillComp = state.chatContainer.children[0] as SlashCommandComponent;
     expect(
-      skillComp.matches(
-        'skill/github-triage',
-        'Use <div>, A&B, "quotes". Embedded </skill> stays out of the way.',
-      ),
+      skillComp.matches('skill/github-triage', 'Use <div>, A&B, "quotes". Embedded </skill> stays out of the way.'),
     ).toBe(true);
   });
 

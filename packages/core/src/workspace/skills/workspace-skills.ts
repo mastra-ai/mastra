@@ -132,6 +132,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           description: skill.description,
           license: skill.license,
           compatibility: skill.compatibility,
+          'user-invocable': skill['user-invocable'],
           metadata: skill.metadata,
         });
       }
