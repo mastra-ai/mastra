@@ -31,7 +31,7 @@ vi.mock('./analyze/bundleExternals', () => ({
     output: [
       {
         type: 'chunk',
-        fileName: 'custom-user-external.mjs',
+        fileName: '.mastra/.build/custom-user-external.mjs',
         name: 'custom-user-external',
         isEntry: true,
         isDynamicEntry: false,
@@ -105,7 +105,7 @@ describe('user externals validation', () => {
     );
 
     expect(validate).toHaveBeenCalledWith(
-      join(tempDir, 'custom-user-external.mjs'),
+      join(tempDir, '.mastra', '.build', 'custom-user-external.mjs'),
       expect.objectContaining({
         stubbedExternals: expect.arrayContaining(['custom-user-external']),
         stubbedExternalExports: {
