@@ -91,7 +91,7 @@ describe('NestJS Adapter - RequestContext parsing', () => {
     const expressApp = app.getHttpAdapter().getInstance() as Application;
     const response = await executeExpressRequest(expressApp, {
       method: 'POST',
-      path: '/agents/test-agent/generate',
+      path: '/api/agents/test-agent/generate',
       body: {
         messages: [{ role: 'user', content: 'hello' }],
         requestContext: { sessionId: 'session-42' },
@@ -124,7 +124,7 @@ describe('NestJS Adapter - RequestContext parsing', () => {
     const expressApp = app.getHttpAdapter().getInstance() as Application;
     const response = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents?tag=1&tag=2&requestContext=%7B%22traceId%22%3A%22trace-99%22%7D',
+      path: '/api/agents?tag=1&tag=2&requestContext=%7B%22traceId%22%3A%22trace-99%22%7D',
     });
 
     expect(response.status).toBe(200);
