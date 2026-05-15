@@ -153,6 +153,7 @@ export function createTracePropertyFilterFields({
   availableServiceNames,
   availableEnvironments,
   loading,
+  branchesSupported = true,
 }: {
   availableTags: string[];
   availableRootEntityNames: string[];
@@ -164,7 +165,13 @@ export function createTracePropertyFilterFields({
     serviceNames?: boolean;
     environments?: boolean;
   };
+  /** When false, the Branches option is hidden from the List mode pick-multi panel —
+   *  used when the active storage provider doesn't implement `listBranches`. */
+  branchesSupported?: boolean;
 }): PropertyFilterField[] {
+  const listModeOptions = branchesSupported
+    ? TRACE_LIST_MODE_OPTIONS
+    : TRACE_LIST_MODE_OPTIONS.filter(o => o.value !== 'branches');
   const fields: PropertyFilterField[] = [
     {
       id: 'rootEntityType',
@@ -180,7 +187,7 @@ export function createTracePropertyFilterFields({
       label: 'List mode',
       kind: 'pick-multi',
       searchable: false,
-      options: TRACE_LIST_MODE_OPTIONS.map(o => ({ label: o.label, value: o.value })),
+      options: listModeOptions.map(o => ({ label: o.label, value: o.value })),
       placeholder: 'Choose list mode',
       emptyText: 'No list modes.',
       omitAnyOption: true,
