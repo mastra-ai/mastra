@@ -538,14 +538,13 @@ describe('Agent Routes Authorization', () => {
 
   describe('agent metadata serialization', () => {
     it('includes metadata in the list agents response', async () => {
-      const metadata = { type: 'support' };
       mockAgent = new Agent({
         id: 'metadata-agent',
         name: 'metadata-agent',
         instructions: 'test-instructions',
         model: {} as any,
+        metadata: { type: 'support' },
       });
-      vi.spyOn(mockAgent, 'getMetadata').mockReturnValue(metadata);
 
       mastra = new Mastra({
         agents: { 'metadata-agent': mockAgent },
@@ -557,18 +556,17 @@ describe('Agent Routes Authorization', () => {
         requestContext: new RequestContext(),
       } as any);
 
-      expect(result['metadata-agent']?.metadata).toEqual(metadata);
+      expect(result['metadata-agent']?.metadata).toEqual({ type: 'support' });
     });
 
     it('includes metadata in the get agent response', async () => {
-      const metadata = { type: 'support' };
       mockAgent = new Agent({
         id: 'metadata-agent',
         name: 'metadata-agent',
         instructions: 'test-instructions',
         model: {} as any,
+        metadata: { type: 'support' },
       });
-      vi.spyOn(mockAgent, 'getMetadata').mockReturnValue(metadata);
       vi.spyOn(mockAgent, 'listTools').mockResolvedValue({});
       vi.spyOn(mockAgent, 'getLLM').mockResolvedValue({
         getModel: () => undefined,
@@ -591,7 +589,7 @@ describe('Agent Routes Authorization', () => {
         requestContext: new RequestContext(),
       } as any);
 
-      expect(result.metadata).toEqual(metadata);
+      expect(result.metadata).toEqual({ type: 'support' });
     });
   });
 
