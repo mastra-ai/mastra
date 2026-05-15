@@ -3157,6 +3157,7 @@ ${formattedMessages}
 
     let activationTriggeredBy: 'threshold' | 'ttl' | 'provider_change' = 'threshold';
     let activationLastActivityAt: number | undefined;
+    let activationActivateAfterIdle: number | undefined;
     let activateAfterIdleExpiredMs: number | undefined;
     let previousModel: string | undefined;
     let currentModel: string | undefined;
@@ -3189,6 +3190,7 @@ ${formattedMessages}
       } else if (ttlExpired) {
         activationTriggeredBy = 'ttl';
         activationLastActivityAt = lastActivityAt;
+        activationActivateAfterIdle = activateAfterIdle;
         activateAfterIdleExpiredMs = ttlExpiredMs;
       } else {
         const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
@@ -3279,7 +3281,10 @@ ${formattedMessages}
           ttlExpiredMs: activateAfterIdleExpiredMs,
           previousModel,
           currentModel,
-          config: this.getObservationMarkerConfig(),
+          config: {
+            ...this.getObservationMarkerConfig(),
+            activateAfterIdle: activationActivateAfterIdle ?? this.observationConfig.activateAfterIdle,
+          },
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         void opts.writer.custom({ ...activationMarker, transient: true }).catch(() => {});
