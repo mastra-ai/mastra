@@ -288,6 +288,23 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     </>
   );
 
+  const branchesUnsupportedNotice =
+    branchesUnsupported && !branchesNoticeDismissed ? (
+      <Notice
+        variant="info"
+        action={
+          <Notice.Button variant="ghost" onClick={() => setBranchesNoticeDismissed(true)}>
+            Dismiss
+          </Notice.Button>
+        }
+        className="mb-4"
+      >
+        <Notice.Message>
+          Selected list mode isn't supported by this storage provider — switched to default.
+        </Notice.Message>
+      </Notice>
+    ) : null;
+
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
@@ -309,6 +326,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         lockedFieldIds={lockedFieldIds}
         lockedTooltipContent={lockedTooltipContent}
       />
+
+      {branchesUnsupportedNotice}
     </PageLayout.TopArea>
   );
 
@@ -338,27 +357,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     );
   }
 
-  const branchesUnsupportedNotice =
-    branchesUnsupported && !branchesNoticeDismissed ? (
-      <Notice
-        variant="info"
-        action={
-          <Notice.Button variant="ghost" onClick={() => setBranchesNoticeDismissed(true)}>
-            Dismiss
-          </Notice.Button>
-        }
-        className="mb-4"
-      >
-        <Notice.Message>
-          Branches mode isn't supported by this storage provider — switched back to Traces.
-        </Notice.Message>
-      </Notice>
-    ) : null;
-
   return (
     <PageLayout width="wide" height="full">
       {pageTopArea}
-      {branchesUnsupportedNotice}
 
       <TracesLayout
         traceCollapsed={traceCollapsed}
