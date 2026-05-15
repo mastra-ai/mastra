@@ -538,6 +538,15 @@ export const listTracesResponseSchema = z.object({
 /** Response containing paginated root spans with computed status */
 export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 
+/** Schema for listTracesLight operation response */
+export const listTracesLightResponseSchema = z.object({
+  pagination: paginationInfoSchema,
+  spans: z.array(lightSpanRecordSchema),
+});
+
+/** Response containing paginated lightweight root spans */
+export type ListTracesLightResponse = z.infer<typeof listTracesLightResponseSchema>;
+
 // ============================================================================
 // Trace branches (anchor spans surfaced as listable rows, including non-root)
 // ============================================================================

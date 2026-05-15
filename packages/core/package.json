@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.33.0",
+  "version": "1.35.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -89,6 +89,16 @@
       "require": {
         "types": "./dist/auth/ee/index.d.ts",
         "default": "./dist/auth/ee/index.cjs"
+      }
+    },
+    "./agent-builder/ee": {
+      "import": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.cjs"
       }
     },
     "./background-tasks": {
@@ -700,6 +710,16 @@
       "require": {
         "types": "./dist/storage/domains/skills/index.d.ts",
         "default": "./dist/storage/domains/skills/index.cjs"
+      }
+    },
+    "./storage/domains/favorites": {
+      "import": {
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.cjs"
       }
     },
     "./storage/domains/workspaces": {

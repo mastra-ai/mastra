@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { expectRouteDocsLink } from '../../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -12,10 +13,7 @@ test.beforeEach(async ({ page }) => {
 test('overall layout information', async ({ page }) => {
   // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('text=Workflows documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/workflows/overview',
-  );
+  await expectRouteDocsLink(page, 'Workflows documentation', 'https://mastra.ai/en/docs/workflows/overview');
   const breadcrumb = page.locator('header>nav');
   expect(breadcrumb).toMatchAriaSnapshot();
 

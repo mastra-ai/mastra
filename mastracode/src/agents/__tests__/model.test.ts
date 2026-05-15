@@ -46,6 +46,10 @@ vi.mock('../../providers/openai-codex.js', () => ({
   },
 }));
 
+vi.mock('../../providers/github-copilot.js', () => ({
+  githubCopilotProvider: vi.fn(() => ({ __provider: 'github-copilot' })),
+}));
+
 // Mock @ai-sdk/anthropic
 vi.mock('@ai-sdk/anthropic', () => ({
   createAnthropic: vi.fn((_opts: Record<string, unknown>) => {
@@ -124,15 +128,18 @@ vi.mock('../../onboarding/settings.js', () => ({
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
-import { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
-import { resolveModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
+import { resolveModel, getDynamicModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
 
 function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
-  const requestContext = new RequestContext();
+  const values = new Map<string, unknown>();
+  const requestContext = {
+    get: (key: string) => values.get(key),
+    set: (key: string, value: unknown) => values.set(key, value),
+  } as any;
   requestContext.set('harness', {
     threadId,
     resourceId,
@@ -301,6 +308,34 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
+      });
+    });
+
+    it('remaps OpenAI GPT-5 models for Codex OAuth in dynamic model resolution', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'openai-oauth-access-token',
+        refresh: 'openai-oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      const values = new Map<string, unknown>();
+      const requestContext = {
+        get: (key: string) => values.get(key),
+        set: (key: string, value: unknown) => values.set(key, value),
+      } as any;
+      requestContext.set('harness', {
+        state: {
+          currentModelId: 'openai/gpt-5.2',
+          thinkingLevel: 'high',
+        },
+      });
+
+      getDynamicModel({ requestContext });
+
+      expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.2-codex', {
+        thinkingLevel: 'high',
+        headers: undefined,
       });
     });
   });

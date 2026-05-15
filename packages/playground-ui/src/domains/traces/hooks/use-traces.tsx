@@ -11,7 +11,7 @@ const fetchTracesFn = async ({
   page,
   perPage,
   filters,
-  listMode = 'branches',
+  listMode = 'traces',
 }: TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
   page: number;
@@ -51,15 +51,14 @@ export function getTracesNextPageParam(
   return undefined;
 }
 
-type TracesPageResponse = (ListTracesResponse | ListBranchesResponse) & { threadTitles?: Record<string, string> };
+type TracesPageResponse = ListTracesResponse | ListBranchesResponse;
 
 function getPageSpans(page: TracesPageResponse) {
   if ('branches' in page) return page.branches ?? [];
   return page.spans ?? [];
 }
 
-/** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
- *  Also merges threadTitles from all pages for thread grouping display. */
+/** Deduplicates trace/branch rows by traceId + spanId across all loaded pages. */
 export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
   const seen = new Set<string>();
   const spans = data.pages
@@ -71,17 +70,10 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
       return true;
     });
 
-  const threadTitles: Record<string, string> = {};
-  for (const page of data.pages) {
-    if (page.threadTitles) {
-      Object.assign(threadTitles, page.threadTitles);
-    }
-  }
-
-  return { spans, threadTitles };
+  return { spans };
 }
 
-export const useTraces = ({ filters, listMode = 'branches' }: TracesFilters) => {
+export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 

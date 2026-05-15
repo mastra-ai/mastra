@@ -1,5 +1,88 @@
 # @mastra/memory
 
+## 1.18.2-alpha.0
+
+### Patch Changes
+
+- Fixed Observational Memory missing the observation threshold for messages with large file parts. Previously `TokenCounter`'s local/sync counting path only stringified the file descriptor (`type`, `mimeType`, `filename`) for non-image files, so a 100KB PDF looked like ~8 tokens to OM and the conversation kept replaying the full unobserved history past every reasonable threshold. ([#16562](https://github.com/mastra-ai/mastra/pull/16562))
+
+  `TokenCounter` now estimates non-image file part tokens locally from the attachment's byte size and mime type using a per-provider heuristic, mirroring the existing local image-token estimator:
+  - Anthropic PDFs ≈ `bytes / 3` (floor 1500)
+  - Google PDFs ≈ `bytes / 20` (floor 258)
+  - OpenAI / unknown PDFs ≈ `bytes / 4` (floor 500)
+  - Text-ish mime types (`text/*`, JSON, XML, YAML) ≈ `bytes / 4`
+  - Other binary ≈ `bytes / 4`
+
+  URL-only file parts (no body to size) keep the previous descriptor-only local estimate. `countMessagesAsync()` continues to prefer provider token-count endpoints for supported providers; this change only improves the local fallback used when no provider endpoint is available.
+
+  ```ts
+  // Before: this PDF counted as ~8 tokens locally regardless of size, so OM never triggered.
+  const part = {
+    type: 'file',
+    data: largePdfBase64,
+    mimeType: 'application/pdf',
+    filename: 'report.pdf',
+  };
+  // counter.countMessage(message) ≈ 8
+
+  // After: estimated locally from byte size on the active provider.
+  // counter.countMessage(message) ≈ tens of thousands of tokens
+  //   → OM threshold trips as expected.
+  ```
+
+  The internal token-estimate cache version was bumped, which invalidates persisted estimates from older `@mastra/memory` releases on the next read; entries are recomputed automatically.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/16522
+
+- Updated dependencies [[`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2)]:
+  - @mastra/core@1.35.0-alpha.1
+
+## 1.18.1
+
+### Patch Changes
+
+- Added a public escape hatch so callers can supply an authoritative token estimate for file parts whose binary payload has been stripped before persistence (for example, files uploaded to cloud storage with a hidden reference token left in `data` and re-hydrated by LLM middleware before inference). ([#16565](https://github.com/mastra-ai/mastra/pull/16565))
+
+  For those pipelines TokenCounter has no on-device file size to measure, so Observational Memory thresholds and context budgets undercount large attachments. Callers can now stamp an estimate directly on the part:
+
+  ```ts
+  part.providerMetadata = {
+    mastra: {
+      tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: 25_000 },
+    },
+  };
+  ```
+
+  When present, TokenCounter returns those tokens from both the sync and async paths and skips provider fetches. Invalid entries (NaN, negative, non-numeric) fall through to the default estimator. Parts without a client estimate are unaffected.
+
+  Related to https://github.com/mastra-ai/mastra/issues/16522
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0
+
+## 1.18.1-alpha.0
+
+### Patch Changes
+
+- Added a public escape hatch so callers can supply an authoritative token estimate for file parts whose binary payload has been stripped before persistence (for example, files uploaded to cloud storage with a hidden reference token left in `data` and re-hydrated by LLM middleware before inference). ([#16565](https://github.com/mastra-ai/mastra/pull/16565))
+
+  For those pipelines TokenCounter has no on-device file size to measure, so Observational Memory thresholds and context budgets undercount large attachments. Callers can now stamp an estimate directly on the part:
+
+  ```ts
+  part.providerMetadata = {
+    mastra: {
+      tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: 25_000 },
+    },
+  };
+  ```
+
+  When present, TokenCounter returns those tokens from both the sync and async paths and skips provider fetches. Invalid entries (NaN, negative, non-numeric) fall through to the default estimator. Parts without a client estimate are unaffected.
+
+  Related to https://github.com/mastra-ai/mastra/issues/16522
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+
 ## 1.18.0
 
 ### Minor Changes
