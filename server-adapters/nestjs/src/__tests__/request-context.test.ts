@@ -129,8 +129,12 @@ describe('NestJS Adapter - RequestContext parsing', () => {
 
     expect(response.status).toBe(200);
     expect(executeHandler).toHaveBeenCalledOnce();
+    // Repeated query params arrive as a string array; the route's
+    // queryParamSchema (e.g. z.coerce.number().array()) decides whether to
+    // coerce. This matches Hono/Express/Fastify/Koa adapter behavior — see
+    // #16114.
     expect(executeHandler.mock.calls[0]?.[1].queryParams).toMatchObject({
-      tag: [1, 2],
+      tag: ['1', '2'],
     });
     expect(executeHandler.mock.calls[0]?.[1].requestContext.get('traceId')).toBe('trace-99');
   });

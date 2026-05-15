@@ -63,6 +63,7 @@ export const create = async (args: {
     mcpServer: args?.mcpServer,
     observability: args?.observability,
     needsInteractive,
+    onObservabilitySelected: event => getAnalytics()?.trackEvent('cli_observability_selected', event),
   });
 
   if (needsInteractive && result) {
