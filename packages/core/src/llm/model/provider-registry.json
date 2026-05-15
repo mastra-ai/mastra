@@ -946,6 +946,24 @@
       "docUrl": "https://docs.wandb.ai/guides/integrations/inference/",
       "gateway": "models.dev"
     },
+    "gmicloud": {
+      "url": "https://api.gmi-serving.com/v1",
+      "apiKeyEnvVar": "GMICLOUD_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "GMI Cloud",
+      "models": [
+        "anthropic/claude-opus-4.6",
+        "anthropic/claude-opus-4.7",
+        "anthropic/claude-sonnet-4.6",
+        "deepseek-ai/DeepSeek-V4-Flash",
+        "deepseek-ai/DeepSeek-V4-Pro",
+        "moonshotai/Kimi-K2.6",
+        "zai-org/GLM-5-FP8",
+        "zai-org/GLM-5.1-FP8"
+      ],
+      "docUrl": "https://docs.gmicloud.ai/inference-engine/api-reference/llm-api-reference",
+      "gateway": "models.dev"
+    },
     "ambient": {
       "url": "https://api.ambient.xyz/v1",
       "apiKeyEnvVar": "AMBIENT_API_KEY",
@@ -1893,7 +1911,7 @@
       "url": "https://api.minimaxi.com/anthropic/v1",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
-      "name": "MiniMax Coding Plan (minimaxi.com)",
+      "name": "MiniMax Token Plan (minimaxi.com)",
       "models": [
         "MiniMax-M2",
         "MiniMax-M2.1",
@@ -1902,7 +1920,7 @@
         "MiniMax-M2.7",
         "MiniMax-M2.7-highspeed"
       ],
-      "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
+      "docUrl": "https://platform.minimaxi.com/docs/token-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
     },
@@ -3386,6 +3404,21 @@
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
       "gateway": "models.dev"
     },
+    "atomic-chat": {
+      "url": "http://127.0.0.1:1337/v1",
+      "apiKeyEnvVar": "ATOMIC_CHAT_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Atomic Chat",
+      "models": [
+        "Meta-Llama-3_1-8B-Instruct-GGUF",
+        "Qwen3_5-9B-MLX-4bit",
+        "Qwen3_5-9B-Q4_K_M",
+        "gemma-4-E4B-it-IQ4_XS",
+        "gemma-4-E4B-it-MLX-4bit"
+      ],
+      "docUrl": "https://atomic.chat",
+      "gateway": "models.dev"
+    },
     "github-models": {
       "url": "https://models.github.ai/inference",
       "apiKeyEnvVar": "GITHUB_TOKEN",
@@ -3669,7 +3702,8 @@
         "minimax-m2.7",
         "nemotron-3-super-free",
         "qwen3.5-plus",
-        "qwen3.6-plus"
+        "qwen3.6-plus",
+        "qwen3.6-plus-free"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -3919,7 +3953,7 @@
       "url": "https://api.minimax.io/anthropic/v1",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
-      "name": "MiniMax Coding Plan (minimax.io)",
+      "name": "MiniMax Token Plan (minimax.io)",
       "models": [
         "MiniMax-M2",
         "MiniMax-M2.1",
@@ -3928,7 +3962,7 @@
         "MiniMax-M2.7",
         "MiniMax-M2.7-highspeed"
       ],
-      "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
+      "docUrl": "https://platform.minimax.io/docs/token-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
     },
@@ -4741,6 +4775,15 @@
         "zai-org/GLM-5.1"
       ],
       "docUrl": "https://huggingface.co/docs/inference-providers",
+      "gateway": "models.dev"
+    },
+    "umans-ai-coding-plan": {
+      "url": "https://api.code.umans.ai/v1",
+      "apiKeyEnvVar": "UMANS_AI_CODING_PLAN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Umans AI Coding Plan",
+      "models": ["umans-coder", "umans-flash", "umans-glm-5.1", "umans-kimi-k2.6", "umans-qwen3.6-35b-a3b"],
+      "docUrl": "https://app.umans.ai/offers/code/docs",
       "gateway": "models.dev"
     },
     "tencent-tokenhub": {
@@ -5762,6 +5805,16 @@
       "openai/gpt-oss-20b",
       "zai-org/GLM-5-FP8",
       "zai-org/GLM-5.1"
+    ],
+    "gmicloud": [
+      "anthropic/claude-opus-4.6",
+      "anthropic/claude-opus-4.7",
+      "anthropic/claude-sonnet-4.6",
+      "deepseek-ai/DeepSeek-V4-Flash",
+      "deepseek-ai/DeepSeek-V4-Pro",
+      "moonshotai/Kimi-K2.6",
+      "zai-org/GLM-5-FP8",
+      "zai-org/GLM-5.1-FP8"
     ],
     "ambient": ["moonshotai/kimi-k2.6", "zai-org/GLM-5.1-FP8"],
     "the-grid-ai": ["text-max", "text-prime", "text-standard"],
@@ -7772,6 +7825,13 @@
       "claude-sonnet-4-6"
     ],
     "zhipuai-coding-plan": ["glm-4.5-air", "glm-4.7", "glm-5-turbo", "glm-5.1", "glm-5v-turbo"],
+    "atomic-chat": [
+      "Meta-Llama-3_1-8B-Instruct-GGUF",
+      "Qwen3_5-9B-MLX-4bit",
+      "Qwen3_5-9B-Q4_K_M",
+      "gemma-4-E4B-it-IQ4_XS",
+      "gemma-4-E4B-it-MLX-4bit"
+    ],
     "github-models": [
       "ai21-labs/ai21-jamba-1.5-large",
       "ai21-labs/ai21-jamba-1.5-mini",
@@ -8019,7 +8079,8 @@
       "minimax-m2.7",
       "nemotron-3-super-free",
       "qwen3.5-plus",
-      "qwen3.6-plus"
+      "qwen3.6-plus",
+      "qwen3.6-plus-free"
     ],
     "mixlayer": [
       "qwen/qwen3.5-122b-a10b",
@@ -8853,6 +8914,7 @@
       "zai-org/GLM-5",
       "zai-org/GLM-5.1"
     ],
+    "umans-ai-coding-plan": ["umans-coder", "umans-flash", "umans-glm-5.1", "umans-kimi-k2.6", "umans-qwen3.6-35b-a3b"],
     "tencent-tokenhub": ["hy3-preview"],
     "nebius": [
       "MiniMaxAI/MiniMax-M2.5",
