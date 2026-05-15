@@ -4,8 +4,10 @@
  * @license Mastra Enterprise License - see ee/LICENSE
  */
 
+import { captureEEEvent, getEETelemetryFallbackDistinctId } from '../../telemetry/posthog';
 import type { FGACheckContext, IFGAProvider } from './interfaces/fga';
 import type { MastraFGAPermissionInput } from './interfaces/permissions.generated';
+import { getSafeLicenseSummary } from './license';
 
 export interface CheckFGAOptions {
   fgaProvider: IFGAProvider | undefined;
@@ -29,6 +31,23 @@ export async function checkFGA(options: CheckFGAOptions): Promise<void> {
   }
 
   await fgaProvider.require(user, { resource, permission, context });
+
+  const license = getSafeLicenseSummary();
+  try {
+    captureEEEvent('ee_feature_used', user?.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+      feature: 'fga',
+      resource_type: resource.type,
+      resource_id: resource.id,
+      permission,
+      user_id: user?.id,
+      organization_membership_id: user?.organizationMembershipId,
+      license_valid: license.valid,
+      license_hash: license.licenseHash,
+      is_dev_environment: license.isDevEnvironment,
+    });
+  } catch {
+    // Telemetry must never affect auth or EE feature behavior.
+  }
 }
 
 /**

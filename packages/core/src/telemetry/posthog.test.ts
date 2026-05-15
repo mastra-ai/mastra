@@ -1,0 +1,72 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { capture, flush, PostHog } = vi.hoisted(() => {
+  const capture = vi.fn();
+  const flush = vi.fn().mockResolvedValue(undefined);
+  const PostHog = vi.fn(function () {
+    return { capture, flush };
+  });
+  return { capture, flush, PostHog };
+});
+
+vi.mock('posthog-node', () => ({ PostHog }));
+
+import { captureEEEvent, resetEETelemetryForTests } from './posthog';
+
+describe('EE PostHog telemetry', () => {
+  let originalTelemetryDisabled: string | undefined;
+
+  beforeEach(() => {
+    originalTelemetryDisabled = process.env['MASTRA_TELEMETRY_DISABLED'];
+    delete process.env['MASTRA_TELEMETRY_DISABLED'];
+    capture.mockClear();
+    flush.mockClear();
+    PostHog.mockClear();
+    resetEETelemetryForTests();
+  });
+
+  afterEach(() => {
+    if (originalTelemetryDisabled !== undefined) process.env['MASTRA_TELEMETRY_DISABLED'] = originalTelemetryDisabled;
+    else delete process.env['MASTRA_TELEMETRY_DISABLED'];
+    resetEETelemetryForTests();
+  });
+
+  it('suppresses events when telemetry is disabled', () => {
+    process.env['MASTRA_TELEMETRY_DISABLED'] = '1';
+
+    captureEEEvent('ee_license_check', 'user-1', { license_hash: 'safe' });
+
+    expect(PostHog).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it('only treats MASTRA_TELEMETRY_DISABLED=1 as disabled', () => {
+    process.env['MASTRA_TELEMETRY_DISABLED'] = '0';
+
+    captureEEEvent('ee_license_check', 'user-1', { license_hash: 'safe' });
+
+    expect(PostHog).toHaveBeenCalled();
+    expect(capture).toHaveBeenCalled();
+  });
+
+  it('includes a raw machine id for install-level differentiation', () => {
+    captureEEEvent('ee_license_check', undefined, { license_hash: 'safe' });
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        distinctId: expect.stringMatching(/^mastra-/),
+        properties: expect.objectContaining({
+          machine_id: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  it('swallows PostHog capture failures', () => {
+    capture.mockImplementationOnce(() => {
+      throw new Error('posthog unavailable');
+    });
+
+    expect(() => captureEEEvent('ee_feature_used', 'user-1', { feature: 'fga' })).not.toThrow();
+  });
+});
