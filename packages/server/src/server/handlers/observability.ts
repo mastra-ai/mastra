@@ -31,6 +31,7 @@ import {
   listBranchesResponseSchema,
   getBranchArgsSchema,
   getBranchResponseSchema,
+  listTracesLightResponseSchema,
 } from './observability-storage-schemas';
 
 export * from './observability-new-endpoints';
@@ -105,18 +106,20 @@ async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
   return scores;
 }
 
+const listTracesQueryParamSchema = wrapSchemaForQueryParams(
+  tracesFilterSchema
+    .extend(paginationArgsSchema.shape)
+    .extend(tracesOrderBySchema.shape)
+    .extend(legacyQueryParamsSchema.shape) // Accept legacy params for backward compatibility
+    .partial(),
+);
+
 /** Route: GET /observability/traces - paginated trace listing with filtering and sorting. */
 export const LIST_TRACES_ROUTE = createRoute({
   method: 'GET',
   path: '/observability/traces',
   responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(
-    tracesFilterSchema
-      .extend(paginationArgsSchema.shape)
-      .extend(tracesOrderBySchema.shape)
-      .extend(legacyQueryParamsSchema.shape) // Accept legacy params for backward compatibility
-      .partial(),
-  ),
+  queryParamSchema: listTracesQueryParamSchema,
   responseSchema: listTracesResponseSchema,
   summary: 'List traces',
   description: 'Returns a paginated list of traces with optional filtering and sorting',
@@ -135,6 +138,43 @@ export const LIST_TRACES_ROUTE = createRoute({
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing traces');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/light - paginated lightweight trace listing with filtering and sorting. */
+export const LIST_TRACES_LIGHT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/light',
+  responseType: 'json',
+  queryParamSchema: listTracesQueryParamSchema,
+  responseSchema: listTracesLightResponseSchema,
+  summary: 'List lightweight traces',
+  description: 'Returns a paginated list of lightweight traces with optional filtering and sorting',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    try {
+      const transformedParams = transformLegacyParams(params);
+
+      const filters = pickParams(tracesFilterSchema, transformedParams);
+      const pagination = pickParams(paginationArgsSchema, transformedParams);
+      const orderBy = pickParams(tracesOrderBySchema, transformedParams);
+
+      const observabilityStore = await getObservabilityStore(mastra);
+      // `listTracesLight` was added in `@mastra/core` alongside this route.
+      // When this `@mastra/server` is paired with an older `@mastra/core`,
+      // the base `ObservabilityStorage` class doesn't declare
+      // `listTracesLight` at all, so calling it on a store instance throws
+      // `TypeError: ... is not a function`. Detect that case and fall back
+      // to the full `listTraces` call so consumers still get a response.
+      const store = observabilityStore as { listTracesLight?: unknown };
+      if (typeof store.listTracesLight !== 'function') {
+        return await observabilityStore.listTraces({ filters, pagination, orderBy });
+      }
+      return await observabilityStore.listTracesLight({ filters, pagination, orderBy });
+    } catch (error) {
+      return handleError(error, 'Error listing lightweight traces');
     }
   },
 });

@@ -5,13 +5,11 @@ import { getTracesNextPageParam, selectUniqueTraces } from '../use-traces';
 function makeTracesPage(
   spans: Array<{ traceId: string; spanId?: string; name: string; metadata?: unknown; tags?: unknown }>,
   hasMore: boolean,
-  threadTitles?: Record<string, string>,
-): ListTracesResponse & { threadTitles?: Record<string, string> } {
+): ListTracesResponse {
   return {
     pagination: { total: 100, page: 0, perPage: 25, hasMore },
     spans,
-    ...(threadTitles ? { threadTitles } : {}),
-  } as unknown as ListTracesResponse & { threadTitles?: Record<string, string> };
+  } as unknown as ListTracesResponse;
 }
 
 function makeBranchesPage(
@@ -86,17 +84,6 @@ describe('useTraces logic', () => {
     expect((result.spans[0] as { tags?: unknown }).tags).toEqual(['agent:test']);
     expect((result.spans[1] as { metadata?: unknown }).metadata).toEqual({ userId: 'u_1' });
     expect((result.spans[1] as { tags?: unknown }).tags).toEqual(['env:prod']);
-  });
-
-  it('merges threadTitles across pages', () => {
-    const data = {
-      pages: [
-        makeTracesPage([{ traceId: 'aaa', name: 'Alpha' }], true, { aaa: 'Greeting thread' }),
-        makeTracesPage([{ traceId: 'bbb', name: 'Bravo' }], false, { bbb: 'Support thread' }),
-      ],
-    };
-    const result = selectUniqueTraces(data);
-    expect(result.threadTitles).toEqual({ aaa: 'Greeting thread', bbb: 'Support thread' });
   });
 
   // ---- Branches mode ----

@@ -1,5 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -11,7 +11,7 @@ import {
   signalToDataPartFormat,
   signalToMastraDBMessage,
 } from '../signals';
-import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -81,6 +81,10 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 500) {
 }
 
 describe('Agent signals', () => {
+  beforeEach(() => {
+    agentThreadStreamRuntime.resetForTests();
+  });
+
   it('converts signals between DB, LLM, and data part formats', () => {
     const signal = createSignal({
       id: 'signal-1',
@@ -355,6 +359,54 @@ describe('Agent signals', () => {
     await expect(stream.text).resolves.toBe('first response');
     expect(streamCount).toBe(1);
     expect(JSON.stringify(prompts)).not.toContain('discard while running');
+  });
+
+  it('supports cross-instance thread subscriptions through the shared runtime without Mastra', async () => {
+    const runner = new Agent({
+      id: 'standalone-shared-agent',
+      name: 'Standalone Shared Runner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('standalone shared response'),
+    });
+    const observer = new Agent({
+      id: 'standalone-shared-agent',
+      name: 'Standalone Shared Observer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('standalone observer response'),
+    });
+
+    const subscription = await observer.subscribeToThread({
+      threadId: 'standalone-shared-thread',
+      resourceId: 'standalone-shared-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRunPromise = readNextRun(iterator);
+
+    const stream = await runner.stream('Hello', {
+      memory: { thread: 'standalone-shared-thread', resource: 'standalone-shared-user' },
+    });
+
+    const subscribedRun = await firstRunPromise;
+    expect(subscribedRun.value.runId).toBe(stream.runId);
+    expect(subscribedRun.value.text).toBe('standalone shared response');
+
+    const secondRunPromise = readNextRun(iterator);
+    const signalResult = await runner.sendSignal(
+      { type: 'user-message', contents: 'Hello from standalone shared signal' },
+      {
+        resourceId: 'standalone-shared-user',
+        threadId: 'standalone-shared-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'standalone-shared-user', thread: 'standalone-shared-thread' } },
+        },
+      },
+    );
+    const signalRun = await secondRunPromise;
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
+    expect(signalResult.signal.id).toBeDefined();
+    expect(signalRun.value.text).toBe('standalone shared response');
+
+    subscription.unsubscribe();
   });
 
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
