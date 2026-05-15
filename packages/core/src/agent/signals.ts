@@ -222,9 +222,6 @@ function signalToDBMessage(
   parts: SignalPart[],
   options?: { threadId?: string; resourceId?: string },
 ): MastraDBMessage {
-  // content.parts is the single source of truth for the signal payload. We deliberately do not
-  // duplicate signal.contents into metadata.signal — that stash doubled storage (especially
-  // painful for base64 file data) and made round-trips ambiguous. Rehydration walks parts.
   return {
     id: signal.id,
     role: 'signal',
@@ -257,8 +254,6 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
 
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   const signal = normalizeSignal(input);
-  // Convert input contents into canonical SignalPart[] once at the boundary. Every downstream
-  // projection (LLM, DB) reads from this representation.
   const parts = contentsToSignalParts(signal.contents);
 
   return {

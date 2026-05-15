@@ -5,9 +5,9 @@
 '@mastra/react': minor
 ---
 
-Narrows `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`.
+Narrowed `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`.
 
-This also fixes two signal-content bugs:
+Fixed two signal-content bugs:
 
 - `user-message` signal attributes now reach the LLM
 - multimodal non-`user-message` signals no longer lose file parts
