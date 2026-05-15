@@ -81,6 +81,8 @@ async function decryptSession(encrypted: string, password: string): Promise<unkn
 
 /**
  * In-memory store for OAuth state validation.
+ * WARNING: Only works in single-instance deployments.
+ * For load-balanced/distributed setups, consider a shared store or signed state tokens.
  */
 const stateStore = new Map<string, { expiresAt: number; redirectUri: string }>();
 
@@ -610,16 +612,19 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
       };
     };
 
+    // Cookie-only sessions — validation happens via decryption in getUserFromSessionCookie/authenticateToken
     (this as unknown as ISessionProvider<Session>).validateSession = async function (
       _sessionId: string,
     ): Promise<Session | null> {
       return null;
     };
 
-    (this as unknown as ISessionProvider<Session>).destroySession = async function (_sessionId: string): Promise<void> {
-      // Session is cleared via cookie
-    };
+    // Cookie-only sessions — destruction happens via getClearSessionHeaders setting Max-Age=0
+    (this as unknown as ISessionProvider<Session>).destroySession = async function (
+      _sessionId: string,
+    ): Promise<void> {};
 
+    // Cookie-only sessions — refresh not supported; user must re-authenticate after expiry
     (this as unknown as ISessionProvider<Session>).refreshSession = async function (
       _sessionId: string,
     ): Promise<Session | null> {
