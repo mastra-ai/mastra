@@ -1,6 +1,7 @@
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
+import { withOmDebugSpan } from '../debug-trace';
 import { filterObservedMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
@@ -43,6 +44,10 @@ export class ObservationStep {
    * builds system message, filters observed.
    */
   async prepare(): Promise<StepContext> {
+    return withOmDebugSpan('om.step.prepare', this.turn.observabilityContext, () => this._prepareImpl());
+  }
+
+  private async _prepareImpl(): Promise<StepContext> {
     if (this._prepared) throw new Error(`Step ${this.stepNumber} already prepared`);
 
     const { threadId, resourceId, messageList } = this.turn;
@@ -122,11 +127,13 @@ export class ObservationStep {
     );
 
     // ── Check thresholds + buffer trigger (all steps) ──────────
-    let statusSnapshot = await om.getStatus({
-      threadId,
-      resourceId,
-      messages: messageList.get.all.db(),
-    });
+    let statusSnapshot = await withOmDebugSpan('om.getStatus', this.turn.observabilityContext, () =>
+      om.getStatus({
+        threadId,
+        resourceId,
+        messages: messageList.get.all.db(),
+      }),
+    );
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
     if (statusSnapshot.shouldBuffer && !hasIncompleteToolCalls) {
@@ -238,11 +245,13 @@ export class ObservationStep {
       }
 
       // Re-fetch status after observation/cleanup for the snapshot
-      statusSnapshot = await om.getStatus({
-        threadId,
-        resourceId,
-        messages: messageList.get.all.db(),
-      });
+      statusSnapshot = await withOmDebugSpan('om.getStatus', this.turn.observabilityContext, () =>
+        om.getStatus({
+          threadId,
+          resourceId,
+          messages: messageList.get.all.db(),
+        }),
+      );
     }
 
     // ── Refresh cross-thread context (resource scope) ──────────
@@ -309,11 +318,13 @@ export class ObservationStep {
     await om.waitForBuffering(threadId, resourceId);
 
     // Re-check status with fresh state
-    const freshStatus = await om.getStatus({
-      threadId,
-      resourceId,
-      messages: messageList.get.all.db(),
-    });
+    const freshStatus = await withOmDebugSpan('om.getStatus', this.turn.observabilityContext, () =>
+      om.getStatus({
+        threadId,
+        resourceId,
+        messages: messageList.get.all.db(),
+      }),
+    );
 
     if (!freshStatus.shouldObserve) {
       return { succeeded: false, record: freshStatus.record };

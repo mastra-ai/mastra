@@ -6,6 +6,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
+import { withOmDebugSpan } from './debug-trace';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
@@ -289,7 +290,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // isBufferingObservation set by fire-and-forget buffer()) are visible.
         // The cached this.turn.record is stale in production DBs where each
         // query returns a new row object.
-        const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
+        const freshRecord = await withOmDebugSpan('om.getOrCreateRecord', observabilityContext, () =>
+          this.engine.getOrCreateRecord(threadId, resourceId),
+        );
         await this.engine.emitProgress({
           record: freshRecord,
           stepNumber,
