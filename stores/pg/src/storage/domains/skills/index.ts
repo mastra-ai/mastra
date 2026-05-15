@@ -16,6 +16,7 @@ import type {
   StorageListSkillsOutput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import type {
   SkillVersion,
   CreateSkillVersionInput,
@@ -252,8 +253,10 @@ export class SkillsPG extends SkillsStorage {
         const changedFields = SNAPSHOT_FIELDS.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !skillSnapshotFieldValuesEqual(
+              configFields[field as keyof typeof configFields],
+              latestConfig[field as keyof typeof latestConfig],
+            ),
         );
 
         if (changedFields.length > 0) {
