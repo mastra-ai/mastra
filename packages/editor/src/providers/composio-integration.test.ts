@@ -10,7 +10,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
   interface FakeComposioInstance {
     apiKey: string;
     hasProvider: boolean;
-    toolkits: { get: ReturnType<typeof vi.fn> };
+    toolkits: { get: ReturnType<typeof vi.fn>; getConnectedAccountInitiationFields: ReturnType<typeof vi.fn> };
     tools: { get: ReturnType<typeof vi.fn>; getRawComposioTools: ReturnType<typeof vi.fn> };
     connectedAccounts: {
       initiate: ReturnType<typeof vi.fn>;
@@ -26,7 +26,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
     const inst: FakeComposioInstance = {
       apiKey: opts.apiKey,
       hasProvider: Boolean(opts.provider),
-      toolkits: { get: vi.fn() },
+      toolkits: { get: vi.fn(), getConnectedAccountInitiationFields: vi.fn() },
       tools: { get: vi.fn(), getRawComposioTools: vi.fn() },
       connectedAccounts: { initiate: vi.fn(), get: vi.fn(), list: vi.fn() },
       authConfigs: { list: vi.fn() },
@@ -315,6 +315,93 @@ describe('ComposioToolIntegration — authorize', () => {
     await expect(integration.authorize({ toolService: 'gmail', connectionId: 'a' })).rejects.toThrow(
       /Multiple ENABLED auth configs/,
     );
+  });
+
+  it('forwards config to connectedAccounts.initiate as { authScheme, val }', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.authorize({ toolService: 'confluence', connectionId: 'a' }).catch(() => undefined);
+    const raw = getRawInstance();
+
+    raw.authConfigs.list.mockResolvedValue({
+      items: [{ id: 'ac_1', status: 'ENABLED', authScheme: 'OAUTH2' }],
+    });
+    raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+
+    await integration.authorize({
+      toolService: 'confluence',
+      connectionId: 'author_1',
+      config: { subdomain: 'acme' },
+    });
+
+    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('author_1', 'ac_1', {
+      allowMultiple: true,
+      config: { authScheme: 'OAUTH2', val: { subdomain: 'acme' } },
+    });
+  });
+
+  it('omits config when an empty object is supplied', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.authorize({ toolService: 'gmail', connectionId: 'a' }).catch(() => undefined);
+    const raw = getRawInstance();
+
+    raw.authConfigs.list.mockResolvedValue({
+      items: [{ id: 'ac_1', status: 'ENABLED', authScheme: 'OAUTH2' }],
+    });
+    raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+
+    await integration.authorize({ toolService: 'gmail', connectionId: 'a', config: {} });
+
+    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('a', 'ac_1', { allowMultiple: true });
+  });
+});
+
+describe('ComposioToolIntegration — listConnectionFields', () => {
+  it('queries the SDK with the resolved authScheme and maps fields', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.listConnectionFields({ toolService: 'confluence' }).catch(() => undefined);
+    const raw = getRawInstance();
+
+    raw.authConfigs.list.mockResolvedValue({
+      items: [{ id: 'ac_1', status: 'ENABLED', authScheme: 'OAUTH2' }],
+    });
+    raw.toolkits.getConnectedAccountInitiationFields.mockResolvedValue([
+      { name: 'subdomain', displayName: 'Subdomain', description: 'Your sub', type: 'string', required: true },
+      { name: 'port', type: 'integer', required: false, default: 443 },
+      { name: 'tls', type: 'bool' },
+    ]);
+
+    const fields = await integration.listConnectionFields({ toolService: 'confluence' });
+
+    expect(raw.toolkits.getConnectedAccountInitiationFields).toHaveBeenCalledWith('confluence', 'OAUTH2', {
+      requiredOnly: false,
+    });
+    expect(fields).toEqual([
+      {
+        name: 'subdomain',
+        displayName: 'Subdomain',
+        description: 'Your sub',
+        type: 'string',
+        required: true,
+        default: undefined,
+      },
+      { name: 'port', displayName: undefined, description: undefined, type: 'number', required: false, default: 443 },
+      { name: 'tls', displayName: undefined, description: undefined, type: 'boolean', required: false, default: undefined },
+    ]);
+  });
+
+  it('returns [] when no auth scheme is available without calling the SDK', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.listConnectionFields({ toolService: 'gmail' }).catch(() => undefined);
+    const raw = getRawInstance();
+
+    raw.authConfigs.list.mockResolvedValue({
+      items: [{ id: 'ac_1', status: 'ENABLED' /* no authScheme */ }],
+    });
+
+    const fields = await integration.listConnectionFields({ toolService: 'gmail' });
+
+    expect(fields).toEqual([]);
+    expect(raw.toolkits.getConnectedAccountInitiationFields).not.toHaveBeenCalled();
   });
 });
 

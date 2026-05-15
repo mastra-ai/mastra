@@ -10,6 +10,7 @@ import {
   AUTHORIZE_TOOL_INTEGRATION_ROUTE,
   GET_TOOL_INTEGRATION_AUTH_STATUS_ROUTE,
   GET_TOOL_INTEGRATION_HEALTH_ROUTE,
+  LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE,
   LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE,
   LIST_TOOL_INTEGRATION_TOOLS_ROUTE,
   LIST_TOOL_INTEGRATIONS_ROUTE,
@@ -35,6 +36,7 @@ function makeIntegration(overrides: Partial<ToolIntegration> = {}): ToolIntegrat
     listToolServices: vi.fn().mockResolvedValue({ data: [] }),
     listTools: vi.fn().mockResolvedValue({ data: [], pagination: { page: 1, hasMore: false } }),
     listConnections: vi.fn().mockResolvedValue({ items: [] }),
+    listConnectionFields: vi.fn().mockResolvedValue([]),
     resolveTools: vi.fn(),
     authorize: vi.fn(),
     getAuthStatus: vi.fn(),
@@ -169,6 +171,25 @@ describe('AUTHORIZE_TOOL_INTEGRATION_ROUTE', () => {
     });
   });
 
+  it('forwards optional config to authorize when supplied', async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'auth-123' });
+    const integration = makeIntegration({ authorize });
+    const editor = makeEditor(integration);
+    await AUTHORIZE_TOOL_INTEGRATION_ROUTE.handler({
+      mastra: makeMastra(editor),
+      integrationId: 'composio',
+      toolService: 'confluence',
+      connectionId: 'conn-1',
+      config: { subdomain: 'acme' },
+    } as any);
+    expect(authorize).toHaveBeenCalledWith({
+      toolService: 'confluence',
+      connectionId: 'conn-1',
+      toolName: undefined,
+      config: { subdomain: 'acme' },
+    });
+  });
+
   it('falls back to user.id when resource id is missing (Workos-style auth)', async () => {
     const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'auth-123' });
     const integration = makeIntegration({ authorize });
@@ -278,6 +299,36 @@ describe('LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE', () => {
         integrationId: 'missing',
         toolService: 'gmail',
         requestContext: undefined,
+      } as any),
+    ).rejects.toThrow(HTTPException);
+  });
+});
+
+describe('LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE', () => {
+  it('forwards toolService to listConnectionFields and wraps result in { fields }', async () => {
+    const listConnectionFields = vi
+      .fn()
+      .mockResolvedValue([{ name: 'subdomain', displayName: 'Subdomain', type: 'string', required: true }]);
+    const integration = makeIntegration({ listConnectionFields });
+    const editor = makeEditor(integration);
+    const result = await LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE.handler({
+      mastra: makeMastra(editor),
+      integrationId: 'composio',
+      toolService: 'confluence',
+    } as any);
+    expect(listConnectionFields).toHaveBeenCalledWith({ toolService: 'confluence' });
+    expect(result).toEqual({
+      fields: [{ name: 'subdomain', displayName: 'Subdomain', type: 'string', required: true }],
+    });
+  });
+
+  it('returns 404 for unknown integration id', async () => {
+    const editor = makeEditor();
+    await expect(
+      LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE.handler({
+        mastra: makeMastra(editor),
+        integrationId: 'missing',
+        toolService: 'gmail',
       } as any),
     ).rejects.toThrow(HTTPException);
   });

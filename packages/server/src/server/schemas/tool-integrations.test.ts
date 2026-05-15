@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { connectionSchema, toolIntegrationConfigSchema, toolIntegrationsSchema } from './tool-integrations';
+import {
+  authorizeToolIntegrationBodySchema,
+  connectionSchema,
+  listConnectionFieldsQuerySchema,
+  listConnectionFieldsResponseSchema,
+  toolIntegrationConfigSchema,
+  toolIntegrationsSchema,
+} from './tool-integrations';
 
 describe('tool-integrations schemas (v1 Agent Builder tool integrations)', () => {
   describe('connectionSchema', () => {
@@ -152,6 +159,72 @@ describe('tool-integrations schemas (v1 Agent Builder tool integrations)', () =>
             ],
           },
         },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('authorizeToolIntegrationBodySchema', () => {
+    it('accepts payloads without config (back-compat)', () => {
+      const result = authorizeToolIntegrationBodySchema.safeParse({
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts payloads with arbitrary user-supplied config values', () => {
+      const result = authorizeToolIntegrationBodySchema.safeParse({
+        toolService: 'confluence',
+        connectionId: '',
+        config: { subdomain: 'acme', port: 443, tls: true },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects config that is not an object record', () => {
+      const result = authorizeToolIntegrationBodySchema.safeParse({
+        toolService: 'gmail',
+        connectionId: '',
+        config: 'not-an-object',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('listConnectionFieldsQuerySchema', () => {
+    it('requires toolService', () => {
+      expect(listConnectionFieldsQuerySchema.safeParse({}).success).toBe(false);
+      expect(listConnectionFieldsQuerySchema.safeParse({ toolService: 'gmail' }).success).toBe(true);
+    });
+  });
+
+  describe('listConnectionFieldsResponseSchema', () => {
+    it('accepts an empty fields array', () => {
+      const result = listConnectionFieldsResponseSchema.safeParse({ fields: [] });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts fields with required type/required and optional displayName/description/default', () => {
+      const result = listConnectionFieldsResponseSchema.safeParse({
+        fields: [
+          {
+            name: 'subdomain',
+            displayName: 'Subdomain',
+            description: 'Tenant subdomain',
+            type: 'string',
+            required: true,
+            default: 'example',
+          },
+          { name: 'port', type: 'number', required: false },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects unknown field types', () => {
+      const result = listConnectionFieldsResponseSchema.safeParse({
+        fields: [{ name: 'x', type: 'date', required: true }],
       });
       expect(result.success).toBe(false);
     });

@@ -14,6 +14,10 @@ vi.mock('@/domains/tool-integrations/hooks/use-existing-connections', () => ({
   useExistingConnections: () => ({ data: { items: [] }, isLoading: false }),
 }));
 
+vi.mock('@/domains/tool-integrations/hooks/use-connection-fields', () => ({
+  useConnectionFields: () => ({ data: { fields: [] }, isLoading: false }),
+}));
+
 const renderPanel = (services: ToolIntegrationServiceGroup[] = [], onConnectionsChange = vi.fn()) =>
   render(
     <TooltipProvider>

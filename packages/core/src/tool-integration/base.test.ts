@@ -169,4 +169,9 @@ describe('BaseToolIntegration', () => {
     const integration = new FakeIntegration(services, tools);
     expect(await integration.getHealth()).toEqual({ ok: true });
   });
+
+  it('returns [] from listConnectionFields by default (opt-in capability)', async () => {
+    const integration = new FakeIntegration(services, tools);
+    await expect(integration.listConnectionFields({ toolService: 'gmail' })).resolves.toEqual([]);
+  });
 });
