@@ -103,6 +103,14 @@ export const authorizeToolIntegrationBodySchema = z.object({
   toolService: z.string().describe('Tool service slug being authorized'),
   connectionId: z.string().describe('Existing or newly-minted connection bucket id'),
   toolName: z.string().optional().describe('Optional tool slug for tool-scoped authorization'),
+  config: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Provider-specific user-supplied connection fields (e.g. subdomain)'),
+});
+
+export const listConnectionFieldsQuerySchema = z.object({
+  toolService: z.string().describe('Tool service slug whose connection field schema to list'),
 });
 
 export const connectionStatusToolIntegrationBodySchema = z.object({
@@ -184,6 +192,19 @@ export const listConnectionsResponseSchema = z.object({
       connectionId: z.string(),
       status: z.enum(['active', 'pending', 'failed', 'inactive']),
       createdAt: z.string().optional(),
+    }),
+  ),
+});
+
+export const listConnectionFieldsResponseSchema = z.object({
+  fields: z.array(
+    z.object({
+      name: z.string(),
+      displayName: z.string().optional(),
+      description: z.string().optional(),
+      type: z.enum(['string', 'number', 'boolean']),
+      required: z.boolean(),
+      default: z.unknown().optional(),
     }),
   ),
 });

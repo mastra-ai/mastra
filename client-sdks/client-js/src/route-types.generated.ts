@@ -77254,6 +77254,12 @@ export type PostToolIntegrationsIntegrationIdAuthorize_Body = {
   connectionId: string;
   /** Optional tool slug for tool-scoped authorization */
   toolName?: string | undefined;
+  /** Provider-specific user-supplied connection fields (e.g. subdomain) */
+  config?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostToolIntegrationsIntegrationIdAuthorize_Response = {
@@ -77397,6 +77403,51 @@ export interface GetToolIntegrationsIntegrationIdConnections_RouteContract {
   body: never;
   request: GetToolIntegrationsIntegrationIdConnections_Request;
   response: GetToolIntegrationsIntegrationIdConnections_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-integrations/:integrationId/connection-fields
+// ============================================================================
+export type GetToolIntegrationsIntegrationIdConnectionFields_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+};
+
+export type GetToolIntegrationsIntegrationIdConnectionFields_QueryParams = {
+  /** Tool service slug whose connection field schema to list */
+  toolService: string;
+};
+
+export type GetToolIntegrationsIntegrationIdConnectionFields_Response = {
+  fields: {
+    name: string;
+    displayName?: string | undefined;
+    description?: string | undefined;
+    type: 'string' | 'number' | 'boolean';
+    required: boolean;
+    default?: unknown | undefined;
+  }[];
+};
+
+export type GetToolIntegrationsIntegrationIdConnectionFields_Request = Simplify<
+  (GetToolIntegrationsIntegrationIdConnectionFields_PathParams extends never
+    ? {}
+    : { params: GetToolIntegrationsIntegrationIdConnectionFields_PathParams }) &
+    (GetToolIntegrationsIntegrationIdConnectionFields_QueryParams extends never
+      ? {}
+      : {} extends GetToolIntegrationsIntegrationIdConnectionFields_QueryParams
+        ? { query?: GetToolIntegrationsIntegrationIdConnectionFields_QueryParams }
+        : { query: GetToolIntegrationsIntegrationIdConnectionFields_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrationsIntegrationIdConnectionFields_RouteContract {
+  pathParams: GetToolIntegrationsIntegrationIdConnectionFields_PathParams;
+  queryParams: GetToolIntegrationsIntegrationIdConnectionFields_QueryParams;
+  body: never;
+  request: GetToolIntegrationsIntegrationIdConnectionFields_Request;
+  response: GetToolIntegrationsIntegrationIdConnectionFields_Response;
   responseType: 'json';
 }
 
@@ -81442,6 +81493,7 @@ export interface RouteTypes {
   'GET /tool-integrations/:integrationId/auth-status/:authId': GetToolIntegrationsIntegrationIdAuthStatusAuthId_RouteContract;
   'POST /tool-integrations/:integrationId/connection-status': PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;
   'GET /tool-integrations/:integrationId/connections': GetToolIntegrationsIntegrationIdConnections_RouteContract;
+  'GET /tool-integrations/:integrationId/connection-fields': GetToolIntegrationsIntegrationIdConnectionFields_RouteContract;
   'GET /tool-integrations/:integrationId/health': GetToolIntegrationsIntegrationIdHealth_RouteContract;
   'GET /tool-providers': GetToolProviders_RouteContract;
   'GET /tool-providers/:providerId/toolkits': GetToolProvidersProviderIdToolkits_RouteContract;
@@ -82168,6 +82220,9 @@ export interface Client {
   };
   '/tool-integrations/:integrationId/authorize': {
     POST: PostToolIntegrationsIntegrationIdAuthorize_RouteContract;
+  };
+  '/tool-integrations/:integrationId/connection-fields': {
+    GET: GetToolIntegrationsIntegrationIdConnectionFields_RouteContract;
   };
   '/tool-integrations/:integrationId/connection-status': {
     POST: PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;

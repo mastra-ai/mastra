@@ -2,6 +2,7 @@ import type { ToolAction } from '../tools/types';
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
+  ConnectionField,
   ListConnectionsOpts,
   ListConnectionsResult,
   ListToolServicesResult,
@@ -102,6 +103,16 @@ export abstract class BaseToolIntegration implements ToolIntegration {
     items: Array<{ connectionId: string; toolService: string }>;
   }): Promise<Record<string, { connected: boolean }>>;
   abstract listConnections(opts: ListConnectionsOpts): Promise<ListConnectionsResult>;
+
+  /**
+   * Default connection-fields implementation — returns `[]`. Subclasses
+   * whose underlying provider requires user-supplied custom fields at
+   * authorize time (e.g. Confluence subdomain) should override.
+   */
+
+  async listConnectionFields(_opts: { toolService: string }): Promise<ConnectionField[]> {
+    return [];
+  }
 
   /**
    * Default health implementation — returns `{ ok: true }`. Subclasses that

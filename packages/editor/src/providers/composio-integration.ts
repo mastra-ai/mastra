@@ -1,6 +1,7 @@
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
+  ConnectionField,
   ExistingConnection,
   ListConnectionsOpts,
   ListConnectionsResult,
@@ -206,7 +207,7 @@ export class ComposioToolIntegration extends BaseToolIntegration {
 
   async authorize(opts: AuthorizeOpts): Promise<{ url: string; authId: string }> {
     const composio = this.getRawClient();
-    const authConfigId = await this.resolveAuthConfigId(opts.toolService);
+    const { id: authConfigId, authScheme } = await this.resolveAuthConfig(opts.toolService);
 
     // `connectionId` carries the internal user bucket for the runtime fan-out;
     // for authorize we treat it as the Composio `userId` so the new connected
@@ -214,8 +215,23 @@ export class ComposioToolIntegration extends BaseToolIntegration {
     const internalUserId = opts.connectionId || DEFAULT_INTERNAL_USER_ID;
     // `allowMultiple: true` — we explicitly support N connected accounts per
     // (user, auth config) and disambiguate at runtime via per-connection labels.
+    // `config` carries provider-specific user-supplied fields (e.g. Confluence
+    // subdomain) collected by the picker via `listConnectionFields`. Composio
+    // expects a discriminated `{ authScheme, val }` shape; we cast through
+    // `unknown` because our generic interface keeps it Record-shaped.
+    const initiateConfig =
+      opts.config && Object.keys(opts.config).length > 0 && authScheme
+        ? ({ authScheme, val: opts.config } as unknown as Parameters<
+            typeof composio.connectedAccounts.initiate
+          >[2] extends infer O
+            ? O extends { config?: infer C }
+              ? C
+              : never
+            : never)
+        : undefined;
     const request = await composio.connectedAccounts.initiate(internalUserId, authConfigId, {
       allowMultiple: true,
+      ...(initiateConfig ? { config: initiateConfig } : {}),
     });
 
     if (!request.redirectUrl) {
@@ -225,6 +241,29 @@ export class ComposioToolIntegration extends BaseToolIntegration {
     }
 
     return { url: request.redirectUrl, authId: request.id };
+  }
+
+  async listConnectionFields({ toolService }: { toolService: string }): Promise<ConnectionField[]> {
+    const composio = this.getRawClient();
+    const { authScheme } = await this.resolveAuthConfig(toolService);
+    if (!authScheme) {
+      // Without a known auth scheme we can't query the field schema — fall
+      // back to no fields rather than blocking the user.
+      return [];
+    }
+    const fields = await composio.toolkits.getConnectedAccountInitiationFields(
+      toolService,
+      authScheme,
+      { requiredOnly: false },
+    );
+    return fields.map(f => ({
+      name: f.name,
+      displayName: f.displayName,
+      description: f.description,
+      type: coerceFieldType(f.type),
+      required: f.required ?? false,
+      default: f.default ?? undefined,
+    }));
   }
 
   async getAuthStatus(authId: string): Promise<AuthFlowStatus> {
@@ -310,7 +349,9 @@ export class ComposioToolIntegration extends BaseToolIntegration {
    * or multiple configs match — the admin must enable exactly one in the
    * Composio dashboard before agents can connect.
    */
-  private async resolveAuthConfigId(toolService: string): Promise<string> {
+  private async resolveAuthConfig(
+    toolService: string,
+  ): Promise<{ id: string; authScheme?: ComposioAuthScheme }> {
     const composio = this.getRawClient();
     const response = await composio.authConfigs.list({ toolkit: toolService });
     const enabled = response.items.filter(item => item.status === 'ENABLED');
@@ -326,7 +367,31 @@ export class ComposioToolIntegration extends BaseToolIntegration {
         `[composio] Multiple ENABLED auth configs for tool service "${toolService}" (${ids}). Keep exactly one enabled.`,
       );
     }
-    return enabled[0]!.id;
+    return { id: enabled[0]!.id, authScheme: enabled[0]!.authScheme };
+  }
+}
+
+type ComposioAuthScheme = NonNullable<
+  Awaited<ReturnType<Composio['authConfigs']['list']>>['items'][number]['authScheme']
+>;
+
+/**
+ * Composio reports a free-form `type` string (e.g. `'string'`, `'text'`,
+ * `'number'`, `'bool'`). Map common values to our generic ConnectionField
+ * type vocabulary; everything else falls back to `'string'`.
+ */
+function coerceFieldType(type: string): 'string' | 'number' | 'boolean' {
+  switch (type.toLowerCase()) {
+    case 'number':
+    case 'integer':
+    case 'int':
+    case 'float':
+      return 'number';
+    case 'bool':
+    case 'boolean':
+      return 'boolean';
+    default:
+      return 'string';
   }
 }
 

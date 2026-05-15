@@ -151,6 +151,35 @@ export interface AuthorizeOpts {
   connectionId: string;
   /** Optional tool slug — some integrations scope authorize per tool. */
   toolName?: string;
+  /**
+   * Provider-specific custom fields collected from the user before the
+   * OAuth flow starts (e.g. Confluence `{ subdomain: 'mycorp' }`).
+   *
+   * The shape is described by {@link ConnectionField} and discovered via
+   * {@link ToolIntegration.listConnectionFields}. Adapters that don't
+   * need custom fields ignore this.
+   */
+  config?: Record<string, unknown>;
+}
+
+/**
+ * A single user-supplied field required to open a new connection on a
+ * tool service. Surfaced by {@link ToolIntegration.listConnectionFields}
+ * and rendered inline in the connection picker.
+ */
+export interface ConnectionField {
+  /** Programmatic name (e.g. `'subdomain'`). Sent back as a key in `AuthorizeOpts.config`. */
+  name: string;
+  /** Human-readable label (e.g. `'Your Subdomain'`). */
+  displayName: string;
+  /** Optional helper text rendered under the input. */
+  description?: string;
+  /** Storage / input type. Adapters coerce richer types into one of these. */
+  type: 'string' | 'number' | 'boolean';
+  /** Whether the user must provide a value before authorize can run. */
+  required: boolean;
+  /** Provider-suggested default (rendered as the input's initial value). */
+  default?: string | null;
 }
 
 /**
@@ -237,6 +266,15 @@ export interface ToolIntegration {
 
   /** Start an OAuth flow; returns the redirect URL and an opaque auth handle. */
   authorize(opts: AuthorizeOpts): Promise<{ url: string; authId: string }>;
+
+  /**
+   * List provider-specific custom fields the user must supply when starting
+   * a fresh OAuth flow for `toolService` (e.g. Confluence subdomain).
+   *
+   * Returning `[]` means the integration can authorize without extra input.
+   * The picker UI shows an inline form when this is non-empty.
+   */
+  listConnectionFields(opts: { toolService: string }): Promise<ConnectionField[]>;
 
   /** Poll the OAuth flow status by `authId`. */
   getAuthStatus(authId: string): Promise<AuthFlowStatus>;

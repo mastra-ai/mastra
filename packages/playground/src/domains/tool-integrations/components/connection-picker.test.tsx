@@ -65,6 +65,11 @@ describe('ConnectionPicker', () => {
       http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
         HttpResponse.json({ items: [] }),
       ),
+      // No provider-specific fields by default — keeps the picker tests
+      // quiet by satisfying the unconditional `useConnectionFields` query.
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connection-fields`, () =>
+        HttpResponse.json({ fields: [] }),
+      ),
     );
   });
 
@@ -189,6 +194,65 @@ describe('ConnectionPicker', () => {
       toolService: TOOL_SERVICE,
       label: 'Personal',
     });
+  });
+
+  it('collects provider-specific fields before initiating OAuth', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connection-fields`, () =>
+        HttpResponse.json({
+          fields: [
+            {
+              name: 'subdomain',
+              displayName: 'Subdomain',
+              description: 'Your workspace subdomain',
+              type: 'string',
+              required: true,
+            },
+          ],
+        }),
+      ),
+    );
+    authorizeMock.mockResolvedValue({ status: 'completed', connectionId: 'ca_new' });
+
+    const onChange = vi.fn();
+    renderPicker({ initial: [], onChange });
+
+    // Let react-query settle so `useConnectionFields` has resolved before we
+    // exercise the Connect button — otherwise the picker thinks there are
+    // no provider fields and goes straight to OAuth.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId(`connection-picker-${TOOL_SERVICE}-empty`)).toBeTruthy();
+    });
+
+    // First click opens the inline field form rather than calling authorize.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId(`connection-picker-${TOOL_SERVICE}-fields`)).toBeTruthy();
+    });
+    expect(authorizeMock).not.toHaveBeenCalled();
+
+    // Fill the required field and submit.
+    const subdomain = screen.getByTestId(`connection-field-${TOOL_SERVICE}-subdomain`) as HTMLInputElement;
+    fireEvent.change(subdomain, { target: { value: 'acme' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+    });
+
+    await waitFor(() => {
+      expect(authorizeMock).toHaveBeenCalledWith({
+        integrationId: INTEGRATION_ID,
+        toolService: TOOL_SERVICE,
+        config: { subdomain: 'acme' },
+      });
+    });
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall).toHaveLength(1);
+    expect(lastCall[0].connectionId).toBe('ca_new');
   });
 
   it('hides the existing-connections section in single-select once pinned', async () => {

@@ -3,7 +3,17 @@ import { Trash2, Plus, RefreshCw, AlertCircle, Link2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useAuthorize } from '../hooks/use-authorize';
+import { useConnectionFields } from '../hooks/use-connection-fields';
 import { useExistingConnections } from '../hooks/use-existing-connections';
+
+type ConnectionField = {
+  name: string;
+  displayName?: string;
+  description?: string;
+  type: 'string' | 'number' | 'boolean';
+  required: boolean;
+  default?: unknown;
+};
 
 /**
  * A single saved connection (provider-agnostic). Mirrors the shape that
@@ -77,6 +87,42 @@ export const ConnectionPicker = ({
 }: ConnectionPickerProps) => {
   const authorize = useAuthorize();
   const existing = useExistingConnections(integrationId, toolService);
+  const fieldsQuery = useConnectionFields(integrationId, toolService);
+  const fields = useMemo<ConnectionField[]>(
+    () => (fieldsQuery.data?.fields ?? []) as ConnectionField[],
+    [fieldsQuery.data?.fields],
+  );
+  const requiresFields = fields.length > 0;
+
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [showFieldForm, setShowFieldForm] = useState(false);
+
+  const fieldFormError = useMemo(() => {
+    if (!requiresFields) return undefined;
+    for (const f of fields) {
+      if (f.required && !(fieldValues[f.name] ?? '').trim()) {
+        return `${f.displayName || f.name} is required`;
+      }
+    }
+    return undefined;
+  }, [requiresFields, fields, fieldValues]);
+
+  const coerceFieldValues = (): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const f of fields) {
+      const raw = fieldValues[f.name];
+      if (raw === undefined || raw === '') continue;
+      if (f.type === 'number') {
+        const n = Number(raw);
+        if (!Number.isNaN(n)) out[f.name] = n;
+      } else if (f.type === 'boolean') {
+        out[f.name] = raw === 'true';
+      } else {
+        out[f.name] = raw;
+      }
+    }
+    return out;
+  };
 
   const pinnedIds = useMemo(() => new Set(connections.map(c => c.connectionId)), [connections]);
 
@@ -124,9 +170,23 @@ export const ConnectionPicker = ({
   };
 
   const handleAdd = async () => {
-    const result = await authorize.mutateAsync({ integrationId, toolService });
+    // If the provider declares additional fields (e.g. Confluence subdomain),
+    // surface an inline form first instead of jumping straight to OAuth.
+    if (requiresFields && !showFieldForm) {
+      setShowFieldForm(true);
+      return;
+    }
+    if (fieldFormError) return;
+    const config = requiresFields ? coerceFieldValues() : undefined;
+    const result = await authorize.mutateAsync({
+      integrationId,
+      toolService,
+      ...(config ? { config } : {}),
+    });
     if (result.status !== 'completed') return;
     onChange([...connections, { connectionId: result.connectionId, toolService, label: '' }]);
+    setShowFieldForm(false);
+    setFieldValues({});
   };
 
   const handleReauthorize = async (index: number) => {
@@ -217,9 +277,42 @@ export const ConnectionPicker = ({
     );
   };
 
+  const renderFieldForm = () => {
+    if (!requiresFields || !showFieldForm) return null;
+    return (
+      <div
+        className="flex flex-col gap-2 rounded-md border border-border-default/60 bg-surface-2/30 px-3 py-2"
+        data-testid={`connection-picker-${toolService}-fields`}
+      >
+        <Txt as="span" variant="ui-xs" className="text-text-muted">
+          This connection needs a few extra details before we can start OAuth.
+        </Txt>
+        {fields.map(f => (
+          <div key={f.name} className="flex flex-col gap-1">
+            <label className="text-text-muted text-ui-xs">
+              {f.displayName || f.name}
+              {f.required && <span className="text-error"> *</span>}
+            </label>
+            <Input
+              size="sm"
+              value={fieldValues[f.name] ?? ''}
+              placeholder={f.description ?? f.displayName ?? f.name}
+              onChange={e => setFieldValues(prev => ({ ...prev, [f.name]: e.target.value }))}
+              disabled={disabled || authorize.isPending}
+              data-testid={`connection-field-${toolService}-${f.name}`}
+            />
+            {f.description && <p className="text-text-muted text-ui-xs">{f.description}</p>}
+          </div>
+        ))}
+        {fieldFormError && <p className="text-error text-ui-xs">{fieldFormError}</p>}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-2" data-testid={`connection-picker-${toolService}`}>
       {renderExistingSection()}
+      {renderFieldForm()}
       {connections.length === 0 ? (
         <div
           className="flex items-center gap-2 rounded-md border border-dashed border-warning/40 bg-warning/5 px-3 py-2"

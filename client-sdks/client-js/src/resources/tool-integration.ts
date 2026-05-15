@@ -2,6 +2,8 @@ import type {
   AuthorizeToolIntegrationParams,
   AuthorizeToolIntegrationResponse,
   ClientOptions,
+  ListToolIntegrationConnectionFieldsParams,
+  ListToolIntegrationConnectionFieldsResponse,
   ListToolIntegrationConnectionsParams,
   ListToolIntegrationConnectionsResponse,
   ListToolIntegrationToolsParams,
@@ -105,6 +107,21 @@ export class ToolIntegration extends BaseResource {
     searchParams.set('toolService', params.toolService);
     return this.request(
       `/tool-integrations/${encodeURIComponent(this.integrationId)}/connections?${searchParams.toString()}`,
+    );
+  }
+
+  /**
+   * Lists provider-specific fields the picker should collect before
+   * initiating a new connection (e.g. Confluence subdomain). Most tool
+   * services return an empty array.
+   */
+  listConnectionFields(
+    params: ListToolIntegrationConnectionFieldsParams,
+  ): Promise<ListToolIntegrationConnectionFieldsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('toolService', params.toolService);
+    return this.request(
+      `/tool-integrations/${encodeURIComponent(this.integrationId)}/connection-fields?${searchParams.toString()}`,
     );
   }
 

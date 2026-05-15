@@ -17,6 +17,7 @@ export type {
   ListConnectionsOpts,
   ListConnectionsResult,
   ExistingConnection,
+  ConnectionField,
 } from './tool-integration';
 
 export { BaseToolIntegration } from './base';

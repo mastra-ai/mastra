@@ -10,6 +10,11 @@ export interface AuthorizeArgs {
    * bucket the new connected account should be created under.
    */
   connectionId?: string;
+  /**
+   * Provider-specific connection fields collected from the picker (e.g.
+   * Confluence subdomain). Forwarded to the server's `authorize` body.
+   */
+  config?: Record<string, unknown>;
 }
 
 export interface AuthorizeResult {
@@ -49,11 +54,12 @@ export const useAuthorize = (options: UseAuthorizeOptions = {}) => {
   const openPopup = options.openPopup ?? ((url: string) => window.open(url, '_blank', 'popup,width=600,height=700'));
 
   return useMutation<AuthorizeResult, Error, AuthorizeArgs>({
-    mutationFn: async ({ integrationId, toolService, connectionId }) => {
+    mutationFn: async ({ integrationId, toolService, connectionId, config }) => {
       const integration = client.getToolIntegration(integrationId);
       const { url, authId } = await integration.authorize({
         toolService,
         connectionId: connectionId ?? '',
+        ...(config ? { config } : {}),
       });
 
       const popup = openPopup(url);

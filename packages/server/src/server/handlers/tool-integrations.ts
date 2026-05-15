@@ -11,6 +11,8 @@ import {
   authStatusToolIntegrationResponseSchema,
   connectionStatusToolIntegrationBodySchema,
   connectionStatusToolIntegrationResponseSchema,
+  listConnectionFieldsQuerySchema,
+  listConnectionFieldsResponseSchema,
   listConnectionsQuerySchema,
   listConnectionsResponseSchema,
   listToolIntegrationsResponseSchema,
@@ -170,7 +172,7 @@ export const AUTHORIZE_TOOL_INTEGRATION_ROUTE = createRoute({
   description: 'Starts an OAuth flow and returns a redirect URL + opaque auth handle',
   tags: ['Tool Integrations'],
   requiresAuth: true,
-  handler: async ({ mastra, integrationId, toolService, connectionId, toolName, requestContext }) => {
+  handler: async ({ mastra, integrationId, toolService, connectionId, toolName, config, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
       const integration = resolveIntegration(editor, integrationId);
@@ -179,7 +181,7 @@ export const AUTHORIZE_TOOL_INTEGRATION_ROUTE = createRoute({
       // runtime will use at execution time. Re-auth (caller passed an existing
       // `connectionId`) is left untouched so the adapter refreshes in place.
       const bucket = connectionId && connectionId.length > 0 ? connectionId : resolveOwnerId(requestContext);
-      return await integration.authorize({ toolService, connectionId: bucket, toolName });
+      return await integration.authorize({ toolService, connectionId: bucket, toolName, config });
     } catch (error) {
       return handleError(error, 'Error authorizing tool integration');
     }
@@ -265,6 +267,34 @@ export const LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE = createRoute({
       return await integration.listConnections({ toolService, userId });
     } catch (error) {
       return handleError(error, 'Error listing tool integration connections');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/connection-fields - List provider-specific
+ * fields the picker should collect before initiating a new connection (e.g.
+ * Confluence subdomain). Most tool services return an empty array.
+ */
+export const LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/connection-fields',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  queryParamSchema: listConnectionFieldsQuerySchema,
+  responseSchema: listConnectionFieldsResponseSchema,
+  summary: 'List connection field schema',
+  description: 'Returns a list of provider-specific fields the UI should collect before initiating an authorize call',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, toolService }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const fields = await integration.listConnectionFields({ toolService });
+      return { fields };
+    } catch (error) {
+      return handleError(error, 'Error listing tool integration connection fields');
     }
   },
 });

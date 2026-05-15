@@ -2370,6 +2370,13 @@ export type ListToolIntegrationConnectionsParams = GeneratedRequest<
 export type ListToolIntegrationConnectionsResponse =
   GeneratedResponse<'GET /tool-integrations/:integrationId/connections'>;
 
+export type ListToolIntegrationConnectionFieldsParams = GeneratedRequest<
+  QueryParams<'GET /tool-integrations/:integrationId/connection-fields'>
+>;
+
+export type ListToolIntegrationConnectionFieldsResponse =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/connection-fields'>;
+
 export type ToolIntegrationHealthResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/health'>;
 
 // ============================================================================
