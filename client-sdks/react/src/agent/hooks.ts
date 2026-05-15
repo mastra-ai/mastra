@@ -121,7 +121,9 @@ export const useChat = ({
   }, [propsRequestContext]);
 
   type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
-  type SignalContentPart = Exclude<UserMessageSignalContents, string>[number];
+  type SignalContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'file'; data: string; mimeType: string; filename?: string };
 
   const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
     if (data instanceof URL) return data.toString();
