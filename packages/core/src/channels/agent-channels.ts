@@ -1087,8 +1087,10 @@ export class AgentChannels {
       if (!mimeType) continue;
 
       const inline = this.shouldInline(mimeType);
+      const filename = att.name || att.url?.split('/').pop() || 'file';
       if (inline) {
         let data: string | undefined;
+        let fetchFailed = false;
         if (att.fetchData) {
           // Prefer authenticated fetch (e.g. Slack CDN requires auth)
           try {
@@ -1096,8 +1098,8 @@ export class AgentChannels {
             const base64 = Buffer.from(buf).toString('base64');
             data = `data:${mimeType};base64,${base64}`;
           } catch (err) {
-            this.logger?.warn('[CHANNEL] fetchData failed, falling back to URL', { mimeType, error: String(err) });
-            data = att.url;
+            this.logger?.warn('[CHANNEL] fetchData failed', { mimeType, error: String(err) });
+            fetchFailed = true;
           }
         } else {
           // Public URL (e.g. Discord CDN) — let the provider fetch directly
@@ -1114,9 +1116,13 @@ export class AgentChannels {
             mediaType: mimeType,
             ...(att.name ? { filename: att.name } : {}),
           });
+        } else if (fetchFailed) {
+          parts.push({
+            type: 'text',
+            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
+          });
         }
       } else {
-        const filename = att.name || att.url?.split('/').pop() || 'file';
         parts.push({
           type: 'text',
           text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
