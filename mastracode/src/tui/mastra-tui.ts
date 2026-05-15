@@ -462,7 +462,10 @@ export class MastraTUI {
     // workspace may not be resolved yet on cold start; once it is, refresh
     // the provider so `/skill/<name>` entries appear without restart.
     setupAutocomplete(this.state);
-    void refreshSkillsAutocomplete(this.state);
+    refreshSkillsAutocomplete(this.state).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[skill autocomplete refresh] ${msg}\n`);
+    });
 
     // Build UI layout
     buildLayout(this.state, () => this.refreshModelAuthStatus());
