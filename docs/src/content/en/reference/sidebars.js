@@ -33,6 +33,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/getInstructions', label: '.getInstructions()' },
         { type: 'doc', id: 'agents/getLLM', label: '.getLLM()' },
         { type: 'doc', id: 'agents/getMemory', label: '.getMemory()' },
+        { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
@@ -257,7 +258,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       collapsed: true,
       items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
     },
@@ -455,6 +456,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
+        { type: 'doc', id: 'storage/dsql', label: 'Aurora DSQL Storage' },
         { type: 'doc', id: 'storage/clickhouse', label: 'ClickHouse Storage' },
         { type: 'doc', id: 'storage/cloudflare-d1', label: 'Cloudflare D1 Storage' },
         { type: 'doc', id: 'storage/cloudflare', label: 'Cloudflare KV Storage' },
@@ -571,6 +573,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/playai', label: 'PlayAI' },
         { type: 'doc', id: 'voice/sarvam', label: 'Sarvam' },
         { type: 'doc', id: 'voice/speechify', label: 'Speechify' },
+        { type: 'doc', id: 'voice/xai-realtime', label: 'xAI Realtime' },
         { type: 'doc', id: 'voice/voice.addInstructions', label: '.addInstructions()' },
         { type: 'doc', id: 'voice/voice.addTools', label: '.addTools()' },
         { type: 'doc', id: 'voice/voice.answer', label: '.answer()' },

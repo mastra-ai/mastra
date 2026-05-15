@@ -1,3 +1,4 @@
+import { Container } from '@mariozechner/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -7,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../render-messages.js', async importOriginal => {
-  const actual = await importOriginal();
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     addUserMessage: mocks.addUserMessage,
@@ -37,6 +38,8 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     streamingComponent: undefined,
     streamingMessage: undefined,
     followUpComponents: [],
+    messageComponentsById: new Map(),
+    pendingSignalMessageComponentsById: new Map(),
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     pendingSlashCommands: [],
@@ -52,7 +55,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
     allShellComponents: [],
-    ui: { requestRender: vi.fn() } as TUIState['ui'],
+    ui: { requestRender: vi.fn() } as unknown as TUIState['ui'],
     ...overrides,
   } as unknown as TUIState;
 }
@@ -69,6 +72,7 @@ function createQueueContext(state: TUIState, overrides: Partial<EventHandlerCont
     addUserMessage: vi.fn(),
     addChildBeforeFollowUps: vi.fn(),
     fireMessage: vi.fn(),
+    startGoal: vi.fn(),
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
@@ -85,7 +89,7 @@ describe('MastraTUI queueing', () => {
     mocks.showError.mockReset();
   });
 
-  it('queues editor submissions instead of resolving input while the harness is running', async () => {
+  it('sends editor submissions as signals instead of resolving input while the harness is running', async () => {
     const editor = {
       onSubmit: undefined as ((text: string) => void) | undefined,
       addToHistory: vi.fn(),
@@ -107,16 +111,19 @@ describe('MastraTUI queueing', () => {
       state: typeof state;
       getUserInput: () => Promise<string>;
       queueFollowUpMessage: (text: string) => void;
+      signalMessage: (text: string) => void;
     };
     tui.state = state;
     tui.queueFollowUpMessage = vi.fn();
+    tui.signalMessage = vi.fn();
 
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('queued follow-up');
 
     expect(editor.addToHistory).toHaveBeenCalledWith('queued follow-up');
     expect(editor.setText).toHaveBeenCalledWith('');
-    expect(tui.queueFollowUpMessage).toHaveBeenCalledWith('queued follow-up');
+    expect(tui.signalMessage).toHaveBeenCalledWith('queued follow-up');
+    expect(tui.queueFollowUpMessage).not.toHaveBeenCalled();
 
     const resolution = await Promise.race([
       pendingInput.then(value => ({ resolved: true as const, value })),
@@ -166,6 +173,213 @@ describe('MastraTUI queueing', () => {
       Promise.resolve({ resolved: false as const, value: undefined }),
     ]);
     expect(resolution).toEqual({ resolved: false, value: undefined });
+  });
+
+  it('keeps signal messages pending after sendSignal accepts until the stream echoes them', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => true,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: true }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage('stay pending');
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'stay pending' });
+    expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(true);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(mocks.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('creates a pending new thread before sending an optimistic signal', async () => {
+    const createThread = vi.fn().mockResolvedValue({ id: 'thread-new' });
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      pendingNewThread: true,
+      harness: {
+        createThread,
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      sendOptimisticSignal: (text: string, images: undefined, optimisticMessageId: string) => void;
+    };
+    tui.state = state;
+    state.messageComponentsById.set('user-optimistic', {} as never);
+
+    tui.sendOptimisticSignal('starts new thread', undefined, 'user-optimistic');
+
+    expect(createThread).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'starts new thread' });
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('remaps pre-hook optimistic messages to signal ids for echo dedupe', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-after-hook', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      renderOptimisticUserMessage: (text: string) => string;
+      sendOptimisticSignal: (text: string, images: undefined, optimisticMessageId: string) => void;
+    };
+    tui.state = state;
+
+    const optimisticId = 'user-optimistic';
+    const component = {};
+    state.messageComponentsById.set(optimisticId, component as never);
+
+    tui.sendOptimisticSignal('shows immediately', undefined, optimisticId);
+    await Promise.resolve();
+
+    expect(state.messageComponentsById.has(optimisticId)).toBe(false);
+    expect(state.messageComponentsById.has('signal-after-hook')).toBe(true);
+  });
+
+  it('creates a pending new thread before sending an idle signal message', async () => {
+    const createThread = vi.fn().mockResolvedValue({ id: 'thread-new' });
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      pendingNewThread: true,
+      harness: {
+        createThread,
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage('new thread follow-up');
+
+    expect(createThread).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'new thread follow-up' });
+    expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
+      id: 'signal-after-new',
+      role: 'user',
+      content: [{ type: 'text', text: 'new thread follow-up' }],
+      createdAt: expect.any(Date),
+    });
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('renders idle signal messages directly instead of pending them', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-idle-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage('render directly');
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'render directly' });
+    expect(state.pendingSignalMessageComponentsById.has('signal-idle-1')).toBe(false);
+    expect(state.chatContainer.children).toHaveLength(0);
+    expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
+      id: 'signal-idle-1',
+      role: 'user',
+      content: [{ type: 'text', text: 'render directly' }],
+      createdAt: expect.any(Date),
+    });
+  });
+
+  it('renders idle image signals with the echoed signal id so they dedupe', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-image-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string, images?: Array<{ data: string; mimeType: string }>) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage("what's in this image?", [{ data: 'data:image/png;base64,abc', mimeType: 'image/png' }]);
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: {
+        role: 'user',
+        content: [
+          { type: 'text', text: "what's in this image?" },
+          { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
+        ],
+      },
+    });
+    expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
+      id: 'signal-image-1',
+      role: 'user',
+      content: [
+        { type: 'text', text: "what's in this image?" },
+        { type: 'image', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
+      ],
+      createdAt: expect.any(Date),
+    });
   });
 
   it('queues follow-up messages with images in FIFO order metadata', () => {
@@ -316,6 +530,81 @@ describe('MastraTUI queueing', () => {
     expect(ctx.fireMessage).not.toHaveBeenCalledWith('goal continuation');
   });
 
+  it('sends goal continuation as a system-reminder signal', async () => {
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+    const state = createQueueState({
+      harness: {
+        getFollowUpCount: vi.fn(() => 0),
+        sendSignal,
+      } as any,
+      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      goalManager: {
+        isActive: vi.fn(() => true),
+        getGoal: vi.fn(() => ({
+          id: 'goal-1',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.5',
+          turnsUsed: 2,
+          maxTurns: 20,
+        })),
+        evaluateAfterTurn: vi.fn().mockResolvedValue({
+          continuation: 'goal continuation',
+          judgeResult: { decision: 'continue', reason: 'Keep going.' },
+        }),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    await vi.waitFor(() => {
+      expect(sendSignal).toHaveBeenCalledWith({
+        type: 'system-reminder',
+        contents: 'goal continuation',
+        attributes: { type: 'goal-judge' },
+        metadata: {
+          goalId: 'goal-1',
+          turnsUsed: 2,
+          maxTurns: 20,
+          judgeModelId: 'openai/gpt-5.5',
+        },
+      });
+    });
+    expect(ctx.fireMessage).not.toHaveBeenCalled();
+  });
+
+  it('shows an error when goal continuation signal delivery fails', async () => {
+    const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new Error('signal rejected')) }));
+    const state = createQueueState({
+      harness: {
+        getFollowUpCount: vi.fn(() => 0),
+        sendSignal,
+      } as any,
+      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      goalManager: {
+        isActive: vi.fn(() => true),
+        getGoal: vi.fn(() => ({
+          id: 'goal-1',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.5',
+          turnsUsed: 2,
+          maxTurns: 20,
+        })),
+        evaluateAfterTurn: vi.fn().mockResolvedValue({
+          continuation: 'goal continuation',
+          judgeResult: { decision: 'continue', reason: 'Keep going.' },
+        }),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    await vi.waitFor(() => {
+      expect(ctx.showError).toHaveBeenCalledWith('Failed to send goal continuation: signal rejected');
+    });
+  });
+
   it('persists terminal goal judge responses when no continuation is queued', async () => {
     const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const state = createQueueState({
@@ -363,6 +652,50 @@ describe('MastraTUI queueing', () => {
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);
     expect(mocks.showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
+  });
+
+  it('cancels an in-flight goal judge when the user aborts before it resolves', async () => {
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+    let resolveEvaluation:
+      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
+      | undefined;
+    const state = createQueueState({
+      harness: {
+        getFollowUpCount: vi.fn(() => 0),
+        sendSignal,
+      } as any,
+      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      goalManager: {
+        isActive: vi.fn(() => true),
+        getGoal: vi.fn(() => ({
+          id: 'goal-1',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.5',
+          turnsUsed: 2,
+          maxTurns: 20,
+        })),
+        evaluateAfterTurn: vi.fn(
+          () =>
+            new Promise(resolve => {
+              resolveEvaluation = resolve;
+            }),
+        ),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+    handleAgentAborted(ctx);
+    resolveEvaluation?.({
+      continuation: 'goal continuation',
+      judgeResult: { decision: 'continue', reason: 'Keep going.' },
+    });
+
+    await vi.waitFor(() => {
+      expect(state.gradientAnimator?.fadeOut).toHaveBeenCalled();
+    });
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(state.chatContainer.children).toHaveLength(0);
   });
 
   it('waits for harness-level follow-ups to finish before draining the local queue', () => {

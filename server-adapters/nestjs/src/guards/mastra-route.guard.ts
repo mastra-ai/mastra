@@ -32,6 +32,10 @@ export class MastraRouteGuard implements CanActivate {
     const method = request.method.toUpperCase();
     const routePath = getMastraRoutePath(request.path, this.options.prefix);
 
+    if (!routePath) {
+      return true;
+    }
+
     // If not a Mastra route, allow controller to handle 404 logic.
     const matchResult = this.routeHandler.matchRoute(method, routePath);
     if (!matchResult) {

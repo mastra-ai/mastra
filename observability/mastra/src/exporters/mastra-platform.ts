@@ -232,7 +232,8 @@ export class MastraPlatformExporter extends BaseExporter {
       throw createInvalidProjectIdError(config.projectId);
     }
 
-    const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+    const accessToken =
+      config.accessToken || process.env.MASTRA_PLATFORM_ACCESS_TOKEN || process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     // Treat an empty MASTRA_PROJECT_ID as unset so deployments that always
     // export the variable (e.g. CI templates) don't have to special-case it.
     const envProjectId = process.env.MASTRA_PROJECT_ID === '' ? undefined : process.env.MASTRA_PROJECT_ID;
@@ -242,7 +243,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
     const projectId = rawProjectId;
     if (!accessToken) {
-      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
+      this.setDisabled('MASTRA_PLATFORM_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
     const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;

@@ -13,7 +13,7 @@ export function AgentHeader({ agentId }: { agentId: string }) {
           Agents
         </Crumb>
         <Crumb as="span" to="" isCurrent>
-          <AgentCombobox value={agentId} variant="ghost" />
+          <AgentCombobox value={agentId} variant="ghost" size="sm" />
         </Crumb>
       </Breadcrumb>
 

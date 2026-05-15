@@ -1100,6 +1100,31 @@ export class MessageList {
     return true;
   }
 
+  public markResponseMessageBoundary(messageId?: string): boolean {
+    const message = messageId
+      ? this.messages.find(message => message.id === messageId)
+      : [...this.messages].reverse().find(message => message.role === 'assistant');
+
+    if (!message || message.role !== 'assistant') {
+      return false;
+    }
+
+    message.content.metadata = {
+      ...(message.content.metadata ?? {}),
+      mastra: {
+        ...((message.content.metadata?.mastra as Record<string, unknown> | undefined) ?? {}),
+        responseBoundary: true,
+      },
+    };
+
+    if (!this.stateManager.isResponseMessage(message)) {
+      this.stateManager.removeMessage(message);
+      this.stateManager.addToSource(message, 'response');
+    }
+
+    return true;
+  }
+
   public enrichLastStepStart(model: string): boolean {
     const lastMsg = this.messages[this.messages.length - 1];
     if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
@@ -1327,6 +1352,9 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    if (messageSource === 'input' && messageV2.role === 'signal') {
+      messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
+    }
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 

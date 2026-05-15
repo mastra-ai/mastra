@@ -74,7 +74,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (requires MASTRA_CLOUD_ACCESS_TOKEN)
+          new MastraPlatformExporter(), // Sends observability events to Mastra platform (requires MASTRA_PLATFORM_ACCESS_TOKEN)
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },

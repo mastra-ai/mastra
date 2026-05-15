@@ -45,7 +45,7 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -1235,6 +1235,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
 
             if (interjectedSignals.length > 0) {
+              messageList.markResponseMessageBoundary(currentStep.messageId);
               outputStream.messageId = rotateResponseMessageId();
               for (const signal of interjectedSignals) {
                 messageList.add(signal, 'input');
