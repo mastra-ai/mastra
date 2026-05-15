@@ -1,13 +1,17 @@
 ---
+'@mastra/libsql': minor
+'@mastra/pg': minor
+'@mastra/mongodb': minor
 '@mastra/clickhouse': minor
+'@mastra/cloudflare': minor
 ---
 
-Added favorites support to the ClickHouse adapter so favorite records for stored agents and skills can be persisted alongside other ClickHouse-backed tables.
+Added favorites support to storage adapters so callers can favorite/unfavorite stored agents and skills, query favorite state alongside list results, and filter listings by visibility.
 
 **Example**
 
 ```ts
-const storage = new ClickhouseStore({ /* config */ });
+const storage = new LibSQLStore({ /* config */ });
 const favorites = await storage.getStore('favorites');
 
 await favorites?.favorite({
