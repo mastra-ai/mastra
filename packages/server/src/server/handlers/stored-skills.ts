@@ -235,13 +235,13 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Skills storage domain is not available' });
       }
 
-      // Check if skill exists
-      const existing = await skillStore.getById(storedSkillId);
+      // Check if skill exists. Skill metadata lives on the resolved snapshot.
+      const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
-      assertStoredResourceScope(await skillStore.getByIdResolved(storedSkillId), scope);
+      assertStoredResourceScope(existing, scope);
 
       // Update the skill with both entity-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
@@ -299,15 +299,12 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Skills storage domain is not available' });
       }
 
-      // Check if skill exists
-      const existing = await skillStore.getById(storedSkillId);
+      // Check if skill exists. Skill metadata lives on the resolved snapshot.
+      const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
-      assertStoredResourceScope(
-        await skillStore.getByIdResolved(storedSkillId),
-        await getStoredResourceScope(mastra, requestContext),
-      );
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       await skillStore.delete(storedSkillId);
 
@@ -356,15 +353,12 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Blob storage domain is not available' });
       }
 
-      // Verify skill exists
-      const existing = await skillStore.getById(storedSkillId);
+      // Verify skill exists. Skill metadata lives on the resolved snapshot.
+      const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
-      assertStoredResourceScope(
-        await skillStore.getByIdResolved(storedSkillId),
-        await getStoredResourceScope(mastra, requestContext),
-      );
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       // Validate skillPath to prevent path traversal
       const path = await import('node:path');
