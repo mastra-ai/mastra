@@ -1,7 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef } from 'react';
-import type { ReactNode } from 'react';
-import { groupTracesByThread } from '../utils/group-traces-by-thread';
+import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
@@ -19,6 +18,8 @@ export type TracesListViewTrace = {
   traceId: string;
   /** Required for branch rows; absent on plain trace rows (which are root-rooted). */
   spanId?: string | null;
+  /** `null`/missing → root span. Drives the Kind column's icon (top-level trace vs nested branch). */
+  parentSpanId?: string | null;
   name: string;
   entityType?: string | null;
   entityId?: string | null;
@@ -27,18 +28,13 @@ export type TracesListViewTrace = {
   input?: unknown;
   startedAt?: Date | string | null;
   createdAt: Date | string;
-  threadId?: string | null;
 };
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '7rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
+const COLUMNS = '4rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
-
-type ListItem =
-  | { kind: 'subheader'; key: string; node: ReactNode }
-  | { kind: 'row'; key: string; trace: TracesListViewTrace };
 
 export type TracesListViewProps = {
   traces: TracesListViewTrace[];
@@ -56,13 +52,10 @@ export type TracesListViewProps = {
   featuredSpanId?: string | null;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
-  groupByThread?: boolean;
-  threadTitles?: Record<string, string>;
 };
 
 /**
- * Virtualized presentational list. Flattens optional thread groups into a single
- * indexed item array, renders only the visible window via TanStack Virtual, and
+ * Virtualized presentational list. Renders only the visible window via TanStack Virtual, and
  * uses DataList primitives for layout (CSS Grid with subgrid rows).
  */
 export function TracesListView({
@@ -75,55 +68,11 @@ export function TracesListView({
   featuredTraceId,
   featuredSpanId,
   onTraceClick,
-  groupByThread,
-  threadTitles,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const items = useMemo<ListItem[]>(() => {
-    if (traces.length === 0) return [];
-    if (!groupByThread) {
-      return traces.map(trace => ({ kind: 'row', key: `${trace.traceId}:${trace.spanId ?? ''}`, trace }));
-    }
-    const { groups, ungrouped } = groupTracesByThread(traces);
-    const result: ListItem[] = [];
-    for (const group of groups) {
-      result.push({
-        kind: 'subheader',
-        key: `header-${group.threadId}`,
-        node: (
-          <TracesDataList.SubHeading className="flex gap-2">
-            <span className="uppercase">Thread</span>
-            {threadTitles?.[group.threadId] && <b>'{threadTitles[group.threadId]}'</b>}
-            <b># {group.threadId}</b>
-            <span className="text-neutral2">({group.traces.length})</span>
-          </TracesDataList.SubHeading>
-        ),
-      });
-      for (const trace of group.traces) {
-        result.push({ kind: 'row', key: `${trace.traceId}:${trace.spanId ?? ''}`, trace });
-      }
-    }
-    if (ungrouped.length > 0) {
-      result.push({
-        kind: 'subheader',
-        key: 'header-ungrouped',
-        node: (
-          <TracesDataList.SubHeading className="flex gap-2 uppercase">
-            <span>No thread</span>
-            <span className="text-neutral2">({ungrouped.length})</span>
-          </TracesDataList.SubHeading>
-        ),
-      });
-      for (const trace of ungrouped) {
-        result.push({ kind: 'row', key: `${trace.traceId}:${trace.spanId ?? ''}`, trace });
-      }
-    }
-    return result;
-  }, [traces, groupByThread, threadTitles]);
-
   const virtualizer = useVirtualizer({
-    count: items.length,
+    count: traces.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
@@ -160,7 +109,22 @@ export function TracesListView({
   return (
     <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>ID</TracesDataList.TopCell>
+        <TracesDataList.TopCellWithTooltip
+          tooltip={
+            <div className="grid gap-1">
+              <span className="flex items-center gap-1.5">
+                <ListTreeIcon className="size-4 shrink-0" aria-hidden />
+                Trace
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CornerDownRightIcon className="size-4 shrink-0" aria-hidden />
+                Subtrace
+              </span>
+            </div>
+          }
+        >
+          Level
+        </TracesDataList.TopCellWithTooltip>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
@@ -169,7 +133,7 @@ export function TracesListView({
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
       </TracesDataList.Top>
 
-      {items.length === 0 ? (
+      {traces.length === 0 ? (
         <TracesDataList.NoMatch
           message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
         />
@@ -177,18 +141,9 @@ export function TracesListView({
         <>
           <TracesDataList.Spacer height={paddingTop} />
           {virtualItems.map(vi => {
-            const item = items[vi.index];
-            if (!item) return null;
+            const trace = traces[vi.index];
+            if (!trace) return null;
 
-            if (item.kind === 'subheader') {
-              return (
-                <TracesDataList.Subheader key={item.key} ref={virtualizer.measureElement} data-index={vi.index}>
-                  {item.node}
-                </TracesDataList.Subheader>
-              );
-            }
-
-            const trace = item.trace;
             const isFeatured =
               trace.traceId === featuredTraceId && (featuredSpanId == null || trace.spanId === featuredSpanId);
             const displayDate = trace.startedAt ?? trace.createdAt;
@@ -197,13 +152,13 @@ export function TracesListView({
 
             return (
               <TracesDataList.RowButton
-                key={trace.traceId}
+                key={`${trace.traceId}:${trace.spanId ?? ''}`}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
                 onClick={() => onTraceClick(trace)}
                 className={cn(isFeatured && 'bg-surface4')}
               >
-                <TracesDataList.IdCell traceId={trace.traceId} />
+                <TracesDataList.KindCell parentSpanId={trace.parentSpanId} />
                 <TracesDataList.DateCell timestamp={displayDate} />
                 <TracesDataList.TimeCell timestamp={displayDate} />
                 <TracesDataList.NameCell name={trace.name} />

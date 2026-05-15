@@ -264,6 +264,7 @@ const modelConfigSchema = z.object({
 export const serializedAgentSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   instructions: systemMessageSchema.optional(),
   tools: z.record(z.string(), serializedToolSchema),
   agents: z.record(z.string(), serializedAgentDefinitionSchema),

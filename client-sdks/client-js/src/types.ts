@@ -437,6 +437,7 @@ export interface GetAgentResponse {
   id: string;
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
