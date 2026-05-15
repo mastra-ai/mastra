@@ -4225,6 +4225,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "config",
       "connectionId",
       "toolName",
       "toolService"
@@ -4281,6 +4282,23 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "items"
+    }
+  },
+  "GET /tool-integrations/:integrationId/connection-fields": {
+    "method": "GET",
+    "path": "/tool-integrations/:integrationId/connection-fields",
+    "pathParams": [
+      "integrationId"
+    ],
+    "queryParams": [
+      "toolService"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "fields"
     }
   },
   "GET /tool-integrations/:integrationId/health": {
