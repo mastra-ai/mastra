@@ -1,4 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
@@ -17,6 +18,8 @@ export type TracesListViewTrace = {
   traceId: string;
   /** Required for branch rows; absent on plain trace rows (which are root-rooted). */
   spanId?: string | null;
+  /** `null`/missing → root span. Drives the Kind column's icon (top-level trace vs nested branch). */
+  parentSpanId?: string | null;
   name: string;
   entityType?: string | null;
   entityId?: string | null;
@@ -28,7 +31,7 @@ export type TracesListViewTrace = {
 };
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '7rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
+const COLUMNS = '4rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -106,7 +109,22 @@ export function TracesListView({
   return (
     <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>ID</TracesDataList.TopCell>
+        <TracesDataList.TopCellWithTooltip
+          tooltip={
+            <div className="grid gap-1">
+              <span className="flex items-center gap-1.5">
+                <ListTreeIcon className="size-4 shrink-0" aria-hidden />
+                Trace
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CornerDownRightIcon className="size-4 shrink-0" aria-hidden />
+                Subtrace
+              </span>
+            </div>
+          }
+        >
+          Level
+        </TracesDataList.TopCellWithTooltip>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
@@ -140,7 +158,7 @@ export function TracesListView({
                 onClick={() => onTraceClick(trace)}
                 className={cn(isFeatured && 'bg-surface4')}
               >
-                <TracesDataList.IdCell traceId={trace.traceId} />
+                <TracesDataList.KindCell parentSpanId={trace.parentSpanId} />
                 <TracesDataList.DateCell timestamp={displayDate} />
                 <TracesDataList.TimeCell timestamp={displayDate} />
                 <TracesDataList.NameCell name={trace.name} />
