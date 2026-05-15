@@ -1105,6 +1105,10 @@ export class AgentChannels {
         }
         if (data) {
           parts.push({
+            type: 'text',
+            text: `[Attached ${mimeType} file${att.name ? `: ${att.name}` : ''}]`,
+          });
+          parts.push({
             type: 'file',
             data,
             mimeType,
