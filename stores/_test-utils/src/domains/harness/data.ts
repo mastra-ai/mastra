@@ -8,6 +8,7 @@ export function createSampleSessionRecord(overrides: Partial<SessionRecord> = {}
   const now = Date.now();
   return {
     id: 'session-1',
+    harnessName: 'default',
     resourceId: 'resource-1',
     threadId: 'thread-1',
     origin: 'top-level',

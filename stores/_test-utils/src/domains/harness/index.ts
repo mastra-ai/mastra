@@ -1,4 +1,6 @@
 import {
+  HarnessStorageAdmissionConflictError,
+  HarnessStorageAttachmentUnavailableError,
   HarnessStorageLeaseConflictError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
@@ -158,6 +160,74 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         const loaded = await harness.loadSession({ sessionId: 'session-1' });
         expect(loaded?.ownsThread).toBe(true);
       });
+
+      it('isolates session rows by harnessName namespace', async () => {
+        if (!harness) return;
+        await harness.saveSession(
+          createSampleSessionRecord({ harnessName: 'harness-a', modeId: 'build', lastActivityAt: 1000 }),
+          { harnessName: 'harness-a', ownerId: 'h', ifVersion: 0 },
+        );
+        await harness.saveSession(
+          createSampleSessionRecord({ harnessName: 'harness-b', modeId: 'review', lastActivityAt: 2000 }),
+          { harnessName: 'harness-b', ownerId: 'h', ifVersion: 0 },
+        );
+
+        await expect(harness.loadSession({ harnessName: 'missing', sessionId: 'session-1' })).resolves.toBeNull();
+        await expect(harness.loadSession({ harnessName: 'harness-a', sessionId: 'session-1' })).resolves.toMatchObject({
+          harnessName: 'harness-a',
+          modeId: 'build',
+        });
+        await expect(harness.loadSession({ harnessName: 'harness-b', sessionId: 'session-1' })).resolves.toMatchObject({
+          harnessName: 'harness-b',
+          modeId: 'review',
+        });
+        await expect(harness.listSessions({ harnessName: 'harness-a', resourceId: 'resource-1' })).resolves.toEqual([
+          expect.objectContaining({ harnessName: 'harness-a', modeId: 'build' }),
+        ]);
+      });
+
+      it('round-trips durable queue admission and lifecycle metadata', async () => {
+        if (!harness) return;
+        const record = createSampleSessionRecord({
+          subagentDepth: 2,
+          closingAt: 3000,
+          closeDeadlineAt: 4000,
+          pendingQueue: [
+            {
+              id: 'queued-1',
+              admissionId: 'admission-1',
+              admissionHash: 'hash-1',
+              enqueuedAt: 1000,
+              content: 'queued',
+              attachments: [],
+              requestContext: { userId: 'user-1' },
+            },
+          ],
+          queueAdmissionReceipts: {
+            'queued-1': {
+              admissionId: 'admission-1',
+              admissionHash: 'hash-1',
+              queuedItemId: 'queued-1',
+              status: 'accepted',
+              attempts: 1,
+              enqueuedAt: 1000,
+              acceptedAt: 1100,
+              updatedAt: 1100,
+              runId: 'run-1',
+              signalId: 'signal-1',
+            },
+          },
+        });
+
+        await harness.saveSession(record, { ownerId: 'h', ifVersion: 0 });
+
+        const loaded = await harness.loadSession({ sessionId: 'session-1' });
+        expect(loaded?.subagentDepth).toBe(2);
+        expect(loaded?.closingAt).toBe(3000);
+        expect(loaded?.closeDeadlineAt).toBe(4000);
+        expect(loaded?.pendingQueue).toEqual(record.pendingQueue);
+        expect(loaded?.queueAdmissionReceipts).toEqual(record.queueAdmissionReceipts);
+      });
     });
 
     describe('loadSessionByThread', () => {
@@ -189,22 +259,83 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         expect(await harness.loadSessionByThread({ threadId: 'thread-1', resourceId: 'other-resource' })).toBeNull();
       });
 
-      it('returns the most recent active record when multiple match', async () => {
+      it('rejects a second active record for the same admission key', async () => {
         if (!harness) return;
         await harness.saveSession(createSampleSessionRecord({ id: 'a', lastActivityAt: 1000 }), {
           ownerId: 'h-1',
           ifVersion: 0,
         });
-        await harness.saveSession(createSampleSessionRecord({ id: 'b', lastActivityAt: 2000 }), {
-          ownerId: 'h-1',
-          ifVersion: 0,
-        });
+        await expect(
+          harness.saveSession(createSampleSessionRecord({ id: 'b', lastActivityAt: 2000 }), {
+            ownerId: 'h-1',
+            ifVersion: 0,
+          }),
+        ).rejects.toBeInstanceOf(HarnessStorageVersionConflictError);
 
         const loaded = await harness.loadSessionByThread({
           threadId: 'thread-1',
           resourceId: 'resource-1',
         });
-        expect(loaded?.id).toBe('b');
+        expect(loaded?.id).toBe('a');
+      });
+    });
+
+    describe('createOrLoadActiveSession', () => {
+      it('creates a leased active session when none exists', async () => {
+        if (!harness) return;
+        const result = await harness.createOrLoadActiveSession(createSampleSessionRecord(), {
+          initialLease: { ownerId: 'h', ttlMs: 30_000 },
+        });
+
+        expect(result).toMatchObject({
+          created: true,
+          leaseAcquired: true,
+          version: 1,
+          record: expect.objectContaining({ id: 'session-1', ownerId: 'h', version: 1 }),
+        });
+        expect(result.expiresAt).toBeGreaterThanOrEqual(result.storageNow);
+        await expect(harness.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+          ownerId: 'h',
+          version: 1,
+        });
+      });
+
+      it('returns the existing active session for the same namespace/resource/thread', async () => {
+        if (!harness) return;
+        await harness.createOrLoadActiveSession(createSampleSessionRecord({ id: 'first' }), {
+          initialLease: { ownerId: 'h-1', ttlMs: 30_000 },
+        });
+
+        const result = await harness.createOrLoadActiveSession(createSampleSessionRecord({ id: 'second' }), {
+          initialLease: { ownerId: 'h-2', ttlMs: 30_000 },
+        });
+
+        expect(result).toMatchObject({
+          created: false,
+          leaseAcquired: false,
+          record: expect.objectContaining({ id: 'first', ownerId: 'h-1' }),
+        });
+        await expect(harness.loadSession({ sessionId: 'second' })).resolves.toBeNull();
+      });
+
+      it('allows the same resource/thread active key in a different harness namespace', async () => {
+        if (!harness) return;
+        await harness.createOrLoadActiveSession(createSampleSessionRecord({ harnessName: 'harness-a', id: 'same' }), {
+          initialLease: { ownerId: 'h-a', ttlMs: 30_000 },
+        });
+
+        const result = await harness.createOrLoadActiveSession(
+          createSampleSessionRecord({ harnessName: 'harness-b', id: 'same' }),
+          {
+            initialLease: { ownerId: 'h-b', ttlMs: 30_000 },
+          },
+        );
+
+        expect(result).toMatchObject({
+          created: true,
+          leaseAcquired: true,
+          record: expect.objectContaining({ harnessName: 'harness-b', id: 'same', ownerId: 'h-b' }),
+        });
       });
     });
 
@@ -296,6 +427,34 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         await harness.deleteSession({ sessionId: 'session-1' });
 
         expect(await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).toBeNull();
+      });
+
+      it('clears attachment references before cascading owned attachments', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord(), { ownerId: 'h', ifVersion: 0 });
+        await harness.saveAttachment({
+          sessionId: 'session-1',
+          attachmentId: 'a1',
+          name: 'note.txt',
+          mimeType: 'text/plain',
+          source: 'preupload',
+          data: new Uint8Array([1, 2, 3]),
+        });
+        await harness.recordAttachmentReferences([
+          {
+            sessionId: 'session-1',
+            attachmentId: 'a1',
+            source: 'queued_item',
+            sourceId: 'q1',
+          },
+        ]);
+
+        await harness.deleteSession({ sessionId: 'session-1' });
+
+        await expect(harness.listAttachmentReferences({ sessionId: 'session-1', attachmentId: 'a1' })).resolves.toEqual(
+          [],
+        );
+        await expect(harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).resolves.toBeNull();
       });
     });
 
@@ -642,6 +801,307 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
         expect(await harness.loadAttachment({ sessionId: 'session-a', attachmentId: 'a1' })).not.toBeNull();
         expect(await harness.loadAttachment({ sessionId: 'session-b', attachmentId: 'a2' })).not.toBeNull();
+      });
+
+      it('keeps transactional attachment references in the session harness namespace', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ harnessName: 'harness-a', id: 'session-a' }), {
+          harnessName: 'harness-a',
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+        await harness.saveAttachment({
+          harnessName: 'harness-b',
+          sessionId: 'session-a',
+          attachmentId: 'a1',
+          name: 'n',
+          mimeType: 'text/plain',
+          source: 'preupload',
+          data: new Uint8Array([1]),
+        });
+
+        await expect(
+          harness.saveSessionWithAttachmentReferences(
+            createSampleSessionRecord({ harnessName: 'harness-a', id: 'session-a', version: 1 }),
+            { harnessName: 'harness-a', ownerId: 'h', ifVersion: 1 },
+            [
+              {
+                harnessName: 'harness-b',
+                sessionId: 'session-a',
+                attachmentId: 'a1',
+                source: 'queued_item',
+                sourceId: 'q1',
+              },
+            ],
+          ),
+        ).rejects.toBeInstanceOf(HarnessStorageAttachmentUnavailableError);
+        await expect(
+          harness.listAttachmentReferences({ harnessName: 'harness-b', sessionId: 'session-a', attachmentId: 'a1' }),
+        ).resolves.toEqual([]);
+      });
+    });
+
+    describe('admission/result evidence', () => {
+      it('loads queue admission receipts and resolves duplicate/conflict attempts', async () => {
+        if (!harness) return;
+        await harness.saveSession(
+          createSampleSessionRecord({
+            queueAdmissionReceipts: {
+              'queued-1': {
+                admissionId: 'admission-1',
+                admissionHash: 'hash-1',
+                queuedItemId: 'queued-1',
+                status: 'accepted',
+                attempts: 1,
+                enqueuedAt: 1000,
+                acceptedAt: 1100,
+                updatedAt: 1100,
+                runId: 'run-1',
+                signalId: 'signal-1',
+              },
+            },
+          }),
+          { ownerId: 'h', ifVersion: 0 },
+        );
+
+        await expect(
+          harness.loadQueueResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            queuedItemId: 'queued-1',
+          }),
+        ).resolves.toMatchObject({ status: 'accepted', admissionId: 'admission-1' });
+        await expect(
+          harness.loadQueueResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'other-resource',
+            queuedItemId: 'queued-1',
+          }),
+        ).resolves.toBeNull();
+        await expect(
+          harness.resolveOperationAdmissionEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            kind: 'queue',
+            admissionId: 'admission-1',
+            attemptedAdmissionHash: 'hash-1',
+          }),
+        ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-1' });
+        await expect(
+          harness.resolveOperationAdmissionEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            kind: 'queue',
+            admissionId: 'admission-1',
+            attemptedAdmissionHash: 'different-hash',
+          }),
+        ).resolves.toMatchObject({ status: 'conflict', storedAdmissionHash: 'hash-1' });
+        await expect(
+          harness.resolveOperationAdmissionEvidence({
+            sessionId: 'session-1',
+            resourceId: 'other-resource',
+            kind: 'queue',
+            admissionId: 'admission-1',
+            attemptedAdmissionHash: 'hash-1',
+          }),
+        ).resolves.toMatchObject({ status: 'none' });
+      });
+
+      it('writes, loads, conflicts, and deletes operation tombstones', async () => {
+        if (!harness) return;
+        const tombstone = {
+          kind: 'message' as const,
+          harnessName: 'default',
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          admissionId: 'admission-1',
+          admissionHash: 'hash-1',
+          signalId: 'signal-1',
+          runId: 'run-1',
+          terminalAt: 2000,
+          compactedAt: 3000,
+          expiresAt: 4000,
+        };
+
+        await harness.writeOperationAdmissionTombstone(tombstone);
+        await harness.writeOperationAdmissionTombstone(tombstone);
+
+        await expect(
+          harness.loadMessageResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            signalId: 'signal-1',
+          }),
+        ).resolves.toEqual(tombstone);
+        await expect(
+          harness.resolveOperationAdmissionEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            kind: 'message',
+            admissionId: 'admission-1',
+            attemptedAdmissionHash: 'hash-1',
+          }),
+        ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-1' });
+        await expect(
+          harness.writeOperationAdmissionTombstone({ ...tombstone, admissionHash: 'different-hash' }),
+        ).rejects.toBeInstanceOf(HarnessStorageAdmissionConflictError);
+
+        await harness.deleteOperationAdmissionTombstonesForSession({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+        });
+        await expect(
+          harness.loadMessageResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            signalId: 'signal-1',
+          }),
+        ).resolves.toBeNull();
+      });
+
+      it('compacts terminal queue receipts into tombstones', async () => {
+        if (!harness) return;
+        await harness.saveSession(
+          createSampleSessionRecord({
+            queueAdmissionReceipts: {
+              'queued-1': {
+                admissionId: 'admission-1',
+                admissionHash: 'hash-1',
+                queuedItemId: 'queued-1',
+                status: 'completed',
+                attempts: 1,
+                enqueuedAt: 1000,
+                acceptedAt: 1100,
+                completedAt: 2000,
+                updatedAt: 2000,
+                runId: 'run-1',
+                signalId: 'signal-1',
+                result: { ok: true },
+              },
+            },
+          }),
+          { ownerId: 'h', ifVersion: 0 },
+        );
+
+        const tombstone = await harness.compactOperationResultEvidence({
+          sessionId: 'session-1',
+          resourceId: 'other-resource',
+          kind: 'queue',
+          queuedItemId: 'queued-1',
+          now: 3000,
+        });
+        expect(tombstone).toBeNull();
+
+        const compacted = await harness.compactOperationResultEvidence({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          kind: 'queue',
+          queuedItemId: 'queued-1',
+          now: 3000,
+        });
+        expect(compacted).toMatchObject({
+          kind: 'queue',
+          admissionId: 'admission-1',
+          admissionHash: 'hash-1',
+          queuedItemId: 'queued-1',
+          terminalAt: 2000,
+          compactedAt: 3000,
+        });
+        await expect(
+          harness.loadQueueResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            queuedItemId: 'queued-1',
+          }),
+        ).resolves.toEqual(compacted);
+        await expect(harness.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+          queueAdmissionReceipts: undefined,
+        });
+      });
+
+      it('compacts concurrent terminal queue receipts without losing survivors', async () => {
+        if (!harness) return;
+        await harness.saveSession(
+          createSampleSessionRecord({
+            queueAdmissionReceipts: {
+              'queued-1': {
+                admissionId: 'admission-1',
+                admissionHash: 'hash-1',
+                queuedItemId: 'queued-1',
+                status: 'completed',
+                attempts: 1,
+                enqueuedAt: 1000,
+                acceptedAt: 1100,
+                completedAt: 2000,
+                updatedAt: 2000,
+              },
+              'queued-2': {
+                admissionId: 'admission-2',
+                admissionHash: 'hash-2',
+                queuedItemId: 'queued-2',
+                status: 'failed',
+                attempts: 1,
+                enqueuedAt: 1000,
+                acceptedAt: 1100,
+                failedAt: 2100,
+                updatedAt: 2100,
+              },
+              'queued-3': {
+                admissionId: 'admission-3',
+                admissionHash: 'hash-3',
+                queuedItemId: 'queued-3',
+                status: 'accepted',
+                attempts: 1,
+                enqueuedAt: 1000,
+                acceptedAt: 1100,
+                updatedAt: 1100,
+              },
+            },
+          }),
+          { ownerId: 'h', ifVersion: 0 },
+        );
+
+        const [first, second] = await Promise.all([
+          harness.compactOperationResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            kind: 'queue',
+            queuedItemId: 'queued-1',
+            now: 3000,
+          }),
+          harness.compactOperationResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            kind: 'queue',
+            queuedItemId: 'queued-2',
+            now: 3000,
+          }),
+        ]);
+
+        expect(first).toMatchObject({ queuedItemId: 'queued-1', admissionHash: 'hash-1' });
+        expect(second).toMatchObject({ queuedItemId: 'queued-2', admissionHash: 'hash-2' });
+        await expect(
+          harness.loadQueueResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            queuedItemId: 'queued-1',
+          }),
+        ).resolves.toMatchObject({ queuedItemId: 'queued-1', admissionHash: 'hash-1' });
+        await expect(
+          harness.loadQueueResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            queuedItemId: 'queued-2',
+          }),
+        ).resolves.toMatchObject({ queuedItemId: 'queued-2', admissionHash: 'hash-2' });
+        await expect(harness.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+          queueAdmissionReceipts: {
+            'queued-3': expect.objectContaining({ status: 'accepted' }),
+          },
+        });
       });
     });
 

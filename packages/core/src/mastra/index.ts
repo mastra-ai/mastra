@@ -1243,7 +1243,7 @@ export class Mastra<
     if (config?.harnesses) {
       for (const [key, harness] of Object.entries(config.harnesses)) {
         if (harness == null) continue;
-        harness.__registerMastra(this);
+        harness.__registerMastra(this, key);
         this.#harnesses[key] = harness;
       }
     }

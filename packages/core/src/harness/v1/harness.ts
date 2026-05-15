@@ -175,6 +175,7 @@ export class Harness {
    * `harness.mastra`.
    */
   private _mastra?: Mastra;
+  private _harnessName = 'default';
   private readonly _storageOverride?: HarnessStorage;
   private readonly _modesById: Map<string, HarnessMode>;
   private readonly _defaultModeId?: string;
@@ -456,11 +457,19 @@ export class Harness {
    * harness is registered under `harnesses.<name>`. Idempotent for the
    * same parent; throws if called twice with different parents.
    */
-  __registerMastra(mastra: Mastra): void {
+  __registerMastra(mastra: Mastra, harnessName?: string): void {
     if (this._mastra && this._mastra !== mastra) {
       throw new HarnessConfigError('mastra', 'harness is already bound to a different Mastra instance');
     }
-    if (this._mastra === mastra) return;
+    if (this._mastra === mastra) {
+      if (harnessName !== undefined && harnessName !== this._harnessName) {
+        throw new HarnessConfigError('mastra', 'harness is already registered under a different harness name');
+      }
+      return;
+    }
+    if (harnessName !== undefined) {
+      this._harnessName = harnessName;
+    }
     this._bindMastra(mastra);
   }
 
@@ -702,7 +711,7 @@ export class Harness {
       return live;
     }
 
-    const stored = await storage.loadSession({ sessionId });
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId });
     if (!stored) throw new HarnessSessionNotFoundError(sessionId);
     if (resourceId !== undefined && stored.resourceId !== resourceId) {
       // Cross-tenant existence is never leaked.
@@ -743,33 +752,13 @@ export class Harness {
     // In-memory hit by (threadId, resourceId)?
     for (const live of this._liveSessions.values()) {
       if (live.threadId === threadId && live.resourceId === resourceId) {
-        // §5.3: deterministic-ID callers can pass `sessionId` alongside; if
-        // the live one has a different id, prefer the explicit id and treat
-        // the live one as a different session.
-        if (opts.sessionId && live.id !== opts.sessionId) continue;
         return live;
       }
     }
 
     // Storage lookup — adapters filter out closed records.
-    const stored = await storage.loadSessionByThread({ threadId, resourceId });
+    const stored = await storage.loadSessionByThread({ harnessName: this._harnessName, threadId, resourceId });
     if (stored) {
-      if (opts.sessionId && stored.id !== opts.sessionId) {
-        // Caller asked for a specific session id on this thread; the active
-        // one in storage doesn't match — fall through to deterministic-id
-        // create with the supplied id.
-        return this._createFresh(storage, {
-          resourceId,
-          threadId,
-          ownsThread: false,
-          sessionId: opts.sessionId,
-          parentSessionId: opts.parentSessionId,
-          origin: opts.origin ?? 'top-level',
-          modeId: opts.modeId,
-          modelId: opts.modelId,
-          subagentDepth: opts.subagentDepth,
-        });
-      }
       return this._hydrate(storage, stored);
     }
 
@@ -803,11 +792,11 @@ export class Harness {
     }
     if (liveCandidate) return liveCandidate;
 
-    const summaries = await storage.listSessions({ resourceId, includeClosed: false });
+    const summaries = await storage.listSessions({ harnessName: this._harnessName, resourceId, includeClosed: false });
     const head = summaries[0];
     if (head) {
       // listSessions returns newest-first by lastActivityAt.
-      const stored = await storage.loadSession({ sessionId: head.id });
+      const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: head.id });
       if (stored && stored.closedAt === undefined) {
         return this._hydrate(storage, stored);
       }
@@ -859,10 +848,9 @@ export class Harness {
       throw new HarnessConfigError('session().modeId', `unknown mode "${modeId}"`);
     }
 
-    // First-write inserts the row, then we acquire the lease against it.
-    // Lease + version both start at the values set here.
     const record: SessionRecord = {
       id: sessionId,
+      harnessName: this._harnessName,
       resourceId: init.resourceId,
       threadId: init.threadId,
       parentSessionId: init.parentSessionId,
@@ -884,9 +872,11 @@ export class Harness {
       leaseExpiresAt: now + this._leaseTtlMs,
     };
 
-    let saved;
+    let admitted;
     try {
-      saved = await storage.saveSession(record, { ownerId: this.ownerId, ifVersion: 0 });
+      admitted = await storage.createOrLoadActiveSession(record, {
+        initialLease: { ownerId: this.ownerId, ttlMs: this._leaseTtlMs },
+      });
     } catch (err) {
       // A version conflict on first insert means another writer beat us to
       // this id (only realistic for deterministic ids passed by the caller).
@@ -895,15 +885,12 @@ export class Harness {
       }
       throw new HarnessStorageError(sessionId, 'flush', err);
     }
-    record.version = saved.version;
 
-    // Acquire the lease atomically so renews/CAS use a known TTL.
-    const lease = await this._acquireLease(storage, sessionId);
-    record.ownerId = this.ownerId;
-    record.leaseExpiresAt = lease.expiresAt;
-    record.version = lease.version;
+    if (!admitted.created) {
+      return this._hydrate(storage, admitted.record);
+    }
 
-    return this._publish(storage, record);
+    return this._publish(storage, admitted.record);
   }
 
   private async _hydrate(storage: HarnessStorage, stored: SessionRecord): Promise<Session> {
@@ -980,6 +967,7 @@ export class Harness {
   private async _acquireLease(storage: HarnessStorage, sessionId: string) {
     try {
       return await storage.acquireSessionLease({
+        harnessName: this._harnessName,
         sessionId,
         ownerId: this.ownerId,
         ttlMs: this._leaseTtlMs,
@@ -1011,7 +999,7 @@ export class Harness {
       await this._closeSession(live);
       return;
     }
-    const stored = await storage.loadSession({ sessionId: opts.sessionId });
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored) throw new HarnessSessionNotFoundError(opts.sessionId);
     if (stored.closedAt !== undefined) return; // already closed → idempotent.
     // Hydrate so we have the lease, then close.
@@ -1037,6 +1025,7 @@ export class Harness {
     let saved;
     try {
       saved = await storage.saveSession(closed, {
+        harnessName: record.harnessName,
         ownerId: this.ownerId,
         ifVersion: record.version,
       });
@@ -1050,6 +1039,7 @@ export class Harness {
     // parent's lease — a crash in the middle leaves a partially-closed
     // tree and the next deleteSession on the original target completes.
     const children = await storage.listSessions({
+      harnessName: record.harnessName,
       resourceId: record.resourceId,
       includeClosed: false,
       parentSessionId: record.id,
@@ -1060,6 +1050,7 @@ export class Harness {
 
     try {
       await storage.releaseSessionLease({
+        harnessName: record.harnessName,
         sessionId: session.id,
         ownerId: this.ownerId,
       });
@@ -1103,6 +1094,7 @@ export class Harness {
   async listSessions(opts: SessionListOptions & { parentSessionId?: string }): Promise<SessionSummary[]> {
     const storage = this._requireStorage('listSessions()');
     return storage.listSessions({
+      harnessName: this._harnessName,
       resourceId: opts.resourceId,
       includeClosed: opts.includeClosed,
       parentSessionId: opts.parentSessionId,
@@ -1116,7 +1108,7 @@ export class Harness {
    */
   async loadSession(opts: SessionLoadByIdOptions): Promise<SessionRecord | null> {
     const storage = this._requireStorage('loadSession()');
-    const stored = await storage.loadSession({ sessionId: opts.sessionId });
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored) return null;
     if (stored.closedAt !== undefined && !opts.includeClosed) return null;
     return stored;
@@ -1145,6 +1137,7 @@ export class Harness {
     for (const session of sessions) {
       try {
         await storage.releaseSessionLease({
+          harnessName: session.getRecord().harnessName,
           sessionId: session.id,
           ownerId: this.ownerId,
         });
@@ -1323,6 +1316,7 @@ export class Harness {
       const storage = this._requireStorage('threads.delete()');
       let cascaded = false;
       const stored = await storage.loadSessionByThread({
+        harnessName: this._harnessName,
         threadId: opts.threadId,
         resourceId: opts.resourceId,
       });
@@ -1492,6 +1486,7 @@ export class Harness {
           : new Uint8Array(await new Response(opts.data).arrayBuffer());
       const attachmentId = `attachment-${randomUUID()}`;
       const saved = await storage.saveAttachment({
+        harnessName: session.getRecord().harnessName,
         sessionId: session.id,
         attachmentId,
         name: opts.filename,
@@ -1515,6 +1510,7 @@ export class Harness {
       );
       try {
         await storage.deleteAttachment({
+          harnessName: session.getRecord().harnessName,
           sessionId: session.id,
           attachmentId: opts.attachmentId,
         });

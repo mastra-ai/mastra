@@ -245,8 +245,8 @@ export interface UseSkillOptions {
  *   1. **Registered on a Mastra instance.** The Harness is created with no
  *      `mastra` / `agents` / `storage` of its own and is then registered as
  *      a child of a `Mastra` instance (`new Mastra({ harnesses: { ... } })`).
- *      The parent calls `harness.__registerMastra(mastra)` and the harness
- *      reads agents and storage from there.
+ *      The parent calls `harness.__registerMastra(mastra, name)` and the
+ *      harness reads agents and storage from there.
  *
  *   2. **Self-contained.** The Harness is constructed with `agents` (and
  *      optionally `storage`) and internally builds a private `Mastra`

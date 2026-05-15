@@ -262,7 +262,8 @@ describe('Session.queue() — crash replay', () => {
     const sessionId = 'sess-replay';
     const queuedItemId = 'q-survive';
     const now = Date.now();
-    db.harnessSessions.set(sessionId, {
+    db.harnessSessions.set(`default\u0000${sessionId}`, {
+      harnessName: 'default',
       id: sessionId,
       resourceId: 'u',
       threadId: 't-replay',

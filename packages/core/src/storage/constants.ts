@@ -48,6 +48,7 @@ export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
 export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
+export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -85,7 +86,8 @@ export type TABLE_NAMES =
   | typeof TABLE_CHANNEL_CONFIG
   | typeof TABLE_HARNESS_SESSIONS
   | typeof TABLE_HARNESS_ATTACHMENTS
-  | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES;
+  | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES
+  | typeof TABLE_HARNESS_OPERATION_TOMBSTONES;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -634,11 +636,13 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   // shapes are defined by the harness layer and the adapter does not query
   // their internals.
   [TABLE_HARNESS_SESSIONS]: {
+    harness_name: { type: 'text', nullable: false },
     id: { type: 'text', nullable: false, primaryKey: true },
     resource_id: { type: 'text', nullable: false },
     thread_id: { type: 'text', nullable: false },
     parent_session_id: { type: 'text', nullable: true },
     origin: { type: 'text', nullable: false },
+    subagent_depth: { type: 'integer', nullable: true },
     owns_thread: { type: 'boolean', nullable: false },
     mode_id: { type: 'text', nullable: false },
     model_id: { type: 'text', nullable: false },
@@ -648,12 +652,15 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     token_usage: { type: 'jsonb', nullable: false },
     pending_queue: { type: 'jsonb', nullable: false },
     pending_resume: { type: 'jsonb', nullable: true },
+    queue_admission_receipts: { type: 'jsonb', nullable: true },
     observational_memory: { type: 'jsonb', nullable: true },
     goal: { type: 'jsonb', nullable: true },
     workspace: { type: 'jsonb', nullable: true },
     state: { type: 'jsonb', nullable: false },
     created_at: { type: 'bigint', nullable: false },
     last_activity_at: { type: 'bigint', nullable: false },
+    closing_at: { type: 'bigint', nullable: true },
+    close_deadline_at: { type: 'bigint', nullable: true },
     closed_at: { type: 'bigint', nullable: true },
     version: { type: 'integer', nullable: false },
     owner_id: { type: 'text', nullable: true },
@@ -665,6 +672,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   // 100 MiB) the 33% base64 overhead is acceptable; switching to a true
   // BLOB column is a lossless schema migration when we extend the union.
   [TABLE_HARNESS_ATTACHMENTS]: {
+    harness_name: { type: 'text', nullable: false },
     session_id: { type: 'text', nullable: false },
     attachment_id: { type: 'text', nullable: false },
     name: { type: 'text', nullable: false },
@@ -676,12 +684,29 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     data_b64: { type: 'text', nullable: false },
   },
   [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
+    harness_name: { type: 'text', nullable: false },
     session_id: { type: 'text', nullable: false },
     attachment_id: { type: 'text', nullable: false },
     source: { type: 'text', nullable: false },
     source_id: { type: 'text', nullable: false },
     retained_until: { type: 'bigint', nullable: true },
     created_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    admission_id: { type: 'text', nullable: true },
+    admission_hash: { type: 'text', nullable: true },
+    queued_item_id: { type: 'text', nullable: true },
+    signal_id: { type: 'text', nullable: true },
+    run_id: { type: 'text', nullable: true },
+    terminal_at: { type: 'bigint', nullable: false },
+    compacted_at: { type: 'bigint', nullable: false },
+    expires_at: { type: 'bigint', nullable: false },
   },
 };
 
@@ -691,13 +716,20 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  */
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
+  [TABLE_HARNESS_SESSIONS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
+    compositePrimaryKey: ['harness_name', 'id'],
+  },
   [TABLE_HARNESS_ATTACHMENTS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
-    compositePrimaryKey: ['session_id', 'attachment_id'],
+    compositePrimaryKey: ['harness_name', 'session_id', 'attachment_id'],
   },
   [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
-    compositePrimaryKey: ['session_id', 'attachment_id', 'source', 'source_id'],
+    compositePrimaryKey: ['harness_name', 'session_id', 'attachment_id', 'source', 'source_id'],
+  },
+  [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
   },
 };
 

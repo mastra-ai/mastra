@@ -12,8 +12,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
+import { Mastra } from '../../mastra';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
+import { InMemoryStore } from '../../storage/mock';
 
 import {
   HarnessConfigError,
@@ -172,6 +174,53 @@ describe('Harness v1 — session(...) by thread', () => {
     const rehydrated = await harness2.session({ threadId: 't1', resourceId: 'r1' });
     expect(rehydrated.id).toBe(id);
     expect(rehydrated).not.toBe(original);
+  });
+
+  it('uses the registered Mastra harness key as the storage namespace', async () => {
+    const storage = new InMemoryStore();
+    const alpha = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const beta = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage,
+      harnesses: { alpha, beta },
+    });
+
+    const a = await alpha.session({ threadId: 'shared-thread', resourceId: 'r1' });
+    const b = await beta.session({ threadId: 'shared-thread', resourceId: 'r1' });
+
+    expect(a.id).not.toBe(b.id);
+    expect(a.getRecord().harnessName).toBe('alpha');
+    expect(b.getRecord().harnessName).toBe('beta');
+    const harnessStore = await storage.getStore('harness');
+    expect(harnessStore).toBeDefined();
+    await expect(harnessStore!.loadSession({ harnessName: 'alpha', sessionId: a.id })).resolves.toMatchObject({
+      harnessName: 'alpha',
+    });
+    await expect(harnessStore!.loadSession({ harnessName: 'beta', sessionId: b.id })).resolves.toMatchObject({
+      harnessName: 'beta',
+    });
+  });
+
+  it('rejects re-registering the same Mastra under a different harness key', async () => {
+    const storage = new InMemoryStore();
+    const alpha = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage,
+      harnesses: { alpha },
+    });
+
+    expect(() => alpha.__registerMastra(mastra, 'renamed')).toThrow(HarnessConfigError);
   });
 
   it('forces a brand-new thread when threadId is { fresh: true }', async () => {
@@ -418,12 +467,11 @@ describe('Harness v1 — deterministic-id branch (§5.3)', () => {
     expect(b).toBe(a);
   });
 
-  it('creates a fresh record when caller-supplied sessionId disagrees with the active one', async () => {
+  it('returns the active record when caller-supplied sessionId disagrees with the active one', async () => {
     const harness = makeHarness();
     const first = await harness.session({ threadId: 't1', resourceId: 'r1' });
     const second = await harness.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-different' });
-    expect(second.id).toBe('sess-different');
-    expect(second.id).not.toBe(first.id);
+    expect(second.id).toBe(first.id);
     expect(second.threadId).toBe('t1');
   });
 });
@@ -469,9 +517,9 @@ describe('Harness v1 — crash recovery (lease TTL)', () => {
     // expiry by rewriting the lease window into the past directly in the
     // backing db (saveSession preserves lease metadata so we cannot do this
     // through the public storage API).
-    const stored = db.harnessSessions.get(id);
+    const stored = db.harnessSessions.get(`default\u0000${id}`);
     if (!stored) throw new Error('precondition: session must exist after crash');
-    db.harnessSessions.set(id, { ...stored, leaseExpiresAt: Date.now() - 60_000 });
+    db.harnessSessions.set(`default\u0000${id}`, { ...stored, leaseExpiresAt: Date.now() - 60_000 });
 
     const b = makeHarness({ sessions: { storage } });
     const taken = await b.session({ sessionId: id });

@@ -75,9 +75,20 @@ export type PersistedAttachment =
  */
 export interface QueuedItem {
   id: string;
+  /**
+   * Idempotency key for this queue admission. Older local-only queue items may
+   * not have one yet; durable remote/channel/wakeup admissions must set it.
+   */
+  admissionId?: string;
+  /**
+   * Stable hash of the admitted queue inputs. Used with `admissionId` to
+   * distinguish exact retries from same-key/different-payload conflicts.
+   */
+  admissionHash?: string;
   enqueuedAt: number;
   content: string;
   attachments: PersistedAttachment[];
+  requestContext?: unknown;
   model?: string;
   mode?: string;
   yolo?: boolean;
@@ -205,6 +216,11 @@ export type AttachmentReferenceSource =
  * write lease (see HARNESS_V1_SPEC.md §5.8).
  */
 export interface SessionRecord {
+  /**
+   * Immutable Harness namespace. The runtime writes `default` for single
+   * harness/local storage and the registered Mastra harness key when known.
+   */
+  harnessName: string;
   id: string;
   resourceId: string;
   threadId: string;
@@ -250,6 +266,7 @@ export interface SessionRecord {
   // At most one outstanding agent suspension per session (see PendingResume).
   pendingQueue: QueuedItem[];
   pendingResume?: PendingResume;
+  queueAdmissionReceipts?: Record<string, QueueAdmissionReceipt>;
 
   // Observational memory config (per-session override)
   observationalMemory?: {
@@ -269,6 +286,8 @@ export interface SessionRecord {
   // Lifecycle
   createdAt: number;
   lastActivityAt: number;
+  closingAt?: number;
+  closeDeadlineAt?: number;
   closedAt?: number;
 
   // Write-concurrency — see HARNESS_V1_SPEC.md §5.8.
@@ -284,6 +303,7 @@ export interface SessionRecord {
  * Lightweight projection of `SessionRecord`, used by `listSessions(...)`.
  */
 export interface SessionSummary {
+  harnessName: string;
   id: string;
   resourceId: string;
   threadId: string;
@@ -292,8 +312,72 @@ export interface SessionSummary {
   modeId: string;
   modelId: string;
   lastActivityAt: number;
+  closingAt?: number;
+  closeDeadlineAt?: number;
   closedAt?: number;
 }
+
+export type HarnessOperationKind = 'message' | 'queue';
+
+export interface HarnessStoredPublicError {
+  code: string;
+  message: string;
+}
+
+export type AgentSignalResultStatus =
+  | { status: 'pending'; signalId: string; runId?: string }
+  | { status: 'completed'; signalId: string; runId: string; result: unknown }
+  | { status: 'failed'; signalId: string; runId?: string; error: HarnessStoredPublicError };
+
+export interface AgentSignalAccepted {
+  runId: string;
+  signalId: string;
+  duplicate: boolean;
+  admissionId?: string;
+  admissionHash?: string;
+}
+
+export interface QueueAdmissionReceipt {
+  admissionId: string;
+  admissionHash: string;
+  queuedItemId: string;
+  status: 'queued' | 'admitting' | 'accepted' | 'completed' | 'admission_failed' | 'failed' | 'dead';
+  runId?: string;
+  signalId?: string;
+  result?: unknown;
+  error?: HarnessStoredPublicError;
+  attempts: number;
+  enqueuedAt: number;
+  admittingAt?: number;
+  acceptedAt?: number;
+  completedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  nextAttemptAt?: number;
+  updatedAt: number;
+}
+
+export interface OperationAdmissionTombstone {
+  kind: HarnessOperationKind;
+  harnessName: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  admissionId?: string;
+  admissionHash?: string;
+  queuedItemId?: string;
+  signalId?: string;
+  runId?: string;
+  terminalAt: number;
+  compactedAt: number;
+  expiresAt: number;
+}
+
+export type OperationAdmissionEvidence =
+  | AgentSignalAccepted
+  | AgentSignalResultStatus
+  | QueueAdmissionReceipt
+  | OperationAdmissionTombstone;
 
 // ---------------------------------------------------------------------------
 // Attachment metadata
@@ -328,6 +412,7 @@ export interface AttachmentRecord {
 // ---------------------------------------------------------------------------
 
 export interface ListSessionsInput {
+  harnessName?: string;
   resourceId: string;
   /** When true, includes records with `closedAt` set. */
   includeClosed?: boolean;
@@ -336,6 +421,7 @@ export interface ListSessionsInput {
 }
 
 export interface SaveSessionOptions {
+  harnessName?: string;
   /** The Harness instance currently holding the lease. */
   ownerId: string;
   /**
@@ -350,19 +436,38 @@ export interface SaveSessionResult {
   version: number;
 }
 
+export interface CreateOrLoadActiveSessionOptions {
+  initialLease: {
+    ownerId: string;
+    ttlMs: number;
+  };
+}
+
+export interface CreateOrLoadActiveSessionResult {
+  record: SessionRecord;
+  created: boolean;
+  leaseAcquired: boolean;
+  version: number;
+  expiresAt?: number;
+  storageNow: number;
+}
+
 export interface AcquireSessionLeaseInput {
+  harnessName?: string;
   sessionId: string;
   ownerId: string;
   ttlMs: number;
 }
 
 export interface RenewSessionLeaseInput {
+  harnessName?: string;
   sessionId: string;
   ownerId: string;
   ttlMs: number;
 }
 
 export interface ReleaseSessionLeaseInput {
+  harnessName?: string;
   sessionId: string;
   ownerId: string;
 }
@@ -375,6 +480,7 @@ export interface SessionLeaseResult {
 }
 
 export interface SaveAttachmentInput {
+  harnessName?: string;
   sessionId: string;
   attachmentId: string;
   name: string;
@@ -404,6 +510,7 @@ export interface AttachmentReference {
 }
 
 export interface SaveAttachmentReferenceInput extends AttachmentReference {
+  harnessName?: string;
   /** Session that owns the referenced attachment bytes. */
   sessionId: string;
   attachmentId: string;

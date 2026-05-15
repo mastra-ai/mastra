@@ -1,10 +1,16 @@
 import { StorageDomain } from '../base';
 import type {
   AcquireSessionLeaseInput,
+  AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
+  CreateOrLoadActiveSessionOptions,
+  CreateOrLoadActiveSessionResult,
   ListSessionsInput,
   LoadedAttachment,
+  OperationAdmissionEvidence,
+  OperationAdmissionTombstone,
+  QueueAdmissionReceipt,
   ReleaseSessionLeaseInput,
   RenewSessionLeaseInput,
   SaveAttachmentInput,
@@ -90,6 +96,18 @@ export class HarnessStorageSessionNotFoundError extends Error {
   }
 }
 
+export class HarnessStorageAdmissionConflictError extends Error {
+  readonly name = 'HarnessStorageAdmissionConflictError';
+  readonly code = 'harness.storage.admission_conflict' as const;
+  constructor(
+    public readonly sessionId: string,
+    public readonly kind: 'message' | 'queue',
+    public readonly admissionId: string,
+  ) {
+    super(`Admission "${admissionId}" for ${kind} in session "${sessionId}" conflicts with stored evidence`);
+  }
+}
+
 /**
  * Storage domain for the v1 Harness — see HARNESS_V1_SPEC.md §5.
  *
@@ -132,7 +150,7 @@ export abstract class HarnessStorage extends StorageDomain {
    * Resource scoping is NOT enforced here; the harness layer cross-checks
    * `resourceId` against the returned record before surfacing it.
    */
-  abstract loadSession(opts: { sessionId: string }): Promise<SessionRecord | null>;
+  abstract loadSession(opts: { harnessName?: string; sessionId: string }): Promise<SessionRecord | null>;
 
   /**
    * Lookup by (thread, resource). Returns only **active** records
@@ -140,10 +158,14 @@ export abstract class HarnessStorage extends StorageDomain {
    * even if one or more closed records match — close-then-reopen-by-thread
    * is guaranteed to create a fresh session (HARNESS_V1_SPEC.md §5.3).
    *
-   * If multiple active records match (a degenerate state), implementations
-   * return the most recent by `lastActivityAt`.
+   * Implementations reject new rows that would create a second active session
+   * for the same `(harnessName, resourceId, threadId)` admission key.
    */
-  abstract loadSessionByThread(opts: { threadId: string; resourceId: string }): Promise<SessionRecord | null>;
+  abstract loadSessionByThread(opts: {
+    harnessName?: string;
+    threadId: string;
+    resourceId: string;
+  }): Promise<SessionRecord | null>;
 
   /**
    * List session summaries for a resource. Closed records are excluded by
@@ -181,6 +203,17 @@ export abstract class HarnessStorage extends StorageDomain {
   ): Promise<SaveSessionResult>;
 
   /**
+   * Atomic active-session admission. Inserts `record` only when no active
+   * record exists for `(harnessName, resourceId, threadId)`; otherwise returns
+   * the existing active row without overwriting it. A created row also receives
+   * the caller's initial lease.
+   */
+  abstract createOrLoadActiveSession(
+    record: SessionRecord,
+    opts: CreateOrLoadActiveSessionOptions,
+  ): Promise<CreateOrLoadActiveSessionResult>;
+
+  /**
    * Hard-delete of a single session record. The harness layer's
    * `harness.deleteSession(...)` walks the `parentSessionId` chain and
    * calls this method once per descendant — adapters do NOT implement
@@ -189,7 +222,7 @@ export abstract class HarnessStorage extends StorageDomain {
    * Implementations should also delete attachments owned by the session
    * (equivalent to `deleteAttachmentsForSession`) to keep the index clean.
    */
-  abstract deleteSession(opts: { sessionId: string }): Promise<void>;
+  abstract deleteSession(opts: { harnessName?: string; sessionId: string }): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Session leases (HARNESS_V1_SPEC.md §5.8)
@@ -248,13 +281,17 @@ export abstract class HarnessStorage extends StorageDomain {
    * Load an attachment by (sessionId, attachmentId). Returns null when the
    * row is missing.
    */
-  abstract loadAttachment(opts: { sessionId: string; attachmentId: string }): Promise<LoadedAttachment | null>;
+  abstract loadAttachment(opts: {
+    harnessName?: string;
+    sessionId: string;
+    attachmentId: string;
+  }): Promise<LoadedAttachment | null>;
 
   /**
    * Delete a single attachment. No-op when the row is missing.
    * Throws `HarnessStorageAttachmentInUseError` while references remain.
    */
-  abstract deleteAttachment(opts: { sessionId: string; attachmentId: string }): Promise<void>;
+  abstract deleteAttachment(opts: { harnessName?: string; sessionId: string; attachmentId: string }): Promise<void>;
 
   /**
    * Delete all attachments owned by a session. Called from `deleteSession`
@@ -262,13 +299,17 @@ export abstract class HarnessStorage extends StorageDomain {
    * down. Referenced rows are skipped; force cleanup belongs to the lifecycle
    * delete lane.
    */
-  abstract deleteAttachmentsForSession(opts: { sessionId: string }): Promise<void>;
+  abstract deleteAttachmentsForSession(opts: { harnessName?: string; sessionId: string }): Promise<void>;
 
   /**
    * Look up the index row only (without bytes). Useful for attachment
    * metadata listings (e.g. message rendering).
    */
-  abstract getAttachmentRecord(opts: { sessionId: string; attachmentId: string }): Promise<AttachmentRecord | null>;
+  abstract getAttachmentRecord(opts: {
+    harnessName?: string;
+    sessionId: string;
+    attachmentId: string;
+  }): Promise<AttachmentRecord | null>;
 
   /**
    * Register durable references to attachment bytes. Source ids are scoped by
@@ -280,7 +321,61 @@ export abstract class HarnessStorage extends StorageDomain {
 
   abstract deleteAttachmentReferences(references: SaveAttachmentReferenceInput[]): Promise<void>;
 
-  abstract listAttachmentReferences(opts: { sessionId: string; attachmentId: string }): Promise<AttachmentReference[]>;
+  abstract listAttachmentReferences(opts: {
+    harnessName?: string;
+    sessionId: string;
+    attachmentId: string;
+  }): Promise<AttachmentReference[]>;
+
+  // -------------------------------------------------------------------------
+  // Admission/result evidence
+  // -------------------------------------------------------------------------
+
+  abstract loadMessageResultEvidence(opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+    signalId: string;
+  }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null>;
+
+  abstract loadQueueResultEvidence(opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    queuedItemId: string;
+  }): Promise<QueueAdmissionReceipt | OperationAdmissionTombstone | null>;
+
+  abstract resolveOperationAdmissionEvidence(opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    kind: 'message' | 'queue';
+    admissionId: string;
+    attemptedAdmissionHash: string;
+  }): Promise<{
+    status: 'none' | 'duplicate' | 'conflict';
+    evidence?: OperationAdmissionEvidence;
+    storedAdmissionHash?: string;
+  }>;
+
+  abstract writeOperationAdmissionTombstone(record: OperationAdmissionTombstone): Promise<void>;
+
+  abstract compactOperationResultEvidence(opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    kind: 'message' | 'queue';
+    signalId?: string;
+    queuedItemId?: string;
+    now: number;
+  }): Promise<OperationAdmissionTombstone | null>;
+
+  abstract deleteOperationAdmissionTombstonesForSession(opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+  }): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Test-only
