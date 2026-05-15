@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const fetchMock = vi.fn();
 
@@ -13,6 +13,10 @@ describe('createBrightDataFetchTool', () => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockResolvedValue(new Response('# Example Page\n\nHello world.'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should create a tool with id brightdata-fetch', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const fetchMock = vi.fn();
 
@@ -29,6 +29,10 @@ describe('createBrightDataSearchTool', () => {
         current_page: 2,
       }),
     );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should create a tool with id brightdata-search', () => {
