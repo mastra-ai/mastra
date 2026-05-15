@@ -20,41 +20,13 @@ This page focuses on trace-specific concepts: span hierarchy, sampling, metadata
 
 ## Get started
 
-Set up shared observability first:
+Start with:
 
 - [Configuration](/docs/observability/config): Base observability config, multiple configs, and serverless flushing
 - [Storage](/docs/observability/storage): Storage routing for traces, logs, and metrics
 - [Integrations overview](/docs/observability/integrations/overview): Exporters, bridges, and processors
 
 Tracing starts automatically after observability is configured and you run an agent or workflow.
-
-## Moved setup topics
-
-Shared observability setup now lives on dedicated top-level pages:
-
-### Configuration
-
-- [Basic config](/docs/observability/config#basic-config): Configure the base observability instance, exporters, span processors, and logging behavior.
-
-### Multi-config setup
-
-- [Multi-config setup](/docs/observability/config#multi-config-setup): Choose between multiple observability configs at runtime.
-
-### Maintaining Studio access
-
-- [Maintaining Studio access](/docs/observability/config#maintaining-studio-access): Keep local Studio or Mastra platform visibility when adding external exporters.
-
-### Exporters
-
-- [Exporters](/docs/observability/integrations/overview#exporters): Send observability data to storage, Mastra platform, or external providers.
-
-### Bridges
-
-- [Bridges](/docs/observability/integrations/overview#bridges): Connect Mastra to third-party tracing systems.
-
-### Flushing traces in serverless environments
-
-- [Serverless runtimes](/docs/observability/config#flushing-traces-in-serverless-environments): Flush exporters before a serverless runtime pauses or exits.
 
 ## Sampling strategies
 
@@ -180,7 +152,7 @@ export const mastra = new Mastra({
 
 If `environment` is not set, Mastra falls back to `process.env.NODE_ENV`. If neither is set, the field is left undefined rather than guessed.
 
-Per-call `tracingOptions.metadata.environment` always takes precedence, so individual calls can still override the value when needed.
+Per-call `tracingOptions.metadata.environment` always takes precedence, so individual calls can override the value when needed.
 
 ### Automatic Metadata from `RequestContext`
 
@@ -351,7 +323,7 @@ const result = await agent.generate([{ role: 'user', content: 'Handle confidenti
 #### How it works
 
 - **Trace-wide effect**: When set on the root span, these options apply to all child spans in the trace (tool calls, model generations, etc.)
-- **Export-time filtering**: The data is still available internally during execution but is excluded when spans are exported to observability platforms
+- **Export-time filtering**: The data remains available internally during execution but is excluded when spans are exported to observability platforms
 - **Combinable with other options**: You can use `hideInput`/`hideOutput` alongside `tags`, `metadata`, and other `tracingOptions`
 
 ```ts

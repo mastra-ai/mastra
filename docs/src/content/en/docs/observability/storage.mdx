@@ -72,7 +72,7 @@ This setup is for local testing and development. It gives you persisted traces, 
 
 Observability traffic is usually more write-heavy than the rest of the application. In production:
 
-- Use ClickHouse for the `observability` domain when you keep observability in your own storage.
+- Use `MastraStorageExporter` with ClickHouse for the `observability` domain when you keep observability in your own storage.
 - Use `MastraPlatformExporter` if you want hosted Mastra platform observability instead of managing the backend yourself.
 - Do not route observability to your primary application store.
 
