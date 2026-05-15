@@ -5,9 +5,15 @@ import type { BuilderPickerVisibility } from '../../../builder';
 import { useAvailableAgentTools } from '../use-available-agent-tools';
 
 let pickerMock: BuilderPickerVisibility;
+let allIntegrationToolsMock: Array<{ providerId: string; slug: string; toolService: string; description?: string }> =
+  [];
 
 vi.mock('../../../builder', () => ({
   useBuilderPickerVisibility: () => pickerMock,
+}));
+
+vi.mock('../../../tool-integrations/hooks', () => ({
+  useAllIntegrationTools: () => ({ tools: allIntegrationToolsMock, isLoading: false }),
 }));
 
 const UNRESTRICTED: BuilderPickerVisibility = {
@@ -18,6 +24,7 @@ const UNRESTRICTED: BuilderPickerVisibility = {
 
 beforeEach(() => {
   pickerMock = UNRESTRICTED;
+  allIntegrationToolsMock = [];
 });
 
 describe('useAvailableAgentTools', () => {
@@ -239,7 +246,7 @@ describe('useAvailableAgentTools', () => {
     });
   });
 
-  it('omits integration tools when toolIntegrations is absent', () => {
+  it('omits integration tools when toolIntegrations is absent and no catalog is loaded', () => {
     const { result } = renderHook(() =>
       useAvailableAgentTools({
         toolsData: {},
@@ -249,5 +256,35 @@ describe('useAvailableAgentTools', () => {
       }),
     );
     expect(result.current).toHaveLength(0);
+  });
+
+  it('surfaces every available integration tool with isChecked driven by toolIntegrations', () => {
+    allIntegrationToolsMock = [
+      { providerId: 'composio', slug: 'GMAIL_FETCH_EMAILS', toolService: 'gmail', description: 'Fetch emails' },
+      { providerId: 'composio', slug: 'GMAIL_SEND_EMAIL', toolService: 'gmail', description: 'Send email' },
+    ];
+
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: {},
+        agentsData: {},
+        selectedTools: {},
+        selectedAgents: {},
+        toolIntegrations: {
+          composio: {
+            tools: {
+              GMAIL_FETCH_EMAILS: { toolService: 'gmail' },
+            },
+            connections: {},
+          },
+        },
+      }),
+    );
+
+    expect(result.current).toHaveLength(2);
+    const fetch = result.current.find(t => t.name === 'GMAIL_FETCH_EMAILS');
+    const send = result.current.find(t => t.name === 'GMAIL_SEND_EMAIL');
+    expect(fetch?.isChecked).toBe(true);
+    expect(send?.isChecked).toBe(false);
   });
 });

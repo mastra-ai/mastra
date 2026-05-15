@@ -452,6 +452,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           const newIntegrationTools = await this.resolveStoredToolIntegrations(
             resolvedToolIntegrationsConfig,
             requestContext,
+            storedConfig!.authorId,
           );
 
           return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools };
@@ -472,6 +473,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         );
         const newIntegrationTools = await this.resolveStoredToolIntegrations(
           storedConfig.toolIntegrations as ToolIntegrations | undefined,
+          undefined,
+          storedConfig.authorId,
         );
         fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools });
       }
@@ -638,6 +641,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         const newIntegrationTools = await this.resolveStoredToolIntegrations(
           resolvedToolIntegrationsConfig,
           requestContext,
+          storedAgent.authorId,
         );
 
         return { ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools };
@@ -653,6 +657,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       );
       const newIntegrationTools = await this.resolveStoredToolIntegrations(
         storedAgent.toolIntegrations as ToolIntegrations | undefined,
+        undefined,
+        storedAgent.authorId,
       );
       tools = { ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools };
     }
@@ -1175,10 +1181,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   private async resolveStoredToolIntegrations(
     toolIntegrations?: ToolIntegrations,
     requestContext?: RequestContext,
+    authorId?: string,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!toolIntegrations || Object.keys(toolIntegrations).length === 0) return {};
     return resolveStoredToolIntegrations(toolIntegrations, id => this.editor.getToolIntegrationOrThrow(id), {
       requestContext: requestContext?.toJSON(),
+      authorId,
       logger: this.logger,
     }) as Promise<Record<string, ToolAction<any, any, any, any, any, any>>>;
   }

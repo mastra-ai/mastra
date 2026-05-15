@@ -4,6 +4,7 @@ import { UnknownIntegrationError } from '@mastra/core/tool-integration';
 import type { ToolIntegration } from '@mastra/core/tool-integration';
 import { describe, it, expect, vi } from 'vitest';
 
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   AUTHORIZE_TOOL_INTEGRATION_ROUTE,
@@ -146,6 +147,46 @@ describe('AUTHORIZE_TOOL_INTEGRATION_ROUTE', () => {
       toolName: 'gmail.fetch',
     });
     expect(result).toEqual({ url: 'https://oauth/redirect', authId: 'auth-123' });
+  });
+
+  it('falls back to the caller owner id when connectionId is empty (fresh connect)', async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'auth-123' });
+    const integration = makeIntegration({ authorize });
+    const editor = makeEditor(integration);
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-abc');
+    await AUTHORIZE_TOOL_INTEGRATION_ROUTE.handler({
+      mastra: makeMastra(editor),
+      integrationId: 'composio',
+      toolService: 'gmail',
+      connectionId: '',
+      requestContext,
+    } as any);
+    expect(authorize).toHaveBeenCalledWith({
+      toolService: 'gmail',
+      connectionId: 'user-abc',
+      toolName: undefined,
+    });
+  });
+
+  it('falls back to user.id when resource id is missing (Workos-style auth)', async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'auth-123' });
+    const integration = makeIntegration({ authorize });
+    const editor = makeEditor(integration);
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_USER_KEY, { id: 'user-xyz' });
+    await AUTHORIZE_TOOL_INTEGRATION_ROUTE.handler({
+      mastra: makeMastra(editor),
+      integrationId: 'composio',
+      toolService: 'gmail',
+      connectionId: '',
+      requestContext,
+    } as any);
+    expect(authorize).toHaveBeenCalledWith({
+      toolService: 'gmail',
+      connectionId: 'user-xyz',
+      toolName: undefined,
+    });
   });
 });
 

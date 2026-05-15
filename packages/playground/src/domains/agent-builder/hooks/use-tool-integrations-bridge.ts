@@ -18,7 +18,7 @@ interface UseToolIntegrationsBridgeResult {
   toolIntegrationServices: ToolIntegrationServiceGroup[];
   /** Handler for `<ToolsDetail onConnectionsChange>`. */
   handleConnectionsChange: (providerId: string, toolService: string, next: PickerConnection[]) => void;
-  /** Add selected tools coming from `<AddToolsDialog />` to form state. */
+  /** Add an integration tool to form state (typically called when a user checks a row inline). */
   handleAddTools: (entries: AddToolEntry[]) => void;
 }
 

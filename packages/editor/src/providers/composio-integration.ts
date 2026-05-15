@@ -146,7 +146,11 @@ export class ComposioToolIntegration extends BaseToolIntegration {
   async resolveTools(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> {
     if (opts.toolSlugs.length === 0) return {};
 
-    const internalUserId = resolveInternalUserId(opts.requestContext);
+    // For author-bound connections, the runtime fan-out passes the agent's
+    // author id explicitly. Use it as the Composio user bucket so the pin
+    // resolves for any invoker (not just the original author).
+    const internalUserId =
+      opts.authorId && opts.authorId.length > 0 ? opts.authorId : resolveInternalUserId(opts.requestContext);
     const composio = this.getMastraClient();
 
     const modifiers = {
@@ -155,7 +159,7 @@ export class ComposioToolIntegration extends BaseToolIntegration {
       // is `beforeExecute`, which receives the params object that flows
       // into the API call. Mutating `params.connectedAccountId` routes
       // the call to a specific account.
-      beforeExecute: ({ params }: { params: { connectedAccountId?: string } }) => {
+      beforeExecute: ({ params }: { params: { connectedAccountId?: string; userId?: string } }) => {
         params.connectedAccountId = opts.connectionId;
         return params;
       },
@@ -359,7 +363,23 @@ function mapComposioStatus(
  * {@link MASTRA_RESOURCE_ID_KEY}. The adapter never reads `storedAgent`
  * directly — that keeps Composio agnostic to agent-level binding modes.
  */
+// Mirror of `MASTRA_USER_KEY` from `@mastra/server`. Inlined to avoid a
+// reverse dependency from `editor` onto `server`.
+const MASTRA_USER_KEY = 'mastra__user';
+
 function resolveInternalUserId(requestContext?: Record<string, unknown>): string {
-  const value = requestContext?.[MASTRA_RESOURCE_ID_KEY];
-  return typeof value === 'string' && value.length > 0 ? value : DEFAULT_INTERNAL_USER_ID;
+  const resourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+  if (typeof resourceId === 'string' && resourceId.length > 0) {
+    return resourceId;
+  }
+
+  const user = requestContext?.[MASTRA_USER_KEY];
+  if (user && typeof user === 'object' && 'id' in user) {
+    const id = (user as { id: unknown }).id;
+    if (typeof id === 'string' && id.length > 0) {
+      return id;
+    }
+  }
+
+  return DEFAULT_INTERNAL_USER_ID;
 }

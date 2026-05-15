@@ -126,6 +126,12 @@ export interface ResolveToolsOpts {
   toolMeta: Record<string, ToolMeta>;
   /** Provider-opaque OAuth bucket identifier. */
   connectionId: string;
+  /**
+   * For `kind: 'author'` connections, the agent author's user id. The runtime
+   * uses this as the integration's user bucket so the pin works for any
+   * invoker, not just the author. Falsy = fall back to request context.
+   */
+  authorId?: string;
   /** Per-request context (auth, tenant, currentUser, ...). */
   requestContext?: Record<string, unknown>;
 }

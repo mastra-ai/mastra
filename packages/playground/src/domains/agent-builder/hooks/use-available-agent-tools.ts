@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useBuilderPickerVisibility } from '../../builder';
+import { useAllIntegrationTools } from '../../tool-integrations/hooks';
 import { buildAvailableToolRecords } from '../mappers/build-available-tool-records';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { buildAgentTools } from '../types/agent-tool';
@@ -40,6 +41,8 @@ export function useAvailableAgentTools({
 }: UseAvailableAgentToolsArgs): AgentTool[] {
   const resolvedWorkflowsData = workflowsData ?? EMPTY_RECORD;
   const picker = useBuilderPickerVisibility();
+  const { tools: availableIntegrationTools } = useAllIntegrationTools();
+
   return useMemo(() => {
     const filteredTools = picker.visibleTools === null ? toolsData : filterByAllowlist(toolsData, picker.visibleTools);
     const filteredAgents =
@@ -49,18 +52,46 @@ export function useAvailableAgentTools({
         ? resolvedWorkflowsData
         : filterByAllowlist(resolvedWorkflowsData, picker.visibleWorkflows);
 
-    const selectedIntegrationTools: SelectedIntegrationTool[] = [];
+    // Union of provider-allowed tools and currently-selected tools. The
+    // server caps `allowedToolServices`, so this list is bounded and stable
+    // for rendering inline.
+    const integrationToolsById = new Map<string, SelectedIntegrationTool>();
+    for (const available of availableIntegrationTools) {
+      const key = `${available.providerId}:${available.slug}`;
+      integrationToolsById.set(key, {
+        providerId: available.providerId,
+        slug: available.slug,
+        toolService: available.toolService,
+        description: available.description,
+      });
+    }
     if (toolIntegrations) {
       for (const [providerId, config] of Object.entries(toolIntegrations)) {
         if (!config?.tools) continue;
         for (const [slug, entry] of Object.entries(config.tools)) {
           if (!entry) continue;
-          selectedIntegrationTools.push({
+          const key = `${providerId}:${slug}`;
+          // Selected entries override the catalog so we never drop a saved
+          // tool the catalog can't list right now.
+          integrationToolsById.set(key, {
             providerId,
             toolService: entry.toolService,
             slug,
             description: entry.description,
           });
+        }
+      }
+    }
+    const integrationTools = Array.from(integrationToolsById.values());
+
+    // Build the `selected` set for integrations from form state so the UI
+    // can show a checkbox per tool.
+    const selectedIntegrationIds = new Set<string>();
+    if (toolIntegrations) {
+      for (const [providerId, config] of Object.entries(toolIntegrations)) {
+        if (!config?.tools) continue;
+        for (const slug of Object.keys(config.tools)) {
+          selectedIntegrationIds.add(`${providerId}:${slug}`);
         }
       }
     }
@@ -71,7 +102,8 @@ export function useAvailableAgentTools({
       agents: records.agents,
       workflows: records.workflows,
       selected: { tools: selectedTools, agents: selectedAgents, workflows: selectedWorkflows },
-      selectedIntegrationTools,
+      integrationTools,
+      selectedIntegrationIds,
     });
   }, [
     toolsData,
@@ -83,5 +115,6 @@ export function useAvailableAgentTools({
     toolIntegrations,
     excludeAgentId,
     picker,
+    availableIntegrationTools,
   ]);
 }

@@ -42,7 +42,13 @@ export interface BuildAgentToolsArgs {
   agents: AvailableAgentsRecord;
   workflows?: AvailableWorkflowsRecord;
   selected?: SelectedMaps;
-  selectedIntegrationTools?: SelectedIntegrationTool[];
+  /**
+   * Catalog of integration tools to render. Each entry becomes a checkbox
+   * row; `selectedIntegrationIds` controls the checked state.
+   */
+  integrationTools?: SelectedIntegrationTool[];
+  /** Set of `${providerId}:${slug}` keys that are currently active on the agent. */
+  selectedIntegrationIds?: Set<string>;
 }
 
 export const buildAgentTools = ({
@@ -50,7 +56,8 @@ export const buildAgentTools = ({
   agents,
   workflows = {},
   selected,
-  selectedIntegrationTools = [],
+  integrationTools = [],
+  selectedIntegrationIds,
 }: BuildAgentToolsArgs): AgentTool[] => {
   const selectedTools = selected?.tools ?? {};
   const selectedAgents = selected?.agents ?? {};
@@ -104,7 +111,7 @@ export const buildAgentTools = ({
     });
   }
 
-  for (const entry of selectedIntegrationTools) {
+  for (const entry of integrationTools) {
     const id = buildIntegrationToolId(entry.providerId, entry.slug);
     if (seen.has(id)) {
       console.warn(
@@ -113,11 +120,12 @@ export const buildAgentTools = ({
       continue;
     }
     seen.add(id);
+    const key = `${entry.providerId}:${entry.slug}`;
     result.push({
       id,
       name: entry.slug,
       description: entry.description,
-      isChecked: true,
+      isChecked: selectedIntegrationIds?.has(key) ?? false,
       type: 'integration',
       providerId: entry.providerId,
       toolService: entry.toolService,

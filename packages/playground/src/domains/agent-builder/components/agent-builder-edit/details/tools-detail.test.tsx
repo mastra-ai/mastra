@@ -77,8 +77,26 @@ describe('ToolsDetail', () => {
     expect(screen.getByText(/no tools available/i)).toBeTruthy();
   });
 
-  it('renders an integration service block with a picker per service', () => {
+  it('renders an inline picker under each checked integration tool row', () => {
     renderPanel({
+      availableAgentTools: [
+        {
+          id: 'integration:composio:GMAIL_FETCH_EMAILS',
+          name: 'GMAIL_FETCH_EMAILS',
+          isChecked: true,
+          type: 'integration',
+          providerId: 'composio',
+          toolService: 'gmail',
+        },
+        {
+          id: 'integration:composio:GITHUB_CREATE_ISSUE',
+          name: 'GITHUB_CREATE_ISSUE',
+          isChecked: true,
+          type: 'integration',
+          providerId: 'composio',
+          toolService: 'github',
+        },
+      ],
       toolIntegrationServices: [
         {
           integrationId: 'composio',
@@ -95,7 +113,7 @@ describe('ToolsDetail', () => {
           toolService: 'github',
           toolServiceDisplayName: 'GitHub',
           multipleAllowed: false,
-          hasSelectedTools: false,
+          hasSelectedTools: true,
           connections: [],
         },
       ],
@@ -104,11 +122,57 @@ describe('ToolsDetail', () => {
     expect(screen.getByTestId('tools-detail-service-composio-gmail')).toBeTruthy();
     expect(screen.getByTestId('tools-detail-service-composio-github')).toBeTruthy();
     expect(screen.getByTestId('connection-picker-gmail')).toBeTruthy();
-    expect(screen.getByTestId('connection-picker-github')).toBeTruthy();
+    expect(screen.getByTestId('connection-picker-github-empty')).toBeTruthy();
   });
 
-  it('renders the empty connection state for a service with selected tools but no connection', () => {
+  it('does not render an inline picker when the integration tool is unchecked', () => {
     renderPanel({
+      availableAgentTools: [
+        {
+          id: 'integration:composio:GMAIL_FETCH_EMAILS',
+          name: 'GMAIL_FETCH_EMAILS',
+          isChecked: false,
+          type: 'integration',
+          providerId: 'composio',
+          toolService: 'gmail',
+        },
+      ],
+      toolIntegrationServices: [
+        {
+          integrationId: 'composio',
+          integrationDisplayName: 'Composio',
+          toolService: 'gmail',
+          toolServiceDisplayName: 'Gmail',
+          multipleAllowed: true,
+          hasSelectedTools: false,
+          connections: [],
+        },
+      ],
+    });
+
+    expect(screen.queryByTestId('tools-detail-service-composio-gmail')).toBeNull();
+  });
+
+  it('renders the inline picker only once even when multiple tools share a service', () => {
+    renderPanel({
+      availableAgentTools: [
+        {
+          id: 'integration:composio:GMAIL_FETCH_EMAILS',
+          name: 'GMAIL_FETCH_EMAILS',
+          isChecked: true,
+          type: 'integration',
+          providerId: 'composio',
+          toolService: 'gmail',
+        },
+        {
+          id: 'integration:composio:GMAIL_SEND_EMAIL',
+          name: 'GMAIL_SEND_EMAIL',
+          isChecked: true,
+          type: 'integration',
+          providerId: 'composio',
+          toolService: 'gmail',
+        },
+      ],
       toolIntegrationServices: [
         {
           integrationId: 'composio',
@@ -117,18 +181,27 @@ describe('ToolsDetail', () => {
           toolServiceDisplayName: 'Gmail',
           multipleAllowed: true,
           hasSelectedTools: true,
-          connections: [],
+          connections: [{ connectionId: 'c1', toolService: 'gmail', label: 'Work' }],
         },
       ],
     });
 
-    expect(screen.getByTestId('connection-picker-gmail-empty')).toBeTruthy();
-    expect(screen.getByText(/no connections yet/i)).toBeTruthy();
+    expect(screen.getAllByTestId('tools-detail-service-composio-gmail').length).toBe(1);
   });
 
   it('forwards picker edits through onConnectionsChange', () => {
     const onConnectionsChange = vi.fn();
     renderPanel({
+      availableAgentTools: [
+        {
+          id: 'integration:composio:GMAIL_FETCH_EMAILS',
+          name: 'GMAIL_FETCH_EMAILS',
+          isChecked: true,
+          type: 'integration',
+          providerId: 'composio',
+          toolService: 'gmail',
+        },
+      ],
       toolIntegrationServices: [
         {
           integrationId: 'composio',
@@ -208,7 +281,7 @@ describe('ToolsDetail', () => {
     expect(onConnectionsInvalid).toHaveBeenCalledWith(false);
   });
 
-  it('renders the active / total count when legacy agent tools are present', () => {
+  it('renders all available tools with their checked state and shows active/total in the header', () => {
     renderPanel({
       availableAgentTools: [
         { id: 't1', name: 'Tool one', isChecked: true, type: 'tool' },
@@ -216,7 +289,38 @@ describe('ToolsDetail', () => {
       ],
     });
 
+    expect(screen.getByText('Tool one')).toBeTruthy();
+    expect(screen.getByText('Tool two')).toBeTruthy();
     expect(screen.getByText('1 / 2')).toBeTruthy();
+  });
+
+  it('shows the empty connection prompt inline when an integration tool is checked but its service has no connection', () => {
+    renderPanel({
+      availableAgentTools: [
+        {
+          id: 'integration:composio:GMAIL_FETCH_EMAILS',
+          name: 'GMAIL_FETCH_EMAILS',
+          isChecked: true,
+          type: 'integration',
+          providerId: 'composio',
+          toolService: 'gmail',
+        },
+      ],
+      toolIntegrationServices: [
+        {
+          integrationId: 'composio',
+          integrationDisplayName: 'Composio',
+          toolService: 'gmail',
+          toolServiceDisplayName: 'Gmail',
+          multipleAllowed: true,
+          hasSelectedTools: true,
+          connections: [],
+        },
+      ],
+    });
+
+    expect(screen.getByTestId('connection-picker-gmail-empty')).toBeTruthy();
+    expect(screen.getByText(/no connections yet/i)).toBeTruthy();
   });
 
   it('invokes onClose when the close button is clicked', async () => {

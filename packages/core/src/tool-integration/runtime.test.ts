@@ -287,4 +287,36 @@ describe('resolveStoredToolIntegrations', () => {
     expect([firstCallSlugs, secondCallSlugs].flat().sort()).toEqual(['gmail.fetch_emails', 'slack.send_message']);
     expect(Object.keys(out).sort()).toEqual(['gmail.fetch_emails', 'slack.send_message']);
   });
+
+  it('passes authorId to resolveTools for kind=author connections', async () => {
+    const spy = vi.fn(async (opts: ResolveToolsOpts) => ({ [opts.toolSlugs[0]!]: makeTool(opts.toolSlugs[0]!) }));
+    const integration = makeIntegration({ resolveTools: spy });
+    const stored: ToolIntegrations = {
+      composio: {
+        tools: { 'gmail.fetch_emails': {} },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' }],
+        },
+      },
+    };
+    await resolveStoredToolIntegrations(stored, () => integration, { authorId: 'author_42' });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0].authorId).toBe('author_42');
+  });
+
+  it('omits authorId for non-author connections', async () => {
+    const spy = vi.fn(async (opts: ResolveToolsOpts) => ({ [opts.toolSlugs[0]!]: makeTool(opts.toolSlugs[0]!) }));
+    const integration = makeIntegration({ resolveTools: spy });
+    const stored: ToolIntegrations = {
+      composio: {
+        tools: { 'gmail.fetch_emails': {} },
+        connections: {
+          gmail: [{ kind: 'platform', toolService: 'gmail', connectionId: 'ca_1', label: 'Shared' }],
+        },
+      },
+    };
+    await resolveStoredToolIntegrations(stored, () => integration, { authorId: 'author_42' });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0].authorId).toBeUndefined();
+  });
 });

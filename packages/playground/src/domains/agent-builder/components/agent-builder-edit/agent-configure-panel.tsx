@@ -487,6 +487,13 @@ function DetailPane({
   const toolIntegrations = useWatch<AgentBuilderEditFormValues, 'toolIntegrations'>({ name: 'toolIntegrations' });
   const health = useAgentHealth(toolIntegrations);
 
+  const handleAddIntegrationTool = (entry: {
+    providerId: string;
+    toolSlug: string;
+    toolService: string;
+    description?: string;
+  }) => handleAddTools([entry]);
+
   return (
     <div className="h-full w-full min-w-0 overflow-hidden">
       {activeDetail === 'instructions' && (
@@ -504,15 +511,7 @@ function DetailPane({
           availableAgentTools={availableAgentTools}
           toolIntegrationServices={toolIntegrationServices}
           onConnectionsChange={handleConnectionsChange}
-          onAddTools={selection =>
-            handleAddTools(
-              selection.map(item => ({
-                providerId: item.integrationId,
-                toolSlug: item.slug,
-                toolService: item.toolService,
-              })),
-            )
-          }
+          onAddIntegrationTool={handleAddIntegrationTool}
           health={health}
         />
       )}

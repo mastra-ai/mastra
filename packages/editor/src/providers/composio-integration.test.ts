@@ -247,6 +247,25 @@ describe('ComposioToolIntegration — resolveTools', () => {
 
     expect(mastra.tools.get.mock.calls[0]![0]).toBe('author_99');
   });
+
+  it('prefers opts.authorId over requestContext when supplied (author-bound pin)', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+
+    await integration.resolveTools({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({});
+
+    await integration.resolveTools({
+      toolSlugs: ['gmail.fetch_emails'],
+      toolMeta: {},
+      connectionId: 'ca_1',
+      authorId: 'author_owner',
+      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'invoker_other' },
+    });
+
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('author_owner');
+  });
 });
 
 describe('ComposioToolIntegration — authorize', () => {

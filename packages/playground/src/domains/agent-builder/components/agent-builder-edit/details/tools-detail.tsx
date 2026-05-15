@@ -1,12 +1,10 @@
 import { Button, Checkbox, Txt } from '@mastra/playground-ui';
-import { PlusIcon, WrenchIcon, XIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { LinkIcon, WrenchIcon, XIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
-import { AddToolsDialog } from '@/domains/tool-integrations/components/add-tools-dialog';
-import type { AddToolsDialogSelection } from '@/domains/tool-integrations/components/add-tools-dialog';
 import { ConnectionPicker } from '@/domains/tool-integrations/components/connection-picker';
 import type { PickerConnection } from '@/domains/tool-integrations/components/connection-picker';
 import { HealthPill } from '@/domains/tool-integrations/components/health-pill';
@@ -48,8 +46,16 @@ interface ToolsDetailProps {
   onConnectionsInvalid?: (invalid: boolean) => void;
   /** Per-agent health rollup; rendered as a pill in the section header. */
   health?: AgentHealthResult;
-  /** Called when the user submits the "Add tools" cross-provider catalog dialog. */
-  onAddTools?: (selection: AddToolsDialogSelection[]) => void;
+  /**
+   * Called when the user toggles an integration tool on. Adds it to the form
+   * state and bootstraps `toolIntegrations[providerId].tools[slug]`.
+   */
+  onAddIntegrationTool?: (entry: {
+    providerId: string;
+    toolSlug: string;
+    toolService: string;
+    description?: string;
+  }) => void;
 }
 
 export const ToolsDetail = ({
@@ -60,27 +66,23 @@ export const ToolsDetail = ({
   onConnectionsChange,
   onConnectionsInvalid,
   health,
-  onAddTools,
+  onAddIntegrationTool,
 }: ToolsDetailProps) => {
   const { setValue, getValues } = useFormContext<AgentBuilderEditFormValues>();
   const activeCount = availableAgentTools.filter(item => item.isChecked).length;
-  const [addOpen, setAddOpen] = useState(false);
-
-  const initialSelectedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const tool of availableAgentTools) {
-      if (tool.type === 'integration' && tool.providerId) ids.add(`${tool.providerId}:${tool.name}`);
-    }
-    return ids;
-  }, [availableAgentTools]);
 
   const toggle = (item: AgentTool, next: boolean) => {
     if (item.type === 'integration') {
-      // Integration tools are toggled by removing them from toolIntegrations[providerId].tools
-      // when unchecked. Checking them back on requires re-picking from AddToolsDialog, so the
-      // checkbox is effectively a "remove" affordance here.
-      if (next) return;
-      if (!item.providerId) return;
+      if (!item.providerId || !item.toolService) return;
+      if (next) {
+        onAddIntegrationTool?.({
+          providerId: item.providerId,
+          toolSlug: item.name,
+          toolService: item.toolService,
+          description: item.description,
+        });
+        return;
+      }
       const current = getValues('toolIntegrations') ?? {};
       const config = current[item.providerId];
       if (!config) return;
@@ -96,6 +98,20 @@ export const ToolsDetail = ({
     const current = getValues(fieldName) ?? {};
     setValue(fieldName, { ...current, [item.id]: next }, { shouldDirty: true });
   };
+
+  // Lookup of toolIntegrationServices keyed by `providerId:toolService` so
+  // integration rows can render their picker inline.
+  const groupByService = useMemo(() => {
+    const map = new Map<string, ToolIntegrationServiceGroup>();
+    for (const group of toolIntegrationServices) {
+      map.set(`${group.integrationId}:${group.toolService}`, group);
+    }
+    return map;
+  }, [toolIntegrationServices]);
+
+  // Track which `(providerId:toolService)` groups have already rendered their
+  // inline picker, so we only show it once per service (under the first row).
+  const renderedServices = new Set<string>();
 
   const invalid = useMemo(
     () => toolIntegrationServices.some(group => group.hasSelectedTools && group.connections.length === 0),
@@ -126,36 +142,17 @@ export const ToolsDetail = ({
           )}
           {health && health.state !== 'empty' && <HealthPill health={health} />}
         </div>
-        <div className="flex items-center gap-1">
-          {editable && onAddTools && (
-            <Button size="sm" variant="ghost" onClick={() => setAddOpen(true)} data-testid="tools-detail-add">
-              <PlusIcon className="h-4 w-4" />
-              Add tools
-            </Button>
-          )}
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            tooltip="Close"
-            className="rounded-full"
-            onClick={onClose}
-            data-testid="tools-detail-close"
-          >
-            <XIcon />
-          </Button>
-        </div>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          tooltip="Close"
+          className="rounded-full"
+          onClick={onClose}
+          data-testid="tools-detail-close"
+        >
+          <XIcon />
+        </Button>
       </div>
-      {onAddTools && (
-        <AddToolsDialog
-          open={addOpen}
-          onClose={() => setAddOpen(false)}
-          initialSelectedIds={initialSelectedIds}
-          onSubmit={selection => {
-            onAddTools(selection);
-            setAddOpen(false);
-          }}
-        />
-      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto py-2">
         {availableAgentTools.length === 0 && toolIntegrationServices.length === 0 ? (
@@ -166,6 +163,20 @@ export const ToolsDetail = ({
           <>
             <ul className="flex flex-col">
               {availableAgentTools.map(item => {
+                const serviceKey =
+                  item.type === 'integration' && item.providerId && item.toolService
+                    ? `${item.providerId}:${item.toolService}`
+                    : null;
+                const group = serviceKey ? groupByService.get(serviceKey) : undefined;
+                const showInlinePicker =
+                  item.type === 'integration' &&
+                  item.isChecked &&
+                  !!group &&
+                  !!serviceKey &&
+                  !renderedServices.has(serviceKey);
+                if (showInlinePicker && serviceKey) {
+                  renderedServices.add(serviceKey);
+                }
                 return (
                   <li key={item.id}>
                     <label
@@ -180,53 +191,42 @@ export const ToolsDetail = ({
                           disabled={!editable}
                         />
                       </div>
-                      <div className="flex min-w-0 flex-col">
+                      <div className="flex min-w-0 flex-1 flex-col">
                         <Txt variant="ui-sm" className="font-medium text-neutral6">
                           {item.name}
                         </Txt>
                         {item.description && (
-                          <Txt variant="ui-xs" className="mt-0.5 truncate text-neutral3" title={item.description}>
+                          <Txt variant="ui-xs" className="mt-0.5 truncate text-neutral3">
                             {item.description}
                           </Txt>
                         )}
                       </div>
                     </label>
+                    {showInlinePicker && group && (
+                      <div
+                        className="flex flex-col gap-2 border-t border-border1 bg-surface2/40 px-6 py-3"
+                        data-testid={`tools-detail-service-${group.integrationId}-${group.toolService}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <LinkIcon className="h-3 w-3 text-neutral3" />
+                          <Txt variant="ui-xs" className="text-neutral3">
+                            {group.toolServiceDisplayName} · {group.integrationDisplayName}
+                          </Txt>
+                        </div>
+                        <ConnectionPicker
+                          integrationId={group.integrationId}
+                          toolService={group.toolService}
+                          multipleAllowed={group.multipleAllowed}
+                          connections={group.connections}
+                          disabled={!editable}
+                          onChange={next => onConnectionsChange?.(group.integrationId, group.toolService, next)}
+                        />
+                      </div>
+                    )}
                   </li>
                 );
               })}
             </ul>
-
-            {toolIntegrationServices.length > 0 && (
-              <div
-                className="flex flex-col gap-3 border-t border-border1 px-6 py-4"
-                data-testid="tools-detail-integrations"
-              >
-                {toolIntegrationServices.map(group => (
-                  <div
-                    key={`${group.integrationId}:${group.toolService}`}
-                    className="flex flex-col gap-2"
-                    data-testid={`tools-detail-service-${group.integrationId}-${group.toolService}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Txt variant="ui-sm" className="font-medium text-neutral6">
-                        {group.toolServiceDisplayName}
-                      </Txt>
-                      <Txt variant="ui-xs" className="text-neutral3">
-                        · {group.integrationDisplayName}
-                      </Txt>
-                    </div>
-                    <ConnectionPicker
-                      integrationId={group.integrationId}
-                      toolService={group.toolService}
-                      multipleAllowed={group.multipleAllowed}
-                      connections={group.connections}
-                      disabled={!editable}
-                      onChange={next => onConnectionsChange?.(group.integrationId, group.toolService, next)}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
           </>
         )}
       </div>

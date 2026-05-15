@@ -62,7 +62,7 @@ export const mastra = new Mastra({
     // toolProviders: {
     //   composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '' }),
     // },
-    toolIntegrations: [new ComposioToolIntegration({ apiKey: process.env.COMPOSIO_API_KEY!, allowedToolServices: ['gmail'] })],
+    toolIntegrations: [new ComposioToolIntegration({ apiKey: process.env.COMPOSIO_API_KEY!, allowedToolServices: ['gmail', 'googlecalendar'] })],
     browsers: {
       stagehand: {
         id: 'stagehand',

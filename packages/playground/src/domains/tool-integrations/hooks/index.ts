@@ -9,3 +9,5 @@ export type { ConnectionStatusItem } from './use-connection-status';
 export { useExistingConnections } from './use-existing-connections';
 export { useAgentHealth } from './use-agent-health';
 export type { AgentHealthResult, IntegrationHealth, ToolServiceHealth } from './use-agent-health';
+export { useAllIntegrationTools } from './use-all-integration-tools';
+export type { AvailableIntegrationTool } from './use-all-integration-tools';

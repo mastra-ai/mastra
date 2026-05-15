@@ -147,6 +147,7 @@ const AgentBuilderAgentViewReady = ({
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
+  const toolIntegrations = useWatch({ control: formMethods.control, name: 'toolIntegrations' });
   // Gate publishing on the *saved* visibility — never on unsaved form state.
   const isPublishable = storedAgent?.visibility === 'public';
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
@@ -161,6 +162,7 @@ const AgentBuilderAgentViewReady = ({
     selectedTools,
     selectedAgents,
     selectedWorkflows,
+    toolIntegrations,
     excludeAgentId: id,
   });
 

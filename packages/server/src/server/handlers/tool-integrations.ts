@@ -3,6 +3,7 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import { UnknownIntegrationError } from '@mastra/core/tool-integration';
 import type { ToolIntegration } from '@mastra/core/tool-integration';
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   authorizeToolIntegrationBodySchema,
@@ -52,8 +53,20 @@ function resolveIntegration(editor: IMastraEditor, integrationId: string): ToolI
  * no auth context is present so OSS deployments still work.
  */
 function resolveOwnerId(requestContext: RequestContext | undefined): string {
-  const value = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
-  return typeof value === 'string' && value.length > 0 ? value : 'default';
+  const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+  if (typeof resourceId === 'string' && resourceId.length > 0) {
+    return resourceId;
+  }
+
+  const user = requestContext?.get(MASTRA_USER_KEY);
+  if (user && typeof user === 'object' && 'id' in user) {
+    const id = (user as { id: unknown }).id;
+    if (typeof id === 'string' && id.length > 0) {
+      return id;
+    }
+  }
+
+  return 'default';
 }
 
 // ============================================================================
@@ -157,11 +170,16 @@ export const AUTHORIZE_TOOL_INTEGRATION_ROUTE = createRoute({
   description: 'Starts an OAuth flow and returns a redirect URL + opaque auth handle',
   tags: ['Tool Integrations'],
   requiresAuth: true,
-  handler: async ({ mastra, integrationId, toolService, connectionId, toolName }) => {
+  handler: async ({ mastra, integrationId, toolService, connectionId, toolName, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
       const integration = resolveIntegration(editor, integrationId);
-      return await integration.authorize({ toolService, connectionId, toolName });
+      // Fresh connect (no `connectionId`) resolves the caller's owner id from
+      // auth context so the new connected account lands in the same bucket the
+      // runtime will use at execution time. Re-auth (caller passed an existing
+      // `connectionId`) is left untouched so the adapter refreshes in place.
+      const bucket = connectionId && connectionId.length > 0 ? connectionId : resolveOwnerId(requestContext);
+      return await integration.authorize({ toolService, connectionId: bucket, toolName });
     } catch (error) {
       return handleError(error, 'Error authorizing tool integration');
     }

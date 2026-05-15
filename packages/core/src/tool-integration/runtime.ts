@@ -13,6 +13,11 @@ export type ToolIntegrationLookup = (integrationId: string) => ToolIntegration;
 export interface ResolveStoredToolIntegrationsOpts {
   /** Per-request context plumbed to each `integration.resolveTools` call. */
   requestContext?: Record<string, unknown>;
+  /**
+   * Agent author's user id. Used as the integration user bucket for
+   * `kind: 'author'` connections so pinned credentials work for any invoker.
+   */
+  authorId?: string;
   /** Optional logger for non-fatal per-connection warnings. */
   logger?: IMastraLogger;
 }
@@ -65,7 +70,7 @@ export async function resolveStoredToolIntegrations(
   lookup: ToolIntegrationLookup,
   opts: ResolveStoredToolIntegrationsOpts = {},
 ): Promise<Record<string, ToolAction<any, any, any>>> {
-  const { requestContext, logger } = opts;
+  const { requestContext, authorId, logger } = opts;
   const out: Record<string, ToolAction<any, any, any>> = {};
   if (!toolIntegrations || Object.keys(toolIntegrations).length === 0) return out;
 
@@ -113,6 +118,7 @@ export async function resolveStoredToolIntegrations(
             toolSlugs: slugsForService,
             toolMeta: cfg.tools ?? {},
             connectionId: connection.connectionId,
+            authorId: connection.kind === 'author' ? authorId : undefined,
             requestContext,
           });
         } catch (error) {
