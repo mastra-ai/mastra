@@ -78,8 +78,8 @@ const baseAgent = {
   authorId: 'user-1',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
-  isStarred: true,
-  starCount: 1,
+  isFavorited: true,
+  favoriteCount: 1,
 };
 
 describe('AgentBuilderFavoritePage', () => {
@@ -87,7 +87,7 @@ describe('AgentBuilderFavoritePage', () => {
     cleanup();
   });
 
-  it('passes starredOnly=true and updatedAt descending order to the API without a status filter', async () => {
+  it('passes favoritedOnly=true and updatedAt descending order to the API without a status filter', async () => {
     let capturedSearch: URLSearchParams | null = null;
     server.use(
       http.get(`${BASE_URL}/api/stored/agents`, ({ request }) => {
@@ -107,7 +107,7 @@ describe('AgentBuilderFavoritePage', () => {
     await waitFor(() => {
       expect(capturedSearch).not.toBeNull();
     });
-    expect(capturedSearch!.get('starredOnly')).toBe('true');
+    expect(capturedSearch!.get('favoritedOnly')).toBe('true');
     expect(capturedSearch!.get('orderBy[field]')).toBe('updatedAt');
     expect(capturedSearch!.get('orderBy[direction]')).toBe('DESC');
     expect(capturedSearch!.get('status')).toBeNull();

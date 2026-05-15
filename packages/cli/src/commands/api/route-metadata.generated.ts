@@ -1606,6 +1606,59 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "pagination"
     }
   },
+  "GET /observability/traces/light": {
+    "method": "GET",
+    "path": "/observability/traces/light",
+    "pathParams": [],
+    "queryParams": [
+      "dateRange",
+      "direction",
+      "endedAt",
+      "entityId",
+      "entityName",
+      "entityType",
+      "entityVersionId",
+      "environment",
+      "experimentId",
+      "field",
+      "hasChildError",
+      "metadata",
+      "name",
+      "organizationId",
+      "page",
+      "parentEntityId",
+      "parentEntityName",
+      "parentEntityType",
+      "parentEntityVersionId",
+      "perPage",
+      "requestId",
+      "resourceId",
+      "rootEntityId",
+      "rootEntityName",
+      "rootEntityType",
+      "rootEntityVersionId",
+      "runId",
+      "scope",
+      "serviceName",
+      "sessionId",
+      "source",
+      "spanType",
+      "startedAt",
+      "status",
+      "tags",
+      "threadId",
+      "traceId",
+      "userId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "spans",
+      "paginationProperty": "pagination"
+    }
+  },
   "GET /observability/branches": {
     "method": "GET",
     "path": "/observability/branches",
@@ -3017,11 +3070,11 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
       "perPage",
-      "starredOnly",
       "status",
       "visibility"
     ],
@@ -3266,9 +3319,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "PUT /stored/agents/:storedAgentId/star": {
+  "PUT /stored/agents/:storedAgentId/favorite": {
     "method": "PUT",
-    "path": "/stored/agents/:storedAgentId/star",
+    "path": "/stored/agents/:storedAgentId/favorite",
     "pathParams": [
       "storedAgentId"
     ],
@@ -3280,9 +3333,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /stored/agents/:storedAgentId/star": {
+  "DELETE /stored/agents/:storedAgentId/favorite": {
     "method": "DELETE",
-    "path": "/stored/agents/:storedAgentId/star",
+    "path": "/stored/agents/:storedAgentId/favorite",
     "pathParams": [
       "storedAgentId"
     ],
@@ -4024,11 +4077,11 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
       "perPage",
-      "starredOnly",
       "status",
       "visibility"
     ],
@@ -4140,9 +4193,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "PUT /stored/skills/:storedSkillId/star": {
+  "PUT /stored/skills/:storedSkillId/favorite": {
     "method": "PUT",
-    "path": "/stored/skills/:storedSkillId/star",
+    "path": "/stored/skills/:storedSkillId/favorite",
     "pathParams": [
       "storedSkillId"
     ],
@@ -4154,9 +4207,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /stored/skills/:storedSkillId/star": {
+  "DELETE /stored/skills/:storedSkillId/favorite": {
     "method": "DELETE",
-    "path": "/stored/skills/:storedSkillId/star",
+    "path": "/stored/skills/:storedSkillId/favorite",
     "pathParams": [
       "storedSkillId"
     ],

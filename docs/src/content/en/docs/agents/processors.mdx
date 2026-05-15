@@ -234,6 +234,16 @@ The method receives `prompt`, `model`, `stepNumber`, `steps`, `state`, and the s
 
 See the [`Processor` reference](/reference/processors/processor-interface#processllmrequest) for all available arguments and return types.
 
+### Act on the LLM response after the provider call
+
+Use `processLLMResponse()` to act on the completed LLM response after the step finishes and stream chunks have been collected. This hook pairs with `processLLMRequest()`: stash state (such as a cache key) in the request hook, then read it back in the response hook to perform side effects like writing to a cache.
+
+The `state` object is the same instance passed to `processLLMRequest()` for the same step. When `fromCache` is `true`, the response was replayed from a cache rather than produced by a live model call — processors that write to a cache should skip writes in this case.
+
+The method receives `chunks`, `model`, `stepNumber`, `steps`, `state`, `fromCache`, and the shared processor context.
+
+See the [`Processor` reference](/reference/processors/processor-interface#processllmresponse) for all available arguments and return types.
+
 ### Use the `prepareStep()` callback
 
 The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `processInputStep()`. Internally, Mastra wraps it in a processor that calls your function at each step. It accepts the same arguments and return type as `processInputStep()`, but doesn't require creating a class:

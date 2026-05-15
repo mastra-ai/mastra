@@ -86,7 +86,12 @@ export default function AgentBuilderLibraryPage() {
         );
       }
       return (
-        <AgentBuilderList agents={agents} search={search} rowTestId="library-agent-row" showStars={canUseFavorites} />
+        <AgentBuilderList
+          agents={agents}
+          search={search}
+          rowTestId="library-agent-row"
+          showFavorites={canUseFavorites}
+        />
       );
     }
 
@@ -109,7 +114,7 @@ export default function AgentBuilderLibraryPage() {
         skills={skills}
         search={search}
         onSkillClick={skill => navigate(`/agent-builder/skills/${skill.id}/view`, { viewTransition: true })}
-        showStars={canUseFavorites}
+        showFavorites={canUseFavorites}
       />
     );
   })();

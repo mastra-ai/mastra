@@ -1229,11 +1229,11 @@ export class MastraClient extends BaseResource {
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
     }
-    if (params?.starredOnly) {
-      searchParams.set('starredOnly', 'true');
+    if (params?.favoritedOnly) {
+      searchParams.set('favoritedOnly', 'true');
     }
-    if (params?.pinStarredFor) {
-      searchParams.set('pinStarredFor', params.pinStarredFor);
+    if (params?.pinFavoritedFor) {
+      searchParams.set('pinFavoritedFor', params.pinFavoritedFor);
     }
 
     const queryString = searchParams.toString();
@@ -1473,11 +1473,11 @@ export class MastraClient extends BaseResource {
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
     }
-    if (params?.starredOnly) {
-      searchParams.set('starredOnly', 'true');
+    if (params?.favoritedOnly) {
+      searchParams.set('favoritedOnly', 'true');
     }
-    if (params?.pinStarredFor) {
-      searchParams.set('pinStarredFor', params.pinStarredFor);
+    if (params?.pinFavoritedFor) {
+      searchParams.set('pinFavoritedFor', params.pinFavoritedFor);
     }
 
     const queryString = searchParams.toString();

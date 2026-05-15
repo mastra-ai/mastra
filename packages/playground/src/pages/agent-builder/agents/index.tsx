@@ -87,7 +87,7 @@ export default function AgentBuilderAgentsPage() {
       );
     }
 
-    return <AgentBuilderList agents={agents} search={search} showStars={canUseFavorites} />;
+    return <AgentBuilderList agents={agents} search={search} showFavorites={canUseFavorites} />;
   })();
 
   return (

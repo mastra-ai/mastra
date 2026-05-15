@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.7.24",
+  "version": "0.8.1-alpha.0",
   "description": "Mastra Editor for agent management and instantiation",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -63,8 +63,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts src/ee/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts src/ee/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

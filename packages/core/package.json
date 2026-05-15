@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.33.1",
+  "version": "1.35.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -722,14 +722,14 @@
         "default": "./dist/storage/domains/skills/index.cjs"
       }
     },
-    "./storage/domains/stars": {
+    "./storage/domains/favorites": {
       "import": {
-        "types": "./dist/storage/domains/stars/index.d.ts",
-        "default": "./dist/storage/domains/stars/index.js"
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/stars/index.d.ts",
-        "default": "./dist/storage/domains/stars/index.cjs"
+        "types": "./dist/storage/domains/favorites/index.d.ts",
+        "default": "./dist/storage/domains/favorites/index.cjs"
       }
     },
     "./storage/domains/workspaces": {

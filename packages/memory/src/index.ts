@@ -657,7 +657,11 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
+    const thread = await memoryStore.getThreadById({ threadId });
     await memoryStore.deleteThread({ threadId });
+    if (thread?.resourceId && memoryStore.supportsObservationalMemory) {
+      await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
+    }
     if (this.vector) {
       void this.deleteThreadVectors(threadId);
     }

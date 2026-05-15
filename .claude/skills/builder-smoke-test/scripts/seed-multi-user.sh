@@ -89,7 +89,14 @@ public_version="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 private_version="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 
 sqlite3 "${DB_PATH}" <<SQL
+-- foreign_keys=OFF so we can DELETE versions before the parent skills row
+-- (the schema has a self-referential FK between mastra_skills.activeVersionId
+-- and mastra_skill_versions.id; without the pragma the cleanup half of an
+-- idempotent re-run aborts before the INSERT can re-seed).
 PRAGMA foreign_keys = OFF;
+-- All interpolated values below are script-internal constants (public_id,
+-- private_id, generated uuids, frozen 'user_seed_other'); none come from
+-- user input, so direct string interpolation is safe inside this heredoc.
 DELETE FROM mastra_skill_versions WHERE skillId IN ('${public_id}', '${private_id}');
 DELETE FROM mastra_skills         WHERE id      IN ('${public_id}', '${private_id}');
 
@@ -112,7 +119,7 @@ VALUES
    '["name","description","instructions"]', 'Initial version (seeded)', '${now}');
 
 INSERT INTO mastra_skills
-  (id, status, activeVersionId, authorId, visibility, starCount, createdAt, updatedAt)
+  (id, status, activeVersionId, authorId, visibility, favoriteCount, createdAt, updatedAt)
 VALUES
   ('${public_id}',  'published', '${public_version}',  '${other_user}', 'public',  0, '${now}', '${now}'),
   ('${private_id}', 'published', '${private_version}', '${other_user}', 'private', 0, '${now}', '${now}');

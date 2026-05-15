@@ -7,7 +7,7 @@ import {
   calculatePagination,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
-  TABLE_STARS,
+  TABLE_FAVORITES,
   AGENTS_SCHEMA,
   AGENT_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
@@ -49,7 +49,7 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
-      ifNotExists: ['status', 'authorId', 'visibility', 'starCount'],
+      ifNotExists: ['status', 'authorId', 'visibility', 'favoriteCount'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
@@ -310,7 +310,7 @@ export class AgentsLibSQL extends AgentsStorage {
       authorId: row.authorId as string | undefined,
       visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
-      starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
@@ -356,7 +356,7 @@ export class AgentsLibSQL extends AgentsStorage {
           authorId: agent.authorId ?? null,
           visibility,
           metadata: agent.metadata ?? null,
-          starCount: 0,
+          favoriteCount: 0,
           createdAt: now,
           updatedAt: now,
         },
@@ -503,8 +503,8 @@ export class AgentsLibSQL extends AgentsStorage {
       status,
       visibility,
       entityIds,
-      pinStarredFor,
-      starredOnly,
+      pinFavoritedFor,
+      favoritedOnly,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -576,23 +576,23 @@ export class AgentsLibSQL extends AgentsStorage {
         queryParams.push(...entityIds);
       }
 
-      // Optional LEFT JOIN on stars for starred-first ordering / starredOnly filter.
-      // starredOnly only takes effect when pinStarredFor is also provided (no userId
+      // Optional LEFT JOIN on favorites for favorited-first ordering / favoritedOnly filter.
+      // favoritedOnly only takes effect when pinFavoritedFor is also provided (no userId
       // means no rows can match). The handler passes both together, but defend
-      // against direct callers that ask for starredOnly without identifying a user.
-      const joinUserId = pinStarredFor;
+      // against direct callers that ask for favoritedOnly without identifying a user.
+      const joinUserId = pinFavoritedFor;
       const useJoin = Boolean(joinUserId);
 
       let joinClause = '';
       const joinParams: InValue[] = [];
       if (useJoin && joinUserId) {
-        joinClause = `LEFT JOIN "${TABLE_STARS}" s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = ?`;
+        joinClause = `LEFT JOIN "${TABLE_FAVORITES}" s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = ?`;
         joinParams.push(joinUserId);
-        if (starredOnly) {
+        if (favoritedOnly) {
           conditions.push('s."userId" IS NOT NULL');
         }
-      } else if (starredOnly) {
-        // Defensive: starredOnly with no userId can never match a real row.
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
         conditions.push('1=0');
       }
 
@@ -615,7 +615,7 @@ export class AgentsLibSQL extends AgentsStorage {
         };
       }
 
-      // Compose ORDER BY: starred-first when JOIN active, then existing field, then id ASC tie-break.
+      // Compose ORDER BY: favorited-first when JOIN active, then existing field, then id ASC tie-break.
       const orderByParts: string[] = [];
       if (useJoin && joinUserId) {
         orderByParts.push(`(s."userId" IS NOT NULL) DESC`);

@@ -1,0 +1,58 @@
+// @vitest-environment jsdom
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FavoriteButton } from '../favorite-button';
+
+vi.mock('@/domains/agent-builder', () => ({
+  useBuilderAgentFeatures: () => ({ favorites: true }),
+}));
+
+vi.mock('../../hooks/use-stored-agent-favorite', () => ({
+  useToggleStoredAgentFavorite: () => ({ isPending: false, mutate: vi.fn() }),
+}));
+
+const authCapabilitiesMock = vi.fn();
+
+vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
+  useAuthCapabilities: () => authCapabilitiesMock(),
+}));
+
+describe('FavoriteButton', () => {
+  beforeEach(() => {
+    authCapabilitiesMock.mockReturnValue({
+      data: {
+        enabled: true,
+        login: { sso: false, credentials: false },
+        user: { id: 'u1' },
+        capabilities: {},
+        access: null,
+      },
+    });
+  });
+
+  it('renders singular Star text with the count', () => {
+    render(<FavoriteButton agentId="agent-1" favoriteCount={1} />);
+
+    expect(screen.getByRole('button', { name: 'Star agent' })).toBeTruthy();
+    expect(screen.getByText('Star')).toBeTruthy();
+    expect(screen.getByText('1')).toBeTruthy();
+  });
+
+  it('renders plural Stars text with the count', () => {
+    render(<FavoriteButton agentId="agent-1" favoriteCount={2} />);
+
+    expect(screen.getByText('Stars')).toBeTruthy();
+    expect(screen.getByText('2')).toBeTruthy();
+  });
+
+  it('renders as disabled with a sign-in tooltip when the user is not authenticated', () => {
+    authCapabilitiesMock.mockReturnValue({
+      data: { enabled: true, login: { sso: false, credentials: false } },
+    });
+    render(<FavoriteButton agentId="agent-1" favoriteCount={1} />);
+
+    const button = screen.getByRole('button', { name: 'Sign in to star this agent' });
+    expect(button).toBeTruthy();
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+});

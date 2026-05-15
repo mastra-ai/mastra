@@ -48,6 +48,17 @@ fi
 
 BUDGET="${BUDGET:-60}"
 PORT="${PORT:-4111}"
+
+# Validate inputs before any arithmetic. Both must be positive integers.
+if ! [[ "${BUDGET}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "wait-for-server: --budget must be a positive integer (got '${BUDGET}')" >&2
+  exit 2
+fi
+if ! [[ "${PORT}" =~ ^[1-9][0-9]*$ ]] || [ "${PORT}" -gt 65535 ]; then
+  echo "wait-for-server: --port must be an integer between 1 and 65535 (got '${PORT}')" >&2
+  exit 2
+fi
+
 URL="http://localhost:${PORT}/api/agents"
 
 # Warn if something else is already listening on the target port before polling.

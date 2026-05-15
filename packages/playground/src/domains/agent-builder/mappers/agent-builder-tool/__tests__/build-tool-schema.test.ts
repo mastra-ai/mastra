@@ -10,7 +10,7 @@ const allOff = {
   avatarUpload: false,
   skills: false,
   model: false,
-  stars: false,
+  favorites: false,
 };
 const allOn = { ...allOff, tools: true };
 

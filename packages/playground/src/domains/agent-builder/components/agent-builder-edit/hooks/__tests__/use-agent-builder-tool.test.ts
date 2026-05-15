@@ -18,7 +18,7 @@ vi.mock('../../../../hooks/use-builder-agent-features', () => ({
     avatarUpload: false,
     skills: true,
     model: true,
-    stars: false,
+    favorites: false,
   }),
 }));
 
@@ -30,7 +30,7 @@ const features = {
   avatarUpload: false,
   skills: true,
   model: true,
-  stars: false,
+  favorites: false,
   browser: false,
 };
 

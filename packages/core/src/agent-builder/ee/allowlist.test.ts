@@ -148,7 +148,7 @@ describe('enforceModelAllowlist', () => {
     const conditional: ModelCandidateInput = [
       { value: 'openai/gpt-4o', rules: { operator: 'AND', conditions: [] } },
       { value: 'anthropic/claude-opus-4-7' }, // rule-less default — disallowed
-    ] as unknown as ModelCandidateInput;
+    ];
     const result = enforceModelAllowlist(allowed, conditional);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -162,7 +162,7 @@ describe('enforceModelAllowlist', () => {
     const conditional: ModelCandidateInput = [
       { value: 'openai/gpt-4o', rules: { operator: 'AND', conditions: [] } },
       { value: 'anthropic/claude-opus-4-7' },
-    ] as unknown as ModelCandidateInput;
+    ];
     expect(enforceModelAllowlist(allowed, conditional).ok).toBe(true);
   });
 

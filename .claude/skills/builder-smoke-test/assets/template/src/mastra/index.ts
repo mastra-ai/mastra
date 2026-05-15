@@ -1,3 +1,4 @@
+import type { Context } from 'hono';
 import { Mastra } from '@mastra/core/mastra';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { MastraEditor } from '@mastra/editor';
@@ -60,7 +61,7 @@ export const mastra = new Mastra({
             {
               path: '/smoke-test/cookie',
               method: 'GET' as const,
-              handler: async (c: any) => c.text(c.req.header('cookie') ?? ''),
+              handler: async (c: Context) => c.text(c.req.header('cookie') ?? ''),
             },
           ]
         : undefined,

@@ -52,20 +52,20 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
 
     const missingToken = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents',
+      path: '/api/agents',
     });
     expect(missingToken.status).toBe(401);
 
     const invalidToken = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents',
+      path: '/api/agents',
       headers: { authorization: 'Bearer invalid' },
     });
     expect(invalidToken.status).toBe(401);
 
     const validToken = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents',
+      path: '/api/agents',
       headers: { authorization: 'Bearer valid' },
     });
     expect(validToken.status).toBe(200);
@@ -102,7 +102,7 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
 
     const disabledResponse = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents?apiKey=valid',
+      path: '/api/agents?apiKey=valid',
     });
     expect(disabledResponse.status).toBe(401);
 
@@ -126,13 +126,13 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
 
     const enabledResponse = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents?apiKey=valid',
+      path: '/api/agents?apiKey=valid',
     });
     expect(enabledResponse.status).toBe(200);
 
     const repeatedApiKeyResponse = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents?apiKey=valid&apiKey=ignored',
+      path: '/api/agents?apiKey=valid&apiKey=ignored',
     });
     expect(repeatedApiKeyResponse.status).toBe(200);
   });
@@ -157,13 +157,13 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
 
     const first = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents',
+      path: '/api/agents',
     });
     expect(first.status).toBe(200);
 
     const second = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents',
+      path: '/api/agents',
     });
     expect(second.status).toBe(429);
   });
