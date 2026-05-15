@@ -1,11 +1,13 @@
 import { EntityType } from '@mastra/core/observability';
 import {
   DateTimeRangePicker,
+  Label,
   NoTracesInfo,
   Notice,
   PageLayout,
   PropertyFilterCreator,
   SpanDataPanelView,
+  Switch,
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
@@ -151,7 +153,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           serviceNames: isServiceNamesLoading,
           environments: isEnvironmentsLoading,
         },
-        branchesSupported: !branchesUnsupported,
       }),
     [
       availableTags,
@@ -162,7 +163,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       isEntityNamesLoading,
       isServiceNamesLoading,
       isEnvironmentsLoading,
-      branchesUnsupported,
     ],
   );
 
@@ -270,6 +270,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
+      {!branchesUnsupported && (
+        <div className="flex h-form-default items-center gap-2 ml-auto">
+          <Switch
+            id="show-subtraces"
+            checked={url.listMode === 'branches'}
+            onCheckedChange={checked => url.handleListModeChange(checked ? 'branches' : 'traces')}
+            disabled={isTracesLoading}
+          />
+          <Label htmlFor="show-subtraces">Show subtraces</Label>
+        </div>
+      )}
     </>
   );
 
@@ -293,7 +304,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
+        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2 w-full">
           {toolbarControls}
         </PageLayout.Column>
       </PageLayout.Row>
