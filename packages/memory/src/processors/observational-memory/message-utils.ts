@@ -1,119 +1,25 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
 
-type ToolInvocationPart = {
-  type?: string;
-  toolInvocation?: { state?: string; toolCallId?: string; toolName?: string };
-  toolCallId?: string;
-};
-
-/** Terminal tool-invocation states that pair with a prior call (see MastraToolInvocation.state). */
-const TOOL_RESULT_LIKE_STATES = new Set(['result', 'error', 'output-error', 'output-denied']);
-
-export function getMessageListPartsForToolScan(msg: MastraDBMessage | undefined): unknown[] {
-  const c = msg?.content as unknown;
-  if (typeof c === 'string' || c == null) return [];
-  if (Array.isArray(c)) return c;
-  if (typeof c === 'object' && 'parts' in c) {
-    const parts = (c as { parts?: unknown }).parts;
-    return Array.isArray(parts) ? parts : [];
-  }
-  return [];
-}
-
-function accumulateToolInvocationPart(
-  part: ToolInvocationPart,
-  withCallOrPartial: Set<string>,
-  withResultLike: Set<string>,
-): void {
-  const type = part?.type;
-  if (type !== 'tool-invocation' && type !== 'tool-call' && type !== 'tool-result') return;
-
-  const toolCallId = part.toolInvocation?.toolCallId ?? part.toolCallId;
-  if (!toolCallId) return;
-
-  if (type === 'tool-invocation') {
-    const state = part.toolInvocation?.state;
-    if (state === 'call' || state === 'partial-call') {
-      withCallOrPartial.add(toolCallId);
-    } else if (state && TOOL_RESULT_LIKE_STATES.has(state)) {
-      withResultLike.add(toolCallId);
-    }
-    return;
-  }
-
-  if (type === 'tool-call') {
-    withCallOrPartial.add(toolCallId);
-  } else if (type === 'tool-result') {
-    withResultLike.add(toolCallId);
-  }
-}
-
-type ToolInvocationScan = {
-  withCallOrPartial: Set<string>;
-  withResultLike: Set<string>;
-};
-
-function scanToolInvocationIds(messages: MastraDBMessage[]): ToolInvocationScan {
-  const withCallOrPartial = new Set<string>();
-  const withResultLike = new Set<string>();
-
-  for (const msg of messages) {
-    const parts = getMessageListPartsForToolScan(msg);
-    if (parts.length === 0) continue;
-    for (const raw of parts) {
-      accumulateToolInvocationPart(raw as ToolInvocationPart, withCallOrPartial, withResultLike);
-    }
-  }
-
-  return { withCallOrPartial, withResultLike };
-}
-
-function messageHasToolCallForId(msg: MastraDBMessage, toolCallId: string): boolean {
-  const parts = getMessageListPartsForToolScan(msg);
-  for (const raw of parts) {
-    const part = raw as ToolInvocationPart;
-    const type = part?.type;
-    const id = part?.toolInvocation?.toolCallId ?? part?.toolCallId;
-    if (id !== toolCallId) continue;
-
-    if (type === 'tool-invocation') {
-      const state = part.toolInvocation?.state;
-      if (state === 'call' || state === 'partial-call') return true;
-    } else if (type === 'tool-call') {
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
- * Returns the subset of message IDs that are safe to mark as observed.
+ * Returns true if any part in the array represents an in-flight tool call that
+ * has not yet received its result.
  *
- * Excludes any message that carries a tool call (state: 'call' or 'partial-call')
- * whose matching result does not exist anywhere in the given message set.
- * This stops a call from entering observedMessageIds before its result arrives —
- * which is the root cause of client-side tool orphaning: once a call is observed,
- * the next request's pruning can drop it while the result is still present.
+ * Handles both AI SDK UI format (`tool-invocation` with state `call` or
+ * `partial-call`) and raw AI SDK format (`tool-call`). The raw format is used
+ * by client-side tools and was previously invisible to the incomplete-tool-call
+ * guard, allowing OM to run and mark the call as observed before its result
+ * arrived — the root cause of #15244.
  */
-export function getObservableMessageIds(messages: MastraDBMessage[]): string[] {
-  const { withCallOrPartial, withResultLike } = scanToolInvocationIds(messages);
-
-  const unpairedCallIds = new Set<string>();
-  for (const id of withCallOrPartial) {
-    if (!withResultLike.has(id)) {
-      unpairedCallIds.add(id);
+export function hasIncompleteToolCallParts(parts: unknown[]): boolean {
+  return parts.some(part => {
+    const type = (part as { type?: string })?.type;
+    if (type === 'tool-invocation') {
+      const state = (part as { toolInvocation?: { state?: string } }).toolInvocation?.state;
+      return state === 'call' || state === 'partial-call';
     }
-  }
-
-  if (unpairedCallIds.size === 0) {
-    return messages.map(m => m.id).filter((id): id is string => !!id);
-  }
-
-  return messages
-    .filter(m => !m.id || !Array.from(unpairedCallIds).some(id => messageHasToolCallForId(m, id)))
-    .map(m => m.id)
-    .filter((id): id is string => !!id);
+    return type === 'tool-call';
+  });
 }
 
 /**

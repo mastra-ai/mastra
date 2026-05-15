@@ -1,8 +1,7 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { filterObservedMessages, getMessageListPartsForToolScan } from '../message-utils';
+import { filterObservedMessages, hasIncompleteToolCallParts } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
@@ -112,19 +111,10 @@ export class ObservationStep {
     const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
     const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
     const latestStepParts = [
-      ...getLatestStepParts(getMessageListPartsForToolScan(lastMessage) as MastraDBMessage['content']['parts']),
-      ...pendingStepMessages.flatMap(msg =>
-        getLatestStepParts(getMessageListPartsForToolScan(msg) as MastraDBMessage['content']['parts']),
-      ),
+      ...getLatestStepParts(lastMessage?.content?.parts ?? []),
+      ...pendingStepMessages.flatMap(msg => getLatestStepParts(msg.content?.parts ?? [])),
     ];
-    const hasIncompleteToolCalls = latestStepParts.some(part => {
-      const type = part?.type;
-      if (type === 'tool-invocation') {
-        const state = (part as { toolInvocation?: { state?: string } }).toolInvocation?.state;
-        return state === 'call' || state === 'partial-call';
-      }
-      return type === 'tool-call';
-    });
+    const hasIncompleteToolCalls = hasIncompleteToolCallParts(latestStepParts);
     omDebug(
       `[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}, latestStepPartsCount=${latestStepParts.length}`,
     );

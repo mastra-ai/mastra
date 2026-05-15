@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripThreadTags } from '../message-utils';
+import { hasIncompleteToolCallParts, stripThreadTags } from '../message-utils';
 
 describe('stripThreadTags', () => {
   it('removes <thread> open tags with attributes', () => {
@@ -33,5 +33,58 @@ describe('stripThreadTags', () => {
     // Generous budget — linear implementation finishes in a few ms;
     // a quadratic implementation would take multiple seconds.
     expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+function oldGuard(parts: unknown[]): boolean {
+  return parts.some((part: any) => part?.type === 'tool-invocation' && part?.toolInvocation?.state === 'call');
+}
+
+describe('hasIncompleteToolCallParts', () => {
+  it('returns true for tool-invocation state:call', () => {
+    const parts = [{ type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'tc-1' } }];
+    expect(hasIncompleteToolCallParts(parts)).toBe(true);
+  });
+
+  it('returns true for tool-invocation state:partial-call', () => {
+    const parts = [{ type: 'tool-invocation', toolInvocation: { state: 'partial-call', toolCallId: 'tc-2' } }];
+    expect(oldGuard(parts)).toBe(false);
+    expect(hasIncompleteToolCallParts(parts)).toBe(true);
+  });
+
+  it('returns false for tool-invocation state:result', () => {
+    const parts = [{ type: 'tool-invocation', toolInvocation: { state: 'result', toolCallId: 'tc-3' } }];
+    expect(hasIncompleteToolCallParts(parts)).toBe(false);
+  });
+
+  it('returns true for raw tool-call part (missed by old guard)', () => {
+    const parts = [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'clientTool', args: {} }];
+    expect(oldGuard(parts)).toBe(false);
+    expect(hasIncompleteToolCallParts(parts)).toBe(true);
+  });
+
+  it('returns false for raw tool-result part', () => {
+    const parts = [{ type: 'tool-result', toolCallId: 'tc-client-1', result: 'done' }];
+    expect(hasIncompleteToolCallParts(parts)).toBe(false);
+  });
+
+  it('returns true when any part is an incomplete call among mixed parts', () => {
+    const parts = [
+      { type: 'text', text: 'Here is the result:' },
+      { type: 'tool-call', toolCallId: 'tc-2', toolName: 'clientTool', args: {} },
+    ];
+    expect(hasIncompleteToolCallParts(parts)).toBe(true);
+  });
+
+  it('returns false when all parts are text or completed results', () => {
+    const parts = [
+      { type: 'text', text: 'Done.' },
+      { type: 'tool-result', toolCallId: 'tc-3', result: 'ok' },
+    ];
+    expect(hasIncompleteToolCallParts(parts)).toBe(false);
+  });
+
+  it('returns false for empty parts array', () => {
+    expect(hasIncompleteToolCallParts([])).toBe(false);
   });
 });
