@@ -11,9 +11,11 @@ import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
 import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
+import { createWorkspaceTools } from '@mastra/core/workspace';
 import { z } from 'zod';
 
 import { resolveModel } from '../agents/model.js';
+import { MC_TOOLS } from '../tool-names.js';
 
 import type { TUIState } from './state.js';
 
@@ -30,6 +32,7 @@ export interface GoalState {
   turnsUsed: number;
   maxTurns: number;
   judgeModelId: string;
+  startedAt: string;
 }
 
 export interface GoalJudgeResult {
@@ -40,6 +43,11 @@ export interface GoalJudgeResult {
 export interface GoalEvaluationResult {
   continuation: string | null;
   judgeResult: GoalJudgeResult | null;
+}
+
+export interface GoalEvaluationOptions {
+  abortSignal?: AbortSignal;
+  onActivity?: (line: string) => void;
 }
 
 // =============================================================================
@@ -54,7 +62,8 @@ const JUDGE_SYSTEM_PROMPT = `You are the goal judge. Your decision directly cont
 Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
 
 Use "done" when the goal is fully achieved.
-Use "waiting" only when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint. Do not use "waiting" merely because the assistant asked a question or could benefit from user input.
+Use "waiting" when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint.
+Use "waiting" when the latest user message asks a question or requests clarification and the latest assistant message answers it; let the user acknowledge the answer, ask a follow-up, or otherwise return control before continuing goal work. Use common sense and do not wait if the user explicitly asked the assistant to continue autonomously after answering.
 Use "continue" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.
 If your previous decision was "waiting" for an explicit user checkpoint, keep choosing "waiting" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.
 If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose "continue" when the assistant should proceed to the next step. Do not choose "waiting" for judge-controlled checkpoints, because that would mean waiting for yourself.
@@ -107,6 +116,7 @@ export class GoalManager {
       turnsUsed: 0,
       maxTurns,
       judgeModelId,
+      startedAt: new Date().toISOString(),
     };
     return this.goal;
   }
@@ -117,7 +127,7 @@ export class GoalManager {
   loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
     const saved = metadata?.[THREAD_GOAL_KEY] as GoalState | undefined;
     if (saved && saved.objective && saved.status) {
-      this.goal = { ...saved, id: saved.id ?? randomUUID() };
+      this.goal = { ...saved, id: saved.id ?? randomUUID(), startedAt: saved.startedAt ?? new Date().toISOString() };
     } else {
       this.goal = null;
     }
@@ -176,7 +186,7 @@ export class GoalManager {
    * Called after each agent turn completes. Evaluates whether to continue.
    * Returns a GoalEvaluationResult with continuation prompt and judge result.
    */
-  async evaluateAfterTurn(state: TUIState): Promise<GoalEvaluationResult> {
+  async evaluateAfterTurn(state: TUIState, options: GoalEvaluationOptions = {}): Promise<GoalEvaluationResult> {
     if (!this.goal || this.goal.status !== 'active') {
       return { continuation: null, judgeResult: null };
     }
@@ -200,11 +210,15 @@ export class GoalManager {
     }
 
     // Call judge — always judge the current turn's response before enforcing budget
-    const result = await this.callJudge(state, {
-      lastUserContent: context.lastUserContent,
-      assistantStepsSinceLastUser: context.assistantStepsSinceLastUser,
-      lastAssistantContent: context.lastAssistantContent,
-    });
+    const result = await this.callJudge(
+      state,
+      {
+        lastUserContent: context.lastUserContent,
+        assistantStepsSinceLastUser: context.assistantStepsSinceLastUser,
+        lastAssistantContent: context.lastAssistantContent,
+      },
+      options,
+    );
     if (!this.goal || this.goal.id !== evaluatedGoalId || this.goal.status !== 'active') {
       return { continuation: null, judgeResult: null };
     }
@@ -266,7 +280,9 @@ export class GoalManager {
 
       const lastUserContent = lastUserIndex >= 0 ? this.extractTextContent(messages[lastUserIndex]!.content) : null;
       const assistantStepsSinceLastUser =
-        lastUserIndex >= 0 ? messages.slice(lastUserIndex + 1).filter(msg => msg.role === 'assistant').length : 0;
+        lastUserIndex >= 0
+          ? messages.slice(lastUserIndex + 1).filter((msg: any) => msg.role === 'assistant').length
+          : 0;
 
       return { lastUserContent, assistantStepsSinceLastUser, lastAssistantContent };
     } catch {
@@ -278,8 +294,13 @@ export class GoalManager {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
       return content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
+        .map((part: any) => {
+          if (typeof part === 'string') return part;
+          if (typeof part?.text === 'string') return part.text;
+          if (typeof part?.content === 'string') return part.content;
+          return null;
+        })
+        .filter((text: string | null): text is string => Boolean(text))
         .join('\n');
     }
     return String(content ?? '');
@@ -288,40 +309,86 @@ export class GoalManager {
   private async callJudge(
     state: TUIState,
     context: { lastUserContent: string | null; assistantStepsSinceLastUser: number; lastAssistantContent: string },
+    options: GoalEvaluationOptions,
   ): Promise<GoalJudgeResult> {
     try {
       const memory = await this.getJudgeMemory(state);
-      const judgeAgent = this.createJudgeAgent(memory);
+      const tools = await this.createJudgeTools(state);
+      const judgeAgent = this.createJudgeAgent(memory, tools);
       if (!judgeAgent) {
         return { decision: 'paused', reason: 'Judge model could not be initialized.' };
       }
 
-      // Truncate very long messages to keep judge calls fast
-      const truncatedAssistant = truncateForJudge(context.lastAssistantContent);
       const recentUser = context.lastUserContent
         ? `\n\nLatest user message:\n${truncateForJudge(context.lastUserContent)}\n\nAssistant steps since that user message: ${context.assistantStepsSinceLastUser}`
         : '';
 
       const stream = await judgeAgent.stream(
-        `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${truncatedAssistant}`,
+        `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${context.lastAssistantContent}`,
         {
           ...(memory
             ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
             : {}),
+          abortSignal: options.abortSignal,
           structuredOutput: {
             schema: judgeSchema,
           },
         },
       );
 
-      await stream.consumeStream();
+      await this.consumeJudgeStream(stream, options.onActivity);
       const output = (await stream.getFullOutput()).object as z.infer<typeof judgeSchema> | undefined;
       if (!output) {
         return { decision: 'paused', reason: 'Judge returned no structured decision.' };
       }
       return { decision: output.decision, reason: output.reason };
     } catch (error) {
+      if (options.abortSignal?.aborted) {
+        return { decision: 'paused', reason: 'Judge evaluation was interrupted.' };
+      }
       return { decision: 'paused', reason: `Judge could not evaluate this turn: ${formatError(error)}` };
+    }
+  }
+
+  private async createJudgeTools(state: TUIState): Promise<Record<string, any>> {
+    const workspace = state.harness.getWorkspace?.() ?? state.workspace;
+    if (!workspace) return {};
+
+    const workspaceTools = await createWorkspaceTools(workspace, {
+      requestContext: {},
+      workspace,
+    });
+    const allowedTools = new Set<string>([
+      MC_TOOLS.VIEW,
+      MC_TOOLS.SEARCH_CONTENT,
+      MC_TOOLS.FIND_FILES,
+      MC_TOOLS.FILE_STAT,
+      MC_TOOLS.LSP_INSPECT,
+    ]);
+    const tools: Record<string, any> = {};
+
+    for (const [name, tool] of Object.entries(workspaceTools)) {
+      if (!allowedTools.has(name)) continue;
+      const { needsApprovalFn: _needsApprovalFn, ...toolWithoutApproval } = tool as Record<string, any>;
+      tools[name] = { ...toolWithoutApproval, requireApproval: false };
+    }
+
+    return tools;
+  }
+
+  private async consumeJudgeStream(stream: any, onActivity?: (line: string) => void): Promise<void> {
+    if (!stream.fullStream) {
+      await stream.consumeStream();
+      return;
+    }
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk?.type === 'tool-call') {
+        const toolName = getToolName(chunk);
+        if (!toolName) continue;
+        const line = formatJudgeActivity(toolName, parseToolInput(chunk));
+        if (line) onActivity?.(line);
+      }
     }
   }
 
@@ -354,7 +421,7 @@ export class GoalManager {
     return `${state.harness.getCurrentThreadId() ?? 'no-thread'}-${this.goal!.id}`;
   }
 
-  private createJudgeAgent(memory: MastraMemory | null): Agent | null {
+  private createJudgeAgent(memory: MastraMemory | null, tools: Record<string, any>): Agent | null {
     if (!this.goal?.judgeModelId) return null;
     try {
       const model = resolveModel(this.goal.judgeModelId);
@@ -363,6 +430,7 @@ export class GoalManager {
         name: 'Goal Judge',
         instructions: JUDGE_SYSTEM_PROMPT,
         model,
+        tools,
         ...(memory ? { memory } : {}),
         inputProcessors: [new ProviderHistoryCompat()],
         errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
@@ -381,6 +449,45 @@ export class GoalManager {
 
 function truncateForJudge(value: string): string {
   return value.length > 4000 ? value.slice(0, 4000) + '\n...[truncated]' : value;
+}
+
+function getToolName(chunk: any): string | null {
+  const toolName = chunk.payload?.toolName ?? chunk.toolName;
+  return typeof toolName === 'string' ? toolName : null;
+}
+
+function parseToolInput(chunk: any): Record<string, any> {
+  const input = chunk.payload?.args ?? chunk.input ?? chunk.args ?? chunk.toolInput;
+  if (!input) return {};
+  if (typeof input === 'string') {
+    try {
+      return JSON.parse(input);
+    } catch {
+      return { input };
+    }
+  }
+  return input as Record<string, any>;
+}
+
+function formatJudgeActivity(toolName: string, input: Record<string, any>): string | null {
+  if (toolName === MC_TOOLS.VIEW) return `read ${formatActivityValue(input.path)}`;
+  if (toolName === MC_TOOLS.SEARCH_CONTENT) return `search ${formatQuotedActivityValue(input.pattern)}`;
+  if (toolName === MC_TOOLS.FIND_FILES) return `find files ${formatActivityValue(input.pattern ?? input.path)}`;
+  if (toolName === MC_TOOLS.FILE_STAT) return `stat ${formatActivityValue(input.path)}`;
+  if (toolName === MC_TOOLS.LSP_INSPECT) return `inspect ${formatActivityValue(input.path)}`;
+  return null;
+}
+
+function formatActivityValue(value: unknown): string {
+  if (typeof value === 'string' && value.length > 0) {
+    return value.length > 80 ? value.slice(0, 77) + '...' : value;
+  }
+  return 'workspace';
+}
+
+function formatQuotedActivityValue(value: unknown): string {
+  const formatted = formatActivityValue(value);
+  return formatted === 'workspace' ? formatted : JSON.stringify(formatted);
 }
 
 function formatError(error: unknown): string {

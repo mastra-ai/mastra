@@ -39,20 +39,28 @@ function nextTick() {
 }
 
 async function readNextRun(iterator: AsyncIterator<any>) {
+  const nextRun = await readNextRunWithParts(iterator);
+  if (nextRun.done) return nextRun;
+  return { value: { runId: nextRun.value.runId, text: nextRun.value.text, part: nextRun.value.part }, done: false };
+}
+
+async function readNextRunWithParts(iterator: AsyncIterator<any>) {
   let runId: string | undefined;
   let text = '';
+  const parts: any[] = [];
 
   while (true) {
     const next = await iterator.next();
     if (next.done) return next;
 
     const part = next.value;
+    parts.push(part);
     runId ??= part.runId;
     if (part.type === 'text-delta') {
       text += part.payload.text;
     }
     if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') {
-      return { value: { runId, text, part }, done: false };
+      return { value: { runId, text, part, parts }, done: false };
     }
   }
 }
@@ -91,6 +99,7 @@ describe('Agent signals', () => {
       type: 'user-message',
       contents: 'Signal contents',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      acceptedAt: new Date('2026-01-01T00:00:01.000Z'),
       attributes: { priority: 'high' },
       metadata: { source: 'test', signal: { userProvided: true } },
     });
@@ -106,6 +115,7 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'Signal contents',
         createdAt: '2026-01-01T00:00:00.000Z',
+        acceptedAt: '2026-01-01T00:00:01.000Z',
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
@@ -113,20 +123,40 @@ describe('Agent signals', () => {
 
     const dbMessage = signal.toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
     expect(dbMessage.role).toBe('signal');
+    expect(dbMessage.createdAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
     expect(dbMessage.content.metadata).toEqual({
       signal: {
         id: 'signal-1',
         type: 'user-message',
         createdAt: '2026-01-01T00:00:00.000Z',
+        acceptedAt: '2026-01-01T00:00:01.000Z',
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
     });
     expect(signalToMastraDBMessage(signal).role).toBe('signal');
     expect(mastraDBMessageToSignal(dbMessage).contents).toBe('Signal contents');
+    expect(mastraDBMessageToSignal(dbMessage).createdAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+    expect(mastraDBMessageToSignal(dbMessage).acceptedAt).toEqual(new Date('2026-01-01T00:00:01.000Z'));
     expect(mastraDBMessageToSignal(dbMessage).attributes).toEqual({ priority: 'high' });
     expect(mastraDBMessageToSignal(dbMessage).metadata).toEqual({ source: 'test', signal: { userProvided: true } });
+
+    const legacyDbMessage = {
+      ...dbMessage,
+      content: {
+        ...dbMessage.content,
+        metadata: {
+          signal: {
+            ...(dbMessage.content.metadata!.signal as Record<string, unknown>),
+            acceptedAt: undefined,
+          },
+        },
+      },
+    };
+    expect(mastraDBMessageToSignal(legacyDbMessage).acceptedAt).toBeUndefined();
+
     expect(dataPartToSignal(signalToDataPartFormat(signal)).contents).toBe('Signal contents');
+    expect(dataPartToSignal(signalToDataPartFormat(signal)).acceptedAt).toEqual(new Date('2026-01-01T00:00:01.000Z'));
 
     const reminderSignal = createSignal({
       id: 'signal-2',
@@ -586,7 +616,7 @@ describe('Agent signals', () => {
       threadId: 'idle-thread',
       resourceId: 'idle-user',
     });
-    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
 
     const signalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Hello from signal' },
@@ -600,7 +630,15 @@ describe('Agent signals', () => {
     const subscribedRun = await nextRun;
     expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
     expect(signalResult.signal.id).toBeDefined();
+    expect(signalResult.signal.acceptedAt).toBeInstanceOf(Date);
     expect(subscribedRun.value.text).toBe('signal response');
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-user-message');
+    expect(signalPart?.data).toMatchObject({
+      id: signalResult.signal.id,
+      contents: 'Hello from signal',
+      acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
+    });
+    expect(signalPart?.data.createdAt).toBeDefined();
 
     subscription.unsubscribe();
   });
@@ -814,10 +852,14 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('drains a user-message signal into the active same-agent thread run', async () => {
+  it('drains multiple user-message signals into an active same-agent thread run without merging them into users', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {
       releaseFirst = resolve;
+    });
+    let releaseSecond!: () => void;
+    const secondFinished = new Promise<void>(resolve => {
+      releaseSecond = resolve;
     });
     let streamCount = 0;
     const prompts: any[][] = [];
@@ -825,8 +867,10 @@ describe('Agent signals', () => {
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         streamCount += 1;
+        const callIndex = streamCount;
         prompts.push(prompt);
-        const responseText = streamCount === 1 ? 'first response' : 'signal response';
+        const responseText =
+          callIndex === 1 ? 'first response' : callIndex === 2 ? 'first signal response' : 'second signal response';
 
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -836,15 +880,18 @@ describe('Agent signals', () => {
               controller.enqueue({ type: 'stream-start', warnings: [] });
               controller.enqueue({
                 type: 'response-metadata',
-                id: `id-${streamCount}`,
+                id: `id-${callIndex}`,
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               });
-              controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
-              controller.enqueue({ type: 'text-end', id: 'text-1' });
-              if (streamCount === 1) {
+              controller.enqueue({ type: 'text-start', id: `text-${callIndex}` });
+              controller.enqueue({ type: 'text-delta', id: `text-${callIndex}`, delta: responseText });
+              controller.enqueue({ type: 'text-end', id: `text-${callIndex}` });
+              if (callIndex === 1) {
                 await firstFinished;
+              }
+              if (callIndex === 2) {
+                await secondFinished;
               }
               controller.enqueue({
                 type: 'finish',
@@ -879,23 +926,46 @@ describe('Agent signals', () => {
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    const signalResult = await agent.sendSignal(
-      { type: 'user-message', contents: 'Hello while running' },
+    const firstSignalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'First signal while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
-    expect(signalResult.signal.id).toBeDefined();
+    expect(firstSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    expect(firstSignalResult.signal.id).toBeDefined();
 
     releaseFirst();
+    await waitForCondition(() => streamCount === 2);
+
+    const secondSignalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'Second signal while running' },
+      { resourceId: 'active-user', threadId: 'active-thread' },
+    );
+    expect(secondSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    expect(secondSignalResult.signal.id).toBeDefined();
+    expect(secondSignalResult.signal.id).not.toBe(firstSignalResult.signal.id);
+
+    releaseSecond();
     const firstRun = await firstRunPromise;
-    expect(firstRun.value.text).toBe('first responsesignal response');
-    expect(streamCount).toBe(2);
-    expect(JSON.stringify(prompts[1])).toContain('Hello while running');
+    expect(firstRun.value.text).toBe('first responsefirst signal responsesecond signal response');
+    expect(streamCount).toBe(3);
+    expect(JSON.stringify(prompts[1])).toContain('First signal while running');
+    expect(JSON.stringify(prompts[1])).not.toContain('Second signal while running');
+    expect(JSON.stringify(prompts[2])).toContain('First signal while running');
+    expect(JSON.stringify(prompts[2])).toContain('Second signal while running');
 
     await stream.consumeStream();
     const recalled = await memory.recall({ threadId: 'active-thread', resourceId: 'active-user' });
-    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant', 'signal', 'assistant']);
+    expect(recalled.messages.map(message => message.role)).toEqual([
+      'user',
+      'assistant',
+      'signal',
+      'assistant',
+      'signal',
+      'assistant',
+    ]);
     expect(recalled.messages.map(message => message.content.parts.map(part => part.type))).toEqual([
+      ['text'],
+      ['text'],
       ['text'],
       ['text'],
       ['text'],
@@ -905,12 +975,49 @@ describe('Agent signals', () => {
       recalled.messages.map(message =>
         message.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
       ),
-    ).toEqual(['Hello', 'first response', 'Hello while running', 'signal response']);
+    ).toEqual([
+      'Hello',
+      'first response',
+      'First signal while running',
+      'first signal response',
+      'Second signal while running',
+      'second signal response',
+    ]);
+
+    const [userMessage, firstAssistant, firstSignal, secondAssistant, secondSignal, thirdAssistant] = recalled.messages;
+    expect(firstSignal.id).toBe(firstSignalResult.signal.id);
+    expect(secondSignal.id).toBe(secondSignalResult.signal.id);
+    expect(firstSignal.id).not.toBe(userMessage.id);
+    expect(secondSignal.id).not.toBe(userMessage.id);
+    expect(firstSignal.createdAt.getTime()).toBeGreaterThan(firstAssistant.createdAt.getTime());
+    expect(firstSignal.createdAt.getTime()).toBeLessThanOrEqual(secondAssistant.createdAt.getTime());
+    expect(secondSignal.createdAt.getTime()).toBeGreaterThan(secondAssistant.createdAt.getTime());
+    expect(secondSignal.createdAt.getTime()).toBeLessThanOrEqual(thirdAssistant.createdAt.getTime());
+
+    const firstRecalledSignal = mastraDBMessageToSignal(firstSignal);
+    const secondRecalledSignal = mastraDBMessageToSignal(secondSignal);
+    expect(firstRecalledSignal.createdAt).toEqual(firstSignal.createdAt);
+    expect(secondRecalledSignal.createdAt).toEqual(secondSignal.createdAt);
+    expect(firstRecalledSignal.acceptedAt).toEqual(firstSignalResult.signal.acceptedAt);
+    expect(secondRecalledSignal.acceptedAt).toEqual(secondSignalResult.signal.acceptedAt);
+
+    const firstSignalMetadata = firstSignal.content.metadata?.signal as { createdAt?: string; acceptedAt?: string };
+    const secondSignalMetadata = secondSignal.content.metadata?.signal as { createdAt?: string; acceptedAt?: string };
+    expect(firstSignalMetadata).toMatchObject({
+      createdAt: firstSignal.createdAt.toISOString(),
+      acceptedAt: firstSignalResult.signal.acceptedAt?.toISOString(),
+    });
+    expect(secondSignalMetadata).toMatchObject({
+      createdAt: secondSignal.createdAt.toISOString(),
+      acceptedAt: secondSignalResult.signal.acceptedAt?.toISOString(),
+    });
+    expect(firstAssistant.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
+    expect(secondAssistant.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
 
     subscription.unsubscribe();
   });
 
-  it('drops a not-yet-visible current-step tool call when draining a follow-up signal', async () => {
+  it('preserves current-step tool calls before draining a follow-up signal', async () => {
     const prompts: any[][] = [];
     let callCount = 0;
     let continueToToolCall!: () => void;
@@ -1014,9 +1121,9 @@ describe('Agent signals', () => {
     await waitForCondition(() => callCount === 2);
     await runPromise;
 
-    expect(chunks.map(chunk => chunk.type)).not.toContain('tool-call');
+    expect(chunks.map(chunk => chunk.type)).toContain('tool-call');
     expect(JSON.stringify(prompts[1])).toContain('Actually stop and answer this instead');
-    expect(JSON.stringify(prompts[1])).not.toContain('stale-tool-call');
+    expect(JSON.stringify(prompts[1])).toContain('stale-tool-call');
 
     subscription.unsubscribe();
   });
