@@ -14,4 +14,4 @@
 '@mastra/temporal': patch
 ---
 
-Bumped `@mastra/core` peer dependency floor to `>=1.35.0-0` so the widened FGA permission types and `MASTRA_USER_*` request-context constants are available. The floor cascades through packages that transitively depend on `@mastra/server` or `@mastra/deployer` to satisfy the workspace peer-dep subset rule.
+Minimum required `@mastra/core` version is now `>=1.35.0-0`. Older versions don't ship the widened FGA permission types or the new `MASTRA_USER_*` request-context constants these packages consume.
