@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.9.2
+
+### Patch Changes
+
+- Improve `npm create mastra` telemetry delivery so command completion events are tracked and flushed before the process exits. ([#16582](https://github.com/mastra-ai/mastra/pull/16582))
+
 ## 1.9.2-alpha.3
 
 ## 1.9.2-alpha.2
