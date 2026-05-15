@@ -203,13 +203,13 @@ function signalToLLMMessage(signal: Pick<AgentSignalInput, 'type' | 'attributes'
   return { role: 'user', content } as CoreMessage;
 }
 
-function signalToDataPart(signal: ReturnType<typeof normalizeSignal>): AgentSignalDataPart {
+function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: SignalPart[]): AgentSignalDataPart {
   return {
     type: `data-${signal.type}`,
     data: {
       id: signal.id,
       type: signal.type,
-      contents: signal.contents,
+      contents: partsToSignalContents(parts),
       createdAt: signal.createdAt.toISOString(),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
@@ -266,7 +266,7 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
     __isCreatedSignal: true as const,
     toDBMessage: options => signalToDBMessage(signal, parts, options),
     toLLMMessage: () => signalToLLMMessage(signal, parts),
-    toDataPart: () => signalToDataPart(signal),
+    toDataPart: () => signalToDataPart(signal, parts),
   };
 }
 

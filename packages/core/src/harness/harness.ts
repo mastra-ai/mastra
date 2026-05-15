@@ -1964,9 +1964,12 @@ export class Harness<TState = {}> {
     }
 
     const signalMetadata = getRecordValue(msg.content.metadata?.signal);
-    // Prefer content.parts (canonical source post stash-drop). Fall back to legacy
-    // metadata.signal.contents stash for old rows, then to plain content.content.
-    const signalSourceContents = signalMetadata?.contents ?? msg.content.parts ?? msg.content.content;
+    // Prefer content.parts when present (canonical source post stash-drop). Fall back to
+    // legacy metadata.signal.contents stash for old rows, then to plain content.content.
+    const signalSourceContents =
+      signalMetadata?.contents ??
+      (Array.isArray(msg.content.parts) && msg.content.parts.length > 0 ? msg.content.parts : undefined) ??
+      msg.content.content;
     if (signalMetadata?.type === 'user-message') {
       const signalContent = signalContentsToHarnessContent(signalSourceContents);
       if (signalContent.length > 0) {

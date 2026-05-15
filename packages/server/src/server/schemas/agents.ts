@@ -45,19 +45,10 @@ const userMessageSignalContentsSchema = z.union([
   z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
 ]);
 
-const userMessageSignalSchema = baseSignalSchema.extend({
-  type: z.literal('user-message'),
+const agentSignalSchema = baseSignalSchema.extend({
+  type: z.string(),
   contents: userMessageSignalContentsSchema,
 });
-
-const contextSignalSchema = baseSignalSchema.extend({
-  type: z.string().refine(type => type !== 'user-message', {
-    message: 'non-user-message signals must not use type "user-message"',
-  }),
-  contents: z.string(),
-});
-
-const agentSignalSchema = z.union([userMessageSignalSchema, contextSignalSchema]);
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({

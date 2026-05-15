@@ -3,6 +3,7 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
 import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { CoreUserMessage } from '@mastra/core/llm';
+import { convertSignalDataToBase64String } from './signal-data';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
@@ -122,6 +123,11 @@ export const useChat = ({
   type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
   type SignalContentPart = Exclude<UserMessageSignalContents, string>[number];
 
+  const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
+    if (data instanceof URL) return data.toString();
+    return convertSignalDataToBase64String(data);
+  };
+
   const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
     const parts: SignalContentPart[] = [];
     for (const message of coreUserMessages) {
@@ -135,14 +141,14 @@ export const useChat = ({
         } else if (part.type === 'file') {
           parts.push({
             type: 'file',
-            data: typeof part.data === 'string' ? part.data : '',
+            data: normalizeSignalFileData(part.data),
             mimeType: part.mimeType,
             ...(part.filename ? { filename: part.filename } : {}),
           } as SignalContentPart);
         } else if (part.type === 'image') {
           parts.push({
             type: 'file',
-            data: typeof part.image === 'string' ? part.image : '',
+            data: normalizeSignalFileData(part.image),
             mimeType: part.mimeType ?? 'image/png',
           } as SignalContentPart);
         }
