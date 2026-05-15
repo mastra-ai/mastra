@@ -187,7 +187,7 @@ export class ConvexDB extends MastraBase {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
-  }): Promise<WorkflowRunState | undefined> {
+  }): Promise<WorkflowRunState> {
     const snapshot = await this.client.callStorage<string>({
       op: 'mergeWorkflowState',
       tableName: TABLE_WORKFLOW_SNAPSHOT,
