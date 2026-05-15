@@ -448,17 +448,20 @@ describe('MastraAuthClerk', () => {
     });
 
     it('should throw on expired state', async () => {
-      const auth = new MastraAuthClerk(mockSSOOptions) as any;
+      vi.useFakeTimers();
+      try {
+        const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
-      // Generate a login URL to store state
-      auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
+        // Generate a login URL to store state
+        auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
 
-      // Manually expire the state
-      // Access the module-level stateStore through the closure
-      // We can test this by calling handleCallback immediately, which should work
-      // unless we make the time check fail.
+        // Advance time past state expiry (10 minutes + 1ms)
+        vi.advanceTimersByTime(10 * 60 * 1000 + 1);
 
-      // Instead, test the happy path with a valid state
+        await expect(auth.handleCallback('code123', 'expired-state')).rejects.toThrow('State parameter has expired');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should exchange code for tokens and return user with session cookie', async () => {
