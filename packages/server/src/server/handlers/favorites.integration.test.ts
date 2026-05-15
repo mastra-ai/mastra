@@ -1,9 +1,9 @@
 /**
- * Cross-layer integration tests for the stars feature.
+ * Cross-layer integration tests for the favorites feature.
  *
  * Drives real route handlers (LIST/GET/STAR/UNSTAR/UPDATE/DELETE) against a
  * real `InMemoryStore`. Covers scenarios that span enrichment + visibility +
- * the two-step `?starredOnly=true` pipeline + `authorId` transfer + archive.
+ * the two-step `?favoritedOnly=true` pipeline + `authorId` transfer + archive.
  *
  * Phases 0–2 already unit-test storage primitives, namespace, route auth /
  * cascade / EE gate. This file only adds the scenarios that need every layer
@@ -15,19 +15,19 @@ import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-con
 import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { STAR_STORED_AGENT_ROUTE } from './stored-agent-stars';
+import { FAVORITE_STORED_AGENT_ROUTE } from './stored-agent-favorites';
 import { LIST_STORED_AGENTS_ROUTE, UPDATE_STORED_AGENT_ROUTE } from './stored-agents';
-import { STAR_STORED_SKILL_ROUTE } from './stored-skill-stars';
+import { FAVORITE_STORED_SKILL_ROUTE } from './stored-skill-favorites';
 import { LIST_STORED_SKILLS_ROUTE, UPDATE_STORED_SKILL_ROUTE } from './stored-skills';
 
 // ----------------------------------------------------------------------------
 // Fixtures
 // ----------------------------------------------------------------------------
 
-function createEditor(starsEnabled: boolean): Partial<IMastraEditor> {
+function createEditor(favoritesEnabled: boolean): Partial<IMastraEditor> {
   const builder: IAgentBuilder = {
     enabled: true,
-    getFeatures: () => ({ agent: { stars: starsEnabled } }),
+    getFeatures: () => ({ agent: { stars: favoritesEnabled } }),
     getConfiguration: () => ({}),
   };
   return {
@@ -37,10 +37,10 @@ function createEditor(starsEnabled: boolean): Partial<IMastraEditor> {
   };
 }
 
-function createMastra(storage: InMemoryStore, starsEnabled = true) {
+function createMastra(storage: InMemoryStore, favoritesEnabled = true) {
   return {
     getStorage: () => storage,
-    getEditor: () => createEditor(starsEnabled),
+    getEditor: () => createEditor(favoritesEnabled),
     getLogger: () => ({ warn: vi.fn() }),
   } as any;
 }
@@ -93,7 +93,7 @@ async function seedSkill(
 // Tests
 // ----------------------------------------------------------------------------
 
-describe('stars integration: list enrichment shape', () => {
+describe('favorites integration: list enrichment shape', () => {
   let storage: InMemoryStore;
   let mastra: any;
 
@@ -104,9 +104,9 @@ describe('stars integration: list enrichment shape', () => {
     await seedAgent(storage, { id: 'a1', authorId: 'user-a', visibility: 'public' });
   });
 
-  it('list as starring user shows isStarred:true; list as another user shows isStarred:false; counter is shared', async () => {
-    // user-A stars a1.
-    await STAR_STORED_AGENT_ROUTE.handler({
+  it('list as favoriting user shows isFavorited:true; list as another user shows isFavorited:false; counter is shared', async () => {
+    // user-A favorites a1.
+    await FAVORITE_STORED_AGENT_ROUTE.handler({
       ...ctx(mastra, 'user-a'),
       storedAgentId: 'a1',
     } as any);
@@ -125,14 +125,14 @@ describe('stars integration: list enrichment shape', () => {
     const aRow = asA.agents.find((r: any) => r.id === 'a1') as any;
     const bRow = asB.agents.find((r: any) => r.id === 'a1') as any;
 
-    expect(aRow.isStarred).toBe(true);
-    expect(bRow.isStarred).toBe(false);
-    expect(aRow.starCount).toBe(1);
-    expect(bRow.starCount).toBe(1);
+    expect(aRow.isFavorited).toBe(true);
+    expect(bRow.isFavorited).toBe(false);
+    expect(aRow.favoriteCount).toBe(1);
+    expect(bRow.favoriteCount).toBe(1);
   });
 });
 
-describe('stars integration: ?starredOnly=true + visibility-recomputed total', () => {
+describe('favorites integration: ?favoritedOnly=true + visibility-recomputed total', () => {
   let storage: InMemoryStore;
   let mastra: any;
 
@@ -140,15 +140,15 @@ describe('stars integration: ?starredOnly=true + visibility-recomputed total', (
     storage = new InMemoryStore();
     await storage.init();
     mastra = createMastra(storage, true);
-    // user-A owns two public agents; user-B will star both.
+    // user-A owns two public agents; user-B will favorite both.
     await seedAgent(storage, { id: 'pub-1', authorId: 'user-a', visibility: 'public' });
     await seedAgent(storage, { id: 'pub-2', authorId: 'user-a', visibility: 'public' });
   });
 
-  it('flipping a starred agent to private removes it from B’s starredOnly list AND recomputes total', async () => {
-    // user-B stars both.
+  it('flipping a favorited agent to private removes it from B’s favoritedOnly list AND recomputes total', async () => {
+    // user-B favorites both.
     for (const id of ['pub-1', 'pub-2']) {
-      await STAR_STORED_AGENT_ROUTE.handler({
+      await FAVORITE_STORED_AGENT_ROUTE.handler({
         ...ctx(mastra, 'user-b'),
         storedAgentId: id,
       } as any);
@@ -159,7 +159,7 @@ describe('stars integration: ?starredOnly=true + visibility-recomputed total', (
       ...ctx(mastra, 'user-b'),
       page: 0,
       perPage: 100,
-      starredOnly: true,
+      favoritedOnly: true,
     } as any);
     expect(before.agents.map((a: any) => a.id).sort()).toEqual(['pub-1', 'pub-2']);
     expect(before.total).toBe(2);
@@ -176,15 +176,15 @@ describe('stars integration: ?starredOnly=true + visibility-recomputed total', (
       ...ctx(mastra, 'user-b'),
       page: 0,
       perPage: 100,
-      starredOnly: true,
+      favoritedOnly: true,
     } as any);
     expect(after.agents.map((a: any) => a.id)).toEqual(['pub-2']);
     expect(after.total).toBe(1);
   });
 
-  it('?starredOnly=true&perPage=1 returns honest total for nav badge', async () => {
+  it('?favoritedOnly=true&perPage=1 returns honest total for nav badge', async () => {
     for (const id of ['pub-1', 'pub-2']) {
-      await STAR_STORED_AGENT_ROUTE.handler({
+      await FAVORITE_STORED_AGENT_ROUTE.handler({
         ...ctx(mastra, 'user-b'),
         storedAgentId: id,
       } as any);
@@ -194,7 +194,7 @@ describe('stars integration: ?starredOnly=true + visibility-recomputed total', (
       ...ctx(mastra, 'user-b'),
       page: 0,
       perPage: 1,
-      starredOnly: true,
+      favoritedOnly: true,
     } as any);
 
     expect(result.agents).toHaveLength(1);
@@ -203,14 +203,14 @@ describe('stars integration: ?starredOnly=true + visibility-recomputed total', (
   });
 });
 
-describe('stars integration: archive survives star + still surfaces under starredOnly', () => {
-  it('archived agent keeps its star row and still appears in ?starredOnly=true', async () => {
+describe('favorites integration: archive survives favorite + still surfaces under favoritedOnly', () => {
+  it('archived agent keeps its favorite row and still appears in ?favoritedOnly=true', async () => {
     const storage = new InMemoryStore();
     await storage.init();
     const mastra = createMastra(storage, true);
     await seedAgent(storage, { id: 'a1', authorId: 'user-a', visibility: 'public' });
 
-    await STAR_STORED_AGENT_ROUTE.handler({
+    await FAVORITE_STORED_AGENT_ROUTE.handler({
       ...ctx(mastra, 'user-a'),
       storedAgentId: 'a1',
     } as any);
@@ -225,26 +225,26 @@ describe('stars integration: archive survives star + still surfaces under starre
       ...ctx(mastra, 'user-a'),
       page: 0,
       perPage: 100,
-      starredOnly: true,
+      favoritedOnly: true,
       status: 'archived',
     } as any);
 
     const row = result.agents.find((a: any) => a.id === 'a1') as any;
     expect(row).toBeDefined();
-    expect(row.isStarred).toBe(true);
-    expect(row.starCount).toBe(1);
+    expect(row.isFavorited).toBe(true);
+    expect(row.favoriteCount).toBe(1);
   });
 });
 
-describe('stars integration: authorId transfer leaves stars intact', () => {
-  it('changing authorId does not drop the star row', async () => {
+describe('favorites integration: authorId transfer leaves favorites intact', () => {
+  it('changing authorId does not drop the favorite row', async () => {
     const storage = new InMemoryStore();
     await storage.init();
     const mastra = createMastra(storage, true);
     await seedAgent(storage, { id: 'a1', authorId: 'user-x', visibility: 'public' });
 
-    // user-A stars an agent owned by user-X.
-    await STAR_STORED_AGENT_ROUTE.handler({
+    // user-A favorites an agent owned by user-X.
+    await FAVORITE_STORED_AGENT_ROUTE.handler({
       ...ctx(mastra, 'user-a'),
       storedAgentId: 'a1',
     } as any);
@@ -257,20 +257,20 @@ describe('stars integration: authorId transfer leaves stars intact', () => {
       authorId: 'user-y',
     } as any);
 
-    // user-A's view: still starred, still surfaces under starredOnly.
+    // user-A's view: still favorited, still surfaces under favoritedOnly.
     const result = await LIST_STORED_AGENTS_ROUTE.handler({
       ...ctx(mastra, 'user-a'),
       page: 0,
       perPage: 100,
-      starredOnly: true,
+      favoritedOnly: true,
     } as any);
     const row = result.agents.find((a: any) => a.id === 'a1') as any;
     expect(row).toBeDefined();
-    expect(row.isStarred).toBe(true);
+    expect(row.isFavorited).toBe(true);
   });
 });
 
-describe('stars integration: skills mirror', () => {
+describe('favorites integration: skills mirror', () => {
   let storage: InMemoryStore;
   let mastra: any;
 
@@ -282,7 +282,7 @@ describe('stars integration: skills mirror', () => {
   });
 
   it('list enrichment is per-caller, counter is shared', async () => {
-    await STAR_STORED_SKILL_ROUTE.handler({
+    await FAVORITE_STORED_SKILL_ROUTE.handler({
       ...ctx(mastra, 'user-a'),
       storedSkillId: 's1',
     } as any);
@@ -300,14 +300,14 @@ describe('stars integration: skills mirror', () => {
 
     const aRow = asA.skills.find((r: any) => r.id === 's1') as any;
     const bRow = asB.skills.find((r: any) => r.id === 's1') as any;
-    expect(aRow.isStarred).toBe(true);
-    expect(bRow.isStarred).toBe(false);
-    expect(aRow.starCount).toBe(1);
-    expect(bRow.starCount).toBe(1);
+    expect(aRow.isFavorited).toBe(true);
+    expect(bRow.isFavorited).toBe(false);
+    expect(aRow.favoriteCount).toBe(1);
+    expect(bRow.favoriteCount).toBe(1);
   });
 
-  it('archived skill keeps its star row and still appears in ?starredOnly=true', async () => {
-    await STAR_STORED_SKILL_ROUTE.handler({
+  it('archived skill keeps its favorite row and still appears in ?favoritedOnly=true', async () => {
+    await FAVORITE_STORED_SKILL_ROUTE.handler({
       ...ctx(mastra, 'user-a'),
       storedSkillId: 's1',
     } as any);
@@ -320,18 +320,18 @@ describe('stars integration: skills mirror', () => {
       ...ctx(mastra, 'user-a'),
       page: 0,
       perPage: 100,
-      starredOnly: true,
+      favoritedOnly: true,
       status: 'archived',
     } as any);
 
     const row = result.skills.find((s: any) => s.id === 's1') as any;
     expect(row).toBeDefined();
-    expect(row.isStarred).toBe(true);
-    expect(row.starCount).toBe(1);
+    expect(row.isFavorited).toBe(true);
+    expect(row.favoriteCount).toBe(1);
   });
 
-  it('changing skill authorId does not drop the star row', async () => {
-    await STAR_STORED_SKILL_ROUTE.handler({
+  it('changing skill authorId does not drop the favorite row', async () => {
+    await FAVORITE_STORED_SKILL_ROUTE.handler({
       ...ctx(mastra, 'user-a'),
       storedSkillId: 's1',
     } as any);
@@ -346,11 +346,11 @@ describe('stars integration: skills mirror', () => {
       ...ctx(mastra, 'user-a'),
       page: 0,
       perPage: 100,
-      starredOnly: true,
+      favoritedOnly: true,
     } as any);
 
     const row = result.skills.find((s: any) => s.id === 's1') as any;
     expect(row).toBeDefined();
-    expect(row.isStarred).toBe(true);
+    expect(row.isFavorited).toBe(true);
   });
 });

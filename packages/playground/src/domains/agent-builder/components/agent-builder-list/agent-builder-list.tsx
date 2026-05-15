@@ -2,7 +2,7 @@ import type { StoredAgentResponse } from '@mastra/client-js';
 import { Avatar, EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
 import { LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { StarButton } from '@/domains/agents/components/star-button';
+import { FavoriteButton } from '@/domains/agents/components/favorite-button';
 import { useLinkComponent } from '@/lib/framework';
 
 export type AgentBuilderListProps = {
@@ -93,15 +93,20 @@ export function AgentBuilderList({ agents, search, rowTestId, showStars = true }
               </div>
               {showStars && (
                 <div className="mt-2 md:hidden">
-                  <StarButton agentId={agent.id} isStarred={agent.isStarred} starCount={agent.starCount} size="sm" />
+                  <FavoriteButton
+                    agentId={agent.id}
+                    isFavorited={agent.isFavorited}
+                    favoriteCount={agent.favoriteCount}
+                    size="sm"
+                  />
                 </div>
               )}
             </div>
             {showStars && (
-              <StarButton
+              <FavoriteButton
                 agentId={agent.id}
-                isStarred={agent.isStarred}
-                starCount={agent.starCount}
+                isFavorited={agent.isFavorited}
+                favoriteCount={agent.favoriteCount}
                 size="sm"
                 className="shrink-0 hidden md:inline-flex"
               />

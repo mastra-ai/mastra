@@ -6,6 +6,7 @@ import { InMemoryBlobStore } from './domains/blobs/inmemory';
 import { InMemoryChannelsStorage } from './domains/channels/inmemory';
 import { DatasetsInMemory } from './domains/datasets/inmemory';
 import { ExperimentsInMemory } from './domains/experiments/inmemory';
+import { InMemoryFavoritesStorage } from './domains/favorites/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
@@ -16,7 +17,6 @@ import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
-import { InMemoryStarsStorage } from './domains/stars/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
@@ -72,7 +72,7 @@ export class InMemoryStore extends MastraCompositeStore {
       mcpServers: new InMemoryMCPServersStorage({ db: this.#db }),
       workspaces: new InMemoryWorkspacesStorage({ db: this.#db }),
       skills: new InMemorySkillsStorage({ db: this.#db }),
-      stars: new InMemoryStarsStorage({ db: this.#db }),
+      favorites: new InMemoryFavoritesStorage({ db: this.#db }),
       blobs: new InMemoryBlobStore(),
       backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
       schedules: new InMemorySchedulesStorage({ db: this.#db }),

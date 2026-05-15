@@ -59,7 +59,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       authorId: agent.authorId,
       visibility,
       metadata: agent.metadata,
-      starCount: 0,
+      favoriteCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -127,7 +127,8 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       metadata,
       status,
       entityIds,
-      pinStarredFor,
+      pinFavoritedFor,
+      favoritedOnly,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -147,7 +148,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
 
-    // Restrict to a set of IDs (used by ?starredOnly=true).
+    // Restrict to a set of IDs (used by ?favoritedOnly=true).
     // An empty array means "no candidates" -> empty result.
     if (entityIds !== undefined) {
       if (entityIds.length === 0) {
@@ -186,9 +187,18 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       });
     }
 
-    // Sort filtered agents (with optional starred-first compound sort)
-    const starredIds = pinStarredFor ? this.collectStarredIdsFor(pinStarredFor) : undefined;
-    const sortedAgents = this.sortAgents(agents, field, direction, starredIds);
+    // Optional favorited-first ordering / favorites-only filter.
+    const favoritedIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
+    if (favoritedOnly) {
+      if (favoritedIds) {
+        agents = agents.filter(agent => favoritedIds.has(agent.id));
+      } else {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        agents = [];
+      }
+    }
+
+    const sortedAgents = this.sortAgents(agents, field, direction, favoritedIds);
 
     // Deep clone agents to avoid mutation
     const clonedAgents = sortedAgents.map(agent => this.deepCopyAgent(agent));
@@ -349,14 +359,14 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     agents: StorageAgentType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
-    starredIds?: Set<string>,
+    favoritedIds?: Set<string>,
   ): StorageAgentType[] {
     return agents.sort((a, b) => {
-      // Compound sort: starred first, then existing orderBy, then id ASC for stable pagination.
-      if (starredIds) {
-        const aStar = starredIds.has(a.id) ? 1 : 0;
-        const bStar = starredIds.has(b.id) ? 1 : 0;
-        if (aStar !== bStar) return bStar - aStar;
+      // Compound sort: favorited first, then existing orderBy, then id ASC for stable pagination.
+      if (favoritedIds) {
+        const aFav = favoritedIds.has(a.id) ? 1 : 0;
+        const bFav = favoritedIds.has(b.id) ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
       }
 
       const aValue = new Date(a[field]).getTime();
@@ -371,17 +381,17 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   /**
-   * Collect the set of agent IDs starred by the given user. Returns an empty
-   * Set when the stars domain is not wired or the user has no stars.
+   * Collect the set of agent IDs favorited by the given user. Returns an empty
+   * Set when the favorites domain is not wired or the user has no favorites.
    */
-  private collectStarredIdsFor(userId: string): Set<string> {
-    const starred = new Set<string>();
-    for (const row of this.db.stars.values()) {
+  private collectFavoritedIdsFor(userId: string): Set<string> {
+    const favorited = new Set<string>();
+    for (const row of this.db.favorites.values()) {
       if (row.userId === userId && row.entityType === 'agent') {
-        starred.add(row.entityId);
+        favorited.add(row.entityId);
       }
     }
-    return starred;
+    return favorited;
   }
 
   private sortVersions(

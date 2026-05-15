@@ -2,7 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
 import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
+import { SkillFavoriteButton } from '@/domains/agents/components/skill-favorite-button';
 import { getSkillOrigin } from '@/domains/agents/utils/skill-origin';
 
 export type SkillBuilderListProps = {
@@ -91,20 +91,20 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
               </div>
               {showStars && (
                 <div className="mt-2 md:hidden">
-                  <SkillStarButton
+                  <SkillFavoriteButton
                     skillId={skill.id}
-                    isStarred={skill.isStarred}
-                    starCount={skill.starCount}
+                    isFavorited={skill.isFavorited}
+                    favoriteCount={skill.favoriteCount}
                     size="sm"
                   />
                 </div>
               )}
             </div>
             {showStars && (
-              <SkillStarButton
+              <SkillFavoriteButton
                 skillId={skill.id}
-                isStarred={skill.isStarred}
-                starCount={skill.starCount}
+                isFavorited={skill.isFavorited}
+                favoriteCount={skill.favoriteCount}
                 size="sm"
                 className="shrink-0 hidden md:inline-flex"
               />

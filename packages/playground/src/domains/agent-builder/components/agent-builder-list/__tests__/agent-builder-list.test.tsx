@@ -18,8 +18,8 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
   };
 });
 
-vi.mock('@/domains/agents/components/star-button', () => ({
-  StarButton: () => <button type="button" aria-label="Star agent" />,
+vi.mock('@/domains/agents/components/favorite-button', () => ({
+  FavoriteButton: () => <button type="button" aria-label="Star agent" />,
 }));
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (

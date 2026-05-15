@@ -233,29 +233,29 @@ describe('StoredAgent Resource', () => {
       );
     });
 
-    describe('Stars', () => {
-      it('should star the agent via PUT /star', async () => {
-        const mockResponse = { starred: true, starCount: 3 };
+    describe('Favorites', () => {
+      it('should favorite the agent via PUT /favorite', async () => {
+        const mockResponse = { favorited: true, favoriteCount: 3 };
         mockFetchResponse(mockResponse);
 
-        const result = await storedAgent.star();
+        const result = await storedAgent.favorite();
         expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
-          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/star`,
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/favorite`,
           expect.objectContaining({
             method: 'PUT',
           }),
         );
       });
 
-      it('should unstar the agent via DELETE /star', async () => {
-        const mockResponse = { starred: false, starCount: 2 };
+      it('should unfavorite the agent via DELETE /favorite', async () => {
+        const mockResponse = { favorited: false, favoriteCount: 2 };
         mockFetchResponse(mockResponse);
 
-        const result = await storedAgent.unstar();
+        const result = await storedAgent.unfavorite();
         expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
-          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/star`,
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/favorite`,
           expect.objectContaining({
             method: 'DELETE',
           }),
@@ -263,13 +263,13 @@ describe('StoredAgent Resource', () => {
       });
     });
 
-    it('should pass starredOnly and pinStarredFor on listStoredAgents', async () => {
+    it('should pass favoritedOnly and pinFavoritedFor on listStoredAgents', async () => {
       const mockResponse = { agents: [], total: 0, page: 0, perPage: 100, hasMore: false };
       mockFetchResponse(mockResponse);
 
-      await client.listStoredAgents({ starredOnly: true, pinStarredFor: 'user-1' });
+      await client.listStoredAgents({ favoritedOnly: true, pinFavoritedFor: 'user-1' });
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/stored/agents?starredOnly=true&pinStarredFor=user-1`,
+        `${clientOptions.baseUrl}/api/stored/agents?favoritedOnly=true&pinFavoritedFor=user-1`,
         expect.anything(),
       );
     });

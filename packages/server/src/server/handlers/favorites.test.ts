@@ -5,9 +5,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 
-import { STAR_STORED_AGENT_ROUTE, UNSTAR_STORED_AGENT_ROUTE } from './stored-agent-stars';
+import { FAVORITE_STORED_AGENT_ROUTE, UNFAVORITE_STORED_AGENT_ROUTE } from './stored-agent-favorites';
 import { DELETE_STORED_AGENT_ROUTE } from './stored-agents';
-import { STAR_STORED_SKILL_ROUTE, UNSTAR_STORED_SKILL_ROUTE } from './stored-skill-stars';
+import { FAVORITE_STORED_SKILL_ROUTE, UNFAVORITE_STORED_SKILL_ROUTE } from './stored-skill-favorites';
 import { DELETE_STORED_SKILL_ROUTE } from './stored-skills';
 
 // =============================================================================
@@ -38,12 +38,12 @@ function createBuilder(features: { stars?: boolean } | null): Partial<IMastraEdi
 function createMastra(opts: {
   agents?: Map<string, MockRecord>;
   skills?: Map<string, MockRecord>;
-  starsStore?: ReturnType<typeof createStarsStore>;
+  favoritesStore?: ReturnType<typeof createFavoritesStore>;
   editor?: Partial<IMastraEditor>;
 }) {
   const agents = opts.agents ?? new Map<string, MockRecord>();
   const skills = opts.skills ?? new Map<string, MockRecord>();
-  const starsStore = opts.starsStore ?? createStarsStore();
+  const favoritesStore = opts.favoritesStore ?? createFavoritesStore();
 
   const agentStore = {
     getById: vi.fn(async (id: string) => agents.get(id) ?? null),
@@ -57,7 +57,7 @@ function createMastra(opts: {
     getStore: vi.fn(async (name: string) => {
       if (name === 'agents') return agentStore;
       if (name === 'skills') return skillStore;
-      if (name === 'stars') return starsStore;
+      if (name === 'favorites') return favoritesStore;
       return null;
     }),
   };
@@ -70,7 +70,7 @@ function createMastra(opts: {
     getStorage: () => storage,
     getEditor: () => ({ ...editorBase, ...(opts.editor ?? {}) }),
     getLogger: () => ({ warn: vi.fn() }),
-    starsStore,
+    favoritesStore,
     agentStore,
     skillStore,
     agents,
@@ -78,11 +78,11 @@ function createMastra(opts: {
   };
 }
 
-function createStarsStore() {
+function createFavoritesStore() {
   return {
-    star: vi.fn(async () => ({ starred: true, starCount: 1 })),
-    unstar: vi.fn(async () => ({ starred: false, starCount: 0 })),
-    deleteStarsForEntity: vi.fn(async () => {}),
+    favorite: vi.fn(async () => ({ favorited: true, favoriteCount: 1 })),
+    unfavorite: vi.fn(async () => ({ favorited: false, favoriteCount: 0 })),
+    deleteFavoritesForEntity: vi.fn(async () => {}),
   };
 }
 
@@ -100,61 +100,61 @@ function createCtx(mastra: ReturnType<typeof createMastra>, callerId: string | n
 // Tests
 // =============================================================================
 
-describe('Star route EE gating', () => {
-  it('PUT /stored/agents/:id/star → 404 when stars feature disabled', async () => {
+describe('Favorite route EE gating', () => {
+  it('PUT /stored/agents/:id/favorite → 404 when favorites feature disabled', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', visibility: 'public' }]]);
     const mastra = createMastra({ agents, editor: createBuilder({ stars: false }) });
 
     await expect(
-      STAR_STORED_AGENT_ROUTE.handler({
+      FAVORITE_STORED_AGENT_ROUTE.handler({
         ...createCtx(mastra, 'user-1'),
         storedAgentId: 'a1',
       } as any),
     ).rejects.toMatchObject({ status: 404 });
 
-    expect(mastra.starsStore.star).not.toHaveBeenCalled();
+    expect(mastra.favoritesStore.favorite).not.toHaveBeenCalled();
   });
 
-  it('PUT /stored/skills/:id/star → 404 when no editor configured', async () => {
+  it('PUT /stored/skills/:id/favorite → 404 when no editor configured', async () => {
     const skills = new Map<string, MockRecord>([['s1', { id: 's1', visibility: 'public' }]]);
     const mastra = createMastra({ skills, editor: {} });
 
     await expect(
-      STAR_STORED_SKILL_ROUTE.handler({
+      FAVORITE_STORED_SKILL_ROUTE.handler({
         ...createCtx(mastra, 'user-1'),
         storedSkillId: 's1',
       } as any),
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  it('PUT /stored/agents/:id/star → 200 happy path when feature enabled', async () => {
+  it('PUT /stored/agents/:id/favorite → 200 happy path when feature enabled', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', visibility: 'public' }]]);
     const mastra = createMastra({ agents, editor: createBuilder({ stars: true }) });
 
-    const result = await STAR_STORED_AGENT_ROUTE.handler({
+    const result = await FAVORITE_STORED_AGENT_ROUTE.handler({
       ...createCtx(mastra, 'user-1'),
       storedAgentId: 'a1',
     } as any);
 
-    expect(result).toEqual({ starred: true, starCount: 1 });
-    expect(mastra.starsStore.star).toHaveBeenCalledWith({
+    expect(result).toEqual({ favorited: true, favoriteCount: 1 });
+    expect(mastra.favoritesStore.favorite).toHaveBeenCalledWith({
       userId: 'user-1',
       entityType: 'agent',
       entityId: 'a1',
     });
   });
 
-  it('DELETE /stored/skills/:id/star → 200 happy path', async () => {
+  it('DELETE /stored/skills/:id/favorite → 200 happy path', async () => {
     const skills = new Map<string, MockRecord>([['s1', { id: 's1', visibility: 'public' }]]);
     const mastra = createMastra({ skills, editor: createBuilder({ stars: true }) });
 
-    const result = await UNSTAR_STORED_SKILL_ROUTE.handler({
+    const result = await UNFAVORITE_STORED_SKILL_ROUTE.handler({
       ...createCtx(mastra, 'user-1'),
       storedSkillId: 's1',
     } as any);
 
-    expect(result).toEqual({ starred: false, starCount: 0 });
-    expect(mastra.starsStore.unstar).toHaveBeenCalledWith({
+    expect(result).toEqual({ favorited: false, favoriteCount: 0 });
+    expect(mastra.favoritesStore.unfavorite).toHaveBeenCalledWith({
       userId: 'user-1',
       entityType: 'skill',
       entityId: 's1',
@@ -162,13 +162,13 @@ describe('Star route EE gating', () => {
   });
 });
 
-describe('Star route auth + visibility', () => {
+describe('Favorite route auth + visibility', () => {
   it('returns 401 when no caller id', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', visibility: 'public' }]]);
     const mastra = createMastra({ agents, editor: createBuilder({ stars: true }) });
 
     await expect(
-      STAR_STORED_AGENT_ROUTE.handler({
+      FAVORITE_STORED_AGENT_ROUTE.handler({
         ...createCtx(mastra, null),
         storedAgentId: 'a1',
       } as any),
@@ -179,7 +179,7 @@ describe('Star route auth + visibility', () => {
     const mastra = createMastra({ editor: createBuilder({ stars: true }) });
 
     await expect(
-      STAR_STORED_AGENT_ROUTE.handler({
+      FAVORITE_STORED_AGENT_ROUTE.handler({
         ...createCtx(mastra, 'user-1'),
         storedAgentId: 'missing',
       } as any),
@@ -191,18 +191,18 @@ describe('Star route auth + visibility', () => {
     const mastra = createMastra({ agents, editor: createBuilder({ stars: true }) });
 
     await expect(
-      STAR_STORED_AGENT_ROUTE.handler({
+      FAVORITE_STORED_AGENT_ROUTE.handler({
         ...createCtx(mastra, 'user-1'),
         storedAgentId: 'a1',
       } as any),
     ).rejects.toMatchObject({ status: 404 });
 
-    expect(mastra.starsStore.star).not.toHaveBeenCalled();
+    expect(mastra.favoritesStore.favorite).not.toHaveBeenCalled();
   });
 });
 
 describe('Cascade on entity hard delete', () => {
-  it('DELETE /stored/agents/:id calls deleteStarsForEntity', async () => {
+  it('DELETE /stored/agents/:id calls deleteFavoritesForEntity', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', authorId: 'user-1', visibility: 'public' }]]);
     const mastra = createMastra({ agents });
 
@@ -212,13 +212,13 @@ describe('Cascade on entity hard delete', () => {
     } as any);
 
     expect(result).toMatchObject({ success: true });
-    expect(mastra.starsStore.deleteStarsForEntity).toHaveBeenCalledWith({
+    expect(mastra.favoritesStore.deleteFavoritesForEntity).toHaveBeenCalledWith({
       entityType: 'agent',
       entityId: 'a1',
     });
   });
 
-  it('DELETE /stored/skills/:id calls deleteStarsForEntity', async () => {
+  it('DELETE /stored/skills/:id calls deleteFavoritesForEntity', async () => {
     const skills = new Map<string, MockRecord>([['s1', { id: 's1', authorId: 'user-1', visibility: 'public' }]]);
     const mastra = createMastra({ skills });
 
@@ -228,7 +228,7 @@ describe('Cascade on entity hard delete', () => {
     } as any);
 
     expect(result).toMatchObject({ success: true });
-    expect(mastra.starsStore.deleteStarsForEntity).toHaveBeenCalledWith({
+    expect(mastra.favoritesStore.deleteFavoritesForEntity).toHaveBeenCalledWith({
       entityType: 'skill',
       entityId: 's1',
     });
@@ -236,9 +236,9 @@ describe('Cascade on entity hard delete', () => {
 
   it('cascade failure does not abort the entity delete', async () => {
     const agents = new Map<string, MockRecord>([['a1', { id: 'a1', authorId: 'user-1', visibility: 'public' }]]);
-    const failingStars = createStarsStore();
-    failingStars.deleteStarsForEntity.mockRejectedValueOnce(new Error('boom'));
-    const mastra = createMastra({ agents, starsStore: failingStars });
+    const failingFavorites = createFavoritesStore();
+    failingFavorites.deleteFavoritesForEntity.mockRejectedValueOnce(new Error('boom'));
+    const mastra = createMastra({ agents, favoritesStore: failingFavorites });
 
     const result = await DELETE_STORED_AGENT_ROUTE.handler({
       ...createCtx(mastra, 'user-1'),
@@ -250,25 +250,25 @@ describe('Cascade on entity hard delete', () => {
   });
 });
 
-describe('Star route metadata', () => {
+describe('Favorite route metadata', () => {
   beforeEach(() => {
     // metadata-only assertions
   });
 
-  it('agent star routes use stored-agents:read permission', () => {
-    expect(STAR_STORED_AGENT_ROUTE.requiresPermission).toBe('stored-agents:read');
-    expect(UNSTAR_STORED_AGENT_ROUTE.requiresPermission).toBe('stored-agents:read');
+  it('agent favorite routes use stored-agents:read permission', () => {
+    expect(FAVORITE_STORED_AGENT_ROUTE.requiresPermission).toBe('stored-agents:read');
+    expect(UNFAVORITE_STORED_AGENT_ROUTE.requiresPermission).toBe('stored-agents:read');
   });
 
-  it('skill star routes use stored-skills:read permission', () => {
-    expect(STAR_STORED_SKILL_ROUTE.requiresPermission).toBe('stored-skills:read');
-    expect(UNSTAR_STORED_SKILL_ROUTE.requiresPermission).toBe('stored-skills:read');
+  it('skill favorite routes use stored-skills:read permission', () => {
+    expect(FAVORITE_STORED_SKILL_ROUTE.requiresPermission).toBe('stored-skills:read');
+    expect(UNFAVORITE_STORED_SKILL_ROUTE.requiresPermission).toBe('stored-skills:read');
   });
 
-  it('all star routes require auth', () => {
-    expect(STAR_STORED_AGENT_ROUTE.requiresAuth).toBe(true);
-    expect(UNSTAR_STORED_AGENT_ROUTE.requiresAuth).toBe(true);
-    expect(STAR_STORED_SKILL_ROUTE.requiresAuth).toBe(true);
-    expect(UNSTAR_STORED_SKILL_ROUTE.requiresAuth).toBe(true);
+  it('all favorite routes require auth', () => {
+    expect(FAVORITE_STORED_AGENT_ROUTE.requiresAuth).toBe(true);
+    expect(UNFAVORITE_STORED_AGENT_ROUTE.requiresAuth).toBe(true);
+    expect(FAVORITE_STORED_SKILL_ROUTE.requiresAuth).toBe(true);
+    expect(UNFAVORITE_STORED_SKILL_ROUTE.requiresAuth).toBe(true);
   });
 });

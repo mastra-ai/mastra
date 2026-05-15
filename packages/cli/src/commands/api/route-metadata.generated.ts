@@ -3070,11 +3070,11 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
       "perPage",
-      "starredOnly",
       "status",
       "visibility"
     ],
@@ -3317,9 +3317,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "PUT /stored/agents/:storedAgentId/star": {
+  "PUT /stored/agents/:storedAgentId/favorite": {
     "method": "PUT",
-    "path": "/stored/agents/:storedAgentId/star",
+    "path": "/stored/agents/:storedAgentId/favorite",
     "pathParams": [
       "storedAgentId"
     ],
@@ -3331,9 +3331,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /stored/agents/:storedAgentId/star": {
+  "DELETE /stored/agents/:storedAgentId/favorite": {
     "method": "DELETE",
-    "path": "/stored/agents/:storedAgentId/star",
+    "path": "/stored/agents/:storedAgentId/favorite",
     "pathParams": [
       "storedAgentId"
     ],
@@ -4075,11 +4075,11 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
       "perPage",
-      "starredOnly",
       "status",
       "visibility"
     ],
@@ -4191,9 +4191,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "PUT /stored/skills/:storedSkillId/star": {
+  "PUT /stored/skills/:storedSkillId/favorite": {
     "method": "PUT",
-    "path": "/stored/skills/:storedSkillId/star",
+    "path": "/stored/skills/:storedSkillId/favorite",
     "pathParams": [
       "storedSkillId"
     ],
@@ -4205,9 +4205,9 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /stored/skills/:storedSkillId/star": {
+  "DELETE /stored/skills/:storedSkillId/favorite": {
     "method": "DELETE",
-    "path": "/stored/skills/:storedSkillId/star",
+    "path": "/stored/skills/:storedSkillId/favorite",
     "pathParams": [
       "storedSkillId"
     ],

@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { StarButton } from '../star-button';
+import { FavoriteButton } from '../favorite-button';
 
 vi.mock('@/domains/agent-builder', () => ({
   useBuilderAgentFeatures: () => ({ stars: true }),
 }));
 
-vi.mock('../../hooks/use-stored-agent-star', () => ({
-  useToggleStoredAgentStar: () => ({ isPending: false, mutate: vi.fn() }),
+vi.mock('../../hooks/use-stored-agent-favorite', () => ({
+  useToggleStoredAgentFavorite: () => ({ isPending: false, mutate: vi.fn() }),
 }));
 
 const authCapabilitiesMock = vi.fn();
@@ -17,7 +17,7 @@ vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => authCapabilitiesMock(),
 }));
 
-describe('StarButton', () => {
+describe('FavoriteButton', () => {
   beforeEach(() => {
     authCapabilitiesMock.mockReturnValue({
       data: {
@@ -31,7 +31,7 @@ describe('StarButton', () => {
   });
 
   it('renders singular Star text with the count', () => {
-    render(<StarButton agentId="agent-1" starCount={1} />);
+    render(<FavoriteButton agentId="agent-1" favoriteCount={1} />);
 
     expect(screen.getByRole('button', { name: 'Star agent' })).toBeTruthy();
     expect(screen.getByText('Star')).toBeTruthy();
@@ -39,7 +39,7 @@ describe('StarButton', () => {
   });
 
   it('renders plural Stars text with the count', () => {
-    render(<StarButton agentId="agent-1" starCount={2} />);
+    render(<FavoriteButton agentId="agent-1" favoriteCount={2} />);
 
     expect(screen.getByText('Stars')).toBeTruthy();
     expect(screen.getByText('2')).toBeTruthy();
@@ -49,7 +49,7 @@ describe('StarButton', () => {
     authCapabilitiesMock.mockReturnValue({
       data: { enabled: true, login: { sso: false, credentials: false } },
     });
-    render(<StarButton agentId="agent-1" starCount={1} />);
+    render(<FavoriteButton agentId="agent-1" favoriteCount={1} />);
 
     const button = screen.getByRole('button', { name: 'Sign in to star this agent' });
     expect(button).toBeTruthy();

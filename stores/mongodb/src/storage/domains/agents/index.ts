@@ -235,7 +235,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         authorId: agent.authorId,
         visibility,
         metadata: agent.metadata,
-        starCount: 0,
+        favoriteCount: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -473,7 +473,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       authorId: rest.authorId,
       visibility: (rest.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: rest.metadata,
-      starCount: rest.starCount === null || rest.starCount === undefined ? 0 : Number(rest.starCount),
+      favoriteCount: rest.favoriteCount === null || rest.favoriteCount === undefined ? 0 : Number(rest.favoriteCount),
       createdAt: rest.createdAt instanceof Date ? rest.createdAt : new Date(rest.createdAt),
       updatedAt: rest.updatedAt instanceof Date ? rest.updatedAt : new Date(rest.updatedAt),
     };
@@ -491,7 +491,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       authorId: agent.authorId,
       visibility: agent.visibility,
       metadata: agent.metadata,
-      starCount: agent.starCount,
+      favoriteCount: agent.favoriteCount,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     };

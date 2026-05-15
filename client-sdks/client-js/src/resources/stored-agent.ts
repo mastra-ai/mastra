@@ -12,7 +12,7 @@ import type {
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
-  StarToggleResponse,
+  FavoriteToggleResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -79,18 +79,18 @@ export class StoredAgent extends BaseResource {
   }
 
   // ==========================================================================
-  // Star Methods (EE feature)
+  // Favorite Methods (EE feature)
   // ==========================================================================
 
   /**
-   * Stars this agent for the calling user. Idempotent.
+   * Favorites this agent for the calling user. Idempotent.
    * Requires the `agent.stars` builder feature flag to be enabled on the server.
    * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise containing the new starred state and updated star count
+   * @returns Promise containing the new favorited state and updated favorite count
    */
-  star(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+  favorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
     return this.request(
-      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/star${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/favorite${requestContextQueryString(requestContext)}`,
       {
         method: 'PUT',
       },
@@ -98,14 +98,14 @@ export class StoredAgent extends BaseResource {
   }
 
   /**
-   * Unstars this agent for the calling user. Idempotent.
+   * Unfavorites this agent for the calling user. Idempotent.
    * Requires the `agent.stars` builder feature flag to be enabled on the server.
    * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise containing the new starred state and updated star count
+   * @returns Promise containing the new favorited state and updated favorite count
    */
-  unstar(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+  unfavorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
     return this.request(
-      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/star${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/favorite${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },

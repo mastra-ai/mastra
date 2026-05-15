@@ -1,15 +1,15 @@
 import { Button, cn } from '@mastra/playground-ui';
 import { Star } from 'lucide-react';
 import type { MouseEvent } from 'react';
-import { useToggleStoredSkillStar } from '../hooks/use-stored-skill-star';
+import { useToggleStoredAgentFavorite } from '../hooks/use-stored-agent-favorite';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { isAuthenticated } from '@/domains/auth/types';
 
-export interface SkillStarButtonProps {
-  skillId: string;
-  isStarred?: boolean;
-  starCount?: number;
+export interface FavoriteButtonProps {
+  agentId: string;
+  isFavorited?: boolean;
+  favoriteCount?: number;
   size?: 'sm' | 'md';
   className?: string;
   /** Show the count badge next to the icon. Defaults to true. */
@@ -22,30 +22,28 @@ const iconSizes = {
 } as const;
 
 /**
- * Toggles the star state for a stored skill. Mirrors the agent-list
- * `StarButton` shell so the skill list matches the agent list visually.
- * Renders nothing if the EE `agent.stars` flag is off. Stops click
- * propagation so it can sit inside a row that is itself a link.
+ * Toggles the favorite state for a stored agent. Renders nothing if the EE
+ * `agent.stars` flag is off. Stops click propagation so it can sit inside a
+ * row that is itself a link.
  */
-export const SkillStarButton = ({
-  skillId,
-  isStarred = false,
-  starCount,
+export const FavoriteButton = ({
+  agentId,
+  isFavorited = false,
+  favoriteCount,
   size = 'md',
   className,
   showCount = true,
-}: SkillStarButtonProps) => {
+}: FavoriteButtonProps) => {
   const features = useBuilderAgentFeatures();
-  const toggle = useToggleStoredSkillStar(skillId);
+  const toggle = useToggleStoredAgentFavorite(agentId);
   const { data: capabilities } = useAuthCapabilities();
 
   if (!features.stars) return null;
 
   const signedIn = capabilities ? isAuthenticated(capabilities) : false;
-  const label = isStarred ? 'Unstar skill' : 'Star skill';
-  const disabledLabel = 'Sign in to star this skill';
-  const hasCount = typeof starCount === 'number' && starCount > 0;
-  const starText = starCount === 1 ? 'Star' : 'Stars';
+  const label = isFavorited ? 'Unstar agent' : 'Star agent';
+  const disabledLabel = 'Sign in to star this agent';
+  const starText = favoriteCount === 1 ? 'Star' : 'Stars';
   const isDisabled = toggle.isPending || !signedIn;
 
   return (
@@ -53,7 +51,7 @@ export const SkillStarButton = ({
       type="button"
       variant="default"
       size={size}
-      aria-pressed={isStarred}
+      aria-pressed={isFavorited}
       aria-label={signedIn ? label : disabledLabel}
       title={signedIn ? label : disabledLabel}
       disabled={isDisabled}
@@ -61,24 +59,18 @@ export const SkillStarButton = ({
         event.preventDefault();
         event.stopPropagation();
         if (!signedIn) return;
-        toggle.mutate({ starred: !isStarred });
+        toggle.mutate({ favorited: !isFavorited });
       }}
       className={cn('shrink-0', signedIn ? 'cursor-pointer' : 'cursor-not-allowed', className)}
     >
       <Star
         size={iconSizes[size]}
-        className={cn('shrink-0', isStarred && 'fill-current text-yellow-300')}
+        className={cn('shrink-0', isFavorited && 'fill-current text-yellow-300')}
         aria-hidden
       />
-      {showCount && (
+      {showCount && typeof favoriteCount === 'number' && (
         <span className="leading-none whitespace-nowrap">
-          {hasCount ? (
-            <>
-              <span className="tabular-nums">{starCount}</span> {starText}
-            </>
-          ) : (
-            'Star'
-          )}
+          <span className="tabular-nums">{favoriteCount}</span> {starText}
         </span>
       )}
     </Button>

@@ -27,7 +27,7 @@ import {
 } from './authorship';
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
-import { prepareStarsEnrichment, stripStarFields } from './stars-enrichment';
+import { prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
 
 // ============================================================================
 // Helpers
@@ -128,7 +128,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
     authorId,
     visibility,
     metadata,
-    starredOnly,
+    favoritedOnly,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -150,22 +150,22 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       });
 
       const callerId = getCallerAuthorId(requestContext);
-      const starsEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
-      const honoredStarredOnly = starsEnabled && starredOnly === true;
+      const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
+      const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
 
-      // `?starredOnly=true` flow: fetch caller's starred IDs, restrict the list
+      // `?favoritedOnly=true` flow: fetch caller's favorited IDs, restrict the list
       // to that set, then post-filter by visibility and recompute total/pages.
       if (honoredStarredOnly) {
         const effectivePerPage: number = perPage ?? 100;
         if (!callerId) {
-          // Caller cannot have starred anything without an identity.
+          // Caller cannot have favorited anything without an identity.
           return { skills: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
-        const starsStore = await storage.getStore('stars');
-        if (!starsStore) {
-          throw new HTTPException(500, { message: 'Stars storage domain is not available' });
+        const favoritesStore = await storage.getStore('favorites');
+        if (!favoritesStore) {
+          throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
         }
-        const starredIds = await starsStore.listStarredIds({ userId: callerId, entityType: 'skill' });
+        const starredIds = await favoritesStore.listFavoritedIds({ userId: callerId, entityType: 'skill' });
         if (starredIds.length === 0) {
           return { skills: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
@@ -182,7 +182,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         const startIdx = effectivePerPage === 0 ? 0 : page * effectivePerPage;
         const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
         const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
-        const annotated = sliced.map(record => ({ ...record, isStarred: true }));
+        const annotated = sliced.map(record => ({ ...record, isFavorited: true }));
         const hasMore = effectivePerPage > 0 && endIdx < total;
         return {
           skills: annotated,
@@ -204,18 +204,18 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
 
       const visibleSkills = result.skills.filter(record => matchesAuthorFilter(record, filter));
 
-      if (!starsEnabled) {
-        return { ...result, skills: visibleSkills.map(stripStarFields) };
+      if (!favoritesEnabled) {
+        return { ...result, skills: visibleSkills.map(stripFavoriteFields) };
       }
 
-      const enrichment = await prepareStarsEnrichment(
+      const enrichment = await prepareFavoritesEnrichment(
         mastra,
         requestContext,
         'skill',
         visibleSkills.map(s => s.id),
       );
       const annotated = enrichment
-        ? visibleSkills.map(record => ({ ...record, isStarred: enrichment.starredIds.has(record.id) }))
+        ? visibleSkills.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
         : visibleSkills;
 
       return { ...result, skills: annotated };
@@ -259,11 +259,11 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
 
       assertReadAccess({ requestContext, resource: 'skills', resourceId: storedSkillId, record: skill });
 
-      const enrichment = await prepareStarsEnrichment(mastra, requestContext, 'skill', [skill.id]);
+      const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'skill', [skill.id]);
       if (enrichment) {
-        return { ...skill, isStarred: enrichment.starredIds.has(skill.id) };
+        return { ...skill, isFavorited: enrichment.starredIds.has(skill.id) };
       }
-      return stripStarFields(skill);
+      return stripFavoriteFields(skill);
     } catch (error) {
       return handleError(error, 'Error getting stored skill');
     }
@@ -519,15 +519,15 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
 
       await skillStore.delete(storedSkillId);
 
-      // Cascade: drop any star rows referencing this skill. Failure must not
+      // Cascade: drop any favorite rows referencing this skill. Failure must not
       // abort the delete.
       try {
-        const starsStore = await storage.getStore('stars');
-        await starsStore?.deleteStarsForEntity({ entityType: 'skill', entityId: storedSkillId });
+        const favoritesStore = await storage.getStore('favorites');
+        await favoritesStore?.deleteFavoritesForEntity({ entityType: 'skill', entityId: storedSkillId });
       } catch (cascadeError) {
         mastra
           .getLogger?.()
-          ?.warn?.('Failed to cascade-delete stars for skill', { storedSkillId, error: cascadeError });
+          ?.warn?.('Failed to cascade-delete favorites for skill', { storedSkillId, error: cascadeError });
       }
 
       return {

@@ -309,41 +309,41 @@ export interface IEditorSkillNamespace {
 }
 
 // ============================================================================
-// Stars Namespace Interface
+// Favorites Namespace Interface
 // ============================================================================
 
-/** Entity kinds that can be starred. Mirrors `STORAGE_STAR_ENTITY_TYPES`. */
-export type EditorStarEntityType = 'agent' | 'skill';
+/** Entity kinds that can be favorited. Mirrors `STORAGE_FAVORITE_ENTITY_TYPES`. */
+export type EditorFavoriteEntityType = 'agent' | 'skill';
 
-export interface EditorStarToggleResult {
-  /** Whether the entity is starred by the caller after the operation. */
-  starred: boolean;
-  /** Aggregate star count on the entity post-mutation. */
-  starCount: number;
+export interface EditorFavoriteToggleResult {
+  /** Whether the entity is favorited by the caller after the operation. */
+  favorited: boolean;
+  /** Aggregate favorite count on the entity post-mutation. */
+  favoriteCount: number;
 }
 
-export interface EditorStarTargetInput {
-  entityType: EditorStarEntityType;
+export interface EditorFavoriteTargetInput {
+  entityType: EditorFavoriteEntityType;
   entityId: string;
   /** Caller author id (resolved by the route handler from `RequestContext`). */
   userId: string;
 }
 
-export interface EditorListStarredIdsInput {
-  entityType: EditorStarEntityType;
+export interface EditorListFavoritedIdsInput {
+  entityType: EditorFavoriteEntityType;
   /** Caller author id (resolved by the route handler from `RequestContext`). */
   userId: string;
 }
 
-export interface EditorIsStarredBatchInput {
-  entityType: EditorStarEntityType;
+export interface EditorIsFavoritedBatchInput {
+  entityType: EditorFavoriteEntityType;
   entityIds: string[];
   /** Caller author id (resolved by the route handler from `RequestContext`). */
   userId: string;
 }
 
 /**
- * Stars (favorites) namespace. Optional: only present on EE-enabled builds
+ * Favorites namespace. Optional: only present on EE-enabled builds
  * with `features.agent.stars === true`.
  *
  * **Authorization layering**: the namespace verifies the target entity exists
@@ -352,17 +352,17 @@ export interface EditorIsStarredBatchInput {
  * server boundary. Direct namespace callers must run their own visibility
  * check before invoking these methods.
  */
-export interface IEditorStarsNamespace {
-  star(input: EditorStarTargetInput): Promise<EditorStarToggleResult>;
-  unstar(input: EditorStarTargetInput): Promise<EditorStarToggleResult>;
-  isStarred(input: EditorStarTargetInput): Promise<boolean>;
+export interface IEditorFavoritesNamespace {
+  favorite(input: EditorFavoriteTargetInput): Promise<EditorFavoriteToggleResult>;
+  unfavorite(input: EditorFavoriteTargetInput): Promise<EditorFavoriteToggleResult>;
+  isFavorited(input: EditorFavoriteTargetInput): Promise<boolean>;
   /**
-   * Look up which entity IDs in the candidate set are starred by the caller.
+   * Look up which entity IDs in the candidate set are favorited by the caller.
    * Used for one-shot annotation of list responses (avoids N+1 queries).
-   * Returns a `Set<string>` of starred entity IDs; order is irrelevant.
+   * Returns a `Set<string>` of favorited entity IDs; order is irrelevant.
    */
-  isStarredBatch(input: EditorIsStarredBatchInput): Promise<Set<string>>;
-  listStarredIds(input: EditorListStarredIdsInput): Promise<string[]>;
+  isFavoritedBatch(input: EditorIsFavoritedBatchInput): Promise<Set<string>>;
+  listFavoritedIds(input: EditorListFavoritedIdsInput): Promise<string[]>;
 }
 
 // ============================================================================
@@ -402,11 +402,11 @@ export interface IMastraEditor {
   readonly skill: IEditorSkillNamespace;
 
   /**
-   * Stars (favorites) namespace. Present only when the EE stars feature is
+   * Favorites namespace. Present only when the EE favorites feature is
    * enabled. Route handlers must hard-gate with `requireBuilderFeature`
    * before calling this namespace.
    */
-  readonly stars?: IEditorStarsNamespace;
+  readonly favorites?: IEditorFavoritesNamespace;
 
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;

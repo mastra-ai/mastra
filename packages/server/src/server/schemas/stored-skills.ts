@@ -25,10 +25,10 @@ export const listStoredSkillsQuerySchema = createPagePaginationSchema(100).exten
   authorId: z.string().optional().describe('Filter skills by author identifier'),
   visibility: z.enum(['public']).optional().describe('Filter to only public skills'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter skills by metadata key-value pairs'),
-  starredOnly: z
+  favoritedOnly: z
     .stringbool()
     .optional()
-    .describe('When true, return only skills starred by the caller (requires the stars EE feature)'),
+    .describe('When true, return only skills favorited by the caller (requires the `stars` EE feature)'),
 });
 
 // ============================================================================
@@ -160,8 +160,8 @@ export const storedSkillSchema = z.object({
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
   visibility: z.enum(['private', 'public']).optional(),
-  starCount: z.number().int().nonnegative().optional().describe('Number of users who have starred this skill'),
-  isStarred: z.boolean().optional().describe('Whether the requesting user has starred this skill'),
+  favoriteCount: z.number().int().nonnegative().optional().describe('Number of users who have favorited this skill'),
+  isFavorited: z.boolean().optional().describe('Whether the requesting user has favorited this skill'),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   name: z.string().describe('Name of the skill'),
