@@ -1,5 +1,13 @@
 # @mastra/react
 
+## 0.3.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7)]:
+  - @mastra/core@1.34.1-alpha.0
+  - @mastra/client-js@1.19.1-alpha.0
+
 ## 0.3.2
 
 ### Patch Changes

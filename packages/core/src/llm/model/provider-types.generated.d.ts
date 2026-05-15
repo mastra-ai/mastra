@@ -835,6 +835,16 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5-FP8',
     'zai-org/GLM-5.1',
   ];
+  readonly gmicloud: readonly [
+    'anthropic/claude-opus-4.6',
+    'anthropic/claude-opus-4.7',
+    'anthropic/claude-sonnet-4.6',
+    'deepseek-ai/DeepSeek-V4-Flash',
+    'deepseek-ai/DeepSeek-V4-Pro',
+    'moonshotai/Kimi-K2.6',
+    'zai-org/GLM-5-FP8',
+    'zai-org/GLM-5.1-FP8',
+  ];
   readonly ambient: readonly ['moonshotai/kimi-k2.6', 'zai-org/GLM-5.1-FP8'];
   readonly 'the-grid-ai': readonly ['text-max', 'text-prime', 'text-standard'];
   readonly fastrouter: readonly [
@@ -2850,6 +2860,13 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-6',
   ];
   readonly 'zhipuai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5v-turbo'];
+  readonly 'atomic-chat': readonly [
+    'Meta-Llama-3_1-8B-Instruct-GGUF',
+    'Qwen3_5-9B-MLX-4bit',
+    'Qwen3_5-9B-Q4_K_M',
+    'gemma-4-E4B-it-IQ4_XS',
+    'gemma-4-E4B-it-MLX-4bit',
+  ];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',
@@ -3098,6 +3115,7 @@ export type ProviderModelsMap = {
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
+    'qwen3.6-plus-free',
   ];
   readonly mixlayer: readonly [
     'qwen/qwen3.5-122b-a10b',
@@ -3930,6 +3948,13 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
+  ];
+  readonly 'umans-ai-coding-plan': readonly [
+    'umans-coder',
+    'umans-flash',
+    'umans-glm-5.1',
+    'umans-kimi-k2.6',
+    'umans-qwen3.6-35b-a3b',
   ];
   readonly 'tencent-tokenhub': readonly ['hy3-preview'];
   readonly nebius: readonly [

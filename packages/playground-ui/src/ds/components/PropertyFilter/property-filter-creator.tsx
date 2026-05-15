@@ -1,11 +1,4 @@
-import {
-  ArrowLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  FilterIcon,
-  ListFilterPlusIcon,
-  PlusIcon,
-} from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, FilterIcon, ListFilterPlusIcon, PlusIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
@@ -387,7 +380,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronLeftIcon className="h-4 w-4 text-neutral3 shrink-0" />}
+          {open && <ChevronRightIcon className="h-4 w-4 text-neutral3 shrink-0" />}
           <span className="truncate">{field.label}</span>
           {!open && <ChevronRightIcon className="h-4 w-4 ml-auto text-neutral3 shrink-0" />}
         </button>
