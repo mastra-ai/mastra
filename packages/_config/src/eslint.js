@@ -37,6 +37,7 @@ export const createConfig = async ({ e18e = false } = {}) =>
         '**/playwright-report/**',
         '**/dist/**',
         '**/coverage/**',
+        '**/tsup.config.bundled_*',
       ],
     },
 
