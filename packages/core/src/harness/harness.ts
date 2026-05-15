@@ -130,7 +130,7 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  const message = getStringValue(payload.contents);
   if (message === undefined) return undefined;
 
   return {
@@ -160,7 +160,7 @@ function toSystemReminderContent(
 
 function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
   const id = getStringValue(payload.id);
-  const rawContents = payload.contents ?? payload.message;
+  const rawContents = payload.contents;
   if (!id || rawContents === undefined) return undefined;
 
   const signal = createSignal({
