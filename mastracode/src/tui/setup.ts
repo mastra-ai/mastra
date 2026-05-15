@@ -399,8 +399,7 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   } catch {
     state.customSlashCommands = [];
   }
-  // Skills are loaded lazily by `refreshSkillsAutocomplete` so initial
-  // autocomplete setup never blocks on workspace resolution.
+  // Skills load via `refreshSkillsAutocomplete` so this never blocks on workspace resolution.
 }
 
 /**
@@ -428,11 +427,7 @@ export async function loadSkillCommands(state: TUIState): Promise<void> {
   }
 }
 
-/**
- * Asynchronously refresh skills and rebuild the autocomplete provider.
- * Called in the background after init so the initial autocomplete is
- * available immediately and skill entries appear once they load.
- */
+/** Reload skills and rebuild the autocomplete provider. */
 export async function refreshSkillsAutocomplete(state: TUIState): Promise<void> {
   await loadSkillCommands(state);
   setupAutocomplete(state);

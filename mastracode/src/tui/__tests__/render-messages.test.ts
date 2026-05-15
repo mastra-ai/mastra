@@ -93,7 +93,6 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children).toHaveLength(1);
     expect(state.chatContainer.children[0]).toBeInstanceOf(SlashCommandComponent);
     expect(state.allSlashCommandComponents).toHaveLength(1);
-    // No raw UserMessageComponent should have been added alongside the skill component.
     expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
   });
 
@@ -109,8 +108,6 @@ describe('addUserMessage', () => {
     );
 
     const skillComp = state.chatContainer.children[0] as SlashCommandComponent;
-    // General XML/HTML is passed through unchanged; only the &lt;/skill&gt;
-    // boundary token gets decoded back to a literal </skill>.
     expect(
       skillComp.matches(
         'skill/github-triage',

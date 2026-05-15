@@ -78,9 +78,6 @@ describe('handleSkillCommand', () => {
     const { ctx, harness } = createCtx({
       skill: {
         name: 'github-triage',
-        // Legitimate XML/JSX content stays untouched so the model sees it
-        // literally; only a stray `</skill>` substring gets boundary-escaped
-        // to keep the renderer's regex from terminating early.
         instructions: 'Use <div>, A&B, "quotes". Embedded </skill> stays out of the way.',
         references: [],
         scripts: [],

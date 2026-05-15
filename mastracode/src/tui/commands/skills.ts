@@ -3,12 +3,8 @@ import { SlashCommandComponent } from '../components/slash-command.js';
 import { isUserInvocable } from './skill-filters.js';
 import type { SlashCommandContext } from './types.js';
 
-// The persisted `<skill name="…">…</skill>` wrapper is parsed back out by
-// `render-messages.ts` to dedup against the optimistic SlashCommandComponent.
-// Neutralize any literal closing tag inside the body so the non-greedy regex
-// terminates only at the real boundary. We deliberately do NOT escape other
-// XML characters — skill instructions frequently contain legitimate `<div>`,
-// JSX, code, etc., and the model should see those literally.
+// Keep the renderer's non-greedy `<skill>...</skill>` regex from terminating
+// on a literal closing tag inside the body. Other characters pass through.
 function escapeSkillBoundary(value: string): string {
   return value.replaceAll('</skill>', '&lt;/skill&gt;');
 }
@@ -123,9 +119,6 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
       ctx.state.pendingNewThread = false;
     }
 
-    // skill.name is spec-validated to `^[a-z0-9-]+$` so it cannot contain
-    // XML-special characters — no name escape needed. Only the body needs
-    // boundary protection (see `escapeSkillBoundary`).
     await ctx.harness.sendMessage({
       content: `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`,
     });

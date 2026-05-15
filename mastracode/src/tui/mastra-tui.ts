@@ -458,9 +458,7 @@ export class MastraTUI {
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
-    // Setup autocomplete with whatever skills loaded synchronously. The
-    // workspace may not be resolved yet on cold start; once it is, refresh
-    // the provider so `/skill/<name>` entries appear without restart.
+    // Install autocomplete immediately; refresh once the workspace resolves.
     setupAutocomplete(this.state);
     refreshSkillsAutocomplete(this.state).catch(err => {
       const msg = err instanceof Error ? err.message : String(err);
