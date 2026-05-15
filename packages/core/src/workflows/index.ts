@@ -9,9 +9,7 @@ export * from './state-reader';
 
 // Load after the base workflow exports so EventedWorkflow can extend Workflow
 // without hitting an ESM init-time cycle.
-import { Workflow as BaseWorkflow } from './workflow';
 import { createWorkflow as createEventedWorkflow } from './evented';
 
 // Keep a live reference so bundlers do not drop the registration import.
-void BaseWorkflow;
 void createEventedWorkflow;

@@ -21,8 +21,8 @@ import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import type { IdGeneratorContext } from '../../types';
-import { createStep, createWorkflow } from '../../workflows/workflow';
 import type { Step, SuspendOptions } from '../../workflows/step';
+import { createStep, createWorkflow } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
 
 /**
