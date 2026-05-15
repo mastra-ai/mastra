@@ -9,9 +9,9 @@ import type {
   SendMessageResponse,
   Task,
   TaskPushNotificationConfig,
-} from '@mastra/core/a2a';
+} from '@mastra/core/a2a/client';
 import canonicalize from 'canonicalize';
-import { CompactSign, exportJWK } from 'jose';
+import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
 import { MastraClientError } from '../types';
 import { A2A } from './a2a';
@@ -207,13 +207,18 @@ describe('A2A', () => {
         skills: [],
       };
       const { card, publicJwk } = await createSignedAgentCard(baseCard);
+      const tamperedSignature = (() => {
+        const bytes = base64url.decode(card.signatures?.[0]?.signature ?? '');
+        bytes[0] = bytes[0] ^ 0xff;
+        return base64url.encode(bytes);
+      })();
       const invalidCard: AgentCard = {
         ...card,
         signatures: card.signatures?.map((signature, index) =>
           index === 0
             ? {
                 ...signature,
-                signature: `${signature.signature.slice(0, -1)}${signature.signature.at(-1) === 'A' ? 'B' : 'A'}`,
+                signature: tamperedSignature,
               }
             : signature,
         ),

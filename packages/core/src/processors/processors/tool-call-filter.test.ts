@@ -163,6 +163,52 @@ describe('ToolCallFilter', () => {
       expect(resultMessages[1]!.id).toBe('msg-2');
     });
 
+    it('should preserve top-level text content when all tool parts are filtered', async () => {
+      const filter = new ToolCallFilter();
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'assistant-with-text-fallback',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I found three relevant papers.',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'search_papers',
+                  args: { query: 'attention mechanisms' },
+                  result: { papers: ['paper-1', 'paper-2', 'paper-3'] },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+
+      const resultContent = resultMessages[0]!.content;
+      if (typeof resultContent === 'string') {
+        throw new Error('Expected format 2 content');
+      }
+      expect(resultContent.content).toBe('I found three relevant papers.');
+      expect(resultContent.parts).toEqual([]);
+    });
+
     it('should handle empty messages array', async () => {
       const filter = new ToolCallFilter();
 
@@ -617,6 +663,52 @@ describe('ToolCallFilter', () => {
         expect(searchInvocations).toHaveLength(0);
         expect(calculatorInvocations.length).toBeGreaterThan(0);
       }
+    });
+
+    it('should preserve top-level text content when all excluded tool parts are filtered', async () => {
+      const filter = new ToolCallFilter({ exclude: ['search_papers'] });
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'assistant-with-text-fallback',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I found three relevant papers.',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'search_papers',
+                  args: { query: 'attention mechanisms' },
+                  result: { papers: ['paper-1', 'paper-2', 'paper-3'] },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+
+      const resultContent = resultMessages[0]!.content;
+      if (typeof resultContent === 'string') {
+        throw new Error('Expected format 2 content');
+      }
+      expect(resultContent.content).toBe('I found three relevant papers.');
+      expect(resultContent.parts).toEqual([]);
     });
 
     it('should handle empty exclude array (keep all messages)', async () => {

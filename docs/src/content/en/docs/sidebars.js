@@ -93,11 +93,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/processors',
+          label: 'Processors',
+        },
+        {
+          type: 'doc',
+          id: 'agents/guardrails',
+          label: 'Guardrails',
+        },
+        {
+          type: 'doc',
+          id: 'agents/agent-approval',
+          label: 'Agent Approval',
+        },
+        {
+          type: 'doc',
           id: 'agents/supervisor-agents',
           label: 'Supervisor Agents',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -109,23 +121,27 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/processors',
-          label: 'Processors',
+          id: 'agents/channels',
+          label: 'Channels',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
-          id: 'agents/guardrails',
-          label: 'Guardrails',
+          id: 'agents/a2a',
+          label: 'A2A',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
-          id: 'agents/response-caching',
-          label: 'Response caching',
-        },
-        {
-          type: 'doc',
-          id: 'agents/agent-approval',
-          label: 'Agent Approval',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['alpha'],
+          },
         },
         {
           type: 'doc',
@@ -134,10 +150,10 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/channels',
-          label: 'Channels',
+          id: 'agents/response-caching',
+          label: 'Response Caching',
           customProps: {
-            tags: ['new'],
+            tags: ['experimental'],
           },
         },
         {
@@ -174,9 +190,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/observational-memory',
           label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -254,9 +267,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Editor',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -323,6 +333,9 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
+          customProps: {
+            tags: ['new'],
+          },
         },
       ],
     },
@@ -592,7 +605,7 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/mastra-platform',
-                  label: 'Mastra Platform',
+                  label: 'Mastra platform',
                 },
                 {
                   type: 'doc',
@@ -716,7 +729,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       customProps: {
         tags: ['new'],
       },
@@ -725,6 +738,21 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
         },
         {
           type: 'doc',

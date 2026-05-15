@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
-import { logger } from '../../../utils/logger.js';
-import type { LintContext, LintRule } from './types.js';
+import type { LintContext, LintIssue, LintRule } from './types.js';
 
 interface NextConfig {
   serverExternalPackages?: string[];
@@ -195,14 +194,22 @@ function isNextJsProject(dir: string): boolean {
 export const nextConfigRule: LintRule = {
   name: 'next-config',
   description: 'Checks if Next.js config is properly configured for Mastra packages',
-  async run(context: LintContext): Promise<boolean> {
+  async run(context: LintContext): Promise<LintIssue[]> {
     if (!isNextJsProject(context.rootDir)) {
-      return true;
+      return [];
     }
 
     const nextConfig = readNextConfig(context.rootDir);
     if (!nextConfig) {
-      return false;
+      return [
+        {
+          code: 'NEXT_MISSING_SERVER_EXTERNAL_PACKAGES',
+          severity: 'error',
+          scope: 'project',
+          message: 'next.config.js could not be parsed for serverExternalPackages.',
+          fix: 'Ensure next.config.js exports a plain object and includes serverExternalPackages: ["@mastra/*"].',
+        },
+      ];
     }
 
     const serverExternals = nextConfig.serverExternalPackages || [];
@@ -211,13 +218,17 @@ export const nextConfigRule: LintRule = {
     );
 
     if (!hasMastraExternals) {
-      logger.error('next.config.js is missing Mastra packages in serverExternalPackages');
-      logger.error('Please add the following to your next.config.js:');
-      logger.error('  serverExternalPackages: ["@mastra/*"],');
-      return false;
+      return [
+        {
+          code: 'NEXT_MISSING_SERVER_EXTERNAL_PACKAGES',
+          severity: 'error',
+          scope: 'project',
+          message: 'next.config.js is missing Mastra packages in serverExternalPackages.',
+          fix: 'Add serverExternalPackages: ["@mastra/*"] to your next.config.js.',
+        },
+      ];
     }
 
-    logger.info('Next.js config is properly configured for Mastra packages');
-    return true;
+    return [];
   },
 };

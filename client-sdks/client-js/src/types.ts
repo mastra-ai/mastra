@@ -109,6 +109,29 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface SubscribeAgentThreadParams {
+  resourceId?: string;
+  threadId: string;
+}
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -414,6 +437,7 @@ export interface GetAgentResponse {
   id: string;
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
@@ -1916,7 +1940,8 @@ export interface CreateStoredSkillParams {
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;
-  description?: string;
+  /** Required by the server: description of what the skill does and when to use it. */
+  description: string;
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];

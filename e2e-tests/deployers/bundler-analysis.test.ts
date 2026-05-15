@@ -100,8 +100,10 @@ export const mastra = new Mastra({
       );
 
       // Install dependencies
+      const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
+
       console.log('Installing dependencies...');
-      spawnSync(pkgManager, ['install'], {
+      spawnSync(pkgManager, installArgs, {
         cwd: fixturePath,
         stdio: 'inherit',
         shell: true,

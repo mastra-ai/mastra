@@ -59,11 +59,4 @@ export class PDFAttachmentAdapter implements AttachmentAdapter {
     });
     return btoa(binary);
   }
-
-  // Optional: Extract text from PDF using a library like pdf.js
-  private async extractTextFromPDF(): Promise<string> {
-    // Implementation would use pdf.js or similar
-    // This is a placeholder
-    return 'Extracted PDF text content';
-  }
 }

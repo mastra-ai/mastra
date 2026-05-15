@@ -88,6 +88,10 @@ createWorkflowTestSuite({
     // requiring direct Mastra registration which the shared suite can't do.
     // The test remains in workflow.test.ts as a default-engine-specific test.
     resumeMapBranchCondition: true,
+
+    //default engine uses the same runId for parent and nested workflows which makes this test fail.
+    //The test will be added in workflow.test.ts as a default-engine-specific test.
+    restartNested: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -749,6 +753,185 @@ describe('Workflow (Default Engine Specifics)', () => {
         addEventListenerSpy.mockRestore();
         removeEventListenerSpy.mockRestore();
       }
+    });
+  });
+
+  describe('Nested workflow restart', () => {
+    it('should restart a workflow execution that was previously active and has nested workflows', async () => {
+      const storage = new MockStore();
+      const mastra = new Mastra({ logger: false, storage });
+
+      const mockStep1 = vi.fn().mockResolvedValue({ step1Result: 2 });
+      const mockStep2 = vi.fn().mockResolvedValue({ step2Result: 3 });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: mockStep1,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: mockStep2,
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => ({
+          nestedFinal: inputData.step2Result + 1,
+        }),
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ nestedFinal: z.number() }),
+      });
+
+      const step4 = createStep({
+        id: 'step4',
+        execute: async ({ inputData }) => ({
+          final: inputData.nestedFinal + 1,
+        }),
+        inputSchema: z.object({ nestedFinal: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'restart-nestedWorkflow',
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ nestedFinal: z.number() }),
+        steps: [step2, step3],
+      })
+        .then(step2)
+        .then(step3)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'restart-nested',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      })
+        .then(step1)
+        .then(nestedWorkflow as any)
+        .then(step4 as any)
+        .commit();
+
+      workflow.__registerMastra(mastra);
+
+      const workflowsStore = await storage?.getStore('workflows');
+
+      const runId = `restart-nested-${Date.now()}`;
+
+      if (!workflowsStore) {
+        return;
+      }
+
+      // Simulate a workflow where step1 completed and nested workflow is running step3
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { 'restart-nestedWorkflow': [1] },
+          value: {},
+          context: {
+            input: { value: 0 },
+            step1: {
+              payload: { value: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step1Result: 2 },
+              endedAt: Date.now(),
+            },
+            'restart-nestedWorkflow': {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          },
+          serializedStepGraph: (workflow as any).serializedStepGraph,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      // Also simulate the nested workflow state
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'restart-nestedWorkflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { step3: [1] },
+          value: {},
+          context: {
+            input: { step1Result: 2 },
+            step2: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step2Result: 3 },
+              endedAt: Date.now(),
+            },
+            step3: {
+              payload: { step2Result: 3 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          },
+          serializedStepGraph: (nestedWorkflow as any).serializedStepGraph,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await workflow.createRun({ runId });
+      const restartResult = await run.restart();
+
+      expect(restartResult.status).toBe('success');
+      expect(restartResult).toMatchObject({
+        status: 'success',
+        steps: {
+          input: { value: 0 },
+          step1: {
+            status: 'success',
+            output: { step1Result: 2 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          'restart-nestedWorkflow': {
+            status: 'success',
+            output: { nestedFinal: 4 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            status: 'success',
+            output: { final: 5 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        },
+      });
+
+      // step1 was already completed in the snapshot, should not be re-executed
+      expect(mockStep1).toHaveBeenCalledTimes(0);
+      // step2 was already completed in the nested snapshot, should not be re-executed
+      expect(mockStep2).toHaveBeenCalledTimes(0);
+
+      const nestedWorkflowStoreResult = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: 'restart-nestedWorkflow',
+        runId,
+      });
+
+      expect(nestedWorkflowStoreResult?.status).toBe('success');
     });
   });
 });

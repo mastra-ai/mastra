@@ -8,7 +8,7 @@ import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { Step } from '../../../workflows';
+import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
@@ -291,10 +291,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (!aborted) {
             try {
-              const outputText = messageList.get.all
-                .core()
-                .map(m => m.content)
-                .join('\n');
+              const outputText =
+                options.structuredOutput?.schema && payload.object != null
+                  ? JSON.stringify(payload.object)
+                  : (payload.text ?? '');
 
               await capabilities.executeOnFinish({
                 result: payload,

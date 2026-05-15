@@ -1,5 +1,5 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
-import type { AgentModelManagerConfig, DurableAgentLike } from '@mastra/core/agent';
+import type { AgentModelManagerConfig, AgentSignalInput, DurableAgentLike } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
@@ -49,12 +49,15 @@ import {
   declineNetworkToolCallBodySchema,
   observeAgentBodySchema,
   observeAgentResponseSchema,
+  sendAgentSignalBodySchema,
+  subscribeAgentThreadBodySchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
+import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -209,6 +212,7 @@ export interface SerializedWorkflow {
 export interface SerializedAgent {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   instructions?: SystemMessage;
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
@@ -521,6 +525,13 @@ async function formatAgentList({
   // Wrap each independent getter so a single failure doesn't abort the whole
   // serialization — the agent will still be listed with safe defaults, and the
   // failure is logged so the user can see what went wrong in `mastra dev`.
+  let metadata: Record<string, unknown> | undefined;
+  if (typeof agent.getMetadata === 'function') {
+    try {
+      metadata = await agent.getMetadata({ requestContext });
+    } catch {}
+  }
+
   let instructions: SystemMessage | undefined;
   try {
     instructions = await agent.getInstructions({ requestContext });
@@ -649,6 +660,7 @@ async function formatAgentList({
     id: agent.id || id,
     name: agent.name,
     description,
+    metadata,
     instructions,
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
@@ -793,6 +805,12 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
+  let metadata: Record<string, unknown> | undefined;
+  if (typeof agent.getMetadata === 'function') {
+    try {
+      metadata = await agent.getMetadata({ requestContext });
+    } catch {}
+  }
 
   const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
@@ -910,6 +928,7 @@ async function formatAgent({
   return {
     name: agent.name,
     description,
+    metadata,
     instructions,
     tools: serializedAgentTools,
     agents: serializedAgentAgents,
@@ -1077,7 +1096,6 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_READ },
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
@@ -1555,6 +1573,182 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');
+    }
+  },
+});
+
+const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string }> = z.object({
+  accepted: z.literal(true),
+  runId: z.string(),
+});
+
+export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
+  InferParams<typeof agentIdPathParams, undefined, typeof sendAgentSignalBodySchema>,
+  z.infer<typeof sendAgentSignalResponseSchema>,
+  'json',
+  RouteSchemas<
+    typeof agentIdPathParams,
+    undefined,
+    typeof sendAgentSignalBodySchema,
+    typeof sendAgentSignalResponseSchema
+  >,
+  'POST',
+  '/agents/:agentId/signals'
+> = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/signals',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: sendAgentSignalBodySchema,
+  responseSchema: sendAgentSignalResponseSchema,
+  summary: 'Send agent signal',
+  description: 'Sends a signal to an active agent run or starts a memory thread run when the thread is idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({
+    mastra,
+    agentId,
+    requestContext: serverRequestContext,
+    signal,
+    runId,
+    resourceId,
+    threadId,
+    ifActive,
+    ifIdle,
+  }) => {
+    try {
+      mergeBodyRequestContext(serverRequestContext, ifIdle?.streamOptions?.requestContext);
+
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+      const ifIdleWithContext = {
+        ifIdle: {
+          ...(ifIdle ?? {}),
+          streamOptions: { ...(ifIdle?.streamOptions ?? {}), requestContext: serverRequestContext } as any,
+        },
+      };
+
+      if (effectiveThreadId && effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      if (typeof (agent as { sendSignal?: unknown }).sendSignal !== 'function') {
+        throw new HTTPException(501, { message: 'agent signals are not supported by this Mastra core version' });
+      }
+
+      const agentSignal = signal as AgentSignalInput;
+
+      if (runId) {
+        const result = await agent.sendSignal(agentSignal, {
+          runId,
+          ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
+          ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
+          ...(ifActive ? { ifActive } : {}),
+        });
+        return { accepted: result.accepted, runId: result.runId, signal: result.signal };
+      }
+
+      if (!effectiveResourceId || !effectiveThreadId) {
+        throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
+      }
+
+      const result = await agent.sendSignal(agentSignal, {
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+        ...(ifActive ? { ifActive } : {}),
+        ...ifIdleWithContext,
+      });
+      return { accepted: result.accepted, runId: result.runId, signal: result.signal };
+    } catch (error) {
+      return handleError(error, 'error sending agent signal');
+    }
+  },
+});
+
+export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/threads/subscribe',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: subscribeAgentThreadBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Subscribe to agent thread runs',
+  description: 'Subscribes to future and active stream runs for a memory thread',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, resourceId, threadId, abortSignal, requestContext: serverRequestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
+        throw new HTTPException(501, {
+          message: 'agent thread subscriptions are not supported by this Mastra core version',
+        });
+      }
+
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+
+      if (!effectiveThreadId) {
+        throw new HTTPException(400, { message: 'threadId is required' });
+      }
+
+      if (effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      const subscription = await agent.subscribeToThread({
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+      });
+
+      let cleanedUp = false;
+      const cleanup = (closeController?: ReadableStreamDefaultController) => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        subscription.abort();
+        subscription.unsubscribe();
+        if (closeController) {
+          try {
+            closeController.close();
+          } catch {}
+        }
+      };
+
+      return new ReadableStream({
+        async start(controller) {
+          const abortCleanup = () => cleanup(controller);
+          abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+
+          try {
+            for await (const part of subscription.stream) {
+              controller.enqueue(part);
+            }
+            cleanup(controller);
+          } catch (error) {
+            cleanup();
+            controller.error(error);
+          } finally {
+            abortSignal?.removeEventListener('abort', abortCleanup);
+          }
+        },
+        cancel() {
+          cleanup();
+        },
+      });
+    } catch (error) {
+      return handleError(error, 'error subscribing to agent thread');
     }
   },
 });

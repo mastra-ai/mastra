@@ -59,3 +59,4 @@ export const branchesOrderBySchema: any = ns.branchesOrderBySchema ?? fallbackEm
 export const getBranchArgsSchema: any = ns.getBranchArgsSchema ?? fallbackBranchArgs;
 export const listBranchesResponseSchema: any = ns.listBranchesResponseSchema ?? fallbackSchema;
 export const getBranchResponseSchema: any = ns.getBranchResponseSchema ?? fallbackSchema;
+export const listTracesLightResponseSchema: any = ns.listTracesLightResponseSchema ?? fallbackSchema;

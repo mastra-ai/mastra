@@ -14,7 +14,7 @@ export async function processWorkflowLoop(
     runId,
     executionPath,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     resumeSteps,
     resumeData,
     parentWorkflow,
@@ -60,91 +60,52 @@ export async function processWorkflowLoop(
     iterationCount,
   });
 
+  // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
+  // resume metadata. Otherwise the body would keep receiving the same resumeData on every
+  // iteration (and e.g. never re-suspend).
+  const loopAgainData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps: [] as string[],
+    stepResults,
+    prevResult: stepResult,
+    resumeData: undefined,
+    activeStepsPath,
+    requestContext,
+    retryCount,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+  const loopEndData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps,
+    stepResults,
+    prevResult: stepResult,
+    resumeData,
+    activeStepsPath,
+    requestContext,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+
   if (step.loopType === 'dountil') {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          state: currentState,
-          outputOptions,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     }
   } else {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     }
   }
 }
@@ -156,9 +117,10 @@ export async function processWorkflowForEach(
     runId,
     executionPath,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     resumeSteps,
     timeTravel,
+    restart,
     resumeData,
     parentWorkflow,
     requestContext,
@@ -207,7 +169,7 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults,
           prevResult: { status: 'failed', error },
-          activeSteps,
+          activeStepsPath,
           requestContext,
           state: currentState,
           outputOptions,
@@ -237,10 +199,11 @@ export async function processWorkflowForEach(
           executionPath: [executionPath[0]!, forEachIndex],
           resumeSteps,
           timeTravel,
+          restart,
           stepResults,
           prevResult: iterationPrevResult,
           resumeData,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           perStep,
           state: currentState,
@@ -303,7 +266,7 @@ export async function processWorkflowForEach(
             startedAt: currentResult.startedAt,
             suspendedAt: Date.now(),
           },
-          activeSteps,
+          activeStepsPath,
           requestContext,
           state: currentState,
           outputOptions,
@@ -385,10 +348,11 @@ export async function processWorkflowForEach(
               executionPath: [executionPath[0]!, suspIdx],
               resumeSteps,
               timeTravel,
+              restart,
               stepResults,
               prevResult: iterationPrevResult,
               resumeData,
-              activeSteps,
+              activeStepsPath,
               requestContext,
               perStep,
               state: currentState,
@@ -442,9 +406,10 @@ export async function processWorkflowForEach(
         resumeSteps,
         stepResults,
         timeTravel,
+        restart,
         prevResult: result,
         resumeData: undefined, // No resumeData when advancing past foreach
-        activeSteps,
+        activeStepsPath,
         requestContext,
         perStep,
         state: currentState,
@@ -499,9 +464,10 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults,
           timeTravel,
+          restart,
           prevResult: iterationPrevResult,
           resumeData,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           perStep,
           state: currentState,
@@ -546,10 +512,11 @@ export async function processWorkflowForEach(
       executionPath: [executionPath[0]!, idx],
       resumeSteps,
       timeTravel,
+      restart,
       stepResults,
       prevResult: iterationPrevResult,
       resumeData,
-      activeSteps,
+      activeStepsPath,
       requestContext,
       perStep,
       state: currentState,
