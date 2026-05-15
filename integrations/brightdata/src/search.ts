@@ -13,6 +13,7 @@ const inputSchema = z.object({
     .describe('2-letter country code for geo-targeted results (e.g., "us", "gb")'),
   language: z
     .string()
+    .length(2)
     .optional()
     .describe('Language code for localized Google results (e.g., "en", "es", "fr")'),
   start: z
@@ -39,7 +40,7 @@ export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
   return createTool({
     id: 'brightdata-search',
     description:
-      "Search Google and get back parsed organic results (link, title, description). Uses Bright Data's SERP API which bypasses bot detection. Supports country targeting and pagination via result offset.",
+      "Search Google and get back parsed organic results (link, title, description). Uses Bright Data's SERP API which bypasses bot detection. Supports country and language targeting, plus pagination via result offset.",
     inputSchema,
     outputSchema,
     execute: async input => {
