@@ -624,12 +624,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Check route permission requirement (EE feature)
       // Uses convention-based permission derivation: permissions are auto-derived
       // from route path/method unless explicitly set or route is public
+      const requestContext = request.requestContext;
       const authConfig = this.mastra.getServer()?.auth;
       if (authConfig) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
-          const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+          const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
           if (permissionError) {
             return reply.status(permissionError.status).send({
@@ -641,7 +642,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       }
 
       // Check FGA authorization (EE feature)
-      const fgaError = await checkRouteFGA(this.mastra, route, request.requestContext, {
+      const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
         ...params.urlParams,
         ...params.queryParams,
         ...(typeof params.body === 'object' ? params.body : {}),
@@ -758,6 +759,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
         }
 
+        const requestContext = request.requestContext;
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
           let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
@@ -770,8 +772,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
 
           if (hasPermission) {
-            const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(
+              serverRoute,
+              userPermissions,
+              hasPermission,
+              requestContext,
+            );
             if (permissionError) {
               return reply.status(permissionError.status).send({
                 error: permissionError.error,
@@ -782,7 +789,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Check FGA authorization (EE feature)
-        const fgaError = await checkRouteFGA(this.mastra, serverRoute, request.requestContext, {
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, requestContext, {
           ...(request.params as Record<string, string>),
           ...(request.query as Record<string, string>),
           ...(typeof request.body === 'object' && request.body !== null
