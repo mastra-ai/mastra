@@ -17,7 +17,7 @@ import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import type { MastraModelOutput } from '../../stream/base/output';
 import { buildFakeOutput } from './__test-utils__/fake-output';
 
-import { HarnessValidationError } from './errors';
+import { HarnessInboxResponseConflictError, HarnessValidationError } from './errors';
 import { Harness } from './harness';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +38,7 @@ interface RunSpec {
     | undefined;
   text?: string;
   runId?: string;
+  holdUntil?: Promise<void>;
 }
 
 interface ResumeCall {
@@ -101,6 +102,7 @@ class FakeAgent extends Agent<any, any, any> {
     this.streamCalls.push({ messages: _messages, options });
     const spec = this.runs.shift();
     if (!spec) throw new Error('FakeAgent: no run enqueued for stream()');
+    await spec.holdUntil;
     const out = this.buildOutput(spec, options?.runId);
     this._internalRegisterStreamRun(out, (options ?? {}) as any);
     return out;
@@ -109,6 +111,7 @@ class FakeAgent extends Agent<any, any, any> {
   async generate(_messages: any, _options?: any): Promise<any> {
     const spec = this.runs.shift();
     if (!spec) throw new Error('FakeAgent: no run enqueued for generate()');
+    await spec.holdUntil;
     const out = this.buildOutput(spec);
     return await out.getFullOutput();
   }
@@ -117,6 +120,7 @@ class FakeAgent extends Agent<any, any, any> {
     this.resumeCalls.push({ resumeData, options });
     const spec = this.runs.shift();
     if (!spec) throw new Error('FakeAgent: no run enqueued for resumeStream()');
+    await spec.holdUntil;
     const out = this.buildOutput(spec, options?.runId);
     this._internalRegisterStreamRun(out, (options ?? {}) as any);
     return out;
@@ -389,6 +393,41 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     expect(session.getDisplayState().pending).toBeNull();
   });
 
+  it('respondToToolApproval records denial receipts and forwards reason', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-deny',
+      suspendPayload: { toolCallId: 'tc-deny', toolName: 'shell', args: { cmd: 'rm' } },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    agent.enqueueRun({ finishReason: 'stop', runId: 'run-deny', text: 'denied' });
+    const receipt = await session.respondToToolApproval({
+      approved: false,
+      reason: 'needs review',
+      responseId: 'deny-response-1',
+    });
+
+    expect(receipt).toEqual({
+      itemId: 'tool-approval:tc-deny',
+      kind: 'tool-approval',
+      status: 'applied',
+      responseId: 'deny-response-1',
+      duplicate: false,
+    });
+    expect(agent.resumeCalls[0]!.resumeData).toEqual({ approved: false, reason: 'needs review' });
+    expect(session.getRecord().inboxResponseReceipts?.['deny-response-1']).toMatchObject({
+      itemId: 'tool-approval:tc-deny',
+      kind: 'tool-approval',
+      resumeAttemptId: 'deny-response-1',
+      status: 'applied',
+      response: { approved: false, reason: 'needs review' },
+      result: expect.objectContaining({ text: 'denied' }),
+    });
+  });
+
   it('respondToToolSuspension forwards opaque resumeData', async () => {
     const { harness, agent } = setup();
     agent.enqueueRun({
@@ -411,6 +450,30 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     expect(session.getRecord().pendingResume).toBeUndefined();
   });
 
+  it('respondToToolSuspension without responseId preserves legacy opaque resumeData behavior', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-S',
+      suspendPayload: {
+        toolCallId: 'tc-S',
+        toolName: 'long',
+        args: {},
+        suspendPayload: { step: 'A' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    const resumeData = { completedAt: new Date('2026-05-15T00:00:00.000Z') };
+    agent.enqueueRun({ finishReason: 'stop', runId: 'run-S', text: 'done' });
+    const result = await session.respondToToolSuspension({ resumeData });
+
+    expect(result.text).toBe('done');
+    expect(agent.resumeCalls[0]!.resumeData).toBe(resumeData);
+    expect(session.getRecord().inboxResponseReceipts).toBeUndefined();
+  });
+
   it('respondToQuestion forwards { answer }', async () => {
     const { harness, agent } = setup();
     agent.enqueueRun({
@@ -429,6 +492,313 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     await session.respondToQuestion({ answer: 'red' });
 
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ answer: 'red' });
+  });
+
+  it('respondToQuestion returns duplicate receipt without resuming twice', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    agent.enqueueRun({ finishReason: 'stop', runId: 'run-Q' });
+    const first = await session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+    const duplicate = await session.respondToQuestion({
+      itemId: 'question:tc-Q',
+      responseId: 'answer-1',
+      answer: 'red',
+    });
+
+    expect(first).toMatchObject({ status: 'applied', duplicate: false, responseId: 'answer-1' });
+    expect(duplicate).toMatchObject({ status: 'applied', duplicate: true, responseId: 'answer-1' });
+    expect(agent.resumeCalls).toHaveLength(1);
+  });
+
+  it('respondToQuestion serializes concurrent duplicate responseIds before resuming', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    let release!: () => void;
+    const holdUntil = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ finishReason: 'stop', runId: 'run-Q', holdUntil });
+
+    const first = session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+    const second = session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+
+    await new Promise(resolve => setImmediate(resolve));
+    expect(agent.resumeCalls).toHaveLength(1);
+
+    release();
+    await expect(first).resolves.toMatchObject({ status: 'applied', duplicate: false, responseId: 'answer-1' });
+    await expect(second).resolves.toMatchObject({ status: 'accepted', duplicate: true, responseId: 'answer-1' });
+    expect(agent.resumeCalls).toHaveLength(1);
+  });
+
+  it('respondToQuestion rejects concurrent distinct responseIds after one response wins admission', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    let release!: () => void;
+    const holdUntil = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ finishReason: 'stop', runId: 'run-Q', holdUntil });
+
+    const first = session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+    const second = session
+      .respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-2', answer: 'red' })
+      .catch(err => err);
+
+    await new Promise(resolve => setImmediate(resolve));
+    await expect(second).resolves.toMatchObject({
+      message: expect.stringContaining('pending resume already responded; awaiting agent confirmation'),
+    });
+    expect(agent.resumeCalls).toHaveLength(1);
+
+    release();
+    await expect(first).resolves.toMatchObject({ status: 'applied', duplicate: false, responseId: 'answer-1' });
+    expect(session.getRecord().inboxResponseReceipts?.['answer-2']).toBeUndefined();
+  });
+
+  it('respondToQuestion returns accepted duplicate receipt while resume is in flight', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    let release!: () => void;
+    const holdUntil = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ finishReason: 'stop', runId: 'run-Q', holdUntil });
+
+    const first = session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    const duplicate = await session.respondToQuestion({
+      itemId: 'question:tc-Q',
+      responseId: 'answer-1',
+      answer: 'red',
+    });
+
+    expect(duplicate).toMatchObject({ status: 'accepted', duplicate: true, responseId: 'answer-1' });
+    expect(agent.resumeCalls).toHaveLength(1);
+
+    release();
+    await expect(first).resolves.toMatchObject({ status: 'applied', duplicate: false, responseId: 'answer-1' });
+  });
+
+  it('respondToQuestion rejects same responseId with different answer', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    agent.enqueueRun({ finishReason: 'stop', runId: 'run-Q' });
+    await session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+
+    await expect(
+      session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'blue' }),
+    ).rejects.toBeInstanceOf(HarnessInboxResponseConflictError);
+    expect(agent.resumeCalls).toHaveLength(1);
+  });
+
+  it('respondToQuestion returns applied duplicate after the resumed run suspends again', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q2',
+        toolName: 'ask_user',
+        args: { question: 'pick again' },
+      },
+    });
+    const first = await session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+    const duplicate = await session.respondToQuestion({
+      itemId: 'question:tc-Q',
+      responseId: 'answer-1',
+      answer: 'red',
+    });
+
+    expect(first).toMatchObject({ status: 'applied', duplicate: false, responseId: 'answer-1' });
+    expect(duplicate).toMatchObject({ status: 'applied', duplicate: true, responseId: 'answer-1' });
+    expect(session.getRecord().pendingResume).toMatchObject({ itemId: 'question:tc-Q2' });
+    expect(agent.resumeCalls).toHaveLength(1);
+  });
+
+  it('respondToQuestion marks accepted receipts failed when resumeStream throws', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    await expect(
+      session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' }),
+    ).rejects.toThrow('FakeAgent: no run enqueued for resumeStream()');
+
+    expect(session.getRecord().inboxResponseReceipts?.['answer-1']).toMatchObject({
+      itemId: 'question:tc-Q',
+      status: 'failed',
+      retryable: false,
+      error: expect.objectContaining({ message: 'FakeAgent: no run enqueued for resumeStream()' }),
+    });
+    await expect(
+      session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' }),
+    ).rejects.toThrow('FakeAgent: no run enqueued for resumeStream()');
+    expect(agent.resumeCalls).toHaveLength(1);
+  });
+
+  it('clears a stale non-queued pending response without replaying resumeStream', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+    const pending = session.getRecord().pendingResume!;
+    const staleAt = Date.now() - 60_000;
+    const response = { answer: 'red' };
+    const responseHash = (session as any)._computeInboxResponseHash({
+      kind: 'question',
+      itemId: pending.itemId,
+      runId: pending.runId,
+      pendingRequestedAt: pending.requestedAt,
+      response,
+    });
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingResume: { ...prev.pendingResume, resumedAt: staleAt },
+      inboxResponseReceipts: {
+        stale: {
+          responseId: 'stale',
+          responseHash,
+          resumeAttemptId: 'stale',
+          itemId: pending.itemId,
+          kind: 'question',
+          runId: pending.runId,
+          toolCallId: pending.toolCallId,
+          pendingRequestedAt: pending.requestedAt,
+          response,
+          status: 'accepted',
+          acceptedAt: staleAt,
+          updatedAt: staleAt,
+        },
+      },
+    }));
+
+    await expect(
+      session.respondToQuestion({ itemId: pending.itemId, responseId: 'stale', answer: 'red' }),
+    ).rejects.toThrow('queued turn resume was marked in flight');
+
+    expect(session.getRecord().pendingResume).toBeUndefined();
+    expect(session.getRecord().inboxResponseReceipts?.stale).toMatchObject({ status: 'failed' });
+
+    agent.enqueueRun({ finishReason: 'stop', text: 'fresh answer' });
+    await expect(
+      session.respondToQuestion({ itemId: pending.itemId, responseId: 'fresh', answer: 'red' }),
+    ).rejects.toThrow('no pending resume on this session');
+
+    expect(agent.resumeCalls).toHaveLength(0);
+  });
+
+  it('clears a stale non-queued pending response on a fresh responseId retry', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+    const pending = session.getRecord().pendingResume!;
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingResume: { ...prev.pendingResume, resumedAt: Date.now() - 60_000 },
+    }));
+
+    await expect(
+      session.respondToQuestion({ itemId: pending.itemId, responseId: 'fresh', answer: 'red' }),
+    ).rejects.toThrow('queued turn resume was marked in flight');
+
+    expect(session.getRecord().pendingResume).toBeUndefined();
+    expect(session.getRecord().inboxResponseReceipts?.fresh).toBeUndefined();
+    expect(agent.resumeCalls).toHaveLength(0);
   });
 
   it('respondToPlanApproval flips active mode atomically when approved + transitionsTo set', async () => {

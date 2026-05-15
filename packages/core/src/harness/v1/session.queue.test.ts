@@ -792,6 +792,122 @@ describe('Session.queue() — suspension', () => {
     await session.close();
   });
 
+  it('rejects a fresh responseId when queued resume recovery has no matching inbox receipt', async () => {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const queuedItemId = 'q-completed-resume-fresh-response';
+    const now = Date.now();
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingQueue: [
+        {
+          id: queuedItemId,
+          admissionId: 'queue-completed-resume-fresh-response',
+          admissionHash: 'hash-completed-resume-fresh-response',
+          enqueuedAt: now,
+          content: 'already resumed',
+          attachments: [],
+          mode: 'default',
+        },
+      ],
+      pendingResume: {
+        kind: 'tool-approval',
+        itemId: 'tc-completed-fresh',
+        runId: 'completed-fresh-run',
+        toolCallId: 'tc-completed-fresh',
+        toolName: 'shell',
+        source: 'parent',
+        requestedAt: now,
+        queuedItemId,
+        modeId: 'default',
+        resumedAt: now,
+        payload: { input: { cmd: 'ls' } },
+      },
+      queueAdmissionReceipts: {
+        [queuedItemId]: {
+          admissionId: 'queue-completed-resume-fresh-response',
+          admissionHash: 'hash-completed-resume-fresh-response',
+          queuedItemId,
+          modeId: 'default',
+          status: 'completed',
+          runId: 'completed-fresh-run',
+          signalId: 'completed-fresh-signal',
+          attempts: 1,
+          enqueuedAt: now,
+          acceptedAt: now,
+          completedAt: now,
+          updatedAt: now,
+          result: { text: 'already done', finishReason: 'stop', runId: 'completed-fresh-run' },
+        },
+      },
+    }));
+
+    await expect(session.respondToToolApproval({ approved: true, responseId: 'fresh-response' })).rejects.toThrow(
+      'pending resume already responded; no matching inbox response receipt exists',
+    );
+
+    expect(agent.resumeCalls).toHaveLength(0);
+    expect(session.getRecord().inboxResponseReceipts?.['fresh-response']).toBeUndefined();
+    await session.close();
+  });
+
+  it('does not apply accepted inbox receipts from a different completed queued item with the same runId', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const now = Date.now();
+    const response = { approved: true };
+    const responseHash = (session as any)._computeInboxResponseHash({
+      kind: 'tool-approval',
+      itemId: 'tc-target',
+      runId: 'shared-run',
+      pendingRequestedAt: now,
+      response,
+    });
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      inboxResponseReceipts: {
+        target: {
+          responseId: 'target',
+          responseHash,
+          resumeAttemptId: 'target',
+          itemId: 'tc-target',
+          queuedItemId: 'q-target',
+          kind: 'tool-approval',
+          runId: 'shared-run',
+          toolCallId: 'tc-target',
+          pendingRequestedAt: now,
+          response,
+          status: 'accepted',
+          acceptedAt: now,
+          updatedAt: now,
+        },
+      },
+      queueAdmissionReceipts: {
+        'q-other': {
+          admissionId: 'queue-other',
+          admissionHash: 'hash-other',
+          queuedItemId: 'q-other',
+          modeId: 'default',
+          status: 'completed',
+          runId: 'shared-run',
+          signalId: 'other-signal',
+          attempts: 1,
+          enqueuedAt: now,
+          acceptedAt: now,
+          completedAt: now,
+          updatedAt: now,
+          result: { text: 'wrong queue item', finishReason: 'stop', runId: 'shared-run' },
+        },
+      },
+    }));
+
+    const duplicate = await session.respondToToolApproval({ approved: true, responseId: 'target' });
+
+    expect(duplicate).toMatchObject({ status: 'accepted', duplicate: true, responseId: 'target' });
+    expect(session.getRecord().inboxResponseReceipts?.target).toMatchObject({ status: 'accepted' });
+    await session.close();
+  });
+
   it('completes a rehydrated suspended queued item when respondTo* resumes it', async () => {
     const storage = new InMemoryStore();
     const harnessStore = await storage.getStore('harness');

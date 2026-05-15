@@ -108,6 +108,29 @@ export class HarnessAdmissionConflictError extends Error {
   }
 }
 
+export class HarnessInboxItemNotFoundError extends Error {
+  readonly name = 'HarnessInboxItemNotFoundError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly itemId: string,
+  ) {
+    super(`Inbox item "${itemId}" for session "${sessionId}" was not found`);
+  }
+}
+
+export class HarnessInboxResponseConflictError extends Error {
+  readonly name = 'HarnessInboxResponseConflictError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly itemId: string,
+    public readonly responseId: string,
+  ) {
+    super(
+      `Inbox response "${responseId}" for item "${itemId}" on session "${sessionId}" conflicts with stored evidence`,
+    );
+  }
+}
+
 export class HarnessAttachmentInUseError extends Error {
   readonly name = 'HarnessAttachmentInUseError';
   constructor(

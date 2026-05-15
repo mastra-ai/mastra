@@ -106,7 +106,14 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_SESSIONS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
-      ifNotExists: ['harness_name', 'subagent_depth', 'queue_admission_receipts', 'closing_at', 'close_deadline_at'],
+      ifNotExists: [
+        'harness_name',
+        'subagent_depth',
+        'queue_admission_receipts',
+        'inbox_response_receipts',
+        'closing_at',
+        'close_deadline_at',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_ATTACHMENTS,
@@ -1387,6 +1394,7 @@ const SESSION_COLUMN_NAMES = [
   'pending_queue',
   'pending_resume',
   'queue_admission_receipts',
+  'inbox_response_receipts',
   'observational_memory',
   'goal',
   'workspace',
@@ -1420,6 +1428,7 @@ function sessionColumnValues(record: SessionRecord, version: number): { names: s
     JSON.stringify(record.pendingQueue),
     record.pendingResume ? JSON.stringify(record.pendingResume) : null,
     record.queueAdmissionReceipts ? JSON.stringify(record.queueAdmissionReceipts) : null,
+    record.inboxResponseReceipts ? JSON.stringify(record.inboxResponseReceipts) : null,
     record.observationalMemory ? JSON.stringify(record.observationalMemory) : null,
     record.goal ? JSON.stringify(record.goal) : null,
     record.workspace ? JSON.stringify(record.workspace) : null,
@@ -1455,6 +1464,7 @@ function rowToSession(row: Record<string, unknown>): SessionRecord {
     pendingQueue: parseJson(row.pending_queue) ?? [],
     pendingResume: parseJson(row.pending_resume) ?? undefined,
     queueAdmissionReceipts: parseJson(row.queue_admission_receipts) ?? undefined,
+    inboxResponseReceipts: parseJson(row.inbox_response_receipts) ?? undefined,
     observationalMemory: parseJson(row.observational_memory) ?? undefined,
     goal: parseJson(row.goal) ?? undefined,
     workspace: parseJson(row.workspace) ?? undefined,

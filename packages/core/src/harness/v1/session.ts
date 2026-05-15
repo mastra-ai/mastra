@@ -40,6 +40,7 @@ import type {
   AgentSignalResultStatus,
   HarnessStorage,
   HarnessStorageAttachmentUnavailableError,
+  InboxResponseReceipt,
   QueueAdmissionReceipt,
   PendingResume,
   PermissionRules,
@@ -62,6 +63,8 @@ import {
   HarnessAdmissionConflictError,
   HarnessAttachmentUnavailableError,
   HarnessConfigError,
+  HarnessInboxItemNotFoundError,
+  HarnessInboxResponseConflictError,
   HarnessOverrideConflictError,
   HarnessQueueFullError,
   HarnessSessionClosedError,
@@ -91,6 +94,8 @@ import type {
   AttachmentRef,
   GoalOptions,
   HarnessMode,
+  InboxResponseOptions,
+  InboxResponseResult,
   HarnessRequestContext,
   HarnessSkill,
   UseSkillOptions,
@@ -131,6 +136,10 @@ type QueueResumeRecoveryResult =
   | { status: 'none' }
   | { status: 'completed'; result: AgentResult }
   | { status: 'stale' };
+
+type ResumeResponseMode = 'agent-result' | 'inbox-receipt';
+type InboxReceiptResponseOptions = InboxResponseOptions & { responseId: string };
+type LegacyInboxResponseOptions = Omit<InboxResponseOptions, 'responseId'> & { responseId?: undefined };
 
 /**
  * Tool IDs the harness translates from `tool-call-approval` /
@@ -3446,18 +3455,50 @@ export class Session {
   // -------------------------------------------------------------------------
 
   /** Resume a pending tool-approval. `approved: false` rejects the call. */
-  async respondToToolApproval(opts: { approved: boolean }): Promise<AgentResult> {
-    return this._resume('tool-approval', { approved: opts.approved });
+  async respondToToolApproval(
+    opts: { approved: boolean; reason?: string } & InboxReceiptResponseOptions,
+  ): Promise<InboxResponseResult>;
+  async respondToToolApproval(
+    opts: { approved: boolean; reason?: string } & LegacyInboxResponseOptions,
+  ): Promise<AgentResult>;
+  async respondToToolApproval(
+    opts: { approved: boolean; reason?: string } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult>;
+  async respondToToolApproval(
+    opts: { approved: boolean; reason?: string } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult> {
+    return this._resume(
+      'tool-approval',
+      compactJsonObject({
+        approved: opts.approved,
+        reason: opts.reason,
+      }),
+      opts,
+    );
   }
 
   /** Resume a pending tool-suspension. `resumeData` is forwarded to the tool. */
-  async respondToToolSuspension(opts: { resumeData: unknown }): Promise<AgentResult> {
-    return this._resume('tool-suspension', opts.resumeData);
+  async respondToToolSuspension(
+    opts: { resumeData: unknown } & InboxReceiptResponseOptions,
+  ): Promise<InboxResponseResult>;
+  async respondToToolSuspension(opts: { resumeData: unknown } & LegacyInboxResponseOptions): Promise<AgentResult>;
+  async respondToToolSuspension(
+    opts: { resumeData: unknown } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult>;
+  async respondToToolSuspension(
+    opts: { resumeData: unknown } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult> {
+    return this._resume('tool-suspension', opts.resumeData, opts);
   }
 
   /** Resume a pending `ask_user` question. */
-  async respondToQuestion(opts: { answer: unknown }): Promise<AgentResult> {
-    return this._resume('question', { answer: opts.answer });
+  async respondToQuestion(opts: { answer: unknown } & InboxReceiptResponseOptions): Promise<InboxResponseResult>;
+  async respondToQuestion(opts: { answer: unknown } & LegacyInboxResponseOptions): Promise<AgentResult>;
+  async respondToQuestion(opts: { answer: unknown } & InboxResponseOptions): Promise<AgentResult | InboxResponseResult>;
+  async respondToQuestion(
+    opts: { answer: unknown } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult> {
+    return this._resume('question', { answer: opts.answer }, opts);
   }
 
   /**
@@ -3473,21 +3514,48 @@ export class Session {
    * of approval — the reviewer can approve with a revision note or reject
    * with revision guidance.
    */
-  async respondToPlanApproval(opts: {
-    approved: boolean;
-    revision?: string;
-    transitionToMode?: string;
-  }): Promise<AgentResult> {
+  async respondToPlanApproval(
+    opts: {
+      approved: boolean;
+      revision?: string;
+      transitionToMode?: string;
+    } & InboxReceiptResponseOptions,
+  ): Promise<InboxResponseResult>;
+  async respondToPlanApproval(
+    opts: {
+      approved: boolean;
+      revision?: string;
+      transitionToMode?: string;
+    } & LegacyInboxResponseOptions,
+  ): Promise<AgentResult>;
+  async respondToPlanApproval(
+    opts: {
+      approved: boolean;
+      revision?: string;
+      transitionToMode?: string;
+    } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult>;
+  async respondToPlanApproval(
+    opts: {
+      approved: boolean;
+      revision?: string;
+      transitionToMode?: string;
+    } & InboxResponseOptions,
+  ): Promise<AgentResult | InboxResponseResult> {
     if (opts.transitionToMode !== undefined) {
       // Validate eagerly so callers see a clean error rather than a CAS-time
       // throw from inside the resume flow.
       this._harness._getMode(opts.transitionToMode);
     }
-    return this._resume('plan-approval', {
-      approved: opts.approved,
-      revision: opts.revision,
-      transitionToMode: opts.transitionToMode,
-    });
+    return this._resume(
+      'plan-approval',
+      compactJsonObject({
+        approved: opts.approved,
+        revision: opts.revision,
+        transitionToMode: opts.transitionToMode,
+      }),
+      opts,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -3665,8 +3733,38 @@ export class Session {
     });
   }
 
-  private async _resume(expectedKind: PendingResume['kind'], resumeData: unknown): Promise<AgentResult> {
+  private async _resume(
+    expectedKind: PendingResume['kind'],
+    resumeData: unknown,
+    responseOptions: InboxResponseOptions = {},
+  ): Promise<AgentResult | InboxResponseResult> {
     this._assertLive(`respond[${expectedKind}]`);
+    const responseId = getOwnRecordValue(responseOptions as Record<string, unknown>, 'responseId');
+    if (responseId !== undefined && typeof responseId !== 'string') {
+      throw new HarnessValidationError(`respond[${expectedKind}].responseId`, 'responseId must be a string');
+    }
+    const responseMode: ResumeResponseMode = responseId !== undefined ? 'inbox-receipt' : 'agent-result';
+    if (responseId !== undefined && responseId.length === 0) {
+      throw new HarnessValidationError(`respond[${expectedKind}].responseId`, 'responseId must be a non-empty string');
+    }
+    const requestedItemId = getOwnRecordValue(responseOptions as Record<string, unknown>, 'itemId');
+    if (requestedItemId !== undefined && typeof requestedItemId !== 'string') {
+      throw new HarnessValidationError(`respond[${expectedKind}].itemId`, 'itemId must be a string');
+    }
+
+    const storedReceipt =
+      responseId !== undefined ? getOwnRecordValue(this._record.inboxResponseReceipts, responseId) : undefined;
+    if (storedReceipt !== undefined) {
+      const duplicate = this._resolveStoredInboxResponse(expectedKind, resumeData, responseOptions);
+      if (storedReceipt.status === 'applied') {
+        return duplicate!;
+      }
+      if (this._record.pendingResume === undefined) {
+        const recoveredReceipt = await this._applyInboxReceiptFromCompletedQueue(storedReceipt);
+        if (recoveredReceipt) return this._inboxReceiptResult(recoveredReceipt, true);
+        return duplicate!;
+      }
+    }
 
     const pending = this._record.pendingResume;
     if (!pending) {
@@ -3679,6 +3777,43 @@ export class Session {
       );
     }
 
+    const itemId = pending.itemId ?? pending.toolCallId;
+    if (requestedItemId !== undefined && requestedItemId !== itemId) {
+      throw new HarnessInboxItemNotFoundError(this.id, requestedItemId);
+    }
+    const responseHash =
+      responseId !== undefined
+        ? this._computeInboxResponseHash({
+            kind: expectedKind,
+            itemId,
+            runId: pending.runId,
+            pendingRequestedAt: pending.requestedAt,
+            response: resumeData,
+          })
+        : undefined;
+    const persistedResponse =
+      responseId !== undefined ? assertJsonValue(resumeData, `respond[${expectedKind}].response`) : undefined;
+    const existingReceipt =
+      responseId !== undefined ? getOwnRecordValue(this._record.inboxResponseReceipts, responseId) : undefined;
+    if (existingReceipt !== undefined) {
+      this._assertMatchingInboxReceipt(existingReceipt, {
+        kind: expectedKind,
+        itemId,
+        responseId: responseId!,
+        responseHash: responseHash!,
+      });
+      this._throwStoredInboxResponseFailure(existingReceipt);
+      if (
+        responseMode === 'inbox-receipt' &&
+        (pending.resumedAt === undefined || existingReceipt.status === 'applied')
+      ) {
+        return this._inboxReceiptResult(existingReceipt, true);
+      }
+      if (existingReceipt.status === 'applied' && existingReceipt.result !== undefined) {
+        return existingReceipt.result as AgentResult;
+      }
+    }
+
     // Idempotency: a crash between "marked resumed" and "cleared pending"
     // surfaces here on the next call. We do not replay the agent — the prior
     // resumeStream() either landed (and cleared pending in a later flush we
@@ -3686,10 +3821,55 @@ export class Session {
     // move is to surface the suspended state to the caller and let them
     // re-fetch via getDisplayState / listMessages.
     if (pending.resumedAt !== undefined) {
+      if (existingReceipt !== undefined && responseMode === 'inbox-receipt') {
+        const recovery = await this._maybeRecoverStaleQueuedResume();
+        if (recovery.status === 'completed') {
+          await this._markInboxResponseApplied(existingReceipt.responseId, recovery.result);
+          const receipt =
+            getOwnRecordValue(this._record.inboxResponseReceipts, existingReceipt.responseId) ?? existingReceipt;
+          return this._inboxReceiptResult(receipt, true);
+        }
+        if (recovery.status === 'stale') {
+          const stale = new QueueResumeRecoveryStaleError();
+          await this._markInboxResponseFailed(existingReceipt.responseId, stale);
+          throw stale;
+        }
+        if (
+          this._currentTurnAbortController === undefined &&
+          this._queuedItemIdForPendingResume(pending) === undefined &&
+          Date.now() >= pending.resumedAt + QUEUE_ACCEPTED_RECOVERY_STALE_MS
+        ) {
+          const stale = new QueueResumeRecoveryStaleError();
+          await this._markInboxResponseFailedAndClearPending(existingReceipt.responseId, pending, stale);
+          throw stale;
+        }
+        return this._inboxReceiptResult(existingReceipt, true);
+      }
       const recovery = await this._maybeRecoverStaleQueuedResume();
-      if (recovery.status === 'completed') return recovery.result;
+      if (recovery.status === 'completed') {
+        if (responseMode === 'inbox-receipt') {
+          throw new HarnessValidationError(
+            `respond[${expectedKind}]`,
+            'pending resume already responded; no matching inbox response receipt exists',
+          );
+        }
+        return recovery.result;
+      }
       if (recovery.status === 'stale') {
-        throw new QueueResumeRecoveryStaleError();
+        const stale = new QueueResumeRecoveryStaleError();
+        if (responseId !== undefined) {
+          await this._markInboxResponseFailed(responseId, stale);
+        }
+        throw stale;
+      }
+      if (
+        this._currentTurnAbortController === undefined &&
+        this._queuedItemIdForPendingResume(pending) === undefined &&
+        Date.now() >= pending.resumedAt + QUEUE_ACCEPTED_RECOVERY_STALE_MS
+      ) {
+        const stale = new QueueResumeRecoveryStaleError();
+        await this._markInboxResponseFailedAndClearPending(responseId, pending, stale);
+        throw stale;
       }
       throw new HarnessValidationError(
         `respond[${expectedKind}]`,
@@ -3706,10 +3886,88 @@ export class Session {
     // marker per §5.4 / §5.7). On crash here, the next caller observes
     // resumedAt set and rejects rather than double-resuming.
     const resumedAt = Date.now();
-    await this._flushUpdate(prev => ({
-      ...prev,
-      pendingResume: prev.pendingResume ? { ...prev.pendingResume, resumedAt } : prev.pendingResume,
-    }));
+    let duplicateReceiptAfterAdmission: InboxResponseReceipt | undefined;
+    let pendingAlreadyResumedAfterAdmission = false;
+    await this._flushUpdate(prev => {
+      const currentReceipt =
+        responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
+      if (currentReceipt !== undefined) {
+        this._assertMatchingInboxReceipt(currentReceipt, {
+          kind: expectedKind,
+          itemId,
+          responseId: currentReceipt.responseId,
+          responseHash: responseHash!,
+        });
+        duplicateReceiptAfterAdmission = currentReceipt;
+        return prev;
+      }
+
+      const currentPending = prev.pendingResume;
+      if (
+        currentPending === undefined ||
+        currentPending.resumedAt !== undefined ||
+        currentPending.kind !== expectedKind ||
+        currentPending.runId !== pending.runId ||
+        currentPending.toolCallId !== pending.toolCallId ||
+        (currentPending.itemId ?? currentPending.toolCallId) !== itemId
+      ) {
+        pendingAlreadyResumedAfterAdmission = true;
+        return prev;
+      }
+
+      const next: SessionRecord = {
+        ...prev,
+        pendingResume: { ...currentPending, resumedAt },
+      };
+      if (responseId === undefined) return next;
+
+      next.inboxResponseReceipts = {
+        ...(prev.inboxResponseReceipts ?? {}),
+        [responseId]: {
+          responseId,
+          responseHash: responseHash!,
+          resumeAttemptId: responseId,
+          itemId,
+          ...(pendingQueuedItemId !== undefined ? { queuedItemId: pendingQueuedItemId } : {}),
+          kind: expectedKind,
+          runId: pending.runId,
+          toolCallId: pending.toolCallId,
+          pendingRequestedAt: pending.requestedAt,
+          response: persistedResponse,
+          status: 'accepted',
+          acceptedAt: resumedAt,
+          updatedAt: resumedAt,
+        } satisfies InboxResponseReceipt,
+      };
+      return next;
+    });
+    if (duplicateReceiptAfterAdmission !== undefined) {
+      this._throwStoredInboxResponseFailure(duplicateReceiptAfterAdmission);
+      return this._inboxReceiptResult(duplicateReceiptAfterAdmission, true);
+    }
+    if (pendingAlreadyResumedAfterAdmission) {
+      const recovery = await this._maybeRecoverStaleQueuedResume();
+      if (recovery.status === 'completed') {
+        if (responseMode === 'inbox-receipt') {
+          throw new HarnessValidationError(
+            `respond[${expectedKind}]`,
+            'pending resume already responded; no matching inbox response receipt exists',
+          );
+        }
+        return recovery.result;
+      }
+      if (recovery.status === 'stale') {
+        const stale = new QueueResumeRecoveryStaleError();
+        if (responseId !== undefined) {
+          await this._markInboxResponseFailed(responseId, stale);
+        }
+        throw stale;
+      }
+      throw new HarnessValidationError(
+        `respond[${expectedKind}]`,
+        'pending resume already responded; awaiting agent confirmation',
+      );
+    }
 
     // For plan-approval, resolve the active-mode flip before finalizing the
     // resumed turn. Queued terminal resumes persist this flip with the
@@ -3758,6 +4016,9 @@ export class Session {
       }
     } catch (err) {
       this._endTurn(turnAbortController);
+      if (responseId !== undefined) {
+        await this._markInboxResponseFailed(responseId, err);
+      }
       throw err;
     }
 
@@ -3784,9 +4045,24 @@ export class Session {
         this._recordTurnCompletion(full);
       }
       const queueCompletedAt = Date.now();
+      const responseAppliedAt = queueCompletedAt;
       await this._flushUpdate(prev => {
         const next: SessionRecord = { ...prev };
         delete next.pendingResume;
+        const receipt =
+          responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
+        if (receipt) {
+          next.inboxResponseReceipts = {
+            ...(prev.inboxResponseReceipts ?? {}),
+            [receipt.responseId]: {
+              ...receipt,
+              status: 'applied',
+              result: full,
+              appliedAt: receipt.appliedAt ?? responseAppliedAt,
+              updatedAt: responseAppliedAt,
+            },
+          };
+        }
         if (modeFlipTarget) next.modeId = modeFlipTarget;
         if (completingQueuedItemId !== undefined) {
           next.pendingQueue = (prev.pendingQueue ?? []).filter(x => x.id !== completingQueuedItemId);
@@ -3862,7 +4138,185 @@ export class Session {
     } finally {
       this._endTurn(turnAbortController);
     }
+    if (responseMode === 'inbox-receipt') {
+      const receipt =
+        responseId !== undefined ? getOwnRecordValue(this._record.inboxResponseReceipts, responseId) : undefined;
+      if (receipt) return this._inboxReceiptResult(receipt, false);
+    }
     return full as AgentResult;
+  }
+
+  private _resolveStoredInboxResponse(
+    expectedKind: PendingResume['kind'],
+    resumeData: unknown,
+    responseOptions: InboxResponseOptions,
+  ): InboxResponseResult | undefined {
+    const responseId = getOwnRecordValue(responseOptions as Record<string, unknown>, 'responseId');
+    if (typeof responseId !== 'string') return undefined;
+    const receipt = getOwnRecordValue(this._record.inboxResponseReceipts, responseId);
+    if (receipt === undefined) return undefined;
+    if (receipt.kind !== expectedKind) {
+      throw new HarnessInboxResponseConflictError(this.id, receipt.itemId, responseId);
+    }
+    const requestedItemId = getOwnRecordValue(responseOptions as Record<string, unknown>, 'itemId');
+    if (requestedItemId !== undefined && typeof requestedItemId !== 'string') {
+      throw new HarnessValidationError(`respond[${expectedKind}].itemId`, 'itemId must be a string');
+    }
+    if (requestedItemId !== undefined && receipt.itemId !== requestedItemId) {
+      throw new HarnessInboxItemNotFoundError(this.id, requestedItemId);
+    }
+    const attemptedHash = this._computeInboxResponseHash({
+      kind: expectedKind,
+      itemId: receipt.itemId,
+      runId: receipt.runId,
+      pendingRequestedAt: receipt.pendingRequestedAt,
+      response: resumeData,
+    });
+    if (attemptedHash !== receipt.responseHash) {
+      throw new HarnessInboxResponseConflictError(this.id, receipt.itemId, responseId);
+    }
+    this._throwStoredInboxResponseFailure(receipt);
+    return this._inboxReceiptResult(receipt, true);
+  }
+
+  private _assertMatchingInboxReceipt(
+    receipt: InboxResponseReceipt,
+    input: { kind: PendingResume['kind']; itemId: string; responseId: string; responseHash: string },
+  ): void {
+    if (receipt.kind !== input.kind || receipt.itemId !== input.itemId || receipt.responseHash !== input.responseHash) {
+      throw new HarnessInboxResponseConflictError(this.id, input.itemId, input.responseId);
+    }
+  }
+
+  private _inboxReceiptResult(receipt: InboxResponseReceipt, duplicate: boolean): InboxResponseResult {
+    return {
+      itemId: receipt.itemId,
+      kind: receipt.kind,
+      status: receipt.status === 'applied' ? 'applied' : 'accepted',
+      responseId: receipt.responseId,
+      duplicate,
+    };
+  }
+
+  private _throwStoredInboxResponseFailure(receipt: InboxResponseReceipt): void {
+    if (receipt.status !== 'failed' && receipt.status !== 'dead') return;
+    throw publicErrorProjectionToError(
+      receipt.error ?? { code: 'harness.inbox_response_failed', message: 'inbox response failed' },
+    );
+  }
+
+  private async _applyInboxReceiptFromCompletedQueue(
+    receipt: InboxResponseReceipt,
+  ): Promise<InboxResponseReceipt | undefined> {
+    if (receipt.queuedItemId === undefined) return undefined;
+    const completed = this._record.queueAdmissionReceipts?.[receipt.queuedItemId];
+    if (completed?.status !== 'completed' || completed.runId !== receipt.runId || completed.result === undefined) {
+      return undefined;
+    }
+    await this._markInboxResponseApplied(receipt.responseId, completed.result as AgentResult);
+    return getOwnRecordValue(this._record.inboxResponseReceipts, receipt.responseId) ?? receipt;
+  }
+
+  private async _markInboxResponseApplied(responseId: string, result: AgentResult): Promise<void> {
+    const appliedAt = Date.now();
+    await this._flushUpdate(prev => {
+      const receipt = getOwnRecordValue(prev.inboxResponseReceipts, responseId);
+      if (!receipt || receipt.status === 'applied') return prev;
+      return {
+        ...prev,
+        inboxResponseReceipts: {
+          ...(prev.inboxResponseReceipts ?? {}),
+          [responseId]: {
+            ...receipt,
+            status: 'applied',
+            result,
+            appliedAt: receipt.appliedAt ?? appliedAt,
+            updatedAt: appliedAt,
+          },
+        },
+      };
+    });
+  }
+
+  private async _markInboxResponseFailed(responseId: string, err: unknown): Promise<void> {
+    const failedAt = Date.now();
+    await this._flushUpdate(prev => {
+      const receipt = getOwnRecordValue(prev.inboxResponseReceipts, responseId);
+      if (!receipt || receipt.status === 'applied' || receipt.status === 'failed' || receipt.status === 'dead') {
+        return prev;
+      }
+      return {
+        ...prev,
+        inboxResponseReceipts: {
+          ...(prev.inboxResponseReceipts ?? {}),
+          [responseId]: {
+            ...receipt,
+            status: 'failed',
+            error: projectHarnessPublicError(err),
+            retryable: false,
+            failedAt: receipt.failedAt ?? failedAt,
+            updatedAt: failedAt,
+          },
+        },
+      };
+    });
+  }
+
+  private async _markInboxResponseFailedAndClearPending(
+    responseId: string | undefined,
+    pending: PendingResume,
+    err: unknown,
+  ): Promise<void> {
+    const failedAt = Date.now();
+    await this._flushUpdate(prev => {
+      const receipt = responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
+      const current = prev.pendingResume;
+      const currentItemId = current ? (current.itemId ?? current.toolCallId) : undefined;
+      const pendingItemId = pending.itemId ?? pending.toolCallId;
+      const canClearPending =
+        current !== undefined &&
+        current.runId === pending.runId &&
+        current.toolCallId === pending.toolCallId &&
+        currentItemId === pendingItemId &&
+        current.resumedAt === pending.resumedAt &&
+        current.queuedItemId === undefined;
+
+      if (
+        (!receipt || receipt.status === 'applied' || receipt.status === 'failed' || receipt.status === 'dead') &&
+        !canClearPending
+      ) {
+        return prev;
+      }
+
+      const next: SessionRecord = { ...prev };
+      if (receipt && receipt.status !== 'applied' && receipt.status !== 'failed' && receipt.status !== 'dead') {
+        next.inboxResponseReceipts = {
+          ...(prev.inboxResponseReceipts ?? {}),
+          [receipt.responseId]: {
+            ...receipt,
+            status: 'failed',
+            error: projectHarnessPublicError(err),
+            retryable: false,
+            failedAt: receipt.failedAt ?? failedAt,
+            updatedAt: failedAt,
+          },
+        };
+      }
+      if (canClearPending) {
+        delete next.pendingResume;
+      }
+      return next;
+    });
+  }
+
+  private _computeInboxResponseHash(input: {
+    kind: PendingResume['kind'];
+    itemId: string;
+    runId: string;
+    pendingRequestedAt: number;
+    response: unknown;
+  }): string {
+    return sha256CanonicalJson(input);
   }
 
   private _queuedItemIdForPendingResume(pending: PendingResume): string | undefined {
@@ -5246,6 +5700,15 @@ function assertJsonValue(value: unknown, path = 'value'): JsonValue {
     return out;
   }
   throw new HarnessValidationError(path, 'must be JSON-serializable for admission hashing');
+}
+
+function compactJsonObject<T extends Record<string, unknown>>(value: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
+function getOwnRecordValue<T>(record: Record<string, T> | undefined, key: string): T | undefined {
+  if (!record || !Object.prototype.hasOwnProperty.call(record, key)) return undefined;
+  return record[key];
 }
 
 function isPlainJsonObject(value: object): value is Record<string, unknown> {

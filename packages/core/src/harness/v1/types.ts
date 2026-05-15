@@ -858,6 +858,19 @@ export type AgentResult<OUTPUT = undefined> = FullOutput<OUTPUT>;
 /** Shorthand for the streaming return type. */
 export type AgentStream<OUTPUT = undefined> = MastraModelOutput<OUTPUT>;
 
+export interface InboxResponseOptions {
+  itemId?: string;
+  responseId?: string;
+}
+
+export interface InboxResponseResult {
+  itemId: string;
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  status: 'accepted' | 'applied';
+  responseId: string;
+  duplicate: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // queue() — wait-for-idle FIFO turn queue (spec §4.2 / §6).
 //

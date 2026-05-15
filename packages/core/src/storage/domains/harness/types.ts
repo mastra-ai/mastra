@@ -271,6 +271,7 @@ export interface SessionRecord {
   pendingQueue: QueuedItem[];
   pendingResume?: PendingResume;
   queueAdmissionReceipts?: Record<string, QueueAdmissionReceipt>;
+  inboxResponseReceipts?: Record<string, InboxResponseReceipt>;
 
   // Observational memory config (per-session override)
   observationalMemory?: {
@@ -371,6 +372,28 @@ export interface QueueAdmissionReceipt {
   failedAt?: number;
   deadAt?: number;
   nextAttemptAt?: number;
+  updatedAt: number;
+}
+
+export interface InboxResponseReceipt {
+  responseId: string;
+  responseHash: string;
+  resumeAttemptId: string;
+  itemId: string;
+  queuedItemId?: string;
+  kind: PendingResume['kind'];
+  runId: string;
+  toolCallId: string;
+  pendingRequestedAt: number;
+  response: unknown;
+  status: 'accepted' | 'applied' | 'failed' | 'dead';
+  result?: unknown;
+  error?: HarnessStoredPublicError;
+  retryable?: boolean;
+  acceptedAt: number;
+  appliedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
   updatedAt: number;
 }
 

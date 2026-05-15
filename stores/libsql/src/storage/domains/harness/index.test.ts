@@ -407,6 +407,55 @@ describe('HarnessLibSQL queue admission evidence', () => {
   });
 });
 
+describe('HarnessLibSQL inbox response receipts', () => {
+  let storage: HarnessLibSQL;
+
+  beforeEach(async () => {
+    const client = createHarnessTestClient();
+    storage = new HarnessLibSQL({ client });
+    await storage.init();
+  });
+
+  it('round-trips inbox response receipts on session records', async () => {
+    await storage.saveSession(
+      sampleSession({
+        inboxResponseReceipts: {
+          'response-1': {
+            responseId: 'response-1',
+            responseHash: 'hash-1',
+            resumeAttemptId: 'response-1',
+            itemId: 'question:tool-1',
+            kind: 'question',
+            runId: 'run-1',
+            toolCallId: 'tool-1',
+            pendingRequestedAt: 1000,
+            response: { answer: 'red' },
+            status: 'applied',
+            result: { text: 'done', finishReason: 'stop', runId: 'run-1' },
+            acceptedAt: 1100,
+            appliedAt: 1200,
+            updatedAt: 1200,
+          },
+        },
+      }),
+      { ownerId: 'h', ifVersion: 0 },
+    );
+
+    await expect(storage.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+      inboxResponseReceipts: {
+        'response-1': {
+          responseId: 'response-1',
+          resumeAttemptId: 'response-1',
+          itemId: 'question:tool-1',
+          status: 'applied',
+          response: { answer: 'red' },
+          result: { text: 'done', finishReason: 'stop', runId: 'run-1' },
+        },
+      },
+    });
+  });
+});
+
 function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     harnessName: 'default',

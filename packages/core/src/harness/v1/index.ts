@@ -51,6 +51,8 @@ export type {
 export {
   HarnessConfigError,
   HarnessAdmissionConflictError,
+  HarnessInboxItemNotFoundError,
+  HarnessInboxResponseConflictError,
   HarnessQueueFullError,
   HarnessSessionClosedError,
   HarnessSessionLockedError,
@@ -93,6 +95,8 @@ export type {
   HarnessConfig,
   HarnessMode,
   HarnessSkill,
+  InboxResponseOptions,
+  InboxResponseResult,
   UseSkillOptions,
   HarnessWorkspaceConfig,
   ListMessagesOptions,
@@ -119,4 +123,4 @@ export type {
   ToolCategory,
 } from './types';
 
-export type { PermissionRules, SessionGrants } from '../../storage/domains/harness';
+export type { InboxResponseReceipt, PermissionRules, SessionGrants } from '../../storage/domains/harness';

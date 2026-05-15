@@ -655,6 +655,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     pending_queue: { type: 'jsonb', nullable: false },
     pending_resume: { type: 'jsonb', nullable: true },
     queue_admission_receipts: { type: 'jsonb', nullable: true },
+    inbox_response_receipts: { type: 'jsonb', nullable: true },
     observational_memory: { type: 'jsonb', nullable: true },
     goal: { type: 'jsonb', nullable: true },
     workspace: { type: 'jsonb', nullable: true },
