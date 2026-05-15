@@ -1,5 +1,13 @@
 # @mastra/editor
 
+## 0.8.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`3d42730`](https://github.com/mastra-ai/mastra/commit/3d42730bed209f3ea4088be10013df6fa91fe757)]:
+  - @mastra/core@1.35.0-alpha.1
+  - @mastra/memory@1.18.2-alpha.0
+
 ## 0.8.0
 
 ### Minor Changes
