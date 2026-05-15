@@ -221,6 +221,17 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+export function isMaybeAzure(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  return matchesProviderPrefix(model, 'azure');
+}
+
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
  * assistant messages. Returns `undefined` if no changes were necessary.
@@ -306,6 +317,64 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: Azure OpenAI <system-reminder> tag transform
+// ---------------------------------------------------------------------------
+
+/**
+ * Renames `<system-reminder>` opening and closing tags to `<memory-context>`
+ * in a text string, preserving any attributes on the opening tag.
+ */
+function renameSystemReminderTags(text: string): string {
+  return text
+    .replaceAll('<system-reminder>', '<memory-context>')
+    .replaceAll(/<system-reminder(\s[^>]+)>/g, '<memory-context$1>')
+    .replaceAll('</system-reminder>', '</memory-context>');
+}
+
+function transformSystemReminderInPrompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt | undefined {
+  let mutated = false;
+  const next: LanguageModelV2Prompt = prompt.map(message => {
+    if (message.role !== 'user') return message;
+
+    let partsMutated = false;
+    const newContent = message.content.map(part => {
+      if (part.type !== 'text') return part;
+      const transformed = renameSystemReminderTags(part.text);
+      if (transformed !== part.text) {
+        partsMutated = true;
+        return { ...part, text: transformed };
+      }
+      return part;
+    });
+
+    if (partsMutated) {
+      mutated = true;
+      return { ...message, content: newContent };
+    }
+    return message;
+  });
+  return mutated ? next : undefined;
+}
+
+/**
+ * Azure OpenAI's content-moderation layer treats `<system-reminder>` as a
+ * prompt-injection signal and responds with a canned refusal.
+ *
+ * Mastra injects `<system-reminder>` into user messages for Observational
+ * Memory continuation hints and temporal gap markers. This rule renames
+ * the tag to `<memory-context>` in the outbound prompt for Azure models.
+ * The rename is wire-only — persisted history and other providers retain
+ * the original tag so Anthropic and distilled models see what they expect.
+ */
+export const azureSystemReminderTransform: CompatRule = {
+  name: 'azure-system-reminder-transform',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAzure(model)) return undefined;
+    return transformSystemReminderInPrompt(prompt);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -317,6 +386,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
   anthropicStripForeignReasoningContent,
+  azureSystemReminderTransform,
 ];
 
 // ---------------------------------------------------------------------------
@@ -343,6 +413,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **azure-system-reminder-transform** — renames `<system-reminder>` tags to
+ *   `<memory-context>` in user message text parts when the resolved model is
+ *   Azure, to avoid content-moderation false-positives. Wire-only; persisted
+ *   history is unchanged.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
