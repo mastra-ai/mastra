@@ -460,12 +460,23 @@ function applyTaskToolResult(
 
 const STARTUP_MESSAGE_WINDOW_SIZE = 40;
 
+function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
+  let latest: number | undefined;
+  for (const message of messages) {
+    const time = new Date(message.createdAt).getTime();
+    if (Number.isNaN(time)) continue;
+    latest = latest === undefined ? time : Math.max(latest, time);
+  }
+  return latest;
+}
+
 /**
  * Re-render all existing messages from the harness thread into the chat container.
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
   const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   state.chatContainer.clear();
   state.pendingTools.clear();

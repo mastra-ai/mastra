@@ -18,8 +18,9 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
+import type { IdleCounterComponent } from './components/idle-counter.js';
 import type { GradientAnimator } from './components/obi-loader.js';
-import type { OMMarkerComponent } from './components/om-marker.js';
+import type { OMMarkerComponent, OMMarkerData } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { ShellStreamComponent } from './components/shell-output.js';
@@ -95,6 +96,9 @@ export interface TUIState {
   ui: TUI;
   chatContainer: Container;
   editorContainer: Container;
+  idleCounter?: IdleCounterComponent;
+  idleStartedAt?: number;
+  lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
   terminal: ProcessTerminal;
@@ -180,6 +184,7 @@ export interface TUIState {
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
+  activeActivationData?: OMMarkerData;
   activeActivationTTLMarker?: OMMarkerComponent;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
 

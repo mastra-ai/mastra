@@ -11,6 +11,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
+import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
@@ -134,9 +135,16 @@ export function getCurrentModel(model?: { provider?: string; modelId?: string })
 
 export { didProviderChange } from './model-context';
 
-function parseActivationTTL(value: number | string | false | undefined, fieldPath: string): number | undefined {
+function parseActivationTTL(
+  value: number | string | false | undefined,
+  fieldPath: string,
+): number | 'auto' | undefined {
   if (value === undefined || value === false) {
     return undefined;
+  }
+
+  if (value === 'auto') {
+    return value;
   }
 
   if (typeof value === 'number') {
@@ -3163,7 +3171,7 @@ ${formattedMessages}
           record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
         ));
 
-      const activateAfterIdle = this.observationConfig.activateAfterIdle;
+      const activateAfterIdle = resolveActivationTTL(this.observationConfig.activateAfterIdle, opts.currentModel);
       const lastActivityAt = getLastActivityFromMessages(thresholdMessages);
       const ttlExpiredMs =
         activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;

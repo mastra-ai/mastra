@@ -10,6 +10,7 @@ import type { z } from 'zod';
 
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
@@ -62,6 +63,8 @@ export interface SerializableModelConfig {
     presencePenalty?: number;
     [key: string]: unknown;
   };
+  /** Provider-specific options for the model call */
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -154,6 +157,8 @@ export interface SerializableDurableOptions {
   returnScorerData?: boolean;
   /** Whether error processors are configured (flag only, instances are non-serializable) */
   hasErrorProcessors?: boolean;
+  /** Provider-specific options passed to the language model */
+  providerOptions?: ProviderOptions;
   /** Structured output configuration */
   structuredOutput?: SerializableStructuredOutput;
   /** When true, the background task check step skips its in-loop wait (external driver handles continuation) */

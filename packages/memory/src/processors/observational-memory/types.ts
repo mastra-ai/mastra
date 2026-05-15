@@ -50,7 +50,8 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | false;
+export type ActivationTTL = number | string | 'auto' | false;
+export type ResolvedActivationTTL = number | 'auto';
 
 /**
  * Configuration for the observation step (Observer agent).
@@ -312,12 +313,13 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
-  activateAfterIdle?: number;
+  activateAfterIdle?: ResolvedActivationTTL;
 }
 
 export interface ObservationModelContext {
   provider?: string;
   modelId?: string;
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -930,8 +932,8 @@ export interface ResolvedObservationConfig {
   bufferTokens?: number;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
-  /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: number;
+  /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
@@ -955,8 +957,8 @@ export interface ResolvedReflectionConfig {
   providerOptions: ProviderOptions;
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
-  /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: number;
+  /** Time in milliseconds, or auto provider-aware TTL, before buffered reflections are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */
