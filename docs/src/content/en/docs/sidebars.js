@@ -615,12 +615,12 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/bridges/datadog',
+                  id: 'observability/integrations/bridges/datadog',
                   label: 'Datadog',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/bridges/otel',
+                  id: 'observability/integrations/bridges/otel',
                   label: 'OpenTelemetry',
                 },
               ],
@@ -631,62 +631,62 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/mastra-storage',
+                  id: 'observability/integrations/exporters/mastra-storage',
                   label: 'Mastra Storage',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/mastra-platform',
+                  id: 'observability/integrations/exporters/mastra-platform',
                   label: 'Mastra platform',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/arize',
+                  id: 'observability/integrations/exporters/arize',
                   label: 'Arize',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/arthur',
+                  id: 'observability/integrations/exporters/arthur',
                   label: 'Arthur',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/braintrust',
+                  id: 'observability/integrations/exporters/braintrust',
                   label: 'Braintrust',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/datadog',
+                  id: 'observability/integrations/exporters/datadog',
                   label: 'Datadog',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/laminar',
+                  id: 'observability/integrations/exporters/laminar',
                   label: 'Laminar',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/langfuse',
+                  id: 'observability/integrations/exporters/langfuse',
                   label: 'Langfuse',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/langsmith',
+                  id: 'observability/integrations/exporters/langsmith',
                   label: 'LangSmith',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/otel',
+                  id: 'observability/integrations/exporters/otel',
                   label: 'OpenTelemetry',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/posthog',
+                  id: 'observability/integrations/exporters/posthog',
                   label: 'PostHog',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/sentry',
+                  id: 'observability/integrations/exporters/sentry',
                   label: 'Sentry',
                 },
               ],
@@ -697,7 +697,7 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/processors/sensitive-data-filter',
+                  id: 'observability/integrations/processors/sensitive-data-filter',
                   label: 'SensitiveDataFilter',
                 },
               ],

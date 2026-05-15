@@ -369,7 +369,7 @@ const result = await agent.generate([{ role: 'user', content: 'Sensitive operati
 
 :::tip
 
-For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
 
 :::
 
@@ -461,7 +461,7 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in Processors
 
-- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
+- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
 
 #### Creating Custom Processors
 
@@ -945,7 +945,7 @@ Mastra automatically creates spans for:
 - [Arize](/reference/observability/tracing/exporters/arize): Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
 - [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
-- [MLflow](/docs/observability/tracing/exporters/otel#mlflow): MLflow OTLP endpoint setup
+- [MLflow](/docs/observability/integrations/exporters/otel#mlflow): MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/observability/tracing/exporters/otel): OTEL-compatible platforms
 
 ### Bridges
@@ -954,4 +954,4 @@ Mastra automatically creates spans for:
 
 ### Processors
 
-- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter): Data redaction
+- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter): Data redaction
