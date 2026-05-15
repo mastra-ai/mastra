@@ -1,11 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { z } from 'zod/v4';
-
 import type { Agent } from '@mastra/core/agent';
-import { createSignal, isMastraSignalMessage, mastraDBMessageToSignal } from '@mastra/core/signals';
-import type { CreatedAgentSignal } from '@mastra/core/signals';
 import { BaseProcessor } from '@mastra/core/processors';
 import type {
   ProcessInputStepArgs,
@@ -14,7 +10,10 @@ import type {
   ProcessOutputStepArgs,
 } from '@mastra/core/processors';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
+import type { CreatedAgentSignal } from '@mastra/core/signals';
+import { createSignal, isMastraSignalMessage, mastraDBMessageToSignal } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
+import { z } from 'zod/v4';
 
 import type { GithubNotificationPoller } from './notification-poller.js';
 import type { GithubInboxNotification } from './notification-store.js';
@@ -26,6 +25,8 @@ const GITHUB_UNSUBSCRIBE_SIGNAL = 'github-pr-unsubscribe';
 const GITHUB_CI_FAILURE_SIGNAL = 'github-ci-failure';
 const GITHUB_COMMENT_SIGNAL = 'github-comment';
 const GITHUB_REVIEW_SIGNAL = 'github-review';
+const GITHUB_PR_MERGED_SIGNAL = 'github-pr-merged';
+const GITHUB_PR_CLOSED_SIGNAL = 'github-pr-closed';
 const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
 const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
@@ -94,6 +95,7 @@ export interface GithubSignalsAddAgentOptions {
 export interface GithubSignalsInitOptions {
   memory: GithubSignalsMemory;
   resourceId?: string;
+  threadId?: string;
 }
 
 interface GithubSignalsMemory {
@@ -129,7 +131,7 @@ export interface GithubPRSignalInput {
 }
 
 export interface GithubPRNotificationInput extends GithubPRSignalInput {
-  kind: 'ci-failure' | 'comment' | 'review' | 'command-error';
+  kind: 'ci-failure' | 'comment' | 'review' | 'pr-merged' | 'pr-closed' | 'command-error';
   title: string;
   details: string;
   url?: string;
@@ -188,6 +190,7 @@ interface PendingGithubNotificationBucket {
   firstQueuedAt: string;
   lastQueuedAt: string;
   noticeSent: boolean;
+  acknowledgeAfterDelivery?: ActiveSubscription;
 }
 
 interface GithubPRSnapshot {
@@ -328,6 +331,8 @@ function getGithubReminderType(kind: GithubPRNotificationInput['kind']): string 
   if (kind === 'ci-failure') return GITHUB_CI_FAILURE_SIGNAL;
   if (kind === 'comment') return GITHUB_COMMENT_SIGNAL;
   if (kind === 'review') return GITHUB_REVIEW_SIGNAL;
+  if (kind === 'pr-merged') return GITHUB_PR_MERGED_SIGNAL;
+  if (kind === 'pr-closed') return GITHUB_PR_CLOSED_SIGNAL;
   return GITHUB_COMMAND_ERROR_SIGNAL;
 }
 
@@ -349,6 +354,11 @@ function getCommandErrorMessage(error: unknown) {
 
 function isGithubRateLimitError(message: string) {
   return /API rate limit exceeded|rate limit exceeded|HTTP 403/i.test(message);
+}
+
+function isSqliteBusyError(error: unknown): boolean {
+  const message = getCommandErrorMessage(error);
+  return /SQLITE_BUSY|database is locked|database table is locked/i.test(message);
 }
 
 function getCommandErrorFingerprint(message: string) {
@@ -408,6 +418,28 @@ function getLatestTimestamp<T>(items: T[], getTimestamp: (item: T) => string | u
     .filter((value): value is string => !!value)
     .sort()
     .at(-1);
+}
+
+function getCachedNotificationDeliveryKey(notification: GithubInboxNotification) {
+  return notification.latestCommentUrl ?? notification.updatedAt;
+}
+
+function getCachedCheckDeliveryKey(notification: GithubInboxNotification, checkFingerprint: string) {
+  return `checks:${checkFingerprint}:${notification.updatedAt}`;
+}
+
+function getCachedPrStateDeliveryKey(notification: GithubInboxNotification) {
+  const state = notification.prMerged ? 'merged' : notification.prState?.toLowerCase();
+  return `pr-state:${state}:${notification.prMergedAt ?? notification.prClosedAt ?? notification.updatedAt}`;
+}
+
+function hasNewFailedCheckFingerprint(notification: GithubInboxNotification, subscription: ActiveSubscription) {
+  if (!notification.failedChecks?.length) return false;
+  return getFailedChecksFingerprint(notification.failedChecks) !== subscription.lastCheckFingerprint;
+}
+
+function hasClosedPrState(notification: GithubInboxNotification) {
+  return notification.prState?.toLowerCase() === 'closed';
 }
 
 function summarizeText(value: string | undefined, fallback: string) {
@@ -470,6 +502,34 @@ export class GithubSignals {
 
   async init(options: GithubSignalsInitOptions) {
     const subscriptions: GithubPRSubscriptionMetadata[] = [];
+    const hydrateThread = async (thread: GithubSignalsThread) => {
+      const metadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
+      const baselinedSubscriptions = await Promise.all(
+        Object.entries(metadata.subscriptions).map(async ([key, subscription]) => [
+          key,
+          await this.baselineSubscription(subscription),
+        ]),
+      );
+      if (baselinedSubscriptions.length === 0) return;
+
+      metadata.subscriptions = Object.fromEntries(baselinedSubscriptions);
+      const persistence = this.#createSubscriptionPersistence(options.memory, thread);
+      for (const subscription of Object.values(metadata.subscriptions)) {
+        subscriptions.push(subscription);
+        this.addSubscription(subscription, persistence);
+      }
+
+      await this.#persistThreadSubscriptions(options.memory, thread, metadata.subscriptions);
+    };
+
+    if (options.threadId) {
+      const thread = options.memory.getThreadById
+        ? await options.memory.getThreadById({ threadId: options.threadId, resourceId: options.resourceId ?? '' })
+        : undefined;
+      if (thread) await hydrateThread(thread);
+      return subscriptions;
+    }
+
     let page = 0;
 
     do {
@@ -480,23 +540,7 @@ export class GithubSignals {
       });
 
       for (const thread of result.threads) {
-        const metadata = getGithubSignalsMetadata(thread.metadata as ThreadMetadata | undefined);
-        const baselinedSubscriptions = await Promise.all(
-          Object.entries(metadata.subscriptions).map(async ([key, subscription]) => [
-            key,
-            await this.baselineSubscription(subscription, { force: true }),
-          ]),
-        );
-        if (baselinedSubscriptions.length === 0) continue;
-
-        metadata.subscriptions = Object.fromEntries(baselinedSubscriptions);
-        const persistence = this.#createSubscriptionPersistence(options.memory, thread);
-        for (const subscription of Object.values(metadata.subscriptions)) {
-          subscriptions.push(subscription);
-          this.addSubscription(subscription, persistence);
-        }
-
-        await this.#persistThreadSubscriptions(options.memory, thread, metadata.subscriptions);
+        await hydrateThread(thread);
       }
 
       page += 1;
@@ -581,7 +625,11 @@ export class GithubSignals {
   ): Promise<GithubPRSubscriptionMetadata> {
     if (
       !options.force &&
-      (subscription.lastCheckFingerprint || subscription.lastCommentTimestamp || subscription.lastReviewTimestamp)
+      (subscription.lastCheckFingerprint ||
+        subscription.lastCommentTimestamp ||
+        subscription.lastReviewTimestamp ||
+        subscription.lastNotificationUpdatedAt ||
+        (subscription.seenNotificationIds?.length ?? 0) > 0)
     ) {
       return subscription;
     }
@@ -643,7 +691,7 @@ export class GithubSignals {
         try {
           await this.#notificationPoller.poll();
         } catch (error) {
-          sharedInboxError = error;
+          if (!isSqliteBusyError(error)) sharedInboxError = error;
         }
       }
 
@@ -709,7 +757,7 @@ export class GithubSignals {
       const snapshot = await this.#loadPullRequestSnapshot(subscription);
       await this.#emitSnapshotNotifications(registeredAgent, subscription, snapshot);
     } catch (error) {
-      await this.#emitCommandError(registeredAgent, subscription, error);
+      if (!isSqliteBusyError(error)) await this.#emitCommandError(registeredAgent, subscription, error);
     }
   }
 
@@ -768,23 +816,52 @@ export class GithubSignals {
   ) {
     const seenIds = new Set(subscription.seenNotificationIds ?? []);
     const unseen = notifications.filter(notification => {
-      if (seenIds.has(notification.id)) return false;
+      if (hasNewFailedCheckFingerprint(notification, subscription)) return true;
+      if (hasClosedPrState(notification)) return true;
       if (!subscription.lastNotificationUpdatedAt) return true;
       return new Date(notification.updatedAt).getTime() > new Date(subscription.lastNotificationUpdatedAt).getTime();
     });
 
+    let queuedDelivery = false;
     for (const notification of unseen) {
+      if (notification.failedChecks?.length) {
+        const delivery = await this.#emitCachedCheckNotification(registeredAgent, subscription, notification);
+        if (delivery === 'queued') queuedDelivery = true;
+      }
+
+      const stateDelivery = await this.#emitCachedPrStateNotification(registeredAgent, subscription, notification);
+      if (stateDelivery === 'queued') queuedDelivery = true;
+      if (stateDelivery !== 'skipped') continue;
+
+      if (!isActionableCachedNotification(notification)) continue;
+
+      const claimed = await this.#notificationPoller?.store.claimNotificationDelivery({
+        accountKey: this.#notificationPoller.accountKey,
+        resourceId: subscription.resourceId,
+        threadId: subscription.threadId,
+        repo: notification.repo,
+        prNumber: notification.prNumber,
+        notificationId: notification.id,
+        notificationUpdatedAt: getCachedNotificationDeliveryKey(notification),
+      });
+      if (claimed === false) continue;
+
       await this.#handleNotification(registeredAgent, subscription, {
         kind: 'comment',
         title: notification.title,
-        details: notification.reason
-          ? `GitHub notification (${notification.reason}): ${notification.title}`
-          : `GitHub notification: ${notification.title}`,
-        url: notification.latestCommentUrl ?? notification.subjectUrl ?? notification.url,
+        details: summarizeText(
+          notification.commentBody,
+          notification.reason
+            ? `GitHub notification (${notification.reason}): ${notification.title}`
+            : `GitHub notification: ${notification.title}`,
+        ),
+        url:
+          notification.commentHtmlUrl ?? notification.latestCommentUrl ?? notification.subjectUrl ?? notification.url,
+        user: notification.commentAuthor,
       });
     }
 
-    if (notifications.length > 0) {
+    if (notifications.length > 0 && !queuedDelivery) {
       subscription.lastNotificationUpdatedAt = getLatestTimestamp(
         notifications,
         notification => notification.updatedAt,
@@ -800,26 +877,129 @@ export class GithubSignals {
     }
   }
 
+  async #emitCachedPrStateNotification(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: ActiveSubscription,
+    notification: GithubInboxNotification,
+  ): Promise<'sent' | 'queued' | 'skipped'> {
+    if (notification.prState?.toLowerCase() !== 'closed') return 'skipped';
+
+    const kind = notification.prMerged ? 'pr-merged' : 'pr-closed';
+    const claimed = await this.#notificationPoller?.store.claimNotificationDelivery({
+      accountKey: this.#notificationPoller.accountKey,
+      resourceId: subscription.resourceId,
+      threadId: subscription.threadId,
+      repo: notification.repo,
+      prNumber: notification.prNumber,
+      notificationId: notification.id,
+      notificationUpdatedAt: getCachedPrStateDeliveryKey(notification),
+    });
+    if (claimed === false) return 'skipped';
+
+    const delivery = await this.#handleNotification(registeredAgent, subscription, {
+      kind,
+      title: notification.prMerged ? 'GitHub PR merged' : 'GitHub PR closed',
+      details: notification.prMerged
+        ? `PR #${notification.prNumber} was merged: ${notification.title}`
+        : `PR #${notification.prNumber} was closed without merge: ${notification.title}`,
+      url: notification.prHtmlUrl ?? notification.subjectUrl ?? notification.url,
+    });
+    return delivery === 'queued' ? 'queued' : 'sent';
+  }
+
+  async #emitCachedCheckNotification(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: ActiveSubscription,
+    notification: GithubInboxNotification,
+  ): Promise<'sent' | 'queued' | 'skipped'> {
+    const sortedChecks = [...(notification.failedChecks ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+    const checkFingerprint = getFailedChecksFingerprint(sortedChecks);
+    if (sortedChecks.length === 0 || checkFingerprint === subscription.lastCheckFingerprint) return 'skipped';
+
+    const acknowledgedSubscription: ActiveSubscription = {
+      ...subscription,
+      lastCheckFingerprint: checkFingerprint,
+      lastErrorFingerprint: undefined,
+      updatedAt: this.#options.now().toISOString(),
+    };
+
+    if (!this.#activeThreads.has(activeThreadKey(subscription))) {
+      const claimed = await this.#notificationPoller?.store.claimNotificationDelivery({
+        accountKey: this.#notificationPoller.accountKey,
+        resourceId: subscription.resourceId,
+        threadId: subscription.threadId,
+        repo: notification.repo,
+        prNumber: notification.prNumber,
+        notificationId: notification.id,
+        notificationUpdatedAt: getCachedCheckDeliveryKey(notification, checkFingerprint),
+      });
+      if (claimed === false) return 'skipped';
+    }
+
+    const delivery = await this.#handleNotification(
+      registeredAgent,
+      subscription,
+      {
+        kind: 'ci-failure',
+        title: `GitHub CI failure`,
+        details: sortedChecks
+          .map(check => `- ${check.name}: ${check.status}${check.url ? ` (${check.url})` : ''}`)
+          .join('\n'),
+        url: sortedChecks.find(check => check.url)?.url,
+        checkCount: sortedChecks.length,
+      },
+      acknowledgedSubscription,
+    );
+    if (delivery === 'queued') return 'queued';
+
+    Object.assign(subscription, acknowledgedSubscription);
+    this.#activeSubscriptions.set(subscription.key, acknowledgedSubscription);
+    await subscription.persistence?.update(acknowledgedSubscription);
+    return 'sent';
+  }
+
+  async #emitCheckNotifications(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: ActiveSubscription,
+    failedChecks: GithubPRSnapshot['failedChecks'],
+  ) {
+    const sortedChecks = failedChecks.sort((a, b) => a.name.localeCompare(b.name));
+    const checkFingerprint = getFailedChecksFingerprint(sortedChecks);
+    if (sortedChecks.length === 0 || checkFingerprint === subscription.lastCheckFingerprint) return 'skipped';
+
+    const acknowledgedSubscription: ActiveSubscription = {
+      ...subscription,
+      lastCheckFingerprint: checkFingerprint,
+      lastErrorFingerprint: undefined,
+      updatedAt: this.#options.now().toISOString(),
+    };
+    const delivery = await this.#handleNotification(
+      registeredAgent,
+      subscription,
+      {
+        kind: 'ci-failure',
+        title: `GitHub CI failure`,
+        details: sortedChecks
+          .map(check => `- ${check.name}: ${check.status}${check.url ? ` (${check.url})` : ''}`)
+          .join('\n'),
+        url: sortedChecks.find(check => check.url)?.url,
+        checkCount: sortedChecks.length,
+      },
+      acknowledgedSubscription,
+    );
+    if (delivery === 'queued') return;
+
+    Object.assign(subscription, acknowledgedSubscription);
+    this.#activeSubscriptions.set(subscription.key, acknowledgedSubscription);
+    await subscription.persistence?.update(acknowledgedSubscription);
+  }
+
   async #emitSnapshotNotifications(
     registeredAgent: RegisteredGithubAgent,
     subscription: ActiveSubscription,
     snapshot: GithubPRSnapshot,
   ) {
-    const failedChecks = snapshot.failedChecks.sort((a, b) => a.name.localeCompare(b.name));
-    const checkFingerprint = getFailedChecksFingerprint(failedChecks);
-    if (failedChecks.length > 0 && checkFingerprint !== subscription.lastCheckFingerprint) {
-      await this.#handleNotification(registeredAgent, subscription, {
-        kind: 'ci-failure',
-        title: `GitHub CI failure`,
-        details: failedChecks
-          .map(check => `- ${check.name}: ${check.status}${check.url ? ` (${check.url})` : ''}`)
-          .join('\n'),
-        url: failedChecks.find(check => check.url)?.url,
-        checkCount: failedChecks.length,
-      });
-      subscription.lastCheckFingerprint = checkFingerprint;
-      subscription.lastErrorFingerprint = undefined;
-    }
+    await this.#emitCheckNotifications(registeredAgent, subscription, snapshot.failedChecks);
 
     const newComments = snapshot.comments.filter(comment =>
       isAfterTimestamp(comment.createdAt, subscription.lastCommentTimestamp),
@@ -920,19 +1100,22 @@ export class GithubSignals {
     registeredAgent: RegisteredGithubAgent,
     subscription: ActiveSubscription,
     notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
-  ) {
+    acknowledgeAfterDelivery?: ActiveSubscription,
+  ): Promise<'sent' | 'queued'> {
     if (!this.#activeThreads.has(activeThreadKey(subscription))) {
       await this.#sendNotification(registeredAgent, subscription, notification);
-      return;
+      return 'sent';
     }
 
-    await this.#queuePendingNotification(registeredAgent, subscription, notification);
+    await this.#queuePendingNotification(registeredAgent, subscription, notification, acknowledgeAfterDelivery);
+    return 'queued';
   }
 
   async #queuePendingNotification(
     registeredAgent: RegisteredGithubAgent,
     subscription: ActiveSubscription,
     notification: Omit<GithubPRNotificationInput, 'repo' | 'prNumber'>,
+    acknowledgeAfterDelivery?: ActiveSubscription,
   ) {
     const key = subscription.key;
     const queuedAt = this.#options.now().toISOString();
@@ -946,6 +1129,7 @@ export class GithubSignals {
     };
 
     bucket.subscription = { ...subscription };
+    if (acknowledgeAfterDelivery) bucket.acknowledgeAfterDelivery = { ...acknowledgeAfterDelivery };
     bucket.notifications.push({ notification, queuedAt });
     bucket.lastQueuedAt = queuedAt;
     this.#pendingNotifications.set(key, bucket);
@@ -988,14 +1172,15 @@ export class GithubSignals {
     await result.started;
   }
 
+  countPendingNotifications(filter: ActiveThreadContext & { repo?: string; prNumber?: number }) {
+    return this.#getPendingNotificationBuckets(filter).reduce(
+      (count, [, bucket]) => count + bucket.notifications.length,
+      0,
+    );
+  }
+
   async deliverPendingNotifications(filter: ActiveThreadContext & { repo?: string; prNumber?: number }) {
-    const buckets = [...this.#pendingNotifications.entries()].filter(([, bucket]) => {
-      const subscription = bucket.subscription;
-      if (activeThreadKey(subscription) !== activeThreadKey(filter)) return false;
-      if (filter.repo && subscription.repo !== filter.repo) return false;
-      if (filter.prNumber && subscription.prNumber !== filter.prNumber) return false;
-      return bucket.notifications.length > 0;
-    });
+    const buckets = this.#getPendingNotificationBuckets(filter);
 
     for (const [key, bucket] of buckets) {
       const registeredAgent = this.#agents.get(bucket.subscription.agentId);
@@ -1003,8 +1188,30 @@ export class GithubSignals {
       for (const pending of bucket.notifications) {
         await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
       }
+      await this.#acknowledgePendingDelivery(bucket);
       this.#pendingNotifications.delete(key);
     }
+
+    return buckets.reduce((count, [, bucket]) => count + bucket.notifications.length, 0);
+  }
+
+  #getPendingNotificationBuckets(filter: ActiveThreadContext & { repo?: string; prNumber?: number }) {
+    return [...this.#pendingNotifications.entries()].filter(([, bucket]) => {
+      const subscription = bucket.subscription;
+      if (activeThreadKey(subscription) !== activeThreadKey(filter)) return false;
+      if (filter.repo && subscription.repo !== filter.repo) return false;
+      if (filter.prNumber && subscription.prNumber !== filter.prNumber) return false;
+      return bucket.notifications.length > 0;
+    });
+  }
+
+  async #acknowledgePendingDelivery(bucket: PendingGithubNotificationBucket) {
+    const acknowledgedSubscription = bucket.acknowledgeAfterDelivery;
+    if (!acknowledgedSubscription) return;
+
+    this.#activeSubscriptions.set(acknowledgedSubscription.key, acknowledgedSubscription);
+    bucket.subscription = { ...acknowledgedSubscription };
+    await acknowledgedSubscription.persistence?.update(acknowledgedSubscription);
   }
 
   async #flushExpiredPendingNotifications() {
@@ -1019,6 +1226,7 @@ export class GithubSignals {
       for (const pending of bucket.notifications) {
         await this.#sendNotification(registeredAgent, bucket.subscription, pending.notification);
       }
+      await this.#acknowledgePendingDelivery(bucket);
       this.#pendingNotifications.delete(key);
     }
   }
@@ -1044,6 +1252,21 @@ export class GithubSignals {
     await result.persisted;
     await result.started;
     return true;
+  }
+
+  async sendSubscriptionChangeSignal(context: ActiveThreadContext, signal: CreatedAgentSignal) {
+    const registeredAgent = this.#agents.get(context.agentId);
+    if (!registeredAgent) return undefined;
+
+    const result = registeredAgent.agent.sendSignal(signal, {
+      resourceId: context.resourceId,
+      threadId: context.threadId,
+      ifIdle: { behavior: 'persist' },
+      ifActive: { behavior: 'deliver' },
+    });
+    await result.persisted;
+    await result.started;
+    return signal;
   }
 
   async #sendNotification(
@@ -1074,6 +1297,17 @@ export class GithubSignals {
     await result.persisted;
     await result.started;
   }
+}
+
+function isActionableCachedNotification(notification: GithubInboxNotification) {
+  if (notification.commentBody || notification.commentAuthor || notification.commentHtmlUrl) {
+    return true;
+  }
+
+  const subjectType = notification.subjectType?.toLowerCase();
+  if (subjectType === 'pullrequest') return false;
+
+  return true;
 }
 
 class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
@@ -1266,6 +1500,11 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
           execute: async ({ action, prNumber, repo }) => {
             const context = this.#getThreadContext(args);
             if (action === 'pending') {
+              const pendingCount = context ? this.#owner.countPendingNotifications({ ...context, repo, prNumber }) : 0;
+              if (pendingCount === 0) {
+                return { success: true, message: 'No pending GitHub notifications.' };
+              }
+
               if (context) {
                 const timeout = setTimeout(() => {
                   void this.#owner.deliverPendingNotifications({ ...context, repo, prNumber });
@@ -1283,7 +1522,9 @@ class GithubSignalsProcessor extends BaseProcessor<'github-signals'> {
               action === 'subscribe'
                 ? ghSignals.prSubscribe({ prNumber, repo })
                 : ghSignals.prUnsubscribe({ prNumber, repo });
-            const persistedSignal = await args.sendSignal?.(signal);
+            const persistedSignal =
+              (await args.sendSignal?.(signal)) ??
+              (context ? await this.#owner.sendSubscriptionChangeSignal(context, signal) : undefined);
             await this.#applyGithubSignal(args, persistedSignal ?? signal);
             return {
               success: true,

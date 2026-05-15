@@ -406,6 +406,7 @@ describe('createMastraCode', () => {
   });
 
   it('wires GithubSignals into the code agent and exposes deferred startup rehydration', async () => {
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
     const { createMastraCode } = await import('../index.js');
 
     const result = await createMastraCode();
@@ -427,6 +428,7 @@ describe('createMastraCode', () => {
     expect(githubSignalsInitMock).toHaveBeenCalledWith({
       memory: expect.objectContaining({ listThreads: expect.any(Function) }),
       resourceId: expect.any(String),
+      threadId: 'thread-1',
     });
   });
 });

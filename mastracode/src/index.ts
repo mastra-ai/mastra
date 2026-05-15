@@ -18,8 +18,6 @@ import {
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import { defaultGithubCommandRunner, GithubSignals } from './github-signals/index.js';
-import { GithubNotificationPoller } from './github-signals/notification-poller.js';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -43,6 +41,8 @@ import { createDynamicTools } from './agents/tools.js';
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
+import { defaultGithubCommandRunner, GithubSignals } from './github-signals/index.js';
+import { GithubNotificationPoller } from './github-signals/notification-poller.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -338,7 +338,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Agent
   const githubNotificationPoller = new GithubNotificationPoller({ commandRunner: defaultGithubCommandRunner });
-  const githubSignals = new GithubSignals({ notificationPoller: githubNotificationPoller });
+  const githubSignals = new GithubSignals({
+    notificationPoller: githubNotificationPoller,
+    commandRunner: defaultGithubCommandRunner,
+  });
   const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
@@ -644,9 +647,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     getStreamOptions: ({ resourceId, threadId }) => harness.buildSignalStreamOptions({ resourceId, threadId }),
   });
   const initGithubSignals = async () => {
+    const threadId = harness.getCurrentThreadId();
+    if (!threadId) return;
+
     const memoryStore = await storage.getStore('memory');
     if (memoryStore) {
-      await githubSignals.init({ memory: memoryStore, resourceId: project.resourceId });
+      await githubSignals.init({ memory: memoryStore, resourceId: project.resourceId, threadId });
     }
   };
 

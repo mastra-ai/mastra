@@ -37,6 +37,7 @@ function notification(input: Partial<Record<string, unknown>> = {}) {
       url: Object.hasOwn(input, 'subject_url')
         ? input.subject_url
         : 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+      latest_comment_url: input.subject_latest_comment_url,
     },
   };
 }
@@ -63,13 +64,31 @@ describe('GithubNotificationStore', () => {
         }),
       )?.prNumber,
     ).toBe(789);
+    expect(
+      parseGithubNotificationPr(
+        notification({
+          subject_url: undefined,
+          subject_latest_comment_url: 'https://api.github.com/repos/mastra-ai/mastra/issues/790/comments/1',
+        }),
+      )?.prNumber,
+    ).toBe(790);
   });
 
   it('normalizes inbox notifications into bounded PR records', async () => {
     const store = createStore();
     const accountKey = 'account-1';
-    const normalized = normalizeGithubInboxNotification(notification({ id: 'n1' }));
-    expect(normalized).toMatchObject({ id: 'n1', repo: 'mastra-ai/mastra', prNumber: 123 });
+    const normalized = normalizeGithubInboxNotification(
+      notification({
+        id: 'n1',
+        subject_latest_comment_url: 'https://api.github.com/repos/mastra-ai/mastra/issues/comments/1',
+      }),
+    );
+    expect(normalized).toMatchObject({
+      id: 'n1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      latestCommentUrl: 'https://api.github.com/repos/mastra-ai/mastra/issues/comments/1',
+    });
 
     await store.upsertNotifications(accountKey, [normalized!]);
 
@@ -109,6 +128,27 @@ describe('GithubNotificationStore', () => {
     expect(stored).toHaveLength(50);
     expect(stored[0]?.id).toBe('n5');
     expect(stored.at(-1)?.id).toBe('n54');
+  });
+
+  it('claims notification delivery once per thread and notification update', async () => {
+    const url = createTestDbUrl();
+    const first = createStore(undefined, url);
+    const second = createStore(undefined, url);
+    const claim = {
+      accountKey: 'account-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      notificationId: 'notification-1',
+      notificationUpdatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    await expect(first.claimNotificationDelivery(claim)).resolves.toBe(true);
+    await expect(second.claimNotificationDelivery(claim)).resolves.toBe(false);
+    await expect(
+      second.claimNotificationDelivery({ ...claim, notificationUpdatedAt: '2026-01-01T00:01:00.000Z' }),
+    ).resolves.toBe(true);
   });
 
   it('uses the account table as a master lease', async () => {
