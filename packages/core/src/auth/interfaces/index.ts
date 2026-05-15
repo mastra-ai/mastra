@@ -8,7 +8,7 @@
  */
 
 // User
-export type { User, IUserProvider } from './user';
+export type { User, IUserProvider, IUserListing, ListUsersOptions, ListUsersResult } from './user';
 
 // Session management
 export type { Session, ISessionProvider } from './session';
