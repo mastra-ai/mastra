@@ -99,9 +99,7 @@ describe('setupKeyboardShortcuts', () => {
       { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
       { name: 'ship', description: 'Ship release', template: '', sourcePath: '' },
     ];
-    state.skillCommands = [
-      { name: 'lint-fix', description: 'Fix lint issues', path: '/skills/lint-fix' },
-    ];
+    state.skillCommands = [{ name: 'lint-fix', description: 'Fix lint issues', path: '/skills/lint-fix' }];
     state.goalSkillCommands = [
       { name: 'review', description: 'Review code', path: '/skills/review', metadata: { goal: true } },
     ];

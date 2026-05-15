@@ -80,11 +80,7 @@ export async function handleSkillsCommand(ctx: SlashCommandContext): Promise<voi
   }
 }
 
-export async function handleSkillCommand(
-  ctx: SlashCommandContext,
-  skillName: string,
-  args: string[],
-): Promise<void> {
+export async function handleSkillCommand(ctx: SlashCommandContext, skillName: string, args: string[]): Promise<void> {
   const normalizedSkillName = skillName.trim();
   if (!normalizedSkillName) {
     ctx.showError('Usage: /skill:<name>');
@@ -134,6 +130,8 @@ export async function handleSkillCommand(
       content: `<skill name="${skill.name}">\n${content}\n</skill>`,
     });
   } catch (error) {
-    ctx.showError(`Error executing /skill:${normalizedSkillName}: ${error instanceof Error ? error.message : String(error)}`);
+    ctx.showError(
+      `Error executing /skill:${normalizedSkillName}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
