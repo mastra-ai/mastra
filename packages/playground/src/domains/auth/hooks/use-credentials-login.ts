@@ -59,7 +59,7 @@ export function useCredentialsLogin() {
 
   return useMutation<CredentialsLoginResponse, Error, CredentialsLoginRequest>({
     mutationFn: async ({ email, password }) => {
-      const { baseUrl = '', apiPrefix } = (client as any).options || {};
+      const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = (client as any).options || {};
       const raw = (apiPrefix || '/api').trim();
       const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
@@ -68,6 +68,7 @@ export function useCredentialsLogin() {
         method: 'POST',
         credentials: 'include',
         headers: {
+          ...clientHeaders,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
