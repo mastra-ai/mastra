@@ -123,16 +123,6 @@ function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
   });
 }
 
-// Flatten the canonical parts back to a plain string. Used to recover text for non-user-message
-// signals during rehydration when the round-trip target is a string.
-function partsToText(parts: SignalPart[]): string {
-  return parts
-    .filter((part): part is TextPart => part.type === 'text')
-    .map(part => part.text)
-    .filter(Boolean)
-    .join('\n');
-}
-
 // Narrow a storage parts array down to SignalPart. Signal rows should only ever contain text/file
 // parts (that's what contentsToSignalParts produces), but the storage type permits richer parts —
 // so the read boundary filters defensively.
@@ -204,7 +194,7 @@ function signalToLLMMessage(signal: Pick<AgentSignalInput, 'type' | 'attributes'
     content = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
   } else if (parts.every(part => part.type === 'text')) {
     // Text-only: flatten to one wrapped string.
-    content = signalToXmlMarkup({ ...signal, contents: partsToText(parts) });
+    content = signalToXmlMarkup({ ...signal, contents: parts.map(part => part.text).join('\n') });
   } else {
     // Multimodal: inline-wrap the marker alongside the file/image payload.
     content = injectMarkerInline(signal, parts);
