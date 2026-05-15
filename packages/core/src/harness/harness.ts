@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
-import { createSignal } from '../agent/signals';
+import type { MastraDBMessage } from '../agent/message-list/state/types';
+import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -103,44 +104,25 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
+function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  if (Array.isArray(contents)) {
-    return contents.flatMap((part): HarnessMessageContent[] => {
-      const record = getRecordValue(part);
-      if (!record) {
-        if (typeof part === 'string') return [{ type: 'text', text: part }];
-        return [];
-      }
-      if (record.type === 'text' && typeof record.text === 'string') {
-        return [{ type: 'text', text: record.text }];
-      }
-      if (record.type === 'file' && typeof record.data === 'string') {
-        // Public signal contents and main-era stashes use mediaType (v5). Internal
-        // MastraMessagePart storage rows still carry mimeType (v4 UI part shape).
-        const mediaType =
-          typeof record.mediaType === 'string'
-            ? record.mediaType
-            : typeof record.mimeType === 'string'
-              ? record.mimeType
-              : undefined;
-        if (mediaType === undefined) return [];
-        if (mediaType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType: mediaType }];
-        }
-        return [
-          {
-            type: 'file',
-            data: record.data,
-            mediaType,
-            filename: typeof record.filename === 'string' ? record.filename : undefined,
-          },
-        ];
-      }
-      return [];
-    });
-  }
-  return [];
+  return contents.flatMap((part): HarnessMessageContent[] => {
+    if (part.type === 'text') {
+      return [{ type: 'text', text: part.text }];
+    }
+    if (typeof part.data !== 'string') return [];
+    if (part.mediaType.startsWith('image/')) {
+      return [{ type: 'image', data: part.data, mimeType: part.mediaType }];
+    }
+    return [
+      {
+        type: 'file',
+        data: part.data,
+        mediaType: part.mediaType,
+        filename: part.filename,
+      },
+    ];
+  });
 }
 
 function toSystemReminderContent(
@@ -178,17 +160,23 @@ function toSystemReminderContent(
 
 function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
   const id = getStringValue(payload.id);
-  const contents = payload.contents ?? payload.message;
-  if (!id || contents === undefined) return undefined;
+  const rawContents = payload.contents ?? payload.message;
+  if (!id || rawContents === undefined) return undefined;
 
-  const content = signalContentsToHarnessContent(contents);
+  const signal = createSignal({
+    id,
+    type: 'user-message',
+    contents: rawContents as AgentSignalContents,
+    createdAt: getStringValue(payload.createdAt),
+  });
+  const content = signalContentsToHarnessContent(signal.contents);
   if (content.length === 0) return undefined;
 
   return {
-    id,
+    id: signal.id,
     role: 'user',
     content,
-    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
+    createdAt: signal.createdAt,
   };
 }
 
@@ -1964,55 +1952,45 @@ export class Harness<TState = {}> {
       };
     }
 
-    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
-    // Prefer the legacy metadata.signal.contents stash when present so main-era rows
-    // (which stored the full multimodal payload there and only a flattened text
-    // projection in content.parts) round-trip losslessly. Fall back to content.parts
-    // for post-stash-drop rows, then to plain content.content.
-    const signalSourceContents =
-      signalMetadata?.contents ??
-      (Array.isArray(msg.content.parts) && msg.content.parts.length > 0 ? msg.content.parts : undefined) ??
-      msg.content.content;
-    if (signalMetadata?.type === 'user-message') {
-      const signalContent = signalContentsToHarnessContent(signalSourceContents);
-      if (signalContent.length > 0) {
+    if (msg.role === 'signal') {
+      const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
+
+      if (signal.type === 'user-message') {
+        const signalContent = signalContentsToHarnessContent(signal.contents);
+        if (signalContent.length > 0) {
+          return {
+            id: msg.id,
+            role: 'user',
+            content: signalContent,
+            createdAt: msg.createdAt,
+          };
+        }
+      }
+
+      if (signal.type === 'system-reminder') {
+        const reminder = toSystemReminderContent({
+          type: signal.type,
+          contents:
+            typeof signal.contents === 'string'
+              ? signal.contents
+              : signal.contents
+                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                  .map(p => p.text)
+                  .join('\n'),
+          attributes: signal.attributes ?? msg.content.metadata,
+          metadata: signal.metadata,
+        });
+        if (reminder) {
+          content.push(reminder);
+        }
+
         return {
           id: msg.id,
           role: 'user',
-          content: signalContent,
+          content,
           createdAt: msg.createdAt,
         };
       }
-    }
-
-    if (signalMetadata?.type === 'system-reminder') {
-      const reminder = toSystemReminderContent({
-        type: signalMetadata.type,
-        contents:
-          typeof signalSourceContents === 'string'
-            ? signalSourceContents
-            : Array.isArray(signalSourceContents)
-              ? signalSourceContents
-                  .filter((p): p is { type: 'text'; text: string } => {
-                    const r = getRecordValue(p);
-                    return r?.type === 'text' && typeof r.text === 'string';
-                  })
-                  .map(p => p.text)
-                  .join('\n')
-              : msg.content.content,
-        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
-        metadata: getRecordValue(signalMetadata.metadata),
-      });
-      if (reminder) {
-        content.push(reminder);
-      }
-
-      return {
-        id: msg.id,
-        role: 'user',
-        content,
-        createdAt: msg.createdAt,
-      };
     }
 
     for (const part of msg.content.parts) {
