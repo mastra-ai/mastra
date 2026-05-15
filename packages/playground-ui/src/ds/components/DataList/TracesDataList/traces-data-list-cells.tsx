@@ -41,14 +41,14 @@ export function TracesDataListIdCell({ traceId }: TracesDataListIdCellProps) {
 // ---------------------------------------------------------------------------
 
 export interface TracesDataListKindCellProps {
-  /** `null`/missing → root span (top-level trace). Set → nested branch row. */
+  /** `null`/missing → root span (Trace). Set → nested span (Subtrace). */
   parentSpanId?: string | null;
 }
 
 export function TracesDataListKindCell({ parentSpanId }: TracesDataListKindCellProps) {
   const isRoot = parentSpanId == null;
   const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
-  const label = isRoot ? 'Top-level trace' : 'Nested branch';
+  const label = isRoot ? 'Trace' : 'Subtrace';
   return (
     <DataListCell height="compact" className="flex items-center justify-center">
       <span title={label} aria-label={label} className="inline-flex">
