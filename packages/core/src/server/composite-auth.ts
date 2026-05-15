@@ -50,6 +50,25 @@ export class CompositeAuth
     if (providers.some(provider => typeof provider.mapUserToResourceId === 'function')) {
       this.mapUserToResourceId = user => this.mapAuthenticatedUserToResourceId(user);
     }
+
+    // Null out interface methods when no inner provider supports them.
+    // This ensures duck-typing checks (typeof auth.method === 'function')
+    // accurately reflect the composite's actual capabilities — preventing
+    // Studio from showing login options that no provider can handle.
+    if (!providers.some(isSSOProvider)) {
+      this.getLoginUrl = undefined as any;
+      this.handleCallback = undefined as any;
+      this.getLoginButtonConfig = undefined as any;
+    }
+    if (!providers.some(isSessionProvider)) {
+      this.createSession = undefined as any;
+      this.validateSession = undefined as any;
+      this.getSessionIdFromRequest = undefined as any;
+    }
+    if (!providers.some(isUserProvider)) {
+      this.getCurrentUser = undefined as any;
+      this.getUser = undefined as any;
+    }
   }
 
   // Find first provider implementing an interface
