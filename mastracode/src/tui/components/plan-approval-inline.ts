@@ -55,11 +55,11 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private contentBox: Box;
   private selectList?: SelectList;
   private feedbackInput?: Input;
-  private onApprove: () => void;
-  private onGoal: () => void;
-  private onReject: (feedback?: string) => void;
+  private onApprove?: () => void;
+  private onGoal?: () => void;
+  private onReject?: (feedback?: string) => void;
   private resolved = false;
-  private mode: 'select' | 'feedback' = 'select';
+  private mode: 'streaming' | 'select' | 'feedback' = 'select';
   private planTitle: string;
   private planContent: string;
 
@@ -76,16 +76,61 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
   constructor(options: PlanApprovalInlineOptions, _ui: TUI) {
     super();
+    this.planTitle = options.title;
+    this.planContent = options.plan;
+    this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
+    this.addChild(this.contentBox);
+    this.addChild(new Spacer(1));
+    this.activate(options);
+  }
+
+  static createStreaming(ui: TUI): PlanApprovalInlineComponent {
+    const component = new PlanApprovalInlineComponent(
+      {
+        planId: '',
+        title: 'Untitled plan',
+        plan: '',
+        onApprove: () => {},
+        onGoal: () => {},
+        onReject: () => {},
+      },
+      ui,
+    );
+    component.mode = 'streaming';
+    component.resolved = false;
+    component.renderStreaming();
+    return component;
+  }
+
+  activate(options: PlanApprovalInlineOptions): void {
     this.onApprove = options.onApprove;
     this.onGoal = options.onGoal;
     this.onReject = options.onReject;
     this.planTitle = options.title;
     this.planContent = options.plan;
+    this.mode = 'select';
+    this.resolved = false;
+    this.renderSelectable();
+  }
 
-    this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
-    this.addChild(this.contentBox);
-    this.addChild(new Spacer(1));
+  updateArgs(args: unknown): void {
+    if (!args || typeof args !== 'object' || this.resolved) return;
+    const partial = args as { title?: unknown; plan?: unknown };
+    if (typeof partial.title === 'string') {
+      this.planTitle = partial.title || 'Untitled plan';
+    }
+    if (typeof partial.plan === 'string') {
+      this.planContent = partial.plan;
+    }
+    if (this.mode === 'streaming') {
+      this.renderStreaming();
+    }
+  }
 
+  private renderSelectable(): void {
+    this.contentBox.clear();
+    this.selectList = undefined;
+    this.feedbackInput = undefined;
     this.renderPlanHeader();
     this.renderPlanContent();
 
@@ -120,6 +165,15 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(this.selectList);
     this.contentBox.addChild(new Spacer(1));
     this.contentBox.addChild(new Text(theme.fg('dim', 'Up/Down navigate  Enter select  Esc reject'), 0, 0));
+  }
+
+  private renderStreaming(): void {
+    this.contentBox.clear();
+    this.selectList = undefined;
+    this.feedbackInput = undefined;
+    this.renderPlanHeader();
+    this.renderPlanContent();
+    this.contentBox.addChild(new Text(theme.fg('dim', 'Submitting plan…'), 0, 0));
   }
 
   private renderPlanHeader(prefix = ''): void {
@@ -161,21 +215,21 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     if (this.resolved) return;
     this.resolved = true;
     this.showResult('Approved', true);
-    this.onApprove();
+    this.onApprove?.();
   }
 
   private handleGoal(): void {
     if (this.resolved) return;
     this.resolved = true;
     this.showResult('Set as goal', true);
-    this.onGoal();
+    this.onGoal?.();
   }
 
   private handleReject(feedback?: string): void {
     if (this.resolved) return;
     this.resolved = true;
     this.showResult(feedback ? 'Changes requested' : 'Rejected', false, feedback);
-    this.onReject(feedback);
+    this.onReject?.(feedback);
   }
 
   private switchToFeedbackMode(): void {
@@ -210,10 +264,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.clear();
 
     const icon = isApproved ? theme.fg('success', '✓') : theme.fg('error', '✗');
-    this.renderPlanHeader(`${icon} `);
-    this.contentBox.addChild(new Text(theme.fg('dim', status), 0, 0));
-    this.contentBox.addChild(new Spacer(1));
+    this.renderPlanHeader();
     this.renderPlanContent();
+    this.contentBox.addChild(new Text(`${icon} ${theme.fg('dim', status)}`, 0, 0));
+    this.contentBox.addChild(new Spacer(1));
     this.renderFeedback(feedback);
   }
 
@@ -254,11 +308,11 @@ export class PlanResultComponent extends Container {
     const icon = options.isApproved ? theme.fg('success', '✓') : theme.fg('error', '✗');
     const status = options.isApproved ? 'Approved' : options.feedback ? 'Changes requested' : 'Rejected';
 
-    contentBox.addChild(
-      new Text(`${icon} ${theme.bold(theme.fg('accent', `Plan: ${options.title}`))} ${theme.fg('dim', `— ${status}`)}`, 0, 0),
-    );
+    contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${options.title}`)), 0, 0));
     contentBox.addChild(new Spacer(1));
     contentBox.addChild(new PlanContentBox(options.plan));
+    contentBox.addChild(new Spacer(1));
+    contentBox.addChild(new Text(`${icon} ${theme.fg('dim', status)}`, 0, 0));
     contentBox.addChild(new Spacer(1));
 
     if (options.feedback) {

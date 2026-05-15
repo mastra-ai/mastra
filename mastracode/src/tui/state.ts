@@ -156,7 +156,8 @@ export interface TUIState {
   pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
-  lastSubmitPlanComponent?: IToolExecutionComponent;
+  lastSubmitPlanComponent?: Component;
+  pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -273,6 +274,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Inline interaction
     lastClearedText: '',
     pendingAskUserComponents: new Map(),
+    pendingSubmitPlanComponents: new Map(),
     pendingInlineQuestions: [],
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],

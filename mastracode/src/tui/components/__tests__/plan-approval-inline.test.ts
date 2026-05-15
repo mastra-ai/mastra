@@ -82,12 +82,13 @@ describe('PlanApprovalInlineComponent', () => {
     });
 
     const lines = component.render(80);
-    const headerIndex = lines.findIndex(line => line.includes('Changes requested'));
+    const statusIndex = lines.findIndex(line => line.includes('Changes requested'));
     const planLineIndex = lines.findIndex(line => line.includes('Build the feature'));
     const feedbackLineIndex = lines.findIndex(line => line.includes('Requested changes: Add verification steps'));
 
-    expect(headerIndex).toBeGreaterThan(-1);
-    expect(planLineIndex).toBeGreaterThan(headerIndex);
-    expect(feedbackLineIndex).toBeGreaterThan(planLineIndex);
+    expect(statusIndex).toBeGreaterThan(-1);
+    expect(planLineIndex).toBeGreaterThan(-1);
+    expect(statusIndex).toBeGreaterThan(planLineIndex);
+    expect(feedbackLineIndex).toBeGreaterThan(statusIndex);
   });
 });
