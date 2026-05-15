@@ -7,18 +7,18 @@ packages:
 
 # Integrations overview
 
-Mastra observability integrations control where observability data goes and how it is transformed on the way out. Use integrations to store data locally, send it to Mastra platform, connect to external observability providers, or redact exported span data.
+Mastra observability integrations control where observability data goes and how it is transformed on the way out. Use integrations to store data in Mastra storage, send it to Mastra platform, connect to external observability providers, or redact exported span data.
 
 ## When to use integrations
 
-- Keep local observability available in Studio with `MastraStorageExporter`.
+- Keep observability available in Studio with `MastraStorageExporter`.
 - Send hosted observability data to Mastra platform with `MastraPlatformExporter`.
 - Forward traces to external providers such as Datadog, Langfuse, or OpenTelemetry backends.
 - Redact sensitive values before they leave the runtime.
 
 ## Choose an integration path
 
-- Local Studio workflow: Start with [Mastra Storage](/docs/observability/integrations/exporters/mastra-storage).
+- Studio workflow: Start with [Mastra Storage](/docs/observability/integrations/exporters/mastra-storage).
 - Hosted Mastra workflow: Add [Mastra platform](/docs/observability/integrations/exporters/mastra-platform).
 - External observability stack: Choose one or more exporter pages under the sidebar `Exporters` section.
 - Existing distributed trace context: Use a bridge, then add exporters as needed.

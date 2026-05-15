@@ -9,14 +9,14 @@ packages:
 
 Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
-Unlike the shared setup pages under observability, this page focuses on trace-specific concepts: span hierarchy, sampling, metadata, filtering, trace IDs, and external trace context.
+This page focuses on trace-specific concepts: span hierarchy, sampling, metadata, filtering, trace IDs, and third-party trace context.
 
 ## When to use tracing
 
 - Debug unexpected agent or workflow behavior by inspecting the full execution path.
 - Follow model calls, tool calls, and workflow steps inside a single request.
 - Attach trace-specific metadata and tags for filtering and investigation.
-- Connect Mastra traces to an existing distributed tracing system.
+- Connect Mastra traces to a third-party tracing system.
 
 ## Get started
 
@@ -26,35 +26,33 @@ Set up shared observability first:
 - [Storage](/docs/observability/storage): Storage routing for traces, logs, and metrics
 - [Integrations overview](/docs/observability/integrations/overview): Exporters, bridges, and processors
 
-Tracing starts automatically once observability is configured and agents or workflows begin running.
+Tracing starts automatically after observability is configured and you run an agent or workflow.
 
 ## Moved setup topics
 
-<div id="configuration" />
-
 Shared observability setup now lives on dedicated top-level pages:
 
-<div id="basic-config" />
+### Configuration
 
-- [Basic config](/docs/observability/config#basic-config): Configure the base observability instance, exporters, processors, and logging behavior.
+- [Basic config](/docs/observability/config#basic-config): Configure the base observability instance, exporters, span processors, and logging behavior.
 
-<div id="multi-config-setup" />
+### Multi-config setup
 
 - [Multi-config setup](/docs/observability/config#multi-config-setup): Choose between multiple observability configs at runtime.
 
-<div id="maintaining-studio-access" />
+### Maintaining Studio access
 
 - [Maintaining Studio access](/docs/observability/config#maintaining-studio-access): Keep local Studio or Mastra platform visibility when adding external exporters.
 
-<div id="exporters" />
+### Exporters
 
 - [Exporters](/docs/observability/integrations/overview#exporters): Send observability data to storage, Mastra platform, or external providers.
 
-<div id="bridges" />
+### Bridges
 
-- [Bridges](/docs/observability/integrations/overview#bridges): Connect Mastra to an existing distributed tracing context.
+- [Bridges](/docs/observability/integrations/overview#bridges): Connect Mastra to third-party tracing systems.
 
-<div id="flushing-traces-in-serverless-environments" />
+### Flushing traces in serverless environments
 
 - [Serverless runtimes](/docs/observability/config#flushing-traces-in-serverless-environments): Flush exporters before a serverless runtime pauses or exits.
 
@@ -936,22 +934,3 @@ Mastra automatically creates spans for:
 - [Span Interfaces](/reference/observability/tracing/spans): Span types and lifecycle
 - [Type Definitions](/reference/observability/tracing/interfaces): Complete interface reference
 - [Span filtering](/reference/observability/tracing/span-filtering): Filtering behavior, span types, and examples
-
-### Exporters
-
-- [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter): Storage persistence
-- [MastraPlatformExporter](/reference/observability/tracing/exporters/mastra-platform-exporter): Mastra platform integration
-- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output
-- [Arize](/reference/observability/tracing/exporters/arize): Arize Phoenix and Arize AX integration
-- [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
-- [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
-- [MLflow](/docs/observability/integrations/exporters/otel#mlflow): MLflow OTLP endpoint setup
-- [OpenTelemetry](/reference/observability/tracing/exporters/otel): OTEL-compatible platforms
-
-### Bridges
-
-- [OpenTelemetry Bridge](/reference/observability/tracing/bridges/otel): OTEL context integration
-
-### Processors
-
-- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter): Data redaction
