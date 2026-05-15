@@ -439,7 +439,7 @@ export class Harness<TState = {}> {
     if (this.stateSchema) {
       const result = await this.stateSchema['~standard'].validate(newState);
       if (result.issues) {
-        const messages = result.issues.map(i => i.message).join('; ');
+        const messages = result.issues.map((i: { message: string }) => i.message).join('; ');
         throw new Error(`Invalid state update: ${messages}`);
       }
       this.state = result.value as TState;

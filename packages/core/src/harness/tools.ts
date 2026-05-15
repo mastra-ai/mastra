@@ -7,7 +7,7 @@ import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
-import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } from './types';
+import type { HarnessQuestionAnswer, HarnessQuestionOption, HarnessRequestContext, HarnessSubagent } from './types';
 
 let questionCounter = 0;
 let planCounter = 0;
@@ -83,7 +83,7 @@ export const askUserTool = createTool({
       if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
         return {
           content: `[Question for user]: ${question}${
-            options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
+            options?.length ? '\nOptions: ' + options.map((o: HarnessQuestionOption) => o.label).join(', ') : ''
           }${resolvedSelectionMode ? '\nSelection mode: ' + resolvedSelectionMode : ''}`,
           isError: false,
         };

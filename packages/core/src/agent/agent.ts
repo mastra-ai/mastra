@@ -768,7 +768,7 @@ export class Agent<
       if (validation.issues) {
         const errors = validation.issues;
         const errorMessages = errors
-          .map(e => {
+          .map((e: any) => {
             const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
             return `- ${pathStr}: ${e.message}`;
           })
@@ -6162,7 +6162,8 @@ export class Agent<
       });
     }
 
-    const fullOutput = await result.result.getFullOutput();
+    const output = result.result as MastraModelOutput<OUTPUT>;
+    const fullOutput = await output.getFullOutput();
 
     const error = fullOutput.error;
 
@@ -6373,14 +6374,16 @@ export class Agent<
       });
     }
 
+    const output = result.result as MastraModelOutput<OUTPUT>;
+
     agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
-      result.result,
+      output,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
       this.getPubSub(),
     );
 
-    return result.result;
+    return output;
   }
 
   /**
@@ -6784,7 +6787,8 @@ export class Agent<
       });
     }
 
-    const fullOutput = (await result.result.getFullOutput()) as Awaited<
+    const output = result.result as MastraModelOutput<OUTPUT>;
+    const fullOutput = (await output.getFullOutput()) as Awaited<
       ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
     >;
 
