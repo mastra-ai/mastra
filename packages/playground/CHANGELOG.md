@@ -1,5 +1,19 @@
 # @internal/playground
 
+## 1.9.3-alpha.3
+
+### Patch Changes
+
+- Fixed Studio credentials sign-in and sign-up to respect the configured API prefix instead of hardcoding `/api`. When the server is started with a custom `--server-api-prefix` (or `apiPrefix` option), the auth endpoints now derive from `MastraClient.options.apiPrefix` and forward any configured client headers, matching the behavior of the other auth hooks. Added Vitest coverage for prefix normalization, header forwarding, and error handling. ([#16461](https://github.com/mastra-ai/mastra/pull/16461))
+
+- Removed the cosmetic `as any` casts on `client.options` across the Studio auth hooks (`use-auth-actions`, `use-auth-capabilities`, `use-credentials-login`, `use-credentials-signup`, `use-current-user`). `useMastraClient()` already returns a typed `MastraClient` whose `options: ClientOptions` field is public, so the casts were unnecessary. The `makeSSOLoginRequest` and `makeLogoutRequest` helper signatures were also tightened from `{ options: any }` to `MastraClient`. No runtime change. Closes [#16655](https://github.com/mastra-ai/mastra/issues/16655). ([#16656](https://github.com/mastra-ai/mastra/pull/16656))
+
+- Updated dependencies [[`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0-alpha.3
+  - @mastra/client-js@1.19.1-alpha.3
+  - @mastra/react@0.3.3-alpha.3
+  - @mastra/playground-ui@28.0.1-alpha.3
+
 ## 1.9.3-alpha.2
 
 ### Patch Changes
