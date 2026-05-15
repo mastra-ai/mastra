@@ -1,5 +1,4 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4';
-import type { FilePart, TextPart } from '@internal/ai-sdk-v5';
+import type { FilePart, TextPart, UserModelMessage } from '@internal/ai-sdk-v5';
 
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from './message-list/state/types';
@@ -9,10 +8,11 @@ import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from 
  */
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
-// Internal canonical part shape. File parts carry the v4 UI shape (mimeType, data:string)
-// because that's what MastraMessagePart storage requires, plus an optional filename.
+// Internal canonical part shape. File parts use v5 `mediaType` so they line up with the public
+// `AgentSignalContents` surface and the `UserModelMessage` we hand to the model. The storage
+// boundary translates to `mimeType` for v4-shaped `MastraMessagePart` rows.
 export type SignalPart = { type: 'text'; text: string } | SignalFilePart;
-type SignalFilePart = { type: 'file'; data: string; mimeType: string; filename?: string };
+type SignalFilePart = { type: 'file'; data: string; mediaType: string; filename?: string };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -32,7 +32,7 @@ export type AgentSignalInput = {
   metadata?: Record<string, unknown>;
   /**
    * Provider options attached to the resulting prompt turn. Surfaces as `providerOptions` on the
-   * v4 CoreMessage sent to the model and as `content.providerMetadata` on the persisted DB
+   * `UserModelMessage` sent to the model and as `content.providerMetadata` on the persisted DB
    * message (also visible to UI consumers via `useChat` message metadata).
    */
   providerOptions?: MastraProviderMetadata;
@@ -63,7 +63,7 @@ export type CreatedAgentSignal = AgentSignalInput & {
   createdAt: Date;
   acceptedAt?: Date;
   toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
-  toLLMMessage: () => CoreMessage;
+  toLLMMessage: () => UserModelMessage;
   toDataPart: () => AgentSignalDataPart;
 };
 
@@ -226,8 +226,12 @@ function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
   return contents.map(part => {
     if (part.type === 'file') {
       const data = part.data instanceof URL ? part.data.toString() : convertDataContentToBase64String(part.data);
-      // Translate public `mediaType` (v5) → internal/storage `mimeType` (v4 UI part shape).
-      return { type: 'file', data, mimeType: part.mediaType, ...(part.filename ? { filename: part.filename } : {}) };
+      return {
+        type: 'file',
+        data,
+        mediaType: part.mediaType,
+        ...(part.filename ? { filename: part.filename } : {}),
+      };
     }
     return { type: 'text', text: part.text };
   });
@@ -246,7 +250,7 @@ function storagePartsToSignalParts(parts: MastraMessagePart[]): SignalPart[] {
       out.push({
         type: 'file',
         data: file.data,
-        mimeType: typeof file.mimeType === 'string' ? file.mimeType : '',
+        mediaType: typeof file.mimeType === 'string' ? file.mimeType : '',
         ...(typeof file.filename === 'string' ? { filename: file.filename } : {}),
       });
     }
@@ -255,8 +259,8 @@ function storagePartsToSignalParts(parts: MastraMessagePart[]): SignalPart[] {
 }
 
 // Project canonical signal parts back into the public AgentSignalContents shape. Collapses a
-// single text part to a bare string; otherwise translates internal `mimeType` → public
-// `mediaType` so the public surface stays v5-aligned.
+// single text part to a bare string; otherwise returns the parts unchanged (both internal
+// SignalPart and the public v5 FilePart use `mediaType`).
 function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
   if (parts.length === 1 && parts[0]?.type === 'text') return parts[0].text;
   return parts.map<TextPart | FilePart>(part =>
@@ -264,7 +268,7 @@ function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
       ? {
           type: 'file',
           data: part.data,
-          mediaType: part.mimeType,
+          mediaType: part.mediaType,
           ...(part.filename ? { filename: part.filename } : {}),
         }
       : { type: 'text', text: part.text },
@@ -300,17 +304,17 @@ function injectMarkerInline(signal: Pick<AgentSignalInput, 'type' | 'attributes'
   return out;
 }
 
-// Build the LLM-facing projection from the canonical parts. Returns a v4 CoreMessage with
-// role: 'user' (a prompt turn the model sees, not a signal row). The XML wrapper carries the
-// attributes inline so there's no metadata.signal here.
+// Build the LLM-facing projection from the canonical parts. Returns a v5 UserModelMessage
+// (a prompt turn the model sees, not a signal row). The XML wrapper carries the attributes
+// inline so there's no metadata.signal here.
 function signalToLLMMessage(
   signal: Pick<AgentSignalInput, 'type' | 'attributes' | 'providerOptions'>,
   parts: SignalPart[],
-): CoreMessage {
+): UserModelMessage {
   const isUserMessage = signal.type === 'user-message';
   const hasAttrs = hasMeaningfulAttributes(signal.attributes);
 
-  let content: string | SignalPart[];
+  let content: UserModelMessage['content'];
   if (isUserMessage && !hasAttrs) {
     // user-message with no attributes — pass parts through unchanged. Collapse a single text
     // part to a bare string so providers get their natural prompt shape.
@@ -327,7 +331,7 @@ function signalToLLMMessage(
     role: 'user',
     content,
     ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
-  } as CoreMessage;
+  };
 }
 
 function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: SignalPart[]): AgentSignalDataPart {
@@ -350,6 +354,19 @@ function signalToDBMessage(
   parts: SignalPart[],
   options?: { threadId?: string; resourceId?: string },
 ): MastraDBMessage {
+  const storageParts: MastraMessagePart[] =
+    parts.length > 0
+      ? parts.map(part =>
+          part.type === 'file'
+            ? {
+                type: 'file',
+                data: part.data,
+                mimeType: part.mediaType,
+                ...(part.filename ? { filename: part.filename } : {}),
+              }
+            : { type: 'text', text: part.text },
+        )
+      : [{ type: 'text', text: '' }];
   return {
     id: signal.id,
     role: 'signal',
@@ -359,7 +376,7 @@ function signalToDBMessage(
     type: signal.type,
     content: {
       format: 2,
-      parts: parts.length > 0 ? parts : [{ type: 'text', text: '' }],
+      parts: storageParts,
       ...(signal.providerOptions ? { providerMetadata: signal.providerOptions } : {}),
       metadata: {
         signal: {
@@ -395,7 +412,7 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   };
 }
 
-export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): CoreMessage {
+export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): UserModelMessage {
   return createSignal(signal).toLLMMessage();
 }
 

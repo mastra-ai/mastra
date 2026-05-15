@@ -200,7 +200,7 @@ describe('Agent signals', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
-    // toLLMMessage emits the v4 CoreMessage shape (uses mimeType for FilePart).
+    // toLLMMessage emits the v5 UserModelMessage shape (uses mediaType for FilePart).
     expect(fileSignal.toLLMMessage()).toEqual({
       role: 'user',
       content: [
@@ -208,7 +208,7 @@ describe('Agent signals', () => {
         {
           type: 'file',
           data: 'data:text/plain;base64,aGVsbG8=',
-          mimeType: 'text/plain',
+          mediaType: 'text/plain',
           filename: 'note.txt',
         },
       ],
