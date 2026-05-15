@@ -101,6 +101,8 @@ describe('GithubNotificationPoller', () => {
             closed_at: '2026-01-01T00:01:00.000Z',
             merged_at: '2026-01-01T00:01:00.000Z',
             html_url: 'https://github.com/mastra-ai/mastra/pull/123',
+            mergeable: false,
+            mergeable_state: 'dirty',
             head: { sha: 'sha-1' },
           }),
         };
@@ -129,6 +131,9 @@ describe('GithubNotificationPoller', () => {
         prClosedAt: '2026-01-01T00:01:00.000Z',
         prMergedAt: '2026-01-01T00:01:00.000Z',
         prHtmlUrl: 'https://github.com/mastra-ai/mastra/pull/123',
+        prMergeable: false,
+        prMergeableState: 'dirty',
+        prHeadSha: 'sha-1',
         failedChecks: [{ name: 'lint', status: 'failure', url: 'https://github.com/checks/lint' }],
       },
     ]);
@@ -148,6 +153,66 @@ describe('GithubNotificationPoller', () => {
 
     expect(commandRunner.mock.calls.find(call => call[0].includes('If-None-Match: "etag-1"'))?.[0]).toContain(
       'If-None-Match: "etag-1"',
+    );
+  });
+
+  it('backfills missing enrichment for cached PR notifications after a fresh inbox poll', async () => {
+    const store = createSharedStore();
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'old-conflicted-pr',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'Old conflicted PR row',
+        subjectType: 'PullRequest',
+        reason: 'author',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args.includes('/notifications')) return { stdout: ghResponse([notification('new-pr')], '"etag-2"') };
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/123') {
+        return {
+          stdout: JSON.stringify({
+            state: 'open',
+            merged: false,
+            html_url: 'https://github.com/mastra-ai/mastra/pull/123',
+            mergeable: false,
+            mergeable_state: 'dirty',
+            head: { sha: 'sha-1' },
+          }),
+        };
+      }
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/commits/sha-1/check-runs') {
+        return { stdout: JSON.stringify({ check_runs: [] }) };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1' });
+
+    await expect(poller.poll()).resolves.toMatchObject({
+      role: 'master',
+      updated: true,
+      notifications: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'old-conflicted-pr',
+          prMergeable: false,
+          prMergeableState: 'dirty',
+          prHeadSha: 'sha-1',
+        }),
+      ]),
+    });
+
+    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'old-conflicted-pr',
+          prMergeable: false,
+          prMergeableState: 'dirty',
+          prHeadSha: 'sha-1',
+        }),
+      ]),
     );
   });
 

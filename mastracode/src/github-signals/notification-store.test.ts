@@ -97,6 +97,28 @@ describe('GithubNotificationStore', () => {
     ]);
   });
 
+  it('round-trips enriched PR mergeability fields', async () => {
+    const store = createStore();
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'n1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'Conflicted PR',
+        subjectType: 'PullRequest',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        prMergeable: false,
+        prMergeableState: 'dirty',
+        prHeadSha: 'sha-1',
+      },
+    ]);
+
+    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
+      { id: 'n1', prMergeable: false, prMergeableState: 'dirty', prHeadSha: 'sha-1' },
+    ]);
+  });
+
   it('drops notifications older than the cache age window', async () => {
     const store = createStore(new Date('2026-01-10T00:00:00.000Z'));
     await store.upsertNotifications('account-1', [

@@ -79,14 +79,18 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
         .filter(Boolean) as GithubInboxNotification[];
       await this.#enrichNotifications(notifications);
       await this.store.upsertNotifications(this.accountKey, notifications);
+      const backfilledNotifications = await this.#backfillMissingEnrichment();
+      const updatedNotifications = [...notifications, ...backfilledNotifications];
       await this.store.updateAccountState(this.accountKey, {
         checkedAt,
         updatedAt: checkedAt,
         etag: response.etag,
         rateLimitedUntil: undefined,
       });
-      if (notifications.length > 0) this.emit('cache-updated', { accountKey: this.accountKey, notifications });
-      return { role: 'master', updated: notifications.length > 0, notifications };
+      if (updatedNotifications.length > 0) {
+        this.emit('cache-updated', { accountKey: this.accountKey, notifications: updatedNotifications });
+      }
+      return { role: 'master', updated: updatedNotifications.length > 0, notifications: updatedNotifications };
     } catch (error) {
       if (isRateLimitError(error)) {
         const until = getRateLimitedUntil(error, this.#now);
@@ -102,11 +106,18 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
   }
 
   async #backfillMissingEnrichment(): Promise<GithubInboxNotification[]> {
-    const notifications = await this.store.readPullRequestNotificationsMissingFailedChecks(this.accountKey);
+    const notifications = await this.store.readPullRequestNotificationsMissingEnrichment(this.accountKey);
     if (notifications.length === 0) return [];
+    const before = new Map(
+      notifications.map(notification => [notification.id, getEnrichmentFingerprint(notification)]),
+    );
     await this.#enrichNotifications(notifications);
-    await this.store.upsertNotifications(this.accountKey, notifications);
-    return notifications;
+    const enrichedNotifications = notifications.filter(
+      notification => before.get(notification.id) !== getEnrichmentFingerprint(notification),
+    );
+    if (enrichedNotifications.length === 0) return [];
+    await this.store.upsertNotifications(this.accountKey, enrichedNotifications);
+    return enrichedNotifications;
   }
 
   async #enrichNotifications(notifications: GithubInboxNotification[]): Promise<void> {
@@ -160,15 +171,18 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
           const matchingNotifications = notifications.filter(
             notification => notification.subjectUrl === pullRequestUrl,
           );
+          const headSha = getString(pullRequest, ['head', 'sha']);
           for (const notification of matchingNotifications) {
             notification.prState = getString(pullRequest, ['state']);
             notification.prMerged = getBoolean(pullRequest, ['merged']);
             notification.prClosedAt = getString(pullRequest, ['closed_at']);
             notification.prMergedAt = getString(pullRequest, ['merged_at']);
             notification.prHtmlUrl = getString(pullRequest, ['html_url']);
+            notification.prMergeable = getNullableBoolean(pullRequest, ['mergeable']);
+            notification.prMergeableState = getString(pullRequest, ['mergeable_state']);
+            notification.prHeadSha = headSha;
           }
 
-          const headSha = getString(pullRequest, ['head', 'sha']);
           const repoUrl = pullRequestUrl.replace(/\/pulls\/\d+(?:$|[?#].*)/, '');
           if (!headSha || repoUrl === pullRequestUrl) return;
 
@@ -219,6 +233,24 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
   }
 }
 
+function getEnrichmentFingerprint(notification: GithubInboxNotification): string {
+  return JSON.stringify({
+    commentAuthor: notification.commentAuthor,
+    commentBody: notification.commentBody,
+    commentCreatedAt: notification.commentCreatedAt,
+    commentHtmlUrl: notification.commentHtmlUrl,
+    failedChecks: notification.failedChecks,
+    prState: notification.prState,
+    prMerged: notification.prMerged,
+    prClosedAt: notification.prClosedAt,
+    prMergedAt: notification.prMergedAt,
+    prHtmlUrl: notification.prHtmlUrl,
+    prMergeable: notification.prMergeable,
+    prMergeableState: notification.prMergeableState,
+    prHeadSha: notification.prHeadSha,
+  });
+}
+
 function parseGhApiResponse(stdout: string): { status: number; etag?: string; items: unknown[] } {
   const normalized = stdout.replace(/\r\n/g, '\n');
   const headerEnd = normalized.indexOf('\n\n');
@@ -265,12 +297,22 @@ function getString(value: unknown, path: string[]): string | undefined {
 }
 
 function getBoolean(value: unknown, path: string[]): boolean | undefined {
+  const current = getPath(value, path);
+  return typeof current === 'boolean' ? current : undefined;
+}
+
+function getNullableBoolean(value: unknown, path: string[]): boolean | null | undefined {
+  const current = getPath(value, path);
+  return current === null || typeof current === 'boolean' ? current : undefined;
+}
+
+function getPath(value: unknown, path: string[]): unknown {
   let current = value;
   for (const key of path) {
     if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
     current = (current as Record<string, unknown>)[key];
   }
-  return typeof current === 'boolean' ? current : undefined;
+  return current;
 }
 
 function isNotModifiedError(error: unknown): boolean {

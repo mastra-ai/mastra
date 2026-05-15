@@ -48,6 +48,9 @@ export interface GithubInboxNotification {
   prClosedAt?: string;
   prMergedAt?: string;
   prHtmlUrl?: string;
+  prMergeable?: boolean | null;
+  prMergeableState?: string;
+  prHeadSha?: string;
   updatedAt: string;
   payload?: unknown;
 }
@@ -74,6 +77,9 @@ interface GithubNotificationRow {
   pr_closed_at: string | null;
   pr_merged_at: string | null;
   pr_html_url: string | null;
+  pr_mergeable: number | null;
+  pr_mergeable_state: string | null;
+  pr_head_sha: string | null;
   updated_at: string;
   payload_json: string | null;
 }
@@ -241,8 +247,8 @@ export class GithubNotificationStore {
     for (const notification of notifications) {
       await this.#execute({
         sql: `INSERT INTO github_notifications
-          (account_key, notification_id, repo, pr_number, title, subject_type, reason, url, subject_url, latest_comment_url, comment_author, comment_body, comment_created_at, comment_html_url, failed_checks_json, pr_state, pr_merged, pr_closed_at, pr_merged_at, pr_html_url, updated_at, touched_at, payload_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (account_key, notification_id, repo, pr_number, title, subject_type, reason, url, subject_url, latest_comment_url, comment_author, comment_body, comment_created_at, comment_html_url, failed_checks_json, pr_state, pr_merged, pr_closed_at, pr_merged_at, pr_html_url, pr_mergeable, pr_mergeable_state, pr_head_sha, updated_at, touched_at, payload_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(account_key, notification_id) DO UPDATE SET
             repo = excluded.repo,
             pr_number = excluded.pr_number,
@@ -262,6 +268,9 @@ export class GithubNotificationStore {
             pr_closed_at = excluded.pr_closed_at,
             pr_merged_at = excluded.pr_merged_at,
             pr_html_url = excluded.pr_html_url,
+            pr_mergeable = excluded.pr_mergeable,
+            pr_mergeable_state = excluded.pr_mergeable_state,
+            pr_head_sha = excluded.pr_head_sha,
             updated_at = excluded.updated_at,
             touched_at = excluded.touched_at,
             payload_json = excluded.payload_json`,
@@ -286,6 +295,13 @@ export class GithubNotificationStore {
           notification.prClosedAt ?? null,
           notification.prMergedAt ?? null,
           notification.prHtmlUrl ?? null,
+          notification.prMergeable === undefined || notification.prMergeable === null
+            ? null
+            : notification.prMergeable
+              ? 1
+              : 0,
+          notification.prMergeableState ?? null,
+          notification.prHeadSha ?? null,
           notification.updatedAt,
           now,
           JSON.stringify(notification.payload ?? notification),
@@ -309,14 +325,14 @@ export class GithubNotificationStore {
     return (result.rows as unknown as GithubNotificationRow[]).map(rowToNotification).reverse();
   }
 
-  async readPullRequestNotificationsMissingFailedChecks(accountKey: string): Promise<GithubInboxNotification[]> {
+  async readPullRequestNotificationsMissingEnrichment(accountKey: string): Promise<GithubInboxNotification[]> {
     await this.init();
     const minUpdatedAt = new Date(this.#now().getTime() - MAX_NOTIFICATION_AGE_MS).toISOString();
     const result = await this.#execute({
       sql: `SELECT * FROM github_notifications
         WHERE account_key = ?
           AND lower(subject_type) = 'pullrequest'
-          AND failed_checks_json IS NULL
+          AND (failed_checks_json IS NULL OR pr_mergeable IS NULL OR pr_mergeable_state IS NULL OR pr_head_sha IS NULL)
           AND updated_at >= ?
         ORDER BY updated_at DESC, notification_id DESC
         LIMIT ?`,
@@ -414,6 +430,9 @@ export class GithubNotificationStore {
       pr_closed_at TEXT,
       pr_merged_at TEXT,
       pr_html_url TEXT,
+      pr_mergeable INTEGER,
+      pr_mergeable_state TEXT,
+      pr_head_sha TEXT,
       updated_at TEXT NOT NULL,
       touched_at TEXT NOT NULL,
       payload_json TEXT,
@@ -429,6 +448,9 @@ export class GithubNotificationStore {
     await this.#addColumnIfMissing('github_notifications', 'pr_closed_at', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'pr_merged_at', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'pr_html_url', 'TEXT');
+    await this.#addColumnIfMissing('github_notifications', 'pr_mergeable', 'INTEGER');
+    await this.#addColumnIfMissing('github_notifications', 'pr_mergeable_state', 'TEXT');
+    await this.#addColumnIfMissing('github_notifications', 'pr_head_sha', 'TEXT');
     await this.#execute(
       'CREATE INDEX IF NOT EXISTS idx_github_notifications_pr ON github_notifications(account_key, repo, pr_number, updated_at DESC)',
     );
@@ -524,6 +546,9 @@ function rowToNotification(row: GithubNotificationRow): GithubInboxNotification 
     prClosedAt: row.pr_closed_at ?? undefined,
     prMergedAt: row.pr_merged_at ?? undefined,
     prHtmlUrl: row.pr_html_url ?? undefined,
+    prMergeable: row.pr_mergeable === null ? undefined : Number(row.pr_mergeable) === 1,
+    prMergeableState: row.pr_mergeable_state ?? undefined,
+    prHeadSha: row.pr_head_sha ?? undefined,
     updatedAt: row.updated_at,
     payload: parseJson(row.payload_json),
   };

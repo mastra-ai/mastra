@@ -640,6 +640,82 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
+  it('emits cached PR conflict notifications even when the inbox updated_at was already acknowledged', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'conflicted-thread',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'feat: needs merge work',
+        subjectType: 'PullRequest',
+        reason: 'state_change',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        prHtmlUrl: 'https://github.com/mastra-ai/mastra/pull/123',
+        prMergeable: false,
+        prMergeableState: 'dirty',
+        prHeadSha: 'sha-1',
+      },
+      {
+        id: 'unknown-thread',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'feat: still computing',
+        subjectType: 'PullRequest',
+        reason: 'state_change',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        prMergeable: null,
+        prMergeableState: 'unknown',
+        prHeadSha: 'sha-2',
+      },
+    ]);
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const commandRunner = vi.fn(async () => {
+      throw new Error('non-master should not call GitHub');
+    });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription({
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      repo: 'mastra-ai/mastra',
+      prNumber: 123,
+      lastNotificationUpdatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await github.poll();
+    await github.poll();
+
+    expect(commandRunner).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    const calls = sendSignal.mock.calls as any[];
+    expect(calls[0][0]).toMatchObject({
+      contents: 'PR #123 has merge conflicts: feat: needs merge work',
+      attributes: {
+        type: 'github-pr-conflict',
+        kind: 'pr-conflict',
+        pr: 123,
+        url: 'https://github.com/mastra-ai/mastra/pull/123',
+      },
+    });
+    github.destroy();
+  });
+
   it('emits cached CI failures even when the inbox updated_at was already acknowledged', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-02T00:00:01.000Z');

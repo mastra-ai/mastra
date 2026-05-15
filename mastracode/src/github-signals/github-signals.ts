@@ -27,6 +27,7 @@ const GITHUB_COMMENT_SIGNAL = 'github-comment';
 const GITHUB_REVIEW_SIGNAL = 'github-review';
 const GITHUB_PR_MERGED_SIGNAL = 'github-pr-merged';
 const GITHUB_PR_CLOSED_SIGNAL = 'github-pr-closed';
+const GITHUB_PR_CONFLICT_SIGNAL = 'github-pr-conflict';
 const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
 const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
@@ -131,7 +132,7 @@ export interface GithubPRSignalInput {
 }
 
 export interface GithubPRNotificationInput extends GithubPRSignalInput {
-  kind: 'ci-failure' | 'comment' | 'review' | 'pr-merged' | 'pr-closed' | 'command-error';
+  kind: 'ci-failure' | 'comment' | 'review' | 'pr-merged' | 'pr-closed' | 'pr-conflict' | 'command-error';
   title: string;
   details: string;
   url?: string;
@@ -333,6 +334,7 @@ function getGithubReminderType(kind: GithubPRNotificationInput['kind']): string 
   if (kind === 'review') return GITHUB_REVIEW_SIGNAL;
   if (kind === 'pr-merged') return GITHUB_PR_MERGED_SIGNAL;
   if (kind === 'pr-closed') return GITHUB_PR_CLOSED_SIGNAL;
+  if (kind === 'pr-conflict') return GITHUB_PR_CONFLICT_SIGNAL;
   return GITHUB_COMMAND_ERROR_SIGNAL;
 }
 
@@ -433,6 +435,10 @@ function getCachedPrStateDeliveryKey(notification: GithubInboxNotification) {
   return `pr-state:${state}:${notification.prMergedAt ?? notification.prClosedAt ?? notification.updatedAt}`;
 }
 
+function getCachedPrConflictDeliveryKey(notification: GithubInboxNotification) {
+  return `pr-conflict:${notification.prMergeableState ?? 'conflict'}:${notification.prHeadSha ?? notification.updatedAt}`;
+}
+
 function hasNewFailedCheckFingerprint(notification: GithubInboxNotification, subscription: ActiveSubscription) {
   if (!notification.failedChecks?.length) return false;
   return getFailedChecksFingerprint(notification.failedChecks) !== subscription.lastCheckFingerprint;
@@ -440,6 +446,11 @@ function hasNewFailedCheckFingerprint(notification: GithubInboxNotification, sub
 
 function hasClosedPrState(notification: GithubInboxNotification) {
   return notification.prState?.toLowerCase() === 'closed';
+}
+
+function hasMergeConflict(notification: GithubInboxNotification) {
+  if (hasClosedPrState(notification)) return false;
+  return notification.prMergeable === false || notification.prMergeableState?.toLowerCase() === 'dirty';
 }
 
 function summarizeText(value: string | undefined, fallback: string) {
@@ -818,6 +829,7 @@ export class GithubSignals {
     const unseen = notifications.filter(notification => {
       if (hasNewFailedCheckFingerprint(notification, subscription)) return true;
       if (hasClosedPrState(notification)) return true;
+      if (hasMergeConflict(notification)) return true;
       if (!subscription.lastNotificationUpdatedAt) return true;
       return new Date(notification.updatedAt).getTime() > new Date(subscription.lastNotificationUpdatedAt).getTime();
     });
@@ -832,6 +844,14 @@ export class GithubSignals {
       const stateDelivery = await this.#emitCachedPrStateNotification(registeredAgent, subscription, notification);
       if (stateDelivery === 'queued') queuedDelivery = true;
       if (stateDelivery !== 'skipped') continue;
+
+      const conflictDelivery = await this.#emitCachedPrConflictNotification(
+        registeredAgent,
+        subscription,
+        notification,
+      );
+      if (conflictDelivery === 'queued') queuedDelivery = true;
+      if (conflictDelivery !== 'skipped') continue;
 
       if (!isActionableCachedNotification(notification)) continue;
 
@@ -902,6 +922,33 @@ export class GithubSignals {
       details: notification.prMerged
         ? `PR #${notification.prNumber} was merged: ${notification.title}`
         : `PR #${notification.prNumber} was closed without merge: ${notification.title}`,
+      url: notification.prHtmlUrl ?? notification.subjectUrl ?? notification.url,
+    });
+    return delivery === 'queued' ? 'queued' : 'sent';
+  }
+
+  async #emitCachedPrConflictNotification(
+    registeredAgent: RegisteredGithubAgent,
+    subscription: ActiveSubscription,
+    notification: GithubInboxNotification,
+  ): Promise<'sent' | 'queued' | 'skipped'> {
+    if (!hasMergeConflict(notification)) return 'skipped';
+
+    const claimed = await this.#notificationPoller?.store.claimNotificationDelivery({
+      accountKey: this.#notificationPoller.accountKey,
+      resourceId: subscription.resourceId,
+      threadId: subscription.threadId,
+      repo: notification.repo,
+      prNumber: notification.prNumber,
+      notificationId: notification.id,
+      notificationUpdatedAt: getCachedPrConflictDeliveryKey(notification),
+    });
+    if (claimed === false) return 'skipped';
+
+    const delivery = await this.#handleNotification(registeredAgent, subscription, {
+      kind: 'pr-conflict',
+      title: 'GitHub PR merge conflict',
+      details: `PR #${notification.prNumber} has merge conflicts: ${notification.title}`,
       url: notification.prHtmlUrl ?? notification.subjectUrl ?? notification.url,
     });
     return delivery === 'queued' ? 'queued' : 'sent';
