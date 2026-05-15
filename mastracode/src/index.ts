@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
+import type { PubSub } from '@mastra/core/events';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -132,6 +133,10 @@ export interface MastraCodeConfig {
   memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: HarnessConfig['browser'];
+  /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
+  pubsub?: PubSub;
+  /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
+  crossProcessPubSub?: boolean;
 }
 
 export function createAuthStorage() {
@@ -226,6 +231,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
   }
+
+  const signalsPubSub = config?.pubsub;
+  const crossProcessPubSub = config?.crossProcessPubSub ?? false;
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
@@ -524,6 +532,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     storage,
     observability,
     memory,
+    pubsub: signalsPubSub,
     stateSchema,
     subagents,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
@@ -628,10 +637,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
       return customModels;
     },
-    threadLock: {
-      acquire: acquireThreadLock,
-      release: releaseThreadLock,
-    },
+    threadLock: crossProcessPubSub
+      ? undefined
+      : {
+          acquire: acquireThreadLock,
+          release: releaseThreadLock,
+        },
   });
 
   // Sync hookManager session ID on thread changes
@@ -661,6 +672,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     resolveModel,
     storageWarning,
     observabilityWarning,
+    signalsPubSub,
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,

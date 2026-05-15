@@ -69,6 +69,7 @@ type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'cr
 
 type AgentThreadStreamRuntimeEvent =
   | { type: 'run-registered'; runId: string }
+  | { type: 'stream-part'; runId: string; part: unknown; sourceId: string }
   | { type: 'run-completed'; runId: string }
   | { type: 'run-aborted'; runId: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string };
@@ -117,13 +118,54 @@ export class AgentThreadStreamRuntime {
   }
 
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
-    void this.#getPubSub(pubsub)
-      .publish(this.#threadTopic(key), {
-        type: event.type,
-        runId: event.runId,
-        data: event,
-      })
-      .catch(() => {});
+    void this.#publishAndWait(pubsub, key, event).catch(() => {});
+  }
+
+  async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
+    await this.#getPubSub(pubsub).publish(this.#threadTopic(key), {
+      type: event.type,
+      runId: event.runId,
+      data: event,
+    });
+  }
+
+  #withBroadcastStream<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
+    if (this.#getPubSub(pubsub) instanceof EventEmitterPubSub) return output;
+    const runtime = this;
+    const source = output.fullStream as any;
+    if (!source) return output;
+    const fullStream =
+      typeof source.pipeThrough === 'function'
+        ? source.pipeThrough(
+            new TransformStream({
+              transform(part, controller) {
+                runtime.#publish(pubsub, key, {
+                  type: 'stream-part',
+                  runId: output.runId,
+                  part,
+                  sourceId: runtime.#id,
+                });
+                controller.enqueue(part);
+              },
+            }) as any,
+          )
+        : (async function* () {
+            for await (const part of source) {
+              runtime.#publish(pubsub, key, {
+                type: 'stream-part',
+                runId: output.runId,
+                part,
+                sourceId: runtime.#id,
+              });
+              yield part;
+            }
+          })();
+    Object.defineProperty(output, 'fullStream', {
+      configurable: true,
+      enumerable: true,
+      value: fullStream,
+    });
+    return output;
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -251,9 +293,10 @@ export class AgentThreadStreamRuntime {
 
     const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
+    const outputForSubscribers = this.#withBroadcastStream(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
-      output,
+      output: outputForSubscribers,
       runId: output.runId,
       threadId,
       resourceId,
@@ -431,6 +474,10 @@ export class AgentThreadStreamRuntime {
     const seenRunIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
     const waiters: Array<() => void> = [];
+    const remoteRuns = new Map<
+      string,
+      { parts: unknown[]; waiters: Array<() => void>; done: boolean; stream: ReadableStream<unknown> }
+    >();
     let done = false;
 
     const wake = () => {
@@ -452,14 +499,69 @@ export class AgentThreadStreamRuntime {
       wake();
     };
 
+    const createRemoteRun = (runId: string): AgentThreadRunRecord<any> => {
+      const remoteRun = {
+        parts: [] as unknown[],
+        waiters: [] as Array<() => void>,
+        done: false,
+        stream: undefined as unknown as ReadableStream<unknown>,
+        closed: false,
+      };
+      remoteRun.stream = new ReadableStream({
+        pull(controller) {
+          const drain = () => {
+            if (remoteRun.closed) return;
+            while (remoteRun.parts.length > 0) {
+              controller.enqueue(remoteRun.parts.shift());
+            }
+            if (remoteRun.done) {
+              remoteRun.closed = true;
+              controller.close();
+            }
+          };
+          drain();
+          if (!remoteRun.done && !remoteRun.closed) {
+            remoteRun.waiters.push(drain);
+          }
+        },
+        cancel() {
+          remoteRun.done = true;
+          remoteRun.closed = true;
+          remoteRun.waiters.length = 0;
+        },
+      });
+      remoteRuns.set(runId, remoteRun);
+      return {
+        agent,
+        output: {
+          runId,
+          status: 'running',
+          fullStream: remoteRun.stream,
+          _waitUntilFinished: async () => {},
+        } as MastraModelOutput<any>,
+        runId,
+        threadId: options.threadId,
+        resourceId: options.resourceId,
+        streamOptions: {},
+      };
+    };
+
     const onEvent: EventCallback = event => {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
         state.activeThreadRunIds.set(key, data.runId);
-        const record = state.threadRunsById.get(data.runId);
-        if (record) enqueueRun(record);
+        const record = state.threadRunsById.get(data.runId) ?? createRemoteRun(data.runId);
+        enqueueRun(record);
         wake();
+        return;
+      }
+      if (data.type === 'stream-part') {
+        if (data.sourceId === this.#id) return;
+        const remoteRun = remoteRuns.get(data.runId);
+        if (!remoteRun) return;
+        remoteRun.parts.push(data.part);
+        while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         return;
       }
       if (data.type === 'signal-enqueued') {
@@ -472,6 +574,12 @@ export class AgentThreadStreamRuntime {
       if (data.type === 'run-completed' || data.type === 'run-aborted') {
         if (state.activeThreadRunIds.get(key) === data.runId) {
           state.activeThreadRunIds.delete(key);
+        }
+        const remoteRun = remoteRuns.get(data.runId);
+        if (remoteRun) {
+          remoteRun.done = true;
+          while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
+          remoteRuns.delete(data.runId);
         }
         void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
         wake();
