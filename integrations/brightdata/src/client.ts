@@ -49,8 +49,9 @@ async function requestBrightData(
   body: BrightDataRequestBody,
   timeout = DEFAULT_TIMEOUT,
 ): Promise<unknown> {
+  const effectiveTimeout = Number.isFinite(timeout) && timeout > 0 ? timeout : DEFAULT_TIMEOUT;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
   try {
     const response = await fetch(REQUEST_ENDPOINT, {
@@ -84,7 +85,7 @@ async function requestBrightData(
     return responseText;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeout}ms`);
+      throw new Error(`Request timed out after ${effectiveTimeout}ms`);
     }
     throw error;
   } finally {
