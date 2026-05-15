@@ -583,6 +583,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/umans-ai-coding-plan',
+          label: 'Umans AI Coding Plan',
+        },
+        {
+          type: 'doc',
           id: 'providers/upstage',
           label: 'Upstage',
         },
