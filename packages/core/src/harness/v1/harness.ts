@@ -1333,6 +1333,9 @@ export class Harness {
       }
 
       await memory.deleteThread({ threadId: opts.threadId });
+      if (memory.supportsObservationalMemory) {
+        await memory.clearObservationalMemory(opts.threadId, opts.resourceId);
+      }
       this._emitter.emit({
         type: 'thread_deleted',
         threadId: opts.threadId,

@@ -3,7 +3,10 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 
-function createHarness(threadLock?: { acquire: (id: string) => void; release: (id: string) => void }) {
+function createHarness(
+  threadLock?: { acquire: (id: string) => void; release: (id: string) => void },
+  storage = new InMemoryStore(),
+) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -12,7 +15,7 @@ function createHarness(threadLock?: { acquire: (id: string) => void; release: (i
 
   return new Harness({
     id: 'test-harness',
-    storage: new InMemoryStore(),
+    storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
     threadLock,
   });
@@ -243,6 +246,25 @@ describe('Harness thread locking', () => {
 
       const threads = await harness.listThreads();
       expect(threads.find(t => t.id === thread.id)).toBeUndefined();
+    });
+
+    it('clears thread-scoped observational memory when deleting a thread', async () => {
+      const storage = new InMemoryStore();
+      const harnessWithStorage = createHarness({ acquire, release }, storage);
+      await harnessWithStorage.init();
+      const thread = await harnessWithStorage.createThread({ title: 'with observations' });
+      const memoryStorage = (await storage.getStore('memory'))!;
+      await memoryStorage.initializeObservationalMemory({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await expect(memoryStorage.getObservationalMemory(thread.id, thread.resourceId)).resolves.not.toBeNull();
+      await harnessWithStorage.memory.deleteThread({ threadId: thread.id });
+
+      await expect(memoryStorage.getObservationalMemory(thread.id, thread.resourceId)).resolves.toBeNull();
     });
 
     it('releases lock when deleting the current thread', async () => {

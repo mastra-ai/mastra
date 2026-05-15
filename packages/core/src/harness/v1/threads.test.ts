@@ -157,6 +157,23 @@ describe('harness.threads — CRUD', () => {
     const fetched = await harness.threads.get({ resourceId: 'r1', threadId: created.id });
     expect(fetched).toBeNull();
   });
+
+  it('clears thread-scoped observational memory when deleting a thread', async () => {
+    const { harness } = setupHarness();
+    const created = await harness.threads.create({ resourceId: 'r1', title: 'with observations' });
+    const memory = (await harness._internalTryGetMemoryStorage())!;
+    await memory.initializeObservationalMemory({
+      threadId: created.id,
+      resourceId: 'r1',
+      scope: 'thread',
+      config: {},
+    });
+
+    await expect(memory.getObservationalMemory(created.id, 'r1')).resolves.not.toBeNull();
+    await harness.threads.delete({ resourceId: 'r1', threadId: created.id });
+
+    await expect(memory.getObservationalMemory(created.id, 'r1')).resolves.toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------

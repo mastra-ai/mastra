@@ -2,6 +2,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { PubSub } from '../../events/pubsub';
+import type { EventCallback, SubscribeOptions } from '../../events/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
@@ -37,6 +39,27 @@ function createTextStreamModel(responseText: string) {
 
 function nextTick() {
   return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+class AsyncFanoutPubSub extends PubSub {
+  #inner = new EventEmitterPubSub();
+
+  async publish(topic: string, event: Parameters<PubSub['publish']>[1]): Promise<void> {
+    await nextTick();
+    await this.#inner.publish(topic, event);
+  }
+
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    await this.#inner.subscribe(topic, cb, options);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    await this.#inner.unsubscribe(topic, cb);
+  }
+
+  async flush(): Promise<void> {
+    await this.#inner.flush();
+  }
 }
 
 async function readNextRun(iterator: AsyncIterator<any>) {
@@ -473,6 +496,106 @@ describe('Agent signals', () => {
     expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
     expect(signalResult.signal.id).toBeDefined();
     expect(signalRun.value.text).toBe('standalone shared response');
+
+    subscription.unsubscribe();
+  });
+
+  it('broadcasts through async PubSub without consuming the caller fullStream', async () => {
+    const pubsub = new AsyncFanoutPubSub();
+    const runner = new Agent({
+      id: 'async-shared-agent',
+      name: 'Async Shared Runner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('async shared response'),
+      pubsub,
+    });
+    const observer = new Agent({
+      id: 'async-shared-agent',
+      name: 'Async Shared Observer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('async observer response'),
+      pubsub,
+    });
+    const subscription = await observer.subscribeToThread({
+      resourceId: 'async-user',
+      threadId: 'async-thread',
+    });
+
+    const stream = await runner.stream('Hello', {
+      memory: { resource: 'async-user', thread: 'async-thread' },
+    });
+
+    await expect(readNextRun(stream.fullStream[Symbol.asyncIterator]())).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'async shared response' },
+      done: false,
+    });
+    await expect(readNextRun(subscription.stream[Symbol.asyncIterator]())).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'async shared response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('broadcasts async PubSub stream parts across runtime instances in order', async () => {
+    const pubsub = new AsyncFanoutPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const observerRuntime = new AgentThreadStreamRuntime();
+    const runId = 'async-remote-run';
+    const chunks = [
+      { type: 'stream-start', runId, from: 'AGENT', payload: { warnings: [] } },
+      { type: 'text-start', runId, from: 'AGENT', payload: { id: 'text-1' } },
+      { type: 'text-delta', runId, from: 'AGENT', payload: { id: 'text-1', text: 'remote async response' } },
+      { type: 'text-end', runId, from: 'AGENT', payload: { id: 'text-1' } },
+      { type: 'finish', runId, from: 'AGENT', payload: {} },
+    ];
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+
+    const subscription = await observerRuntime.subscribeToThread(
+      { id: 'async-remote-observer' } as any,
+      {
+        resourceId: 'async-remote-user',
+        threadId: 'async-remote-thread',
+      },
+      pubsub,
+    );
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+    const output = {
+      runId,
+      status: 'running',
+      fullStream: new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          finish();
+          controller.close();
+        },
+      }),
+      _waitUntilFinished: () => finished,
+    };
+
+    ownerRuntime.registerRun(
+      { id: 'async-remote-owner' } as any,
+      output as any,
+      {
+        runId,
+        memory: { resource: 'async-remote-user', thread: 'async-remote-thread' },
+      } as any,
+      pubsub,
+    );
+    await expect(
+      readNextRun((output.fullStream as ReadableStream<unknown>)[Symbol.asyncIterator]()),
+    ).resolves.toMatchObject({
+      value: { runId, text: 'remote async response' },
+      done: false,
+    });
+
+    await expect(nextRun).resolves.toMatchObject({
+      value: { runId, text: 'remote async response' },
+      done: false,
+    });
 
     subscription.unsubscribe();
   });
@@ -1138,6 +1261,37 @@ describe('Agent signals', () => {
     expect(secondRun.value.runId).toBe(signalResult.runId);
     expect(secondRun.value.text).toBe('second response');
     expect(secondStarted).toBe(true);
+
+    subscription.unsubscribe();
+  });
+
+  it('preserves caller-provided runId for idle wake signals', async () => {
+    const agent = new Agent({
+      id: 'caller-run-id-agent',
+      name: 'Caller Run Id Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('caller run response'),
+    });
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'caller-run-user',
+      threadId: 'caller-run-thread',
+    });
+
+    const signalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'wake with caller id' },
+      {
+        runId: 'caller-provided-run',
+        resourceId: 'caller-run-user',
+        threadId: 'caller-run-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'caller-run-user', thread: 'caller-run-thread' } } },
+      },
+    );
+
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: 'caller-provided-run' }));
+    await expect(readNextRun(subscription.stream[Symbol.asyncIterator]())).resolves.toMatchObject({
+      value: { runId: 'caller-provided-run', text: 'caller run response' },
+      done: false,
+    });
 
     subscription.unsubscribe();
   });

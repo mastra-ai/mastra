@@ -968,6 +968,9 @@ export class Harness<TState = {}> {
     const isDeletingCurrentThread = this.currentThreadId === threadId;
 
     await memoryStorage.deleteThread({ threadId });
+    if (memoryStorage.supportsObservationalMemory) {
+      await memoryStorage.clearObservationalMemory(threadId, thread.resourceId);
+    }
 
     if (isDeletingCurrentThread) {
       try {

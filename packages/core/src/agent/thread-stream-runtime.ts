@@ -79,6 +79,7 @@ type AgentThreadRuntimeState = {
   acceptedCallerSignals: Map<string, SendAgentSignalResult>;
   callerSignalIdsByRunId: Map<string, Set<string>>;
   pendingOutputWaiters: Map<string, Array<(out: MastraModelOutput<any>) => void>>;
+  broadcastsByRunId: Map<string, Promise<void>>;
 };
 
 type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
@@ -103,6 +104,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     acceptedCallerSignals: new Map(),
     callerSignalIdsByRunId: new Map(),
     pendingOutputWaiters: new Map(),
+    broadcastsByRunId: new Map(),
   };
 }
 
@@ -148,43 +150,62 @@ export class AgentThreadStreamRuntime {
     });
   }
 
-  #withBroadcastStream<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
-    if (this.#getPubSub(pubsub) instanceof EventEmitterPubSub) return output;
-    const runtime = this;
-    const source = output.fullStream as any;
-    if (!source) return output;
-    const fullStream =
-      typeof source.pipeThrough === 'function'
-        ? source.pipeThrough(
-            new TransformStream({
-              transform(part, controller) {
-                runtime.#publish(pubsub, key, {
-                  type: 'stream-part',
-                  runId: output.runId,
-                  part,
-                  sourceId: runtime.#id,
-                });
-                controller.enqueue(part);
-              },
-            }) as any,
-          )
-        : (async function* () {
-            for await (const part of source) {
-              runtime.#publish(pubsub, key, {
-                type: 'stream-part',
-                runId: output.runId,
-                part,
-                sourceId: runtime.#id,
-              });
-              yield part;
-            }
-          })();
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      enumerable: true,
-      value: fullStream,
-    });
-    return output;
+  #prepareBroadcastSource<OUTPUT>(output: MastraModelOutput<OUTPUT>, pubsub: PubSub | undefined, key: string) {
+    if (this.#getPubSub(pubsub) instanceof EventEmitterPubSub) return;
+
+    let source = output.fullStream as any;
+    if (!source) return;
+
+    if (Object.prototype.hasOwnProperty.call(output, 'fullStream')) {
+      if (typeof source.tee === 'function') {
+        const [broadcastSource, callerSource] = source.tee();
+        source = broadcastSource;
+        Object.defineProperty(output, 'fullStream', {
+          configurable: true,
+          enumerable: true,
+          value: callerSource,
+        });
+      } else {
+        const runtime = this;
+        const fullStream = (async function* () {
+          for await (const part of source) {
+            await runtime.#publishAndWait(pubsub, key, {
+              type: 'stream-part',
+              runId: output.runId,
+              part,
+              sourceId: runtime.#id,
+            });
+            yield part;
+          }
+        })();
+        Object.defineProperty(output, 'fullStream', {
+          configurable: true,
+          enumerable: true,
+          value: fullStream,
+        });
+        return;
+      }
+    }
+
+    return source;
+  }
+
+  async #broadcastStream<OUTPUT>(
+    output: MastraModelOutput<OUTPUT>,
+    source: AsyncIterable<unknown> | ReadableStream<unknown> | undefined,
+    pubsub: PubSub | undefined,
+    key: string,
+  ) {
+    if (!source) return;
+
+    for await (const part of source) {
+      await this.#publishAndWait(pubsub, key, {
+        type: 'stream-part',
+        runId: output.runId,
+        part,
+        sourceId: this.#id,
+      });
+    }
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -282,6 +303,7 @@ export class AgentThreadStreamRuntime {
     state.acceptedCallerSignals.clear();
     state.callerSignalIdsByRunId.clear();
     state.pendingOutputWaiters.clear();
+    state.broadcastsByRunId.clear();
   }
 
   #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
@@ -322,10 +344,10 @@ export class AgentThreadStreamRuntime {
 
     const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
-    const outputForSubscribers = this.#withBroadcastStream(output, pubsub, key);
+    const broadcastSource = this.#prepareBroadcastSource(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
-      output: outputForSubscribers,
+      output,
       runId: output.runId,
       threadId,
       resourceId,
@@ -340,7 +362,11 @@ export class AgentThreadStreamRuntime {
       state.pendingOutputWaiters.delete(output.runId);
       for (const resolve of waiters) resolve(output);
     }
-    this.#publish(pubsub, key, { type: 'run-registered', runId: output.runId });
+    const broadcast = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId: output.runId }).then(() =>
+      this.#broadcastStream(output, broadcastSource, pubsub, key),
+    );
+    state.broadcastsByRunId.set(output.runId, broadcast);
+    void broadcast.catch(() => {});
     this.#watchThreadRunCompletion(state, pubsub, key, record);
   }
 
@@ -380,16 +406,20 @@ export class AgentThreadStreamRuntime {
     state.watchedThreadRunIds.add(record.runId);
 
     void record.output._waitUntilFinished().finally(() => {
-      state.watchedThreadRunIds.delete(record.runId);
-      state.threadRunsById.delete(record.runId);
-      state.threadKeysByRunId.delete(record.runId);
-      this.#cleanupPreparedRun(state, record.runId);
-      this.#forgetCallerSignalsForRun(state, record.runId);
-      if (state.activeThreadRunIds.get(key) === record.runId) {
-        state.activeThreadRunIds.delete(key);
-      }
-      this.#publish(pubsub, key, { type: 'run-completed', runId: record.runId });
-      void this.#drainPendingSignals(state, pubsub, key, record);
+      void (async () => {
+        await state.broadcastsByRunId.get(record.runId)?.catch(() => {});
+        state.broadcastsByRunId.delete(record.runId);
+        state.watchedThreadRunIds.delete(record.runId);
+        state.threadRunsById.delete(record.runId);
+        state.threadKeysByRunId.delete(record.runId);
+        this.#cleanupPreparedRun(state, record.runId);
+        this.#forgetCallerSignalsForRun(state, record.runId);
+        if (state.activeThreadRunIds.get(key) === record.runId) {
+          state.activeThreadRunIds.delete(key);
+        }
+        await this.#publishAndWait(pubsub, key, { type: 'run-completed', runId: record.runId });
+        void this.#drainPendingSignals(state, pubsub, key, record);
+      })();
     });
   }
 
@@ -716,10 +746,11 @@ export class AgentThreadStreamRuntime {
     let activeRecord: AgentThreadRunRecord<any> | undefined;
     if (target.resourceId && target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
-      const activeRunId = state.activeThreadRunIds.get(key);
+      let activeRunId = state.activeThreadRunIds.get(key);
       activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
       if (activeRecord && activeRecord.output.status !== 'running') {
         state.activeThreadRunIds.delete(key);
+        activeRunId = undefined;
         activeRecord = undefined;
       }
 
@@ -828,7 +859,7 @@ export class AgentThreadStreamRuntime {
       throw new Error('No active agent run found for signal target');
     }
 
-    runId = randomUUID();
+    runId ??= randomUUID();
     if (idleBehavior !== 'wake') {
       if (idleBehavior === 'persist') {
         const persisted = this.#persistSignal(
