@@ -468,6 +468,49 @@ describe('Agent signals', () => {
     expect(signal.toDBMessage().content.providerMetadata).toBeUndefined();
   });
 
+  it('threads per-part providerOptions through LLM, DB, and rehydration', () => {
+    const partProviderOptions = { anthropic: { cacheControl: { type: 'ephemeral' } } };
+    const signal = createSignal({
+      type: 'user-message',
+      contents: [
+        { type: 'text', text: 'hello', providerOptions: partProviderOptions },
+        { type: 'file', data: 'AAA=', mediaType: 'image/png' },
+      ],
+    });
+
+    // LLM: parts array carries per-part providerOptions (not collapsed to bare string).
+    const llmMessage = signal.toLLMMessage();
+    expect(llmMessage.role).toBe('user');
+    expect(Array.isArray(llmMessage.content)).toBe(true);
+    const llmParts = llmMessage.content as Array<{ type: string; providerOptions?: unknown }>;
+    expect(llmParts[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
+    expect(llmParts[1]).toMatchObject({ type: 'file', data: 'AAA=', mediaType: 'image/png' });
+
+    // DB: per-part providerMetadata persisted alongside the storage part.
+    const db = signal.toDBMessage();
+    const textPart = db.content.parts[0] as { type: string; providerMetadata?: unknown };
+    expect(textPart).toMatchObject({ type: 'text', text: 'hello', providerMetadata: partProviderOptions });
+
+    // Round-trip: rehydrated signal restores per-part providerOptions.
+    const rehydrated = mastraDBMessageToSignal(db);
+    const rehydratedContents = rehydrated.contents as Array<{ type: string; providerOptions?: unknown }>;
+    expect(rehydratedContents[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
+  });
+
+  it('preserves per-part providerOptions on a single-text user-message (no bare-string collapse)', () => {
+    const partProviderOptions = { anthropic: { cacheControl: { type: 'ephemeral' } } };
+    const signal = createSignal({
+      type: 'user-message',
+      contents: [{ type: 'text', text: 'hello', providerOptions: partProviderOptions }],
+    });
+
+    const llmMessage = signal.toLLMMessage();
+    // Must keep parts array — collapsing to a bare string would drop providerOptions.
+    expect(Array.isArray(llmMessage.content)).toBe(true);
+    const llmParts = llmMessage.content as Array<{ type: string; providerOptions?: unknown }>;
+    expect(llmParts[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
+  });
+
   describe('legacy metadata.signal.contents rehydration', () => {
     function buildLegacyDBRow(legacyContents: unknown) {
       const row = createSignal({

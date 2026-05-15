@@ -5432,12 +5432,26 @@ export type PostAgentsAgentIdSignals_Body =
               | {
                   type: 'text';
                   text: string;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
                 }
               | {
                   type: 'file';
                   data: string;
                   mediaType: string;
                   filename?: string | undefined;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
                 }
             )[];
         providerOptions?:
@@ -5479,12 +5493,26 @@ export type PostAgentsAgentIdSignals_Body =
               | {
                   type: 'text';
                   text: string;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
                 }
               | {
                   type: 'file';
                   data: string;
                   mediaType: string;
                   filename?: string | undefined;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
                 }
             )[];
         providerOptions?:

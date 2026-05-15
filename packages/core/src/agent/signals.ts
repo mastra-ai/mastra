@@ -8,11 +8,15 @@ import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from 
  */
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
-// Internal canonical part shape. File parts use v5 `mediaType` so they line up with the public
-// `AgentSignalContents` surface and the `UserModelMessage` we hand to the model. The storage
-// boundary translates to `mimeType` for v4-shaped `MastraMessagePart` rows.
-export type SignalPart = { type: 'text'; text: string } | SignalFilePart;
-type SignalFilePart = { type: 'file'; data: string; mediaType: string; filename?: string };
+export type SignalPart = SignalTextPart | SignalFilePart;
+type SignalTextPart = { type: 'text'; text: string; providerOptions?: MastraProviderMetadata };
+type SignalFilePart = {
+  type: 'file';
+  data: string;
+  mediaType: string;
+  filename?: string;
+  providerOptions?: MastraProviderMetadata;
+};
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -184,9 +188,13 @@ function legacyEntryToParts(entry: unknown): Array<TextPart | FilePart> | undefi
 function legacyPartToSignalPart(part: unknown): TextPart | FilePart | undefined {
   if (!part || typeof part !== 'object') return undefined;
   const record = part as Record<string, unknown>;
+  const providerOptions =
+    record.providerOptions && typeof record.providerOptions === 'object' && !Array.isArray(record.providerOptions)
+      ? (record.providerOptions as MastraProviderMetadata)
+      : undefined;
 
   if (record.type === 'text' && typeof record.text === 'string') {
-    return { type: 'text', text: record.text };
+    return { type: 'text', text: record.text, ...(providerOptions ? { providerOptions } : {}) };
   }
 
   // Accept both shapes here: rows written by main + the v4-shaped narrowed branch used
@@ -208,6 +216,7 @@ function legacyPartToSignalPart(part: unknown): TextPart | FilePart | undefined 
       data,
       mediaType,
       ...(typeof record.filename === 'string' ? { filename: record.filename } : {}),
+      ...(providerOptions ? { providerOptions } : {}),
     };
   }
 
@@ -231,9 +240,14 @@ function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
         data,
         mediaType: part.mediaType,
         ...(part.filename ? { filename: part.filename } : {}),
+        ...(part.providerOptions ? { providerOptions: part.providerOptions as MastraProviderMetadata } : {}),
       };
     }
-    return { type: 'text', text: part.text };
+    return {
+      type: 'text',
+      text: part.text,
+      ...(part.providerOptions ? { providerOptions: part.providerOptions as MastraProviderMetadata } : {}),
+    };
   });
 }
 
@@ -243,8 +257,13 @@ function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
 function storagePartsToSignalParts(parts: MastraMessagePart[]): SignalPart[] {
   const out: SignalPart[] = [];
   for (const part of parts) {
+    const providerOptions = (part as { providerMetadata?: MastraProviderMetadata }).providerMetadata;
     if (part.type === 'text') {
-      out.push({ type: 'text', text: part.text });
+      out.push({
+        type: 'text',
+        text: part.text,
+        ...(providerOptions ? { providerOptions } : {}),
+      });
     } else if (part.type === 'file' && typeof (part as { data?: unknown }).data === 'string') {
       const file = part as { data: string; mimeType?: string; filename?: string };
       out.push({
@@ -252,6 +271,7 @@ function storagePartsToSignalParts(parts: MastraMessagePart[]): SignalPart[] {
         data: file.data,
         mediaType: typeof file.mimeType === 'string' ? file.mimeType : '',
         ...(typeof file.filename === 'string' ? { filename: file.filename } : {}),
+        ...(providerOptions ? { providerOptions } : {}),
       });
     }
   }
@@ -262,7 +282,7 @@ function storagePartsToSignalParts(parts: MastraMessagePart[]): SignalPart[] {
 // single text part to a bare string; otherwise returns the parts unchanged (both internal
 // SignalPart and the public v5 FilePart use `mediaType`).
 function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
-  if (parts.length === 1 && parts[0]?.type === 'text') return parts[0].text;
+  if (parts.length === 1 && parts[0]?.type === 'text' && !parts[0].providerOptions) return parts[0].text;
   return parts.map<TextPart | FilePart>(part =>
     part.type === 'file'
       ? {
@@ -270,8 +290,13 @@ function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
           data: part.data,
           mediaType: part.mediaType,
           ...(part.filename ? { filename: part.filename } : {}),
+          ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
         }
-      : { type: 'text', text: part.text },
+      : {
+          type: 'text',
+          text: part.text,
+          ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
+        },
   );
 }
 
@@ -314,16 +339,20 @@ function signalToLLMMessage(
   const isUserMessage = signal.type === 'user-message';
   const hasAttrs = hasMeaningfulAttributes(signal.attributes);
 
+  const anyPartProviderOptions = parts.some(part => part.providerOptions);
+
   let content: UserModelMessage['content'];
   if (isUserMessage && !hasAttrs) {
     // user-message with no attributes — pass parts through unchanged. Collapse a single text
-    // part to a bare string so providers get their natural prompt shape.
-    content = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
-  } else if (parts.every(part => part.type === 'text')) {
-    // Text-only: flatten to one wrapped string.
+    // part to a bare string so providers get their natural prompt shape (unless the part
+    // carries providerOptions, in which case we keep the parts array to preserve them).
+    content = parts.length === 1 && parts[0]?.type === 'text' && !parts[0].providerOptions ? parts[0].text : parts;
+  } else if (parts.every(part => part.type === 'text') && !anyPartProviderOptions) {
+    // Text-only with no per-part providerOptions: flatten to one wrapped string.
     content = signalToXmlMarkup({ ...signal, contents: parts.map(part => part.text).join('\n') });
   } else {
-    // Multimodal: inline-wrap the marker alongside the file/image payload.
+    // Multimodal or per-part providerOptions present: inline-wrap the marker alongside the
+    // payload so each part (and its providerOptions) is preserved.
     content = injectMarkerInline(signal, parts);
   }
 
@@ -363,8 +392,13 @@ function signalToDBMessage(
                 data: part.data,
                 mimeType: part.mediaType,
                 ...(part.filename ? { filename: part.filename } : {}),
+                ...(part.providerOptions ? { providerMetadata: part.providerOptions } : {}),
               }
-            : { type: 'text', text: part.text },
+            : {
+                type: 'text',
+                text: part.text,
+                ...(part.providerOptions ? { providerMetadata: part.providerOptions } : {}),
+              },
         )
       : [{ type: 'text', text: '' }];
   return {

@@ -28,9 +28,12 @@ const baseSignalSchema = z.object({
   attributes: signalAttributesSchema.optional(),
 });
 
+const partProviderOptionsSchema = z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional();
+
 const signalTextPartSchema = z.object({
   type: z.literal('text'),
   text: z.string(),
+  providerOptions: partProviderOptionsSchema,
 });
 
 const signalFilePartSchema = z.object({
@@ -38,6 +41,7 @@ const signalFilePartSchema = z.object({
   data: z.string(),
   mediaType: z.string(),
   filename: z.string().optional(),
+  providerOptions: partProviderOptionsSchema,
 });
 
 const userMessageSignalContentsSchema = z.union([
