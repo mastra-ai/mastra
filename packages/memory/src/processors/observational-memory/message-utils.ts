@@ -2,14 +2,8 @@ import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 /**
- * Returns true if any part in the array represents an in-flight tool call that
- * has not yet received its result.
- *
- * Handles both AI SDK UI format (`tool-invocation` with state `call` or
- * `partial-call`) and raw AI SDK format (`tool-call`). The raw format is used
- * by client-side tools and was previously invisible to the incomplete-tool-call
- * guard, allowing OM to run and mark the call as observed before its result
- * arrived — the root cause of #15244.
+ * Returns true if any part in the array represents an in-flight tool call.
+ * Handles both `tool-invocation` (state: call/partial-call) and raw `tool-call` parts.
  */
 export function hasIncompleteToolCallParts(parts: unknown[]): boolean {
   return parts.some(part => {
