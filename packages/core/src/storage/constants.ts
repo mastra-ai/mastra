@@ -25,7 +25,7 @@ export const TABLE_WORKSPACE_VERSIONS = 'mastra_workspace_versions';
 export const TABLE_SKILLS = 'mastra_skills';
 export const TABLE_SKILL_VERSIONS = 'mastra_skill_versions';
 export const TABLE_SKILL_BLOBS = 'mastra_skill_blobs';
-export const TABLE_FAVORITES = 'mastra_builder_favorites';
+export const TABLE_FAVORITES = 'mastra_favorites';
 
 // Dataset tables
 export const TABLE_DATASETS = 'mastra_datasets';
