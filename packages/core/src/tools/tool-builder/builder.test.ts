@@ -109,6 +109,44 @@ describe('CoreToolBuilder FGA', () => {
     });
     expect(execute).toHaveBeenCalled();
   });
+
+  it('fails closed when FGA is configured and a tool executes without a user', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext: new RequestContext(),
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(builtTool.execute!({ query: 'docs' }, { toolCallId: 'call-1', messages: [] })).rejects.toThrow(
+      'authenticated user is required',
+    );
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
 });
 
 describe('MCP Tool Tracing', () => {

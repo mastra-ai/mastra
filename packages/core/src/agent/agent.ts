@@ -6055,15 +6055,24 @@ export class Agent<
     const fgaProvider = this.#mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = options?.requestContext?.get('user');
-      if (user) {
-        const { checkFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'agent', id: this.id },
-          permission: MastraFGAPermissions.AGENTS_EXECUTE,
-        });
-      }
+      const executionResourceId =
+        options?.memory?.resource ?? (options?.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
+      const { getAgentFGAResourceId, requireFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+      await requireFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
+        permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        requestContext: options?.requestContext,
+        context: {
+          resourceId: executionResourceId,
+        },
+        metadata: {
+          agentId: this.id,
+          agentName: this.name,
+          runId: options?.runId,
+        },
+      });
     }
 
     const defaultOptions = await this.getDefaultOptions({
@@ -6215,15 +6224,25 @@ export class Agent<
     const streamFgaProvider = this.#mastra?.getServer()?.fga;
     if (streamFgaProvider) {
       const user = streamOptions?.requestContext?.get('user');
-      if (user) {
-        const { checkFGA } = await import('../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider: streamFgaProvider,
-          user,
-          resource: { type: 'agent', id: this.id },
-          permission: MastraFGAPermissions.AGENTS_EXECUTE,
-        });
-      }
+      const executionResourceId =
+        streamOptions?.memory?.resource ??
+        (streamOptions?.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
+      const { getAgentFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
+      await requireFGA({
+        fgaProvider: streamFgaProvider,
+        user,
+        resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
+        permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        requestContext: streamOptions?.requestContext,
+        context: {
+          resourceId: executionResourceId,
+        },
+        metadata: {
+          agentId: this.id,
+          agentName: this.name,
+          runId: streamOptions?.runId,
+        },
+      });
     }
 
     const defaultOptions = await this.getDefaultOptions({

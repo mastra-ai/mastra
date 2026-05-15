@@ -579,30 +579,35 @@ export class CoreToolBuilder extends MastraBase {
 
         const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
         const user = toolRequestContext?.get('user');
-        if (fgaProvider && user) {
+        if (fgaProvider) {
+          const {
+            getAgentToolFGAResourceId,
+            getMCPToolFGAResourceId,
+            getStandaloneToolFGAResourceId,
+            requireFGA,
+          } = await import('../../auth/ee/fga-check');
           const toolResourceId = mcpMeta?.serverName
-            ? JSON.stringify([mcpMeta.serverName, options.name])
+            ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
             : options.agentId
-              ? `${options.agentId}:${options.name}`
-              : options.name;
-          const { checkFGA } = await import('../../auth/ee/fga-check');
-          await checkFGA({
+              ? getAgentToolFGAResourceId(options.agentId, options.name)
+              : getStandaloneToolFGAResourceId(options.name);
+          await requireFGA({
             fgaProvider,
             user,
             resource: { type: 'tool', id: toolResourceId },
             permission: MastraFGAPermissions.TOOLS_EXECUTE,
+            requestContext: toolRequestContext,
             context: {
               resourceId: toolResourceId,
-              requestContext: toolRequestContext,
-              metadata: {
-                toolName: options.name,
-                agentId: options.agentId,
-                agentName: options.agentName,
-                runId: options.runId,
-                threadId: options.threadId,
-                executionResourceId: options.resourceId,
-                mcpMetadata: mcpMeta,
-              },
+            },
+            metadata: {
+              toolName: options.name,
+              agentId: options.agentId,
+              agentName: options.agentName,
+              runId: options.runId,
+              threadId: options.threadId,
+              executionResourceId: options.resourceId,
+              mcpMetadata: mcpMeta,
             },
           });
         }

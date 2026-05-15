@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Added FGA context metadata, per-tool execution authorization, and stored resource scope configuration types.
+Added consistent FGA execution context across agents, tools, memory, and internal workflow execution. When FGA is configured, userless protected execution now fails closed.

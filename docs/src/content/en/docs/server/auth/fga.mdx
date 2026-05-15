@@ -59,6 +59,8 @@ When using `MastraFGAWorkos`, set `fetchMemberships: true` on `MastraAuthWorkos`
 
 Use `thread` as the resource-mapping key for memory authorization. `MastraFGAWorkos` still accepts the legacy alias `memory`, but new configs should prefer `thread`.
 
+When `server.fga` is configured, Mastra enforces FGA on protected actions. If a protected action has no authenticated user, Mastra denies it. If `server.fga` is not configured, these FGA checks are skipped and Mastra keeps the previous behavior.
+
 ### Resource mapping
 
 The `resourceMapping` tells Mastra how to resolve FGA resource types and IDs from request context. Keys are Mastra resource types, values define the FGA resource type and how to derive the ID:
@@ -206,17 +208,20 @@ const fga = new MastraFGAWorkos({
 
 When an FGA provider is configured, Mastra automatically checks authorization at these lifecycle points:
 
-| Lifecycle point | Permission checked | Resource |
-| - | - | - |
-| Agent execution (`generate`, `stream`) | `agents:execute` | `{ type: 'agent', id: agentId }` |
-| Workflow execution | `workflows:execute` | `{ type: 'workflow', id: workflowId }` |
-| Tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` or the derived MCP or agent tool ID |
-| Thread/memory access | `memory:read`, `memory:write`, `memory:delete` | `{ type: 'thread', id: threadId }` |
-| MCP tool execution | `tools:execute` | `{ type: 'tool', id: [serverName, toolName] }` |
-| Stored resource routes | Stored resource permission for the route action | Stored resource type and route ID |
-| HTTP resource routes | Configured per route | Configured per route |
+| Lifecycle point | Permission checked | Resource type | Resource ID |
+| - | - | - | - |
+| Agent execution (`generate`, `stream`) | `agents:execute` | `agent` | `agentId` |
+| Built-in workflow HTTP execution routes and `Workflow.execute()` | `workflows:execute` | `workflow` | `workflowId` |
+| Standalone tool execution | `tools:execute` | `tool` | `toolName` |
+| Agent tool execution | `tools:execute` | `tool` | `${agentId}:${toolName}` |
+| MCP tool execution | `tools:execute` | `tool` | `JSON.stringify([serverName, toolName])` |
+| Thread and memory access | `memory:read`, `memory:write`, `memory:delete` | `thread` | `threadId` |
+| Stored resource routes | Stored resource permission for the route action | Stored resource type | Route record ID, or the stored-resource scope for collection routes |
+| HTTP resource routes | Configured per route | Configured per route | Configured per route |
 
-All checks are **no-ops when FGA is not configured**, maintaining backward compatibility.
+Direct SDK calls to `createRun().start()`, `resume()`, or `restart()` are not independently checked by core FGA in this release. Make those calls from a protected route or guard them in application code. Pass a `requestContext` with an authenticated user when invoking protected entry points directly.
+
+Core agent, internal workflow, tool, and memory checks also pass `requestContext` and action metadata to the FGA provider. Route checks pass `requestContext`. Thread checks pass the owning `resourceId` when available.
 
 ## Custom FGA provider
 
