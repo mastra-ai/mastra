@@ -404,26 +404,82 @@ describe('Agent signals', () => {
     expect(fromDataPart.contents).toEqual(screenshotContents);
   });
 
-  it('ignores malformed legacy metadata.signal.contents when rehydrating a DB row', () => {
-    const reminder = createSignal({
-      id: 'signal-legacy',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      type: 'user-message',
-      contents: 'hello world',
-    });
-    const dbMessage = reminder.toDBMessage();
-    // Simulate a stale DB row whose stash field holds an unrelated object shape
-    // (e.g. a CoreUserMessage wrapper from an earlier prototype).
-    dbMessage.content.metadata = {
-      ...dbMessage.content.metadata,
-      signal: {
-        ...(dbMessage.content.metadata?.signal as Record<string, unknown>),
-        contents: { role: 'user', content: [{ type: 'text', text: 'hello world' }] },
-      },
-    };
+  describe('legacy metadata.signal.contents rehydration', () => {
+    function buildLegacyDBRow(legacyContents: unknown) {
+      const row = createSignal({
+        id: 'signal-legacy',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        type: 'user-message',
+        contents: 'placeholder',
+      }).toDBMessage();
+      row.content.metadata = {
+        ...row.content.metadata,
+        signal: {
+          ...(row.content.metadata?.signal as Record<string, unknown>),
+          contents: legacyContents,
+        },
+      };
+      return row;
+    }
 
-    const rehydrated = mastraDBMessageToSignal(dbMessage);
-    expect(rehydrated.contents).toBe('hello world');
+    it('recovers a bare string stash', () => {
+      const rehydrated = mastraDBMessageToSignal(buildLegacyDBRow('hello world'));
+      expect(rehydrated.contents).toBe('hello world');
+    });
+
+    it('recovers an Array<TextPart | FilePart> stash with mediaType', () => {
+      const rehydrated = mastraDBMessageToSignal(
+        buildLegacyDBRow([
+          { type: 'text', text: 'caption' },
+          { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
+        ]),
+      );
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'caption' },
+        { type: 'file', data: 'BASE64', mimeType: 'image/png', filename: 'photo.png' },
+      ]);
+    });
+
+    it('recovers a CoreUserMessage wrapper with text-only content', () => {
+      const rehydrated = mastraDBMessageToSignal(buildLegacyDBRow({ role: 'user', content: 'hello world' }));
+      expect(rehydrated.contents).toBe('hello world');
+    });
+
+    it('recovers a CoreUserMessage wrapper with mixed text + image parts', () => {
+      const rehydrated = mastraDBMessageToSignal(
+        buildLegacyDBRow({
+          role: 'user',
+          content: [
+            { type: 'text', text: 'what is this?' },
+            { type: 'image', image: 'BASE64', mediaType: 'image/png' },
+          ],
+        }),
+      );
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'what is this?' },
+        { type: 'file', data: 'BASE64', mimeType: 'image/png' },
+      ]);
+    });
+
+    it('recovers a CoreUserMessage[] stash from the React hook', () => {
+      const rehydrated = mastraDBMessageToSignal(
+        buildLegacyDBRow([
+          { role: 'user', content: 'first' },
+          { role: 'user', content: [{ type: 'text', text: 'second' }] },
+        ]),
+      );
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'first' },
+        { type: 'text', text: 'second' },
+      ]);
+    });
+
+    it('falls back to canonical content.parts when the stash is unrecognisable', () => {
+      const row = buildLegacyDBRow({ totally: 'unrelated' });
+      row.content.parts = [{ type: 'text', text: 'from canonical parts' }];
+      const rehydrated = mastraDBMessageToSignal(row);
+      expect(rehydrated.contents).toBe('from canonical parts');
+    });
   });
 
   it('rejects invalid XML names for contextual signal markup', () => {

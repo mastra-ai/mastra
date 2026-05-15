@@ -112,14 +112,103 @@ export function signalToXmlMarkup(
   return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
 }
 
-function isAgentSignalContents(value: unknown): value is AgentSignalContents {
-  if (typeof value === 'string') return true;
-  if (!Array.isArray(value)) return false;
-  return value.every(part => {
-    if (!part || typeof part !== 'object') return false;
-    const type = (part as { type?: unknown }).type;
-    return type === 'text' || type === 'file';
-  });
+// Recover legacy metadata.signal.contents shapes (pre-narrowing) into the current
+// AgentSignalContents. Older rows could stash any of:
+//   - string                                          (most signals)
+//   - Array<TextPart | FilePart> with mediaType       (TUI image messages)
+//   - { role: 'user', content: string | Array<...> } (TUI createUserSignalContent)
+//   - CoreUserMessage[] / string[]                    (React hook BaseMessageListInput)
+// Anything that doesn't decode cleanly returns undefined so the caller can fall back to
+// the canonical content.parts projection.
+function legacyContentsToSignalContents(value: unknown): AgentSignalContents | undefined {
+  if (typeof value === 'string') return value;
+
+  if (Array.isArray(value)) {
+    const parts: Array<TextPart | FilePart> = [];
+    for (const entry of value) {
+      if (typeof entry === 'string') {
+        parts.push({ type: 'text', text: entry });
+        continue;
+      }
+      const decoded = legacyEntryToParts(entry);
+      if (!decoded) return undefined;
+      parts.push(...decoded);
+    }
+    return collapseLegacyParts(parts);
+  }
+
+  const decoded = legacyEntryToParts(value);
+  return decoded ? collapseLegacyParts(decoded) : undefined;
+}
+
+function legacyEntryToParts(entry: unknown): Array<TextPart | FilePart> | undefined {
+  if (!entry || typeof entry !== 'object') return undefined;
+  const record = entry as Record<string, unknown>;
+
+  // CoreUserMessage wrapper: { role: 'user', content: string | Array<...> }.
+  if (record.role === 'user' && 'content' in record) {
+    const content = record.content;
+    if (typeof content === 'string') return [{ type: 'text', text: content }];
+    if (Array.isArray(content)) {
+      const inner: Array<TextPart | FilePart> = [];
+      for (const part of content) {
+        const decoded = legacyPartToSignalPart(part);
+        if (!decoded) return undefined;
+        inner.push(decoded);
+      }
+      return inner;
+    }
+    return undefined;
+  }
+
+  // Bare TextPart / FilePart / ImagePart.
+  const part = legacyPartToSignalPart(record);
+  return part ? [part] : undefined;
+}
+
+function legacyPartToSignalPart(part: unknown): TextPart | FilePart | undefined {
+  if (!part || typeof part !== 'object') return undefined;
+  const record = part as Record<string, unknown>;
+
+  if (record.type === 'text' && typeof record.text === 'string') {
+    return { type: 'text', text: record.text };
+  }
+
+  // Legacy file/image parts used `mediaType`; image parts also used `image` instead of `data`.
+  if (record.type === 'file' || record.type === 'image') {
+    const data = record.type === 'image' ? (record.image ?? record.data) : record.data;
+    if (typeof data !== 'string' && !(data instanceof URL) && !isBinaryDataContent(data)) {
+      return undefined;
+    }
+    const mimeType =
+      typeof record.mimeType === 'string'
+        ? record.mimeType
+        : typeof record.mediaType === 'string'
+          ? record.mediaType
+          : record.type === 'image'
+            ? 'image/png'
+            : '';
+    if (!mimeType) return undefined;
+    return {
+      type: 'file',
+      data: data as FilePart['data'],
+      mimeType,
+      ...(typeof record.filename === 'string' ? { filename: record.filename } : {}),
+    };
+  }
+
+  return undefined;
+}
+
+function isBinaryDataContent(value: unknown): boolean {
+  return value instanceof Uint8Array || value instanceof ArrayBuffer || Buffer.isBuffer(value as Buffer);
+}
+
+function collapseLegacyParts(parts: Array<TextPart | FilePart>): AgentSignalContents | undefined {
+  if (parts.length === 0) return undefined;
+  const first = parts[0];
+  if (parts.length === 1 && first?.type === 'text') return first.text;
+  return parts;
 }
 
 function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
@@ -299,11 +388,12 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
 
   const type = typeof signalMetadata?.type === 'string' ? signalMetadata.type : (message.type ?? 'user-message');
   // Reconstruct contents from content.parts — the canonical source. Legacy rows (pre stash
-  // removal) preserved the original input shape on metadata.signal.contents; honour that
-  // fallback when it matches the narrowed AgentSignalContents shape and ignore anything else
-  // (e.g. CoreUserMessage wrappers stashed by earlier prototypes) so the DB row keeps loading.
+  // removal) preserved the original input shape on metadata.signal.contents; recover whatever
+  // we can from it (string, parts array, CoreUserMessage wrapper, CoreUserMessage[]) so files
+  // and other non-text payloads keep loading. If the stash is unrecognisable, fall back to the
+  // canonical parts projection.
   const rawLegacyContents = signalMetadata && 'contents' in signalMetadata ? signalMetadata.contents : undefined;
-  const legacyContents = isAgentSignalContents(rawLegacyContents) ? rawLegacyContents : undefined;
+  const legacyContents = legacyContentsToSignalContents(rawLegacyContents);
   const partsContents = partsToSignalContents(storagePartsToSignalParts(message.content.parts));
   const contents = legacyContents ?? partsContents;
   const base = {
