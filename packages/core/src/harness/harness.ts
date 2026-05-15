@@ -1791,8 +1791,8 @@ export class Harness<TState = {}> {
         return {
           type: 'file' as const,
           data: f.data,
-          mimeType: f.mediaType,
-          filename: f.filename,
+          mediaType: f.mediaType,
+          ...(f.filename ? { filename: f.filename } : {}),
         };
       });
       messageInput = [{ type: 'text', text: content }, ...fileParts];

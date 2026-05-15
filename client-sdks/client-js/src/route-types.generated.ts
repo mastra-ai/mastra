@@ -5436,7 +5436,7 @@ export type PostAgentsAgentIdSignals_Body =
               | {
                   type: 'file';
                   data: string;
-                  mimeType: string;
+                  mediaType: string;
                   filename?: string | undefined;
                 }
             )[];
@@ -5476,7 +5476,7 @@ export type PostAgentsAgentIdSignals_Body =
               | {
                   type: 'file';
                   data: string;
-                  mimeType: string;
+                  mediaType: string;
                   filename?: string | undefined;
                 }
             )[];

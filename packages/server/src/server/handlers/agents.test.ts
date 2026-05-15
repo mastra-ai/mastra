@@ -1092,8 +1092,8 @@ describe('Agent Routes Authorization', () => {
           type: 'user-message',
           contents: [
             { type: 'text', text: 'describe these files' },
-            { type: 'file', data: 'data:image/png;base64,image-data', mimeType: 'image/png' },
-            { type: 'file', data: 'file-data', mimeType: 'application/pdf', filename: 'brief.pdf' },
+            { type: 'file', data: 'data:image/png;base64,image-data', mediaType: 'image/png' },
+            { type: 'file', data: 'file-data', mediaType: 'application/pdf', filename: 'brief.pdf' },
           ],
           attributes: { intent: 'follow-up', count: 1, urgent: false, empty: null },
           metadata: { source: 'studio' },

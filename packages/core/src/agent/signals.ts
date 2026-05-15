@@ -1,18 +1,18 @@
-import type { CoreMessage, FilePart, TextPart } from '@internal/ai-sdk-v4';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { FilePart, TextPart } from '@internal/ai-sdk-v5';
 
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart } from './message-list/state/types';
-import type { BaseMessageListInput } from './message-list/types';
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
-export type SignalPart = TextPart | (Omit<FilePart, 'data'> & { data: string });
+// Internal canonical part shape. File parts carry the v4 UI shape (mimeType, data:string)
+// because that's what MastraMessagePart storage requires, plus an optional filename.
+export type SignalPart = { type: 'text'; text: string } | SignalFilePart;
+type SignalFilePart = { type: 'file'; data: string; mimeType: string; filename?: string };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -54,7 +54,7 @@ export type CreatedAgentSignal = AgentSignalInput & {
   id: string;
   createdAt: Date;
   toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
-  toLLMMessage: () => BaseMessageListInput;
+  toLLMMessage: () => CoreMessage;
   toDataPart: () => AgentSignalDataPart;
 };
 
@@ -174,23 +174,24 @@ function legacyPartToSignalPart(part: unknown): TextPart | FilePart | undefined 
     return { type: 'text', text: record.text };
   }
 
-  // Legacy file/image parts used `mediaType`; image parts also used `image` instead of `data`.
+  // Accept both shapes here: rows written by main + the v4-shaped narrowed branch used
+  // `mimeType`; rows that came in as v5 user input (and current canonical) use `mediaType`.
   if (record.type === 'file' || record.type === 'image') {
     const data = record.type === 'image' ? (record.image ?? record.data) : record.data;
     if (typeof data !== 'string') return undefined;
-    const mimeType =
-      typeof record.mimeType === 'string'
-        ? record.mimeType
-        : typeof record.mediaType === 'string'
-          ? record.mediaType
+    const mediaType =
+      typeof record.mediaType === 'string'
+        ? record.mediaType
+        : typeof record.mimeType === 'string'
+          ? record.mimeType
           : record.type === 'image'
             ? 'image/png'
             : '';
-    if (!mimeType) return undefined;
+    if (!mediaType) return undefined;
     return {
       type: 'file',
       data,
-      mimeType,
+      mediaType,
       ...(typeof record.filename === 'string' ? { filename: record.filename } : {}),
     };
   }
@@ -210,7 +211,8 @@ function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
   return contents.map(part => {
     if (part.type === 'file') {
       const data = part.data instanceof URL ? part.data.toString() : convertDataContentToBase64String(part.data);
-      return { type: 'file', data, mimeType: part.mimeType, ...(part.filename ? { filename: part.filename } : {}) };
+      // Translate public `mediaType` (v5) → internal/storage `mimeType` (v4 UI part shape).
+      return { type: 'file', data, mimeType: part.mediaType, ...(part.filename ? { filename: part.filename } : {}) };
     }
     return { type: 'text', text: part.text };
   });
@@ -238,10 +240,20 @@ function storagePartsToSignalParts(parts: MastraMessagePart[]): SignalPart[] {
 }
 
 // Project canonical signal parts back into the public AgentSignalContents shape. Collapses a
-// single text part to a bare string; anything richer stays as a parts array.
+// single text part to a bare string; otherwise translates internal `mimeType` → public
+// `mediaType` so the public surface stays v5-aligned.
 function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
   if (parts.length === 1 && parts[0]?.type === 'text') return parts[0].text;
-  return parts;
+  return parts.map<TextPart | FilePart>(part =>
+    part.type === 'file'
+      ? {
+          type: 'file',
+          data: part.data,
+          mediaType: part.mimeType,
+          ...(part.filename ? { filename: part.filename } : {}),
+        }
+      : { type: 'text', text: part.text },
+  );
 }
 
 function hasMeaningfulAttributes(attributes?: AgentSignalInput['attributes']): boolean {
@@ -358,7 +370,7 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   };
 }
 
-export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): BaseMessageListInput {
+export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): CoreMessage {
   return createSignal(signal).toLLMMessage();
 }
 

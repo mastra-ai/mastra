@@ -121,7 +121,7 @@ export const useChat = ({
 
   type SignalContentPart =
     | { type: 'text'; text: string }
-    | { type: 'file'; data: string; mimeType: string; filename?: string };
+    | { type: 'file'; data: string; mediaType: string; filename?: string };
   type UserMessageSignalContents = string | SignalContentPart[];
 
   const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
@@ -143,14 +143,14 @@ export const useChat = ({
           allParts.push({
             type: 'file',
             data: normalizeSignalFileData(part.data),
-            mimeType: part.mimeType,
+            mediaType: part.mimeType,
             ...(part.filename ? { filename: part.filename } : {}),
           });
         } else if (part.type === 'image') {
           allParts.push({
             type: 'file',
             data: normalizeSignalFileData(part.image),
-            mimeType: part.mimeType ?? 'image/png',
+            mediaType: part.mimeType ?? 'image/png',
           });
         }
       }

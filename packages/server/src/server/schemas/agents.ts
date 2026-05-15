@@ -36,7 +36,7 @@ const signalTextPartSchema = z.object({
 const signalFilePartSchema = z.object({
   type: z.literal('file'),
   data: z.string(),
-  mimeType: z.string(),
+  mediaType: z.string(),
   filename: z.string().optional(),
 });
 
