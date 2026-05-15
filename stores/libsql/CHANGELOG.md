@@ -1,5 +1,35 @@
 # @mastra/libsql
 
+## 1.11.0-alpha.0
+
+### Minor Changes
+
+- Added favorites support to storage adapters so callers can favorite/unfavorite stored agents and skills, query favorite state alongside list results, and filter listings by visibility. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+  **Example**
+
+  ```ts
+  const storage = new LibSQLStore({
+    /* config */
+  });
+  const favorites = await storage.getStore('favorites');
+
+  await favorites?.favorite({
+    userId: 'user-1',
+    entityType: 'agent',
+    entityId: 'agent-42',
+  });
+  ```
+
+### Patch Changes
+
+- Bumped `@mastra/core` peer dependency floor to `>=1.34.0-0` so the new `@mastra/core/storage/domains/favorites` subpath is available. Older `@mastra/core` versions don't ship the `FavoritesStorage` base class these adapters now extend. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Fixed a workspace PATCH bug: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined`. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Updated dependencies [[`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04)]:
+  - @mastra/core@1.35.0-alpha.2
+
 ## 1.10.1
 
 ### Patch Changes
