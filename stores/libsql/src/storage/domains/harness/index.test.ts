@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { createClient } from '@libsql/client';
-import { TABLE_HARNESS_ATTACHMENTS } from '@mastra/core/storage';
+import type { Client } from '@libsql/client';
+import {
+  TABLE_HARNESS_ATTACHMENT_REFERENCES,
+  TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_SESSIONS,
+} from '@mastra/core/storage';
 import type { SessionRecord } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -102,12 +107,117 @@ describe('HarnessLibSQL attachments', () => {
 
     const record = await legacyStorage.getAttachmentRecord({ sessionId: 'session-1', attachmentId: 'a1' });
     expect(record).toMatchObject({ source: 'preupload', sha256: expectedSha256, bytes: 3 });
+    await expect(primaryKeyColumns(client, TABLE_HARNESS_ATTACHMENTS)).resolves.toEqual([
+      'harness_name',
+      'session_id',
+      'attachment_id',
+    ]);
+    await expect(
+      client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENTS}
+              (harness_name, session_id, attachment_id, name, mime_type, size_bytes, sha256, source, created_at, data_b64)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'secondary',
+          'session-1',
+          'a1',
+          'secondary.bin',
+          'application/octet-stream',
+          1,
+          createHash('sha256')
+            .update(new Uint8Array([1]))
+            .digest('hex'),
+          'preupload',
+          Date.now(),
+          Buffer.from([1]).toString('base64'),
+        ],
+      }),
+    ).resolves.toBeDefined();
 
     await legacyStorage.init();
     await expect(legacyStorage.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).resolves.toMatchObject({
       bytes: 3,
       sha256: expectedSha256,
     });
+  });
+});
+
+describe('HarnessLibSQL legacy Harness table migrations', () => {
+  it('rebuilds a pre-namespace sessions table with the namespace-aware primary key', async () => {
+    const client = createClient({ url: ':memory:' });
+    const legacySession = sampleSession({
+      ownsThread: true,
+      version: 7,
+      ownerId: 'owner-1',
+      leaseExpiresAt: 3000,
+    });
+    await createLegacySessionsTable(client);
+    await insertLegacySession(client, legacySession);
+
+    const legacyStorage = new HarnessLibSQL({ client });
+    await legacyStorage.init();
+
+    await expect(primaryKeyColumns(client, TABLE_HARNESS_SESSIONS)).resolves.toEqual(['harness_name', 'id']);
+    await expect(legacyStorage.loadSession({ sessionId: 'session-1' })).resolves.toEqual(legacySession);
+    await expect(
+      legacyStorage.saveSession(sampleSession({ harnessName: 'secondary' }), { ownerId: 'h', ifVersion: 0 }),
+    ).resolves.toMatchObject({ version: 1 });
+  });
+
+  it('rebuilds pre-namespace attachment references with the namespace-aware primary key', async () => {
+    const client = createClient({ url: ':memory:' });
+    await client.execute(`
+      CREATE TABLE ${TABLE_HARNESS_ATTACHMENT_REFERENCES} (
+        session_id TEXT NOT NULL,
+        attachment_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        retained_until INTEGER,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, attachment_id, source, source_id)
+      )
+    `);
+    await client.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+            (session_id, attachment_id, source, source_id, retained_until, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['session-1', 'a1', 'queued_item', 'queued-1', 2000, 1000],
+    });
+
+    const legacyStorage = new HarnessLibSQL({ client });
+    await legacyStorage.init();
+
+    await expect(primaryKeyColumns(client, TABLE_HARNESS_ATTACHMENT_REFERENCES)).resolves.toEqual([
+      'harness_name',
+      'session_id',
+      'attachment_id',
+      'source',
+      'source_id',
+    ]);
+    await expect(
+      legacyStorage.listAttachmentReferences({ sessionId: 'session-1', attachmentId: 'a1' }),
+    ).resolves.toEqual([{ source: 'queued_item', sourceId: 'queued-1', retainedUntil: 2000 }]);
+    await expect(
+      client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+              (harness_name, session_id, attachment_id, source, source_id, retained_until, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: ['secondary', 'session-1', 'a1', 'queued_item', 'queued-1', 3000, 1000],
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('reports duplicate active legacy sessions before creating the active-session index', async () => {
+    const client = createClient({ url: ':memory:' });
+    await createLegacySessionsTable(client);
+    await insertLegacySession(client, { id: 'session-1', resourceId: 'resource-1', threadId: 'thread-1' });
+    await insertLegacySession(client, { id: 'session-2', resourceId: 'resource-1', threadId: 'thread-1' });
+
+    const legacyStorage = new HarnessLibSQL({ client });
+    await expect(legacyStorage.init()).rejects.toThrow(
+      'Cannot create Harness active-session uniqueness index while duplicate active rows exist',
+    );
+    await expect(primaryKeyColumns(client, TABLE_HARNESS_SESSIONS)).resolves.toEqual(['id']);
   });
 });
 
@@ -318,4 +428,83 @@ function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
     version: 0,
     ...overrides,
   };
+}
+
+async function primaryKeyColumns(client: Client, tableName: string): Promise<string[]> {
+  const result = await client.execute({ sql: `PRAGMA table_info("${tableName}")`, args: [] });
+  return result.rows
+    .map(row => ({ name: String(row.name), order: Number(row.pk ?? 0) }))
+    .filter(row => row.order > 0)
+    .sort((a, b) => a.order - b.order)
+    .map(row => row.name);
+}
+
+async function createLegacySessionsTable(client: Client): Promise<void> {
+  await client.execute(`
+    CREATE TABLE ${TABLE_HARNESS_SESSIONS} (
+      id TEXT NOT NULL,
+      resource_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      parent_session_id TEXT,
+      origin TEXT NOT NULL,
+      owns_thread INTEGER NOT NULL,
+      mode_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      subagent_model_overrides TEXT NOT NULL,
+      permission_rules TEXT NOT NULL,
+      session_grants TEXT NOT NULL,
+      token_usage TEXT NOT NULL,
+      pending_queue TEXT NOT NULL,
+      pending_resume TEXT,
+      observational_memory TEXT,
+      goal TEXT,
+      workspace TEXT,
+      state TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_activity_at INTEGER NOT NULL,
+      closed_at INTEGER,
+      version INTEGER NOT NULL,
+      owner_id TEXT,
+      lease_expires_at INTEGER,
+      PRIMARY KEY (id)
+    )
+  `);
+}
+
+async function insertLegacySession(client: Client, overrides: Partial<SessionRecord> = {}): Promise<void> {
+  const session = sampleSession(overrides);
+  await client.execute({
+    sql: `INSERT INTO ${TABLE_HARNESS_SESSIONS}
+          (id, resource_id, thread_id, parent_session_id, origin, owns_thread, mode_id, model_id,
+           subagent_model_overrides, permission_rules, session_grants, token_usage, pending_queue, pending_resume,
+           observational_memory, goal, workspace, state, created_at, last_activity_at, closed_at, version,
+           owner_id, lease_expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      session.id,
+      session.resourceId,
+      session.threadId,
+      session.parentSessionId ?? null,
+      session.origin,
+      session.ownsThread ? 1 : 0,
+      session.modeId,
+      session.modelId,
+      JSON.stringify(session.subagentModelOverrides),
+      JSON.stringify(session.permissionRules),
+      JSON.stringify(session.sessionGrants),
+      JSON.stringify(session.tokenUsage),
+      JSON.stringify(session.pendingQueue),
+      session.pendingResume ? JSON.stringify(session.pendingResume) : null,
+      session.observationalMemory ? JSON.stringify(session.observationalMemory) : null,
+      session.goal ? JSON.stringify(session.goal) : null,
+      session.workspace ? JSON.stringify(session.workspace) : null,
+      JSON.stringify(session.state),
+      session.createdAt,
+      session.lastActivityAt,
+      session.closedAt ?? null,
+      session.version,
+      session.ownerId ?? null,
+      session.leaseExpiresAt ?? null,
+    ],
+  });
 }

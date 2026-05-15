@@ -16,6 +16,7 @@ import {
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_SESSIONS,
   TABLE_SCHEMAS,
+  getSqlType,
 } from '@mastra/core/storage';
 import type {
   AcquireSessionLeaseInput,
@@ -40,6 +41,7 @@ import type {
   SessionLeaseResult,
   SessionRecord,
   SessionSummary,
+  StorageColumn,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -117,8 +119,9 @@ export class HarnessLibSQL extends HarnessStorage {
       ifNotExists: ['harness_name'],
     });
     await this.#backfillHarnessNamespace();
-    await this.#backfillAttachmentMetadata();
     await this.#assertNoDuplicateActiveSessions();
+    await this.#backfillAttachmentMetadata();
+    await this.#ensureHarnessPrimaryKeys();
     await this.#client.execute({
       sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_harness_sessions_active_key
             ON "${TABLE_HARNESS_SESSIONS}" ("harness_name", "resource_id", "thread_id")
@@ -1259,6 +1262,64 @@ export class HarnessLibSQL extends HarnessStorage {
     }
   }
 
+  async #ensureHarnessPrimaryKeys(): Promise<void> {
+    await this.#rebuildTableIfPrimaryKeyMismatch(TABLE_HARNESS_SESSIONS, ['harness_name', 'id']);
+    await this.#rebuildTableIfPrimaryKeyMismatch(TABLE_HARNESS_ATTACHMENTS, [
+      'harness_name',
+      'session_id',
+      'attachment_id',
+    ]);
+    await this.#rebuildTableIfPrimaryKeyMismatch(TABLE_HARNESS_ATTACHMENT_REFERENCES, [
+      'harness_name',
+      'session_id',
+      'attachment_id',
+      'source',
+      'source_id',
+    ]);
+  }
+
+  async #rebuildTableIfPrimaryKeyMismatch(tableName: string, primaryKey: string[]): Promise<void> {
+    const currentPrimaryKey = await this.#primaryKeyColumns(tableName);
+    if (arraysEqual(currentPrimaryKey, primaryKey)) return;
+
+    // createTable() plus the alterTable() calls in init() must bring managed
+    // Harness tables to the current column set before this PK-only rebuild.
+    const schema = TABLE_SCHEMAS[tableName as keyof typeof TABLE_SCHEMAS];
+    const tempTableName = `__${tableName}_pf442_rebuild`;
+    const columns = Object.keys(schema);
+    const quotedColumns = columns.map(quoteIdentifier).join(', ');
+
+    await this.#client.batch(
+      [
+        { sql: `DROP TABLE IF EXISTS ${quoteIdentifier(tempTableName)}`, args: [] },
+        { sql: buildCreateTableSql(tempTableName, schema, primaryKey), args: [] },
+        {
+          sql: `INSERT INTO ${quoteIdentifier(tempTableName)} (${quotedColumns})
+                SELECT ${quotedColumns} FROM ${quoteIdentifier(tableName)}`,
+          args: [],
+        },
+        { sql: `DROP TABLE ${quoteIdentifier(tableName)}`, args: [] },
+        {
+          sql: `ALTER TABLE ${quoteIdentifier(tempTableName)} RENAME TO ${quoteIdentifier(tableName)}`,
+          args: [],
+        },
+      ],
+      'write',
+    );
+  }
+
+  async #primaryKeyColumns(tableName: string): Promise<string[]> {
+    const result = await this.#client.execute({
+      sql: `PRAGMA table_info(${quoteIdentifier(tableName)})`,
+      args: [],
+    });
+    return result.rows
+      .map(row => ({ name: String(row.name), order: Number(row.pk ?? 0) }))
+      .filter(row => row.order > 0)
+      .sort((a, b) => a.order - b.order)
+      .map(row => row.name);
+  }
+
   async #assertNoDuplicateActiveSessions(): Promise<void> {
     const result = await this.#client.execute({
       sql: `SELECT harness_name, resource_id, thread_id, COUNT(*) AS duplicate_count
@@ -1574,6 +1635,33 @@ function isTerminalMessageEvidence(record: AgentSignalResultEvidence): boolean {
 
 function isTerminalQueueReceipt(receipt: QueueAdmissionReceipt): boolean {
   return receipt.status === 'completed' || receipt.status === 'failed' || receipt.status === 'dead';
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function quoteIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function buildCreateTableSql(
+  tableName: string,
+  schema: Record<string, StorageColumn>,
+  compositePrimaryKey: string[],
+): string {
+  const compositePrimaryKeySet = new Set(compositePrimaryKey);
+  const columnDefinitions = Object.entries(schema).map(([columnName, column]) => {
+    const parts = [
+      quoteIdentifier(columnName),
+      getSqlType(column.type),
+      column.nullable === false ? 'NOT NULL' : '',
+      column.primaryKey && !compositePrimaryKeySet.has(columnName) ? 'PRIMARY KEY' : '',
+    ].filter(Boolean);
+    return parts.join(' ');
+  });
+  const primaryKey = `PRIMARY KEY (${compositePrimaryKey.map(quoteIdentifier).join(', ')})`;
+  return `CREATE TABLE ${quoteIdentifier(tableName)} (\n  ${[...columnDefinitions, primaryKey].join(',\n  ')}\n)`;
 }
 
 function toAttachmentReferenceSource(value: unknown): AttachmentReference['source'] {
