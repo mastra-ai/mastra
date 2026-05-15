@@ -892,6 +892,9 @@ export interface QueueOptions extends QueueOverrides {
   /** Free-form user content. The only required field. */
   content: string;
 
+  /** Optional idempotency key for retry-safe queue admission. */
+  admissionId?: string;
+
   /** Optional pre-uploaded attachments to include with the user message. */
   attachments?: AttachmentRef[];
 }

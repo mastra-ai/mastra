@@ -256,6 +256,42 @@ describe('Session — suspend capture on message()', () => {
     expect(session.getRecord().pendingResume).toBeUndefined();
   });
 
+  it('persists a message mode override on pendingResume and resumes through that mode', async () => {
+    const agentA = new FakeAgent();
+    const agentB = new FakeAgent();
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { agentA, agentB } as any,
+      modes: [
+        { id: 'modeA', agentId: 'agentA' },
+        { id: 'modeB', agentId: 'agentB' },
+      ],
+      defaultModeId: 'modeA',
+      sessions: { storage },
+    });
+    agentB.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-mode-b',
+      suspendPayload: { toolCallId: 'tc-mode-b', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await session.message({ content: 'use mode b', mode: 'modeB' });
+
+    expect(session.getRecord().pendingResume).toMatchObject({
+      modeId: 'modeB',
+    });
+    expect(agentB.streamCalls).toHaveLength(1);
+    expect(agentA.streamCalls).toHaveLength(0);
+
+    agentB.enqueueRun({ finishReason: 'stop', runId: 'run-mode-b', text: 'resumed on mode b' });
+    const result = await session.respondToToolApproval({ approved: true });
+
+    expect(result.text).toBe('resumed on mode b');
+    expect(agentB.resumeCalls).toHaveLength(1);
+    expect(agentA.resumeCalls).toHaveLength(0);
+  });
+
   it('keeps a question registered by the tool before suspend capture', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
@@ -281,6 +317,7 @@ describe('Session — suspend capture on message()', () => {
     const pending = session.getRecord().pendingResume!;
     expect(pending.kind).toBe('question');
     expect(pending.itemId).toBe('tc-registered');
+    expect(pending.modeId).toBe('default');
     expect(pending.payload).toEqual({
       question: 'registered prompt',
       options: [{ label: 'yes' }],
@@ -317,6 +354,7 @@ describe('Session — suspend capture on message()', () => {
     const pending = session.getRecord().pendingResume!;
     expect(pending.kind).toBe('plan-approval');
     expect(pending.itemId).toBe('tc-plan');
+    expect(pending.modeId).toBe('planner');
     expect(pending.payload).toEqual({ title: 'registered title', plan: 'registered plan' });
     expect(pending.transitionModeId).toBe('builder');
   });

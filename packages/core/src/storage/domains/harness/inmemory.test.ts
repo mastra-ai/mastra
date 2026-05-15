@@ -104,6 +104,52 @@ describe('InMemoryHarness admission storage contract', () => {
       }),
     ).resolves.toEqual(tombstone);
   });
+
+  it('resolves queue admission duplicates and conflicts from retained receipts', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(
+      sampleSession({
+        queueAdmissionReceipts: {
+          'queued-1': {
+            admissionId: 'admission-1',
+            admissionHash: 'hash-1',
+            queuedItemId: 'queued-1',
+            status: 'queued',
+            attempts: 0,
+            enqueuedAt: 1000,
+            updatedAt: 1000,
+          },
+        },
+      }),
+      { ownerId: 'h', ifVersion: 0 },
+    );
+
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        kind: 'queue',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'hash-1',
+      }),
+    ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-1' });
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        kind: 'queue',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'different-hash',
+      }),
+    ).resolves.toMatchObject({ status: 'conflict', storedAdmissionHash: 'hash-1' });
+    await expect(
+      storage.loadQueueResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        queuedItemId: 'queued-1',
+      }),
+    ).resolves.toMatchObject({ admissionId: 'admission-1', status: 'queued' });
+  });
 });
 
 function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {

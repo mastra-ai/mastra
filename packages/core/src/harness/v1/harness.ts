@@ -953,11 +953,16 @@ export class Harness {
       { sessionId: record.id },
     );
 
-    // If the hydrated record has queued items waiting and no live
-    // suspension blocking them, kick the drain. Items recovered this way
-    // emit `queue_item_replayed` instead of `queue_item_started` because
-    // the original `queue()` caller's resolver is gone.
-    if ((record.pendingQueue?.length ?? 0) > 0 && record.pendingResume === undefined) {
+    // If the hydrated record has queued items waiting and no live suspension
+    // blocking them, kick the drain. A `pendingResume` with `resumedAt` is
+    // also kicked so stale queued-resume recovery can clear/fail it instead
+    // of leaving the queue permanently busy. Items recovered this way emit
+    // `queue_item_replayed` instead of `queue_item_started` because the
+    // original `queue()` caller's resolver is gone.
+    if (
+      (record.pendingQueue?.length ?? 0) > 0 &&
+      (record.pendingResume === undefined || record.pendingResume.resumedAt !== undefined)
+    ) {
       void session._kickQueueDrain();
     }
 

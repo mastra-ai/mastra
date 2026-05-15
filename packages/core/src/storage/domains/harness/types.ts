@@ -127,6 +127,10 @@ export interface PendingResume {
   source: 'parent' | 'subagent';
   subagentToolCallId?: string;
   requestedAt: number;
+  /** Present when this pending resume belongs to a queued turn. */
+  queuedItemId?: string;
+  /** Mode whose backing agent produced this pending resume. */
+  modeId?: string;
   /**
    * Idempotency marker. Set by the resume helper before calling
    * `agent.resumeStream(...)` and observed on replay so a crash between
@@ -352,6 +356,7 @@ export interface QueueAdmissionReceipt {
   admissionId: string;
   admissionHash: string;
   queuedItemId: string;
+  modeId?: string;
   status: 'queued' | 'admitting' | 'accepted' | 'completed' | 'admission_failed' | 'failed' | 'dead';
   runId?: string;
   signalId?: string;
@@ -361,6 +366,7 @@ export interface QueueAdmissionReceipt {
   enqueuedAt: number;
   admittingAt?: number;
   acceptedAt?: number;
+  postRunFinalizedAt?: number;
   completedAt?: number;
   failedAt?: number;
   deadAt?: number;

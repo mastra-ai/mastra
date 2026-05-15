@@ -8,10 +8,9 @@
  * The current local surface includes message/signal/queue turns, mode/model
  * and state mutation, display snapshots, message listing, pending inbox
  * responses, permissions, code/workspace skills, subagents, goals, event
- * forwarding, abort, and idle waiting. It is not yet the production remote or
- * recovery surface: durable admission/result rows, server routes, remote SDKs,
- * channels, wakeups, and request-context `registerQuestion` /
- * `registerPlanApproval` support remain follow-up lanes.
+ * forwarding, abort, and idle waiting. Server routes, remote SDKs, channels,
+ * wakeups, and request-context `registerQuestion` / `registerPlanApproval`
+ * support remain follow-up lanes.
  *
  * Lifecycle states tracked here:
  *   - 'live'    — session is in the harness's live map and holds the lease.
@@ -41,6 +40,7 @@ import type {
   AgentSignalResultStatus,
   HarnessStorage,
   HarnessStorageAttachmentUnavailableError,
+  QueueAdmissionReceipt,
   PendingResume,
   PermissionRules,
   PersistedAttachment,
@@ -127,6 +127,11 @@ type MessageAdmissionStart = {
   promise: Promise<string>;
 };
 
+type QueueResumeRecoveryResult =
+  | { status: 'none' }
+  | { status: 'completed'; result: AgentResult }
+  | { status: 'stale' };
+
 /**
  * Tool IDs the harness translates from `tool-call-approval` /
  * `tool-call-suspended` events into `question` / `plan-approval` `kind`s.
@@ -137,6 +142,8 @@ const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
 const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 const MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS = 30_000;
 const MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS = 100;
+const QUEUE_ACCEPTED_RECOVERY_STALE_MS = 30_000;
+const QUEUE_POST_RUN_FINALIZATION_RETRY_MS = 1_000;
 const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
   'required',
   'properties',
@@ -394,7 +401,7 @@ export class Session {
    */
   private readonly _queueResolvers = new Map<
     string,
-    { resolve: (result: AgentResult) => void; reject: (err: unknown) => void }
+    { promise: Promise<AgentResult>; resolve: (result: AgentResult) => void; reject: (err: unknown) => void }
   >();
   /** `queuedItem.id` of the turn currently running (live or suspended). */
   private _currentQueuedItemId?: string;
@@ -403,6 +410,7 @@ export class Session {
   private _currentQueuedItemSource?: 'user' | 'goal';
   /** True while `_maybeDrainQueue` is running so re-entrant kicks are no-ops. */
   private _draining = false;
+  private _queuedResumeRecoveryTimer?: ReturnType<typeof setTimeout>;
   /**
    * Tracks the AbortController for the currently-running turn (message or
    * queued). Set when a turn begins, cleared on terminal completion or
@@ -1913,7 +1921,7 @@ export class Session {
         });
         const full = result as FullOutput<unknown>;
         this._recordTurnCompletion(full);
-        await this._maybeCaptureSuspend(full);
+        await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
         this._emitTurnEvent({
           type: 'agent_end',
           reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -2095,7 +2103,7 @@ export class Session {
           }).then(() => full);
         })
         .then(full => {
-          return this._maybeCaptureSuspend(full).then(() => {
+          return this._maybeCaptureSuspend(full, undefined, effectiveModeId).then(() => {
             this._emitTurnEvent({
               type: 'agent_end',
               reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -2146,7 +2154,7 @@ export class Session {
           admissionHash: admissionHash!,
         });
       }
-      await this._maybeCaptureSuspend(full);
+      await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
       this._emitTurnEvent({
         type: 'agent_end',
         reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -2446,7 +2454,7 @@ export class Session {
       const result: Promise<AgentResult> = completion
         .then(async full => {
           this._recordTurnCompletion(full);
-          await this._maybeCaptureSuspend(full);
+          await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -2567,7 +2575,7 @@ export class Session {
       const result = completion
         .then(async full => {
           this._recordTurnCompletion(full);
-          await this._maybeCaptureSuspend(full);
+          await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
@@ -2628,7 +2636,11 @@ export class Session {
    *
    * No-op when the run did not suspend.
    */
-  private async _maybeCaptureSuspend(full: FullOutput<unknown>): Promise<void> {
+  private async _maybeCaptureSuspend(
+    full: FullOutput<unknown>,
+    queuedItemId = this._currentQueuedItemId,
+    modeId = this._record.modeId,
+  ): Promise<void> {
     if (full.finishReason !== 'suspended') return;
     const payload = full.suspendPayload as
       | { toolCallId: string; toolName: string; args?: unknown; suspendPayload?: unknown }
@@ -2653,11 +2665,13 @@ export class Session {
       toolName: payload.toolName,
       source: 'parent',
       requestedAt: Date.now(),
+      ...(queuedItemId !== undefined ? { queuedItemId } : {}),
+      modeId,
       payload: this._buildResumePayload(kind, payload),
     };
 
     if (kind === 'plan-approval') {
-      const mode = this._harness._getMode(this._record.modeId);
+      const mode = this._harness._getMode(modeId);
       if (mode.transitionsTo) pending.transitionModeId = mode.transitionsTo;
     }
 
@@ -3124,6 +3138,7 @@ export class Session {
       enqueuedAt: Date.now(),
       content,
       attachments: [],
+      mode: this._record.modeId,
       source: 'goal',
       goalId: goal.id,
     };
@@ -3671,6 +3686,11 @@ export class Session {
     // move is to surface the suspended state to the caller and let them
     // re-fetch via getDisplayState / listMessages.
     if (pending.resumedAt !== undefined) {
+      const recovery = await this._maybeRecoverStaleQueuedResume();
+      if (recovery.status === 'completed') return recovery.result;
+      if (recovery.status === 'stale') {
+        throw new QueueResumeRecoveryStaleError();
+      }
       throw new HarnessValidationError(
         `respond[${expectedKind}]`,
         'pending resume already responded; awaiting agent confirmation',
@@ -3686,9 +3706,10 @@ export class Session {
       pendingResume: prev.pendingResume ? { ...prev.pendingResume, resumedAt } : prev.pendingResume,
     }));
 
-    // For plan-approval, flip the active mode atomically with clearing the
-    // pending record. Done inside the same _flushUpdate below so the mode
-    // change and pending-clear land in one CAS write.
+    // For plan-approval, resolve the active-mode flip before finalizing the
+    // resumed turn. Queued terminal resumes persist this flip with the
+    // completed receipt so crash recovery cannot observe "completed plan
+    // approval, old mode".
     //
     // Resolution order on approval:
     //   1. Caller-supplied `transitionToMode` overrides everything.
@@ -3710,11 +3731,14 @@ export class Session {
       }
     }
 
+    const previousModeId = this._record.modeId;
+    const resumeModeId = this._modeIdForPendingResume(pending);
+
     // Resumed runs run under a session-owned AbortController too, so
     // `session.abort()` can cancel an in-flight resume (e.g. ESC after the
     // user approved a tool that's now grinding through a long workflow).
     const turnAbortController = this._beginTurn(undefined);
-    const agent = this._harness.getAgentForMode(this._record.modeId);
+    const agent = this._harness.getAgentForMode(resumeModeId);
     let full: FullOutput<unknown>;
     try {
       const out = await agent.resumeStream(resumeData, {
@@ -3723,64 +3747,273 @@ export class Session {
         abortSignal: turnAbortController.signal,
       });
       full = (await out.getFullOutput()) as FullOutput<unknown>;
-      this._recordTurnCompletion(full);
+      const resumedQueuedItemId = this._queuedItemIdForPendingResume(pending);
+      if (full.finishReason !== 'suspended' && resumedQueuedItemId !== undefined) {
+        await this._markQueuedTurnCompleted(resumedQueuedItemId, full, { modeId: modeFlipTarget });
+      }
     } catch (err) {
       this._endTurn(turnAbortController);
       throw err;
     }
 
-    // Clear pending + apply mode flip in a single CAS write. The mode flip
-    // and pending-clear must land together so a replay does not see
-    // "pending cleared, mode not yet flipped" or vice versa.
-    const previousModeId = this._record.modeId;
+    // Clear pending + apply any remaining mode flip in a single CAS write. A
+    // queued terminal resume has already persisted its completed receipt before
+    // this point, so crash recovery never sees "pending cleared, queue still
+    // accepted".
+    const pendingQueuedItemId = this._queuedItemIdForPendingResume(pending);
+    const completingQueuedItemId = full.finishReason !== 'suspended' ? pendingQueuedItemId : undefined;
+    try {
+      let queuedResumeFinalized = false;
+      if (completingQueuedItemId !== undefined) {
+        if (modeFlipTarget && modeFlipTarget !== previousModeId) {
+          await this._flushUpdate(prev => ({ ...prev, modeId: modeFlipTarget }));
+        }
+        const queuedItem = this._record.pendingQueue.find(item => item.id === completingQueuedItemId);
+        if (queuedItem) {
+          await this._finalizeCompletedQueuedTurn(queuedItem, full, resumeModeId);
+        } else {
+          this._recordTurnCompletion(full);
+          this._emitTurnEvent({
+            type: 'agent_end',
+            reason: full.finishReason === 'error' ? 'error' : 'complete',
+            runId: full.runId,
+          });
+          await this._runGoalJudge(full, false);
+        }
+        queuedResumeFinalized = true;
+      } else {
+        this._recordTurnCompletion(full);
+      }
+      const queueCompletedAt = Date.now();
+      await this._flushUpdate(prev => {
+        const next: SessionRecord = { ...prev };
+        delete next.pendingResume;
+        if (modeFlipTarget) next.modeId = modeFlipTarget;
+        if (completingQueuedItemId !== undefined) {
+          next.pendingQueue = (prev.pendingQueue ?? []).filter(x => x.id !== completingQueuedItemId);
+          const receipt = prev.queueAdmissionReceipts?.[completingQueuedItemId];
+          if (receipt) {
+            next.queueAdmissionReceipts = {
+              ...(prev.queueAdmissionReceipts ?? {}),
+              [completingQueuedItemId]: {
+                ...receipt,
+                status: 'completed',
+                result: full,
+                completedAt: receipt.completedAt ?? queueCompletedAt,
+                updatedAt: queueCompletedAt,
+              },
+            };
+          }
+        }
+        return next;
+      });
+
+      // Pending resolved — emit before the (optional) re-suspension capture
+      // so subscribers see ordering: resolved → (mode_changed?) → required?.
+      this._emitTurnEvent({
+        type: 'suspension_resolved',
+        kind: expectedKind,
+        toolCallId: pending.toolCallId,
+        runId: pending.runId,
+      });
+      if (modeFlipTarget && modeFlipTarget !== previousModeId) {
+        this._emitter.emit({
+          type: 'mode_changed',
+          modeId: modeFlipTarget,
+          previousModeId,
+        });
+      }
+
+      // The resumed run can itself suspend again (multi-step approval chains).
+      // Mirror message()'s post-run hook so the next respond* call sees the
+      // new pending record.
+      if (!queuedResumeFinalized) {
+        await this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId);
+      }
+
+      // If the resumed run did NOT suspend again, the turn is complete from
+      // the harness's perspective. Surface that to subscribers via agent_end.
+      if (full.finishReason !== 'suspended') {
+        if (!queuedResumeFinalized) {
+          this._emitTurnEvent({
+            type: 'agent_end',
+            reason: full.finishReason === 'error' ? 'error' : 'complete',
+            runId: full.runId,
+          });
+        }
+
+        // If this was the terminal completion of a queued turn, settle the
+        // resolver, remove the head item, clear current, then kick the drain
+        // for the next item.
+        const wasGoalDriven = (this._currentQueuedItemSource ?? 'user') === 'goal';
+        if (completingQueuedItemId !== undefined) {
+          this._currentQueuedItemId = undefined;
+          this._currentQueuedItemSource = undefined;
+          const resolver = this._queueResolvers.get(completingQueuedItemId);
+          if (resolver) {
+            this._queueResolvers.delete(completingQueuedItemId);
+            resolver.resolve(full as AgentResult);
+          }
+          this._notifyMaybeIdle();
+          void this._maybeDrainQueue();
+        }
+        if (!queuedResumeFinalized) {
+          await this._runGoalJudge(full, wasGoalDriven);
+        }
+      }
+    } catch (err) {
+      if (err instanceof QueuePostRunFinalizationPendingError && completingQueuedItemId !== undefined) {
+        this._deferQueuedTurnRetry(err);
+      }
+      throw err;
+    } finally {
+      this._endTurn(turnAbortController);
+    }
+    return full as AgentResult;
+  }
+
+  private _queuedItemIdForPendingResume(pending: PendingResume): string | undefined {
+    if (pending.queuedItemId !== undefined) return pending.queuedItemId;
+    if (this._currentQueuedItemId !== undefined) return this._currentQueuedItemId;
+    return (this._record.pendingQueue ?? []).find(item => {
+      const receipt = this._record.queueAdmissionReceipts?.[item.id];
+      return (receipt?.status === 'accepted' || receipt?.status === 'completed') && receipt.runId === pending.runId;
+    })?.id;
+  }
+
+  private _modeIdForPendingResume(pending: PendingResume): string {
+    const queuedItemId = this._queuedItemIdForPendingResume(pending);
+    const queuedItem = queuedItemId ? this._record.pendingQueue.find(item => item.id === queuedItemId) : undefined;
+    const receipt = queuedItemId ? this._record.queueAdmissionReceipts?.[queuedItemId] : undefined;
+    return pending.modeId ?? receipt?.modeId ?? queuedItem?.mode ?? this._record.modeId;
+  }
+
+  private async _maybeRecoverStaleQueuedResume(): Promise<QueueResumeRecoveryResult> {
+    if (this._currentTurnAbortController !== undefined) return { status: 'none' };
+    const pending = this._record.pendingResume;
+    if (pending?.resumedAt === undefined) return { status: 'none' };
+    const queuedItemId = this._queuedItemIdForPendingResume(pending);
+    if (queuedItemId === undefined) return { status: 'none' };
+
+    const currentReceipt = this._record.queueAdmissionReceipts?.[queuedItemId];
+    if (currentReceipt?.status === 'completed') {
+      const queuedItem = this._record.pendingQueue.find(item => item.id === queuedItemId);
+      if (queuedItem && currentReceipt.postRunFinalizedAt === undefined) {
+        try {
+          await this._finalizeCompletedQueuedTurn(
+            queuedItem,
+            currentReceipt.result as FullOutput<unknown>,
+            pending.modeId ?? currentReceipt.modeId ?? queuedItem.mode ?? this._record.modeId,
+          );
+        } catch (err) {
+          if (err instanceof QueuePostRunFinalizationPendingError) {
+            this._deferQueuedTurnRetry(err);
+            return { status: 'none' };
+          }
+          throw err;
+        }
+      }
+      await this._flushUpdate(prev => {
+        const current = prev.pendingResume;
+        if (
+          !current ||
+          current.runId !== pending.runId ||
+          current.toolCallId !== pending.toolCallId ||
+          current.resumedAt !== pending.resumedAt
+        ) {
+          return prev;
+        }
+        const next: SessionRecord = {
+          ...prev,
+          pendingQueue: (prev.pendingQueue ?? []).filter(item => item.id !== queuedItemId),
+        };
+        delete next.pendingResume;
+        return next;
+      });
+      this._currentQueuedItemId = undefined;
+      this._currentQueuedItemSource = undefined;
+      const resolver = this._queueResolvers.get(queuedItemId);
+      if (resolver) {
+        this._queueResolvers.delete(queuedItemId);
+        resolver.resolve(currentReceipt.result as AgentResult);
+      }
+      this._notifyMaybeIdle();
+      void this._maybeDrainQueue();
+      return { status: 'completed', result: currentReceipt.result as AgentResult };
+    }
+
+    const retryAt = pending.resumedAt + QUEUE_ACCEPTED_RECOVERY_STALE_MS;
+    if (Date.now() < retryAt) {
+      if (this._queuedResumeRecoveryTimer === undefined) {
+        const delayMs = Math.max(0, retryAt - Date.now());
+        this._queuedResumeRecoveryTimer = setTimeout(() => {
+          this._queuedResumeRecoveryTimer = undefined;
+          void this._maybeDrainQueue();
+        }, delayMs);
+        this._queuedResumeRecoveryTimer.unref?.();
+      }
+      return { status: 'none' };
+    }
+
+    if (this._queuedResumeRecoveryTimer !== undefined) {
+      clearTimeout(this._queuedResumeRecoveryTimer);
+      this._queuedResumeRecoveryTimer = undefined;
+    }
+
+    const err = new QueueResumeRecoveryStaleError();
+    const now = Date.now();
     await this._flushUpdate(prev => {
-      const next: SessionRecord = { ...prev };
+      const current = prev.pendingResume;
+      if (
+        !current ||
+        current.runId !== pending.runId ||
+        current.toolCallId !== pending.toolCallId ||
+        current.resumedAt !== pending.resumedAt
+      ) {
+        return prev;
+      }
+      const receipt = prev.queueAdmissionReceipts?.[queuedItemId];
+      const next: SessionRecord = {
+        ...prev,
+        pendingQueue: (prev.pendingQueue ?? []).filter(item => item.id !== queuedItemId),
+      };
       delete next.pendingResume;
-      if (modeFlipTarget) next.modeId = modeFlipTarget;
+      if (receipt) {
+        if (receipt.status === 'completed') {
+          return next;
+        }
+        next.queueAdmissionReceipts = {
+          ...(prev.queueAdmissionReceipts ?? {}),
+          [queuedItemId]: {
+            ...receipt,
+            status: 'failed',
+            error: projectHarnessPublicError(err),
+            failedAt: receipt.failedAt ?? now,
+            updatedAt: now,
+          },
+        };
+      }
       return next;
     });
 
-    // Pending resolved — emit before the (optional) re-suspension capture
-    // so subscribers see ordering: resolved → (mode_changed?) → required?.
-    this._emitTurnEvent({
-      type: 'suspension_resolved',
-      kind: expectedKind,
-      toolCallId: pending.toolCallId,
-      runId: pending.runId,
-    });
-    if (modeFlipTarget && modeFlipTarget !== previousModeId) {
-      this._emitter.emit({
-        type: 'mode_changed',
-        modeId: modeFlipTarget,
-        previousModeId,
-      });
+    const current = this._record.pendingResume;
+    if (
+      current?.runId === pending.runId &&
+      current.toolCallId === pending.toolCallId &&
+      current.resumedAt === pending.resumedAt
+    ) {
+      return { status: 'none' };
     }
 
-    // The resumed run can itself suspend again (multi-step approval chains).
-    // Mirror message()'s post-run hook so the next respond* call sees the
-    // new pending record.
-    await this._maybeCaptureSuspend(full);
-
-    // If the resumed run did NOT suspend again, the turn is complete from
-    // the harness's perspective. Surface that to subscribers via agent_end.
-    if (full.finishReason !== 'suspended') {
-      this._emitTurnEvent({
-        type: 'agent_end',
-        reason: full.finishReason === 'error' ? 'error' : 'complete',
-        runId: full.runId,
-      });
-
-      // If this was the terminal completion of a queued turn, settle the
-      // resolver, remove the head item, clear current, then kick the drain
-      // for the next item.
-      const wasGoalDriven = (this._currentQueuedItemSource ?? 'user') === 'goal';
-      if (this._currentQueuedItemId !== undefined) {
-        await this._completeQueuedTurn(this._currentQueuedItemId, full as AgentResult);
-      }
-      await this._runGoalJudge(full, wasGoalDriven);
+    this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
+    const resolver = this._queueResolvers.get(queuedItemId);
+    if (resolver) {
+      this._queueResolvers.delete(queuedItemId);
+      resolver.reject(err);
     }
-    this._endTurn(turnAbortController);
-    return full as AgentResult;
+    this._notifyMaybeIdle();
+    return { status: 'stale' };
   }
 
   // -------------------------------------------------------------------------
@@ -3795,20 +4028,21 @@ export class Session {
   // Drain semantics:
   //   1. `queue()` admits → flush record → register resolver → kick drain.
   //   2. Drain pulls head item, emits `queue_item_started`, runs the turn
-  //      via the same code path as `message()` default (so `agent_start`,
-  //      `message_*`, `tool_*`, `suspension_*`, `agent_end` all flow with
-  //      `queuedItemId` stamped automatically by `_emitTurnEvent`).
+  //      by dispatching a deterministic `agent.sendSignal()` turn (so
+  //      `agent_start`, `message_*`, `tool_*`, `suspension_*`, `agent_end`
+  //      all flow with `queuedItemId` stamped automatically by
+  //      `_emitTurnEvent`).
   //   3. If the turn suspends, the head item stays in `pendingQueue` and
   //      `_currentQueuedItemId` stays set. The next `respondTo*` call calls
   //      into `_resume`; on terminal completion the resume path settles the
   //      resolver + removes the head + kicks drain again.
-  //   4. If the turn completes without suspending, the message() default
-  //      path settles the same way (post-`agent_end` hook below).
+  //   4. If the turn completes without suspending, the queue receipt,
+  //      signal-result evidence, resolver, and head item settle together.
   //
   // Promise resolution: the eventual `AgentResult` once the turn fully ends
-  // (including any suspend → resume cycles). Rejection only for "never got
-  // to run" cases (closed session before drain reached the item, or a
-  // permanent storage failure during admission).
+  // (including any suspend → resume cycles). Rejection surfaces admission
+  // conflicts, queued-run failures, stale accepted recovery, or expired
+  // duplicate-result evidence.
   // -------------------------------------------------------------------------
 
   /**
@@ -3831,20 +4065,34 @@ export class Session {
       // Validates and throws on unknown id.
       this._harness._getMode(opts.mode);
     }
+    if (opts.admissionId !== undefined && opts.admissionId.length === 0) {
+      throw new HarnessValidationError('queue().admissionId', 'admissionId must be a non-empty string');
+    }
+
+    const attachments = await this._resolveAttachmentRefs('queue().attachments', opts.attachments ?? []);
+    const effectiveModeId = opts.mode ?? this._record.modeId;
+    const admissionId = opts.admissionId ?? `queue-${randomUUID()}`;
+    const admissionHash = this._computeQueueAdmissionHash(opts, attachments);
+    const duplicate = opts.admissionId
+      ? await this._resolveQueueAdmissionDuplicate({ admissionId, admissionHash })
+      : undefined;
+    if (duplicate) return this._returnDuplicateQueueResult(duplicate);
 
     const cap = this._harness._internalMaxQueueDepth;
     if ((this._record.pendingQueue?.length ?? 0) >= cap) {
       throw new HarnessQueueFullError(this.id, cap);
     }
 
-    const attachments = await this._resolveAttachmentRefs('queue().attachments', opts.attachments ?? []);
+    const queuedItemId = this._queueAdmissionQueuedItemId(admissionId);
     const item: QueuedItem = {
-      id: `q-${randomUUID()}`,
+      id: queuedItemId,
+      admissionId,
+      admissionHash,
       enqueuedAt: Date.now(),
       content: opts.content,
       attachments,
       ...(opts.model !== undefined ? { model: opts.model } : {}),
-      ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+      mode: effectiveModeId,
       ...(opts.yolo !== undefined ? { yolo: opts.yolo } : {}),
     };
     const attachmentReferences = attachments
@@ -3856,16 +4104,44 @@ export class Session {
         source: 'queued_item' as const,
         sourceId: item.id,
       }));
+    let admittedReceipt: QueueAdmissionReceipt | OperationAdmissionTombstone | undefined;
+    const receipt: QueueAdmissionReceipt = {
+      admissionId,
+      admissionHash,
+      queuedItemId: item.id,
+      modeId: effectiveModeId,
+      status: 'queued',
+      attempts: 0,
+      enqueuedAt: item.enqueuedAt,
+      updatedAt: item.enqueuedAt,
+    };
 
     try {
       // Atomic check + append: re-check capacity inside the updater so a
-      // concurrent in-process `queue()` cannot push us past the cap.
+      // concurrent in-process `queue()` cannot push us past the cap. Exact
+      // admission retries are resolved here too so they do not append or
+      // consume queue capacity even when racing the original admission.
       await this._flushUpdate(
         prev => {
+          for (const existing of Object.values(prev.queueAdmissionReceipts ?? {})) {
+            if (existing.admissionId !== admissionId) continue;
+            if (existing.admissionHash !== admissionHash) {
+              throw new HarnessAdmissionConflictError(this.id, admissionId, existing.admissionHash, admissionHash);
+            }
+            admittedReceipt = existing;
+            return prev;
+          }
           if ((prev.pendingQueue?.length ?? 0) >= cap) {
             throw new HarnessQueueFullError(this.id, cap);
           }
-          return { ...prev, pendingQueue: [...(prev.pendingQueue ?? []), item] };
+          return {
+            ...prev,
+            pendingQueue: [...(prev.pendingQueue ?? []), item],
+            queueAdmissionReceipts: {
+              ...(prev.queueAdmissionReceipts ?? {}),
+              [item.id]: receipt,
+            },
+          };
         },
         { attachmentReferences },
       );
@@ -3876,11 +4152,167 @@ export class Session {
       throw err;
     }
 
-    return new Promise<AgentResult>((resolve, reject) => {
-      this._queueResolvers.set(item.id, { resolve, reject });
-      // Kick the drain — fire-and-forget. Drain handles its own errors and
-      // settles the resolver via `_completeQueuedTurn` / `_failQueuedTurn`.
-      void this._maybeDrainQueue();
+    if (admittedReceipt) return this._returnDuplicateQueueResult(admittedReceipt);
+
+    const queued = createDeferred<AgentResult>();
+    const promise = queued.promise;
+    this._queueResolvers.set(item.id, { promise, resolve: queued.resolve, reject: queued.reject });
+    // Kick the drain — fire-and-forget. Drain handles its own errors and
+    // settles the resolver via `_completeQueuedTurn` / `_failQueuedTurn`.
+    void this._maybeDrainQueue();
+    void promise.catch(() => {});
+    return promise;
+  }
+
+  private async _resolveQueueAdmissionDuplicate({
+    admissionId,
+    admissionHash,
+  }: {
+    admissionId: string;
+    admissionHash: string;
+  }): Promise<QueueAdmissionReceipt | OperationAdmissionTombstone | undefined> {
+    const resolved = await this._storage.resolveOperationAdmissionEvidence({
+      harnessName: this._record.harnessName,
+      sessionId: this.id,
+      resourceId: this.resourceId,
+      kind: 'queue',
+      admissionId,
+      attemptedAdmissionHash: admissionHash,
+    });
+    if (resolved.status === 'none') return undefined;
+    if (resolved.status === 'conflict') {
+      throw new HarnessAdmissionConflictError(this.id, admissionId, resolved.storedAdmissionHash ?? '', admissionHash);
+    }
+    return resolved.evidence as QueueAdmissionReceipt | OperationAdmissionTombstone | undefined;
+  }
+
+  private async _returnDuplicateQueueResult(
+    evidence: QueueAdmissionReceipt | OperationAdmissionTombstone,
+  ): Promise<AgentResult> {
+    if ('kind' in evidence) {
+      throw new HarnessValidationError('queue().admissionId', 'duplicate queue result evidence has expired');
+    }
+    if (evidence.status === 'completed' && evidence.postRunFinalizedAt !== undefined) {
+      return evidence.result as AgentResult;
+    }
+    if (evidence.status === 'failed' || evidence.status === 'admission_failed') {
+      throw publicErrorProjectionToError(
+        evidence.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
+      );
+    }
+    if (evidence.status === 'dead') {
+      throw publicErrorProjectionToError(
+        evidence.error ?? { code: 'harness.queue_exhausted', message: 'queued turn exhausted retry attempts' },
+      );
+    }
+    const resolver = this._queueResolvers.get(evidence.queuedItemId);
+    if (resolver) return resolver.promise;
+    void this._maybeDrainQueue();
+    return this._awaitDurableQueueResult(evidence);
+  }
+
+  private async _awaitDurableQueueResult(receipt: QueueAdmissionReceipt): Promise<AgentResult> {
+    const deadline = Date.now() + MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS;
+    while (true) {
+      const latest = await this._storage.loadQueueResultEvidence({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        resourceId: this.resourceId,
+        queuedItemId: receipt.queuedItemId,
+      });
+      if (!latest) {
+        throw new HarnessValidationError('queue().admissionId', 'duplicate queue result evidence has expired');
+      }
+      if ('kind' in latest) {
+        throw new HarnessValidationError('queue().admissionId', 'duplicate queue result evidence has expired');
+      }
+      if (latest.status === 'completed' && latest.postRunFinalizedAt !== undefined) return latest.result as AgentResult;
+      if (latest.status === 'failed' || latest.status === 'admission_failed') {
+        throw publicErrorProjectionToError(
+          latest.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
+        );
+      }
+      if (latest.status === 'dead') {
+        throw publicErrorProjectionToError(
+          latest.error ?? { code: 'harness.queue_exhausted', message: 'queued turn exhausted retry attempts' },
+        );
+      }
+      const waitMs = Math.min(MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS, Math.max(0, deadline - Date.now()));
+      if (waitMs === 0) {
+        throw new HarnessValidationError('queue().admissionId', 'duplicate queue result evidence has expired');
+      }
+      await delay(waitMs);
+    }
+  }
+
+  private _queueAdmissionQueuedItemId(admissionId: string): string {
+    const digest = sha256CanonicalJson({
+      kind: 'queue-admission',
+      harnessName: this._record.harnessName,
+      sessionId: this.id,
+      resourceId: this.resourceId,
+      threadId: this.threadId,
+      admissionId,
+    });
+    return `q-${digest.slice(0, 32)}`;
+  }
+
+  private _queueSignalIdentity(item: QueuedItem): MessageAdmissionIdentity {
+    const digest = sha256CanonicalJson({
+      kind: 'queue-signal',
+      harnessName: this._record.harnessName,
+      sessionId: this.id,
+      resourceId: this.resourceId,
+      threadId: this.threadId,
+      queuedItemId: item.id,
+      admissionId: item.admissionId,
+    });
+    return {
+      signalId: `harness-queue-${digest.slice(0, 32)}`,
+      runId: `harness-queue-${digest.slice(32, 64)}`,
+    };
+  }
+
+  private _computeQueueAdmissionHash(opts: QueueOptions, attachments: PersistedAttachment[]): string {
+    return sha256CanonicalJson({
+      kind: 'queue',
+      content: opts.content,
+      ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+      ...(opts.model !== undefined ? { model: opts.model } : {}),
+      ...(opts.yolo === true ? { yolo: true } : {}),
+      attachments: attachments.map(attachment => ({
+        kind: attachment.kind,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        ...(attachment.kind === 'ref'
+          ? {
+              attachmentId: attachment.attachmentId,
+              resourceId: this.resourceId,
+              ownerSessionId: attachment.ownerSessionId,
+              bytes: attachment.bytes,
+              sha256: attachment.sha256,
+              source: attachment.source,
+            }
+          : { url: attachment.url }),
+      })),
+    });
+  }
+
+  private async _updateQueueAdmissionReceipt(
+    queuedItemId: string,
+    update: (receipt: QueueAdmissionReceipt, now: number) => QueueAdmissionReceipt,
+  ): Promise<void> {
+    await this._flushUpdate(prev => {
+      const current = prev.queueAdmissionReceipts?.[queuedItemId];
+      if (!current) return prev;
+      const now = Date.now();
+      return {
+        ...prev,
+        queueAdmissionReceipts: {
+          ...(prev.queueAdmissionReceipts ?? {}),
+          [queuedItemId]: update(current, now),
+        },
+      };
     });
   }
 
@@ -3931,7 +4363,10 @@ export class Session {
     if (this._state !== 'live') return;
     // A live suspension means a previous queued turn is awaiting a
     // `respondTo*` call — drain stays parked until that resolves.
-    if (this._record.pendingResume !== undefined) return;
+    if (this._record.pendingResume !== undefined) {
+      const recovery = await this._maybeRecoverStaleQueuedResume();
+      if (recovery.status === 'none') return;
+    }
     if (this._currentQueuedItemId !== undefined) return;
     // A manual `message()` turn is in flight — wait for it to settle.
     // `_recordTurnCompletion` will re-kick the drain on its way out.
@@ -3962,6 +4397,14 @@ export class Session {
             await this._completeQueuedTurn(head.id, full as AgentResult);
           }
         } catch (err) {
+          if (err instanceof QueueRecoveryPendingError) {
+            this._parkQueuedTurn(head.id, err);
+            return;
+          }
+          if (err instanceof QueuePostRunFinalizationPendingError) {
+            this._deferQueuedTurnRetry(err);
+            return;
+          }
           // Permanent failure during the turn — reject the resolver and
           // remove the item so we don't replay it forever.
           await this._failQueuedTurn(head.id, err);
@@ -3986,9 +4429,54 @@ export class Session {
    */
   private async _runQueuedTurn(item: QueuedItem): Promise<FullOutput<unknown>> {
     await this._validateQueuedAttachmentRefs(item);
-    const effectiveModeId = item.mode ?? this._record.modeId;
+    const currentReceipt = this._record.queueAdmissionReceipts?.[item.id];
+    const effectiveModeId = currentReceipt?.modeId ?? item.mode ?? this._record.modeId;
     const mode = this._harness._getMode(effectiveModeId);
     const agent = this._harness.getAgentForMode(effectiveModeId);
+    const identity = this._queueSignalIdentity(item);
+    let shouldMarkAdmitting = true;
+    if (currentReceipt) {
+      if (currentReceipt.status === 'completed') {
+        const full = currentReceipt.result as FullOutput<unknown>;
+        if (currentReceipt.postRunFinalizedAt === undefined) {
+          await this._finalizeCompletedQueuedTurn(item, full, effectiveModeId);
+        }
+        return full;
+      }
+      if (currentReceipt.status === 'failed' || currentReceipt.status === 'admission_failed') {
+        throw publicErrorProjectionToError(
+          currentReceipt.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
+        );
+      }
+      if (currentReceipt.status === 'dead') {
+        throw publicErrorProjectionToError(
+          currentReceipt.error ?? {
+            code: 'harness.queue_exhausted',
+            message: 'queued turn exhausted retry attempts',
+          },
+        );
+      }
+      if (
+        (currentReceipt.status === 'admitting' || currentReceipt.status === 'accepted') &&
+        currentReceipt.runId &&
+        currentReceipt.signalId
+      ) {
+        const recovered = await this._recoverQueuedDispatch(item, currentReceipt, agent, effectiveModeId);
+        if (recovered) return recovered;
+      }
+    }
+    if (shouldMarkAdmitting) {
+      await this._updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
+        ...receipt,
+        status: 'admitting',
+        runId: identity.runId,
+        signalId: identity.signalId,
+        modeId: receipt.modeId ?? effectiveModeId,
+        attempts: receipt.attempts + 1,
+        admittingAt: receipt.admittingAt ?? now,
+        updatedAt: now,
+      }));
+    }
 
     const toolsets = this._buildToolsets(mode);
     // Queued turns run under a session-owned AbortController so
@@ -4010,27 +4498,240 @@ export class Session {
 
     try {
       await this._ensureThreadSubscription(agent);
+      await this._writeQueueSignalResultEvidence({
+        status: 'pending',
+        signalId: identity.signalId,
+        runId: identity.runId,
+      });
       const signal = agent.sendSignal(
-        { type: 'user-message', contents: item.content as never },
+        { id: identity.signalId, type: 'user-message', contents: item.content as never },
         {
+          runId: identity.runId,
           resourceId: this.resourceId,
           threadId: this.threadId,
           ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
         },
       );
-      const full = await this._awaitRunCompletion(signal.runId);
-      this._recordTurnCompletion(full);
-      await this._maybeCaptureSuspend(full);
-      this._emitTurnEvent({
-        type: 'agent_end',
-        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
-        runId: full.runId,
-      });
-      await this._runGoalJudge(full, (item.source ?? 'user') === 'goal');
-      return full;
+      const signalIdentity =
+        signal.runId === identity.runId && signal.signal.id === identity.signalId
+          ? identity
+          : { runId: signal.runId, signalId: signal.signal.id };
+      const completion = this._awaitQueuedRunCompletion(
+        item,
+        signalIdentity.runId,
+        signalIdentity.signalId,
+        effectiveModeId,
+      );
+      if (signalIdentity !== identity) {
+        await this._writeQueueSignalResultEvidence({
+          status: 'pending',
+          signalId: signalIdentity.signalId,
+          runId: signalIdentity.runId,
+        });
+      }
+      await this._updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
+        ...receipt,
+        status: 'accepted',
+        runId: signalIdentity.runId,
+        signalId: signalIdentity.signalId,
+        modeId: receipt.modeId ?? effectiveModeId,
+        acceptedAt: receipt.acceptedAt ?? now,
+        updatedAt: now,
+      })).catch(() => {});
+      return await completion;
     } finally {
       this._endTurn(turnAbortController);
     }
+  }
+
+  private async _recoverQueuedDispatch(
+    item: QueuedItem,
+    receipt: QueueAdmissionReceipt,
+    agent: Agent,
+    modeId: string,
+  ): Promise<FullOutput<unknown> | undefined> {
+    if (!receipt.runId || !receipt.signalId) return undefined;
+
+    await this._ensureThreadSubscription(agent);
+    if (this._hasLiveMessageRun(agent, receipt.runId)) {
+      return this._awaitQueuedRunCompletion(item, receipt.runId, receipt.signalId, modeId);
+    }
+
+    const evidence = await this._loadQueueSignalResultEvidence(receipt);
+    if (evidence.status === 'completed') {
+      const full = evidence.result as FullOutput<unknown>;
+      await this._markQueuedTurnCompleted(item.id, full);
+      if (receipt.postRunFinalizedAt === undefined) {
+        await this._finalizeCompletedQueuedTurn(item, full, modeId);
+      }
+      return full;
+    }
+    if (evidence.status === 'failed') {
+      throw publicErrorProjectionToError(
+        evidence.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
+      );
+    }
+
+    const recovery = await this._inspectQueueReceiptMemory(receipt);
+    if (recovery.status === 'pending') {
+      const dispatchAt = receipt.acceptedAt ?? receipt.admittingAt ?? receipt.updatedAt;
+      const retryAt = dispatchAt + QUEUE_ACCEPTED_RECOVERY_STALE_MS;
+      if (Date.now() >= retryAt) throw new QueueRecoveryStaleError();
+      throw new QueueRecoveryPendingError(retryAt);
+    }
+
+    return undefined;
+  }
+
+  private async _awaitQueuedRunCompletion(
+    item: QueuedItem,
+    runId: string,
+    signalId: string,
+    modeId: string,
+  ): Promise<FullOutput<unknown>> {
+    let full: FullOutput<unknown>;
+    try {
+      full = await this._awaitRunCompletion(runId);
+    } catch (err) {
+      await this._writeQueueSignalResultEvidence({
+        status: 'failed',
+        signalId,
+        runId,
+        error: projectHarnessPublicError(err),
+      }).catch(() => {});
+      throw err;
+    }
+
+    if (full.finishReason !== 'suspended') {
+      await this._markQueuedTurnCompleted(item.id, full);
+      await this._finalizeCompletedQueuedTurn(item, full, modeId);
+      await this._writeQueueSignalResultEvidence({
+        status: 'completed',
+        signalId,
+        runId,
+        result: full,
+      }).catch(() => {});
+    } else {
+      await this._finalizeQueuedRunCompletion(item, full, modeId);
+    }
+    return full;
+  }
+
+  private async _finalizeCompletedQueuedTurn(
+    item: QueuedItem,
+    full: FullOutput<unknown>,
+    modeId: string,
+  ): Promise<void> {
+    if (this._record.queueAdmissionReceipts?.[item.id]?.postRunFinalizedAt === undefined) {
+      // Mark before running non-idempotent post-run side effects. Recovery may
+      // retry a failed marker write, but must not replay goal continuations,
+      // token accounting, or terminal turn events after the marker persists.
+      try {
+        await this._markQueuedPostRunFinalized(item.id);
+      } catch (err) {
+        throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
+      }
+    }
+    await this._finalizeQueuedRunCompletion(item, full, modeId);
+  }
+
+  private async _markQueuedTurnCompleted(
+    queuedItemId: string,
+    full: FullOutput<unknown>,
+    opts?: { modeId?: string },
+  ): Promise<void> {
+    await this._flushUpdate(prev => {
+      const receipt = prev.queueAdmissionReceipts?.[queuedItemId];
+      if (!receipt && opts?.modeId === undefined) return prev;
+      const now = Date.now();
+      const next: SessionRecord = { ...prev };
+      if (opts?.modeId !== undefined) next.modeId = opts.modeId;
+      if (receipt) {
+        next.queueAdmissionReceipts = {
+          ...(prev.queueAdmissionReceipts ?? {}),
+          [queuedItemId]:
+            receipt.status === 'completed'
+              ? receipt
+              : {
+                  ...receipt,
+                  status: 'completed',
+                  result: full,
+                  completedAt: receipt.completedAt ?? now,
+                  updatedAt: now,
+                },
+        };
+      }
+      return next;
+    });
+  }
+
+  private async _finalizeQueuedRunCompletion(
+    item: QueuedItem,
+    full: FullOutput<unknown>,
+    modeId?: string,
+  ): Promise<FullOutput<unknown>> {
+    this._recordTurnCompletion(full);
+    await this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId);
+    this._emitTurnEvent({
+      type: 'agent_end',
+      reason: full.finishReason === 'suspended' ? 'suspended' : full.finishReason === 'error' ? 'error' : 'complete',
+      runId: full.runId,
+    });
+    await this._runGoalJudge(full, (item.source ?? 'user') === 'goal');
+    return full;
+  }
+
+  private async _markQueuedPostRunFinalized(queuedItemId: string): Promise<void> {
+    await this._updateQueueAdmissionReceipt(queuedItemId, (receipt, now) =>
+      receipt.postRunFinalizedAt !== undefined
+        ? receipt
+        : {
+            ...receipt,
+            postRunFinalizedAt: now,
+            updatedAt: now,
+          },
+    );
+  }
+
+  private async _loadQueueSignalResultEvidence(
+    receipt: QueueAdmissionReceipt,
+  ): Promise<AgentSignalResultStatus | { status: 'not_found' }> {
+    if (!receipt.signalId) return { status: 'not_found' };
+    const evidence = await this._storage.loadMessageResultEvidence({
+      harnessName: this._record.harnessName,
+      sessionId: this.id,
+      resourceId: this.resourceId,
+      threadId: this.threadId,
+      signalId: receipt.signalId,
+    });
+    if (!evidence || 'kind' in evidence) return { status: 'not_found' };
+    return evidence;
+  }
+
+  private async _writeQueueSignalResultEvidence(status: AgentSignalResultStatus): Promise<void> {
+    const now = Date.now();
+    await this._storage.writeMessageResultEvidence({
+      ...status,
+      harnessName: this._record.harnessName,
+      sessionId: this.id,
+      resourceId: this.resourceId,
+      threadId: this.threadId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  private async _inspectQueueReceiptMemory(
+    receipt: QueueAdmissionReceipt,
+  ): Promise<{ status: 'not_found' } | { status: 'pending' }> {
+    if (!receipt.signalId) return { status: 'not_found' };
+
+    const memory = await this._harness._internalTryGetMemoryStorage();
+    if (!memory) return { status: 'not_found' };
+
+    const result = await memory.listMessages({ threadId: this.threadId, resourceId: this.resourceId, perPage: false });
+    const messages = result.messages as StoredMessageRow[];
+    return messages.some(message => message.id === receipt.signalId) ? { status: 'pending' } : { status: 'not_found' };
   }
 
   private async _validateQueuedAttachmentRefs(item: QueuedItem): Promise<void> {
@@ -4062,7 +4763,7 @@ export class Session {
   }
 
   private async _registerQuestion(
-    params: RegisterQuestionParams & { runId?: string; toolCallId?: string },
+    params: RegisterQuestionParams & { runId?: string; toolCallId?: string; modeId?: string },
   ): Promise<void> {
     this._assertLive('ctx.registerQuestion');
     if (typeof params.questionId !== 'string' || params.questionId.length === 0) {
@@ -4091,6 +4792,7 @@ export class Session {
       toolName: ASK_USER_TOOL_NAME,
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       requestedAt: Date.now(),
+      modeId: params.modeId ?? this._record.modeId,
       payload: {
         question: params.question,
         ...(params.options ? { options: params.options } : {}),
@@ -4147,6 +4849,7 @@ export class Session {
       toolName: SUBMIT_PLAN_TOOL_NAME,
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       requestedAt: Date.now(),
+      modeId: submittingModeId,
       payload: {
         ...(params.title !== undefined ? { title: params.title } : {}),
         plan: params.plan,
@@ -4178,14 +4881,33 @@ export class Session {
   /**
    * Settle a queued item's resolver with success and remove it from the
    * head of `pendingQueue`. The CAS write here is the durable record that
-   * the item ran exactly once. Crash recovery uses `pendingQueue[0]` and
-   * the absence of `pendingResume` to decide whether to replay.
+   * the item ran exactly once. Crash recovery uses `pendingQueue[0]`,
+   * `pendingResume`, queue receipts, and signal-result evidence to decide
+   * whether to replay, await, or fail a previously admitted item.
    */
   private async _completeQueuedTurn(itemId: string, result: AgentResult): Promise<void> {
-    await this._flushUpdate(prev => ({
-      ...prev,
-      pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
-    }));
+    const now = Date.now();
+    await this._flushUpdate(prev => {
+      const receipt = prev.queueAdmissionReceipts?.[itemId];
+      return {
+        ...prev,
+        pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
+        ...(receipt
+          ? {
+              queueAdmissionReceipts: {
+                ...(prev.queueAdmissionReceipts ?? {}),
+                [itemId]: {
+                  ...receipt,
+                  status: 'completed',
+                  result,
+                  completedAt: receipt.completedAt ?? now,
+                  updatedAt: now,
+                },
+              },
+            }
+          : {}),
+      };
+    });
     this._currentQueuedItemId = undefined;
     this._currentQueuedItemSource = undefined;
     const resolver = this._queueResolvers.get(itemId);
@@ -4200,10 +4922,52 @@ export class Session {
 
   /** Same as `_completeQueuedTurn` but rejects the resolver with `err`. */
   private async _failQueuedTurn(itemId: string, err: unknown): Promise<void> {
-    await this._flushUpdate(prev => ({
-      ...prev,
-      pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
-    }));
+    const now = Date.now();
+    let completedResult: AgentResult | undefined;
+    await this._flushUpdate(prev => {
+      const receipt = prev.queueAdmissionReceipts?.[itemId];
+      if (receipt?.status === 'completed') {
+        completedResult = receipt.result as AgentResult | undefined;
+        return {
+          ...prev,
+          pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
+        };
+      }
+      return {
+        ...prev,
+        pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
+        ...(receipt
+          ? {
+              queueAdmissionReceipts: {
+                ...(prev.queueAdmissionReceipts ?? {}),
+                [itemId]: {
+                  ...receipt,
+                  status: 'failed',
+                  error: projectHarnessPublicError(err),
+                  failedAt: receipt.failedAt ?? now,
+                  updatedAt: now,
+                },
+              },
+            }
+          : {}),
+      };
+    });
+    this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
+    const resolver = this._queueResolvers.get(itemId);
+    if (resolver) {
+      this._queueResolvers.delete(itemId);
+      if (completedResult !== undefined) {
+        resolver.resolve(completedResult);
+      } else {
+        resolver.reject(err);
+      }
+    }
+    this._notifyMaybeIdle();
+    void this._maybeDrainQueue();
+  }
+
+  private _parkQueuedTurn(itemId: string, err: unknown): void {
     this._currentQueuedItemId = undefined;
     this._currentQueuedItemSource = undefined;
     const resolver = this._queueResolvers.get(itemId);
@@ -4212,7 +4976,20 @@ export class Session {
       resolver.reject(err);
     }
     this._notifyMaybeIdle();
-    void this._maybeDrainQueue();
+    if (err instanceof QueueRecoveryPendingError) {
+      const delayMs = Math.max(0, err.retryAt - Date.now());
+      const timer = setTimeout(() => void this._maybeDrainQueue(), delayMs);
+      timer.unref?.();
+    }
+  }
+
+  private _deferQueuedTurnRetry(err: QueuePostRunFinalizationPendingError): void {
+    this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
+    this._notifyMaybeIdle();
+    const delayMs = Math.max(0, err.retryAt - Date.now());
+    const timer = setTimeout(() => void this._maybeDrainQueue(), delayMs);
+    timer.unref?.();
   }
 
   /** @internal — used by the Harness on hydration to start replay drain. */
@@ -4328,7 +5105,7 @@ export class Session {
         return session.setState(updatesOrUpdater as Partial<unknown>);
       }) as HarnessRequestContext<unknown>['setState'],
       abortSignal: turn.abortSignal,
-      registerQuestion: params => session._registerQuestion(params),
+      registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId }),
       registerPlanApproval: params => session._registerPlanApproval({ ...params, modeId: turn.modeId }),
       // Subagent linkage — set from the record so spawned sessions report
       // their depth + parent linkage on the harness slot.
@@ -4484,6 +5261,48 @@ function publicErrorProjectionToError(error: { code: string; message: string }):
   projected.name = error.code;
   (projected as Error & { code: string }).code = error.code;
   return projected;
+}
+
+class QueueRecoveryPendingError extends Error {
+  code = 'harness.queue_recovery_pending';
+  readonly retryAt: number;
+
+  constructor(retryAt: number) {
+    super('queued turn was accepted by the signal runtime and is awaiting durable terminal result evidence');
+    this.name = 'harness.queue_recovery_pending';
+    this.retryAt = retryAt;
+  }
+}
+
+class QueueRecoveryStaleError extends Error {
+  code = 'harness.queue_recovery_stale';
+
+  constructor() {
+    super('queued turn was accepted by the signal runtime but no live run or durable terminal result is available');
+    this.name = 'harness.queue_recovery_stale';
+  }
+}
+
+class QueueResumeRecoveryStaleError extends Error {
+  code = 'harness.queue_resume_recovery_stale';
+
+  constructor() {
+    super('queued turn resume was marked in flight but no terminal queue result is available');
+    this.name = 'harness.queue_resume_recovery_stale';
+  }
+}
+
+class QueuePostRunFinalizationPendingError extends Error {
+  code = 'harness.queue_post_run_finalization_pending';
+  readonly retryAt: number;
+  readonly cause: unknown;
+
+  constructor(retryAt: number, cause: unknown) {
+    super('queued turn completed and is waiting for post-run finalization to persist');
+    this.name = 'harness.queue_post_run_finalization_pending';
+    this.retryAt = retryAt;
+    this.cause = cause;
+  }
 }
 
 function throwIfAborted(signal: AbortSignal | undefined, path: string): void {

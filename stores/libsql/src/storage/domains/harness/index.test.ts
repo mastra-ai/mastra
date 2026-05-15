@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { createClient } from '@libsql/client';
 import { TABLE_HARNESS_ATTACHMENTS } from '@mastra/core/storage';
+import type { SessionRecord } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { HarnessLibSQL } from './index';
@@ -240,3 +241,81 @@ describe('HarnessLibSQL message result evidence', () => {
     ).resolves.toEqual(compacted);
   });
 });
+
+describe('HarnessLibSQL queue admission evidence', () => {
+  let storage: HarnessLibSQL;
+
+  beforeEach(async () => {
+    const client = createHarnessTestClient();
+    storage = new HarnessLibSQL({ client });
+    await storage.init();
+  });
+
+  it('resolves queue admission duplicates and conflicts from retained receipts', async () => {
+    await storage.saveSession(
+      sampleSession({
+        queueAdmissionReceipts: {
+          'queued-1': {
+            admissionId: 'admission-1',
+            admissionHash: 'hash-1',
+            queuedItemId: 'queued-1',
+            status: 'queued',
+            attempts: 0,
+            enqueuedAt: 1000,
+            updatedAt: 1000,
+          },
+        },
+      }),
+      { ownerId: 'h', ifVersion: 0 },
+    );
+
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        kind: 'queue',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'hash-1',
+      }),
+    ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-1' });
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        kind: 'queue',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'different-hash',
+      }),
+    ).resolves.toMatchObject({ status: 'conflict', storedAdmissionHash: 'hash-1' });
+    await expect(
+      storage.loadQueueResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        queuedItemId: 'queued-1',
+      }),
+    ).resolves.toMatchObject({ admissionId: 'admission-1', status: 'queued' });
+  });
+});
+
+function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
+  return {
+    harnessName: 'default',
+    id: 'session-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    origin: 'top-level',
+    ownsThread: false,
+    modeId: 'build',
+    modelId: 'model-1',
+    subagentModelOverrides: {},
+    permissionRules: { categories: {}, tools: {} },
+    sessionGrants: { categories: [], tools: [] },
+    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    pendingQueue: [],
+    state: {},
+    createdAt: 1000,
+    lastActivityAt: 1000,
+    version: 0,
+    ...overrides,
+  };
+}

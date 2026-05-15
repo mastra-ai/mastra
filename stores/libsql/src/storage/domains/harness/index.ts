@@ -985,7 +985,8 @@ export class HarnessLibSQL extends HarnessStorage {
     if (kind === 'queue') {
       const session = await this.loadSession({ harnessName: namespace, sessionId });
       if (session && session.resourceId !== resourceId) return { status: 'none' };
-      for (const receipt of Object.values(session?.queueAdmissionReceipts ?? {})) {
+      const receipts = Object.values(session?.queueAdmissionReceipts ?? {}) as QueueAdmissionReceipt[];
+      for (const receipt of receipts) {
         if (receipt.admissionId !== admissionId) continue;
         return {
           status: receipt.admissionHash === attemptedAdmissionHash ? 'duplicate' : 'conflict',
