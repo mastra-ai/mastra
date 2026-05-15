@@ -60,7 +60,7 @@ function sourceModeExportTarget(source: string) {
     >) {
       if (!exportPath.includes('*') || !exportConfig['mastra-source']) continue;
 
-      const [exportPrefix, exportSuffix] = exportPath.split('*');
+      const [exportPrefix = '', exportSuffix = ''] = exportPath.split('*');
       if (!subpath.startsWith(exportPrefix) || !subpath.endsWith(exportSuffix)) continue;
 
       const wildcard = subpath.slice(exportPrefix.length, subpath.length - exportSuffix.length);

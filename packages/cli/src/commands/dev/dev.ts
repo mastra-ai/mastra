@@ -1,7 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import devcert from '@expo/devcert';
@@ -72,6 +72,11 @@ function applySourceModeEnv(env?: Map<string, string>) {
   env?.set('NODE_OPTIONS', nodeOptions);
 }
 
+function isPathInside(parent: string, child: string) {
+  const relativePath = relative(resolve(parent), resolve(child));
+  return relativePath !== '' && !relativePath.startsWith('..') && !isAbsolute(relativePath);
+}
+
 async function linkSourceModeWorkspacePackages(outputDir: string) {
   if (process.env.MASTRA_SOURCE_MODE !== '1') {
     return;
@@ -81,8 +86,15 @@ async function linkSourceModeWorkspacePackages(outputDir: string) {
   const nodeModulesDir = join(outputDir, 'node_modules');
   await mkdir(nodeModulesDir, { recursive: true });
 
+  const realOutputDir = await realpath(outputDir).catch(() => resolve(outputDir));
+
   const linkNodeModules = async (sourceNodeModules: string) => {
     if (!existsSync(sourceNodeModules)) {
+      return;
+    }
+
+    const realSourceNodeModules = await realpath(sourceNodeModules).catch(() => resolve(sourceNodeModules));
+    if (realSourceNodeModules === realOutputDir || isPathInside(realOutputDir, realSourceNodeModules)) {
       return;
     }
 
@@ -134,8 +146,6 @@ async function linkSourceModeWorkspacePackages(outputDir: string) {
       if (!existsSync(packageJsonPath)) {
         continue;
       }
-
-      await linkNodeModules(join(packageDir, 'node_modules'));
 
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8')) as { name?: string };
       const packageJsonName = packageJson.name;
