@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 
 import type { GoalJudgeResult } from '../goal-manager.js';
-import { BOX_INDENT, getTermWidth, mastraBrand } from '../theme.js';
+import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
 
 const JUDGE_COLOR = mastraBrand.blue;
 const MUTED_COLOR = '#8a8a8a';
@@ -67,7 +67,7 @@ export class JudgeDisplayComponent extends Container {
     }
 
     for (const line of this.activity) {
-      this.addChild(new Text(this.renderRow(chalk.dim.italic(`• ${line}`), innerWidth, border), BOX_INDENT, 0));
+      this.addChild(new Text(this.renderRow(this.renderActivityLine(line), innerWidth, border), BOX_INDENT, 0));
     }
 
     if (this.activity.length > 0 && this.result) {
@@ -81,6 +81,14 @@ export class JudgeDisplayComponent extends Container {
     }
 
     this.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, BOX_INDENT, 0));
+  }
+
+  private renderActivityLine(line: string): string {
+    const toolName = getActivityToolName(line);
+    if (!toolName) return theme.fg('dim', `• ${line}`);
+
+    const rest = line.slice(toolName.length);
+    return `${theme.fg('dim', '• ')}${theme.fg('dim', theme.italic(toolName))}${theme.fg('dim', rest)}`;
   }
 
   private renderHeader(title: string): string {
@@ -126,6 +134,12 @@ export class JudgeDisplayComponent extends Container {
     }
     return text + ' '.repeat(width - visibleLength);
   }
+}
+
+function getActivityToolName(line: string): string | null {
+  if (line.startsWith('find files ')) return 'find files';
+  const [toolName] = line.split(' ');
+  return toolName || null;
 }
 
 function getDecisionText(decision: GoalJudgeResult['decision']): string {
