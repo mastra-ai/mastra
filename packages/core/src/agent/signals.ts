@@ -175,11 +175,11 @@ function legacyPartToSignalPart(part: unknown): TextPart | FilePart | undefined 
   }
 
   // Legacy file/image parts used `mediaType`; image parts also used `image` instead of `data`.
+  // Binary data (Uint8Array/ArrayBuffer/Buffer) and URL instances don't survive JSON, so anything
+  // that round-tripped through storage is already a base64 or URL string.
   if (record.type === 'file' || record.type === 'image') {
     const data = record.type === 'image' ? (record.image ?? record.data) : record.data;
-    if (typeof data !== 'string' && !(data instanceof URL) && !isBinaryDataContent(data)) {
-      return undefined;
-    }
+    if (typeof data !== 'string') return undefined;
     const mimeType =
       typeof record.mimeType === 'string'
         ? record.mimeType
@@ -191,17 +191,13 @@ function legacyPartToSignalPart(part: unknown): TextPart | FilePart | undefined 
     if (!mimeType) return undefined;
     return {
       type: 'file',
-      data: data as FilePart['data'],
+      data,
       mimeType,
       ...(typeof record.filename === 'string' ? { filename: record.filename } : {}),
     };
   }
 
   return undefined;
-}
-
-function isBinaryDataContent(value: unknown): boolean {
-  return value instanceof Uint8Array || value instanceof ArrayBuffer || Buffer.isBuffer(value as Buffer);
 }
 
 function collapseLegacyParts(parts: Array<TextPart | FilePart>): AgentSignalContents | undefined {
