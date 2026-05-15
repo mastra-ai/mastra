@@ -33,6 +33,7 @@ const mastra = new Mastra({
     auth: new MastraAuthWorkos({
       /* ... */
       fetchMemberships: true,
+      mapUserToResourceId: user => user.teamId,
     }),
     fga: new MastraFGAWorkos({
       resourceMapping: {
@@ -47,6 +48,9 @@ const mastra = new Mastra({
         [MastraFGAPermissions.MEMORY_WRITE]: 'update',
       },
     }),
+    storedResources: {
+      scope: true,
+    },
   },
 });
 ```
@@ -75,6 +79,7 @@ resourceMapping: {
 - `user` — the authenticated user
 - `resourceId` — the owning Mastra resource ID when available (for example, a thread's `resourceId`)
 - `requestContext` — the current request context for advanced tenant resolution
+- `metadata` — provider-specific metadata for the attempted action
 
 Return `undefined` from `deriveId()` to fall back to the original Mastra resource ID.
 
@@ -97,9 +102,43 @@ If no mapping exists for a permission, the original string is passed through.
 
 Use `validatePermissions()` to validate the full set of permissions Mastra may emit at startup. Use this when a provider requires every Mastra permission to have an explicit provider permission slug.
 
+### Stored resource scoping
+
+FGA authorizes access to a resource. It does not automatically filter stored records that live in shared storage. Enable stored resource scoping when the built-in stored resource APIs are used in a multi-tenant app.
+
+```typescript prettier: false
+const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthWorkos({
+      /* ... */
+      mapUserToResourceId: user => user.teamId,
+    }),
+    storedResources: {
+      scope: true,
+    },
+  },
+});
+```
+
+With `scope: true`, Mastra reads `MASTRA_RESOURCE_ID_KEY` from the request context. `mapUserToResourceId()` sets this value after authentication. Stored resource handlers persist the scope in record metadata and filter list, read, update, publish, and delete operations by that scope.
+
+Use an object when the scope needs custom request logic:
+
+```typescript prettier: false
+storedResources: {
+  scope: {
+    metadataKey: 'teamId',
+    resolve: ({ user }) => user.teamId,
+    requireScope: true,
+  },
+},
+```
+
+If `requireScope` is `true` or omitted, scoped stored resource routes fail when no scope can be resolved.
+
 ### Route policy coverage
 
-Mastra includes route-level FGA metadata for built-in resource routes, including agents, workflows, tools, MCP tools, memory threads, responses, and conversations. A route is checked when it has route-level `fga` metadata, when Mastra can derive built-in metadata for that route, or when the provider supplies metadata with `resolveRouteFGA()`.
+Mastra includes route-level FGA metadata for built-in resource routes, including agents, workflows, tools, MCP tools, memory threads, responses, conversations, and stored resources. Stored resource route coverage includes `/stored/agents`, `/stored/mcp-clients`, `/stored/prompt-blocks`, `/stored/scorers`, `/stored/skills`, and `/stored/workspaces`. A route is checked when it has route-level `fga` metadata, when Mastra can derive built-in metadata for that route, or when the provider supplies metadata with `resolveRouteFGA()`.
 
 To deny protected routes that do not resolve FGA metadata, configure route policy coverage on the FGA provider:
 
@@ -171,9 +210,10 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | - | - | - |
 | Agent execution (`generate`, `stream`) | `agents:execute` | `{ type: 'agent', id: agentId }` |
 | Workflow execution | `workflows:execute` | `{ type: 'workflow', id: workflowId }` |
-| Tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` |
+| Tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` or the derived MCP or agent tool ID |
 | Thread/memory access | `memory:read`, `memory:write`, `memory:delete` | `{ type: 'thread', id: threadId }` |
-| MCP tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` |
+| MCP tool execution | `tools:execute` | `{ type: 'tool', id: [serverName, toolName] }` |
+| Stored resource routes | Stored resource permission for the route action | Stored resource type and route ID |
 | HTTP resource routes | Configured per route | Configured per route |
 
 All checks are **no-ops when FGA is not configured**, maintaining backward compatibility.

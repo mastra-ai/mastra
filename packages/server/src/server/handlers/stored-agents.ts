@@ -18,7 +18,7 @@ import {
 } from '../schemas/stored-agents';
 import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
@@ -61,7 +61,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -74,13 +74,14 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      const scope = await getStoredResourceScope(mastra, requestContext);
       const result = await agentsStore.listResolved({
         page,
         perPage,
         orderBy,
         status,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
       return result;
@@ -105,7 +106,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
     'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId, status }) => {
+  handler: async ({ mastra, storedAgentId, status, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -123,6 +124,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
       return agent;
     } catch (error) {
@@ -156,6 +158,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     id: providedId,
     authorId,
     metadata,
+    requestContext,
     name,
     description,
     instructions,
@@ -207,7 +210,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         agent: {
           id,
           authorId,
-          metadata,
+          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
           name,
           description,
           instructions,
@@ -274,6 +277,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     // Metadata-level fields
     authorId,
     metadata,
+    requestContext,
     // Config fields (snapshot-level)
     name,
     description,
@@ -312,6 +316,8 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
@@ -319,7 +325,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const updatedAgent = await agentsStore.update({
         id: storedAgentId,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
         name,
         description,
         instructions,
@@ -413,7 +419,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId }) => {
+  handler: async ({ mastra, storedAgentId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -431,6 +437,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       await agentsStore.delete(storedAgentId);
 

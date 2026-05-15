@@ -233,12 +233,14 @@ function createMockEditor(): MockEditor {
 interface MockMastra {
   getStorage: ReturnType<typeof vi.fn>;
   getEditor: ReturnType<typeof vi.fn>;
+  getServer: ReturnType<typeof vi.fn>;
 }
 
-function createMockMastra(options: { storage?: MockStorage; editor?: MockEditor } = {}): MockMastra {
+function createMockMastra(options: { storage?: MockStorage; editor?: MockEditor; server?: Record<string, unknown> } = {}): MockMastra {
   return {
     getStorage: vi.fn().mockReturnValue(options.storage),
     getEditor: vi.fn().mockReturnValue(options.editor),
+    getServer: vi.fn().mockReturnValue(options.server ?? {}),
   };
 }
 
@@ -316,6 +318,68 @@ describe('Stored Agents Handlers', () => {
         name: 'Test Agent 1',
         description: 'First test agent',
       });
+    });
+
+    it('should scope stored agent lists by request resource metadata when configured', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        server: { storedResources: { scope: true } },
+      });
+      mockAgentsData.set('agent1', {
+        id: 'agent1',
+        name: 'Team Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        metadata: { 'mastra.resourceId': 'team-a' },
+      });
+      mockAgentsData.set('agent2', {
+        id: 'agent2',
+        name: 'Other Team Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        metadata: { 'mastra.resourceId': 'team-b' },
+      });
+      const context = createTestContext(mockMastra);
+      context.requestContext.set('mastra__resourceId', 'team-a');
+
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...context,
+        page: 1,
+      });
+
+      expect(result.agents.map(agent => agent.id)).toEqual(['agent1']);
+      expect(mockAgentsStore.listResolved).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: { 'mastra.resourceId': 'team-a' } }),
+      );
+    });
+
+    it('should not scope stored agent lists when auth is configured without stored resource scope', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        server: { auth: {} },
+      });
+      mockAgentsData.set('agent1', {
+        id: 'agent1',
+        name: 'Team Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        metadata: { 'mastra.resourceId': 'team-a' },
+      });
+      mockAgentsData.set('agent2', {
+        id: 'agent2',
+        name: 'Other Team Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        metadata: { 'mastra.resourceId': 'team-b' },
+      });
+      const context = createTestContext(mockMastra);
+      context.requestContext.set('mastra__resourceId', 'team-a');
+
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...context,
+        page: 1,
+      });
+
+      expect(result.agents.map(agent => agent.id)).toEqual(['agent1', 'agent2']);
+      expect(mockAgentsStore.listResolved).toHaveBeenCalledWith(expect.objectContaining({ metadata: undefined }));
     });
 
     it('should support pagination', async () => {

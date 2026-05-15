@@ -1,10 +1,13 @@
 import type { Mastra } from '@mastra/core';
+import type { RequestContext } from '@mastra/core/di';
 import type { SystemMessage } from '@mastra/core/llm';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import { stringify } from 'superjson';
+import { MASTRA_RESOURCE_ID_KEY } from './constants';
+import { HTTPException } from './http-exception';
 
 /**
  * Convert any PublicSchema to a JSON Schema.
@@ -46,6 +49,70 @@ export function normalizeRoutePath(path: string): string {
     normalized = `/${normalized}`;
   }
   return normalized;
+}
+
+const DEFAULT_STORED_RESOURCE_SCOPE_METADATA_KEY = 'mastra.resourceId';
+
+export type StoredResourceScope = {
+  metadataKey: string;
+  value: string;
+};
+
+export type StoredResourceLike = {
+  metadata?: Record<string, unknown> | null;
+};
+
+export async function getStoredResourceScope(
+  mastra: any,
+  requestContext: RequestContext | undefined,
+): Promise<StoredResourceScope | undefined> {
+  const scopeConfig = mastra?.getServer?.()?.storedResources?.scope;
+  if (!scopeConfig) {
+    return undefined;
+  }
+
+  const options = scopeConfig === true ? {} : scopeConfig;
+  const metadataKey = options.metadataKey ?? DEFAULT_STORED_RESOURCE_SCOPE_METADATA_KEY;
+  const user = requestContext?.get('user');
+  const resolved = options.resolve
+    ? await options.resolve({ requestContext, user })
+    : (requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
+
+  if (!resolved) {
+    if (options.requireScope === false) {
+      return undefined;
+    }
+    throw new HTTPException(403, { message: 'Stored resource scope is required' });
+  }
+
+  return { metadataKey, value: resolved };
+}
+
+export function scopeStoredResourceMetadata(
+  metadata: Record<string, unknown> | undefined,
+  scope: StoredResourceScope | undefined,
+): Record<string, unknown> | undefined {
+  if (!scope) {
+    return metadata;
+  }
+
+  return {
+    ...(metadata ?? {}),
+    [scope.metadataKey]: scope.value,
+  };
+}
+
+export function assertStoredResourceScope(
+  resource: StoredResourceLike | null | undefined,
+  scope: StoredResourceScope | undefined,
+): void {
+  if (!resource || !scope) {
+    return;
+  }
+
+  if (resource.metadata?.[scope.metadataKey] !== scope.value) {
+    throw new HTTPException(404, { message: 'Stored resource not found' });
+  }
 }
 
 /**

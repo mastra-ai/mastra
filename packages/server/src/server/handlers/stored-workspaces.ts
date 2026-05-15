@@ -11,7 +11,7 @@ import {
   deleteStoredWorkspaceResponseSchema,
 } from '../schemas/stored-workspaces';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { handleError } from './error';
 
@@ -32,7 +32,7 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
   description: 'Returns a paginated list of all workspace configurations stored in the database',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -45,12 +45,13 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
       }
 
+      const scope = await getStoredResourceScope(mastra, requestContext);
       const result = await workspaceStore.listResolved({
         page,
         perPage,
         orderBy,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
       return result;
@@ -74,7 +75,7 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
     'Returns a specific workspace from storage by its unique identifier (resolved with active version config)',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
-  handler: async ({ mastra, storedWorkspaceId }) => {
+  handler: async ({ mastra, storedWorkspaceId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -92,6 +93,7 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
       if (!workspace) {
         throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
       }
+      assertStoredResourceScope(workspace, await getStoredResourceScope(mastra, requestContext));
 
       return workspace;
     } catch (error) {
@@ -128,6 +130,7 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
     tools,
     autoSync,
     operationTimeout,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -160,7 +163,7 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
         workspace: {
           id,
           authorId,
-          metadata,
+          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
           name,
           description,
           filesystem,
@@ -218,6 +221,7 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
     tools,
     autoSync,
     operationTimeout,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -236,13 +240,15 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
 
       // Update the workspace with both metadata-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
       await workspaceStore.update({
         id: storedWorkspaceId,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
         name,
         description,
         filesystem,
@@ -281,7 +287,7 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
   description: 'Deletes a workspace from storage by its unique identifier',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
-  handler: async ({ mastra, storedWorkspaceId }) => {
+  handler: async ({ mastra, storedWorkspaceId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -299,6 +305,7 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       await workspaceStore.delete(storedWorkspaceId);
 

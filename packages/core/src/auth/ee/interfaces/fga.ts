@@ -30,6 +30,10 @@ export interface FGACheckContext {
    * data to derive the authorization resource identifier.
    */
   requestContext?: RequestContext;
+  /**
+   * Optional provider-specific metadata about the attempted action.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**

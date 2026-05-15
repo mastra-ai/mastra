@@ -13,6 +13,7 @@ import { coreAuthMiddleware } from '../auth/helpers';
 import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
+  MASTRA_RESOURCE_ID_KEY,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
@@ -131,6 +132,43 @@ function getToolRoutePermission(path: string): MastraFGAPermissionInput {
   return path.includes('/execute') ? 'tools:execute' : 'tools:read';
 }
 
+const STORED_ROUTE_FGA: Record<string, { resourceType: string; idParams: string[] }> = {
+  agents: { resourceType: 'stored-agents', idParams: ['storedAgentId', 'agentId'] },
+  'mcp-clients': { resourceType: 'stored-mcp-clients', idParams: ['storedMCPClientId', 'mcpClientId'] },
+  'prompt-blocks': { resourceType: 'stored-prompt-blocks', idParams: ['storedPromptBlockId', 'promptBlockId'] },
+  scorers: { resourceType: 'stored-scorers', idParams: ['storedScorerId', 'scorerId'] },
+  skills: { resourceType: 'stored-skills', idParams: ['storedSkillId'] },
+  workspaces: { resourceType: 'stored-workspaces', idParams: ['storedWorkspaceId'] },
+};
+
+function getStoredResourceRouteFGAConfig(path: string, permission: MastraFGAPermissionInput): FGARouteConfig | null {
+  const match = path.match(/^\/stored\/([^/]+)/);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const config = STORED_ROUTE_FGA[match[1]];
+  if (!config) {
+    return null;
+  }
+
+  return {
+    resourceType: config.resourceType,
+    resourceId: (params, { requestContext }) => {
+      for (const idParam of config.idParams) {
+        const id = params[idParam];
+        if (typeof id === 'string' && id) {
+          return id;
+        }
+      }
+
+      const scopedResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+      return typeof scopedResourceId === 'string' && scopedResourceId ? scopedResourceId : config.resourceType;
+    },
+    permission,
+  };
+}
+
 function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
   if (!isProtectedFGARoute(route) || !route.path || !route.method) {
     return null;
@@ -142,6 +180,11 @@ function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
   }
 
   const path = route.path;
+  const storedRouteConfig = getStoredResourceRouteFGAConfig(path, permission);
+  if (storedRouteConfig) {
+    return storedRouteConfig;
+  }
+
   if (path.startsWith('/agents/:agentId/tools/:toolId')) {
     return {
       resourceType: 'tool',

@@ -12,6 +12,7 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../auth/ee';
 import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -575,6 +576,36 @@ export class CoreToolBuilder extends MastraBase {
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
+
+        const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
+        const user = toolRequestContext?.get('user');
+        if (fgaProvider && user) {
+          const toolResourceId = mcpMeta?.serverName
+            ? JSON.stringify([mcpMeta.serverName, options.name])
+            : options.agentId
+              ? `${options.agentId}:${options.name}`
+              : options.name;
+          const { checkFGA } = await import('../../auth/ee/fga-check');
+          await checkFGA({
+            fgaProvider,
+            user,
+            resource: { type: 'tool', id: toolResourceId },
+            permission: MastraFGAPermissions.TOOLS_EXECUTE,
+            context: {
+              resourceId: toolResourceId,
+              requestContext: toolRequestContext,
+              metadata: {
+                toolName: options.name,
+                agentId: options.agentId,
+                agentName: options.agentName,
+                runId: options.runId,
+                threadId: options.threadId,
+                executionResourceId: options.resourceId,
+                mcpMetadata: mcpMeta,
+              },
+            },
+          });
+        }
 
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
