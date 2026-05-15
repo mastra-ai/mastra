@@ -46,20 +46,36 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
     });
+    // Add columns introduced after initial schema for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: ['agentVersion'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['status', 'tags'],
+    });
 
     // Indexes — idempotent, safe to run on every init
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_experiments_datasetid ON "${TABLE_EXPERIMENTS}" ("datasetId")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_experiment_results_experimentid ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId")`,
-      args: [],
-    });
-    await this.#client.execute({
-      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_results_exp_item ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId", "itemId")`,
-      args: [],
-    });
+    await this.#client.batch(
+      [
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_experiments_datasetid ON "${TABLE_EXPERIMENTS}" ("datasetId")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_experiment_results_experimentid ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId")`,
+          args: [],
+        },
+        {
+          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_results_exp_item ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId", "itemId")`,
+          args: [],
+        },
+      ],
+      'write',
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -286,6 +302,22 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         conditions.push('datasetId = ?');
         queryParams.push(args.datasetId);
       }
+      if (args.targetType) {
+        conditions.push('targetType = ?');
+        queryParams.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push('targetId = ?');
+        queryParams.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push('agentVersion = ?');
+        queryParams.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push('status = ?');
+        queryParams.push(args.status);
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -510,6 +542,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       // Build WHERE clause
       const conditions: string[] = ['experimentId = ?'];
       const queryParams: InValue[] = [args.experimentId];
+
+      if (args.traceId) {
+        conditions.push('traceId = ?');
+        queryParams.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push('status = ?');
+        queryParams.push(args.status);
+      }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 

@@ -134,8 +134,11 @@ function addCommonFilterFields(
     spanId?: string;
     entityType?: string;
     entityName?: string;
+    entityVersionId?: string;
+    parentEntityVersionId?: string;
     parentEntityType?: string;
     parentEntityName?: string;
+    rootEntityVersionId?: string;
     rootEntityType?: string;
     rootEntityName?: string;
     userId?: string;
@@ -161,8 +164,11 @@ function addCommonFilterFields(
   addEq(col('spanId'), filters.spanId, 'spanId', 'String', out);
   addEq(col('entityType'), filters.entityType, 'entityType', 'String', out);
   addEq(col('entityName'), filters.entityName, 'entityName', 'String', out);
+  addEq(col('entityVersionId'), filters.entityVersionId, 'entityVersionId', 'String', out);
+  addEq(col('parentEntityVersionId'), filters.parentEntityVersionId, 'parentEntityVersionId', 'String', out);
   addEq(col('parentEntityType'), filters.parentEntityType, 'parentEntityType', 'String', out);
   addEq(col('parentEntityName'), filters.parentEntityName, 'parentEntityName', 'String', out);
+  addEq(col('rootEntityVersionId'), filters.rootEntityVersionId, 'rootEntityVersionId', 'String', out);
   addEq(col('rootEntityType'), filters.rootEntityType, 'rootEntityType', 'String', out);
   addEq(col('rootEntityName'), filters.rootEntityName, 'rootEntityName', 'String', out);
   addEq(col('userId'), filters.userId, 'userId', 'String', out);
@@ -195,9 +201,12 @@ export function buildTraceFilterConditions(filters: TracesFilter | undefined, ta
   addEq(col('entityType'), filters.entityType, 'entityType', 'String', out);
   addEq(col('entityId'), filters.entityId, 'entityId', 'String', out);
   addEq(col('entityName'), filters.entityName, 'entityName', 'String', out);
+  addEq(col('entityVersionId'), filters.entityVersionId, 'entityVersionId', 'String', out);
+  addEq(col('parentEntityVersionId'), filters.parentEntityVersionId, 'parentEntityVersionId', 'String', out);
   addEq(col('parentEntityType'), filters.parentEntityType, 'parentEntityType', 'String', out);
   addEq(col('parentEntityId'), filters.parentEntityId, 'parentEntityId', 'String', out);
   addEq(col('parentEntityName'), filters.parentEntityName, 'parentEntityName', 'String', out);
+  addEq(col('rootEntityVersionId'), filters.rootEntityVersionId, 'rootEntityVersionId', 'String', out);
   addEq(col('rootEntityType'), filters.rootEntityType, 'rootEntityType', 'String', out);
   addEq(col('rootEntityId'), filters.rootEntityId, 'rootEntityId', 'String', out);
   addEq(col('rootEntityName'), filters.rootEntityName, 'rootEntityName', 'String', out);

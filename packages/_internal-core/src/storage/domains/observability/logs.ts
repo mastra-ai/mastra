@@ -31,6 +31,7 @@ const logDataField = z.record(z.string(), z.unknown()).describe('Structured data
  */
 export const logRecordSchema = z
   .object({
+    logId: z.string().nullish().describe('Unique id for this log event'),
     timestamp: z.date().describe('When the log was created'),
     level: logLevelSchema.describe('Log severity level'),
     message: messageField,

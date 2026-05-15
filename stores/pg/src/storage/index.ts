@@ -16,7 +16,9 @@ import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
+import { BackgroundTasksPG } from './domains/background-tasks';
 import { BlobsPG } from './domains/blobs';
+import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { MCPClientsPG } from './domains/mcp-clients';
@@ -24,6 +26,7 @@ import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { PromptBlocksPG } from './domains/prompt-blocks';
+import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
@@ -49,6 +52,9 @@ const ALL_DOMAINS = [
   WorkflowsPG,
   DatasetsPG,
   ExperimentsPG,
+  BackgroundTasksPG,
+  ChannelsPG,
+  SchedulesPG,
 ] as const;
 
 /**
@@ -74,7 +80,9 @@ export function exportSchemas(schemaName?: string): string {
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsPG,
+  BackgroundTasksPG,
   BlobsPG,
+  ChannelsPG,
   DatasetsPG,
   ExperimentsPG,
   MCPClientsPG,
@@ -84,6 +92,7 @@ export {
   PromptBlocksPG,
   ScorerDefinitionsPG,
   ScoresPG,
+  SchedulesPG,
   SkillsPG,
   WorkflowsPG,
   WorkspacesPG,
@@ -163,6 +172,9 @@ export class PostgresStore extends MastraCompositeStore {
         blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),
+        backgroundTasks: new BackgroundTasksPG(domainConfig),
+        channels: new ChannelsPG(domainConfig),
+        schedules: new SchedulesPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(

@@ -7,6 +7,7 @@
  */
 
 import type {
+  LightSpanRecord,
   SpanRecord,
   CreateSpanRecord,
   LogRecord,
@@ -42,6 +43,9 @@ const PROMOTED_KEYS = new Set([
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'rootEntityVersionId',
   'userId',
   'organizationId',
   'resourceId',
@@ -159,9 +163,12 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    entityVersionId: nullableString(row.entityVersionId),
+    parentEntityVersionId: nullableString(row.parentEntityVersionId),
     parentEntityType: nullableEntityType(row.parentEntityType),
     parentEntityId: nullableString(row.parentEntityId),
     parentEntityName: nullableString(row.parentEntityName),
+    rootEntityVersionId: nullableString(row.rootEntityVersionId),
     rootEntityType: nullableEntityType(row.rootEntityType),
     rootEntityId: nullableString(row.rootEntityId),
     rootEntityName: nullableString(row.rootEntityName),
@@ -194,6 +201,28 @@ export function rowsToSpanRecords(rows: Record<string, any>[]): SpanRecord[] {
   return rows.map(rowToSpanRecord);
 }
 
+export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord {
+  const startedAt = toDate(row.startedAt);
+  const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
+
+  return {
+    traceId: row.traceId,
+    spanId: row.spanId,
+    parentSpanId: nullableString(row.parentSpanId),
+    name: row.name,
+    spanType: row.spanType,
+    isEvent: Boolean(row.isEvent),
+    startedAt,
+    endedAt,
+    entityType: nullableEntityType(row.entityType),
+    entityId: nullableString(row.entityId),
+    entityName: nullableString(row.entityName),
+    error: parseJson(row.error) ?? undefined,
+    createdAt: startedAt,
+    updatedAt: null,
+  };
+}
+
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
@@ -207,9 +236,12 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     entityType: span.entityType ?? null,
     entityId: span.entityId ?? null,
     entityName: span.entityName ?? null,
+    entityVersionId: span.entityVersionId ?? null,
+    parentEntityVersionId: span.parentEntityVersionId ?? null,
     parentEntityType: span.parentEntityType ?? null,
     parentEntityId: span.parentEntityId ?? null,
     parentEntityName: span.parentEntityName ?? null,
+    rootEntityVersionId: span.rootEntityVersionId ?? null,
     rootEntityType: span.rootEntityType ?? null,
     rootEntityId: span.rootEntityId ?? null,
     rootEntityName: span.rootEntityName ?? null,
@@ -243,6 +275,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
 
 export function rowToLogRecord(row: Record<string, any>): LogRecord {
   return {
+    logId: row.logId,
     timestamp: toDate(row.timestamp),
     level: row.level,
     message: row.message,
@@ -253,9 +286,12 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    entityVersionId: nullableString(row.entityVersionId),
+    parentEntityVersionId: nullableString(row.parentEntityVersionId),
     parentEntityType: nullableEntityType(row.parentEntityType),
     parentEntityId: nullableString(row.parentEntityId),
     parentEntityName: nullableString(row.parentEntityName),
+    rootEntityVersionId: nullableString(row.rootEntityVersionId),
     rootEntityType: nullableEntityType(row.rootEntityType),
     rootEntityId: nullableString(row.rootEntityId),
     rootEntityName: nullableString(row.rootEntityName),
@@ -277,6 +313,7 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
 
 export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
   return {
+    logId: log.logId,
     timestamp: toISOString(log.timestamp),
     level: log.level,
     message: log.message,
@@ -287,9 +324,12 @@ export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
     entityType: log.entityType ?? null,
     entityId: log.entityId ?? null,
     entityName: log.entityName ?? null,
+    entityVersionId: log.entityVersionId ?? null,
+    parentEntityVersionId: log.parentEntityVersionId ?? null,
     parentEntityType: log.parentEntityType ?? null,
     parentEntityId: log.parentEntityId ?? null,
     parentEntityName: log.parentEntityName ?? null,
+    rootEntityVersionId: log.rootEntityVersionId ?? null,
     rootEntityType: log.rootEntityType ?? null,
     rootEntityId: log.rootEntityId ?? null,
     rootEntityName: log.rootEntityName ?? null,
@@ -311,6 +351,7 @@ export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
 
 export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
   return {
+    metricId: row.metricId,
     timestamp: toDate(row.timestamp),
     name: row.name,
     value: Number(row.value),
@@ -320,9 +361,12 @@ export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    entityVersionId: nullableString(row.entityVersionId),
+    parentEntityVersionId: nullableString(row.parentEntityVersionId),
     parentEntityType: nullableEntityType(row.parentEntityType),
     parentEntityId: nullableString(row.parentEntityId),
     parentEntityName: nullableString(row.parentEntityName),
+    rootEntityVersionId: nullableString(row.rootEntityVersionId),
     rootEntityType: nullableEntityType(row.rootEntityType),
     rootEntityId: nullableString(row.rootEntityId),
     rootEntityName: nullableString(row.rootEntityName),
@@ -350,6 +394,7 @@ export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
 
 export function metricRecordToRow(metric: CreateMetricRecord): Record<string, unknown> {
   return {
+    metricId: metric.metricId,
     timestamp: toISOString(metric.timestamp),
     name: metric.name,
     value: metric.value,
@@ -359,9 +404,12 @@ export function metricRecordToRow(metric: CreateMetricRecord): Record<string, un
     entityType: metric.entityType ?? null,
     entityId: metric.entityId ?? null,
     entityName: metric.entityName ?? null,
+    entityVersionId: metric.entityVersionId ?? null,
+    parentEntityVersionId: metric.parentEntityVersionId ?? null,
     parentEntityType: metric.parentEntityType ?? null,
     parentEntityId: metric.parentEntityId ?? null,
     parentEntityName: metric.parentEntityName ?? null,
+    rootEntityVersionId: metric.rootEntityVersionId ?? null,
     rootEntityType: metric.rootEntityType ?? null,
     rootEntityId: metric.rootEntityId ?? null,
     rootEntityName: metric.rootEntityName ?? null,
@@ -389,6 +437,7 @@ export function metricRecordToRow(metric: CreateMetricRecord): Record<string, un
 
 export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
   return {
+    scoreId: row.scoreId,
     timestamp: toDate(row.timestamp),
     // Core score/feedback shapes still type traceId as required for now.
     traceId: nullableString(row.traceId) as ScoreRecord['traceId'],
@@ -398,9 +447,12 @@ export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    entityVersionId: nullableString(row.entityVersionId),
+    parentEntityVersionId: nullableString(row.parentEntityVersionId),
     parentEntityType: nullableEntityType(row.parentEntityType),
     parentEntityId: nullableString(row.parentEntityId),
     parentEntityName: nullableString(row.parentEntityName),
+    rootEntityVersionId: nullableString(row.rootEntityVersionId),
     rootEntityType: nullableEntityType(row.rootEntityType),
     rootEntityId: nullableString(row.rootEntityId),
     rootEntityName: nullableString(row.rootEntityName),
@@ -430,6 +482,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   const scoreSource = score.scoreSource ?? score.source ?? null;
 
   return {
+    scoreId: score.scoreId,
     timestamp: toISOString(score.timestamp),
     traceId: score.traceId ?? null,
     spanId: score.spanId ?? null,
@@ -438,9 +491,12 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
     entityType: score.entityType ?? null,
     entityId: score.entityId ?? null,
     entityName: score.entityName ?? null,
+    entityVersionId: score.entityVersionId ?? null,
+    parentEntityVersionId: score.parentEntityVersionId ?? null,
     parentEntityType: score.parentEntityType ?? null,
     parentEntityId: score.parentEntityId ?? null,
     parentEntityName: score.parentEntityName ?? null,
+    rootEntityVersionId: score.rootEntityVersionId ?? null,
     rootEntityType: score.rootEntityType ?? null,
     rootEntityId: score.rootEntityId ?? null,
     rootEntityName: score.rootEntityName ?? null,
@@ -470,6 +526,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const feedbackSource = nullableString(row.feedbackSource);
   const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
+    feedbackId: row.feedbackId,
     timestamp: toDate(row.timestamp),
     // Core score/feedback shapes still type traceId as required for now.
     traceId: nullableString(row.traceId) as FeedbackRecord['traceId'],
@@ -478,9 +535,12 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    entityVersionId: nullableString(row.entityVersionId),
+    parentEntityVersionId: nullableString(row.parentEntityVersionId),
     parentEntityType: nullableEntityType(row.parentEntityType),
     parentEntityId: nullableString(row.parentEntityId),
     parentEntityName: nullableString(row.parentEntityName),
+    rootEntityVersionId: nullableString(row.rootEntityVersionId),
     rootEntityType: nullableEntityType(row.rootEntityType),
     rootEntityId: nullableString(row.rootEntityId),
     rootEntityName: nullableString(row.rootEntityName),
@@ -512,6 +572,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
   const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
 
   return {
+    feedbackId: feedback.feedbackId,
     timestamp: toISOString(feedback.timestamp),
     traceId: feedback.traceId ?? null,
     spanId: feedback.spanId ?? null,
@@ -519,9 +580,12 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     entityType: feedback.entityType ?? null,
     entityId: feedback.entityId ?? null,
     entityName: feedback.entityName ?? null,
+    entityVersionId: feedback.entityVersionId ?? null,
+    parentEntityVersionId: feedback.parentEntityVersionId ?? null,
     parentEntityType: feedback.parentEntityType ?? null,
     parentEntityId: feedback.parentEntityId ?? null,
     parentEntityName: feedback.parentEntityName ?? null,
+    rootEntityVersionId: feedback.rootEntityVersionId ?? null,
     rootEntityType: feedback.rootEntityType ?? null,
     rootEntityId: feedback.rootEntityId ?? null,
     rootEntityName: feedback.rootEntityName ?? null,

@@ -2,7 +2,8 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfigBase, BrowserScope, CdpUrlProvider } from '@mastra/core/browser';
+import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
+import type { StagehandToolName } from './tools/constants';
 
 /**
  * Model configuration for Stagehand AI operations
@@ -69,18 +70,36 @@ interface StagehandConfigExtensions {
    * Custom system prompt for AI operations (act, extract, observe)
    */
   systemPrompt?: string;
+
+  /**
+   * Whether to preserve the user data directory after the browser closes.
+   * By default, Stagehand may clean up temporary user data directories.
+   * Set to `true` to keep the profile data for future sessions.
+   *
+   * Only applicable when `profile` is provided.
+   *
+   * @default false
+   */
+  preserveUserDataDir?: boolean;
+
+  /**
+   * Tool names to exclude from the browser toolset.
+   * Use this to disable specific tools, e.g. `['stagehand_screenshot']`
+   * to skip the screenshot tool for models that don't support vision.
+   *
+   * @example
+   * ```ts
+   * new StagehandBrowser({ excludeTools: ['stagehand_screenshot'] })
+   * ```
+   */
+  excludeTools?: StagehandToolName[];
 }
 
 /**
- * Configuration for StagehandBrowser with compile-time enforcement of cdpUrl/scope compatibility.
- *
- * This type enforces that `cdpUrl` and `scope: 'thread'` cannot be used together:
- * - When `cdpUrl` is provided, `scope` must be `'shared'` or omitted
- * - When `scope: 'thread'` is used, `cdpUrl` must not be provided
+ * Configuration for StagehandBrowser.
+ * Extends the base BrowserConfig with Stagehand-specific options.
  */
-export type StagehandBrowserConfig =
-  | (BrowserConfigBase & StagehandConfigExtensions & { cdpUrl?: undefined; scope?: BrowserScope })
-  | (BrowserConfigBase & StagehandConfigExtensions & { cdpUrl: CdpUrlProvider; scope?: 'shared' });
+export type StagehandBrowserConfig = BaseBrowserConfig & StagehandConfigExtensions;
 
 /**
  * Action returned from observe()

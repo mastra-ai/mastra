@@ -18,7 +18,7 @@ Use structured output when you need an agent to return a data object rather than
 
 ## Define schemas
 
-Agents can return structured data by defining the expected output with either [Zod](https://zod.dev/) or [JSON Schema](https://json-schema.org/). Zod is recommended because it provides TypeScript type inference and runtime validation, while JSON Schema is useful when you need a language agnostic format.
+Agents can return structured data by defining the expected output with either [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.) or [JSON Schema](https://json-schema.org/). Libraries like Zod are recommended because they provide TypeScript type inference and runtime validation, while JSON Schema is useful when you need a language agnostic format.
 
 <Tabs>
   <TabItem value="zod" label="Zod">
@@ -35,6 +35,49 @@ Agents can return structured data by defining the expected output with either [Z
             activities: z.array(z.string()),
           }),
         ),
+      },
+    })
+
+    console.log(response.object)
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    Define the `output` shape using [Valibot](https://valibot.dev/):
+
+    ```typescript
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    const response = await testAgent.generate('Help me plan my day.', {
+      structuredOutput: {
+        schema: toStandardJsonSchema(
+          v.array(
+            v.object({
+              name: v.string(),
+              activities: v.array(v.string()),
+            }),
+          ),
+        ),
+      },
+    })
+
+    console.log(response.object)
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    Define the `output` shape using [ArkType](https://arktype.io/):
+
+    ```typescript
+    import { type } from 'arktype'
+
+    const response = await testAgent.generate('Help me plan my day.', {
+      structuredOutput: {
+        schema: type({
+          name: 'string',
+          activities: 'string[]',
+        }).array(),
       },
     })
 
@@ -229,6 +272,28 @@ const response = await testAgent.generate('Tell me about TypeScript.', {
   },
 })
 ```
+
+If you want that structuring model to also see the current conversation history, set `useAgent: true` alongside `model`. Mastra will reuse the parent agent with the separate structuring model and attach read-only memory context when a thread is available.
+
+```typescript
+const response = await testAgent.generate('Return my profile as structured data.', {
+  memory: {
+    thread: 'thread-123',
+    resource: 'user-123',
+  },
+  structuredOutput: {
+    schema: z.object({
+      favoriteColor: z.string(),
+      hometown: z.string(),
+      petName: z.string(),
+    }),
+    model: 'openai/gpt-5.4',
+    useAgent: true,
+  },
+})
+```
+
+Leave `useAgent` unset if you want the separate structuring model to work only from the current response and not inherit prior conversation memory.
 
 ### Multi-step approach with `prepareStep`
 

@@ -1,629 +1,157 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Schema Output > should match snapshot for API response schema 1`] = `
+exports[`GroqSchemaCompatLayer > ZodIntersection > should handle chained .and().and() (three-way merge) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "person": {
+      "additionalProperties": false,
+      "properties": {
+        "age": {
+          "type": "number",
+        },
+        "email": {
+          "type": "string",
+        },
+        "name": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+        "age",
+        "email",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "person",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`GroqSchemaCompatLayer > ZodIntersection > should handle intersection inside a parent object 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "label": {
+      "type": "string",
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+        },
+        "value": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "key",
+        "value",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "metadata",
+    "label",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`GroqSchemaCompatLayer > ZodIntersection > should handle intersection nested inside a union (allOf inside anyOf) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "locate": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "convertHttpImage2Base64": {
+                  "type": "boolean",
+                },
+                "images": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                      },
+                      "url": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "name",
+                      "url",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+                "prompt": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "prompt",
+                "images",
+                "convertHttpImage2Base64",
+              ],
+              "type": "object",
+            },
+          ],
+        },
+      },
+      "required": [
+        "prompt",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "locate",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`GroqSchemaCompatLayer > ZodIntersection > should handle optional intersection wrapper 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "properties": {
     "data": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "items": {
-              "items": {
-                "additionalProperties": false,
-                "properties": {
-                  "createdAt": {
-                    "type": "string",
-                  },
-                  "id": {
-                    "type": "string",
-                  },
-                  "metadata": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": {
-                          "type": "string",
-                        },
-                        "type": "object",
-                      },
-                      {
-                        "type": "null",
-                      },
-                    ],
-                  },
-                  "name": {
-                    "type": "string",
-                  },
-                  "updatedAt": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                      },
-                      {
-                        "type": "null",
-                      },
-                    ],
-                  },
-                },
-                "required": [
-                  "id",
-                  "name",
-                  "createdAt",
-                  "updatedAt",
-                  "metadata",
-                ],
-                "type": "object",
-              },
-              "type": "array",
-            },
-            "pagination": {
-              "additionalProperties": false,
-              "properties": {
-                "page": {
-                  "type": "number",
-                },
-                "pageSize": {
-                  "type": "number",
-                },
-                "totalItems": {
-                  "type": "number",
-                },
-                "totalPages": {
-                  "type": "number",
-                },
-              },
-              "required": [
-                "page",
-                "pageSize",
-                "totalPages",
-                "totalItems",
-              ],
-              "type": "object",
-            },
-          },
-          "required": [
-            "items",
-            "pagination",
-          ],
-          "type": "object",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "error": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "code": {
-              "type": "string",
-            },
-            "details": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string",
-                  },
-                  "type": "array",
-                },
-                {
-                  "type": "null",
-                },
-              ],
-            },
-            "message": {
-              "type": "string",
-            },
-          },
-          "required": [
-            "code",
-            "message",
-            "details",
-          ],
-          "type": "object",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "status": {
-      "type": "number",
-    },
-  },
-  "required": [
-    "status",
-    "data",
-    "error",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Schema Output > should match snapshot for discriminated union pattern 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "result": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "data": {
-              "additionalProperties": false,
-              "properties": {
-                "id": {
-                  "type": "string",
-                },
-                "value": {
-                  "type": "number",
-                },
-              },
-              "required": [
-                "id",
-                "value",
-              ],
-              "type": "object",
-            },
-            "type": {
-              "const": "success",
-              "type": "string",
-            },
-          },
-          "required": [
-            "type",
-            "data",
-          ],
-          "type": "object",
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "error": {
-              "additionalProperties": false,
-              "properties": {
-                "code": {
-                  "type": "string",
-                },
-                "message": {
-                  "type": "string",
-                },
-              },
-              "required": [
-                "code",
-                "message",
-              ],
-              "type": "object",
-            },
-            "type": {
-              "const": "error",
-              "type": "string",
-            },
-          },
-          "required": [
-            "type",
-            "error",
-          ],
-          "type": "object",
-        },
-      ],
-    },
-  },
-  "required": [
-    "result",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Schema Output > should match snapshot for groq with complete schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "metadata": {
-      "additionalProperties": {
-        "anyOf": [
-          {
-            "type": "string",
-          },
-          {
-            "type": "number",
-          },
-          {
-            "type": "boolean",
-          },
-        ],
-      },
-      "type": "object",
-    },
-    "preferences": {
       "additionalProperties": false,
-      "properties": {
-        "language": {
-          "type": "string",
-        },
-        "notifications": {
-          "type": "boolean",
-        },
-        "theme": {
-          "enum": [
-            "light",
-            "dark",
-          ],
-          "type": "string",
-        },
-      },
-      "required": [
-        "theme",
-        "notifications",
-        "language",
-      ],
-      "type": "object",
-    },
-    "settings": {
       "anyOf": [
         {
           "additionalProperties": false,
           "properties": {
-            "featured": {
-              "anyOf": [
-                {
-                  "type": "boolean",
-                },
-                {
-                  "type": "null",
-                },
-              ],
+            "a": {
+              "type": "string",
             },
-            "public": {
-              "type": "boolean",
-            },
-          },
-          "required": [
-            "public",
-            "featured",
-          ],
-          "type": "object",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "tags": {
-      "description": "constraints: minimum length 1, maximum length 5",
-      "items": {
-        "type": "string",
-      },
-      "type": "array",
-    },
-    "user": {
-      "additionalProperties": false,
-      "properties": {
-        "age": {
-          "anyOf": [
-            {
-              "maximum": 120,
-              "minimum": 0,
+            "b": {
               "type": "number",
             },
-            {
-              "type": "null",
-            },
-          ],
-        },
-        "email": {
-          "description": "Email address
-constraints: a valid email",
-          "type": "string",
-        },
-        "id": {
-          "description": "User ID",
-          "type": "string",
-        },
-        "name": {
-          "description": "Full name",
-          "type": "string",
-        },
-      },
-      "required": [
-        "id",
-        "name",
-        "email",
-        "age",
-      ],
-      "type": "object",
-    },
-  },
-  "required": [
-    "user",
-    "preferences",
-    "tags",
-    "metadata",
-    "settings",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > should handle arrays with min/max constraints (moved to description) 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "tags": {
-      "description": "constraints: minimum length 1, maximum length 10",
-      "items": {
-        "type": "string",
-      },
-      "type": "array",
-    },
-  },
-  "required": [
-    "tags",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > should handle arrays with object items 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "users": {
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "email": {
-            "anyOf": [
-              {
-                "type": "string",
-              },
-              {
-                "type": "null",
-              },
-            ],
-          },
-          "name": {
-            "type": "string",
-          },
-        },
-        "required": [
-          "name",
-          "email",
-        ],
-        "type": "object",
-      },
-      "type": "array",
-    },
-  },
-  "required": [
-    "users",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > should handle nested arrays 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "matrix": {
-      "items": {
-        "items": {
-          "type": "number",
-        },
-        "type": "array",
-      },
-      "type": "array",
-    },
-  },
-  "required": [
-    "matrix",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > should handle optional arrays 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "name": {
-      "type": "string",
-    },
-    "tags": {
-      "anyOf": [
-        {
-          "items": {
-            "type": "string",
-          },
-          "type": "array",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-  },
-  "required": [
-    "name",
-    "tags",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > should handle simple array schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "tags": {
-      "items": {
-        "type": "string",
-      },
-      "type": "array",
-    },
-  },
-  "required": [
-    "tags",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Basic Transformations > should handle nullable fields 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "deletedAt": {
-      "anyOf": [
-        {
-          "description": "constraints: a valid date-time",
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "deletedAt",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Basic Transformations > should handle optional fields 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "age": {
-      "anyOf": [
-        {
-          "type": "number",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "age",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Basic Transformations > should handle simple object schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "age": {
-      "type": "number",
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "age",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Schemas > should handle complex real-world schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "avatar": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "bio": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "deletedAt": {
-      "anyOf": [
-        {
-          "description": "constraints: a valid date-time",
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "email": {
-      "type": "string",
-    },
-    "id": {
-      "type": "string",
-    },
-    "name": {
-      "type": "string",
-    },
-    "settings": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "notifications": {
-              "type": "boolean",
-            },
-            "theme": {
-              "anyOf": [
-                {
-                  "type": "string",
-                },
-                {
-                  "type": "null",
-                },
-              ],
-            },
           },
           "required": [
-            "theme",
-            "notifications",
+            "a",
+            "b",
           ],
           "type": "object",
         },
@@ -631,804 +159,26 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Sche
           "type": "null",
         },
       ],
-    },
-    "tags": {
-      "anyOf": [
-        {
-          "items": {
-            "type": "string",
-          },
-          "type": "array",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-  },
-  "required": [
-    "id",
-    "email",
-    "name",
-    "avatar",
-    "bio",
-    "deletedAt",
-    "settings",
-    "tags",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Schemas > should handle partial objects 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "City": {
-      "anyOf": [
-        {
+      "properties": {
+        "a": {
           "type": "string",
         },
-        {
-          "type": "null",
+        "b": {
+          "type": "number",
         },
-      ],
-    },
-    "Name": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "Slug": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-  },
-  "required": [
-    "City",
-    "Name",
-    "Slug",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Schemas > should handle passthrough objects 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": true,
-  "properties": {
-    "queryText": {
-      "description": "The query text",
-      "type": "string",
-    },
-    "topK": {
-      "description": "Number of results",
-      "type": "number",
-    },
-  },
-  "required": [
-    "queryText",
-    "topK",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Schemas > should handle schema with all basic types 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "arrayField": {
-      "items": {
-        "type": "string",
       },
-      "type": "array",
-    },
-    "booleanField": {
-      "type": "boolean",
-    },
-    "enumField": {
-      "enum": [
+      "required": [
         "a",
         "b",
-        "c",
-      ],
-      "type": "string",
-    },
-    "numberField": {
-      "type": "number",
-    },
-    "objectField": {
-      "additionalProperties": false,
-      "properties": {
-        "nested": {
-          "type": "string",
-        },
-      },
-      "required": [
-        "nested",
-      ],
-      "type": "object",
-    },
-    "stringField": {
-      "type": "string",
-    },
-    "unionField": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "number",
-        },
       ],
     },
   },
   "required": [
-    "stringField",
-    "numberField",
-    "booleanField",
-    "arrayField",
-    "objectField",
-    "enumField",
-    "unionField",
+    "data",
   ],
   "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Values > should handle array defaults 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "name": {
-      "type": "string",
-    },
-    "tags": {
-      "anyOf": [
-        {
-          "default": [],
-          "items": {
-            "type": "string",
-          },
-          "type": "array",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-  },
-  "required": [
-    "name",
-    "tags",
+  "x-optional": [
+    "data",
   ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Values > should handle boolean defaults 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "active": {
-      "anyOf": [
-        {
-          "default": true,
-          "type": "boolean",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "enabled": {
-      "anyOf": [
-        {
-          "default": false,
-          "type": "boolean",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "enabled",
-    "active",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Values > should handle default values 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "confidence": {
-      "anyOf": [
-        {
-          "default": 1,
-          "type": "number",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "confidence",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Values > should handle string defaults 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "explanation": {
-      "anyOf": [
-        {
-          "default": "",
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "explanation",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Descriptions > should handle descriptions with nested objects 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "user": {
-      "additionalProperties": false,
-      "description": "User object",
-      "properties": {
-        "name": {
-          "description": "User name",
-          "type": "string",
-        },
-        "profile": {
-          "additionalProperties": false,
-          "description": "User profile",
-          "properties": {
-            "bio": {
-              "description": "User bio",
-              "type": "string",
-            },
-          },
-          "required": [
-            "bio",
-          ],
-          "type": "object",
-        },
-      },
-      "required": [
-        "name",
-        "profile",
-      ],
-      "type": "object",
-    },
-  },
-  "required": [
-    "user",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Descriptions > should preserve field descriptions 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "age": {
-      "description": "The user age",
-      "type": "number",
-    },
-    "email": {
-      "description": "The user email address",
-      "type": "string",
-    },
-    "name": {
-      "description": "The user name",
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "age",
-    "email",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Enums > should handle enum schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "status": {
-      "enum": [
-        "pending",
-        "active",
-        "completed",
-      ],
-      "type": "string",
-    },
-  },
-  "required": [
-    "status",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Enums > should handle optional enum schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "name": {
-      "type": "string",
-    },
-    "status": {
-      "anyOf": [
-        {
-          "enum": [
-            "pending",
-            "active",
-            "completed",
-          ],
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-  },
-  "required": [
-    "name",
-    "status",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Nested Objects > should handle deeply nested objects 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "user": {
-      "additionalProperties": false,
-      "properties": {
-        "profile": {
-          "additionalProperties": false,
-          "properties": {
-            "bio": {
-              "anyOf": [
-                {
-                  "type": "string",
-                },
-                {
-                  "type": "null",
-                },
-              ],
-            },
-            "settings": {
-              "additionalProperties": false,
-              "properties": {
-                "notifications": {
-                  "type": "boolean",
-                },
-                "theme": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                    },
-                    {
-                      "type": "null",
-                    },
-                  ],
-                },
-              },
-              "required": [
-                "theme",
-                "notifications",
-              ],
-              "type": "object",
-            },
-          },
-          "required": [
-            "bio",
-            "settings",
-          ],
-          "type": "object",
-        },
-      },
-      "required": [
-        "profile",
-      ],
-      "type": "object",
-    },
-  },
-  "required": [
-    "user",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Nested Objects > should handle nested object schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "user": {
-      "additionalProperties": false,
-      "properties": {
-        "email": {
-          "type": "string",
-        },
-        "name": {
-          "type": "string",
-        },
-      },
-      "required": [
-        "name",
-        "email",
-      ],
-      "type": "object",
-    },
-  },
-  "required": [
-    "user",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Nested Objects > should handle optional nested objects 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "address": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "city": {
-              "anyOf": [
-                {
-                  "type": "string",
-                },
-                {
-                  "type": "null",
-                },
-              ],
-            },
-            "street": {
-              "type": "string",
-            },
-          },
-          "required": [
-            "street",
-            "city",
-          ],
-          "type": "object",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "address",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Number Constraints > should handle numbers with constraints 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "age": {
-      "maximum": 120,
-      "minimum": 0,
-      "type": "number",
-    },
-    "score": {
-      "maximum": 9007199254740991,
-      "minimum": -9007199254740991,
-      "type": "integer",
-    },
-  },
-  "required": [
-    "age",
-    "score",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Number Constraints > should handle optional numbers 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "count": {
-      "anyOf": [
-        {
-          "type": "number",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-  },
-  "required": [
-    "count",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Records > should handle record schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "settings": {
-      "additionalProperties": {
-        "type": "boolean",
-      },
-      "type": "object",
-    },
-  },
-  "required": [
-    "settings",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Records > should handle record with key and value types 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "metadata": {
-      "additionalProperties": {
-        "type": "number",
-      },
-      "type": "object",
-    },
-  },
-  "required": [
-    "metadata",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - String Constraints > should handle optional strings 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "bio": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
-    },
-    "name": {
-      "type": "string",
-    },
-  },
-  "required": [
-    "name",
-    "bio",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - String Constraints > should handle string with constraints (moved to description) 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "email": {
-      "description": "constraints: a valid email",
-      "type": "string",
-    },
-    "text": {
-      "description": "constraints: minimum length 10, maximum length 1000",
-      "type": "string",
-    },
-    "url": {
-      "description": "constraints: a valid uri",
-      "type": "string",
-    },
-  },
-  "required": [
-    "email",
-    "url",
-    "text",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - String Constraints > should handle string with description and constraints 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "text": {
-      "description": "A text field with constraints
-constraints: minimum length 10, maximum length 1000",
-      "type": "string",
-    },
-  },
-  "required": [
-    "text",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Unions > should handle optional union schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "name": {
-      "type": "string",
-    },
-    "value": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "number",
-        },
-      ],
-    },
-  },
-  "required": [
-    "name",
-    "value",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Unions > should handle simple union schema 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "value": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "number",
-        },
-      ],
-    },
-  },
-  "required": [
-    "value",
-  ],
-  "type": "object",
-}
-`;
-
-exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Unions > should handle union of objects 1`] = `
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "properties": {
-    "result": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "data": {
-              "type": "string",
-            },
-            "success": {
-              "type": "boolean",
-            },
-          },
-          "required": [
-            "success",
-            "data",
-          ],
-          "type": "object",
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "error": {
-              "type": "string",
-            },
-          },
-          "required": [
-            "error",
-          ],
-          "type": "object",
-        },
-      ],
-    },
-  },
-  "required": [
-    "result",
-  ],
-  "type": "object",
 }
 `;

@@ -11,6 +11,7 @@ import type {
   GetScoreTimeSeriesResponse,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   AggregationInterval,
   AggregationType,
 } from '@mastra/core/storage';
@@ -32,9 +33,12 @@ const SCORE_GROUP_BY_COLUMNS = new Set([
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
   'parentEntityType',
   'parentEntityId',
   'parentEntityName',
+  'rootEntityVersionId',
   'rootEntityType',
   'rootEntityId',
   'rootEntityName',
@@ -151,6 +155,7 @@ function toSeriesName(values: unknown[]): string {
 
 function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    scoreId: row.scoreId as string,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -159,9 +164,12 @@ function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown>
     entityType: (row.entityType as string) ?? null,
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
+    entityVersionId: (row.entityVersionId as string) ?? null,
+    parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
     parentEntityType: (row.parentEntityType as string) ?? null,
     parentEntityId: (row.parentEntityId as string) ?? null,
     parentEntityName: (row.parentEntityName as string) ?? null,
+    rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
     rootEntityType: (row.rootEntityType as string) ?? null,
     rootEntityId: (row.rootEntityId as string) ?? null,
     rootEntityName: (row.rootEntityName as string) ?? null,
@@ -225,12 +233,13 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
-      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES (${[
+       v(s.scoreId),
        v(s.timestamp),
        v(s.traceId),
        v(s.spanId ?? null),
@@ -239,9 +248,12 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        v(s.entityType ?? null),
        v(s.entityId ?? null),
        v(s.entityName ?? null),
+       v(s.entityVersionId ?? null),
+       v(s.parentEntityVersionId ?? null),
        v(s.parentEntityType ?? null),
        v(s.parentEntityId ?? null),
        v(s.parentEntityName ?? null),
+       v(s.rootEntityVersionId ?? null),
        v(s.rootEntityType ?? null),
        v(s.rootEntityId ?? null),
        v(s.rootEntityName ?? null),
@@ -263,7 +275,8 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        jsonV(s.tags ?? null),
        jsonV(s.metadata),
        jsonV(s.scope ?? null),
-     ].join(', ')})`,
+     ].join(', ')})
+     ON CONFLICT DO NOTHING`,
   );
 }
 
@@ -275,6 +288,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[
+      v(legacyScore.scoreId),
       v(legacyScore.timestamp),
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),
@@ -283,9 +297,12 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
       v(legacyScore.entityType ?? null),
       v(legacyScore.entityId ?? null),
       v(legacyScore.entityName ?? null),
+      v(legacyScore.entityVersionId ?? null),
+      v(legacyScore.parentEntityVersionId ?? null),
       v(legacyScore.parentEntityType ?? null),
       v(legacyScore.parentEntityId ?? null),
       v(legacyScore.parentEntityName ?? null),
+      v(legacyScore.rootEntityVersionId ?? null),
       v(legacyScore.rootEntityType ?? null),
       v(legacyScore.rootEntityId ?? null),
       v(legacyScore.rootEntityName ?? null),
@@ -312,12 +329,13 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
-      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
-     VALUES ${tuples.join(',\n       ')}`,
+     VALUES ${tuples.join(',\n       ')}
+     ON CONFLICT DO NOTHING`,
   );
 }
 
@@ -349,6 +367,13 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     scores: rows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
   };
+}
+
+export async function getScoreById(db: DuckDBConnection, scoreId: string): Promise<ScoreRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(`SELECT * FROM score_events WHERE scoreId = ? LIMIT 1`, [
+    scoreId,
+  ]);
+  return rows[0] ? (rowToScoreRecord(rows[0]) as ScoreRecord) : null;
 }
 
 export async function getScoreAggregate(

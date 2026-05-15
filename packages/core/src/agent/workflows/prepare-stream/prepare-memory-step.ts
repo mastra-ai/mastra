@@ -7,7 +7,7 @@ import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/ty
 import { resolveObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
 import type { AgentMethodType } from '../../types';
@@ -71,6 +71,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         resourceId,
         generateMessageId: capabilities.generateMessageId,
         logger: capabilities.logger,
+        filterIncompleteToolCalls: memoryConfig?.filterIncompleteToolCalls,
         // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });

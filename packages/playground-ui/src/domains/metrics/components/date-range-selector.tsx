@@ -1,13 +1,5 @@
-import { useMetrics } from '../hooks/use-metrics';
-import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-
-const DATE_PRESETS = [
-  { label: 'Last 24 hours', value: '24h' },
-  { label: 'Last 3 days', value: '3d' },
-  { label: 'Last 7 days', value: '7d' },
-  { label: 'Last 14 days', value: '14d' },
-  { label: 'Last 30 days', value: '30d' },
-];
+import { SelectFieldBlock } from '../../../ds/components/FormFieldBlocks';
+import { DATE_PRESETS, isValidPreset, useMetrics } from '../hooks/use-metrics';
 
 export function DateRangeSelector() {
   const { datePreset, setDatePreset } = useMetrics();
@@ -17,8 +9,10 @@ export function DateRangeSelector() {
       name="date-range"
       labelIsHidden
       value={datePreset}
-      options={DATE_PRESETS}
-      onValueChange={value => setDatePreset(value as typeof datePreset)}
+      options={DATE_PRESETS.map(p => ({ label: p.label, value: p.value }))}
+      onValueChange={value => {
+        if (isValidPreset(value)) setDatePreset(value);
+      }}
     />
   );
 }

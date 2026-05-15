@@ -149,6 +149,17 @@ const finalStep = createStep({
   },
 });
 
+const echoModeStep = createStep({
+  id: 'echo-mode',
+  inputSchema: z.object({
+    mode: z.enum(['a', 'b']),
+  }),
+  outputSchema: z.object({
+    mode: z.enum(['a', 'b']),
+  }),
+  execute: async ({ inputData }) => inputData,
+});
+
 // Nested workflow that processes text
 export const nestedTextProcessor = createWorkflow({
   id: 'nested-text-processor',
@@ -209,6 +220,18 @@ export const complexWorkflow = createWorkflow({
 
   // Final step
   .then(finalStep)
+  .commit();
+
+export const enumWorkflow = createWorkflow({
+  id: 'enumWorkflow',
+  inputSchema: z.object({
+    mode: z.enum(['a', 'b']).default('a'),
+  }),
+  outputSchema: z.object({
+    mode: z.enum(['a', 'b']),
+  }),
+})
+  .then(echoModeStep)
   .commit();
 
 export const lessComplexWorkflow = createWorkflow({

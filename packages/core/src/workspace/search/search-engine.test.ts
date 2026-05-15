@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { SearchEngine } from './search-engine';
-import type { Embedder } from './search-engine';
+import { SearchEngine, isBatchEmbedder, splitIntoChunks } from './search-engine';
+import type { BatchEmbedder, Embedder } from './search-engine';
 
 describe('SearchEngine', () => {
   describe('BM25-only mode', () => {
@@ -171,6 +171,75 @@ Line 3`;
       });
     });
 
+    it('should call createIndex once before the first upsert with the embedding dimension', async () => {
+      const mockCreateIndex = vi.fn(async () => {});
+      const store: any = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: mockCreateIndex,
+      };
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await localEngine.index({ id: 'doc1', content: 'Hello world' });
+      await localEngine.index({ id: 'doc2', content: 'Another doc' });
+
+      expect(mockCreateIndex).toHaveBeenCalledTimes(1);
+      expect(mockCreateIndex).toHaveBeenCalledWith({ indexName: 'test-index', dimension: 3 });
+      expect(store.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it('should still upsert when createIndex throws (index already exists)', async () => {
+      const store: any = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {
+          throw new Error('index already exists');
+        }),
+      };
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await expect(localEngine.index({ id: 'doc1', content: 'Hello world' })).resolves.toBeUndefined();
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry createIndex on next write if previous createIndex/upsert path failed', async () => {
+      let createAttempts = 0;
+      let indexCreated = false;
+
+      const store: any = {
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {
+          createAttempts += 1;
+          if (createAttempts === 1) {
+            throw new Error('temporary create failure');
+          }
+          indexCreated = true;
+        }),
+        upsert: vi.fn(async () => {
+          if (!indexCreated) {
+            throw new Error('no such table');
+          }
+        }),
+      };
+
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await expect(localEngine.index({ id: 'doc1', content: 'Hello world' })).rejects.toThrow('no such table');
+      await expect(localEngine.index({ id: 'doc2', content: 'Another doc' })).resolves.toBeUndefined();
+
+      expect(store.createIndex).toHaveBeenCalledTimes(2);
+      expect(store.upsert).toHaveBeenCalledTimes(2);
+    });
+
     it('should search vector store', async () => {
       mockVectorStore.query.mockResolvedValue([
         { id: 'doc1', score: 0.95, metadata: { id: 'doc1', text: 'Hello world' } },
@@ -289,6 +358,18 @@ Line 3`;
 
       // Should not have indexed the removed document
       expect(mockVectorStore.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should dedupe pending vector docs by id so last content wins', async () => {
+      await engine.index({ id: 'doc1', content: 'first' });
+      await engine.index({ id: 'doc1', content: 'second' });
+
+      mockVectorStore.query.mockResolvedValue([]);
+
+      await engine.search('hello');
+
+      expect(mockVectorStore.upsert).toHaveBeenCalledTimes(1);
+      expect(mockEmbedder).toHaveBeenCalledWith('second');
     });
   });
 
@@ -541,5 +622,366 @@ Third line has learning too`;
       expect(chunk1Result?.lineRange).toEqual({ start: 1, end: 1 });
       expect(chunk2Result?.lineRange).toEqual({ start: 50, end: 50 });
     });
+  });
+
+  describe('removeByPrefix', () => {
+    it('should remove all BM25 documents matching a prefix', async () => {
+      const engine = new SearchEngine({ bm25: {} });
+
+      await engine.index({ id: 'file.txt#chunk-0', content: 'first chunk content' });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'second chunk content' });
+      await engine.index({ id: 'other.txt', content: 'other content' });
+
+      await engine.removeByPrefix('file.txt#');
+
+      const results = await engine.search('content');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.id).toBe('other.txt');
+    });
+
+    it('should not remove documents that do not match the prefix', async () => {
+      const engine = new SearchEngine({ bm25: {} });
+
+      await engine.index({ id: 'a.txt#chunk-0', content: 'alpha' });
+      await engine.index({ id: 'b.txt#chunk-0', content: 'beta' });
+
+      await engine.removeByPrefix('a.txt#');
+
+      const results = await engine.search('alpha');
+      expect(results).toHaveLength(0);
+
+      const remaining = await engine.search('beta');
+      expect(remaining).toHaveLength(1);
+    });
+
+    it('should delete matching vectors from the vector store', async () => {
+      const mockDeleteVector = vi.fn(async () => {});
+      const engine = new SearchEngine({
+        vector: {
+          vectorStore: {
+            upsert: vi.fn(async () => {}),
+            query: vi.fn(async () => []),
+            deleteVector: mockDeleteVector,
+            deleteVectors: vi.fn(async () => {}),
+          } as any,
+          embedder: vi.fn(async () => [1, 2, 3]),
+          indexName: 'test-index',
+        },
+      });
+
+      await engine.index({ id: 'file.txt#chunk-0', content: 'chunk zero' });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'chunk one' });
+      await engine.index({ id: 'other.txt', content: 'other' });
+
+      await engine.removeByPrefix('file.txt#');
+
+      expect(mockDeleteVector).toHaveBeenCalledTimes(2);
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-0' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-1' });
+    });
+  });
+
+  describe('removeSource', () => {
+    it('should remove source doc, chunks, and sourceFile vectors', async () => {
+      const mockDeleteVector = vi.fn(async () => {});
+      const mockDeleteVectors = vi.fn(async () => {});
+      const engine = new SearchEngine({
+        vector: {
+          vectorStore: {
+            upsert: vi.fn(async () => {}),
+            query: vi.fn(async () => []),
+            deleteVector: mockDeleteVector,
+            deleteVectors: mockDeleteVectors,
+          } as any,
+          embedder: vi.fn(async () => [1, 2, 3]),
+          indexName: 'test-index',
+        },
+      });
+
+      await engine.index({ id: 'file.txt', content: 'full file content' });
+      await engine.index({ id: 'file.txt#chunk-0', content: 'chunk zero', metadata: { sourceFile: 'file.txt' } });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'chunk one', metadata: { sourceFile: 'file.txt' } });
+
+      await engine.removeSource('file.txt');
+
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-0' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-1' });
+      expect(mockDeleteVectors).toHaveBeenCalledWith({
+        indexName: 'test-index',
+        filter: { sourceFile: 'file.txt' },
+      });
+    });
+  });
+
+  describe('BatchEmbedder support', () => {
+    function makeStore() {
+      return {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        deleteVectors: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {}),
+      } as any;
+    }
+
+    function makeBatchEmbedder(maxBatchSize?: number) {
+      const fn = vi.fn(async (texts: string[]) =>
+        texts.map(t => {
+          const hash = t.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+          return [hash % 100, (hash * 2) % 100, (hash * 3) % 100];
+        }),
+      );
+      const embedder: BatchEmbedder = Object.assign(fn, {
+        batch: true as const,
+        ...(maxBatchSize !== undefined ? { maxBatchSize } : {}),
+      });
+      return { embedder, fn };
+    }
+
+    it('isBatchEmbedder distinguishes batch and single embedders', () => {
+      const single: Embedder = vi.fn(async () => [0]);
+      const { embedder: batch } = makeBatchEmbedder();
+      const fakeBranded = Object.assign(
+        vi.fn(async () => [0]),
+        { batch: false },
+      ) as unknown as Embedder;
+
+      expect(isBatchEmbedder(single)).toBe(false);
+      expect(isBatchEmbedder(batch)).toBe(true);
+      expect(isBatchEmbedder(fakeBranded)).toBe(false);
+    });
+
+    it('flushes the entire pending queue in a single embedder call when no maxBatchSize is set', async () => {
+      const store = makeStore();
+      const { embedder, fn } = makeBatchEmbedder();
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+        { id: 'c', content: 'gamma' },
+        { id: 'd', content: 'delta' },
+        { id: 'e', content: 'epsilon' },
+      ]);
+
+      // Lazy: nothing called yet.
+      expect(fn).not.toHaveBeenCalled();
+      expect(store.upsert).not.toHaveBeenCalled();
+
+      // Trigger flush via search.
+      await engine.search('alpha', { mode: 'vector' });
+
+      // One batched embedder call for the docs and one upsert.
+      const docCalls = fn.mock.calls.filter(call => Array.isArray(call[0]) && call[0].length === 5);
+      expect(docCalls).toHaveLength(1);
+      expect(docCalls[0]?.[0]).toEqual(['alpha', 'beta', 'gamma', 'delta', 'epsilon']);
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+      const upsertArgs = store.upsert.mock.calls[0]![0];
+      expect(upsertArgs.ids).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect(upsertArgs.vectors).toHaveLength(5);
+    });
+
+    it('chunks pending docs by maxBatchSize when configured', async () => {
+      const store = makeStore();
+      const { embedder, fn } = makeBatchEmbedder(2);
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: '1', content: 'one' },
+        { id: '2', content: 'two' },
+        { id: '3', content: 'three' },
+        { id: '4', content: 'four' },
+        { id: '5', content: 'five' },
+      ]);
+
+      // Lazy: nothing called yet; indexMany only enqueues.
+      expect(fn).not.toHaveBeenCalled();
+
+      await engine.search('one', { mode: 'vector' });
+
+      // 5 docs / batch size 2 = 3 embedder calls (2, 2, 1). Plus one more for the search query.
+      // The search query is sent as a one-element batch, so we'll see four total
+      // calls and three of them flush docs.
+      expect(fn).toHaveBeenCalledTimes(4);
+      const docCallSizes = fn.mock.calls
+        .slice(0, 3)
+        .map(c => (c[0] as string[]).length)
+        .sort();
+      expect(docCallSizes).toEqual([1, 2, 2]);
+
+      // Single upsert with all 5 vectors.
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+      expect(store.upsert.mock.calls[0]![0].vectors).toHaveLength(5);
+    });
+
+    it('uses batched call for single search query', async () => {
+      const store = makeStore();
+      store.query.mockResolvedValue([{ id: 'a', score: 0.9, metadata: { id: 'a', text: 'alpha' } }]);
+      const { embedder, fn } = makeBatchEmbedder();
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+      });
+
+      await engine.search('hello', { mode: 'vector' });
+
+      // Search query is sent as a one-element batch.
+      expect(fn).toHaveBeenCalledWith(['hello']);
+    });
+
+    it('falls back to per-doc embedding for single-text embedders', async () => {
+      const store = makeStore();
+      const single: Embedder = vi.fn(async (text: string) => [text.length, 0, 0]);
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder: single, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+      ]);
+      await engine.search('alpha', { mode: 'vector' });
+
+      // Two doc embeddings + one query embedding = 3 calls.
+      expect(single).toHaveBeenCalledTimes(3);
+      // Two upserts (one per doc) — same shape as before this PR.
+      expect(store.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-queues batch on flush failure for batch embedders', async () => {
+      const store = makeStore();
+      let attempts = 0;
+      const fn = vi.fn(async (texts: string[]) => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error('transient embedder failure');
+        }
+        return texts.map(() => [1, 2, 3]);
+      });
+      const embedder: BatchEmbedder = Object.assign(fn, { batch: true as const });
+
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+      ]);
+
+      await expect(engine.search('alpha', { mode: 'vector' })).rejects.toThrow('transient embedder failure');
+
+      // Second search succeeds because the batch was re-queued.
+      await engine.search('alpha', { mode: 'vector' });
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+      expect(store.upsert.mock.calls[0]![0].ids).toEqual(['a', 'b']);
+    });
+
+    it('throws when batch embedder returns wrong number of embeddings', async () => {
+      const store = makeStore();
+      const fn = vi.fn(async (_texts: string[]) => [[1, 2, 3]]);
+      const embedder: BatchEmbedder = Object.assign(fn, { batch: true as const });
+
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+      ]);
+
+      await expect(engine.search('alpha', { mode: 'vector' })).rejects.toThrow(/returned 1 embeddings for 2 inputs/);
+    });
+  });
+});
+
+describe('splitIntoChunks', () => {
+  it('should return a single chunk for short text', () => {
+    const chunks = splitIntoChunks('hello world');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe('hello world');
+    expect(chunks[0]?.startLine).toBe(1);
+  });
+
+  it('should split text that exceeds maxChunkChars', () => {
+    const line = 'a'.repeat(50);
+    const lines = Array.from({ length: 20 }, () => line);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 200, overlapLines: 0 });
+
+    expect(chunks.length).toBeGreaterThan(1);
+
+    const reassembled = chunks.map(c => c.content).join('\n');
+    expect(reassembled).toBe(text);
+  });
+
+  it('should produce overlapping chunks when overlapLines > 0', () => {
+    const lines = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 60, overlapLines: 2 });
+
+    expect(chunks.length).toBeGreaterThan(1);
+
+    for (let i = 1; i < chunks.length; i++) {
+      const prevLines = chunks[i - 1]!.content.split('\n');
+      const currLines = chunks[i]!.content.split('\n');
+      const prevTail = prevLines.slice(-2);
+      const currHead = currLines.slice(0, 2);
+      expect(currHead).toEqual(prevTail);
+    }
+  });
+
+  it('should set correct startLine for each chunk', () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `line-${i + 1}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 40, overlapLines: 0 });
+
+    expect(chunks[0]?.startLine).toBe(1);
+
+    for (const chunk of chunks) {
+      const expectedLine = text.split('\n').indexOf(chunk.content.split('\n')[0]!) + 1;
+      expect(chunk.startLine).toBe(expectedLine);
+    }
+  });
+
+  it('should split a single very long line by character boundaries', () => {
+    const text = 'x'.repeat(10000);
+    const chunks = splitIntoChunks(text, { maxChunkChars: 4000 });
+
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0]?.content).toBe('x'.repeat(4000));
+    expect(chunks[1]?.content).toBe('x'.repeat(4000));
+    expect(chunks[2]?.content).toBe('x'.repeat(2000));
+    expect(chunks.every(c => c.startLine === 1)).toBe(true);
+  });
+
+  it('should handle empty text', () => {
+    const chunks = splitIntoChunks('');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe('');
+  });
+
+  it('should not produce empty chunks', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `line ${i}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 100, overlapLines: 2 });
+
+    for (const chunk of chunks) {
+      expect(chunk.content.length).toBeGreaterThan(0);
+    }
   });
 });

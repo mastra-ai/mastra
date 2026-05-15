@@ -4,6 +4,65 @@ import { describe, expect, it } from 'vitest';
 import { toAISdkV5Stream } from '../convert-streams';
 
 describe('Custom Data Handling', () => {
+  describe('agent structured output', () => {
+    it('should emit a custom data event for structured output object chunks', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'structured-output-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'object-result',
+            runId: 'structured-output-run-id',
+            object: {
+              suggestions: ['First idea', 'Second idea'],
+            },
+          });
+
+          controller.enqueue({
+            type: 'finish',
+            runId: 'structured-output-run-id',
+            payload: {
+              stepResult: {
+                reason: 'stop',
+                warnings: [],
+              },
+              output: {
+                usage: {
+                  inputTokens: 10,
+                  outputTokens: 20,
+                  totalTokens: 30,
+                },
+              },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const structuredOutputChunk = chunks.find(chunk => chunk.type === 'data-structured-output');
+
+      expect(structuredOutputChunk).toBeDefined();
+      expect(structuredOutputChunk.data).toEqual({
+        object: {
+          suggestions: ['First idea', 'Second idea'],
+        },
+      });
+      expect(chunks.find(chunk => chunk.type === 'finish')).toBeDefined();
+    });
+  });
+
   describe('workflow tool output with custom data', () => {
     it('should process custom data from workflow tool output', async () => {
       const mockStream = new ReadableStream({
@@ -145,6 +204,99 @@ describe('Custom Data Handling', () => {
       expect(customDataChunk).toBeDefined();
       expect(customDataChunk.data.items).toEqual(['item1', 'item2', 'item3']);
       expect(customDataChunk.data.counts).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('should emit workflow step delta parts from nested workflow tool output', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'tool-output',
+            runId: 'test-run-id',
+            from: 'USER',
+            payload: {
+              output: {
+                type: 'workflow-start',
+                from: 'WORKFLOW',
+                runId: 'nested-workflow-run',
+                payload: {
+                  workflowId: 'nested-workflow',
+                },
+              },
+              toolCallId: 'call_nested_workflow',
+              toolName: 'workflow-nestedWorkflow',
+            },
+          });
+
+          controller.enqueue({
+            type: 'tool-output',
+            runId: 'test-run-id',
+            from: 'USER',
+            payload: {
+              output: {
+                type: 'workflow-step-start',
+                from: 'WORKFLOW',
+                runId: 'nested-workflow-run',
+                payload: {
+                  id: 'step-1',
+                  stepCallId: 'call-1',
+                  status: 'running',
+                  payload: { city: 'Memphis' },
+                },
+              },
+              toolCallId: 'call_nested_workflow',
+              toolName: 'workflow-nestedWorkflow',
+            },
+          });
+
+          controller.enqueue({
+            type: 'tool-output',
+            runId: 'test-run-id',
+            from: 'USER',
+            payload: {
+              output: {
+                type: 'workflow-step-result',
+                from: 'WORKFLOW',
+                runId: 'nested-workflow-run',
+                payload: {
+                  id: 'step-1',
+                  stepCallId: 'call-1',
+                  status: 'success',
+                  output: { forecast: 'sunny' },
+                },
+              },
+              toolCallId: 'call_nested_workflow',
+              toolName: 'workflow-nestedWorkflow',
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const workflowChunk = chunks.find(
+        chunk => chunk.type === 'data-tool-workflow' && chunk.data?.steps && chunk.data.steps['step-1'],
+      );
+      const workflowStepChunk = chunks.find(chunk => chunk.type === 'data-tool-workflow-step');
+
+      expect(workflowChunk).toBeDefined();
+      expect(workflowChunk.data.steps['step-1'].output).toBeNull();
+
+      expect(workflowStepChunk).toBeDefined();
+      expect(workflowStepChunk.data.stepId).toBe('step-1');
+      expect(workflowStepChunk.data.step.output).toEqual({ forecast: 'sunny' });
     });
   });
 

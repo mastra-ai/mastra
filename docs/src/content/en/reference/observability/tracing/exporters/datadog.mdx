@@ -12,6 +12,10 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 Sends Tracing data to Datadog's LLM Observability product for monitoring and analytics.
 
+:::info
+If you also use `dd-trace` APM auto-instrumentation and need it correctly parented under Mastra spans, use the [DatadogBridge](/reference/observability/tracing/bridges/datadog) instead. The exporter sends LLM Observability data after execution completes, so it doesn't participate in `dd-trace`'s live scope.
+:::
+
 ## Constructor
 
 ```typescript prettier:false
@@ -147,7 +151,7 @@ const exporter = new DatadogExporter({
 
 ## Span mapping
 
-Mastra span types are mapped to Datadog LLMObs span kinds:
+Mastra span types are mapped to Datadog LLM Observability span kinds:
 
 | Mastra SpanType | Datadog Kind |
 | - | - |

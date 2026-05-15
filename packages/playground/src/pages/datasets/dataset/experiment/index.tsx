@@ -1,27 +1,18 @@
 import {
-  Header,
   MainContentLayout,
-  Icon,
-  Breadcrumb,
-  Crumb,
-  Spinner,
-  useDataset,
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  ExperimentPageContent,
-  ExperimentPageHeader,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
+  Spinner,
   is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { Database } from 'lucide-react';
-import { useParams, Link } from 'react-router';
+import { useParams } from 'react-router';
+import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { ExperimentPageContent } from '@/domains/experiments/components/experiment-page-content';
+import { ExperimentPageHeader } from '@/domains/experiments/components/experiment-page-header';
 
 function DatasetExperimentPage() {
   const { datasetId, experimentId } = useParams<{ datasetId: string; experimentId: string }>();
-
-  const { data: dataset } = useDataset(datasetId ?? '');
 
   const {
     data: experiment,
@@ -87,23 +78,6 @@ function DatasetExperimentPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
-            {dataset?.name}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            Experiment
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />

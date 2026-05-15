@@ -24,7 +24,6 @@ const meta: Meta<typeof DropdownMenu> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -234,6 +233,40 @@ export const WithSubMenu: Story = {
       </DropdownMenu.Content>
     </DropdownMenu>
   ),
+};
+
+export const WithManyItems: Story = {
+  render: () => {
+    const items = Array.from({ length: 40 }, (_, i) => `Item ${i + 1}`);
+    const subItems = Array.from({ length: 30 }, (_, i) => `Sub item ${i + 1}`);
+
+    return (
+      <DropdownMenu>
+        <DropdownMenu.Trigger asChild>
+          <Button variant="outline">Open long menu</Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content className="w-56">
+          <DropdownMenu.Label>Many items</DropdownMenu.Label>
+          <DropdownMenu.Separator />
+          {items.map(label => (
+            <DropdownMenu.Item key={label}>{label}</DropdownMenu.Item>
+          ))}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger>
+              <UserPlus />
+              <span>Nested (many)</span>
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent>
+              {subItems.map(label => (
+                <DropdownMenu.Item key={label}>{label}</DropdownMenu.Item>
+              ))}
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+  },
 };
 
 export const WithDisabledItems: Story = {

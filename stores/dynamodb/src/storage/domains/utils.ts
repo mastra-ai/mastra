@@ -4,6 +4,7 @@ import {
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
+  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
@@ -17,6 +18,7 @@ const ENTITY_MAP: Record<string, string> = {
   [TABLE_RESOURCES]: 'resource',
   [TABLE_WORKFLOW_SNAPSHOT]: 'workflow_snapshot',
   [TABLE_SCORERS]: 'score',
+  [TABLE_BACKGROUND_TASKS]: 'background_task',
 };
 
 /**
@@ -30,6 +32,7 @@ function getDeleteKey(entityName: string, item: any): Record<string, any> {
     case 'message':
     case 'resource':
     case 'score':
+    case 'background_task':
       key.id = item.id;
       break;
     case 'workflow_snapshot':

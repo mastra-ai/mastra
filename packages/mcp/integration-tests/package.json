@@ -20,7 +20,7 @@
     "@types/node": "22.19.15",
     "get-port": "^7.1.0",
     "mastra": "*",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.0"
   },
   "pnpm": {

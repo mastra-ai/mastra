@@ -3,6 +3,7 @@ import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { BackgroundTasksStorageClickhouse } from './domains/background-tasks';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
@@ -12,6 +13,7 @@ import { WorkflowsStorageClickhouse } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
+  BackgroundTasksStorageClickhouse,
   MemoryStorageClickhouse,
   ObservabilityStorageClickhouse,
   ObservabilityStorageClickhouseVNext,
@@ -225,6 +227,7 @@ export class ClickhouseStore extends MastraCompositeStore {
       scores,
       memory,
       observability,
+      backgroundTasks: new BackgroundTasksStorageClickhouse(domainConfig),
     };
   }
 
@@ -283,5 +286,50 @@ export class ClickhouseStore extends MastraCompositeStore {
         error,
       );
     }
+  }
+}
+
+/**
+ * ClickHouse storage adapter that uses the vNext observability domain by default.
+ *
+ * Equivalent to constructing a `ClickhouseStore` and overriding the `observability`
+ * domain with `ObservabilityStorageClickhouseVNext` through `MastraCompositeStore`.
+ * Use this in new projects to opt into the vNext observability schema without
+ * needing to wire the composite manually.
+ *
+ * Accepts the same configuration as `ClickhouseStore`. The underlying ClickHouse
+ * client is shared between every domain, including observability.
+ *
+ * @example
+ * ```typescript
+ * import { Mastra } from '@mastra/core';
+ * import { ClickhouseStoreVNext } from '@mastra/clickhouse';
+ *
+ * export const mastra = new Mastra({
+ *   storage: new ClickhouseStoreVNext({
+ *     id: 'clickhouse-storage',
+ *     url: process.env.CLICKHOUSE_URL!,
+ *     username: process.env.CLICKHOUSE_USERNAME!,
+ *     password: process.env.CLICKHOUSE_PASSWORD!,
+ *   }),
+ * });
+ * ```
+ */
+export class ClickhouseStoreVNext extends ClickhouseStore {
+  constructor(config: ClickhouseConfig) {
+    super(config);
+
+    // Identify as ClickhouseStoreVNext for callers that introspect `name`.
+    // The logger created by MastraBase still reflects the parent name.
+    this.name = 'ClickhouseStoreVNext';
+
+    // Replace the legacy observability domain set up by ClickhouseStore with the
+    // vNext implementation. Both share the same underlying client.
+    const observability = new ObservabilityStorageClickhouseVNext({ client: this.db });
+
+    this.stores = {
+      ...this.stores,
+      observability,
+    };
   }
 }

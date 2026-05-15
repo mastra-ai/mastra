@@ -4,7 +4,7 @@ import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
@@ -20,6 +20,7 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   memory?: MastraMemory;
+  backgroundTaskEnabled?: boolean;
 }
 
 export function createPrepareToolsStep<OUTPUT = undefined>({
@@ -32,6 +33,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
   agentSpan,
   methodType,
   memory: _memory,
+  backgroundTaskEnabled,
 }: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
@@ -53,6 +55,8 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         memoryConfig: options.memory?.options,
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
         delegation: options.delegation,
+        backgroundTaskEnabled,
+        inputProcessors: options.inputProcessors,
       });
 
       // Update the agent span with available tool names for observability

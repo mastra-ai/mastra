@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import { MastraEditor } from './index';
 
 describe('applyStoredOverrides', () => {
@@ -93,7 +96,7 @@ describe('applyStoredOverrides', () => {
     expect(result).toBe(agent);
   });
 
-  it('mutates the same agent instance (does not create a new one)', async () => {
+  it('returns a forked agent instance (does not mutate the original)', async () => {
     const { editor, codeAgent } = await setup({
       name: 'Stored Agent',
       instructions: 'Updated instructions.',
@@ -102,8 +105,78 @@ describe('applyStoredOverrides', () => {
 
     const result = await editor.agent.applyStoredOverrides(codeAgent);
 
-    // Should be the same object reference
-    expect(result).toBe(codeAgent);
+    // Should be a different object reference — the original is not mutated
+    expect(result).not.toBe(codeAgent);
+    expect(result.id).toBe(codeAgent.id);
+
+    // Original agent should retain its code-defined instructions
+    const originalInstructions = await codeAgent.getInstructions();
+    expect(originalInstructions).toBe('You are a code-defined agent.');
+
+    // Forked agent should have the overridden instructions
+    const forkedInstructions = await result.getInstructions();
+    expect(forkedInstructions).toBe('Updated instructions.');
+  });
+
+  it('merges conditional stored tools with code tools without recursively calling the fork', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeTool = createTool({
+      id: 'code-tool',
+      description: 'Code tool',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const storedTool = createTool({
+      id: 'stored-tool',
+      description: 'Stored tool',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'You are a code-defined agent.',
+      model: 'openai/gpt-4o',
+      tools: { 'code-tool': codeTool },
+    });
+    new Mastra({
+      storage,
+      editor,
+      agents: { 'my-agent': codeAgent },
+      tools: { 'stored-tool': storedTool },
+    });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'You are a stored-config agent.',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        tools: [
+          {
+            value: { 'stored-tool': {} },
+            rules: {
+              operator: 'AND',
+              conditions: [{ field: 'tier', operator: 'equals', value: 'premium' }],
+            },
+          },
+        ],
+      },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    const premiumTools = await result.listTools({ requestContext: new RequestContext([['tier', 'premium']]) });
+    expect(premiumTools['code-tool']).toBeDefined();
+    expect(premiumTools['stored-tool']).toBeDefined();
+
+    const defaultTools = await result.listTools({ requestContext: new RequestContext() });
+    expect(defaultTools['code-tool']).toBeDefined();
+    expect(defaultTools['stored-tool']).toBeUndefined();
   });
 
   it('resolves with the published (active) version when status is "published"', async () => {

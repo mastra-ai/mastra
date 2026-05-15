@@ -38,6 +38,27 @@ describe('toAISdkFormat', () => {
       const result = toAISdkV5Messages([]);
       expect(result).toEqual([]);
     });
+
+    it('should keep system reminders out of UI-facing v5 conversions', () => {
+      const result = toAISdkV5Messages([
+        {
+          id: 'msg-reminder',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: '<system-reminder>continue</system-reminder>' }],
+            metadata: {
+              systemReminder: {
+                type: 'anthropic-prefill-processor-retry',
+              },
+            },
+          },
+          createdAt: new Date(),
+        },
+      ]);
+
+      expect(result).toEqual([]);
+    });
   });
 
   describe('toAISdkMessages', () => {
@@ -74,6 +95,27 @@ describe('toAISdkFormat', () => {
 
     it('should handle empty array', () => {
       const result = toAISdkV4Messages([]);
+      expect(result).toEqual([]);
+    });
+
+    it('should keep system reminders out of UI-facing v4 conversions', () => {
+      const result = toAISdkV4Messages([
+        {
+          id: 'msg-reminder',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: '<system-reminder>continue</system-reminder>' }],
+            metadata: {
+              systemReminder: {
+                type: 'anthropic-prefill-processor-retry',
+              },
+            },
+          },
+          createdAt: new Date(),
+        },
+      ]);
+
       expect(result).toEqual([]);
     });
   });

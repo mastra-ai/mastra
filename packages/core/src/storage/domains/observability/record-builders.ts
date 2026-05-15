@@ -70,12 +70,15 @@ type CorrelationRecordFields = Pick<
   | 'entityType'
   | 'entityId'
   | 'entityName'
+  | 'entityVersionId'
   | 'parentEntityType'
   | 'parentEntityId'
   | 'parentEntityName'
+  | 'parentEntityVersionId'
   | 'rootEntityType'
   | 'rootEntityId'
   | 'rootEntityName'
+  | 'rootEntityVersionId'
   | 'userId'
   | 'organizationId'
   | 'resourceId'
@@ -95,12 +98,15 @@ function buildCorrelationRecordFields(context: CorrelationContext | undefined): 
     entityType: context?.entityType ?? null,
     entityId: context?.entityId ?? null,
     entityName: context?.entityName ?? null,
+    entityVersionId: context?.entityVersionId ?? null,
     parentEntityType: context?.parentEntityType ?? null,
     parentEntityId: context?.parentEntityId ?? null,
     parentEntityName: context?.parentEntityName ?? null,
+    parentEntityVersionId: context?.parentEntityVersionId ?? null,
     rootEntityType: context?.rootEntityType ?? null,
     rootEntityId: context?.rootEntityId ?? null,
     rootEntityName: context?.rootEntityName ?? null,
+    rootEntityVersionId: context?.rootEntityVersionId ?? null,
     userId: context?.userId ?? null,
     organizationId: context?.organizationId ?? null,
     resourceId: context?.resourceId ?? null,
@@ -169,6 +175,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     entityType: span.entityType ?? null,
     entityId: span.entityId ?? null,
     entityName: span.entityName ?? null,
+    entityVersionId: getStringOrNull(metadata.entityVersionId),
 
     // Identity & Tenancy - extracted from metadata if present
     userId: getStringOrNull(metadata.userId),
@@ -186,6 +193,9 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     source: getStringOrNull(metadata.source),
     serviceName: getStringOrNull(metadata.serviceName),
     scope: getObjectOrNull(metadata.scope),
+
+    // Experimentation
+    experimentId: getStringOrNull(metadata.experimentId),
 
     // Span data
     spanType: span.type,
@@ -231,6 +241,7 @@ export function buildMetricRecord(event: MetricEvent): CreateMetricRecord {
   const cost = m.costContext;
 
   return {
+    metricId: m.metricId,
     timestamp: m.timestamp,
     name: m.name,
     value: m.value,
@@ -260,6 +271,7 @@ export function buildLogRecord(event: LogEvent): CreateLogRecord {
   const legacyCorrelationFields = buildLegacyLogMetadataCorrelationFields(l.metadata ?? null);
 
   return {
+    logId: l.logId,
     timestamp: l.timestamp,
     level: l.level,
     message: l.message,
@@ -287,10 +299,12 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
   const s = event.score;
   const correlationFields = buildCorrelationRecordFields(s.correlationContext);
   return {
+    scoreId: s.scoreId,
     timestamp: s.timestamp,
     traceId: s.traceId ?? s.correlationContext?.traceId ?? null,
     spanId: s.spanId ?? s.correlationContext?.spanId ?? null,
     scorerId: s.scorerId,
+    scorerName: s.scorerName ?? null,
     scorerVersion: s.scorerVersion ?? null,
     scoreSource: s.scoreSource ?? s.source ?? null,
     source: s.scoreSource ?? s.source ?? null,
@@ -301,7 +315,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
     experimentId: correlationFields.experimentId ?? s.experimentId ?? null,
     scope: null,
     scoreTraceId: s.scoreTraceId ?? null,
-    metadata: s.scorerName ? { ...(s.metadata ?? {}), scorerName: s.scorerName } : (s.metadata ?? null),
+    metadata: s.metadata ?? null,
   };
 }
 
@@ -310,6 +324,7 @@ export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord 
   const fb = event.feedback;
   const correlationFields = buildCorrelationRecordFields(fb.correlationContext);
   return {
+    feedbackId: fb.feedbackId,
     timestamp: fb.timestamp,
     traceId: fb.traceId ?? fb.correlationContext?.traceId ?? null,
     spanId: fb.spanId ?? fb.correlationContext?.spanId ?? null,

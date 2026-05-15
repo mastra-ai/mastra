@@ -15,7 +15,7 @@ export type MemoryInfo = { threadId: string; resourceId?: string };
 
 type MastraMessageShared = {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
@@ -28,6 +28,10 @@ type LegacyToolInvocation = NonNullable<UIMessageV4['toolInvocations']>[number];
 export type MastraProviderMetadata = AIV5Type.ProviderMetadata;
 type MastraPartExtensions = { providerMetadata?: MastraProviderMetadata; createdAt?: number };
 type PartWithProviderMetadata<T> = T & MastraPartExtensions;
+export type MastraStepStartPart = {
+  type: 'step-start';
+  model?: string;
+} & MastraPartExtensions;
 
 // Approval payload stored alongside tool invocations so v6 approval flows can
 // round-trip through MessageList.
@@ -73,7 +77,10 @@ export type MastraSourceUrlPart = Omit<LegacySourcePart, 'providerMetadata'> & {
 // it with provider metadata, AI SDK v5 data parts, and v6-only persisted parts
 // such as approval-aware tool invocations and source documents.
 export type MastraMessagePart =
-  | PartWithProviderMetadata<Exclude<UIMessageV4['parts'][number], { type: 'tool-invocation' | 'source' }>>
+  | PartWithProviderMetadata<
+      Exclude<UIMessageV4['parts'][number], { type: 'tool-invocation' | 'source' | 'step-start' }>
+    >
+  | MastraStepStartPart
   | MastraToolInvocationPart
   | MastraSourceUrlPart
   | MastraSourceDocumentPart
@@ -103,7 +110,7 @@ export type MastraDBMessage = MastraMessageShared & {
 export type MastraMessageV1 = {
   id: string;
   content: string | CoreMessageV4['content'];
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;

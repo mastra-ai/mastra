@@ -2,8 +2,14 @@ import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
 import type {
   TraceRecord,
+  GetTraceLightResponse,
+  GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  GetBranchArgs,
+  GetBranchResponse,
   SpanIds,
   PaginationArgs,
   SpanRecord,
@@ -133,6 +139,29 @@ export class Observability extends BaseResource {
   }
 
   /**
+   * Retrieves a lightweight trace by ID (timeline fields only).
+   * Excludes heavy fields (input, output, attributes, metadata, tags, links)
+   * for ~97% payload reduction compared to getTrace.
+   *
+   * @param traceId - ID of the trace to retrieve
+   * @returns Promise containing the trace with lightweight spans
+   */
+  getTraceLight(traceId: string): Promise<GetTraceLightResponse> {
+    return this.request(`/observability/traces/${traceId}/light`);
+  }
+
+  /**
+   * Retrieves a single span with full details by trace ID and span ID.
+   *
+   * @param traceId - ID of the trace containing the span
+   * @param spanId - ID of the span to retrieve
+   * @returns Promise containing the full span record
+   */
+  getSpan(traceId: string, spanId: string): Promise<GetSpanResponse> {
+    return this.request(`/observability/traces/${traceId}/spans/${spanId}`);
+  }
+
+  /**
    * Extracts a structured trajectory from a trace's spans.
    *
    * @param traceId - ID of the trace to extract trajectory from
@@ -195,6 +224,39 @@ export class Observability extends BaseResource {
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
     return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves a paginated list of trace branches with optional filtering and sorting.
+   *
+   * Each row is a single branch-anchor span (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL),
+   * including ones nested under a different root entity. Use this to list every run of
+   * a given agent/workflow/tool regardless of how it was triggered. Pairs with
+   * {@link getBranch} to expand a single branch into its subtree.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated branch-anchor spans and pagination info
+   */
+  listBranches(params: ListBranchesArgs = {}): Promise<ListBranchesResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/branches${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves the subtree of spans rooted at a given span.
+   *
+   * @param params - Parameters containing trace ID, span ID, and optional depth.
+   *   When `depth` is omitted the full descendant subtree is returned; with a finite
+   *   `depth` only that many levels below the anchor are returned (depth: 0 → only the
+   *   anchor span; depth: 1 → anchor plus immediate children; etc).
+   * @returns Promise containing the branch (anchor span plus descendants)
+   */
+  getBranch(params: GetBranchArgs): Promise<GetBranchResponse> {
+    const { traceId, spanId, depth } = params;
+    const queryString = depth !== undefined ? `?depth=${depth}` : '';
+    return this.request(
+      `/observability/traces/${encodeURIComponent(traceId)}/branches/${encodeURIComponent(spanId)}${queryString}`,
+    );
   }
 
   /**

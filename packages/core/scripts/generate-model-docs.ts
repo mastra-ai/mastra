@@ -37,6 +37,7 @@ function formatProviderName(name: string): string {
     'moonshotai-cn': 'Moonshot AI (China)',
     zhipuai: 'Zhipu AI',
     opencode: 'OpenCode',
+    'azure-openai': 'Azure OpenAI',
   };
 
   const lower = name.toLowerCase();
@@ -115,7 +116,7 @@ const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 
 const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
-const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai'];
+const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
 
 interface ProviderInfo {
   id: string;
@@ -614,13 +615,13 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 ## Features
 
-- **One API for any model** - Access any model without having to install and manage additional provider dependencies.
+- **One API for any model**: Access any model without having to install and manage additional provider dependencies.
 
-- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
+- **Access the newest AI**: Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
 
-- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-5-mini for large-context processing, then switch to Claude Opus 4.6 for reasoning tasks.
+- [**Mix and match models**](#mix-and-match-models): Use different models for different tasks. For example, run GPT-5-mini for large-context processing, then switch to Claude Opus 4.6 for reasoning tasks.
 
-- [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
+- [**Model fallbacks**](#model-fallbacks): If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
 
 ## Basic usage
 
@@ -638,7 +639,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "openai/gpt-5"
+      model: "openai/gpt-5.5"
     })
     \`\`\`
 
@@ -652,7 +653,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "anthropic/claude-4-5-sonnet"
+      model: "anthropic/claude-sonnet-4-6"
     })
     \`\`\`
 
@@ -694,7 +695,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "openrouter/anthropic/claude-haiku-4-5"
+      model: "openrouter/anthropic/claude-haiku-4.5"
     })
     \`\`\`
 
@@ -916,6 +917,41 @@ Mastra tries your primary model first. If it encounters a 500 error, rate limit,
 
 Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
 
+### Per-model settings
+
+Each fallback entry can carry its own \`modelSettings\`, \`providerOptions\`, and \`headers\` — useful when models in the chain need different temperatures or provider-specific knobs to produce comparable output.
+
+\`\`\`typescript title="src/mastra/agents/tuned-resilient-agent.ts"
+import { Agent } from '@mastra/core/agent';
+
+const agent = new Agent({
+  id: 'tuned-resilient',
+  name: 'Tuned Resilient Agent',
+  instructions: 'You are a helpful assistant.',
+  model: [
+    {
+      model: 'google/gemini-2.5-flash',
+      maxRetries: 2,
+      modelSettings: { temperature: 0.3 },
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+    },
+    {
+      model: 'openai/gpt-5-mini',
+      maxRetries: 2,
+      modelSettings: { temperature: 0.7 },
+      providerOptions: { openai: { reasoningEffort: 'low' } },
+    },
+  ],
+});
+\`\`\`
+
+**Precedence:**
+
+- \`modelSettings\` and \`providerOptions\`: per-fallback entry overrides call-time options, which override agent \`defaultOptions\`. \`modelSettings\` shallow-merges by key. \`providerOptions\` deep-merges recursively, so nested provider config (e.g. \`google.thinkingConfig\`) preserves sibling keys across layers.
+- \`headers\`: call-time \`modelSettings.headers\` overrides per-fallback \`headers\`, which overrides headers extracted from model-router models. Runtime headers (tracing, auth, tenancy) intentionally take precedence over model-level headers.
+
+Each field also accepts a function of \`requestContext\`, matching how dynamic models are resolved.
+
 ## Use local models with Mastra
 
 Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
@@ -998,7 +1034,7 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
   const hasNetlify = gatewaysList.includes('netlify');
-  const logoImport = hasNetlify ? 'import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
+  const logoImport = hasNetlify ? '\nimport { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
 
   return `---
 title: "Gateways"
@@ -1027,9 +1063,18 @@ ${gatewaysList
       if (g === 'azure-openai') {
         return `    <CardGridItem
       title="Azure OpenAI"
-      description="Use your private Azure OpenAI deployments with associated deployment names"
+      description="Private Azure OpenAI deployments"
       href="/models/gateways/${g}"
       logo="${getLogoUrl(g)}"
+    />`;
+      }
+
+      if (g === 'mastra') {
+        return `    <CardGridItem
+      title="Mastra"
+      description="Built-in Observational Memory"
+      href="/models/gateways/${g}"
+      logo="https://mastra.ai/brand/logo.svg"
     />`;
       }
     }
@@ -1050,10 +1095,7 @@ ${gatewaysList
 
     />`;
   })
-  .join(
-    '\
-',
-  )}
+  .join('\n')}
 </CardGrid>`;
 }
 

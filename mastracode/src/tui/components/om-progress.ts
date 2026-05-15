@@ -212,7 +212,7 @@ export function formatReflectionStatus(
   const fraction = `${formatTokensValue(state.observationTokens)}/${formatTokensThreshold(state.reflectionThreshold)}`;
   const savings = state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens;
   const buffered =
-    compact !== 'noBuffer' && state.buffered.reflection.status === 'complete'
+    compact !== 'noBuffer' && state.buffered.reflection.status === 'complete' && savings > 0
       ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`))
       : '';
   return label + colorByPercent(fraction, percent) + buffered;

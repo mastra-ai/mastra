@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS span_events (
   entityType VARCHAR,
   entityId VARCHAR,
   entityName VARCHAR,
+  entityVersionId VARCHAR,
 
   -- Context
   userId VARCHAR,
@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS metric_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  metricId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -74,9 +76,12 @@ CREATE TABLE IF NOT EXISTS metric_events (
   entityType VARCHAR,
   entityId VARCHAR,
   entityName VARCHAR,
+  entityVersionId VARCHAR,
+  parentEntityVersionId VARCHAR,
   parentEntityType VARCHAR,
   parentEntityId VARCHAR,
   parentEntityName VARCHAR,
+  rootEntityVersionId VARCHAR,
   rootEntityType VARCHAR,
   rootEntityId VARCHAR,
   rootEntityName VARCHAR,
@@ -116,6 +121,7 @@ CREATE TABLE IF NOT EXISTS log_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  logId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -124,9 +130,12 @@ CREATE TABLE IF NOT EXISTS log_events (
   entityType VARCHAR,
   entityId VARCHAR,
   entityName VARCHAR,
+  entityVersionId VARCHAR,
+  parentEntityVersionId VARCHAR,
   parentEntityType VARCHAR,
   parentEntityId VARCHAR,
   parentEntityName VARCHAR,
+  rootEntityVersionId VARCHAR,
   rootEntityType VARCHAR,
   rootEntityId VARCHAR,
   rootEntityName VARCHAR,
@@ -161,6 +170,7 @@ CREATE TABLE IF NOT EXISTS score_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  scoreId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -170,9 +180,12 @@ CREATE TABLE IF NOT EXISTS score_events (
   entityType VARCHAR,
   entityId VARCHAR,
   entityName VARCHAR,
+  entityVersionId VARCHAR,
+  parentEntityVersionId VARCHAR,
   parentEntityType VARCHAR,
   parentEntityId VARCHAR,
   parentEntityName VARCHAR,
+  rootEntityVersionId VARCHAR,
   rootEntityType VARCHAR,
   rootEntityId VARCHAR,
   rootEntityName VARCHAR,
@@ -210,6 +223,7 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  feedbackId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -217,9 +231,12 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   entityType VARCHAR,
   entityId VARCHAR,
   entityName VARCHAR,
+  entityVersionId VARCHAR,
+  parentEntityVersionId VARCHAR,
   parentEntityType VARCHAR,
   parentEntityId VARCHAR,
   parentEntityName VARCHAR,
+  rootEntityVersionId VARCHAR,
   rootEntityType VARCHAR,
   rootEntityId VARCHAR,
   rootEntityName VARCHAR,
@@ -258,7 +275,13 @@ export const ALL_DDL = [SPAN_EVENTS_DDL, METRIC_EVENTS_DDL, LOG_EVENTS_DDL, SCOR
 
 /** Additive migrations for observability tables created by older versions. */
 export const ALL_MIGRATIONS = [
+  // Span events
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+
   // Metrics
+  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
+  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS experimentId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS parentEntityType VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS parentEntityId VARCHAR`,
@@ -281,6 +304,9 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS scope JSON`,
 
   // Logs
+  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
+  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS experimentId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS parentEntityType VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS parentEntityId VARCHAR`,
@@ -303,6 +329,9 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS scope JSON`,
 
   // Scores
+  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
+  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityType VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityName VARCHAR`,
@@ -329,6 +358,9 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE score_events ALTER COLUMN traceId DROP NOT NULL`,
 
   // Feedback
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityType VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityName VARCHAR`,

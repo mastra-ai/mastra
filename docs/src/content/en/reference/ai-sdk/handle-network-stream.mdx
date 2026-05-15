@@ -68,6 +68,13 @@ export async function POST(req: Request) {
     isOptional: false,
   },
   {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+    isOptional: true,
+  },
+  {
     name: 'params',
     type: 'NetworkStreamHandlerParams',
     description:

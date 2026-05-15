@@ -1,5 +1,8 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type { RequestContext } from '../request-context';
+import type { MastraAuthProvider } from './auth';
+import { CompositeAuth } from './composite-auth';
+import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
 
 /**
@@ -59,5 +62,26 @@ describe('registerApiRoute Type Tests', () => {
         },
       });
     });
+  });
+});
+
+/**
+ * Regression test: CompositeAuth must accept providers whose TUser is narrower
+ * than unknown. When mapUserToResourceId is declared in property position on
+ * MastraAuthProvider<TUser>, strict contravariance rejects such providers
+ * even though the runtime contract is compatible.
+ */
+describe('CompositeAuth TUser variance', () => {
+  it('accepts SimpleAuth providers with a narrower TUser generic', () => {
+    interface CustomUser {
+      sub: string;
+    }
+
+    const typed = new SimpleAuth<CustomUser>({
+      tokens: { example: { sub: '1' } },
+    });
+
+    const _assignable: MastraAuthProvider<unknown> = typed;
+    new CompositeAuth([typed]);
   });
 });

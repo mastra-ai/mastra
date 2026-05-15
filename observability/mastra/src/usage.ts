@@ -40,7 +40,7 @@ function isV3RawUsage(raw: unknown): raw is V3RawUsage {
 
 /**
  * AI SDK aggregated input token details.
- * Available on totalUsage in multi-step runs — properly summed across all steps.
+ * Available on totalUsage in multi-step runs - properly summed across all steps.
  */
 interface AISdkInputTokenDetails {
   cacheReadTokens?: number;
@@ -60,8 +60,9 @@ function isDefined(value: unknown): value is number {
  *
  * Cache token extraction priority (highest to lowest):
  * 1. AI SDK aggregated inputTokenDetails (properly summed across all steps in multi-step runs)
- * 2. Provider-specific providerMetadata (accurate for single-step, last step only in multi-step)
- * 3. usage.cachedInputTokens (OpenAI/OpenRouter direct field)
+ * 2. Mastra-aggregated top-level usage fields (usage.cachedInputTokens, usage.cacheCreationInputTokens) -
+ *    summed across steps by RunOutput, so they are correct for multi-step runs.
+ * 3. Provider-specific providerMetadata (accurate for single-step, LAST STEP ONLY in multi-step).
  *
  * Handles:
  * - OpenAI: cachedInputTokens in usage object
@@ -97,11 +98,12 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     inputDetails.cacheWrite = aiSdkDetails.cacheWriteTokens;
   }
 
-  // ===== OpenAI / OpenRouter =====
-  // cachedInputTokens is already in the usage object
-  // inputTokens INCLUDES cached tokens (no adjustment needed)
+  // Mastra-aggregated fields — summed across steps by RunOutput; prefer over per-step providerMetadata.
   if (!isDefined(inputDetails.cacheRead) && isDefined(usage.cachedInputTokens)) {
     inputDetails.cacheRead = usage.cachedInputTokens;
+  }
+  if (!isDefined(inputDetails.cacheWrite) && isDefined(usage.cacheCreationInputTokens)) {
+    inputDetails.cacheWrite = usage.cacheCreationInputTokens;
   }
 
   // reasoningTokens from usage (OpenAI o1 models)
@@ -127,9 +129,13 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
       inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
-    // AI SDK v6-style usage already provides total input tokens including cache details,
-    // so avoid adding cache tokens on top of an already-totaled input count.
-    if (!hasV3CachedTotals && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
+    // Skip adjustment when inputTokens already includes cache tokens (V3 raw or any positive Mastra-aggregated cache field).
+    const inputAlreadyIncludesCache =
+      hasV3CachedTotals ||
+      (isDefined(usage.cachedInputTokens) && usage.cachedInputTokens > 0) ||
+      (isDefined(usage.cacheCreationInputTokens) && usage.cacheCreationInputTokens > 0);
+
+    if (!inputAlreadyIncludesCache && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
       inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
     }
   }

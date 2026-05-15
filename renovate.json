@@ -23,7 +23,15 @@
   },
   "schedule": ["before 6am on monday"],
   "vulnerabilityAlerts": {
+    "groupName": "security updates",
+    "labels": ["automation", "security"],
     "schedule": []
+  },
+  "osvVulnerabilityAlerts": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on wednesday"],
+    "automerge": true
   },
   "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**"],
   "packageRules": [
@@ -34,6 +42,10 @@
     {
       "matchDatasources": ["npm"],
       "minimumReleaseAge": "3 days"
+    },
+    {
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "prPriority": 10
     },
     {
       "matchPackageNames": ["@types/node"],
@@ -52,6 +64,23 @@
     },
     {
       "groupName": "AI SDK",
+      "description": "Disable major AI SDK updates outside examples",
+      "matchFileNames": ["**/package.json", "!examples/**", "!docs/**"],
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "groupName": "AI SDK",
+      "description": "Allow minor and patch AI SDK updates outside examples",
+      "matchFileNames": ["**/package.json", "!examples/**", "!docs/**"],
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "groupName": "AI SDK Examples",
+      "description": "Leave example apps eligible for all AI SDK update types",
+      "matchFileNames": ["examples/**/package.json"],
       "matchSourceUrls": ["https://github.com/vercel/ai"]
     },
     {
@@ -91,6 +120,46 @@
       "commitMessageTopic": "e2e-tests",
       "matchFileNames": ["e2e-tests/**/package.json"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Playground kitchen-sink",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/playground/e2e/kitchen-sink/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "kitchen-sink-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Memory integration tests",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/memory/integration-tests/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "memory-integration-tests-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Agent-builder integration tests",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/agent-builder/integration-tests/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "agent-builder-integration-tests-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "MCP integration tests",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/mcp/integration-tests/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "mcp-integration-tests-",
       "dependencyDashboardApproval": false,
       "automerge": true
     },

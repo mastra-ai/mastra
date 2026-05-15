@@ -74,6 +74,8 @@ When referencing an agent from your Mastra instance, use `mastra.getAgentById()`
   <TabItem value="generate" label=".generate()">
     Returns the full response after all tool calls and steps complete. The result includes `text`, `toolCalls`, `toolResults`, `steps`, and token `usage` statistics.
 
+    See the [`Agent.generate()` reference](/reference/agents/generate) for the response shape, including tool call and tool result payloads.
+
     ```ts
     const agent = mastra.getAgentById('test-agent')
     const response = await agent.generate('Help me organize my day')
@@ -83,6 +85,8 @@ When referencing an agent from your Mastra instance, use `mastra.getAgentById()`
 
   <TabItem value="stream" label=".stream()">
     Returns a stream you can consume as tokens arrive. The result exposes `textStream` for incremental output and promises for `toolCalls`, `toolResults`, `steps`, and token `usage` that resolve when the stream finishes.
+
+    See the [`MastraModelOutput` reference](/reference/streaming/agents/MastraModelOutput) for the stream shape, including tool call and tool result payloads.
 
     ```ts
     const agent = mastra.getAgentById('test-agent')

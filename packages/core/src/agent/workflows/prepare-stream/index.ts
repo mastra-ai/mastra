@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+import type { BackgroundTaskManager } from '../../../background-tasks';
+import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
@@ -6,10 +8,12 @@ import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import { createWorkflow } from '../../../workflows';
+import type { ToolPayloadTransformPolicy } from '../../../tools';
+import { createWorkflow } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -41,6 +45,18 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
+  backgroundTaskManager?: BackgroundTaskManager;
+  agentBackgroundConfig?: AgentBackgroundConfig;
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
+  /**
+   * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
+   * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
+   * drives continuation from outside the loop.
+   */
+  skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  /** Signal inputs already stored in the initial message list that still need stream data-part echoes. */
+  initialSignalEchoes?: CreatedAgentSignal[];
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -64,6 +80,12 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentName,
   toolCallId,
   workspace,
+  backgroundTaskManager,
+  agentBackgroundConfig,
+  toolPayloadTransform,
+  skipBgTaskWait,
+  drainPendingSignals,
+  initialSignalEchoes,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -75,6 +97,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     methodType,
     memory,
+    backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
   });
 
   const prepareMemoryStep = createPrepareMemoryStep({
@@ -108,6 +131,12 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     resourceId,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
     workspace,
+    backgroundTaskManager,
+    agentBackgroundConfig,
+    toolPayloadTransform,
+    skipBgTaskWait,
+    drainPendingSignals,
+    initialSignalEchoes,
   });
 
   const mapResultsStep = createMapResultsStep({

@@ -60,10 +60,13 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
 /**
  * Get the LSP language ID for a file path based on its extension.
  * Returns undefined if the extension is not recognized.
+ *
+ * When `customExtensions` is provided, it is checked first, allowing
+ * custom servers to register new file extensions or override built-in mappings.
  */
-export function getLanguageId(filePath: string): string | undefined {
+export function getLanguageId(filePath: string, customExtensions?: Record<string, string>): string | undefined {
   const dotIndex = filePath.lastIndexOf('.');
   if (dotIndex === -1) return undefined;
   const ext = filePath.substring(dotIndex);
-  return LANGUAGE_EXTENSIONS[ext];
+  return customExtensions?.[ext] ?? LANGUAGE_EXTENSIONS[ext];
 }

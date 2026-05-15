@@ -1,3 +1,4 @@
+import { generateSignalId } from '@mastra/core/observability';
 import type {
   AnyRecordedSpan,
   CorrelationContext,
@@ -99,10 +100,12 @@ export function buildScoreEvent(args: {
   return {
     type: 'score',
     score: {
+      scoreId: generateSignalId(),
       timestamp: new Date(),
       traceId,
       spanId,
       scorerId: score.scorerId,
+      scorerName: score.scorerName,
       scorerVersion: score.scorerVersion,
       source: score.source,
       scoreSource: score.scoreSource,
@@ -110,6 +113,7 @@ export function buildScoreEvent(args: {
       reason: score.reason,
       experimentId: score.experimentId,
       scoreTraceId: score.scoreTraceId,
+      targetEntityType: score.targetEntityType,
       correlationContext,
       metadata: mergeMetadata(inheritedMetadata, score.metadata),
     },
@@ -128,6 +132,7 @@ export function buildFeedbackEvent(args: {
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: generateSignalId(),
       timestamp: new Date(),
       traceId,
       spanId,

@@ -9,7 +9,7 @@
 import { EntityType, SpanType } from './types';
 import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
 
-const entityTypeValues = new Set(Object.values(EntityType));
+const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
 let currentSpanResolver: (() => AnySpan | undefined) | undefined;
 
 export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | undefined): void {
@@ -18,6 +18,35 @@ export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | u
 
 export function resolveCurrentSpan(): AnySpan | undefined {
   return currentSpanResolver?.();
+}
+
+/** Generate a unique id for an observability signal (log, metric, score, feedback). */
+export function generateSignalId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Compute the names of tools the model can call on a single inference step,
+ * applying `activeTools` filtering when present. Used to populate the
+ * `availableTools` attribute on MODEL_INFERENCE spans so observers see the
+ * post-processor tool set, which can differ per-step from the AGENT_RUN view.
+ *
+ * `activeTools` is treated by presence, not truthiness: an explicit empty
+ * array means "no tools enabled for this step" and is honored as such.
+ * Returns `[]` (not `undefined`) when `tools` is provided but empty, so a
+ * tool-less agent still reports a definitive empty list to observers.
+ */
+export function getStepAvailableToolNames(
+  tools?: Record<string, unknown> | undefined,
+  activeTools?: readonly string[] | undefined,
+): string[] | undefined {
+  if (activeTools !== undefined) {
+    return [...activeTools];
+  }
+  if (tools) {
+    return Object.keys(tools);
+  }
+  return undefined;
 }
 
 // --- Lazy resolvers for executeWithContext / executeWithContextSync ---
@@ -158,6 +187,8 @@ export function getEntityTypeForSpan(span: {
   switch (span.spanType) {
     case SpanType.AGENT_RUN:
       return EntityType.AGENT;
+    case SpanType.RAG_INGESTION:
+      return EntityType.RAG_INGESTION;
     case SpanType.SCORER_RUN:
     case SpanType.SCORER_STEP:
       return EntityType.SCORER;

@@ -42,6 +42,102 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   ...overrides,
 });
 
+describe('createToolCallStep background task stream replay', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should replay a synthetic tool-call only once per resumed background task stream', async () => {
+    const controller = { enqueue: vi.fn() };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const messageList = createMessageList();
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        context.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'resumed-run',
+            result: { first: true },
+            completedAt: new Date(),
+          },
+        });
+        context.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'resumed-run',
+            result: { second: true },
+            completedAt: new Date(),
+          },
+        });
+
+        return {
+          task: { id: 'task-1' },
+          fallbackToSync: false,
+        };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const tools = {
+      'background-tool': {
+        backgroundConfig: { enabled: true },
+        execute: vi.fn(),
+      },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'background-tool',
+          args: { query: 'customers' },
+        },
+      }),
+    );
+    let replayedToolCalls: any[] = [];
+    await vi.waitFor(() => {
+      replayedToolCalls = controller.enqueue.mock.calls
+        .map(([chunk]) => chunk)
+        .filter(chunk => chunk.type === 'tool-call');
+      expect(replayedToolCalls).toHaveLength(1);
+    });
+
+    expect(replayedToolCalls).toHaveLength(1);
+    expect(replayedToolCalls[0]).toMatchObject({
+      type: 'tool-call',
+      runId: 'resumed-run',
+      payload: {
+        toolCallId: 'call-1',
+        toolName: 'background-tool',
+        args: { query: 'customers' },
+      },
+    });
+  });
+});
+
 describe('createToolCallStep tool execution error handling', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
@@ -213,6 +309,7 @@ describe('createToolCallStep tool approval workflow', () => {
     const inputData = makeInputData();
 
     const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -226,8 +323,6 @@ describe('createToolCallStep tool approval workflow', () => {
         }),
       }),
     );
-
-    await new Promise(resolve => setImmediate(resolve));
 
     expect(suspend).toHaveBeenCalledWith(
       {
@@ -296,6 +391,105 @@ describe('createToolCallStep tool approval workflow', () => {
     expect(result).toEqual({
       result: toolResult,
       ...inputData,
+    });
+  });
+});
+
+describe('createToolCallStep needsApprovalFn enriched context', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+  let neverResolve: Promise<never>;
+
+  const makeInputData = () => ({
+    toolCallId: 'ctx-call-id',
+    toolName: 'ctx-tool',
+    args: { action: 'delete' },
+  });
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    ...makeBaseExecuteParams(suspend),
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'ctx-call-id',
+      name: 'ctx-tool',
+      runId: 'ctx-run-id',
+    }),
+    inputData: makeInputData(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    neverResolve = new Promise(() => {});
+    suspend = vi.fn().mockReturnValue(neverResolve);
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    messageList = createMessageList();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should default to requiring approval when needsApprovalFn throws', async () => {
+    const needsApprovalFn = vi.fn().mockImplementation(() => {
+      throw new Error('approval fn error');
+    });
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn(),
+        requireApproval: true,
+        needsApprovalFn,
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'error-run-id',
+      streamState,
+    });
+
+    const executePromise = toolCallStep.execute(makeExecuteParams());
+
+    await new Promise(resolve => setImmediate(resolve));
+
+    // Should still suspend (default to requiring approval on error)
+    expect(suspend).toHaveBeenCalled();
+    expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('should skip approval when needsApprovalFn returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const toolResult = { deleted: true };
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn().mockResolvedValue(toolResult),
+        requireApproval: true,
+        needsApprovalFn,
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'skip-run-id',
+      streamState,
+    });
+
+    const result = await toolCallStep.execute(makeExecuteParams());
+
+    expect(needsApprovalFn).toHaveBeenCalled();
+    expect(suspend).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      result: toolResult,
+      ...makeInputData(),
     });
   });
 });

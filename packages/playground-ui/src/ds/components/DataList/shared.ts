@@ -4,5 +4,6 @@ export const dataListRowStyles = [
   '[.data-list-row:hover+&]:border-t-transparent [.data-list-row:focus-visible+&]:border-t-transparent',
   '[.data-list-subheader+&]:border-t-transparent',
   '[&:has(+.data-list-subheader)]:border-b-transparent',
+  '[&:not(:has(~.data-list-row))]:border-b-transparent',
   'transition-colors duration-200 rounded-lg',
 ] as const;

@@ -5,6 +5,7 @@
 import type { MastraAuthProvider } from '../../server';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
 import type { IACLProvider } from './interfaces/acl';
+import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
 import { isLicenseValid, isDevEnvironment } from './license';
@@ -22,6 +23,8 @@ export interface PublicAuthCapabilities {
     type: 'sso' | 'credentials' | 'both';
     /** Whether sign-up is enabled (defaults to true) */
     signUpEnabled?: boolean;
+    /** Optional description explaining the auth requirement and what credentials to use */
+    description?: string;
     /** SSO configuration */
     sso?: {
       /** Provider name */
@@ -30,6 +33,8 @@ export interface PublicAuthCapabilities {
       text: string;
       /** Icon URL */
       icon?: string;
+      /** Description of the auth requirement */
+      description?: string;
       /** Login URL */
       url: string;
     };
@@ -64,6 +69,8 @@ export interface CapabilityFlags {
   rbac: boolean;
   /** IACLProvider is implemented and licensed */
   acl: boolean;
+  /** IFGAProvider is implemented and licensed */
+  fga: boolean;
 }
 
 /**
@@ -87,6 +94,8 @@ export interface AuthenticatedCapabilities extends PublicAuthCapabilities {
   capabilities: CapabilityFlags;
   /** User's access (if RBAC available) */
   access: UserAccess | null;
+  /** Available roles in the system (only present for admin users) */
+  availableRoles?: { id: string; name: string }[];
 }
 
 /**
@@ -124,6 +133,13 @@ function isSimpleAuth(auth: unknown): boolean {
 }
 
 /**
+ * Check if a set of permissions includes admin bypass (`*` or `*:*`).
+ */
+function hasAdminBypassPermissions(permissions: string[]): boolean {
+  return permissions.some(p => p === '*' || p === '*:*');
+}
+
+/**
  * Options for building capabilities.
  */
 export interface BuildCapabilitiesOptions {
@@ -142,6 +158,12 @@ export interface BuildCapabilitiesOptions {
    * ```
    */
   rbac?: IRBACProvider<EEUser>;
+
+  /**
+   * FGA provider for fine-grained authorization (EE feature).
+   * Separate from the auth provider to allow mixing different providers.
+   */
+  fga?: IFGAProvider<EEUser>;
 
   /**
    * API route prefix used to construct SSO login URLs.
@@ -207,6 +229,7 @@ export async function buildCapabilities(
     login = {
       type: 'both',
       signUpEnabled,
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,
@@ -216,6 +239,7 @@ export async function buildCapabilities(
     const ssoConfig = (auth as ISSOProvider).getLoginButtonConfig();
     login = {
       type: 'sso',
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,
@@ -249,6 +273,9 @@ export async function buildCapabilities(
   const rbacProvider = options?.rbac;
   const hasRBAC = !!rbacProvider && isLicensedOrCloud;
 
+  // Get FGA provider from options (if configured)
+  const hasFGA = !!options?.fga && isLicensedOrCloud;
+
   // Build capability flags
   const capabilities: CapabilityFlags = {
     user: implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud,
@@ -256,6 +283,7 @@ export async function buildCapabilities(
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
+    fga: hasFGA,
   };
 
   // Get roles/permissions from RBAC provider (if available)
@@ -271,6 +299,41 @@ export async function buildCapabilities(
     }
   }
 
+  // Expose available roles for admin users (for "View as role" feature).
+  // Exclude roles with admin-bypass permissions since previewing as admin
+  // is the same as the current experience.
+  let availableRoles: { id: string; name: string }[] | undefined;
+  if (access && rbacProvider?.getAvailableRoles) {
+    if (hasAdminBypassPermissions(access.permissions)) {
+      try {
+        const allRoles = await rbacProvider.getAvailableRoles();
+        const getPermissionsForRole = rbacProvider.getPermissionsForRole;
+        if (getPermissionsForRole) {
+          // Use allSettled so one failing role lookup doesn't drop the whole picker.
+          const rolePermissions = await Promise.allSettled(
+            allRoles.map(async role => ({
+              role,
+              perms: await getPermissionsForRole(role.id),
+            })),
+          );
+          availableRoles = rolePermissions.flatMap(result => {
+            if (result.status !== 'fulfilled') {
+              console.warn('[auth/ee] failed to list permissions for role:', result.reason);
+              return [];
+            }
+            return hasAdminBypassPermissions(result.value.perms) ? [] : [result.value.role];
+          });
+        } else {
+          availableRoles = allRoles;
+        }
+      } catch (error) {
+        // Degrade gracefully: omit availableRoles so the "View as role" feature
+        // simply doesn't show options. Log so operators can diagnose RBAC issues.
+        console.warn('[auth/ee] failed to list available roles for admin user:', error);
+      }
+    }
+  }
+
   return {
     enabled: true,
     login,
@@ -282,5 +345,6 @@ export async function buildCapabilities(
     },
     capabilities,
     access,
+    availableRoles,
   };
 }

@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+import type { BackgroundTaskManager } from '../../../background-tasks';
+import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
@@ -6,9 +8,11 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import { createStep } from '../../../workflows';
+import type { ToolPayloadTransformPolicy } from '../../../tools';
+import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
+import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 
@@ -32,6 +36,17 @@ interface StreamStepOptions {
   resourceId?: string;
   autoResumeSuspendedTools?: boolean;
   workspace?: Workspace;
+  backgroundTaskManager?: BackgroundTaskManager;
+  agentBackgroundConfig?: AgentBackgroundConfig;
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
+  /**
+   * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
+   * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
+   * drives continuation from outside the loop.
+   */
+  skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  initialSignalEchoes?: CreatedAgentSignal[];
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -51,6 +66,12 @@ export function createStreamStep<OUTPUT = undefined>({
   resourceId,
   autoResumeSuspendedTools,
   workspace,
+  backgroundTaskManager,
+  agentBackgroundConfig,
+  toolPayloadTransform,
+  skipBgTaskWait,
+  drainPendingSignals,
+  initialSignalEchoes,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -87,6 +108,13 @@ export function createStreamStep<OUTPUT = undefined>({
           threadId: validatedInputData.threadId,
           resourceId,
           memory,
+          backgroundTaskManager,
+          agentBackgroundConfig,
+          backgroundTaskManagerConfig: backgroundTaskManager?.config,
+          toolPayloadTransform,
+          skipBgTaskWait,
+          drainPendingSignals,
+          initialSignalEchoes,
         },
         agentId,
         agentName,

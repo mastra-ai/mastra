@@ -7,7 +7,6 @@ const meta: Meta<typeof CodeDiff> = {
   parameters: {
     layout: 'padded',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

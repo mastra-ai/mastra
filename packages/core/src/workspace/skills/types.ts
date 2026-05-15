@@ -116,7 +116,7 @@ export interface SkillsContext {
  * @example Static paths
  * ```typescript
  * const workspace = new Workspace({
- *   skills: ['/skills', '/node_modules/@myorg/skills'],
+ *   skills: ['skills', '../node_modules/@myorg/skills'],
  * });
  * ```
  *
@@ -126,9 +126,9 @@ export interface SkillsContext {
  *   skills: (ctx) => {
  *     const tier = ctx.requestContext?.get('userTier');
  *     if (tier === 'premium') {
- *       return ['/skills/basic', '/skills/premium'];
+ *       return ['skills/basic', 'skills/premium'];
  *     }
- *     return ['/skills/basic'];
+ *     return ['skills/basic'];
  *   },
  * });
  * ```
@@ -211,7 +211,7 @@ export interface SkillSearchOptions extends BaseSearchOptions {
  * ```typescript
  * const workspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './data' }),
- *   skills: ['/skills'],
+ *   skills: ['skills'],
  * });
  *
  * // List all skills

@@ -9,7 +9,6 @@ const meta: Meta<typeof Input> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     variant: {
       control: { type: 'select' },

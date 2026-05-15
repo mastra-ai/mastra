@@ -1,10 +1,10 @@
 import { createScorer } from '@mastra/core/evals';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 
 import { z } from 'zod';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
   createHallucinationAnalyzePrompt,
   createHallucinationExtractPrompt,
@@ -13,8 +13,8 @@ import {
 } from './prompts';
 
 export interface GetContextRun {
-  input?: ScorerRunInputForAgent;
-  output: ScorerRunOutputForAgent;
+  input?: ScorerRunInputForLLMJudge;
+  output: ScorerRunOutputForLLMJudge;
   runId?: string;
   requestContext?: Record<string, any>;
   tracingContext?: TracingContext;
@@ -42,7 +42,7 @@ export function createHallucinationScorer({
   model: MastraModelConfig;
   options?: HallucinationMetricOptions;
 }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'hallucination-scorer',
     name: 'Hallucination Scorer',
     description: 'A scorer that evaluates the hallucination of an LLM output to an input',

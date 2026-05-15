@@ -694,6 +694,29 @@ describe('Span', () => {
       expect(result.tracingContext).toBeUndefined();
     });
 
+    it("should honor an object's serializeForSpan() method so private fields are not walked", () => {
+      class FakeModel {
+        modelId = 'gpt-4o';
+        provider = 'openai';
+        // TypeScript-private fields are enumerable at runtime; serializeForSpan
+        // gives classes a hook to opt out of having them walked.
+        private config = { apiKey: 'sk-leak-me', headers: { Authorization: 'Bearer x' } };
+        private gateway = { name: 'proxy', apiKey: 'gateway-secret' };
+
+        serializeForSpan() {
+          return { modelId: this.modelId, provider: this.provider };
+        }
+      }
+
+      const input = { model: new FakeModel() };
+      const result = deepClean(input);
+
+      expect(result.model).toEqual({ modelId: 'gpt-4o', provider: 'openai' });
+      expect(JSON.stringify(result)).not.toContain('sk-leak-me');
+      expect(JSON.stringify(result)).not.toContain('gateway-secret');
+      expect(JSON.stringify(result)).not.toContain('Bearer x');
+    });
+
     it('should handle keysToStrip as a plain object (bundler compatibility)', () => {
       const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
       const options = {
@@ -791,7 +814,7 @@ describe('Span', () => {
       });
     });
 
-    it('should summarize composition-root JSON schemas instead of treating them as circular', () => {
+    it('should preserve JSON schemas as-is instead of compressing them', () => {
       const schema = {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
         oneOf: [{ type: 'string' }, { type: 'number' }],
@@ -800,8 +823,31 @@ describe('Span', () => {
       const result = deepClean(schema);
 
       expect(result).toEqual({
-        oneOf: ['string', 'number'],
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        oneOf: [{ type: 'string' }, { type: 'number' }],
       });
+    });
+
+    it('should preserve tool parameter JSON schemas with full type information', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'object',
+            properties: {
+              what: { type: 'string' },
+              where: { type: 'string' },
+            },
+            required: ['what', 'where'],
+          },
+        },
+        required: ['query'],
+        $schema: 'http://json-schema.org/draft-07/schema#',
+      };
+
+      const result = deepClean(schema);
+
+      expect(result).toEqual(schema);
     });
 
     it('should not abort when array element getters throw', () => {
@@ -832,7 +878,7 @@ describe('Span', () => {
       expect(result).toBe('[serializeForSpan failed: probe failed]');
     });
 
-    it('should fall back to guarded object traversal when JSON schema probes throw', () => {
+    it('should handle objects with throwing getter properties gracefully', () => {
       const input: Record<string, unknown> = {
         type: 'object',
         properties: { safe: { type: 'string' } },

@@ -601,16 +601,14 @@ export class ClickhouseDB extends MastraBase {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      await this.client.query({
+      // Stop background merges before TRUNCATE. TRUNCATE acquires an exclusive
+      // write lock that blocks until in-flight merges complete. Pausing merges
+      // first avoids this lock contention.
+      await this.client.command({ query: `SYSTEM STOP MERGES ${tableName}` });
+      await this.client.command({
         query: `TRUNCATE TABLE ${tableName}`,
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
       });
+      await this.client.command({ query: `SYSTEM START MERGES ${tableName}` });
     } catch (error: any) {
       throw new MastraError(
         {

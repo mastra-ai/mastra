@@ -6,7 +6,9 @@ import { createWorkflowsTests } from './domains/workflows';
 import { createObservabilityTests } from './domains/observability';
 import { createAgentsTests } from './domains/agents';
 import { createDatasetsTests } from './domains/datasets';
+import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
+import { createSchedulesTests } from './domains/schedules';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -14,6 +16,8 @@ export * from './domains/observability/data';
 export * from './domains/agents/data';
 export * from './domains/datasets/data';
 export * from './domains/experiments/data';
+export * from './domains/background-tasks/data';
+export * from './domains/schedules/data';
 
 /**
  * Test-specific feature flags for conditionally enabling test scenarios.
@@ -69,6 +73,17 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
       if (experimentsStorage) {
         clearList.push(experimentsStorage.dangerouslyClearAll());
       }
+
+      const backgroundTasksStorage = await storage.getStore('backgroundTasks');
+      if (backgroundTasksStorage) {
+        clearList.push(backgroundTasksStorage.dangerouslyClearAll());
+      }
+
+      const schedulesStorage = await storage.getStore('schedules');
+      if (schedulesStorage) {
+        clearList.push(schedulesStorage.dangerouslyClearAll());
+      }
+
       // Clear all domain data after tests
       await Promise.all(clearList);
     });
@@ -82,5 +97,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createAgentsTests({ storage });
     createDatasetsTests({ storage });
     createExperimentsTests({ storage });
+    createBackgroundTasksTests({ storage });
+    createSchedulesTests({ storage });
   });
 }

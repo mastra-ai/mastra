@@ -36,6 +36,7 @@ describe('LoggerContextImpl', () => {
       },
       metadata: { runId: 'run-1', environment: 'test' },
       observabilityBus: bus,
+      minLevel: 'info',
     });
 
     logger.info('test message', { key: 'value' });
@@ -53,7 +54,7 @@ describe('LoggerContextImpl', () => {
     expect(log.metadata).toEqual({ runId: 'run-1', environment: 'test' });
   });
 
-  it('should emit all log levels', () => {
+  it('should default to warn-level logging', () => {
     bus = new ObservabilityBus();
     captureEvents();
 
@@ -61,6 +62,27 @@ describe('LoggerContextImpl', () => {
       traceId: 'trace-1',
       spanId: 'span-1',
       observabilityBus: bus,
+    });
+
+    logger.debug('debug msg');
+    logger.info('info msg');
+    logger.warn('warn msg');
+    logger.error('error msg');
+    logger.fatal('fatal msg');
+
+    expect(emittedEvents).toHaveLength(3);
+    expect(emittedEvents.map(e => e.log.level)).toEqual(['warn', 'error', 'fatal']);
+  });
+
+  it('should emit all log levels when minimum level is debug', () => {
+    bus = new ObservabilityBus();
+    captureEvents();
+
+    const logger = new LoggerContextImpl({
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      observabilityBus: bus,
+      minLevel: 'debug',
     });
 
     logger.debug('debug msg');
@@ -100,7 +122,7 @@ describe('LoggerContextImpl', () => {
       observabilityBus: bus,
     });
 
-    logger.info('no trace context');
+    logger.warn('no trace context');
 
     expect(emittedEvents).toHaveLength(1);
     const log = emittedEvents[0]!.log;
@@ -116,7 +138,7 @@ describe('LoggerContextImpl', () => {
       observabilityBus: bus,
     });
 
-    logger.info('no data');
+    logger.warn('no data');
 
     expect(emittedEvents[0]!.log.data).toBeUndefined();
   });
@@ -138,7 +160,7 @@ describe('LoggerContextImpl', () => {
       observabilityBus: bus,
     });
 
-    logger.info('routed log');
+    logger.warn('routed log');
 
     expect(onLogEvent).toHaveBeenCalledTimes(1);
     expect(onLogEvent.mock.calls[0]![0].log.message).toBe('routed log');
@@ -161,7 +183,7 @@ describe('LoggerContextImpl', () => {
       },
     });
 
-    logger.info('with metadata');
+    logger.warn('with metadata');
 
     const log = emittedEvents[0]!.log;
     expect(log.metadata).toEqual({
@@ -184,7 +206,7 @@ describe('LoggerContextImpl', () => {
       },
     });
 
-    logger.info('with tags');
+    logger.warn('with tags');
 
     const log = emittedEvents[0]!.log;
     expect(log.correlationContext).toEqual({
@@ -205,7 +227,7 @@ describe('LoggerContextImpl', () => {
       },
     });
 
-    logger.info('legacy trace context');
+    logger.warn('legacy trace context');
 
     const log = emittedEvents[0]!.log;
     expect(log.traceId).toBe('legacy-trace');

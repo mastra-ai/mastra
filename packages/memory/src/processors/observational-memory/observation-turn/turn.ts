@@ -6,7 +6,9 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
+import type { ObservationModelContext } from '../types';
 
+import { loadMemoryContextMessages } from './load-memory-context';
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
@@ -55,8 +57,11 @@ export class ObservationTurn {
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
 
-  /** Optional processor-provided hooks for turn/step lifecycle integration. */
-  readonly hooks?: ObservationTurnHooks;
+  /** Current actor model for this step. Updated by the processor before prepare(). */
+  actorModelContext?: ObservationModelContext;
+
+  /** Processor-provided hooks for turn/step lifecycle integration. */
+  readonly hooks: ObservationTurnHooks;
 
   constructor(opts: {
     om: ObservationalMemory;
@@ -71,7 +76,7 @@ export class ObservationTurn {
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
     this.observabilityContext = opts.observabilityContext;
-    this.hooks = opts.hooks;
+    this.hooks = opts.hooks ?? {};
   }
 
   readonly om: ObservationalMemory;
@@ -96,6 +101,11 @@ export class ObservationTurn {
     return this._currentStep;
   }
 
+  addHooks(hooks?: ObservationTurnHooks): void {
+    if (!hooks) return;
+    Object.assign(this.hooks, hooks);
+  }
+
   /**
    * Load context and cache the record. Call once at the start of the turn.
    *
@@ -111,14 +121,12 @@ export class ObservationTurn {
     this.memory = memory;
 
     if (memory) {
-      const ctx = await memory.getContext({ threadId: this.threadId, resourceId: this.resourceId });
-
-      // Add historical messages to the MessageList, filtering out system messages
-      for (const msg of ctx.messages) {
-        if (msg.role !== 'system') {
-          this.messageList.add(msg, 'memory');
-        }
-      }
+      const ctx = await loadMemoryContextMessages({
+        memory,
+        messageList: this.messageList,
+        threadId: this.threadId,
+        resourceId: this.resourceId,
+      });
 
       this._context = {
         messages: ctx.messages,

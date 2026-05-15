@@ -43,6 +43,7 @@ const scoreReasonField = z.string().describe('Explanation for the score');
  */
 export const scoreRecordSchema = z
   .object({
+    scoreId: z.string().nullish().describe('Unique id for this score event'),
     timestamp: z.date().describe('When the score was recorded'),
 
     // Target

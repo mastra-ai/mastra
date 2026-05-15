@@ -229,6 +229,32 @@ describe('AgentBrowserThreadManager', () => {
       expect(threadManager.hasActiveThreadManagers()).toBe(false);
     });
 
+    it('creates dedicated session for DEFAULT_THREAD_ID in thread scope', async () => {
+      const threadManager = new AgentBrowserThreadManager({
+        scope: 'thread',
+        browserConfig: { headless: true },
+      });
+
+      // Should create a session for DEFAULT_THREAD_ID without throwing
+      await threadManager.getManagerForThread();
+
+      expect(mockManager.launch).toHaveBeenCalledTimes(1);
+      expect(threadManager.hasActiveThreadManagers()).toBe(true);
+    });
+
+    it('getPageForThread works with DEFAULT_THREAD_ID in thread scope', async () => {
+      const threadManager = new AgentBrowserThreadManager({
+        scope: 'thread',
+        browserConfig: { headless: true },
+      });
+
+      // Should not throw "Browser not launched"
+      const page = await threadManager.getPageForThread();
+
+      expect(page).toBeDefined();
+      expect(mockManager.launch).toHaveBeenCalledTimes(1);
+    });
+
     it('onBrowserCreated callback is called', async () => {
       const onBrowserCreated = vi.fn();
       const threadManager = new AgentBrowserThreadManager({

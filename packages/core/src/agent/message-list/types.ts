@@ -2,6 +2,7 @@ import type { CoreMessage, Message } from '@internal/ai-sdk-v4';
 import type * as AIV5 from '@internal/ai-sdk-v5';
 import type * as AIV6 from '@internal/ai-v6';
 
+import type { CreatedAgentSignal } from '../signals';
 import type { MastraDBMessage, MastraMessageV1, UIMessageWithMetadata } from './state/types';
 
 // Re-export AI SDK types
@@ -37,4 +38,7 @@ export type MessageInput =
   | MastraMessageV1
   | MastraDBMessage;
 
-export type MessageListInput = string | string[] | MessageInput | MessageInput[];
+export type BaseMessageListItem = string | MessageInput;
+export type BaseMessageListInput = string | MessageInput | BaseMessageListItem[];
+export type MessageListItem = BaseMessageListItem | CreatedAgentSignal;
+export type MessageListInput = BaseMessageListInput | CreatedAgentSignal | MessageListItem[];

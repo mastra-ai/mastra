@@ -1,6 +1,5 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-
 import { useMetricsFilters } from './use-metrics-filters';
 
 export interface ScorerSummary {
@@ -11,7 +10,6 @@ export interface ScorerSummary {
   count: number;
 }
 
-// Flat structure required by Recharts. Scorer names become keys alongside `time`.
 export interface ScoresOverTimePoint {
   time: string;
   [scorer: string]: string | number;

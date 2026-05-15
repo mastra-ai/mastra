@@ -1,24 +1,20 @@
 import {
   Button,
-  ButtonWithTooltip,
-  useLinkComponent,
-  useIsCmsAvailable,
-  useStoredPromptBlocks,
-  PromptsList,
-  NoPromptBlocksInfo,
+  ErrorState,
   ListSearch,
   NoDataPageLayout,
   PageLayout,
-  PageHeader,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, FileTextIcon, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
+import { useLinkComponent } from '@/lib/framework';
 
 export default function PromptBlocks() {
   const { paths } = useLinkComponent();
@@ -30,7 +26,7 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -38,7 +34,7 @@ export default function PromptBlocks() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="prompt blocks" />
       </NoDataPageLayout>
     );
@@ -46,7 +42,7 @@ export default function PromptBlocks() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load prompt blocks" message={error.message} />
       </NoDataPageLayout>
     );
@@ -54,7 +50,7 @@ export default function PromptBlocks() {
 
   if (promptBlocks.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Prompts" icon={<FileTextIcon />}>
+      <NoDataPageLayout>
         <NoPromptBlocksInfo />
       </NoDataPageLayout>
     );
@@ -63,31 +59,13 @@ export default function PromptBlocks() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <FileTextIcon /> Prompts
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Prompts documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-            {isCmsAvailable && (
-              <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
-                <Plus />
-                Create Prompt
-              </Button>
-            )}
-          </PageLayout.Column>
+        <PageLayout.Row className="justify-end">
+          {isCmsAvailable && (
+            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
+              <Plus />
+              Create Prompt
+            </Button>
+          )}
         </PageLayout.Row>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter prompts" placeholder="Filter by name or description" />

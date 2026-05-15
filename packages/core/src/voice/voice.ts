@@ -57,6 +57,30 @@ export abstract class MastraVoice<
   }
 
   /**
+   * Custom serialization for tracing/observability spans.
+   * Excludes `apiKey` from listeningModel / speechModel / realtimeConfig
+   * and any provider-specific state held by subclasses. Subclasses that
+   * need to expose additional non-sensitive fields can override.
+   */
+  serializeForSpan(): {
+    component: 'VOICE';
+    name?: string;
+    speaker?: string;
+    listeningModel?: { name: string };
+    speechModel?: { name: string };
+    realtimeModel?: string;
+  } {
+    return {
+      component: 'VOICE',
+      name: this.name,
+      speaker: this.speaker,
+      listeningModel: this.listeningModel ? { name: this.listeningModel.name } : undefined,
+      speechModel: this.speechModel ? { name: this.speechModel.name } : undefined,
+      realtimeModel: this.realtimeConfig?.model,
+    };
+  }
+
+  /**
    * Convert text to speech
    * @param input Text or text stream to convert to speech
    * @param options Speech options including speaker and provider-specific options

@@ -47,6 +47,33 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
   });
 }
 
+const DYNAMIC_AGENTS_MD_INSTRUCTION =
+  'Messages wrapped in <system-reminder type="dynamic-agents-md" ...>...</system-reminder> are ephemeral project-context instructions injected from files on disk. Do NOT observe or extract information from these messages — they are reloaded automatically when needed and should not be stored in memory.';
+
+// Derived from https://github.com/JuliusBrussee/caveman and adapted for OM use with fixed full-level compression.
+const CAVEMAN_OM_INSTRUCTION = `Respond terse like smart caveman. All technical substance stay. Only fluff die.
+
+Use full caveman compression style.
+
+Drop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging. Fragments OK. Short synonyms (big not extensive, fix not "implement a solution for"). Technical terms exact. Code blocks unchanged. Errors quoted exact. Leave out the words "agent" and "assistant" at the start of each observation line, it is assumed each line is referring to the assistant unless it specifically says it was about the user. Leave out parenthesis and other text characters like * that would not contribute to understanding the observations.
+
+Pattern: \`[thing] [action] [reason]. [next step]\`
+
+Not: "Sure! I'd be happy to help you with that. The issue you're experiencing is likely caused by..."
+Yes: "Bug in auth middleware. Token expiry check use < not <=. Fix:"
+
+Example 1
+🔴 14:31 user asks why React component rerenders
+🟡 14:32 saw inline object prop create new ref each render, cause rerender
+✅ 14:34 fixed render issue by wrap object in useMemo
+
+Example 2
+🟡 15:10 explained pool reuse DB connections, skip repeat handshake overhead
+
+Don't say "Agent did x", say "did x". It will be assumed the agent did what was observed. The who should only be specified for the user or other third parties: "user asked x"
+
+Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
+
 /**
  * Dynamic memory factory function.
  * Reads OM thresholds from harness state via requestContext.
@@ -59,15 +86,21 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
+    const caveman = state?.cavemanObservations ?? false;
 
     const observerPreviousObservationTokens = 1000;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
 
     // Async buffering is not supported with resource scope — disable it
     const isResourceScope = omScope === 'resource';
+
+    const observerInstruction = caveman
+      ? `${DYNAMIC_AGENTS_MD_INSTRUCTION}\n\n${CAVEMAN_OM_INSTRUCTION}`
+      : DYNAMIC_AGENTS_MD_INSTRUCTION;
+    const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
 
     cachedMemory = new Memory({
       storage,
@@ -76,8 +109,11 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       options: {
         observationalMemory: {
           enabled: true,
+          temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
           scope: omScope,
+          activateAfterIdle: '5m',
+          activateOnProviderChange: true,
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,
             bufferActivation: isResourceScope ? undefined : 2000,
@@ -86,14 +122,14 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             blockAfter: 2,
             previousObserverTokens: observerPreviousObservationTokens,
             threadTitle: true,
-            instruction:
-              'Messages wrapped in <system-reminder type="dynamic-agents-md" ...>...</system-reminder> are ephemeral project-context instructions injected from files on disk. Do NOT observe or extract information from these messages — they are reloaded automatically when needed and should not be stored in memory.',
+            instruction: observerInstruction,
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,
             blockAfter: 1.1,
             model: getReflectorModel,
             observationTokens: refThreshold,
+            instruction: reflectionInstruction,
           },
         },
       },

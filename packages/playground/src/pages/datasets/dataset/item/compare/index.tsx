@@ -1,34 +1,28 @@
 import type { DatasetItem } from '@mastra/client-js';
 import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
   Button,
-  HeaderAction,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
-  useDataset,
-  useDatasetItem,
-  useDatasetItems,
-  SelectField,
-  DatasetItemHeader,
-  DatasetItemContent,
-  CodeDiff,
-  useLinkComponent,
-  Columns,
-  Column,
   ButtonsGroup,
+  CodeDiff,
+  Column,
+  Columns,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
+  TextAndIcon,
   is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
+import { ArrowLeft, GitCompareIcon, History, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
+import { DatasetItemHeader, DatasetItemContent } from '@/domains/datasets';
+import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { SelectField } from '@/lib/form/components/select-field';
+import { useLinkComponent } from '@/lib/framework';
+import { RouteHeaderActions } from '@/lib/route-header';
 import { cn } from '@/lib/utils';
 
 function itemToText(item: DatasetItem): string {
@@ -77,19 +71,6 @@ function DatasetItemsComparePage() {
   if (!datasetId || itemIds.length < 2) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
-              <Icon>
-                <Database />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Compare Items
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
             <p>Select at least two items to compare.</p>
@@ -101,30 +82,12 @@ function DatasetItemsComparePage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
-            {dataset?.name || datasetId?.slice(0, 8)}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            Compare Items
-          </Crumb>
-        </Breadcrumb>
-        <HeaderAction>
-          <Button as={Link} to={`/evaluation/datasets/${datasetId}`} variant="outline">
-            <Icon>
-              <ArrowLeft />
-            </Icon>
-            Back to Dataset
-          </Button>
-        </HeaderAction>
-      </Header>
+      <RouteHeaderActions owner="dataset-items-compare">
+        <Button as={Link} to={`/datasets/${datasetId}`} variant="outline">
+          <ArrowLeft />
+          Back to Dataset
+        </Button>
+      </RouteHeaderActions>
 
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div
@@ -141,7 +104,7 @@ function DatasetItemsComparePage() {
               <MainHeader.Description>
                 <TextAndIcon>
                   Comparing {itemIds.length} items of{' '}
-                  <Link to={`/evaluation/datasets/${datasetId}`} className="text-info1 hover:underline">
+                  <Link to={`/datasets/${datasetId}`} className="text-info1 hover:underline">
                     {dataset?.name || datasetId?.slice(0, 8)}
                   </Link>
                 </TextAndIcon>
@@ -149,10 +112,6 @@ function DatasetItemsComparePage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <ButtonsGroup>
-                <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
-                  <ArrowLeftIcon />
-                  Back to Dataset
-                </Button>
                 <Button variant="primary" onClick={() => setIsDiffView(v => !v)}>
                   {isDiffView ? (
                     <>
