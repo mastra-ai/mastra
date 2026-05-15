@@ -22,8 +22,8 @@ import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/outp
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { resolveToolRequiresApproval } from '../../tools/approval';
 import type { IdGeneratorContext } from '../../types';
-import { createStep, createWorkflow } from '../../workflows';
-import type { Step, SuspendOptions } from '../../workflows';
+import { createStep, createWorkflow } from '../../workflows/workflow';
+import type { Step, SuspendOptions } from '../../workflows/step';
 import { PRIMITIVE_TYPES } from '../types';
 
 /**
@@ -1526,7 +1526,6 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      // @ts-expect-error - bad type
       const toolId = tool.id;
       // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
       const inputDataToUse = await safeParseLLMJson(inputData.prompt);
