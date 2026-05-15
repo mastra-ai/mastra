@@ -269,7 +269,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
               currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
               currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
-              currentActiveTools = processInputStepResult.activeTools ?? currentActiveTools;
+              currentActiveTools = processInputStepResult.activeTools;
               currentModelSettings = {
                 ...currentModelSettings,
                 ...(processInputStepResult.modelSettings ?? {}),
