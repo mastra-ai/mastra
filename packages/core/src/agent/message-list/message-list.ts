@@ -318,40 +318,26 @@ export class MessageList {
     // only understand normal prompt messages. Convert the signal into its
     // LLM-facing message content without mutating MessageList timestamp/id
     // bookkeeping or changing the signal's chronological position.
-    const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
-    return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map((signalMessage, index) => {
-      const createdAt = message.createdAt;
-      const id = index === 0 ? message.id : `${message.id}:prompt:${index}`;
-      const promptMessage =
-        typeof signalMessage === `string`
-          ? {
-              id,
-              role: 'user' as const,
-              content: signalMessage,
-              metadata: { createdAt },
-            }
-          : {
-              ...signalMessage,
-              id: 'id' in signalMessage && typeof signalMessage.id === 'string' ? signalMessage.id : id,
-              metadata: {
-                ...('metadata' in signalMessage && signalMessage.metadata && typeof signalMessage.metadata === 'object'
-                  ? signalMessage.metadata
-                  : {}),
-                createdAt,
-              },
-            };
+    const signalMessage = mastraDBMessageToSignal(message).toLLMMessage();
+    const createdAt = message.createdAt;
+    const promptMessage = {
+      ...signalMessage,
+      id: message.id,
+      metadata: { createdAt },
+    };
 
-      return convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+    return [
+      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
         memoryInfo: this.memoryInfo,
-        newMessageId: () => id,
+        newMessageId: () => message.id,
         generateCreatedAt: (_messageSource, start) => {
           if (start instanceof Date) return start;
           if (typeof start === 'string' || typeof start === 'number') return new Date(start);
           return createdAt;
         },
         dbMessages: this.messages,
-      });
-    });
+      }),
+    ];
   }
 
   public makeMessageSourceChecker(): {
