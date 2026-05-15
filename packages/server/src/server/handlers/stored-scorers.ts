@@ -253,12 +253,16 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the scorer definition with both metadata-level and config-level fields
       const updatedScorer = await scorerStore.update({
         id: storedScorerId,
         authorId,
-        metadata: scopeStoredResourceMetadata(metadata, scope),
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         type,

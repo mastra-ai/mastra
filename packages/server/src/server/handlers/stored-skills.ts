@@ -242,6 +242,10 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the skill with both entity-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
@@ -257,7 +261,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         references,
         scripts,
         assets,
-        metadata: scopeStoredResourceMetadata(metadata, scope),
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
       });
 
       // Return the resolved skill with the updated config
