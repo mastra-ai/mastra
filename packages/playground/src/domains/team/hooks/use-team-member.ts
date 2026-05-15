@@ -1,0 +1,38 @@
+import { useQuery } from '@tanstack/react-query';
+import type { TeamMember } from './use-team-members';
+import { fetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+
+/**
+ * Hook to fetch a single team member by ID.
+ *
+ * @example
+ * ```tsx
+ * const { data, isLoading, error } = useTeamMember('user_123');
+ * ```
+ */
+export function useTeamMember(userId: string) {
+  const { baseUrl, apiPrefix } = useStudioConfig();
+
+  return useQuery<TeamMember>({
+    queryKey: ['team', 'member', userId],
+    queryFn: async () => {
+      const url = `${baseUrl}${apiPrefix}/team/${userId}`;
+      const response = await fetchWithRefresh(baseUrl, url, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-mastra-client-type': 'studio',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch team member: ${response.statusText}`);
+      }
+
+      return response.json();
+    },
+    enabled: !!userId,
+    staleTime: 60_000, // 1 minute
+  });
+}

@@ -58,6 +58,7 @@ import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
 import Team from './pages/team';
+import TeamMemberDetail from './pages/team/[id]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
@@ -65,6 +66,7 @@ import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
 import TraceDetails from './pages/traces/trace';
 import Users from './pages/users';
+import UserDetail from './pages/users/[id]';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
@@ -244,7 +246,9 @@ export const routes: RouteObject[] = [
         : [
             { path: '/settings', element: <StudioSettingsPage />, handle: navHandle('/settings') },
             { path: '/team', element: <Team />, handle: navHandle('/team') },
+            { path: '/team/:id', element: <TeamMemberDetail />, handle: navHandle('/team') },
             { path: '/users', element: <Users />, handle: navHandle('/users') },
+            { path: '/users/:id', element: <UserDetail />, handle: navHandle('/users') },
             {
               path: '/templates',
               element: <Templates />,
