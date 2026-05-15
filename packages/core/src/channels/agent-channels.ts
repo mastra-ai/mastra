@@ -1111,7 +1111,7 @@ export class AgentChannels {
           parts.push({
             type: 'file',
             data,
-            mimeType,
+            mediaType: mimeType,
             ...(att.name ? { filename: att.name } : {}),
           });
         }
@@ -1133,12 +1133,12 @@ export class AgentChannels {
 
         if (rule.forcedMimeType) {
           // Object entry with forced mime type — skip HEAD, always promote.
-          parts.push({ type: 'file', data: url, mimeType: rule.forcedMimeType });
+          parts.push({ type: 'file', data: url, mediaType: rule.forcedMimeType });
         } else {
           // String entry — HEAD to determine Content-Type, then check inlineMedia.
           const contentType = await headContentType(url, this.logger);
           if (contentType && this.shouldInline(contentType)) {
-            parts.push({ type: 'file', data: url, mimeType: contentType });
+            parts.push({ type: 'file', data: url, mediaType: contentType });
           }
         }
       }
