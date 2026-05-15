@@ -637,6 +637,22 @@ describe('Agent signals', () => {
     await nextRunPromise;
   });
 
+  it('preserves an injected PubSub when forking an agent', () => {
+    const pubsub = new AsyncFanoutPubSub();
+    const agent = new Agent({
+      id: 'forked-agent-pubsub',
+      name: 'Forked Agent PubSub',
+      instructions: 'Test',
+      model: createTextStreamModel('forked response'),
+    });
+
+    agent.__setPubSub(pubsub);
+    const fork = agent.__fork();
+
+    expect(fork.getPubSub()).toBe(pubsub);
+    expect(fork.hasOwnPubSub()).toBe(true);
+  });
+
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
     const pubsub = new EventEmitterPubSub();
     const runner = new Agent({

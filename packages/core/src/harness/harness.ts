@@ -599,8 +599,8 @@ export class Harness<TState = {}> {
     if (workspaceForAgents && !agent.hasOwnWorkspace()) {
       agent.__setWorkspace(workspaceForAgents);
     }
-    if (browserForAgents && !agent.hasOwnBrowser()) {
-      agent.setBrowser(browserForAgents as MastraBrowser);
+    if (browserForAgents && typeof browserForAgents !== 'function' && !agent.hasOwnBrowser()) {
+      agent.setBrowser(browserForAgents);
     }
     if (this.config.pubsub && !agent.hasOwnPubSub()) {
       agent.__setPubSub(this.config.pubsub);
@@ -969,7 +969,11 @@ export class Harness<TState = {}> {
 
     await memoryStorage.deleteThread({ threadId });
     if (memoryStorage.supportsObservationalMemory) {
-      await memoryStorage.clearObservationalMemory(threadId, thread.resourceId);
+      try {
+        await memoryStorage.clearObservationalMemory(threadId, thread.resourceId);
+      } catch (error) {
+        this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+      }
     }
 
     if (isDeletingCurrentThread) {

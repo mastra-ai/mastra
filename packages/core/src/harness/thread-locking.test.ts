@@ -176,6 +176,29 @@ describe('Harness thread locking', () => {
     });
   });
 
+  describe('runtime service propagation', () => {
+    it('does not install a browser factory as a concrete agent browser', async () => {
+      const agent = new Agent({
+        name: 'browser-factory-agent',
+        instructions: 'You are a test agent.',
+        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      });
+      const browserFactory = vi.fn(() => ({}) as any);
+      const harnessWithBrowserFactory = new Harness({
+        id: 'browser-factory-harness',
+        storage: new InMemoryStore(),
+        browser: browserFactory,
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+
+      await harnessWithBrowserFactory.init();
+
+      expect(browserFactory).not.toHaveBeenCalled();
+      expect(agent.browser).toBeUndefined();
+      expect(agent.hasOwnBrowser()).toBe(false);
+    });
+  });
+
   describe('selectOrCreateThread', () => {
     it('acquires lock when selecting an existing thread', async () => {
       // Pre-create a thread so selectOrCreateThread finds it
@@ -265,6 +288,26 @@ describe('Harness thread locking', () => {
       await harnessWithStorage.memory.deleteThread({ threadId: thread.id });
 
       await expect(memoryStorage.getObservationalMemory(thread.id, thread.resourceId)).resolves.toBeNull();
+    });
+
+    it('continues current-thread teardown when observational memory cleanup fails', async () => {
+      const storage = new InMemoryStore();
+      const harnessWithStorage = createHarness({ acquire, release }, storage);
+      await harnessWithStorage.init();
+      const thread = await harnessWithStorage.createThread({ title: 'cleanup failure' });
+      const memoryStorage = (await storage.getStore('memory'))!;
+      const errors: Error[] = [];
+      harnessWithStorage.subscribe(event => {
+        if (event.type === 'error') errors.push(event.error);
+      });
+      vi.spyOn(memoryStorage, 'clearObservationalMemory').mockRejectedValueOnce(new Error('om cleanup failed'));
+
+      await expect(harnessWithStorage.memory.deleteThread({ threadId: thread.id })).resolves.toBeUndefined();
+
+      expect(release).toHaveBeenCalledWith(thread.id);
+      expect(harnessWithStorage.getCurrentThreadId()).toBeNull();
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.message).toBe('om cleanup failed');
     });
 
     it('releases lock when deleting the current thread', async () => {

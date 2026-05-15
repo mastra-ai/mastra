@@ -2424,6 +2424,9 @@ export class Agent<
     if (this.#primitives) {
       fork.#primitives = this.#primitives;
     }
+    if (this.#pubsub) {
+      fork.#pubsub = this.#pubsub;
+    }
 
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
