@@ -2302,6 +2302,8 @@ describe('Memory', () => {
         config: {},
       });
 
+      await expect(memoryStore?.getObservationalMemory(threadId, resourceId)).resolves.not.toBeNull();
+
       await memory.deleteThread(threadId);
 
       await expect(memory.getThreadById({ threadId })).resolves.toBeNull();
