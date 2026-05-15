@@ -39,6 +39,10 @@ async function initAuth(): Promise<AuthResult> {
       const { initComposite } = await import('./composite');
       return initComposite();
     }
+    case 'auth0': {
+      const { initAuth0 } = await import('./auth0');
+      return initAuth0();
+    }
     case 'auth0-okta': {
       const { initAuth0Okta } = await import('./auth0-okta');
       return initAuth0Okta();
