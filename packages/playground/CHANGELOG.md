@@ -1,5 +1,19 @@
 # @internal/playground
 
+## 1.9.3
+
+### Patch Changes
+
+- Fixed Studio credentials sign-in and sign-up to respect the configured API prefix instead of hardcoding `/api`. When the server is started with a custom `--server-api-prefix` (or `apiPrefix` option), the auth endpoints now derive from `MastraClient.options.apiPrefix` and forward any configured client headers, matching the behavior of the other auth hooks. Added Vitest coverage for prefix normalization, header forwarding, and error handling. ([#16461](https://github.com/mastra-ai/mastra/pull/16461))
+
+- Removed the cosmetic `as any` casts on `client.options` across the Studio auth hooks (`use-auth-actions`, `use-auth-capabilities`, `use-credentials-login`, `use-credentials-signup`, `use-current-user`). `useMastraClient()` already returns a typed `MastraClient` whose `options: ClientOptions` field is public, so the casts were unnecessary. The `makeSSOLoginRequest` and `makeLogoutRequest` helper signatures were also tightened from `{ options: any }` to `MastraClient`. No runtime change. Closes [#16655](https://github.com/mastra-ai/mastra/issues/16655). ([#16656](https://github.com/mastra-ai/mastra/pull/16656))
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`48bb49f`](https://github.com/mastra-ai/mastra/commit/48bb49f21ff7894f9e32fcfe448d942e49ab1329), [`036056a`](https://github.com/mastra-ai/mastra/commit/036056adf02c27c308265223ee861f84964b9a55), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`d6e64b4`](https://github.com/mastra-ai/mastra/commit/d6e64b49d6f08be0b834a053431fb1ca493ef32b), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`ba41021`](https://github.com/mastra-ai/mastra/commit/ba41021f79128a2b02cd283e0576c83067481690), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0
+  - @mastra/playground-ui@28.0.1
+  - @mastra/client-js@1.19.1
+  - @mastra/react@0.3.3
+
 ## 1.9.3-alpha.3
 
 ### Patch Changes
