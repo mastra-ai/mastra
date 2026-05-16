@@ -1,5 +1,6 @@
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useBrowserSessionProbe } from '../hooks/use-browser-session-probe';
 import type { StreamStatus } from '../hooks/use-browser-stream';
 import { useCloseBrowser } from '../hooks/use-close-browser';
 import { BrowserSessionContext } from './browser-session-context';
@@ -26,9 +27,24 @@ export interface BrowserSessionProviderProps {
  * All browser views (thumbnail, expanded, modal, sidebar) share this connection.
  */
 export function BrowserSessionProvider({ children, agentId, threadId, enabled = true }: BrowserSessionProviderProps) {
+  // Probe the server before opening a WebSocket. Avoids two failure modes:
+  //   1. Server doesn't have `ws` / `@hono/node-ws` installed → WS upgrade
+  //      would fail and trigger a reconnect storm.
+  //   2. Agent has browser tools configured but no active session yet → WS
+  //      would open and sit idle indefinitely.
+  // Falls back to legacy "always connect" behavior on older servers (404).
+  const { data: probe } = useBrowserSessionProbe({ agentId, threadId, enabled });
+  const screencastAvailable = probe?.screencastAvailable ?? false;
+  const serverHasSession = probe?.hasSession ?? false;
+
   // UI state
   const [hasSession, setHasSession] = useState(false);
   const [viewMode, setViewModeState] = useState<BrowserViewMode>('collapsed');
+
+  // Open the WS when the server reports a live session OR the user has
+  // explicitly opened the browser panel and expects to see frames.
+  const userOpenedPanel = viewMode !== 'collapsed';
+  const shouldConnect = enabled && screencastAvailable && (serverHasSession || userOpenedPanel);
 
   // Stream state
   const [status, setStatusState] = useState<StreamStatus>('idle');
@@ -75,7 +91,7 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   const intentionalCloseRef = useRef(false);
 
   const connect = useCallback(() => {
-    if (!enabled) return;
+    if (!shouldConnect) return;
     if (!agentId || !threadId) return;
 
     // Skip if already connected/connecting to the same agent/thread
@@ -197,21 +213,22 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
     } catch {
       setStatusState('error');
     }
-  }, [enabled, agentId, threadId, clearReconnectTimeout]);
+  }, [shouldConnect, agentId, threadId, clearReconnectTimeout]);
 
-  // Auto-connect when agentId/threadId are available
+  // Auto-connect once the probe confirms the screencast is available and the
+  // agent has an active session for this thread.
   useEffect(() => {
-    if (enabled && agentId && threadId) {
+    if (shouldConnect && agentId && threadId) {
       connect();
     }
     return () => {
       disconnect();
     };
-  }, [enabled, agentId, threadId, connect, disconnect]);
+  }, [shouldConnect, agentId, threadId, connect, disconnect]);
 
   // Handle tab visibility changes
   useEffect(() => {
-    if (!enabled) return;
+    if (!shouldConnect) return;
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && status === 'disconnected' && agentId && threadId) {
         reconnectAttemptRef.current = 0;
@@ -223,7 +240,7 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, status, agentId, threadId, connect]);
+  }, [shouldConnect, status, agentId, threadId, connect]);
 
   // UI actions
   const setViewMode = useCallback((mode: BrowserViewMode) => {

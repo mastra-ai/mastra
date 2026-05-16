@@ -476,6 +476,20 @@ export interface GetAgentResponse {
   hasDraft?: boolean;
 }
 
+/**
+ * Response from the browser session probe endpoint.
+ *
+ * Use this to decide whether to open a screencast WebSocket for an agent/thread:
+ * - `screencastAvailable`: server has the `ws` / `@hono/node-ws` packages installed.
+ *   When false, opening a WS will fail and trigger a reconnect loop — skip it.
+ * - `hasSession`: the agent has an active browser session for this thread. When
+ *   false, the WS would just sit idle waiting for the agent to invoke a tool.
+ */
+export interface GetAgentBrowserSessionResponse {
+  hasSession: boolean;
+  screencastAvailable: boolean;
+}
+
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;

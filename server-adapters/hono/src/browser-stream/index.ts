@@ -95,6 +95,27 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
     }),
   );
 
+  // Browser session probe endpoint - tells the client whether to open a WS.
+  // Returns:
+  //   - screencastAvailable: true (this route only exists if setupBrowserStream succeeded)
+  //   - hasSession: whether the agent has an active browser session for the given thread
+  app.get('/api/agents/:agentId/browser/session', c => {
+    const agentId = c.req.param('agentId');
+    if (!agentId) {
+      return c.json({ error: 'Agent ID is required' }, 400);
+    }
+
+    const threadId = c.req.query('threadId');
+    const toolset = config.getToolset(agentId);
+
+    if (!toolset) {
+      return c.json({ hasSession: false, screencastAvailable: true });
+    }
+
+    const hasSession = threadId ? toolset.hasThreadSession(threadId) : false;
+    return c.json({ hasSession, screencastAvailable: true });
+  });
+
   // Close browser session endpoint
   app.post('/api/agents/:agentId/browser/close', async c => {
     const agentId = c.req.param('agentId');

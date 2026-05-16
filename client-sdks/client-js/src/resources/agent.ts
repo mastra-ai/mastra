@@ -21,6 +21,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type {
   ZodSchema,
   GenerateLegacyParams,
+  GetAgentBrowserSessionResponse,
   GetAgentResponse,
   GetToolResponse,
   ClientOptions,
@@ -267,6 +268,20 @@ export class Agent extends BaseResource {
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
     return this.request(`/agents/${this.agentId}${this.getQueryString(requestContext)}`);
+  }
+
+  /**
+   * Probe the agent's browser session state before opening a screencast WebSocket.
+   *
+   * Returns `{ hasSession, screencastAvailable }`. Use this to avoid opening a WS
+   * that would either fail (screencast packages not installed) or sit idle (no
+   * active browser session yet). See {@link GetAgentBrowserSessionResponse}.
+   *
+   * @param threadId - Optional thread ID for thread-scoped browser sessions
+   */
+  browserSession(threadId?: string): Promise<GetAgentBrowserSessionResponse> {
+    const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
+    return this.request(`/agents/${this.agentId}/browser/session${query}`);
   }
 
   enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
