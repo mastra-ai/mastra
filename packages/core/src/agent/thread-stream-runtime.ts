@@ -880,11 +880,10 @@ export class AgentThreadStreamRuntime {
     }
     state.pendingIdleThreadKeysByRunId.delete(pendingIdle.runId);
 
-    state.activeThreadRunIds.set(key, pendingIdle.runId);
     const existingRunKey = state.threadKeysByRunId.get(pendingIdle.runId);
     if (existingRunKey && existingRunKey !== key) {
       pendingIdle.onRunRejected?.();
-      this.#releaseReservedRun(state, pubsub, key, pendingIdle.runId, {
+      this.#releaseReservedRun(state, pubsub, existingRunKey, pendingIdle.runId, {
         cleanupPrepared: true,
         clearAbort: true,
         rejectOutputWaiters: true,
@@ -900,6 +899,7 @@ export class AgentThreadStreamRuntime {
       });
       return;
     }
+    state.activeThreadRunIds.set(key, pendingIdle.runId);
     state.threadKeysByRunId.set(pendingIdle.runId, key);
     state.reservedAgentIdsByRunId.set(pendingIdle.runId, pendingIdle.agent.id);
     try {
