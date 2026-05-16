@@ -8,6 +8,7 @@ import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { PubSub } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter } from '../workflows/types';
@@ -669,5 +670,7 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     resumeData: any;
     snapshot: any;
   };
+  /** Internal: PubSub captured by the public execution path for this run */
+  _pubsub?: PubSub;
   toolCallId?: string;
 } & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });

@@ -1,3 +1,4 @@
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +7,7 @@ import { PubSub } from '../../events/pubsub';
 import type { EventCallback, SubscribeOptions } from '../../events/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import {
   createSignal,
@@ -651,6 +653,399 @@ describe('Agent signals', () => {
 
     expect(fork.getPubSub()).toBe(pubsub);
     expect(fork.hasOwnPubSub()).toBe(true);
+  });
+
+  it('keeps one PubSub for a stream run when the agent gets a PubSub during execution setup', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+
+    const runner = new Agent({
+      id: 'pubsub-snapshot-agent',
+      name: 'PubSub Snapshot Runner',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          streamCount += 1;
+          const callIndex = streamCount;
+          prompts.push(prompt);
+          const responseText = callIndex === 1 ? 'first response' : 'signal response';
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: `id-${callIndex}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                if (callIndex === 1) {
+                  await firstFinished;
+                }
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const initialObserver = new Agent({
+      id: 'pubsub-snapshot-agent',
+      name: 'Initial PubSub Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('initial observer response'),
+    });
+    const initialSubscription = await initialObserver.subscribeToThread({
+      threadId: 'pubsub-snapshot-thread',
+      resourceId: 'pubsub-snapshot-user',
+    });
+    const initialIterator = initialSubscription.stream[Symbol.asyncIterator]();
+    const initialNextRun = readNextRun(initialIterator);
+
+    const streamPromise = runner.stream('Hello', {
+      memory: { thread: 'pubsub-snapshot-thread', resource: 'pubsub-snapshot-user' },
+    });
+    await defaultOptionsStarted;
+    runner.__setPubSub(swappedPubSub);
+    const signalResult = await runner.sendSignal(
+      { type: 'user-message', contents: 'Hello while running' },
+      { resourceId: 'pubsub-snapshot-user', threadId: 'pubsub-snapshot-thread' },
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true }));
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    await expect(waitForActiveRun(initialSubscription)).resolves.toBe(stream.runId);
+    expect(runner.getRunOutput(stream.runId)).toBe(stream);
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+
+    releaseFirst();
+    const initialRun = await Promise.race([
+      initialNextRun,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(initialRun).not.toBe('timeout');
+    expect(initialRun).toMatchObject({
+      value: { runId: stream.runId, text: 'first response' },
+      done: false,
+    });
+    await expect(stream.text).resolves.toBe('first response');
+    expect(JSON.stringify(prompts)).toContain('Hello while running');
+
+    initialSubscription.unsubscribe();
+  });
+
+  it('keeps one PubSub for a default idle wake signal when ifIdle options are omitted', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'default-idle-wake-pubsub-agent',
+      name: 'Default Idle Wake PubSub Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('default idle wake response'),
+    });
+    const initialObserver = new Agent({
+      id: 'default-idle-wake-pubsub-agent',
+      name: 'Default Idle Wake Initial Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('observer response'),
+    });
+    const initialSubscription = await initialObserver.subscribeToThread({
+      threadId: 'default-idle-wake-thread',
+      resourceId: 'default-idle-wake-user',
+    });
+    const initialNextRun = readNextRun(initialSubscription.stream[Symbol.asyncIterator]());
+
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Wake without explicit ifIdle' },
+      { resourceId: 'default-idle-wake-user', threadId: 'default-idle-wake-thread' },
+    );
+    expect(signalResult.output).toBeDefined();
+    await defaultOptionsStarted;
+    runner.__setPubSub(swappedPubSub);
+    releaseDefaultOptions();
+
+    await expect(signalResult.output).resolves.toMatchObject({ runId: signalResult.runId });
+    const initialRun = await Promise.race([
+      initialNextRun,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(initialRun).not.toBe('timeout');
+    expect(initialRun).toMatchObject({
+      value: { runId: signalResult.runId, text: 'default idle wake response' },
+      done: false,
+    });
+
+    initialSubscription.unsubscribe();
+  });
+
+  it('tracks idle wake PubSub from ifIdle streamOptions memory when top-level thread target is omitted', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'stream-options-idle-wake-pubsub-agent',
+      name: 'Stream Options Idle Wake PubSub Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('stream options idle wake response'),
+    });
+
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Wake from streamOptions target' },
+      {
+        ifIdle: {
+          streamOptions: {
+            memory: { resource: 'stream-options-idle-wake-user', thread: 'stream-options-idle-wake-thread' },
+          },
+        },
+      } as any,
+    );
+    expect(signalResult.output).toBeDefined();
+    await defaultOptionsStarted;
+    runner.__setPubSub(swappedPubSub);
+    releaseDefaultOptions();
+
+    const output = await signalResult.output;
+    expect(output).toMatchObject({ runId: signalResult.runId });
+    expect(runner.getRunOutput(signalResult.runId!)).toBe(output);
+  });
+
+  it('honors an injected PubSub for streamUntilIdle when the agent PubSub changes', async () => {
+    const initialPubSub = new EventEmitterPubSub();
+    const swappedPubSub = new EventEmitterPubSub();
+    const runner = new Agent({
+      id: 'stream-until-idle-pubsub-agent',
+      name: 'Stream Until Idle PubSub Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('stream until idle response'),
+    });
+    runner.__setPubSub(swappedPubSub);
+
+    const observer = new Agent({
+      id: 'stream-until-idle-pubsub-agent',
+      name: 'Stream Until Idle PubSub Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('observer response'),
+    });
+    observer.__setPubSub(initialPubSub);
+    const subscription = await observer.subscribeToThread({
+      threadId: 'stream-until-idle-thread',
+      resourceId: 'stream-until-idle-user',
+    });
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+
+    const stream = await runner.streamUntilIdle('Hello', {
+      memory: { thread: 'stream-until-idle-thread', resource: 'stream-until-idle-user' },
+      _pubsub: initialPubSub,
+    } as any);
+
+    await expect(stream.text).resolves.toBe('stream until idle response');
+    await expect(nextRun).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'stream until idle response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('re-reserves a pre-default stream when default options change the request-context thread target', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'default-context-user');
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'default-context-thread');
+
+    const runner = new Agent({
+      id: 'default-context-reservation-agent',
+      name: 'Default Context Reservation Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { requestContext };
+      },
+      model: createTextStreamModel('default context response'),
+    });
+    const observer = new Agent({
+      id: 'default-context-reservation-agent',
+      name: 'Default Context Reservation Observer',
+      instructions: 'Test',
+      model: createTextStreamModel('observer response'),
+    });
+    const subscription = await observer.subscribeToThread({
+      threadId: 'default-context-thread',
+      resourceId: 'default-context-user',
+    });
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+
+    const streamPromise = runner.stream('Hello', {
+      memory: { thread: 'explicit-before-default-thread', resource: 'explicit-before-default-user' },
+    });
+    await defaultOptionsStarted;
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    await expect(nextRun).resolves.toMatchObject({
+      value: { runId: stream.runId, text: 'default context response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('forgets a re-reserved PubSub mapping when stream setup fails before preparation', async () => {
+    const swappedPubSub = new EventEmitterPubSub();
+    let useUnsupportedModel = true;
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'failed-rereserve-context-user');
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'failed-rereserve-context-thread');
+    const unsupportedModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1 },
+        text: 'unsupported',
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        stream: convertArrayToReadableStream([]),
+      }),
+    });
+    const supportedModel = createTextStreamModel('post failure response');
+
+    const runner = new Agent({
+      id: 'failed-rereserve-pubsub-agent',
+      name: 'Failed Rereserve PubSub Agent',
+      instructions: 'Test',
+      defaultOptions: async () => ({ requestContext }),
+      model: () => (useUnsupportedModel ? unsupportedModel : supportedModel),
+    });
+
+    await expect(
+      runner.stream('Hello', {
+        memory: { thread: 'failed-rereserve-original-thread', resource: 'failed-rereserve-original-user' },
+      }),
+    ).rejects.toThrow('not compatible with stream()');
+
+    useUnsupportedModel = false;
+    runner.__setPubSub(swappedPubSub);
+    const subscription = await runner.subscribeToThread({
+      threadId: 'failed-rereserve-context-thread',
+      resourceId: 'failed-rereserve-context-user',
+    });
+    const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
+    const stream = await runner.stream('Hello again', {
+      memory: { thread: 'failed-rereserve-context-thread', resource: 'failed-rereserve-context-user' },
+    });
+
+    await expect(stream.text).resolves.toBe('post failure response');
+    const observedRun = await Promise.race([
+      nextRun,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(observedRun).not.toBe('timeout');
+    expect(observedRun).toMatchObject({
+      value: { runId: stream.runId, text: 'post failure response' },
+      done: false,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('reserves request-context scoped streams while default options are pending', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'request-context-reserved-user');
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'request-context-reserved-thread');
+
+    const runner = new Agent({
+      id: 'request-context-reserved-agent',
+      name: 'Request Context Reserved Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('request context reserved response'),
+    });
+
+    const streamPromise = runner.stream('Hello', { requestContext });
+    await defaultOptionsStarted;
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello while request-context stream is starting' },
+      { resourceId: 'request-context-reserved-user', threadId: 'request-context-reserved-thread' },
+    );
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
   });
 
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
@@ -1310,6 +1705,660 @@ describe('Agent signals', () => {
     });
 
     subscription.unsubscribe();
+  });
+
+  it('runs idle wake rejection cleanup when a queued idle stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-failure-user', thread: 'queued-failure-thread' },
+      } as any,
+    );
+    const cleanup = vi.fn();
+    const stream = vi.fn(async () => {
+      throw new Error('queued idle stream failed');
+    });
+
+    const result = runtime.sendSignal(
+      { id: 'queued-idle-agent', stream } as any,
+      { type: 'user-message', contents: 'queued wake' },
+      {
+        resourceId: 'queued-failure-user',
+        threadId: 'queued-failure-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'queued-failure-user', thread: 'queued-failure-thread' } },
+          _onThreadStreamRunRejected: cleanup,
+        } as any,
+      },
+    );
+
+    expect(result.output).toBeUndefined();
+    expect(cleanup).not.toHaveBeenCalled();
+
+    finishActive();
+    await completion;
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued wake' }),
+      expect.objectContaining({
+        runId: result.runId,
+        memory: { resource: 'queued-failure-user', thread: 'queued-failure-thread' },
+      }),
+    );
+  });
+
+  it('wakes reservation waiters when a queued idle stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let rejectStream!: (error: Error) => void;
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-waiter-user', thread: 'queued-waiter-thread' },
+      } as any,
+    );
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    runtime.sendSignal(
+      { id: 'queued-idle-agent', stream } as any,
+      { type: 'user-message', contents: 'queued wake' },
+      {
+        resourceId: 'queued-waiter-user',
+        threadId: 'queued-waiter-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'queued-waiter-user', thread: 'queued-waiter-thread' } },
+        } as any,
+      },
+    );
+
+    finishActive();
+    await nextTick();
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'queued-waiter-user', thread: 'queued-waiter-thread' },
+        } as any,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    rejectStream(new Error('queued idle stream failed'));
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('wakes reservation waiters when an immediate idle stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    const result = runtime.sendSignal(
+      { id: 'immediate-idle-agent', stream } as any,
+      { type: 'user-message', contents: 'immediate wake' },
+      {
+        resourceId: 'immediate-waiter-user',
+        threadId: 'immediate-waiter-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'immediate-waiter-user', thread: 'immediate-waiter-thread' } },
+        } as any,
+      },
+    );
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'immediate-waiter-user', thread: 'immediate-waiter-thread' },
+        } as any,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    rejectStream(new Error('immediate idle stream failed'));
+    await expect(result.output).rejects.toThrow('immediate idle stream failed');
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('wakes waiters and drops queued signals when a reserved setup run is released', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const streamOptions = {
+      runId: 'reserved-setup-run',
+      memory: { resource: 'reserved-setup-user', thread: 'reserved-setup-thread' },
+    } as any;
+    const release = runtime.reserveRun(streamOptions, pubsub);
+    expect(release).toBeDefined();
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'reserved-setup-run',
+          memory: { resource: 'reserved-setup-user', thread: 'reserved-setup-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    const signalResult = runtime.sendSignal(
+      { id: 'reserved-agent' } as any,
+      { type: 'user-message', contents: 'stale setup signal' },
+      {
+        resourceId: 'reserved-setup-user',
+        threadId: 'reserved-setup-thread',
+      },
+      pubsub,
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ runId: 'reserved-setup-run' }));
+
+    release!();
+    await waiter;
+    expect(waiterResolved).toBe(true);
+
+    const laterRelease = runtime.reserveRun(
+      {
+        runId: 'later-run',
+        memory: { resource: 'reserved-setup-user', thread: 'reserved-setup-thread' },
+      } as any,
+      pubsub,
+    );
+    expect(laterRelease).toBeDefined();
+    expect(runtime.drainPendingSignals('later-run', pubsub)).toEqual([]);
+    const laterSignal = runtime.sendSignal(
+      { id: 'reserved-agent' } as any,
+      { type: 'user-message', contents: 'successor signal' },
+      {
+        resourceId: 'reserved-setup-user',
+        threadId: 'reserved-setup-thread',
+      },
+      pubsub,
+    );
+    expect(laterSignal).toEqual(expect.objectContaining({ runId: 'later-run' }));
+    expect(runtime.drainPendingSignals('later-run', pubsub)).toHaveLength(1);
+    laterRelease!();
+  });
+
+  it('does not overwrite an existing run reservation with a reused run id', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const release = runtime.reserveRun(
+      {
+        runId: 'reused-reserved-run',
+        memory: { resource: 'first-reservation-user', thread: 'first-reservation-thread' },
+      } as any,
+      pubsub,
+    );
+
+    expect(release).toBeDefined();
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'reused-reserved-run',
+          memory: { resource: 'first-reservation-user', thread: 'first-reservation-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'reused-reserved-run',
+          memory: { resource: 'second-reservation-user', thread: 'second-reservation-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved for another thread');
+    expect(runtime.abortThread({ resourceId: 'second-reservation-user', threadId: 'second-reservation-thread' }, pubsub))
+      .toBe(false);
+    expect(runtime.abortThread({ resourceId: 'first-reservation-user', threadId: 'first-reservation-thread' }, pubsub))
+      .toBe(true);
+  });
+
+  it('rejects duplicate queued idle run ids before either idle wake starts', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const stream = vi.fn(async () => ({
+      runId: 'queued-duplicate-idle-run',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: async () => {},
+    }));
+
+    runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-before-queued-duplicate',
+        status: 'running',
+        _waitUntilFinished: () => new Promise<any>(() => {}),
+      } as any,
+      {
+        runId: 'active-before-queued-duplicate',
+        memory: { resource: 'queued-duplicate-user', thread: 'queued-duplicate-thread' },
+      } as any,
+      pubsub,
+    );
+
+    const target = {
+      runId: 'queued-duplicate-idle-run',
+      resourceId: 'queued-duplicate-user',
+      threadId: 'queued-duplicate-thread',
+      ifIdle: {
+        streamOptions: { memory: { resource: 'queued-duplicate-user', thread: 'queued-duplicate-thread' } },
+      },
+    } as any;
+
+    expect(
+      runtime.sendSignal(
+        { id: 'queued-duplicate-agent', stream } as any,
+        { type: 'user-message', contents: 'first queued idle' },
+        target,
+        pubsub,
+      ),
+    ).toEqual(expect.objectContaining({ accepted: true, runId: 'queued-duplicate-idle-run' }));
+    expect(() =>
+      runtime.sendSignal(
+        { id: 'queued-duplicate-agent', stream } as any,
+        { type: 'user-message', contents: 'second queued idle' },
+        target,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'queued-duplicate-idle-run',
+          memory: { resource: 'queued-duplicate-user', thread: 'queued-duplicate-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  it('clears caller-signal idempotency when a queued idle run is aborted', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const stream = vi.fn(async () => ({
+      runId: 'unused-queued-idempotency-run',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: async () => {},
+    }));
+
+    runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-before-queued-idempotency',
+        status: 'running',
+        _waitUntilFinished: () => new Promise<any>(() => {}),
+      } as any,
+      {
+        runId: 'active-before-queued-idempotency',
+        memory: { resource: 'queued-idempotency-user', thread: 'queued-idempotency-thread' },
+      } as any,
+      pubsub,
+    );
+
+    const target = {
+      resourceId: 'queued-idempotency-user',
+      threadId: 'queued-idempotency-thread',
+      ifIdle: {
+        streamOptions: { memory: { resource: 'queued-idempotency-user', thread: 'queued-idempotency-thread' } },
+      },
+    } as any;
+    const signal = { id: 'caller-signal-id', type: 'user-message', contents: 'retry queued idle' } as any;
+
+    const first = runtime.sendSignal({ id: 'queued-idempotency-agent', stream } as any, signal, target, pubsub);
+    expect(runtime.abortRun(first.runId, pubsub)).toBe(true);
+    const second = runtime.sendSignal({ id: 'queued-idempotency-agent', stream } as any, signal, target, pubsub);
+
+    expect(second.runId).not.toBe(first.runId);
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  it('aborts a reserved setup run before stream preparation', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'reserved-abort-run',
+        memory: { resource: 'reserved-abort-user', thread: 'reserved-abort-thread' },
+      } as any,
+      pubsub,
+    );
+
+    expect(runtime.abortRun('reserved-abort-run', pubsub)).toBe(true);
+    const prepared = runtime.prepareRunOptions(
+      {
+        runId: 'reserved-abort-run',
+        memory: { resource: 'reserved-abort-user', thread: 'reserved-abort-thread' },
+      } as any,
+      pubsub,
+    );
+    expect(prepared.abortSignal?.aborted).toBe(true);
+  });
+
+  it('starts a queued idle wake when a reserved setup run is aborted', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'reserved-abort-with-idle-run',
+        memory: { resource: 'reserved-abort-idle-user', thread: 'reserved-abort-idle-thread' },
+      } as any,
+      pubsub,
+      'reserved-agent',
+    );
+    const stream = vi.fn(async () => ({
+      runId: 'queued-idle-after-abort-run',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: async () => {},
+    }));
+
+    const result = runtime.sendSignal(
+      { id: 'queued-idle-after-abort-agent', stream } as any,
+      { type: 'user-message', contents: 'wake after abort' },
+      {
+        resourceId: 'reserved-abort-idle-user',
+        threadId: 'reserved-abort-idle-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'reserved-abort-idle-user', thread: 'reserved-abort-idle-thread' } },
+        } as any,
+      },
+      pubsub,
+    );
+    expect(result).toEqual(expect.objectContaining({ runId: expect.any(String) }));
+    expect(stream).not.toHaveBeenCalled();
+
+    expect(runtime.abortRun('reserved-abort-with-idle-run', pubsub)).toBe(true);
+    await nextTick();
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'wake after abort' }),
+      expect.objectContaining({
+        runId: result.runId,
+        memory: { resource: 'reserved-abort-idle-user', thread: 'reserved-abort-idle-thread' },
+      }),
+    );
+  });
+
+  it('drops queued signals when a prepared run is aborted', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'prepared-abort-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'prepared-abort-run',
+        memory: { resource: 'prepared-abort-user', thread: 'prepared-abort-thread' },
+      } as any,
+      pubsub,
+    );
+
+    const signalResult = runtime.sendSignal(
+      { id: 'active-agent' } as any,
+      { type: 'user-message', contents: 'stale prepared signal' },
+      {
+        runId: 'prepared-abort-run',
+      },
+      pubsub,
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ runId: 'prepared-abort-run' }));
+
+    expect(runtime.abortRun('prepared-abort-run', pubsub)).toBe(true);
+    expect(() =>
+      runtime.sendSignal(
+        { id: 'active-agent' } as any,
+        { type: 'user-message', contents: 'post-abort stale signal' },
+        {
+          runId: 'prepared-abort-run',
+        },
+        pubsub,
+      ),
+    ).toThrow('has been aborted');
+    finishActive();
+    await completion;
+
+    runtime.reserveRun(
+      {
+        runId: 'prepared-abort-successor-run',
+        memory: { resource: 'prepared-abort-user', thread: 'prepared-abort-thread' },
+      } as any,
+      pubsub,
+    );
+    expect(runtime.drainPendingSignals('prepared-abort-successor-run', pubsub)).toEqual([]);
+  });
+
+  it('rejects duplicate registered run ids on the same thread', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const streamOptions = {
+      runId: 'duplicate-registered-run',
+      memory: { resource: 'duplicate-registered-user', thread: 'duplicate-registered-thread' },
+    } as any;
+
+    runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'duplicate-registered-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      streamOptions,
+      pubsub,
+    );
+
+    expect(() =>
+      runtime.registerRun(
+        { id: 'active-agent' } as any,
+        {
+          runId: 'duplicate-registered-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        streamOptions,
+        pubsub,
+      ),
+    ).toThrow('already registered');
+  });
+
+  it('moves reservation waiters onto the registered run on setup success', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    runtime.reserveRun(
+      {
+        runId: 'reserved-success-run',
+        memory: { resource: 'reserved-success-user', thread: 'reserved-success-thread' },
+      } as any,
+      pubsub,
+      'owner-agent',
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'reserved-success-user', thread: 'reserved-success-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    const completion = runtime.registerRun(
+      { id: 'owner-agent' } as any,
+      {
+        runId: 'reserved-success-run',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'reserved-success-run',
+        memory: { resource: 'reserved-success-user', thread: 'reserved-success-thread' },
+      } as any,
+      pubsub,
+    );
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    finishActive();
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('does not treat matching run ids from another agent as its own reservation', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+
+    const completion = runtime.registerRun(
+      { id: 'owner-agent' } as any,
+      {
+        runId: 'shared-run-id',
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'shared-run-id',
+        memory: { resource: 'run-id-collision-user', thread: 'run-id-collision-thread' },
+      } as any,
+      pubsub,
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'different-agent' } as any,
+        {
+          runId: 'shared-run-id',
+          memory: { resource: 'run-id-collision-user', thread: 'run-id-collision-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    finishActive();
+    await completion;
+    await waiter;
+    expect(waiterResolved).toBe(true);
+  });
+
+  it('does not treat matching run ids from the same agent as its own reservation without ownership', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const release = runtime.reserveRun(
+      {
+        runId: 'same-agent-shared-run-id',
+        memory: { resource: 'same-agent-collision-user', thread: 'same-agent-collision-thread' },
+      } as any,
+      pubsub,
+      'owner-agent',
+    );
+
+    let waiterResolved = false;
+    const waiter = runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'owner-agent' } as any,
+        {
+          runId: 'same-agent-shared-run-id',
+          memory: { resource: 'same-agent-collision-user', thread: 'same-agent-collision-thread' },
+        } as any,
+        pubsub,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    await nextTick();
+    expect(waiterResolved).toBe(false);
+
+    release?.();
+    await waiter;
+    expect(waiterResolved).toBe(true);
   });
 
   it('cleans up a thread subscription and completes the iterator', async () => {
