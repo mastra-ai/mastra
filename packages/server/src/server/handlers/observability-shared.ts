@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
-import type { MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
+import { ObservabilityStorage } from '@mastra/core/storage';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 
@@ -23,6 +24,111 @@ export async function getObservabilityStore(mastra: Mastra): Promise<Observabili
     throw new HTTPException(500, { message: 'Observability storage domain is not available' });
   }
   return observability;
+}
+
+/** Retrieves the observability storage domain, or undefined if not configured. Does not throw. */
+export async function tryGetObservabilityStore(mastra: Mastra): Promise<ObservabilityStorage | undefined> {
+  const storage = mastra.getStorage();
+  if (!storage) return undefined;
+  return storage.getStore('observability');
+}
+
+/**
+ * Methods on ObservabilityStorage whose default base-class implementation throws
+ * NOT_IMPLEMENTED. A storage adapter "supports" a method when its prototype
+ * entry differs from the base class entry (i.e. the subclass overrode it).
+ *
+ * Note: `getStructure` and `getTraceLight` are aliases that delegate to each
+ * other; overriding either one provides both. `getBranch` has a default
+ * implementation that works when the underlying methods it delegates to are
+ * implemented, so it's reported separately based on its direct override status.
+ */
+const OBSERVABILITY_METHOD_NAMES = [
+  // Tracing - reads
+  'listTraces',
+  'listTracesLight',
+  'listBranches',
+  'getTrace',
+  'getStructure',
+  'getTraceLight',
+  'getSpan',
+  'getSpans',
+  'getRootSpan',
+  'getBranch',
+  // Tracing - writes
+  'createSpan',
+  'updateSpan',
+  'batchCreateSpans',
+  'batchUpdateSpans',
+  'batchDeleteTraces',
+  // Logs
+  'listLogs',
+  'batchCreateLogs',
+  // Metrics
+  'listMetrics',
+  'batchCreateMetrics',
+  'getMetricAggregate',
+  'getMetricBreakdown',
+  'getMetricTimeSeries',
+  'getMetricPercentiles',
+  // Scores
+  'listScores',
+  'createScore',
+  'batchCreateScores',
+  'getScoreById',
+  'getScoreAggregate',
+  'getScoreBreakdown',
+  'getScoreTimeSeries',
+  'getScorePercentiles',
+  // Feedback
+  'listFeedback',
+  'createFeedback',
+  'batchCreateFeedback',
+  'getFeedbackAggregate',
+  'getFeedbackBreakdown',
+  'getFeedbackTimeSeries',
+  'getFeedbackPercentiles',
+  // Discovery
+  'getMetricNames',
+  'getMetricLabelKeys',
+  'getMetricLabelValues',
+  'getEntityTypes',
+  'getEntityNames',
+  'getServiceNames',
+  'getEnvironments',
+  'getTags',
+] as const satisfies ReadonlyArray<keyof ObservabilityStorage>;
+
+export type ObservabilityFeatureName = (typeof OBSERVABILITY_METHOD_NAMES)[number];
+export type ObservabilityFeatureMap = Record<ObservabilityFeatureName, boolean>;
+
+/**
+ * Detects which observability features the connected store supports by
+ * comparing method references against the base ObservabilityStorage prototype.
+ *
+ * The base class provides default `throw NOT_IMPLEMENTED` stubs for every
+ * method; subclasses override only what they support. When `store` is
+ * undefined (no observability storage configured), every feature reports as
+ * unsupported.
+ */
+export function detectObservabilityFeatures(store: ObservabilityStorage | undefined): ObservabilityFeatureMap {
+  const basePrototype = ObservabilityStorage.prototype as unknown as Record<string, unknown>;
+  const features = {} as ObservabilityFeatureMap;
+  for (const method of OBSERVABILITY_METHOD_NAMES) {
+    if (!store) {
+      features[method] = false;
+      continue;
+    }
+    const concrete = (store as unknown as Record<string, unknown>)[method];
+    features[method] = typeof concrete === 'function' && concrete !== basePrototype[method];
+  }
+  // getStructure and getTraceLight delegate to each other in the base class:
+  // overriding either provides the capability for both.
+  if (features.getStructure || features.getTraceLight) {
+    features.getStructure = true;
+    features.getTraceLight = true;
+  }
+  return features;
 }
 
 export interface RouteDetails {
@@ -226,6 +332,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/discovery/tags',
     summary: 'Get tags',
     description: 'Returns distinct tags with optional entity type filtering',
+  },
+
+  GET_CAPABILITIES: {
+    method: 'GET',
+    path: '/observability/capabilities',
+    summary: 'Get observability capabilities',
+    description:
+      'Returns the observability features supported by the connected storage provider so clients can hide or disable unsupported UI affordances',
   },
 } as const satisfies Record<string, RouteDetails>;
 

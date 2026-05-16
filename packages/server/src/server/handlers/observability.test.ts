@@ -2782,4 +2782,97 @@ describe('Observability Handlers', () => {
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
     });
   });
+
+  describe('GET_CAPABILITIES_ROUTE', () => {
+    it('reports features as supported when the store overrides discovery methods', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+
+      class PartialStore extends ObservabilityStorage {
+        override async getEntityNames() {
+          return { names: [] };
+        }
+        override async getEntityTypes() {
+          return { entityTypes: [] };
+        }
+        override async getServiceNames() {
+          return { serviceNames: [] };
+        }
+      }
+
+      const partialStore = new PartialStore();
+      const storage = createMockStorage(
+        partialStore as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      const mastra = createMockMastra(storage);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.storeProvider).toBe('PartialStore');
+      expect(result.features.getEntityNames).toBe(true);
+      expect(result.features.getEntityTypes).toBe(true);
+      expect(result.features.getServiceNames).toBe(true);
+      // Methods the subclass did not override fall back to the base class throw,
+      // so capabilities should report them as unsupported.
+      expect(result.features.getTags).toBe(false);
+      expect(result.features.getEnvironments).toBe(false);
+      expect(result.features.getMetricAggregate).toBe(false);
+    });
+
+    it('treats getStructure and getTraceLight as aliases', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+
+      class StructureOnly extends ObservabilityStorage {
+        override async getStructure() {
+          return null;
+        }
+      }
+
+      class TraceLightOnly extends ObservabilityStorage {
+        override async getTraceLight() {
+          return null;
+        }
+      }
+
+      for (const Ctor of [StructureOnly, TraceLightOnly]) {
+        const storage = createMockStorage(
+          new Ctor() as unknown as ReturnType<typeof createMockObservabilityStore>,
+          mockScoresStore,
+        );
+        const mastra = createMockMastra(storage);
+        const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+          ...createTestServerContext({ mastra }),
+        });
+        expect(result.features.getStructure).toBe(true);
+        expect(result.features.getTraceLight).toBe(true);
+      }
+    });
+
+    it('returns all features as unsupported when no observability store is configured', async () => {
+      const storage: Partial<MastraCompositeStore> = {
+        getStore: vi.fn(() => Promise.resolve(undefined)) as MastraCompositeStore['getStore'],
+      };
+      const mastra = createMockMastra(storage);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.storeProvider).toBeNull();
+      expect(Object.values(result.features).every(v => v === false)).toBe(true);
+    });
+
+    it('returns all features as unsupported when no storage is configured', async () => {
+      const mastra = createMockMastra(undefined);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.storeProvider).toBeNull();
+      expect(Object.values(result.features).every(v => v === false)).toBe(true);
+    });
+  });
 });

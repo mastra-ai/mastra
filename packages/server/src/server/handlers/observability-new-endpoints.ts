@@ -64,7 +64,12 @@ import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { getObservabilityStore, NEW_ROUTE_DEFS } from './observability-shared';
+import {
+  detectObservabilityFeatures,
+  getObservabilityStore,
+  NEW_ROUTE_DEFS,
+  tryGetObservabilityStore,
+} from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
 function createNewRoute<
@@ -410,6 +415,35 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   },
 });
 
+// ============================================================================
+// Capabilities Route
+// ============================================================================
+
+const observabilityFeatureMapSchema = z.record(z.string(), z.boolean());
+
+const observabilityCapabilitiesResponseSchema = z.object({
+  storeProvider: z
+    .string()
+    .nullable()
+    .describe(
+      'Constructor name of the connected observability store, or null if no observability storage is configured',
+    ),
+  features: observabilityFeatureMapSchema.describe(
+    'Map of observability method names to whether the connected storage provider supports them',
+  ),
+});
+
+export const GET_CAPABILITIES = createNewRoute(NEW_ROUTE_DEFS.GET_CAPABILITIES, {
+  responseSchema: observabilityCapabilitiesResponseSchema,
+  handler: async ({ mastra }) => {
+    const store = await tryGetObservabilityStore(mastra);
+    return {
+      storeProvider: store ? store.constructor.name : null,
+      features: detectObservabilityFeatures(store),
+    };
+  },
+});
+
 export const NEW_ROUTES = {
   LIST_LOGS,
   LIST_SCORES,
@@ -437,4 +471,5 @@ export const NEW_ROUTES = {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 };
