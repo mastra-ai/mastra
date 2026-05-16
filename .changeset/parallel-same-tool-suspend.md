@@ -2,8 +2,8 @@
 '@mastra/core': patch
 ---
 
-Fixed parallel suspends of the same tool overwriting each other's bookkeeping. When an LLM emitted two `tool_use` blocks for the same tool in one assistant turn and both suspended, the second entry replaced the first in `metadata.suspendedTools` / `metadata.pendingToolApprovals` and only one of the two calls could be resumed.
+Fixed a bug where calling the same tool twice in parallel within a single assistant turn would only let you resume one of the two calls. The other call became orphaned and could never be resumed, even after a restart.
 
-`addToolMetadata` now keys those records by `toolCallId` instead of `toolName`, so each parallel suspend remains a distinct entry. Readers iterate `Object.values()`, so older runs that persisted entries keyed by `toolName` continue to resolve through a backward-compat fallback. The AIV5 adapter renders one `data-tool-call-suspended` (or `data-tool-call-approval`) part per call, and `removeToolMetadata` clears only the matching `toolCallId` so parallel siblings keep their `resumed: false` flag.
+Each suspended tool call (and each pending approval) is now tracked separately, so all parallel calls to the same tool can be resumed independently. Runs that were persisted before this fix continue to resume correctly.
 
 Fixes #16468.

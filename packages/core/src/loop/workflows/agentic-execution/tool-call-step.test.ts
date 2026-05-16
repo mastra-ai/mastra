@@ -904,15 +904,20 @@ describe('createToolCallStep parallel same-tool suspensions (issue #16468)', () 
       inputData: { toolCallId, toolName: 'workflow-sendEmail', args: { to: toolCallId } },
     });
 
-    // Both calls suspend forever; we only care about the addToolMetadata side-effect
+    // Both calls suspend forever; we only care about the addToolMetadata side-effect.
+    // Use vi.waitFor instead of fixed setImmediate ticks so the assertion fires as soon
+    // as both writes have landed, even if the underlying tool.execute path grows more
+    // awaits later.
     void toolCallStep.execute(makeParams('call-A'));
-    await new Promise(resolve => setImmediate(resolve));
     void toolCallStep.execute(makeParams('call-B'));
-    await new Promise(resolve => setImmediate(resolve));
+
+    await vi.waitFor(() => {
+      const suspended = assistantMessage.content.metadata.suspendedTools as Record<string, any> | undefined;
+      expect(suspended).toBeDefined();
+      expect(Object.keys(suspended!).sort()).toEqual(['call-A', 'call-B']);
+    });
 
     const suspended = assistantMessage.content.metadata.suspendedTools as Record<string, any>;
-    expect(suspended).toBeDefined();
-    expect(Object.keys(suspended).sort()).toEqual(['call-A', 'call-B']);
     expect(suspended['call-A']).toMatchObject({ toolCallId: 'call-A', toolName: 'workflow-sendEmail' });
     expect(suspended['call-B']).toMatchObject({ toolCallId: 'call-B', toolName: 'workflow-sendEmail' });
     expect(suspended['call-A'].suspendPayload).toMatchObject({ reason: 'awaiting' });
