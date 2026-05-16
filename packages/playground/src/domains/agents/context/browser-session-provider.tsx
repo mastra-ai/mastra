@@ -1,9 +1,9 @@
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useBrowserSessionProbe } from '../hooks/use-browser-session-probe';
 import type { StreamStatus } from '../hooks/use-browser-stream';
 import { useCloseBrowser } from '../hooks/use-close-browser';
-import { BrowserSessionContext } from './browser-session-context';
+import { createBrowserFrameStore } from './browser-frame-store';
+import { BrowserFrameStoreContext, BrowserSessionContext } from './browser-session-context';
 import type { BrowserViewMode } from './browser-session-context';
 
 export interface BrowserSessionProviderProps {
@@ -27,30 +27,25 @@ export interface BrowserSessionProviderProps {
  * All browser views (thumbnail, expanded, modal, sidebar) share this connection.
  */
 export function BrowserSessionProvider({ children, agentId, threadId, enabled = true }: BrowserSessionProviderProps) {
-  // Probe the server before opening a WebSocket. Avoids two failure modes:
-  //   1. Server doesn't have `ws` / `@hono/node-ws` installed → WS upgrade
-  //      would fail and trigger a reconnect storm.
-  //   2. Agent has browser tools configured but no active session yet → WS
-  //      would open and sit idle indefinitely.
-  // Falls back to legacy "always connect" behavior on older servers (404).
-  const { data: probe } = useBrowserSessionProbe({ agentId, threadId, enabled });
-  const screencastAvailable = probe?.screencastAvailable ?? false;
-  const serverHasSession = probe?.hasSession ?? false;
-
   // UI state
   const [hasSession, setHasSession] = useState(false);
   const [viewMode, setViewModeState] = useState<BrowserViewMode>('collapsed');
 
-  // Open the WS when the server reports a live session OR the user has
-  // explicitly opened the browser panel and expects to see frames.
-  const userOpenedPanel = viewMode !== 'collapsed';
-  const shouldConnect = enabled && screencastAvailable && (serverHasSession || userOpenedPanel);
+  // Gate the WebSocket on the agent having browser tools (passed via `enabled`).
+  // A follow-up commit will add a server probe to also gate on whether a live
+  // session exists, eliminating the reconnect storm when no session is running.
+  const shouldConnect = enabled;
 
   // Stream state
   const [status, setStatusState] = useState<StreamStatus>('idle');
   const [currentUrl, setCurrentUrlState] = useState<string | null>(null);
-  const [latestFrame, setLatestFrameState] = useState<string | null>(null);
   const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null);
+
+  // Frame data lives in an external store, NOT React state. Frames arrive at
+  // 15-30 fps; routing them through useState would re-render the provider and
+  // its entire subtree at that rate. The store notifies only the components
+  // that subscribe via `useBrowserFrame()`.
+  const frameStoreRef = useRef(createBrowserFrameStore());
 
   // WebSocket management
   const wsRef = useRef<WebSocket | null>(null);
@@ -77,7 +72,7 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
     setHasSession(false);
     setStatusState('idle');
     setCurrentUrlState(null);
-    setLatestFrameState(null);
+    frameStoreRef.current.setFrame(null);
     setViewport(null);
   }, [clearReconnectTimeout]);
 
@@ -176,11 +171,11 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
             }
           } catch {
             // If JSON parsing fails, treat as frame data
-            setLatestFrameState(data);
+            frameStoreRef.current.setFrame(data);
           }
         } else {
           // Plain text is base64 frame data
-          setLatestFrameState(data);
+          frameStoreRef.current.setFrame(data);
           // Ensure we're in streaming status when receiving frames
           setStatusState(prev => (prev !== 'streaming' ? 'streaming' : prev));
           setHasSession(true);
@@ -215,8 +210,7 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
     }
   }, [shouldConnect, agentId, threadId, clearReconnectTimeout]);
 
-  // Auto-connect once the probe confirms the screencast is available and the
-  // agent has an active session for this thread.
+  // Auto-connect whenever we should be connected for this agent/thread.
   useEffect(() => {
     if (shouldConnect && agentId && threadId) {
       connect();
@@ -258,7 +252,7 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   const endSession = useCallback(() => {
     setHasSession(false);
     setViewModeState('collapsed');
-    setLatestFrameState(null);
+    frameStoreRef.current.setFrame(null);
   }, []);
 
   // Close browser via TanStack Query mutation
@@ -288,7 +282,6 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
       isActive: hasSession, // backward compat - reflects session activity, not view mode
       status,
       currentUrl,
-      latestFrame,
       viewport,
       isClosing,
       setViewMode,
@@ -305,7 +298,6 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
       viewMode,
       status,
       currentUrl,
-      latestFrame,
       viewport,
       isClosing,
       setViewMode,
@@ -319,5 +311,9 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
     ],
   );
 
-  return <BrowserSessionContext.Provider value={value}>{children}</BrowserSessionContext.Provider>;
+  return (
+    <BrowserSessionContext.Provider value={value}>
+      <BrowserFrameStoreContext.Provider value={frameStoreRef.current}>{children}</BrowserFrameStoreContext.Provider>
+    </BrowserSessionContext.Provider>
+  );
 }
