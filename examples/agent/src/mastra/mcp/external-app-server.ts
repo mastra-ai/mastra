@@ -106,18 +106,26 @@ const colorMixerHtml = `<!DOCTYPE html>
 </html>`;
 
 // Register the ui:// resource
-server.resource('color-mixer-app', 'ui://color-mixer/app', {
-  description: 'Color mixer interactive UI — served from a non-Mastra MCP server',
-  mimeType: 'text/html;profile=mcp-app',
-}, async (uri) => ({
-  contents: [{ uri: uri.href, text: colorMixerHtml }],
-}));
+server.resource(
+  'color-mixer-app',
+  'ui://color-mixer/app',
+  {
+    description: 'Color mixer interactive UI — served from a non-Mastra MCP server',
+    mimeType: 'text/html;profile=mcp-app',
+  },
+  async uri => ({
+    contents: [{ uri: uri.href, text: colorMixerHtml }],
+  }),
+);
 
 // Register the tool with _meta.ui linking to the resource
 const mixColorsTool = server.tool(
   'mixColors',
   'Mix two hex colors together. Has an interactive MCP App UI for color picking.',
-  { color1: z.string().describe('First hex color (e.g. #ff6347)'), color2: z.string().describe('Second hex color (e.g. #4169e1)') },
+  {
+    color1: z.string().describe('First hex color (e.g. #ff6347)'),
+    color2: z.string().describe('Second hex color (e.g. #4169e1)'),
+  },
   async ({ color1, color2 }) => {
     // Simple color mixing: average RGB channels
     const parse = (hex: string) => {
@@ -126,8 +134,11 @@ const mixColorsTool = server.tool(
     };
     const [r1, g1, b1] = parse(color1);
     const [r2, g2, b2] = parse(color2);
-    const mixed = '#' + [Math.round((r1 + r2) / 2), Math.round((g1 + g2) / 2), Math.round((b1 + b2) / 2)]
-      .map(c => c.toString(16).padStart(2, '0')).join('');
+    const mixed =
+      '#' +
+      [Math.round((r1 + r2) / 2), Math.round((g1 + g2) / 2), Math.round((b1 + b2) / 2)]
+        .map(c => c.toString(16).padStart(2, '0'))
+        .join('');
     return { content: [{ type: 'text' as const, text: mixed }] };
   },
 );
