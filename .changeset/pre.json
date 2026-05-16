@@ -144,5 +144,13 @@
     "@mastra/s3": "0.5.1",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260516-010339",
+    "cozy-walls-teach",
+    "goofy-lines-fail",
+    "green-birds-knock",
+    "shared-skill-formatter",
+    "signals-narrow-contents",
+    "whole-results-give"
+  ]
 }
