@@ -90,6 +90,7 @@ import { WorkspaceRegistry } from './workspace-registry';
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
 const DEFAULT_CLOSE_TIMEOUT_MS = 30_000;
+const MAX_CLOSE_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_SUBAGENT_MAX_DEPTH = 1;
 const DEFAULT_GOAL_MAX_TURNS = 50;
 const DEFAULT_PERMISSION_POLICY: PermissionPolicy = 'ask';
@@ -222,8 +223,15 @@ export class Harness {
       throw new HarnessConfigError('sessions.maxQueueDepth', 'must be a positive integer');
     }
     this._closeTimeoutMs = config.sessions?.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
-    if (!Number.isInteger(this._closeTimeoutMs) || this._closeTimeoutMs < 1) {
-      throw new HarnessConfigError('sessions.closeTimeoutMs', 'must be a positive integer');
+    if (
+      !Number.isInteger(this._closeTimeoutMs) ||
+      this._closeTimeoutMs < 1 ||
+      this._closeTimeoutMs > MAX_CLOSE_TIMEOUT_MS
+    ) {
+      throw new HarnessConfigError(
+        'sessions.closeTimeoutMs',
+        `must be a positive integer no greater than ${MAX_CLOSE_TIMEOUT_MS}`,
+      );
     }
 
     // Subagent registry. Shape validation up front (uniqueness, mutual
@@ -979,6 +987,14 @@ export class Harness {
   }
 
   private _publish(storage: HarnessStorage, record: SessionRecord): Session {
+    return this._adoptSession(storage, record, { emitCreated: true, kickQueueDrain: true });
+  }
+
+  private _adoptSession(
+    storage: HarnessStorage,
+    record: SessionRecord,
+    opts: { emitCreated: boolean; kickQueueDrain: boolean },
+  ): Session {
     // Workspace provider validation (§2.7). If the stored record carries a
     // workspace state blob, the configured provider must match. Mismatch is
     // a hard error — refuse to hand the record to the wrong implementation.
@@ -1012,20 +1028,22 @@ export class Harness {
     const bridge = session._subscribeInternal(event => this._emitter.forward(event));
     this._sessionEventBridges.set(record.id, bridge);
 
-    // Surface session creation to harness-level subscribers AFTER the bridge
-    // is wired. Stamps `sessionId` via the override so harness emitter
-    // (no scope) can carry it.
-    this._emitter.emit(
-      {
-        type: 'session_created',
-        resourceId: record.resourceId,
-        threadId: record.threadId,
-        ...(record.parentSessionId !== undefined && { parentSessionId: record.parentSessionId }),
-        modeId: record.modeId,
-        modelId: record.modelId,
-      },
-      { sessionId: record.id },
-    );
+    if (opts.emitCreated) {
+      // Surface session creation to harness-level subscribers AFTER the bridge
+      // is wired. Stamps `sessionId` via the override so harness emitter
+      // (no scope) can carry it.
+      this._emitter.emit(
+        {
+          type: 'session_created',
+          resourceId: record.resourceId,
+          threadId: record.threadId,
+          ...(record.parentSessionId !== undefined && { parentSessionId: record.parentSessionId }),
+          modeId: record.modeId,
+          modelId: record.modelId,
+        },
+        { sessionId: record.id },
+      );
+    }
 
     // If the hydrated record has queued items waiting and no live suspension
     // blocking them, kick the drain. A `pendingResume` with `resumedAt` is
@@ -1034,6 +1052,7 @@ export class Harness {
     // `queue_item_replayed` instead of `queue_item_started` because the
     // original `queue()` caller's resolver is gone.
     if (
+      opts.kickQueueDrain &&
       (record.pendingQueue?.length ?? 0) > 0 &&
       (record.pendingResume === undefined || record.pendingResume.resumedAt !== undefined)
     ) {
@@ -1072,6 +1091,7 @@ export class Harness {
    * release leases, and drop live instances. Idempotent. See §5.5.
    */
   async closeSession(opts: { sessionId: string }): Promise<void> {
+    if (this._shutdown) return;
     const storage = this._requireStorage('closeSession()');
     const live = this._liveSessions.get(opts.sessionId);
     if (live) {
@@ -1088,6 +1108,7 @@ export class Harness {
    * @internal — used by `Session.close()` and `Harness.closeSession()`.
    */
   async _closeSession(session: Session): Promise<void> {
+    if (this._shutdown) return;
     if (session.isClosed) return;
 
     const storage = this._requireStorage('closeSession()');
@@ -1181,13 +1202,23 @@ export class Harness {
     }
 
     const lease = await this._acquireLease(storage, record.id);
+    const leasedRecord = {
+      ...record,
+      ownerId: this.ownerId,
+      leaseExpiresAt: lease.expiresAt,
+      version: lease.version,
+    };
+    if ((leasedRecord.pendingQueue?.length ?? 0) > 0) {
+      const recovered = this._adoptSession(storage, leasedRecord, { emitCreated: false, kickQueueDrain: false });
+      return {
+        record: recovered.getRecord(),
+        depth,
+        live: recovered,
+        leaseAcquired: true,
+      };
+    }
     return {
-      record: {
-        ...record,
-        ownerId: this.ownerId,
-        leaseExpiresAt: lease.expiresAt,
-        version: lease.version,
-      },
+      record: leasedRecord,
       depth,
       leaseAcquired: true,
     };
@@ -1293,6 +1324,15 @@ export class Harness {
         });
       } catch {
         // Best effort; the lease still expires by TTL.
+      }
+      if (node.live && this._liveSessions.get(node.record.id) === node.live) {
+        node.live._markEvicted(node.record);
+        const bridge = this._sessionEventBridges.get(node.record.id);
+        if (bridge) {
+          bridge();
+          this._sessionEventBridges.delete(node.record.id);
+        }
+        this._liveSessions.delete(node.record.id);
       }
     }
   }

@@ -204,18 +204,6 @@ export class InMemoryHarness extends HarnessStorage {
   ): Promise<CreateOrLoadActiveSessionResult> {
     const namespace = resolveHarnessName(record.harnessName, this.harnessName);
     const storageNow = Date.now();
-    if (record.parentSessionId !== undefined) {
-      const parent = this.db.harnessSessions.get(sessionKey(namespace, record.parentSessionId));
-      if (!parent || parent.resourceId !== record.resourceId) {
-        throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'not_found');
-      }
-      if (parent.closedAt !== undefined) {
-        throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'closed');
-      }
-      if (parent.closingAt !== undefined) {
-        throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'closing');
-      }
-    }
     for (const existing of this.db.harnessSessions.values()) {
       if (existing.harnessName !== namespace) continue;
       if (existing.resourceId !== record.resourceId || existing.threadId !== record.threadId) continue;
@@ -228,6 +216,19 @@ export class InMemoryHarness extends HarnessStorage {
         expiresAt: existing.leaseExpiresAt,
         storageNow,
       };
+    }
+
+    if (record.parentSessionId !== undefined) {
+      const parent = this.db.harnessSessions.get(sessionKey(namespace, record.parentSessionId));
+      if (!parent || parent.resourceId !== record.resourceId) {
+        throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'not_found');
+      }
+      if (parent.closedAt !== undefined) {
+        throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'closed');
+      }
+      if (parent.closingAt !== undefined) {
+        throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'closing');
+      }
     }
 
     const key = sessionKey(namespace, record.id);

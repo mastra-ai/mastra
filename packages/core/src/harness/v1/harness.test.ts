@@ -50,6 +50,16 @@ function deferred() {
   return { promise, resolve };
 }
 
+async function waitFor(predicate: () => boolean, label: string, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${label}`);
+    }
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
 class AbortIgnoringMockAgent extends MockAgent {
   override async stream(messages: any, options?: any): Promise<any> {
     return super.stream(messages, { ...options, abortSignal: undefined });
@@ -123,7 +133,7 @@ describe('Harness v1 — construction', () => {
   });
 
   it('throws HarnessConfigError for invalid close timeout', () => {
-    for (const closeTimeoutMs of [0, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    for (const closeTimeoutMs of [0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648]) {
       expect(
         () =>
           new Harness({
@@ -445,6 +455,35 @@ describe('Harness v1 — lifecycle', () => {
     expect(stored?.closedAt).toBeDefined();
   });
 
+  it('does not start a new close after shutdown begins', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const originalRelease = storage.releaseSessionLease.bind(storage);
+    let releaseShutdown!: () => void;
+    let releaseStarted!: () => void;
+    const releaseGate = new Promise<void>(resolve => {
+      releaseShutdown = resolve;
+    });
+    const releaseSeen = new Promise<void>(resolve => {
+      releaseStarted = resolve;
+    });
+    storage.releaseSessionLease = (async (...args: Parameters<typeof storage.releaseSessionLease>) => {
+      releaseStarted();
+      await releaseGate;
+      return originalRelease(...args);
+    }) as typeof storage.releaseSessionLease;
+
+    const shutdown = harness.shutdown();
+    await releaseSeen;
+    await s.close();
+    releaseShutdown();
+    await shutdown;
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeUndefined();
+  });
+
   it('aborts an active turn at the close deadline before terminalizing', async () => {
     const storage = makeStorage();
     const agent = new MockAgent({ id: 'default' });
@@ -534,6 +573,127 @@ describe('Harness v1 — lifecycle', () => {
     expect(stored?.pendingQueue).toEqual([]);
     expect(stored?.closedAt).toBeDefined();
     expect(agent.streamCalls.map(call => extractSignalContents(call.messages))).toEqual(['manual', 'q1', 'q2']);
+  });
+
+  it('rejects delayed queue admission once close starts', async () => {
+    const storage = makeStorage();
+    const agent = new MockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise, text: 'manual' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 1000 },
+    });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const attachment = await harness.attachments.upload({
+      sessionId: s.id,
+      data: Buffer.from('queued attachment'),
+      filename: 'queued.txt',
+      contentType: 'text/plain',
+    });
+
+    const originalGetAttachmentRecord = storage.getAttachmentRecord.bind(storage);
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const lookupSeen = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    let lookupGated = false;
+    storage.getAttachmentRecord = (async (...args: Parameters<typeof storage.getAttachmentRecord>) => {
+      const [opts] = args;
+      if (!lookupGated && opts.attachmentId === attachment.attachmentId) {
+        lookupGated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return originalGetAttachmentRecord(...args);
+    }) as typeof storage.getAttachmentRecord;
+
+    const manual = s.message({ content: 'manual' });
+    await new Promise(resolve => setImmediate(resolve));
+    const late = s.queue({ content: 'late', attachments: [attachment] });
+    await lookupSeen;
+
+    const close = s.close();
+    await waitFor(() => s.getRecord().closingAt !== undefined, 'session closing marker');
+    releaseLookup();
+
+    await expect(late).rejects.toBeInstanceOf(HarnessSessionClosingError);
+    hold.resolve();
+    await Promise.all([manual, close]);
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.pendingQueue).toEqual([]);
+    expect(agent.streamCalls.map(call => extractSignalContents(call.messages))).toEqual(['manual']);
+  });
+
+  it('fails queued waiters instead of hanging when close drain times out', async () => {
+    const storage = makeStorage();
+    const agent = new AbortIgnoringMockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise, text: 'slow' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 20 },
+    });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+
+    const queued = s.queue({ content: 'slow' });
+    const queuedSecond = s.queue({ content: 'second' });
+    await new Promise(resolve => setImmediate(resolve));
+    const close = s.close();
+
+    await expect(queued).rejects.toBeInstanceOf(HarnessSessionClosingError);
+    await expect(queuedSecond).rejects.toBeInstanceOf(HarnessSessionClosingError);
+    await close;
+    hold.resolve();
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.pendingQueue).toEqual([]);
+    expect(stored?.closedAt).toBeDefined();
+    expect(stored?.queueAdmissionReceipts?.[Object.keys(stored.queueAdmissionReceipts)[0]!]!.status).toBe('failed');
+    expect(agent.streamCalls.map(call => extractSignalContents(call.messages))).toEqual(['slow']);
+  });
+
+  it('allows an admitted turn to park a question while close is draining', async () => {
+    const storage = makeStorage();
+    const agent = new MockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise, text: 'manual' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 20 },
+    });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+
+    const manual = s.message({ content: 'manual' });
+    await new Promise(resolve => setImmediate(resolve));
+    const close = s.close();
+    await waitFor(() => s.getRecord().closingAt !== undefined, 'session closing marker');
+
+    await expect(
+      (s as any)._registerQuestion({
+        questionId: 'q1',
+        question: 'continue?',
+        runId: 'run-1',
+        toolCallId: 'tool-1',
+      }),
+    ).resolves.toBeUndefined();
+    expect(s.getRecord().pendingResume).toMatchObject({ kind: 'question', itemId: 'q1' });
+
+    hold.resolve();
+    await Promise.all([manual, close]);
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeDefined();
   });
 
   it('serializes admitted writes before close and rejects late child creation', async () => {
@@ -633,6 +793,60 @@ describe('Harness v1 — lifecycle', () => {
     expect(stored?.closingAt).toBe(1234);
     expect(stored?.closeDeadlineAt).toBe(5678);
     expect(stored?.closedAt).toBeDefined();
+  });
+
+  it('drains a stored pending queue before closeSession terminalizes a non-live session', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage, closeTimeoutMs: 1000 } });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const record = s.getRecord();
+
+    await harness.shutdown();
+    const now = Date.now();
+    const queuedItemId = 'stored-close-queue';
+    await storage.saveSession(
+      {
+        ...record,
+        pendingQueue: [
+          {
+            id: queuedItemId,
+            admissionId: 'stored-close-admission',
+            admissionHash: 'stored-close-hash',
+            enqueuedAt: now,
+            content: 'stored queued',
+            attachments: [],
+          },
+        ],
+        queueAdmissionReceipts: {
+          [queuedItemId]: {
+            admissionId: 'stored-close-admission',
+            admissionHash: 'stored-close-hash',
+            queuedItemId,
+            status: 'queued',
+            attempts: 0,
+            enqueuedAt: now,
+            updatedAt: now,
+          },
+        },
+        lastActivityAt: now,
+      },
+      { harnessName: record.harnessName, ownerId: harness.ownerId, ifVersion: record.version },
+    );
+
+    const replayAgent = new MockAgent({ id: 'default' });
+    replayAgent.enqueueRun({ text: 'stored queued result' });
+    const harness2 = new Harness({
+      agents: { default: replayAgent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 1000 },
+    });
+    await harness2.closeSession({ sessionId: s.id });
+
+    const stored = await harness2.loadSession({ sessionId: s.id, includeClosed: true });
+    expect(stored?.pendingQueue).toEqual([]);
+    expect(stored?.closedAt).toBeDefined();
+    expect(replayAgent.streamCalls.map(call => extractSignalContents(call.messages))).toEqual(['stored queued']);
   });
 
   it('closeSession by id without holding a live instance still cascades', async () => {

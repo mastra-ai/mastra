@@ -57,6 +57,45 @@ describe('InMemoryHarness admission storage contract', () => {
     await expect(storage.loadSession({ sessionId: 'child' })).resolves.toBeNull();
   });
 
+  it('returns an existing active child session before re-validating a now-closing parent', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ id: 'parent' }), { ownerId: 'h-1', ifVersion: 0 });
+    await storage.saveSession(
+      sampleSession({
+        id: 'child',
+        threadId: 'thread-child',
+        parentSessionId: 'parent',
+      }),
+      { ownerId: 'h-2', ifVersion: 0 },
+    );
+    const parent = await storage.loadSession({ sessionId: 'parent' });
+    if (!parent) throw new Error('expected parent session');
+    await storage.saveSession(
+      {
+        ...parent,
+        closingAt: 1000,
+        closeDeadlineAt: 2000,
+      },
+      { ownerId: 'h-1', ifVersion: parent.version },
+    );
+
+    await expect(
+      storage.createOrLoadActiveSession(
+        sampleSession({
+          id: 'retry-child',
+          threadId: 'thread-child',
+          parentSessionId: 'parent',
+        }),
+        { initialLease: { ownerId: 'h-3', ttlMs: 30_000 } },
+      ),
+    ).resolves.toMatchObject({
+      created: false,
+      leaseAcquired: false,
+      record: expect.objectContaining({ id: 'child' }),
+    });
+    await expect(storage.loadSession({ sessionId: 'retry-child' })).resolves.toBeNull();
+  });
+
   it('isolates sessions by harness namespace', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
 

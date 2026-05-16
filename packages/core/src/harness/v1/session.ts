@@ -823,23 +823,30 @@ export class Session {
 
   /** @internal — close uses this after the durable closing marker commits. */
   _waitForCloseDrain(closeDeadlineAt: number): Promise<void> {
+    void this._maybeDrainQueue();
     if (!this.isBusy()) return Promise.resolve();
     const timeoutMs = Math.max(0, closeDeadlineAt - Date.now());
 
     return new Promise<void>(resolve => {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      const resolveAfter = (settle?: Promise<void>) => {
+        cleanup();
+        if (settle) {
+          void settle.finally(resolve);
+          return;
+        }
+        resolve();
+      };
       const waiter: IdleWaiter = {
         check: () => {
           if (!this.isBusy()) {
-            cleanup();
-            resolve();
+            resolveAfter();
             return true;
           }
           return false;
         },
         reject: () => {
-          cleanup();
-          resolve();
+          resolveAfter();
         },
         cleanup: () => {},
       };
@@ -851,14 +858,12 @@ export class Session {
       this._idleWaiters.add(waiter);
       if (timeoutMs === 0) {
         this.abort({ reason: 'session_close_timeout' });
-        cleanup();
-        resolve();
+        resolveAfter(this._failPendingQueueForClose(new HarnessSessionClosingError(this.id)));
       } else {
         timer = setTimeout(() => {
           timer = undefined;
           this.abort({ reason: 'session_close_timeout' });
-          cleanup();
-          resolve();
+          resolveAfter(this._failPendingQueueForClose(new HarnessSessionClosingError(this.id)));
         }, timeoutMs);
       }
     });
@@ -948,6 +953,10 @@ export class Session {
    */
   async getWorkspace(): Promise<Workspace | undefined> {
     this._assertLive('getWorkspace()');
+    return this._getWorkspaceUnchecked();
+  }
+
+  private async _getWorkspaceUnchecked(): Promise<Workspace | undefined> {
     if (this._workspace) return this._workspace;
     if (this._workspaceResolving) return this._workspaceResolving;
 
@@ -4699,6 +4708,9 @@ export class Session {
             admittedReceipt = existing;
             return prev;
           }
+          if (prev.closingAt !== undefined || this.isClosing) {
+            throw new HarnessSessionClosingError(this.id);
+          }
           if ((prev.pendingQueue?.length ?? 0) >= cap) {
             throw new HarnessQueueFullError(this.id, cap);
           }
@@ -5333,7 +5345,7 @@ export class Session {
   private async _registerQuestion(
     params: RegisterQuestionParams & { runId?: string; toolCallId?: string; modeId?: string },
   ): Promise<void> {
-    this._assertLive('ctx.registerQuestion');
+    this._assertOpenForTurn('ctx.registerQuestion');
     if (typeof params.questionId !== 'string' || params.questionId.length === 0) {
       throw new HarnessValidationError('ctx.registerQuestion.questionId', 'must be a non-empty string');
     }
@@ -5392,7 +5404,7 @@ export class Session {
   private async _registerPlanApproval(
     params: RegisterPlanApprovalParams & { runId?: string; toolCallId?: string; modeId?: string },
   ): Promise<void> {
-    this._assertLive('ctx.registerPlanApproval');
+    this._assertOpenForTurn('ctx.registerPlanApproval');
     if (typeof params.planId !== 'string' || params.planId.length === 0) {
       throw new HarnessValidationError('ctx.registerPlanApproval.planId', 'must be a non-empty string');
     }
@@ -5454,6 +5466,14 @@ export class Session {
    * whether to replay, await, or fail a previously admitted item.
    */
   private async _completeQueuedTurn(itemId: string, result: AgentResult): Promise<void> {
+    if (this._state === 'closed') {
+      const resolver = this._queueResolvers.get(itemId);
+      if (resolver) {
+        this._queueResolvers.delete(itemId);
+        resolver.resolve(result);
+      }
+      return;
+    }
     const now = Date.now();
     await this._flushUpdate(prev => {
       const receipt = prev.queueAdmissionReceipts?.[itemId];
@@ -5490,6 +5510,14 @@ export class Session {
 
   /** Same as `_completeQueuedTurn` but rejects the resolver with `err`. */
   private async _failQueuedTurn(itemId: string, err: unknown): Promise<void> {
+    if (this._state === 'closed') {
+      const resolver = this._queueResolvers.get(itemId);
+      if (resolver) {
+        this._queueResolvers.delete(itemId);
+        resolver.reject(err);
+      }
+      return;
+    }
     const now = Date.now();
     let completedResult: AgentResult | undefined;
     await this._flushUpdate(prev => {
@@ -5533,6 +5561,59 @@ export class Session {
     }
     this._notifyMaybeIdle();
     void this._maybeDrainQueue();
+  }
+
+  private async _failPendingQueueForClose(err: unknown): Promise<void> {
+    const queuedIds = (this._record.pendingQueue ?? []).map(item => item.id);
+    if (queuedIds.length === 0) return;
+
+    const completedResults = new Map<string, AgentResult>();
+    const failedIds = new Set<string>();
+    const now = Date.now();
+    await this._flushUpdate(prev => {
+      const next: SessionRecord = {
+        ...prev,
+        pendingQueue: [],
+      };
+      const receipts = prev.queueAdmissionReceipts ?? {};
+      const nextReceipts: Record<string, QueueAdmissionReceipt> = { ...receipts };
+      for (const item of prev.pendingQueue ?? []) {
+        const receipt = receipts[item.id];
+        if (!receipt) {
+          failedIds.add(item.id);
+          continue;
+        }
+        if (receipt.status === 'completed') {
+          completedResults.set(item.id, receipt.result as AgentResult);
+          continue;
+        }
+        failedIds.add(item.id);
+        nextReceipts[item.id] = {
+          ...receipt,
+          status: 'failed',
+          error: projectHarnessPublicError(err),
+          failedAt: receipt.failedAt ?? now,
+          updatedAt: now,
+        };
+      }
+      next.queueAdmissionReceipts = nextReceipts;
+      return next;
+    });
+
+    this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
+    for (const itemId of queuedIds) {
+      const resolver = this._queueResolvers.get(itemId);
+      if (!resolver) continue;
+      this._queueResolvers.delete(itemId);
+      const completed = completedResults.get(itemId);
+      if (completed !== undefined) {
+        resolver.resolve(completed);
+      } else if (failedIds.has(itemId)) {
+        resolver.reject(err);
+      }
+    }
+    this._notifyMaybeIdle();
   }
 
   private _parkQueuedTurn(itemId: string, err: unknown): void {
@@ -5592,8 +5673,16 @@ export class Session {
     }
   }
 
+  private _assertOpenForTurn(_method: string): void {
+    if (this._state === 'closed') {
+      throw new HarnessSessionClosedError(this.id);
+    }
+  }
+
   private _canDrainQueue(): boolean {
-    return this._state === 'live' || this.isClosing;
+    if (this._state === 'live') return true;
+    if (!this.isClosing) return false;
+    return this._record.closeDeadlineAt === undefined || Date.now() < this._record.closeDeadlineAt;
   }
 
   /**
@@ -5676,7 +5765,7 @@ export class Session {
     // failure; workspace_error is still emitted via the registry.
     let workspace: Workspace | undefined;
     try {
-      workspace = await this.getWorkspace();
+      workspace = await this._getWorkspaceUnchecked();
     } catch {
       // Leave undefined — tools that need a workspace will get a null slot.
       // The registry has already emitted workspace_error so subscribers know.
@@ -5690,12 +5779,10 @@ export class Session {
       modeId: turn.modeId,
       state: stateSnapshot,
       getState: () => (session._record.state ?? {}) as unknown,
-      setState: ((updatesOrUpdater: unknown) => {
-        if (typeof updatesOrUpdater === 'function') {
-          return session.setState(updatesOrUpdater as (prev: unknown) => unknown);
-        }
-        return session.setState(updatesOrUpdater as Partial<unknown>);
-      }) as HarnessRequestContext<unknown>['setState'],
+      setState: ((updatesOrUpdater: unknown) =>
+        session._setTurnState(
+          updatesOrUpdater as Partial<unknown> | ((prev: unknown) => unknown),
+        )) as HarnessRequestContext<unknown>['setState'],
       abortSignal: turn.abortSignal,
       registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId }),
       registerPlanApproval: params => session._registerPlanApproval({ ...params, modeId: turn.modeId }),
@@ -5716,6 +5803,22 @@ export class Session {
       ...(workspace ? { workspace } : {}),
     };
     return new RequestContext([['harness', harnessSlot]]);
+  }
+
+  private async _setTurnState<TState = unknown>(
+    updatesOrUpdater: Partial<TState> | ((prev: TState) => TState),
+  ): Promise<void> {
+    // Tool-facing state writes belong to an already-admitted turn, so they
+    // remain valid while close drains. `_flushUpdate` still rejects after the
+    // terminal closed marker lands.
+    await this._flushUpdate(prev => {
+      const current = (prev.state ?? {}) as TState;
+      const next =
+        typeof updatesOrUpdater === 'function'
+          ? (updatesOrUpdater as (prev: TState) => TState)(current)
+          : ({ ...(current as object), ...(updatesOrUpdater as object) } as TState);
+      return { ...prev, state: next };
+    });
   }
 
   /** @internal — used by the Harness as soon as close starts. */

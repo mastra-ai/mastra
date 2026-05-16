@@ -215,11 +215,11 @@ export abstract class HarnessStorage extends StorageDomain {
   ): Promise<SaveSessionResult>;
 
   /**
-   * Atomic active-session admission. Inserts `record` only when no active
-   * record exists for `(harnessName, resourceId, threadId)`; otherwise returns
-   * the existing active row without overwriting it. When `record.parentSessionId`
-   * is present, adapters must also verify the parent exists in the same
-   * harness/resource and is neither closing nor closed in the same atomic
+   * Atomic active-session admission. Returns the existing active row for
+   * `(harnessName, resourceId, threadId)` without overwriting it; otherwise
+   * inserts `record`. When `record.parentSessionId` is present and no active
+   * row already exists, adapters must also verify the parent exists in the
+   * same harness/resource and is neither closing nor closed in the same atomic
    * admission boundary. A created row also receives the caller's initial lease.
    *
    * Throws `HarnessStorageParentSessionUnavailableError` from
