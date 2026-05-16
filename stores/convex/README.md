@@ -2,7 +2,7 @@
 
 Convex adapters for Mastra:
 
-- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources).
+- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, schedules).
 - `ConvexVector` stores embeddings inside Convex and performs cosine similarity search.
 - `@mastra/convex/server` exposes the required Convex table definitions and storage mutation.
 
@@ -26,6 +26,8 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraSchedulesTable,
+  mastraScheduleTriggersTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
@@ -37,6 +39,8 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_schedules: mastraSchedulesTable,
+  mastra_schedule_triggers: mastraScheduleTriggersTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_documents: mastraDocumentsTable,
@@ -97,6 +101,8 @@ This adapter uses **typed Convex tables** for each Mastra domain:
 | Resources      | `mastra_resources`          | User working memory  |
 | Workflows      | `mastra_workflow_snapshots` | Workflow state       |
 | Scorers        | `mastra_scorers`            | Evaluation data      |
+| Schedules      | `mastra_schedules`          | Workflow schedules   |
+| Triggers       | `mastra_schedule_triggers`  | Schedule history     |
 | Vector Indexes | `mastra_vector_indexes`     | Index metadata       |
 | Vectors        | `mastra_vectors`            | Embeddings           |
 | Fallback       | `mastra_documents`          | Unknown tables       |

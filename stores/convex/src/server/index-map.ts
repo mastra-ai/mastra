@@ -40,6 +40,17 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_created', fields: ['createdAt'] },
     { name: 'by_record_id', fields: ['id'] },
   ],
+  mastra_schedules: [
+    { name: 'by_status_next_fire_at', fields: ['status', 'next_fire_at'] },
+    { name: 'by_owner', fields: ['owner_type', 'owner_id'] },
+    { name: 'by_created', fields: ['created_at'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
+  mastra_schedule_triggers: [
+    { name: 'by_schedule_actual', fields: ['schedule_id', 'actual_fire_at'] },
+    { name: 'by_parent_trigger', fields: ['parent_trigger_id'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
   mastra_vector_indexes: [
     { name: 'by_name', fields: ['indexName'] },
     { name: 'by_record_id', fields: ['id'] },

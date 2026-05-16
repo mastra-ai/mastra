@@ -9,6 +9,8 @@ export {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraSchedulesTable,
+  mastraScheduleTriggersTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
@@ -18,4 +20,6 @@ export {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
 } from '../schema';

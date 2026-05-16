@@ -4,6 +4,8 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
 } from '@mastra/core/storage/constants';
 import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
@@ -83,6 +85,10 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
       return { convexTable: CONVEX_TABLE_WORKFLOW_SNAPSHOTS, isTyped: true };
     case TABLE_SCORERS:
       return { convexTable: 'mastra_scorers', isTyped: true };
+    case TABLE_SCHEDULES:
+      return { convexTable: 'mastra_schedules', isTyped: true };
+    case TABLE_SCHEDULE_TRIGGERS:
+      return { convexTable: 'mastra_schedule_triggers', isTyped: true };
     case TABLE_VECTOR_INDEXES:
       return { convexTable: 'mastra_vector_indexes', isTyped: true };
     default:
@@ -135,6 +141,141 @@ export async function handleTypedOperation(
   request: StorageRequest,
 ): Promise<StorageResponse> {
   switch (request.op) {
+    case 'createSchedule': {
+      if (convexTable !== 'mastra_schedules') {
+        throw new Error(`createSchedule is only supported for mastra_schedules`);
+      }
+      const record = request.record;
+      const id = record.id;
+      if (!id) {
+        throw new Error(`Schedule is missing an id`);
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', id))
+        .unique();
+
+      if (existing) {
+        throw new Error(`Schedule with id "${id}" already exists`);
+      }
+
+      await ctx.db.insert(convexTable, record);
+      return { ok: true };
+    }
+
+    case 'recordScheduleTrigger': {
+      if (convexTable !== 'mastra_schedule_triggers') {
+        throw new Error(`recordScheduleTrigger is only supported for mastra_schedule_triggers`);
+      }
+      const record = request.record;
+      const id = record.id;
+      if (!id) {
+        throw new Error(`Schedule trigger is missing an id`);
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', id))
+        .unique();
+
+      if (existing) {
+        throw new Error(`Schedule trigger with id "${id}" already exists`);
+      }
+
+      await ctx.db.insert(convexTable, record);
+      return { ok: true };
+    }
+
+    case 'listDueSchedules': {
+      if (convexTable !== 'mastra_schedules') {
+        throw new Error(`listDueSchedules is only supported for mastra_schedules`);
+      }
+      const query = ctx.db
+        .query(convexTable)
+        .withIndex('by_status_next_fire_at', (q: any) => q.eq('status', 'active').lte('next_fire_at', request.now));
+      const docs = request.limit == null ? await query.collect() : await query.take(request.limit);
+      return { ok: true, result: docs };
+    }
+
+    case 'updateScheduleNextFire': {
+      if (convexTable !== 'mastra_schedules') {
+        throw new Error(`updateScheduleNextFire is only supported for mastra_schedules`);
+      }
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
+        .unique();
+
+      if (!existing || existing.status !== 'active' || existing.next_fire_at !== request.expectedNextFireAt) {
+        return { ok: true, result: false };
+      }
+
+      await ctx.db.patch(existing._id, {
+        next_fire_at: request.newNextFireAt,
+        last_fire_at: request.lastFireAt,
+        last_run_id: request.lastRunId,
+        updated_at: Date.now(),
+      });
+
+      return { ok: true, result: true };
+    }
+
+    case 'updateSchedule': {
+      if (convexTable !== 'mastra_schedules') {
+        throw new Error(`updateSchedule is only supported for mastra_schedules`);
+      }
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
+        .unique();
+
+      if (!existing) {
+        throw new Error(`Schedule ${request.id} not found`);
+      }
+
+      await ctx.db.patch(existing._id, request.patch);
+      return { ok: true, result: { ...existing, ...request.patch } };
+    }
+
+    case 'listScheduleTriggers': {
+      if (convexTable !== 'mastra_schedule_triggers') {
+        throw new Error(`listScheduleTriggers is only supported for mastra_schedule_triggers`);
+      }
+
+      const query = ctx.db
+        .query(convexTable)
+        .withIndex('by_schedule_actual', (q: any) => {
+          let builder = q.eq('schedule_id', request.scheduleId);
+          if (request.fromActualFireAt != null) {
+            builder = builder.gte('actual_fire_at', request.fromActualFireAt);
+          }
+          if (request.toActualFireAt != null) {
+            builder = builder.lt('actual_fire_at', request.toActualFireAt);
+          }
+          return builder;
+        })
+        .order('desc');
+      const docs = request.limit == null ? await query.collect() : await query.take(request.limit);
+      return { ok: true, result: docs };
+    }
+
+    case 'deleteScheduleTriggers': {
+      if (convexTable !== 'mastra_schedule_triggers') {
+        throw new Error(`deleteScheduleTriggers is only supported for mastra_schedule_triggers`);
+      }
+
+      const docs = await ctx.db
+        .query(convexTable)
+        .withIndex('by_schedule_actual', (q: any) => q.eq('schedule_id', request.scheduleId))
+        .take(STORAGE_MUTATION_BATCH_SIZE + 1);
+      const hasMore = docs.length > STORAGE_MUTATION_BATCH_SIZE;
+      const docsToDelete = hasMore ? docs.slice(0, STORAGE_MUTATION_BATCH_SIZE) : docs;
+
+      await deleteDocs(ctx, docsToDelete);
+      return { ok: true, hasMore };
+    }
+
     case 'insert': {
       const record = request.record;
       const id = record.id;

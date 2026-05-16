@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ConvexAdminClient } from './client';
 import { MemoryConvex } from './domains/memory';
+import { SchedulesConvex } from './domains/schedules';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
 import { ConvexStore } from './index';
@@ -166,6 +167,67 @@ describe('Convex Schema Sync', () => {
     const convexValidator = (mastraWorkflowSnapshotsTable as any).validator;
     const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
     expect(convexFields).toContain('id');
+  });
+
+  it('mastraSchedulesTable should include scheduler state fields', async () => {
+    const { mastraSchedulesTable } = await import('../schema');
+
+    const convexValidator = (mastraSchedulesTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'target',
+        'cron',
+        'status',
+        'next_fire_at',
+        'last_fire_at',
+        'last_run_id',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+  });
+
+  it('mastraScheduleTriggersTable should include trigger history fields', async () => {
+    const { mastraScheduleTriggersTable } = await import('../schema');
+
+    const convexValidator = (mastraScheduleTriggersTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'schedule_id',
+        'run_id',
+        'scheduled_fire_at',
+        'actual_fire_at',
+        'outcome',
+        'trigger_kind',
+      ]),
+    );
+  });
+
+  it('server entrypoint should re-export scheduler schema helpers', async () => {
+    const serverExports = await import('../server');
+
+    expect(serverExports.mastraSchedulesTable).toBeDefined();
+    expect(serverExports.mastraScheduleTriggersTable).toBeDefined();
+    expect(serverExports.TABLE_SCHEDULES).toBe('mastra_schedules');
+    expect(serverExports.TABLE_SCHEDULE_TRIGGERS).toBe('mastra_schedule_triggers');
+  });
+});
+
+describe('ConvexStore domains', () => {
+  it('exposes schedules storage for workflow scheduler support', async () => {
+    const store = new ConvexStore({
+      id: 'convex-domain-test',
+      deploymentUrl: 'https://test.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+
+    expect(store.stores.schedules).toBeInstanceOf(SchedulesConvex);
   });
 });
 
