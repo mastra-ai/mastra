@@ -53,6 +53,14 @@ export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 export type { VersionOverrides, VersionSelector } from '../mastra/types';
 export { mergeVersionOverrides } from '../mastra/types';
 
+class CyclicRequestContextToJSONError extends Error {
+  constructor(readonly context: RequestContext<any>) {
+    super('RequestContext.toJSON: detected cyclic re-entry');
+  }
+}
+
+const requestContextsBeingSerialized = new WeakSet<RequestContext<any>>();
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
@@ -166,13 +174,23 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * are skipped to prevent serialization errors when storing to database.
    */
   public toJSON(): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const [key, value] of this.registry.entries()) {
-      if (this.isSerializable(value)) {
-        result[key] = value;
-      }
+    if (requestContextsBeingSerialized.has(this)) {
+      throw new CyclicRequestContextToJSONError(this);
     }
-    return result;
+
+    requestContextsBeingSerialized.add(this);
+
+    try {
+      const result: Record<string, any> = {};
+      for (const [key, value] of this.registry.entries()) {
+        if (this.isSerializable(value)) {
+          result[key] = value;
+        }
+      }
+      return result;
+    } finally {
+      requestContextsBeingSerialized.delete(this);
+    }
   }
 
   /**
@@ -187,7 +205,11 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
     try {
       JSON.stringify(value);
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof CyclicRequestContextToJSONError && error.context !== this) {
+        throw error;
+      }
+
       return false;
     }
   }

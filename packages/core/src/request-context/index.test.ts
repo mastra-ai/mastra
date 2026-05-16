@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { RequestContext } from './index';
 
 describe('RequestContext', () => {
@@ -101,6 +101,63 @@ describe('RequestContext', () => {
         serializable: 'value',
       });
       expect(json).not.toHaveProperty('circular');
+    });
+
+    it('should skip RequestContext self references', () => {
+      const ctx = new RequestContext();
+      ctx.set('serializable', 'value');
+      ctx.set('self', { ctx });
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({
+        serializable: 'value',
+      });
+      expect(json).not.toHaveProperty('self');
+    });
+
+    it('should skip cross-context RequestContext cycles without repeated JSON serialization', () => {
+      const a = new RequestContext();
+      const b = new RequestContext();
+      a.set('serializable', 'value');
+      a.set('ref', { other: b });
+      b.set('ref', { other: a });
+
+      const originalStringify = JSON.stringify.bind(JSON);
+      let stringifyCalls = 0;
+      const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value: any, replacer?: any, space?: any) => {
+        stringifyCalls++;
+        if (stringifyCalls > 10) {
+          throw new Error('JSON.stringify recursion limit exceeded');
+        }
+
+        return originalStringify(value, replacer, space);
+      });
+
+      try {
+        const json = a.toJSON();
+
+        expect(json).toEqual({
+          serializable: 'value',
+        });
+        expect(json).not.toHaveProperty('ref');
+        expect(stringifyCalls).toBeLessThanOrEqual(2);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+    });
+
+    it('should keep nested RequestContext values with local self references', () => {
+      const outer = new RequestContext();
+      const inner = new RequestContext();
+      inner.set('ok', 1);
+      inner.set('self', { inner });
+      outer.set('inner', inner);
+
+      const json = outer.toJSON();
+
+      expect(json).toHaveProperty('inner', inner);
+      expect(JSON.stringify(json)).toEqual('{"inner":{"ok":1}}');
     });
 
     it('should skip objects without toJSON method (e.g., RPC proxies)', () => {
