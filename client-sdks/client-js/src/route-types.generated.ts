@@ -1612,7 +1612,7 @@ export type PostAgentsAgentIdClone_Response = {
                   kind: 'author' | 'invoker' | 'platform';
                   toolService: string;
                   connectionId: string;
-                  label: string;
+                  label?: string | undefined;
                 }[];
               };
             };
@@ -1631,7 +1631,7 @@ export type PostAgentsAgentIdClone_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -24010,7 +24010,7 @@ export type GetStoredAgents_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -24029,7 +24029,7 @@ export type GetStoredAgents_Response = {
                       kind: 'author' | 'invoker' | 'platform';
                       toolService: string;
                       connectionId: string;
-                      label: string;
+                      label?: string | undefined;
                     }[];
                   };
                 };
@@ -28499,7 +28499,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                   kind: 'author' | 'invoker' | 'platform';
                   toolService: string;
                   connectionId: string;
-                  label: string;
+                  label?: string | undefined;
                 }[];
               };
             };
@@ -28518,7 +28518,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -32858,7 +32858,7 @@ export type PostStoredAgents_Body = {
                   kind: 'author' | 'invoker' | 'platform';
                   toolService: string;
                   connectionId: string;
-                  label: string;
+                  label?: string | undefined;
                 }[];
               };
             };
@@ -32877,7 +32877,7 @@ export type PostStoredAgents_Body = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -37197,7 +37197,7 @@ export type PostStoredAgents_Response = {
                   kind: 'author' | 'invoker' | 'platform';
                   toolService: string;
                   connectionId: string;
-                  label: string;
+                  label?: string | undefined;
                 }[];
               };
             };
@@ -37216,7 +37216,7 @@ export type PostStoredAgents_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -41568,7 +41568,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                       kind: 'author' | 'invoker' | 'platform';
                       toolService: string;
                       connectionId: string;
-                      label: string;
+                      label?: string | undefined;
                     }[];
                   };
                 };
@@ -41587,7 +41587,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                         kind: 'author' | 'invoker' | 'platform';
                         toolService: string;
                         connectionId: string;
-                        label: string;
+                        label?: string | undefined;
                       }[];
                     };
                   };
@@ -45947,7 +45947,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                       kind: 'author' | 'invoker' | 'platform';
                       toolService: string;
                       connectionId: string;
-                      label: string;
+                      label?: string | undefined;
                     }[];
                   };
                 };
@@ -45966,7 +45966,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                         kind: 'author' | 'invoker' | 'platform';
                         toolService: string;
                         connectionId: string;
-                        label: string;
+                        label?: string | undefined;
                       }[];
                     };
                   };
@@ -50350,7 +50350,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -50369,7 +50369,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                       kind: 'author' | 'invoker' | 'platform';
                       toolService: string;
                       connectionId: string;
-                      label: string;
+                      label?: string | undefined;
                     }[];
                   };
                 };
@@ -54193,7 +54193,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                       kind: 'author' | 'invoker' | 'platform';
                       toolService: string;
                       connectionId: string;
-                      label: string;
+                      label?: string | undefined;
                     }[];
                   };
                 };
@@ -54212,7 +54212,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                         kind: 'author' | 'invoker' | 'platform';
                         toolService: string;
                         connectionId: string;
-                        label: string;
+                        label?: string | undefined;
                       }[];
                     };
                   };
@@ -58048,7 +58048,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -58067,7 +58067,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                       kind: 'author' | 'invoker' | 'platform';
                       toolService: string;
                       connectionId: string;
-                      label: string;
+                      label?: string | undefined;
                     }[];
                   };
                 };
@@ -61844,7 +61844,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -61863,7 +61863,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                       kind: 'author' | 'invoker' | 'platform';
                       toolService: string;
                       connectionId: string;
-                      label: string;
+                      label?: string | undefined;
                     }[];
                   };
                 };
@@ -65672,7 +65672,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                   kind: 'author' | 'invoker' | 'platform';
                   toolService: string;
                   connectionId: string;
-                  label: string;
+                  label?: string | undefined;
                 }[];
               };
             };
@@ -65691,7 +65691,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };
@@ -69528,7 +69528,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                   kind: 'author' | 'invoker' | 'platform';
                   toolService: string;
                   connectionId: string;
-                  label: string;
+                  label?: string | undefined;
                 }[];
               };
             };
@@ -69547,7 +69547,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                     kind: 'author' | 'invoker' | 'platform';
                     toolService: string;
                     connectionId: string;
-                    label: string;
+                    label?: string | undefined;
                   }[];
                 };
               };

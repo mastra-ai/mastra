@@ -252,7 +252,9 @@ export const ConnectionPicker = ({
         <div className="flex items-center gap-2">
           <Link2 className="size-3 text-icon-muted" />
           <Txt as="span" variant="ui-xs" className="text-text-muted">
-            Use an existing connection — give it a label for this agent.
+            {labelWouldBeRequired
+              ? 'Use an existing connection — give it a label for this agent.'
+              : 'Use an existing connection — optionally label it for this agent.'}
           </Txt>
         </div>
         {unpinnedExisting.map(item => {
@@ -287,7 +289,7 @@ export const ConnectionPicker = ({
                 size="sm"
                 variant="outline"
                 onClick={() => handlePinExisting(item.connectionId)}
-                disabled={disabled || inactive || draft.trim().length === 0 || Boolean(error)}
+                disabled={disabled || inactive || Boolean(error) || (labelWouldBeRequired && draft.trim().length === 0)}
                 data-testid={`connection-existing-pin-${toolService}-${item.connectionId}`}
               >
                 Pin

@@ -217,6 +217,32 @@ describe('ConnectionPicker', () => {
     });
   });
 
+  it('pins an existing connection with no label when none are pinned yet', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [{ connectionId: 'ca_existing_1', toolService: TOOL_SERVICE, status: 'active' }],
+        }),
+      ),
+    );
+
+    const onChange = vi.fn();
+    renderPicker({ initial: [], onChange });
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`connection-existing-${TOOL_SERVICE}-ca_existing_1`)).toBeTruthy();
+    });
+
+    const pinButton = screen.getByTestId(`connection-existing-pin-${TOOL_SERVICE}-ca_existing_1`) as HTMLButtonElement;
+    expect(pinButton.disabled).toBe(false);
+
+    fireEvent.click(pinButton);
+
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall).toHaveLength(1);
+    expect(lastCall[0]).toEqual({ connectionId: 'ca_existing_1', toolService: TOOL_SERVICE });
+  });
+
   it('collects provider-specific fields before initiating OAuth', async () => {
     server.use(
       http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connection-fields`, () =>
