@@ -96,6 +96,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
+    state.planStartedGoalId = undefined;
     await goalManager.saveToThread(state);
     ctx.showInfo('Goal cleared.');
     return;
@@ -307,6 +308,8 @@ async function startGoal(
 
   const shouldPersistToCreatedThread = !state.harness.getCurrentThreadId();
   const goal = goalManager.setGoal(objective, judgeModelId, maxTurns);
+
+  state.planStartedGoalId = undefined;
   if (shouldPersistToCreatedThread) {
     goalManager.persistOnNextThreadCreate();
   }

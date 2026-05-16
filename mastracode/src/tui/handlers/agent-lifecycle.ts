@@ -181,6 +181,15 @@ export function handleAgentError(ctx: EventHandlerContext): void {
  * whether the standing goal is satisfied. If not, send a continuation
  * prompt to keep the agent working.
  */
+function removeJudgeComponent(state: EventHandlerContext['state'], component: JudgeDisplayComponent): void {
+  const children = state.chatContainer.children;
+  const index = children.indexOf(component);
+  if (index >= 0) {
+    children.splice(index, 1);
+    state.chatContainer.invalidate?.();
+  }
+}
+
 function maybeGoalContinuation(ctx: EventHandlerContext): void {
   const { state } = ctx;
   if (!state.goalManager.isActive()) return;
@@ -218,9 +227,14 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
         return;
       }
 
+      const currentGoal = state.goalManager.getGoal();
+      if (!currentGoal || currentGoal.id !== evaluatedGoalId) {
+        removeJudgeComponent(state, judgeComponent);
+        return;
+      }
+
       if (judgeResult) {
-        const goal = state.goalManager.getGoal()!;
-        judgeComponent.setResult(judgeResult, goal.turnsUsed, goal.maxTurns);
+        judgeComponent.setResult(judgeResult, currentGoal.turnsUsed, currentGoal.maxTurns);
         state.ui.requestRender();
       }
 
@@ -230,8 +244,7 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
       }
 
       if (continuation) {
-        const currentGoal = state.goalManager.getGoal();
-        if (currentGoal?.id !== evaluatedGoalId || currentGoal.status !== 'active') {
+        if (currentGoal.status !== 'active') {
           return;
         }
         if (drainQueuedAction(ctx)) {
@@ -255,18 +268,31 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
       } else {
         // Goal is done, paused, or waiting at an explicit checkpoint. Persist the final
         // judge response so the conversation history survives reloads.
-        const goal = state.goalManager.getGoal();
-        if (goal && judgeResult) {
+        if (judgeResult) {
           const harness = state.harness as typeof state.harness & {
             saveSystemReminderMessage?: (args: { reminderType: string; message: string }) => Promise<unknown>;
           };
           await harness.saveSystemReminderMessage?.({
             reminderType: 'goal-judge',
-            message: `${judgeResult.decision} (${goal.turnsUsed}/${goal.maxTurns})\n${judgeResult.reason}`,
+            message: `${judgeResult.decision} (${currentGoal.turnsUsed}/${currentGoal.maxTurns})\n${judgeResult.reason}`,
           });
         }
-        if (goal?.status === 'paused') {
-          showInfo(state, `Goal paused (attempt ${goal.turnsUsed}/${goal.maxTurns}). Use /goal resume to continue.`);
+        if (currentGoal.status === 'paused') {
+          showInfo(
+            state,
+            `Goal paused (attempt ${currentGoal.turnsUsed}/${currentGoal.maxTurns}). Use /goal resume to continue.`,
+          );
+        }
+
+        if (judgeResult?.decision === 'done' && currentGoal.id === state.planStartedGoalId) {
+          const goalId = state.planStartedGoalId;
+          state.planStartedGoalId = undefined;
+          try {
+            await state.harness.switchMode({ modeId: 'plan' });
+          } catch (error) {
+            ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
+            state.planStartedGoalId = goalId;
+          }
         }
       }
     })
