@@ -1,3 +1,4 @@
+import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 export interface BrowserSessionProbe {
@@ -16,6 +17,15 @@ interface UseBrowserSessionProbeOptions {
   /** Poll interval in ms while the probe is active. Defaults to 5_000. */
   refetchInterval?: number;
 }
+
+const LEGACY_FALLBACK: BrowserSessionProbe = { hasSession: true, screencastAvailable: true };
+
+const isNotFoundError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  if ('status' in error && (error as { status: unknown }).status === 404) return true;
+  if ('statusCode' in error && (error as { statusCode: unknown }).statusCode === 404) return true;
+  return false;
+};
 
 /**
  * Query hook that probes the server for the agent's browser session state.
@@ -39,6 +49,8 @@ export function useBrowserSessionProbe({
   enabled = true,
   refetchInterval = 5_000,
 }: UseBrowserSessionProbeOptions) {
+  const client = useMastraClient();
+
   return useQuery<BrowserSessionProbe>({
     queryKey: ['browser-session-probe', agentId, threadId],
     queryFn: async () => {
@@ -46,19 +58,15 @@ export function useBrowserSessionProbe({
         return { hasSession: false, screencastAvailable: false };
       }
 
-      const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
-      const response = await fetch(`/api/agents/${agentId}/browser/session${query}`);
-
-      if (response.status === 404) {
-        // Older server without the probe endpoint - fall back to legacy behavior.
-        return { hasSession: true, screencastAvailable: true };
+      try {
+        return await client.getAgent(agentId).browserSession(threadId);
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          // Older server without the probe endpoint — fall back to legacy behavior.
+          return LEGACY_FALLBACK;
+        }
+        throw error;
       }
-
-      if (!response.ok) {
-        throw new Error(`Browser session probe failed: ${response.status}`);
-      }
-
-      return response.json();
     },
     enabled: enabled && Boolean(agentId),
     refetchInterval,
