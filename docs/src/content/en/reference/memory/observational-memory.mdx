@@ -135,6 +135,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: 'false',
           },
           {
+            name: 'observeAttachments',
+            type: 'boolean | string[]',
+            description:
+              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. `true` (default) forwards all attachments. `false` drops all attachments while keeping placeholders visible. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model.",
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
             name: 'messageTokens',
             type: 'number',
             description:

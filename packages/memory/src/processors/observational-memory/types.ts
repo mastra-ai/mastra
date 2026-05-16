@@ -191,6 +191,26 @@ export interface ObservationConfig {
    * @default false
    */
   threadTitle?: boolean;
+
+  /**
+   * Controls which attachment parts (image/file) are forwarded to the
+   * Observer model alongside their placeholder text lines. The placeholder
+   * line (e.g. `[Image #1: photo.png]`) is always emitted so the Observer
+   * still knows an attachment existed.
+   *
+   * - `true` (default): forward all attachments.
+   * - `false`: drop all attachments; placeholders remain visible.
+   * - `string[]`: allowlist of mimeType patterns. Each entry is matched
+   *   case-insensitively against the part's mimeType. Supports exact matches
+   *   (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'`
+   *   for everything. An empty array drops everything.
+   *
+   * Use this when the Observer model is text-only (e.g. some DeepSeek
+   * endpoints) while the main agent uses a multimodal model.
+   *
+   * @default true
+   */
+  observeAttachments?: boolean | string[];
 }
 
 /**
@@ -942,6 +962,8 @@ export interface ResolvedObservationConfig {
   instruction?: string;
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
+  /** Filter for attachment parts forwarded to the Observer model */
+  observeAttachments: boolean | string[];
 }
 
 export interface ResolvedReflectionConfig {

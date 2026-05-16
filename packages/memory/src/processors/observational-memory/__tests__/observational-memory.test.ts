@@ -2172,6 +2172,157 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).toContain('[truncated ~');
       expect(joinedText).not.toContain('y'.repeat(200));
     });
+
+    describe('attachmentFilter', () => {
+      const buildMessageWithAttachments = (): MastraDBMessage => {
+        const msg = createTestMessage('ignored', 'user');
+        msg.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Mixed attachments.' },
+            { type: 'image', image: 'https://example.com/diagram.png', mimeType: 'image/png' } as any,
+            {
+              type: 'file',
+              data: 'https://example.com/floorplan.pdf',
+              mimeType: 'application/pdf',
+              filename: 'floorplan.pdf',
+            } as any,
+          ],
+        };
+        return msg;
+      };
+
+      it('forwards all attachment parts when attachmentFilter is true', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: true,
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/diagram.png')).toBe(
+          true,
+        );
+        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
+          true,
+        );
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('drops every attachment part when attachmentFilter is false but keeps placeholders', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: false,
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image')).toBe(false);
+        expect(content.some(part => part.type === 'file')).toBe(false);
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('honors a mimeType allowlist with glob patterns', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: ['image/*'],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/diagram.png')).toBe(
+          true,
+        );
+        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
+          false,
+        );
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('treats an empty allowlist like attachmentFilter: false', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: [],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' || part.type === 'file')).toBe(false);
+      });
+
+      it('matches exact mimeTypes case-insensitively', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: ['APPLICATION/PDF'],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image')).toBe(false);
+        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
+          true,
+        );
+      });
+
+      it('also filters hoisted tool-result attachments', () => {
+        const base64 = 'B'.repeat(1500);
+        const msg = createTestMessage('ignored', 'assistant');
+        msg.content = {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'captureAssets',
+                args: {},
+                result: {},
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: {
+                    type: 'content',
+                    value: [
+                      { type: 'image-data', data: base64, mediaType: 'image/png' },
+                      {
+                        type: 'file-url',
+                        url: 'https://example.com/report.pdf',
+                        mediaType: 'application/pdf',
+                        filename: 'report.pdf',
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        } as any;
+
+        const historyMessage = buildObserverHistoryMessage([msg], {
+          attachmentFilter: ['image/*'],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image')).toBe(true);
+        expect(content.some(part => part.type === 'file')).toBe(false);
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: image/png]');
+        expect(joined).toContain('[File #1: report.pdf]');
+        expect(joined).not.toContain(base64);
+      });
+    });
   });
 
   describe('buildObserverPrompt', () => {
