@@ -131,6 +131,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           options: state.options,
           state: state.state,
           messageId: state.messageId,
+          stepIndex: state.iterationCount,
         };
       },
       { id: 'map-to-llm-input' },
