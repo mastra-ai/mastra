@@ -8,6 +8,23 @@ const POSTHOG_HOST = 'https://us.posthog.com';
 const MASTRA_SOURCE = 'mastracode';
 const TRUTHY_DISABLED_VALUES = new Set(['1', 'true', 'yes', 'on']);
 
+export function getMastraAnalyticsDistinctId(hostname = os.hostname()): string {
+  return `mastra-${hostname}`;
+}
+
+function isAnalyticsDebugEnabled(): boolean {
+  return TRUTHY_DISABLED_VALUES.has(process.env.MASTRACODE_ANALYTICS_DEBUG?.trim().toLowerCase() ?? '');
+}
+
+function debugAnalytics(message: string, properties?: Record<string, unknown>): void {
+  if (!isAnalyticsDebugEnabled()) {
+    return;
+  }
+
+  const suffix = properties ? ` ${JSON.stringify(properties)}` : '';
+  process.stderr.write(`[mastracode analytics] ${message}${suffix}\n`);
+}
+
 export type MastraCodeAnalyticsEvent =
   | 'mastracode_session_started'
   | 'mastracode_prompt_submitted'
@@ -31,10 +48,18 @@ interface MastraCodeAnalyticsOptions {
 }
 
 class NoopMastraCodeAnalytics implements MastraCodeAnalytics {
-  capture(): void {}
-  trackCommand(): void {}
-  trackInteractivePrompt(): void {}
-  async shutdown(): Promise<void> {}
+  capture(event: MastraCodeAnalyticsEvent): void {
+    debugAnalytics('capture skipped: telemetry disabled', { event });
+  }
+  trackCommand(command: string): void {
+    debugAnalytics('command skipped: telemetry disabled', { command });
+  }
+  trackInteractivePrompt(promptType: string): void {
+    debugAnalytics('interactive prompt skipped: telemetry disabled', { promptType });
+  }
+  async shutdown(): Promise<void> {
+    debugAnalytics('shutdown skipped: telemetry disabled');
+  }
   isEnabled(): boolean {
     return false;
   }
@@ -48,7 +73,7 @@ class PostHogMastraCodeAnalytics implements MastraCodeAnalytics {
 
   constructor({ version, apiKey = POSTHOG_API_KEY, host = POSTHOG_HOST }: MastraCodeAnalyticsOptions) {
     this.version = version;
-    this.distinctId = `mastracode-${os.hostname()}`;
+    this.distinctId = getMastraAnalyticsDistinctId();
     this.client = new PostHog(apiKey, {
       host,
       flushAt: 1,
@@ -56,19 +81,23 @@ class PostHogMastraCodeAnalytics implements MastraCodeAnalytics {
       disableGeoip: false,
     });
     this.client.register({ mastraSource: MASTRA_SOURCE });
+    debugAnalytics('enabled', { host, distinctId: this.distinctId, version });
   }
 
   capture(event: MastraCodeAnalyticsEvent, properties?: Record<string, unknown>): void {
     try {
+      const eventProperties = {
+        ...this.getBaseProperties(),
+        ...properties,
+      };
+      debugAnalytics('capture', { event, properties: eventProperties });
       this.client.capture({
         distinctId: this.distinctId,
         event,
-        properties: {
-          ...this.getBaseProperties(),
-          ...properties,
-        },
+        properties: eventProperties,
       });
-    } catch {
+    } catch (error) {
+      debugAnalytics('capture failed', { event, error: error instanceof Error ? error.message : String(error) });
       // swallow analytics errors
     }
   }
@@ -83,8 +112,11 @@ class PostHogMastraCodeAnalytics implements MastraCodeAnalytics {
 
   async shutdown(): Promise<void> {
     try {
+      debugAnalytics('shutdown start');
       await this.client.shutdown();
-    } catch {
+      debugAnalytics('shutdown complete');
+    } catch (error) {
+      debugAnalytics('shutdown failed', { error: error instanceof Error ? error.message : String(error) });
       // swallow analytics errors
     }
   }
@@ -118,6 +150,7 @@ export function isTelemetryDisabled(env: NodeJS.ProcessEnv = process.env): boole
 
 export function createMastraCodeAnalytics(options: MastraCodeAnalyticsOptions): MastraCodeAnalytics {
   if (isTelemetryDisabled()) {
+    debugAnalytics('disabled by MASTRA_TELEMETRY_DISABLED', { value: process.env.MASTRA_TELEMETRY_DISABLED });
     return new NoopMastraCodeAnalytics();
   }
 
