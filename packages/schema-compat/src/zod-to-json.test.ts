@@ -787,3 +787,141 @@ it('should handle optional fields inside array items (nested strict-mode)', () =
   expect(result.properties.list.items.required).toContain('omit');
   expect(result.properties.list.items.properties.omit.type).toEqual(['string', 'null']);
 });
+
+describe('strict-mode widening for anyOf, oneOf, enum, and const', () => {
+  // GAP #1: ensureAllPropertiesRequired widens only fields that have a `type` string/array.
+  // A pure anyOf schema (z.union) has no `type` field, so it gets added to `required` but
+  // is NOT widened with a `null` branch. OpenAI strict mode then sees a required field
+  // that cannot be null, even though the source was .optional().
+  it('GAP #1a: optional z.union field gets a null branch', () => {
+    const schema = z.object({
+      id: z.union([z.string(), z.number()]).optional(),
+    });
+
+    const result = zodToJsonSchema(schema) as any;
+
+    expect(result.required).toContain('id');
+
+    const idProp = result.properties.id;
+
+    if (idProp.anyOf) {
+      const hasNull = idProp.anyOf.some(
+        (v: any) => v && (v.type === 'null' || (Array.isArray(v.type) && v.type.includes('null'))),
+      );
+      expect(hasNull).toBe(true);
+    } else if (idProp.oneOf) {
+      const hasNull = idProp.oneOf.some(
+        (v: any) => v && (v.type === 'null' || (Array.isArray(v.type) && v.type.includes('null'))),
+      );
+      expect(hasNull).toBe(true);
+    } else if (Array.isArray(idProp.type)) {
+      expect(idProp.type).toContain('null');
+    } else {
+      // Field is required but has no way to express null — strict mode would reject.
+      throw new Error(`optional union field has no null branch. Got: ${JSON.stringify(idProp)}`);
+    }
+  });
+
+  it('GAP #1b: optional z.discriminatedUnion field gets a null branch', () => {
+    const schema = z.object({
+      event: z
+        .discriminatedUnion('kind', [
+          z.object({ kind: z.literal('a'), value: z.string() }),
+          z.object({ kind: z.literal('b'), count: z.number() }),
+        ])
+        .optional(),
+    });
+
+    const result = zodToJsonSchema(schema) as any;
+
+    expect(result.required).toContain('event');
+
+    const eventProp = result.properties.event;
+
+    if (eventProp.anyOf) {
+      const hasNull = eventProp.anyOf.some(
+        (v: any) => v && (v.type === 'null' || (Array.isArray(v.type) && v.type.includes('null'))),
+      );
+      expect(hasNull).toBe(true);
+    } else if (eventProp.oneOf) {
+      const hasNull = eventProp.oneOf.some(
+        (v: any) => v && (v.type === 'null' || (Array.isArray(v.type) && v.type.includes('null'))),
+      );
+      expect(hasNull).toBe(true);
+    } else if (Array.isArray(eventProp.type)) {
+      expect(eventProp.type).toContain('null');
+    } else {
+      throw new Error(`optional discriminated union has no null branch. Got: ${JSON.stringify(eventProp)}`);
+    }
+  });
+
+  // GAP #2: the v4 override's typeMap only handles string/number/boolean/integer.
+  // For things like z.enum() and z.literal(), the override bails and the schema
+  // ends up with type 'string' + an enum/const constraint that doesn't include null.
+  // After ensureAllPropertiesRequired widens type to ['string','null'], the enum
+  // constraint still lacks 'null', so a null value would fail the enum/const check.
+  it('GAP #2a: optional z.enum produces a schema where null satisfies the type but not the enum', () => {
+    const schema = z.object({
+      status: z.enum(['a', 'b']).optional(),
+    });
+
+    const result = zodToJsonSchema(schema) as any;
+
+    expect(result.required).toContain('status');
+
+    const statusProp = result.properties.status;
+
+    // If the field has an enum constraint, null must be a valid enum value for strict mode.
+    if (statusProp.enum) {
+      expect(statusProp.enum).toContain(null);
+    }
+  });
+
+  it('GAP #2b: optional z.literal produces a schema where null satisfies the type but not the const', () => {
+    const schema = z.object({
+      kind: z.literal('only').optional(),
+    });
+
+    const result = zodToJsonSchema(schema) as any;
+
+    expect(result.required).toContain('kind');
+
+    const kindProp = result.properties.kind;
+
+    // If the field has a const constraint, anyOf-with-null or const-allowing-null is required.
+    // A widened type alone is insufficient because the const still pins the value.
+    if ('const' in kindProp) {
+      // Either the const is gone (replaced with enum that includes null) or there's an anyOf
+      if (kindProp.anyOf) {
+        const hasNull = kindProp.anyOf.some((v: any) => v && v.type === 'null');
+        expect(hasNull).toBe(true);
+      } else {
+        throw new Error(`optional literal still has const without null escape. Got: ${JSON.stringify(kindProp)}`);
+      }
+    }
+  });
+
+  // GAP #3: zodToJsonSchema never calls ensureAdditionalPropertiesFalse / prepareJsonSchemaForOpenAIStrictMode.
+  // For v4 the override sets additionalProperties: false on ZodObject nodes, but not on
+  // ZodRecord. For v3 the library default does. But what about a JSON schema with a nested
+  // object inside additionalProperties that doesn't have additionalProperties: false set?
+  // The cleanest way to demonstrate: an inner object inside a record value should be strict.
+  it('GAP #3: object inside record additionalProperties has additionalProperties: false', () => {
+    const schema = z.object({
+      bag: createRecord(
+        z.object({
+          inner: z.string(),
+        }),
+      ),
+    });
+
+    const result = zodToJsonSchema(schema) as any;
+
+    const bagProp = result.properties.bag;
+    const innerObjectSchema = bagProp.additionalProperties;
+
+    expect(innerObjectSchema).toBeDefined();
+    expect(innerObjectSchema.type).toBe('object');
+    expect(innerObjectSchema.additionalProperties).toBe(false);
+  });
+});
