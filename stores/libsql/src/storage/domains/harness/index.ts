@@ -139,6 +139,7 @@ export class HarnessLibSQL extends HarnessStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#ensureMessageResultsTable();
+    await this.#ensureOperationTombstonesTable();
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}`);
@@ -1231,6 +1232,15 @@ export class HarnessLibSQL extends HarnessStorage {
       tableName: TABLE_HARNESS_MESSAGE_RESULTS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
       compositePrimaryKey: messageResultsConfig?.compositePrimaryKey,
+    });
+  }
+
+  async #ensureOperationTombstonesTable(): Promise<void> {
+    const tombstonesConfig = TABLE_CONFIGS[TABLE_HARNESS_OPERATION_TOMBSTONES];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_OPERATION_TOMBSTONES,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
+      compositePrimaryKey: tombstonesConfig?.compositePrimaryKey,
     });
   }
 

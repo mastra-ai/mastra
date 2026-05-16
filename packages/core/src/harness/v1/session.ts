@@ -1067,17 +1067,44 @@ export class Session {
    * result through `message()` as a single turn. Returns the underlying
    * `AgentResult`.
    *
-   * Reference resolution checks the static code registry first, then mirrors
-   * Flue's workspace `session.skill(ref, ...)` behavior — either the
-   * frontmatter `name` or a relative path under the workspace skill source
-   * resolves. `WorkspaceSkills.get(ref)` already supports both. A code skill
+   * Reference resolution mirrors Flue's workspace `session.skill(ref, ...)`
+   * behavior for explicit workspace paths, then checks the static code
+   * registry by name, then falls back to workspace skill names. A code skill
    * owns its name, but does not hide an otherwise shadowed workspace skill's
    * explicit path reference.
    */
+  private _isExplicitWorkspaceSkillRef(ref: string): boolean {
+    return (
+      ref.includes('/') ||
+      ref.startsWith('./') ||
+      ref.startsWith('../') ||
+      /\.(?:md|mdx|txt|yaml|yml)$/i.test(ref)
+    );
+  }
+
   private async _skillsUse(ref: string, opts?: UseSkillOptions): Promise<AgentResult> {
     this._assertLive('skills.use()');
     if (typeof ref !== 'string' || ref.length === 0) {
       throw new HarnessValidationError('skills.use()', 'ref must be a non-empty string');
+    }
+
+    const tryWorkspaceSkill = async () => {
+      const workspace = await this.getWorkspace();
+      const skills = workspace?.skills;
+      return skills ? skills.get(ref) : undefined;
+    };
+
+    if (this._isExplicitWorkspaceSkillRef(ref)) {
+      const skill = await tryWorkspaceSkill();
+      if (skill) {
+        const args = opts?.args;
+        this._validateSkillArgs(skill.name, skill.metadata, args);
+        const expandedContent = this._buildSkillPrompt(skill.instructions, args);
+        return this.message({
+          content: expandedContent,
+          ...(opts?.modelOverride ? { model: opts.modelOverride } : {}),
+        });
+      }
     }
 
     const codeSkill = this._harness._getCodeSkill(ref);
@@ -1094,14 +1121,14 @@ export class Session {
     // produce a definitive answer (start a turn or refuse with a typed
     // not-found error).
     const workspace = await this.getWorkspace();
-    const workspaceSkills = workspace?.skills;
-    if (!workspaceSkills) {
+    const skills = workspace?.skills;
+    if (!skills) {
       throw new HarnessSkillNotFoundError(ref, ['code-registered']);
     }
 
     // `WorkspaceSkills.get` accepts either the frontmatter `name` or a
     // relative path under the configured skill source.
-    const skill = await workspaceSkills.get(ref);
+    const skill = await skills.get(ref);
     if (!skill) {
       throw new HarnessSkillNotFoundError(ref, ['code-registered', 'workspace']);
     }
@@ -5454,16 +5481,17 @@ export class Session {
   private _parkQueuedTurn(itemId: string, err: unknown): void {
     this._currentQueuedItemId = undefined;
     this._currentQueuedItemSource = undefined;
-    const resolver = this._queueResolvers.get(itemId);
-    if (resolver) {
-      this._queueResolvers.delete(itemId);
-      resolver.reject(err);
-    }
     this._notifyMaybeIdle();
     if (err instanceof QueueRecoveryPendingError) {
       const delayMs = Math.max(0, err.retryAt - Date.now());
       const timer = setTimeout(() => void this._maybeDrainQueue(), delayMs);
       timer.unref?.();
+      return;
+    }
+    const resolver = this._queueResolvers.get(itemId);
+    if (resolver) {
+      this._queueResolvers.delete(itemId);
+      resolver.reject(err);
     }
   }
 

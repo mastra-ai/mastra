@@ -160,6 +160,25 @@ export class AgentThreadStreamRuntime {
     return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
   }
 
+  #threadIdFromKey(key: string): string {
+    return key.slice(key.indexOf(AGENT_THREAD_KEY_SEPARATOR) + AGENT_THREAD_KEY_SEPARATOR.length);
+  }
+
+  #findUniqueActiveThreadRunByThreadId(
+    state: AgentThreadRuntimeState,
+    threadId: string,
+  ): { key: string; runId: string } | undefined {
+    let match: { key: string; runId: string } | undefined;
+    for (const [candidateKey, candidateRunId] of state.activeThreadRunIds.entries()) {
+      if (this.#threadIdFromKey(candidateKey) !== threadId || state.abortedRunIds.has(candidateRunId)) continue;
+      if (match && match.runId !== candidateRunId) {
+        throw new Error('resourceId is required when multiple active agent runs match signal target');
+      }
+      match = { key: candidateKey, runId: candidateRunId };
+    }
+    return match;
+  }
+
   #threadTopic(key: string): string {
     return `${AGENT_THREAD_STREAM_TOPIC_PREFIX}.${encodeURIComponent(key)}`;
   }
@@ -1180,9 +1199,16 @@ export class AgentThreadStreamRuntime {
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
-    if (target.resourceId && target.threadId) {
+    if (target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
       let activeRunId = state.activeThreadRunIds.get(key);
+      if (!activeRunId && !target.resourceId) {
+        const activeThreadMatch = this.#findUniqueActiveThreadRunByThreadId(state, target.threadId);
+        if (activeThreadMatch) {
+          key = activeThreadMatch.key;
+          activeRunId = activeThreadMatch.runId;
+        }
+      }
       activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
       const activeRunAborted = activeRunId ? state.abortedRunIds.has(activeRunId) : false;
       const reservedAgentId = activeRunId ? state.reservedAgentIdsByRunId.get(activeRunId) : undefined;

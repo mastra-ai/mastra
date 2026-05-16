@@ -563,8 +563,8 @@ export class Agent<
     memory?: AgentExecutionOptionsBase<any>['memory'];
     requestContext?: RequestContext;
   }) {
-    const { threadId, resourceId } = this.#getThreadTarget(options);
-    return typeof threadId === 'string' && resourceId !== undefined;
+    const { threadId } = this.#getThreadTarget(options);
+    return typeof threadId === 'string';
   }
 
   #sameThreadTarget(
@@ -5477,22 +5477,46 @@ export class Agent<
     return existingSnapshot;
   }
 
+  #getAgenticLoopSnapshotMemoryInfo(existingSnapshot: any): { threadId?: string; resourceId?: string } | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        return step.suspendPayload?.__streamState?.messageList?.memoryInfo;
+      }
+    }
+    return undefined;
+  }
+
+  #withSnapshotThreadTarget<T extends { memory?: AgentExecutionOptionsBase<any>['memory'] }>(
+    options: T | undefined,
+    snapshotMemoryInfo: { threadId?: string; resourceId?: string } | undefined,
+  ): T | undefined {
+    if (!snapshotMemoryInfo?.threadId && !snapshotMemoryInfo?.resourceId) return options;
+
+    const memory = options?.memory as ({ resource?: string; thread?: unknown } & Record<string, unknown>) | undefined;
+    const memoryPatch: Record<string, unknown> = {};
+    if (!memory?.resource && snapshotMemoryInfo.resourceId) memoryPatch.resource = snapshotMemoryInfo.resourceId;
+    if (!memory?.thread && snapshotMemoryInfo.threadId) memoryPatch.thread = snapshotMemoryInfo.threadId;
+    if (Object.keys(memoryPatch).length === 0) return options;
+
+    return {
+      ...(options ?? ({} as T)),
+      memory: {
+        ...(memory && typeof memory === 'object' ? memory : {}),
+        ...memoryPatch,
+      },
+    } as T;
+  }
+
   /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
   async #execute<OUTPUT>({ methodType, resumeContext, _pubsub, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
-    let snapshotMemoryInfo;
-    if (existingSnapshot) {
-      for (const key in existingSnapshot?.context) {
-        const step = existingSnapshot?.context[key];
-        if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-          snapshotMemoryInfo = step.suspendPayload?.__streamState?.messageList?.memoryInfo;
-          break;
-        }
-      }
-    }
+    const snapshotMemoryInfo = existingSnapshot
+      ? this.#getAgenticLoopSnapshotMemoryInfo(existingSnapshot)
+      : undefined;
     const requestContext = options.requestContext || new RequestContext();
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
@@ -6395,7 +6419,9 @@ export class Agent<
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
-    const pubsub = this.#resolveThreadStreamPubSub(target) ?? this.getPubSub() ?? defaultAgentThreadPubSub;
+    const requestedIdlePubSub = (target.ifIdle?.streamOptions as { _pubsub?: PubSub } | undefined)?._pubsub;
+    const pubsub =
+      this.#resolveThreadStreamPubSub(target) ?? requestedIdlePubSub ?? this.getPubSub() ?? defaultAgentThreadPubSub;
     const idleStreamTarget = this.#getThreadTarget(target.ifIdle?.streamOptions);
     const idleResourceId = idleStreamTarget.resourceId ?? target.resourceId;
     const idleThreadId = idleStreamTarget.threadId ?? target.threadId;
@@ -6436,7 +6462,7 @@ export class Agent<
             _onThreadStreamRunRejected: forgetAcceptedIdleRunPubSub,
             streamOptions: {
               ...(target.ifIdle?.streamOptions ?? {}),
-              _pubsub: pubsub,
+              _pubsub: requestedIdlePubSub ?? pubsub,
             },
           },
         } as unknown as SendAgentSignalOptions<OUTPUT>)
@@ -6976,11 +7002,17 @@ export class Agent<
     const pubsub =
       ((streamOptions as any)?._pubsub as PubSub | undefined) ?? this.getPubSub() ?? defaultAgentThreadPubSub;
     const streamOptionsWithPubSub = streamOptions ? { ...streamOptions, _pubsub: pubsub } : undefined;
-    const initialThreadTarget = this.#getThreadTarget(streamOptionsWithPubSub);
-    const canReserveBeforeDefaults = this.#hasExplicitThreadMemory(streamOptionsWithPubSub);
+    const runId = streamOptionsWithPubSub?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const streamOptionsWithSnapshotTarget = this.#withSnapshotThreadTarget(
+      streamOptionsWithPubSub,
+      this.#getAgenticLoopSnapshotMemoryInfo(existingSnapshot),
+    );
+    const initialThreadTarget = this.#getThreadTarget(streamOptionsWithSnapshotTarget);
+    const canReserveBeforeDefaults = this.#hasExplicitThreadMemory(streamOptionsWithSnapshotTarget);
     let releaseReservedRun = streamOptionsWithPubSub && canReserveBeforeDefaults
       ? agentThreadStreamRuntime.reserveRun(
-          streamOptionsWithPubSub as unknown as AgentExecutionOptions<OUTPUT>,
+          streamOptionsWithSnapshotTarget as unknown as AgentExecutionOptions<OUTPUT>,
           pubsub,
           this.id,
         )
@@ -6989,10 +7021,10 @@ export class Agent<
     let ownsReservation =
       Boolean(releaseReservedRun) || Boolean((streamOptionsWithPubSub as any)?._threadRunReservationOwner);
     let trackedThreadStreamPubSubTarget: { runId?: string; resourceId?: string; threadId?: string } | undefined;
-    if (streamOptionsWithPubSub && ownsReservation) {
-      this.#rememberThreadStreamPubSub(streamOptionsWithPubSub, pubsub);
+    if (streamOptionsWithSnapshotTarget && ownsReservation) {
+      this.#rememberThreadStreamPubSub(streamOptionsWithSnapshotTarget, pubsub);
       trackedThreadStreamPubSubTarget = {
-        runId: streamOptionsWithPubSub.runId,
+        runId: streamOptionsWithSnapshotTarget.runId,
         resourceId: initialThreadTarget.resourceId,
         threadId: initialThreadTarget.threadId,
       };
@@ -7006,13 +7038,13 @@ export class Agent<
 
       let mergedStreamOptions = deepMerge(
         defaultOptions as Record<string, unknown>,
-        (streamOptionsWithPubSub ?? {}) as Record<string, unknown>,
+        (streamOptionsWithSnapshotTarget ?? {}) as Record<string, unknown>,
       ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
       if (ownsReservation && reservedThreadTarget) {
         const mergedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
         if (!this.#sameThreadTarget(reservedThreadTarget, mergedThreadTarget)) {
           const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
-            streamOptionsWithPubSub?.runId,
+            streamOptionsWithSnapshotTarget?.runId,
             reservedThreadTarget,
             mergedThreadTarget,
             pubsub,
@@ -7020,7 +7052,7 @@ export class Agent<
           );
           if (retargetedReservation) {
             this.#forgetThreadStreamPubSubForTarget({
-              runId: streamOptionsWithPubSub?.runId,
+              runId: streamOptionsWithSnapshotTarget?.runId,
               resourceId: reservedThreadTarget.resourceId,
               threadId: reservedThreadTarget.threadId,
             });
@@ -7089,8 +7121,6 @@ export class Agent<
         });
       }
 
-      const runId = streamOptionsWithPubSub?.runId ?? '';
-      const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
       await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
         this as Agent<any, any, any, any>,
         mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
@@ -7234,7 +7264,7 @@ export class Agent<
       } else if (trackedThreadStreamPubSubTarget) {
         this.#forgetThreadStreamPubSubForTarget(trackedThreadStreamPubSubTarget);
       } else {
-        this.#forgetThreadStreamPubSub(streamOptionsWithPubSub ?? {});
+        this.#forgetThreadStreamPubSub(streamOptionsWithSnapshotTarget ?? {});
       }
       releaseReservedRun?.();
       throw error;

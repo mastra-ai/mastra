@@ -1,4 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
@@ -16,8 +19,9 @@ let harnessDbCounter = 0;
 
 function createHarnessTestClient() {
   harnessDbCounter += 1;
+  const dbPath = join(tmpdir(), `mastra-harness-libsql-${process.pid}-${harnessDbCounter}-${randomUUID()}.db`);
   return createClient({
-    url: `file:/tmp/mastra-harness-libsql-${process.pid}-${harnessDbCounter}-${randomUUID()}.db`,
+    url: pathToFileURL(dbPath).href,
   });
 }
 

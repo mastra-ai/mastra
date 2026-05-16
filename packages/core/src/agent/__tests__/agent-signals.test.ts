@@ -1176,6 +1176,112 @@ describe('Agent signals', () => {
     expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
   });
 
+  it('reserves thread-only streams while default options are pending', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'thread-only-reserved-agent',
+      name: 'Thread Only Reserved Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('thread only reserved response'),
+    });
+
+    const streamPromise = runner.stream('Hello', { memory: { thread: 'thread-only-reserved-thread' } });
+    await defaultOptionsStarted;
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello while thread-only stream is starting' },
+      { threadId: 'thread-only-reserved-thread' },
+    );
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+  });
+
+  it('routes thread-only signals after default options add a resource target', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    let releaseStream!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const streamReleased = new Promise<void>(resolve => {
+      releaseStream = resolve;
+    });
+
+    const runner = new Agent({
+      id: 'thread-only-retargeted-agent',
+      name: 'Thread Only Retargeted Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { memory: { resource: 'thread-only-retargeted-user' } };
+      },
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'thread-only-retargeted-id',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'thread only retargeted response' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              await streamReleased;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        }),
+      }),
+    });
+
+    const streamPromise = runner.stream('Hello', { memory: { thread: 'thread-only-retargeted-thread' } });
+    await defaultOptionsStarted;
+    const earlySignal = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello before retarget' },
+      { threadId: 'thread-only-retargeted-thread' },
+    );
+    releaseDefaultOptions();
+
+    const stream = await streamPromise;
+    const lateSignal = runner.sendSignal(
+      { type: 'user-message', contents: 'Hello after retarget' },
+      { threadId: 'thread-only-retargeted-thread' },
+    );
+
+    expect(earlySignal).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    expect(lateSignal).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    releaseStream();
+    await expect(stream.text).resolves.toBe('thread only retargeted response');
+  });
+
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
     const pubsub = new EventEmitterPubSub();
     const runner = new Agent({

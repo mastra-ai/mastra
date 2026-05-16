@@ -109,6 +109,13 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       ifIdle?: never;
     }
   | {
+      runId?: never;
+      resourceId?: undefined;
+      threadId: string;
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifIdle?: never;
+    }
+  | {
       runId?: string;
       resourceId: string;
       threadId: string;
