@@ -55,13 +55,12 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   const registry = new ViewerRegistry();
 
   // Normalize the API prefix so we can build paths like `${apiPrefix}/agents/...`
-  // without producing `//agents/...` when the prefix is missing or already has
-  // trailing slashes. Uses a linear-time loop instead of a regex to avoid any
-  // ReDoS concern with adversarial input.
-  let apiPrefix = config.apiPrefix ?? '/api';
-  let end = apiPrefix.length;
-  while (end > 0 && apiPrefix.charCodeAt(end - 1) === 47 /* '/' */) end--;
-  apiPrefix = end === 0 ? '/api' : apiPrefix.slice(0, end);
+  // without producing `//agents/...` when the prefix is missing or has a single
+  // trailing slash. Anything weirder than that (e.g. `'/api//'`) is a config
+  // bug we don't try to silently fix.
+  const rawPrefix = config.apiPrefix ?? '/api';
+  const trimmed = rawPrefix.endsWith('/') ? rawPrefix.slice(0, -1) : rawPrefix;
+  const apiPrefix = trimmed || '/api';
 
   app.get(
     '/browser/:agentId/stream',
