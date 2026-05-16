@@ -10,6 +10,8 @@ export type {
   A2AAgentCardSigningConfig,
   A2AConfig,
   ContextWithMastra,
+  CorsOptions,
+  CorsPathMap,
   ApiRoute,
   HttpLoggingConfig,
   ValidationErrorContext,

@@ -41,6 +41,9 @@ export type ApiRoute =
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 
+export type CorsOptions = Parameters<typeof cors>[0];
+export type CorsPathMap = Record<string, CorsOptions>;
+
 export type ContextWithMastra = Context<{
   Variables: {
     mastra: Mastra;
@@ -227,10 +230,11 @@ export type ServerConfig = {
    */
   middleware?: Middleware | Middleware[];
   /**
-   * CORS configuration for the server
+   * CORS configuration for the server. Provide a single config for every route,
+   * or a path map with `*` as the fallback config.
    * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
-  cors?: Parameters<typeof cors>[0] | false;
+  cors?: CorsOptions | CorsPathMap | false;
   /**
    * Build configuration for the server
    */

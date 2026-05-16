@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
+import { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
@@ -83,5 +84,21 @@ describe('CompositeAuth TUser variance', () => {
 
     const _assignable: MastraAuthProvider<unknown> = typed;
     new CompositeAuth([typed]);
+  });
+});
+
+describe('Server CORS type tests', () => {
+  it('accepts path-specific CORS config', () => {
+    new Mastra({
+      server: {
+        cors: {
+          '*': { origin: '*' },
+          '/api/agents/support-agent/channels/web/*': {
+            origin: ['https://customer-saas.example'],
+            credentials: true,
+          },
+        },
+      },
+    });
   });
 });
