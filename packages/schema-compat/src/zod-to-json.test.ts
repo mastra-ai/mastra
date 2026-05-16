@@ -765,3 +765,48 @@ it('reproduce issue #16383 - optional fields must appear in required for OpenAI 
 
   expect(nicknameProp.description).toBe('The nickname');
 });
+
+it('should handle optional fields inside array items (nested strict-mode)', () => {
+  const schema = z.object({
+    list: z
+      .array(
+        z.object({
+          keep: z.string(),
+          omit: z.string().optional(),
+        }),
+      )
+      .optional(),
+  });
+
+  const result = zodToJsonSchema(schema) as any;
+
+  expect(result.required).toContain('list');
+
+  expect(result.properties.list.items.required).toContain('keep');
+  expect(result.properties.list.items.required).toContain('omit');
+
+  expect(result.properties.list.items.properties.omit.type).toEqual(['string', 'null']);
+});
+
+it('should handle optional fields inside array items (nested strict-mode)', () => {
+  const schema = z.object({
+    list: z
+      .array(
+        z.object({
+          keep: z.string(),
+          omit: z.string().optional(),
+        }),
+      )
+      .optional(),
+  });
+
+  const result = zodToJsonSchema(schema) as any;
+  expect(result.properties.list.items.type).toBe('object');
+  expect(result.required).toContain('list');
+  expect(result.properties.list.type).toEqual(['array', 'null']);
+
+  expect(result.properties.list.items.required).toContain('keep');
+  expect(result.properties.list.items.required).toContain('omit');
+
+  expect(result.properties.list.items.properties.omit.type).toEqual(['string', 'null']);
+});
