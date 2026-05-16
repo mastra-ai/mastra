@@ -173,13 +173,16 @@ export async function createHonoServer(
       const agent = mastra.getAgentById(agentId);
       return agent?.browser;
     },
+    apiPrefix,
   });
 
   // Fallback session probe when browser streaming isn't available
   // (ws / @hono/node-ws not installed, or serverless environment).
   // Lets the client decide not to open a WS instead of failing the upgrade.
   if (!browserStreamSetup) {
-    app.get('/api/agents/:agentId/browser/session', c => c.json({ hasSession: false, screencastAvailable: false }));
+    app.get(`${apiPrefix}/agents/:agentId/browser/session`, c =>
+      c.json({ hasSession: false, screencastAvailable: false }),
+    );
   }
 
   //Global cors config

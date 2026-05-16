@@ -97,6 +97,9 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
       wsRef.current.close();
       wsRef.current = null;
     }
+    // Reset retry budget so the next connection (new thread, reopened panel, etc.)
+    // doesn't inherit an exhausted counter from a previous failed session.
+    reconnectAttemptRef.current = 0;
     // Clear all state to prevent stale data from showing on next thread
     setHasSession(false);
     setStatusState('idle');
@@ -223,17 +226,29 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
 
         wsRef.current = null;
 
-        // Don't reconnect if intentionally closed or max attempts reached
-        if (!intentionalCloseRef.current && !event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
+        // Intentional closes (component unmount, thread change) are already handled
+        // by `disconnect()` resetting state; nothing to do here.
+        if (intentionalCloseRef.current) return;
+
+        // Reflect the lost socket in UI state regardless of how it closed. Without
+        // this, a clean remote close (server-initiated shutdown) would leave
+        // `status` / `hasSession` stuck on their last values.
+        setHasSession(false);
+
+        if (!event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
+          // Unclean close with retries left — schedule a reconnect.
           reconnectAttemptRef.current += 1;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 10000);
-
           setStatusState('disconnected');
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, delay);
         } else if (reconnectAttemptRef.current >= maxReconnectAttempts) {
+          // Exhausted retries — surface as an error.
           setStatusState('error');
+        } else {
+          // Clean remote close — no retry, just mark disconnected.
+          setStatusState('disconnected');
         }
       };
     } catch {

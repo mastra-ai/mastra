@@ -71,22 +71,29 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       timestamp: Date.now(),
     });
 
-    // Seeing any browser tool call means the server has an active session,
-    // so the probe can flip to `hasSession: true` immediately without
-    // polling or a network round trip. `setQueriesData` always notifies
+    // Seeing any browser tool call means the server has an active session for
+    // this thread, so the probe can flip to `hasSession: true` immediately
+    // without polling or a network round trip. `setQueriesData` always notifies
     // observers (even on reference-equal updates), so calling it on every
-    // render would feed back into the provider → consumer re-render loop.
-    // Read the cache synchronously first via `getQueriesData` (no notify)
-    // and only write when the cached probe is still false.
+    // render would feed back into the provider → consumer re-render loop. Read
+    // the cache synchronously first via `getQueriesData` (no notify) and only
+    // write entries that actually need to change.
+    //
+    // Important: preserve each probe's existing `screencastAvailable`. The
+    // deployer fallback returns `screencastAvailable: false` when ws packages
+    // aren't installed; clobbering that to `true` would make the client try to
+    // open a WebSocket the server can't accept.
     const cachedProbes = queryClient.getQueriesData<BrowserSessionProbe>({
       queryKey: ['browser-session-probe'],
     });
-    const needsUpdate = cachedProbes.some(([, data]) => !data || !data.hasSession || !data.screencastAvailable);
+    const needsUpdate = cachedProbes.some(([, data]) => data?.screencastAvailable && !data.hasSession);
     if (needsUpdate) {
-      queryClient.setQueriesData<BrowserSessionProbe>({ queryKey: ['browser-session-probe'] }, () => ({
-        hasSession: true,
-        screencastAvailable: true,
-      }));
+      queryClient.setQueriesData<BrowserSessionProbe>({ queryKey: ['browser-session-probe'] }, prev => {
+        if (!prev) return prev;
+        if (!prev.screencastAvailable) return prev;
+        if (prev.hasSession) return prev;
+        return { ...prev, hasSession: true };
+      });
     }
   }, [isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
 

@@ -57,4 +57,36 @@ describe('deployer browser session probe', () => {
     // Comes from the mocked setupBrowserStream, proving the fallback didn't overwrite it.
     await expect(response.json()).resolves.toEqual({ hasSession: false, screencastAvailable: true });
   });
+
+  it('mounts the fallback under a custom apiPrefix and forwards it to setupBrowserStream', async () => {
+    const setupBrowserStreamMock = vi.fn().mockResolvedValue(null);
+    vi.doMock('@mastra/hono', async () => {
+      const actual = await vi.importActual<typeof MastraHono>('@mastra/hono');
+      return {
+        ...actual,
+        setupBrowserStream: setupBrowserStreamMock,
+      };
+    });
+
+    const { createHonoServer } = await import('../index');
+    const mastra = new Mastra({ logger: false, server: { apiPrefix: '/custom/v1' } });
+    const app = await createHonoServer(mastra, { tools: {} });
+
+    // setupBrowserStream is called with the same apiPrefix
+    expect(setupBrowserStreamMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ apiPrefix: '/custom/v1' }),
+    );
+
+    const response = await app.request('http://localhost/custom/v1/agents/some-agent/browser/session');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ hasSession: false, screencastAvailable: false });
+
+    // Default-prefix probe path should NOT be served by the fallback when a custom prefix is configured.
+    // Other unrelated handlers may respond with non-JSON or different status; we only assert that the
+    // fallback shape is not returned at the default prefix.
+    const defaultResponse = await app.request('http://localhost/api/agents/some-agent/browser/session');
+    const defaultBody = defaultResponse.status === 200 ? await defaultResponse.json().catch(() => null) : null;
+    expect(defaultBody).not.toEqual({ hasSession: false, screencastAvailable: false });
+  });
 });

@@ -54,6 +54,11 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
   const registry = new ViewerRegistry();
 
+  // Normalize the API prefix so we can build paths like `${apiPrefix}/agents/...`
+  // without producing `//agents/...` when the prefix is missing or already has
+  // a trailing slash.
+  const apiPrefix = (config.apiPrefix ?? '/api').replace(/\/+$/, '') || '/api';
+
   app.get(
     '/browser/:agentId/stream',
     upgradeWebSocket(c => {
@@ -99,7 +104,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   // Returns:
   //   - screencastAvailable: true (this route only exists if setupBrowserStream succeeded)
   //   - hasSession: whether the agent has an active browser session for the given thread
-  app.get('/api/agents/:agentId/browser/session', c => {
+  app.get(`${apiPrefix}/agents/:agentId/browser/session`, c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);
@@ -117,7 +122,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   });
 
   // Close browser session endpoint
-  app.post('/api/agents/:agentId/browser/close', async c => {
+  app.post(`${apiPrefix}/agents/:agentId/browser/close`, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);

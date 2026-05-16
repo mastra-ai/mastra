@@ -178,4 +178,44 @@ describe('hono browser-stream routes', () => {
       consoleErrorSpy.mockRestore();
     });
   });
+
+  describe('custom apiPrefix', () => {
+    it('mounts the probe and close routes under a custom apiPrefix', async () => {
+      const customApp = new Hono();
+      const customToolsets = new Map<string, MockMastraBrowser>();
+      const customGetToolset = ((agentId: string) => customToolsets.get(agentId)) as (
+        agentId: string,
+      ) => MastraBrowser | undefined;
+
+      await setupBrowserStream(customApp, { getToolset: customGetToolset, apiPrefix: '/custom/v1' });
+
+      const toolset = createMockToolset({ hasThreadSession: vi.fn().mockReturnValue(true) });
+      customToolsets.set('agent-1', toolset);
+
+      const probe = await customApp.request(
+        'http://localhost/custom/v1/agents/agent-1/browser/session?threadId=thread-1',
+      );
+      expect(probe.status).toBe(200);
+      await expect(probe.json()).resolves.toEqual({ hasSession: true, screencastAvailable: true });
+
+      // Default prefix should NOT respond when a custom prefix is set.
+      const defaultProbe = await customApp.request('http://localhost/api/agents/agent-1/browser/session');
+      expect(defaultProbe.status).toBe(404);
+
+      const close = await customApp.request('http://localhost/custom/v1/agents/agent-1/browser/close', {
+        method: 'POST',
+      });
+      expect(close.status).toBe(200);
+    });
+
+    it('normalizes a trailing slash on apiPrefix', async () => {
+      const customApp = new Hono();
+      const customGetToolset = (() => undefined) as (agentId: string) => MastraBrowser | undefined;
+
+      await setupBrowserStream(customApp, { getToolset: customGetToolset, apiPrefix: '/api/' });
+
+      const probe = await customApp.request('http://localhost/api/agents/agent-1/browser/session');
+      expect(probe.status).toBe(200);
+    });
+  });
 });
