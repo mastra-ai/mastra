@@ -17,7 +17,7 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
 
-import { MockAgent } from './__test-utils__';
+import { extractSignalContents, MockAgent } from './__test-utils__';
 import {
   HarnessConfigError,
   HarnessSessionClosedError,
@@ -499,6 +499,41 @@ describe('Harness v1 — lifecycle', () => {
 
     const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
     expect(stored?.closedAt).toBeDefined();
+  });
+
+  it('drains queued work admitted before close starts', async () => {
+    const storage = makeStorage();
+    const agent = new MockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise, text: 'manual' });
+    agent.enqueueRun({ text: 'queued-1' });
+    agent.enqueueRun({ text: 'queued-2' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 1000 },
+    });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+
+    const manual = s.message({ content: 'manual' });
+    await new Promise(resolve => setImmediate(resolve));
+    const q1 = s.queue({ content: 'q1' });
+    const q2 = s.queue({ content: 'q2' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(s.getQueueDepth()).toBe(2);
+
+    const close = s.close();
+    await new Promise(resolve => setImmediate(resolve));
+    await expect(s.queue({ content: 'late' })).rejects.toBeInstanceOf(HarnessSessionClosingError);
+
+    hold.resolve();
+    await Promise.all([manual, q1, q2, close]);
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.pendingQueue).toEqual([]);
+    expect(stored?.closedAt).toBeDefined();
+    expect(agent.streamCalls.map(call => extractSignalContents(call.messages))).toEqual(['manual', 'q1', 'q2']);
   });
 
   it('serializes admitted writes before close and rejects late child creation', async () => {

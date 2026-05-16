@@ -4928,7 +4928,7 @@ export class Session {
    */
   private async _maybeDrainQueue(): Promise<void> {
     if (this._draining) return;
-    if (this._state !== 'live') return;
+    if (!this._canDrainQueue()) return;
     // A live suspension means a previous queued turn is awaiting a
     // `respondTo*` call — drain stays parked until that resolves.
     if (this._record.pendingResume !== undefined) {
@@ -4942,7 +4942,7 @@ export class Session {
 
     this._draining = true;
     try {
-      while (this._state === 'live' && (this._record.pendingQueue?.length ?? 0) > 0) {
+      while (this._canDrainQueue() && (this._record.pendingQueue?.length ?? 0) > 0) {
         // Bail if a previous iteration left the session suspended.
         if (this._record.pendingResume !== undefined) return;
 
@@ -5592,6 +5592,10 @@ export class Session {
     }
   }
 
+  private _canDrainQueue(): boolean {
+    return this._state === 'live' || this.isClosing;
+  }
+
   /**
    * Apply an update to the in-memory record, CAS-write to storage, and
    * adopt the returned version. Single point of truth so every setter
@@ -5601,10 +5605,7 @@ export class Session {
     update: (prev: SessionRecord) => SessionRecord,
     opts?: { attachmentReferences?: SaveAttachmentReferenceInput[] },
   ): Promise<void> {
-    if (this.isClosing) {
-      return Promise.reject(new HarnessSessionClosingError(this.id));
-    }
-    if (this._state !== 'live') {
+    if (this._state === 'closed') {
       return Promise.reject(new HarnessSessionClosedError(this.id));
     }
     const run = async (): Promise<void> => {

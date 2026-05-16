@@ -1099,13 +1099,16 @@ export class Harness {
     if (existing) return existing;
 
     const closeIds = new Set<string>([rootRecord.id]);
+    const persistedCloseIds = new Set<string>();
     this._liveSessions.get(rootRecord.id)?._beginClosing();
     let closePromise!: Promise<void>;
     closePromise = Promise.resolve()
-      .then(() => this._closeSessionRecordOnce(storage, rootRecord, closeIds, closePromise))
+      .then(() => this._closeSessionRecordOnce(storage, rootRecord, closeIds, persistedCloseIds, closePromise))
       .catch(err => {
         for (const id of closeIds) {
-          this._liveSessions.get(id)?._restoreLiveAfterFailedClose();
+          if (!persistedCloseIds.has(id)) {
+            this._liveSessions.get(id)?._restoreLiveAfterFailedClose();
+          }
         }
         throw err;
       })
@@ -1124,13 +1127,14 @@ export class Harness {
     storage: HarnessStorage,
     rootRecord: SessionRecord,
     closeIds: Set<string>,
+    persistedCloseIds: Set<string>,
     closePromise: Promise<void>,
   ): Promise<void> {
     const tree: CloseTreeNode[] = [];
     try {
       const root = await this._prepareCloseNode(storage, rootRecord, 0);
       tree.push(root);
-      tree[0] = await this._markCloseNodeClosing(storage, root);
+      tree[0] = await this._markCloseNodeClosing(storage, root, persistedCloseIds);
 
       for (let index = 0; index < tree.length; index++) {
         const node = tree[index]!;
@@ -1151,8 +1155,9 @@ export class Harness {
           closeIds.add(stored.id);
           this._closePromises.set(stored.id, closePromise);
           const childNode = await this._prepareCloseNode(storage, stored, node.depth + 1);
+          childNode.live?._beginClosing();
           tree.push(childNode);
-          tree[tree.length - 1] = await this._markCloseNodeClosing(storage, childNode);
+          tree[tree.length - 1] = await this._markCloseNodeClosing(storage, childNode, persistedCloseIds);
         }
       }
 
@@ -1188,7 +1193,11 @@ export class Harness {
     };
   }
 
-  private async _markCloseNodeClosing(storage: HarnessStorage, node: CloseTreeNode): Promise<CloseTreeNode> {
+  private async _markCloseNodeClosing(
+    storage: HarnessStorage,
+    node: CloseTreeNode,
+    persistedCloseIds: Set<string>,
+  ): Promise<CloseTreeNode> {
     const closingAt = node.record.closingAt ?? Date.now();
     const closeDeadlineAt = node.record.closeDeadlineAt ?? closingAt + this._closeTimeoutMs;
     if (node.live) {
@@ -1198,6 +1207,7 @@ export class Harness {
       } catch (err) {
         throw new HarnessStorageError(node.record.id, 'flush', err);
       }
+      persistedCloseIds.add(record.id);
       this._emitSessionClosing(node.live, record);
       return { ...node, record };
     }
@@ -1219,6 +1229,7 @@ export class Harness {
       throw new HarnessStorageError(next.id, 'flush', err);
     }
 
+    persistedCloseIds.add(next.id);
     this._emitSessionClosing(undefined, next);
     return { ...node, record: next };
   }
