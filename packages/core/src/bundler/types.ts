@@ -31,5 +31,32 @@ export type BundlerConfig = {
    */
   dynamicPackages?: string[];
 
+  /**
+   * Packages to force-exclude from the generated `package.json` even if
+   * dependency analysis flagged them as in use.
+   *
+   * Useful when conditional dynamic imports (e.g. a dev-only
+   * `await import('@mastra/libsql')` gated by `process.env.NODE_ENV`) get
+   * picked up by static analysis but are tree-shaken out of the production
+   * bundle, polluting the output with packages your runtime never actually
+   * needs.
+   *
+   * Entries are matched by package name only — `'@mastra/libsql'` drops the
+   * package even when it was imported via a subpath, but `'@mastra/libsql/vector'`
+   * matches nothing and is silently ignored.
+   *
+   * This affects the generated `package.json` only; the package stays external
+   * to the bundle. Excluding something the runtime does reach therefore surfaces
+   * as a `MODULE_NOT_FOUND` at run time, not as a build error.
+   *
+   * @example
+   * ```typescript
+   * bundler: {
+   *   excludePackages: ['@mastra/libsql']
+   * }
+   * ```
+   */
+  excludePackages?: string[];
+
   [key: symbol]: boolean | undefined;
 };

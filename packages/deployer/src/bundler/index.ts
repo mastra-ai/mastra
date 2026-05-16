@@ -350,6 +350,7 @@ export abstract class Bundler extends MastraBundler {
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
+      excludePackages: bundlerOptions.excludePackages,
     };
 
     let analyzedBundleInfo;
@@ -384,12 +385,12 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
+    const excludedPackages = new Set(internalBundlerOptions.excludePackages ?? []);
     const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
       if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
-
       dependenciesToInstall.set(dep, depInfo);
     }
 
@@ -412,6 +413,17 @@ export abstract class Bundler extends MastraBundler {
         version: analyzedBundleInfo.workspaceMap.get(dep)?.version,
         packageSpec,
       });
+    }
+
+    // User opt-out: dependency analysis is conservative and may flag packages that are
+    // tree-shaken out of the production bundle (e.g. dev-only conditional dynamic imports).
+    // `excludePackages` force-drops those entries from the generated package.json. Applied
+    // to the final map so the transitive-workspace step above cannot re-add an exclusion.
+    // See #16645.
+    for (const dep of excludedPackages) {
+      if (dependenciesToInstall.delete(dep)) {
+        this.logger.debug(`Excluding "${dep}" from generated package.json (excludePackages)`);
+      }
     }
 
     try {
