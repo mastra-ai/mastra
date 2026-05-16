@@ -7,7 +7,7 @@
  * the session forwarded without standing up a real model.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
@@ -27,6 +27,10 @@ interface FakeCall {
   type: 'stream' | 'generate';
   messages: unknown;
   options: any;
+}
+
+function nextTick() {
+  return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 class FakeAgent extends Agent<any, any, any> {
@@ -228,6 +232,109 @@ describe('Session.message() — default path', () => {
       HarnessValidationError,
     );
     expect(agent.calls).toHaveLength(1);
+  });
+
+  it('normalizes duplicate stream retries when the pending run output was rejected', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    vi.spyOn(agent, 'getRunOutput').mockReturnValue(undefined);
+    vi.spyOn(agent, 'waitForRunOutput').mockRejectedValue(new Error('raw runtime tombstone'));
+    (session as any)._completedRuns.set('rejected-run', { ok: false, err: new Error('cached failed run') });
+
+    await expect(
+      (session as any)._returnDuplicateMessageResult(
+        { status: 'pending', signalId: 'signal-1', runId: 'rejected-run' },
+        { stream: true },
+      ),
+    ).rejects.toMatchObject({
+      name: 'HarnessValidationError',
+      message: expect.stringContaining('duplicate stream is no longer live'),
+    });
+  });
+
+  it('returns a duplicate stream retry when the pending run output registers after recovery starts', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const output = buildFakeOutput({
+      runId: 'pending-retry-run',
+      fullOutput: agent.fullOutput,
+    });
+    vi.spyOn(agent, 'getRunOutput').mockReturnValue(undefined);
+    vi.spyOn(agent, 'waitForRunOutput').mockResolvedValue(output);
+
+    await expect(
+      (session as any)._returnDuplicateMessageResult(
+        { status: 'pending', signalId: 'signal-1', runId: 'pending-retry-run' },
+        { stream: true },
+      ),
+    ).resolves.toBe(output);
+  });
+
+  it('does not wait for duplicate stream retries when the pending run already completed', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const waitForRunOutput = vi.spyOn(agent, 'waitForRunOutput');
+    (session as any)._completedRuns.set('completed-pending-run', { ok: true, full: agent.fullOutput });
+
+    await expect(
+      (session as any)._returnDuplicateMessageResult(
+        { status: 'pending', signalId: 'signal-1', runId: 'completed-pending-run' },
+        { stream: true },
+      ),
+    ).rejects.toMatchObject({
+      name: 'HarnessValidationError',
+      message: expect.stringContaining('duplicate stream is no longer live'),
+    });
+    expect(waitForRunOutput).not.toHaveBeenCalled();
+  });
+
+  it('does not return retained completed output for duplicate stream retries', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const output = buildFakeOutput({
+      runId: 'retained-completed-run',
+      fullOutput: agent.fullOutput,
+    }) as any;
+    output.status = 'success';
+    vi.spyOn(agent, 'getRunOutput').mockReturnValue(output);
+
+    await expect(
+      (session as any)._returnDuplicateMessageResult(
+        { status: 'pending', signalId: 'signal-1', runId: 'retained-completed-run' },
+        { stream: true },
+      ),
+    ).rejects.toMatchObject({
+      name: 'HarnessValidationError',
+      message: expect.stringContaining('duplicate stream is no longer live'),
+    });
+  });
+
+  it('short-circuits duplicate stream retries when pending run completion settles first', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    let resolveCompletion!: (full: unknown) => void;
+    const completion = new Promise<unknown>(resolve => {
+      resolveCompletion = resolve;
+    });
+    vi.spyOn(agent, 'getRunOutput').mockReturnValue(undefined);
+    vi.spyOn(agent, 'waitForRunOutput').mockReturnValue(new Promise(() => {}));
+    (session as any)._runCompletionPromises.set('settling-pending-run', {
+      promise: completion,
+      resolve: resolveCompletion,
+      reject: vi.fn(),
+    });
+
+    const retry = (session as any)._returnDuplicateMessageResult(
+      { status: 'pending', signalId: 'signal-1', runId: 'settling-pending-run' },
+      { stream: true },
+    );
+    await nextTick();
+    resolveCompletion(agent.fullOutput);
+
+    await expect(retry).rejects.toMatchObject({
+      name: 'HarnessValidationError',
+      message: expect.stringContaining('duplicate stream is no longer live'),
+    });
   });
 });
 

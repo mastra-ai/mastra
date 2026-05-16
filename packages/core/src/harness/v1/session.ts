@@ -1558,9 +1558,18 @@ export class Session {
   private async _watchRunCompletion(runId: string): Promise<void> {
     const agent = this._threadSubscriptionAgent;
     if (!agent) return;
-    const out = (await agent.waitForRunOutput(runId)) as MastraModelOutput<unknown> & {
-      _waitUntilFinished?: () => Promise<void>;
-    };
+    let out: MastraModelOutput<unknown> & { _waitUntilFinished?: () => Promise<void> };
+    try {
+      out = (await agent.waitForRunOutput(runId)) as MastraModelOutput<unknown> & {
+        _waitUntilFinished?: () => Promise<void>;
+      };
+    } catch (err) {
+      const waiter = this._runCompletionPromises.get(runId);
+      this._runCompletionPromises.delete(runId);
+      this._rememberCompletedRun(runId, { ok: false, err });
+      waiter?.reject(err);
+      return;
+    }
     try {
       if (typeof out._waitUntilFinished === 'function') {
         await out._waitUntilFinished();
@@ -2231,19 +2240,40 @@ export class Session {
           const agent = this._harness.getAgentForMode(opts.mode ?? this._record.modeId);
           await this._ensureThreadSubscription(agent);
           const runId = await this._pendingMessageRunId(evidence);
-          if (runId && !this._hasLiveMessageRun(agent, runId)) {
-            throw new HarnessValidationError('message().admissionId', 'pending message admission is not live');
+          if (runId && this._completedRuns.has(runId)) {
+            throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
           }
-          const output = runId
-            ? ((agent.getRunOutput(runId) as AgentStream | undefined) ??
-              (await Promise.race([
-                agent.waitForRunOutput(runId) as Promise<AgentStream>,
-                this._awaitRunCompletion(runId).then(
+          let output = runId ? (agent.getRunOutput(runId) as AgentStream | undefined) : undefined;
+          let retainedCompletedOutput = false;
+          if (
+            output &&
+            (output as { status?: string }).status !== undefined &&
+            (output as { status?: string }).status !== 'running'
+          ) {
+            retainedCompletedOutput = true;
+            output = undefined;
+          }
+          if (runId && !output && !retainedCompletedOutput) {
+            const waitAbortController = new AbortController();
+            const completion = this._runCompletionPromises.get(runId)?.promise.then(
+              () => undefined,
+              () => undefined,
+            );
+            try {
+              output = (await Promise.race([
+                (agent.waitForRunOutput(runId, { abortSignal: waitAbortController.signal }) as Promise<AgentStream>).catch(
+                  () => undefined,
+                ),
+                ...(completion ? [completion] : []),
+                delay(MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS, waitAbortController.signal).then(
                   () => undefined,
                   () => undefined,
                 ),
-              ])))
-            : undefined;
+              ])) as AgentStream | undefined;
+            } finally {
+              waitAbortController.abort(new HarnessValidationError('message().admissionId', 'duplicate stream wait ended'));
+            }
+          }
           if (output) return output;
         }
         throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');

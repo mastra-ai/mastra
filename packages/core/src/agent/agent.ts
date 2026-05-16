@@ -563,14 +563,8 @@ export class Agent<
     memory?: AgentExecutionOptionsBase<any>['memory'];
     requestContext?: RequestContext;
   }) {
-    const contextThreadId = options?.requestContext?.get(MASTRA_THREAD_ID_KEY);
-    const contextResourceId = options?.requestContext?.get(MASTRA_RESOURCE_ID_KEY);
-    if (typeof contextThreadId === 'string' && typeof contextResourceId === 'string') return true;
-
-    const thread = options?.memory?.thread;
-    const hasThreadId =
-      typeof thread === 'string' || (thread !== null && typeof thread === 'object' && typeof thread.id === 'string');
-    return hasThreadId && options?.memory?.resource !== undefined;
+    const { threadId, resourceId } = this.#getThreadTarget(options);
+    return typeof threadId === 'string' && resourceId !== undefined;
   }
 
   #sameThreadTarget(
@@ -6320,7 +6314,23 @@ export class Agent<
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
   ): void {
-    agentThreadStreamRuntime.registerRun(this as Agent<any, any, any, any>, output, streamOptions, this.getPubSub());
+    const pubsub =
+      (streamOptions as { _pubsub?: PubSub })._pubsub ??
+      this.#resolveThreadStreamPubSub({
+        runId: output.runId,
+        ...this.#getThreadTarget(streamOptions),
+      }) ??
+      this.getPubSub() ??
+      defaultAgentThreadPubSub;
+    const streamOptionsWithRunId = { ...streamOptions, runId: output.runId };
+    const completion = agentThreadStreamRuntime.registerRun(
+      this as Agent<any, any, any, any>,
+      output,
+      streamOptionsWithRunId,
+      pubsub,
+    );
+    this.#rememberThreadStreamPubSub(streamOptionsWithRunId, pubsub);
+    this.#trackThreadStreamPubSub(output, streamOptionsWithRunId, completion);
   }
 
   /**
@@ -6342,13 +6352,17 @@ export class Agent<
    * registered). Pairs with `sendSignal()` to give callers a handle to the
    * output without polling `getRunOutput()` until it returns non-undefined.
    *
-   * The returned promise never rejects; callers are expected to enforce
-   * their own completion deadline (e.g. tied to the per-run completion path).
+   * The returned promise rejects if the run is rejected or aborted before it registers.
+   * Callers waiting on optional/admission paths should still enforce their own deadline.
    */
-  waitForRunOutput<OUTPUT = TOutput>(runId: string): Promise<MastraModelOutput<OUTPUT>> {
+  waitForRunOutput<OUTPUT = TOutput>(
+    runId: string,
+    options?: { abortSignal?: AbortSignal; signal?: AbortSignal },
+  ): Promise<MastraModelOutput<OUTPUT>> {
     return agentThreadStreamRuntime.waitForRunOutput<OUTPUT>(
       runId,
       this.#resolveThreadStreamPubSub({ runId }) ?? this.getPubSub(),
+      options?.abortSignal ?? options?.signal,
     );
   }
 
@@ -6385,20 +6399,31 @@ export class Agent<
     const idleStreamTarget = this.#getThreadTarget(target.ifIdle?.streamOptions);
     const idleResourceId = idleStreamTarget.resourceId ?? target.resourceId;
     const idleThreadId = idleStreamTarget.threadId ?? target.threadId;
-    const previousThreadRunId = idleThreadId
-      ? this.#threadStreamPubSubsByThreadKey.get(this.#threadStreamKey(idleResourceId, idleThreadId))?.runId
+    const idleThreadKey = idleThreadId ? this.#threadStreamKey(idleResourceId, idleThreadId) : undefined;
+    const previousThreadPubSubEntry = idleThreadKey
+      ? this.#threadStreamPubSubsByThreadKey.get(idleThreadKey)
       : undefined;
+    const previousThreadRunId = previousThreadPubSubEntry?.runId;
     const shouldSnapshotIdleWake =
       Boolean(idleThreadId) && target.ifIdle?.behavior !== 'persist' && target.ifIdle?.behavior !== 'discard';
     const shouldTrackIdleWake = shouldSnapshotIdleWake && (Boolean(target.ifIdle) || !target.runId);
     let acceptedIdleRunId: string | undefined;
     const forgetAcceptedIdleRunPubSub = () => {
-      if (!acceptedIdleRunId || !idleThreadId) return;
-      this.#forgetThreadStreamPubSubForTarget({
-        runId: acceptedIdleRunId,
-        resourceId: idleResourceId,
-        threadId: idleThreadId,
-      });
+      if (!acceptedIdleRunId) return;
+      const currentThreadPubSubEntry = idleThreadKey
+        ? this.#threadStreamPubSubsByThreadKey.get(idleThreadKey)
+        : undefined;
+      this.#threadStreamPubSubsByRunId.delete(acceptedIdleRunId);
+      if (!idleThreadKey || currentThreadPubSubEntry?.runId !== acceptedIdleRunId) return;
+      if (
+        previousThreadPubSubEntry &&
+        previousThreadPubSubEntry.runId !== acceptedIdleRunId &&
+        this.#threadStreamPubSubsByRunId.get(previousThreadPubSubEntry.runId) === previousThreadPubSubEntry.pubsub
+      ) {
+        this.#threadStreamPubSubsByThreadKey.set(idleThreadKey, previousThreadPubSubEntry);
+        return;
+      }
+      this.#threadStreamPubSubsByThreadKey.delete(idleThreadKey);
     };
     const signalTarget = shouldSnapshotIdleWake
       ? ({
@@ -6526,17 +6551,50 @@ export class Agent<
       }
       if (ownsReservation && reservedThreadTarget) {
         if (!this.#sameThreadTarget(reservedThreadTarget, mergedThreadTarget)) {
-          this.#forgetThreadStreamPubSubForTarget({
-            runId: streamOptionsWithRunId.runId,
-            resourceId: reservedThreadTarget.resourceId,
-            threadId: reservedThreadTarget.threadId,
-          });
-          releaseReservedRun?.();
-          releaseReservedRun = undefined;
-          ownsReservation = false;
-          reservedThreadTarget = undefined;
-          trackedThreadStreamPubSubTarget = undefined;
-          if (!callerProvidedRunId) {
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            streamOptionsWithRunId.runId,
+            reservedThreadTarget,
+            mergedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (retargetedReservation) {
+            this.#forgetThreadStreamPubSubForTarget({
+              runId: streamOptionsWithRunId.runId,
+              resourceId: reservedThreadTarget.resourceId,
+              threadId: reservedThreadTarget.threadId,
+            });
+            releaseReservedRun = () =>
+              agentThreadStreamRuntime.releaseRunReservation(mergedOptions.runId, pubsub, {
+                cleanupPrepared: true,
+                clearAbort: true,
+                rejectOutputWaiters: true,
+              });
+            reservedThreadTarget = mergedThreadTarget;
+            this.#rememberThreadStreamPubSubForTarget(
+              {
+                runId: mergedOptions.runId,
+                resourceId: mergedThreadTarget.resourceId,
+                threadId: mergedThreadTarget.threadId,
+              },
+              pubsub,
+            );
+            trackedThreadStreamPubSubTarget = {
+              runId: mergedOptions.runId,
+              resourceId: mergedThreadTarget.resourceId,
+              threadId: mergedThreadTarget.threadId,
+            };
+          } else if (!callerProvidedRunId) {
+            this.#forgetThreadStreamPubSubForTarget({
+              runId: streamOptionsWithRunId.runId,
+              resourceId: reservedThreadTarget.resourceId,
+              threadId: reservedThreadTarget.threadId,
+            });
+            releaseReservedRun?.();
+            releaseReservedRun = undefined;
+            ownsReservation = false;
+            reservedThreadTarget = undefined;
+            trackedThreadStreamPubSubTarget = undefined;
             mergedOptions.runId = this.#generateStreamRunId(mergedThreadTarget);
           }
         }
@@ -6590,6 +6648,66 @@ export class Agent<
         pubsub,
         ownsReservation,
       );
+      while (!ownsReservation && this.#getThreadTarget(mergedOptions).threadId) {
+        releaseReservedRun = agentThreadStreamRuntime.reserveRun(mergedOptions, pubsub, this.id);
+        ownsReservation = Boolean(releaseReservedRun);
+        if (ownsReservation) {
+          reservedThreadTarget = this.#getThreadTarget(mergedOptions);
+          this.#rememberThreadStreamPubSub(mergedOptions, pubsub);
+          trackedThreadStreamPubSubTarget = {
+            runId: mergedOptions.runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          };
+          break;
+        }
+        await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          this as Agent<any, any, any, any>,
+          mergedOptions,
+          pubsub,
+          ownsReservation,
+        );
+      }
+      if (ownsReservation && reservedThreadTarget) {
+        const preparedThreadTarget = this.#getThreadTarget(mergedOptions);
+        if (!this.#sameThreadTarget(reservedThreadTarget, preparedThreadTarget)) {
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            mergedOptions.runId,
+            reservedThreadTarget,
+            preparedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (!retargetedReservation) {
+            throw new Error(`Agent thread run id "${mergedOptions.runId}" could not be retargeted`);
+          }
+          this.#forgetThreadStreamPubSubForTarget({
+            runId: mergedOptions.runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          });
+          releaseReservedRun = () =>
+            agentThreadStreamRuntime.releaseRunReservation(mergedOptions.runId, pubsub, {
+              cleanupPrepared: true,
+              clearAbort: true,
+              rejectOutputWaiters: true,
+            });
+          reservedThreadTarget = preparedThreadTarget;
+          this.#rememberThreadStreamPubSubForTarget(
+            {
+              runId: mergedOptions.runId,
+              resourceId: preparedThreadTarget.resourceId,
+              threadId: preparedThreadTarget.threadId,
+            },
+            pubsub,
+          );
+          trackedThreadStreamPubSubTarget = {
+            runId: mergedOptions.runId,
+            resourceId: preparedThreadTarget.resourceId,
+            threadId: preparedThreadTarget.threadId,
+          };
+        }
+      }
       const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, pubsub);
       preparedOptionsWithPubSub = { ...preparedOptions, _pubsub: pubsub };
       this.#rememberThreadStreamPubSub(preparedOptionsWithPubSub, pubsub);
@@ -6893,16 +7011,40 @@ export class Agent<
       if (ownsReservation && reservedThreadTarget) {
         const mergedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
         if (!this.#sameThreadTarget(reservedThreadTarget, mergedThreadTarget)) {
-          this.#forgetThreadStreamPubSubForTarget({
-            runId: streamOptionsWithPubSub?.runId,
-            resourceId: reservedThreadTarget.resourceId,
-            threadId: reservedThreadTarget.threadId,
-          });
-          releaseReservedRun?.();
-          releaseReservedRun = undefined;
-          ownsReservation = false;
-          reservedThreadTarget = undefined;
-          trackedThreadStreamPubSubTarget = undefined;
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            streamOptionsWithPubSub?.runId,
+            reservedThreadTarget,
+            mergedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (retargetedReservation) {
+            this.#forgetThreadStreamPubSubForTarget({
+              runId: streamOptionsWithPubSub?.runId,
+              resourceId: reservedThreadTarget.resourceId,
+              threadId: reservedThreadTarget.threadId,
+            });
+            releaseReservedRun = () =>
+              agentThreadStreamRuntime.releaseRunReservation((mergedStreamOptions as { runId?: string }).runId, pubsub, {
+                cleanupPrepared: true,
+                clearAbort: true,
+                rejectOutputWaiters: true,
+              });
+            reservedThreadTarget = mergedThreadTarget;
+            this.#rememberThreadStreamPubSubForTarget(
+              {
+                runId: (mergedStreamOptions as { runId?: string }).runId,
+                resourceId: mergedThreadTarget.resourceId,
+                threadId: mergedThreadTarget.threadId,
+              },
+              pubsub,
+            );
+            trackedThreadStreamPubSubTarget = {
+              runId: (mergedStreamOptions as { runId?: string }).runId,
+              resourceId: mergedThreadTarget.resourceId,
+              threadId: mergedThreadTarget.threadId,
+            };
+          }
         }
       }
       if (!ownsReservation) {
@@ -6955,6 +7097,72 @@ export class Agent<
         pubsub,
         ownsReservation,
       );
+      while (!ownsReservation && this.#getThreadTarget(mergedStreamOptions).threadId) {
+        releaseReservedRun = agentThreadStreamRuntime.reserveRun(
+          mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+          pubsub,
+          this.id,
+        );
+        ownsReservation = Boolean(releaseReservedRun);
+        if (ownsReservation) {
+          reservedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
+          this.#rememberThreadStreamPubSub(mergedStreamOptions, pubsub);
+          trackedThreadStreamPubSubTarget = {
+            runId: (mergedStreamOptions as { runId?: string }).runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          };
+          break;
+        }
+        await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          this as Agent<any, any, any, any>,
+          mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+          pubsub,
+          ownsReservation,
+        );
+      }
+      if (ownsReservation && reservedThreadTarget) {
+        const preparedThreadTarget = this.#getThreadTarget(mergedStreamOptions);
+        if (!this.#sameThreadTarget(reservedThreadTarget, preparedThreadTarget)) {
+          const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
+            (mergedStreamOptions as { runId?: string }).runId,
+            reservedThreadTarget,
+            preparedThreadTarget,
+            pubsub,
+            this.id,
+          );
+          if (!retargetedReservation) {
+            throw new Error(
+              `Agent thread run id "${(mergedStreamOptions as { runId?: string }).runId}" could not be retargeted`,
+            );
+          }
+          this.#forgetThreadStreamPubSubForTarget({
+            runId: (mergedStreamOptions as { runId?: string }).runId,
+            resourceId: reservedThreadTarget.resourceId,
+            threadId: reservedThreadTarget.threadId,
+          });
+          releaseReservedRun = () =>
+            agentThreadStreamRuntime.releaseRunReservation((mergedStreamOptions as { runId?: string }).runId, pubsub, {
+              cleanupPrepared: true,
+              clearAbort: true,
+              rejectOutputWaiters: true,
+            });
+          reservedThreadTarget = preparedThreadTarget;
+          this.#rememberThreadStreamPubSubForTarget(
+            {
+              runId: (mergedStreamOptions as { runId?: string }).runId,
+              resourceId: preparedThreadTarget.resourceId,
+              threadId: preparedThreadTarget.threadId,
+            },
+            pubsub,
+          );
+          trackedThreadStreamPubSubTarget = {
+            runId: (mergedStreamOptions as { runId?: string }).runId,
+            resourceId: preparedThreadTarget.resourceId,
+            threadId: preparedThreadTarget.threadId,
+          };
+        }
+      }
       const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
         mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
         pubsub,
