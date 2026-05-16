@@ -49,14 +49,14 @@ describe('EE PostHog telemetry', () => {
     expect(capture).toHaveBeenCalled();
   });
 
-  it('includes a raw machine id for install-level differentiation', () => {
+  it('includes a hashed machine id for install-level differentiation', () => {
     captureEEEvent('ee_license_check', undefined, { license_hash: 'safe' });
 
     expect(capture).toHaveBeenCalledWith(
       expect.objectContaining({
-        distinctId: expect.stringMatching(/^mastra-/),
+        distinctId: expect.stringMatching(/^mastra-[a-f0-9]{16}$/),
         properties: expect.objectContaining({
-          machine_id: expect.any(String),
+          machine_id: expect.stringMatching(/^[a-f0-9]{16}$/),
         }),
       }),
     );

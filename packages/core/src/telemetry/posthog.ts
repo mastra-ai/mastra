@@ -17,8 +17,12 @@ export function hashTelemetryValue(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function getHashedHostname(): string {
+  return hashTelemetryValue(os.hostname() || 'unknown-host').slice(0, 16);
+}
+
 export function getEETelemetryFallbackDistinctId(): string {
-  return `mastra-${os.hostname()}`;
+  return `mastra-${getHashedHostname()}`;
 }
 
 function getClient(): PostHog | null {
@@ -44,7 +48,7 @@ function getSystemProperties(): Record<string, unknown> {
     os_version: os.release(),
     node_version: process.version,
     platform: process.arch,
-    machine_id: os.hostname(),
+    machine_id: getHashedHostname(),
     mastra_version: process.env['npm_package_version'] || 'unknown',
   };
 }

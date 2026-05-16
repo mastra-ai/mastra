@@ -90,15 +90,16 @@ describe('EE telemetry', () => {
       expect.objectContaining({
         license_valid: true,
         license_hash: expect.any(String),
-        ip: '203.0.113.1',
         $ip: '203.0.113.1',
-        user_agent: 'test-agent',
         user_id: 'user-1',
         capabilities: expect.objectContaining({ fga: true }),
       }),
     );
     expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('license-key-that-is-long-enough-for-tests');
     expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('user@test.com');
+    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('test-agent');
+    expect(captureEEEvent.mock.calls[0]?.[2]).not.toHaveProperty('ip');
+    expect(captureEEEvent.mock.calls[0]?.[2]).not.toHaveProperty('user_agent');
   });
 
   it('falls back to x-real-ip for license check events', async () => {
@@ -115,10 +116,10 @@ describe('EE telemetry', () => {
       'ee_license_check',
       'user-1',
       expect.objectContaining({
-        ip: '198.51.100.2',
         $ip: '198.51.100.2',
       }),
     );
+    expect(captureEEEvent.mock.calls[0]?.[2]).not.toHaveProperty('ip');
   });
 
   it('emits RBAC feature usage when access is resolved', async () => {
