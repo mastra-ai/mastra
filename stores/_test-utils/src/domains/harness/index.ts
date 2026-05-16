@@ -2,6 +2,7 @@ import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageLeaseConflictError,
+  HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
 } from '@mastra/core/storage';
@@ -316,6 +317,94 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           record: expect.objectContaining({ id: 'first', ownerId: 'h-1' }),
         });
         await expect(harness.loadSession({ sessionId: 'second' })).resolves.toBeNull();
+      });
+
+      it('rejects child admission when the parent is closing', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ id: 'parent', closingAt: 1000, closeDeadlineAt: 2000 }), {
+          ownerId: 'h-1',
+          ifVersion: 0,
+        });
+
+        await expect(
+          harness.createOrLoadActiveSession(
+            createSampleSessionRecord({
+              id: 'child',
+              threadId: 'thread-child',
+              parentSessionId: 'parent',
+            }),
+            { initialLease: { ownerId: 'h-2', ttlMs: 30_000 } },
+          ),
+        ).rejects.toMatchObject({
+          name: 'HarnessStorageParentSessionUnavailableError',
+          reason: 'closing',
+        } satisfies Partial<HarnessStorageParentSessionUnavailableError>);
+        await expect(harness.loadSession({ sessionId: 'child' })).resolves.toBeNull();
+      });
+
+      it('returns an existing active child before re-validating a now-closing parent', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ id: 'parent' }), { ownerId: 'h-1', ifVersion: 0 });
+        await harness.saveSession(
+          createSampleSessionRecord({
+            id: 'child',
+            threadId: 'thread-child',
+            parentSessionId: 'parent',
+          }),
+          { ownerId: 'h-2', ifVersion: 0 },
+        );
+        const parent = await harness.loadSession({ sessionId: 'parent' });
+        if (!parent) throw new Error('expected parent session');
+        await harness.saveSession(
+          {
+            ...parent,
+            closingAt: 1000,
+            closeDeadlineAt: 2000,
+          },
+          { ownerId: 'h-1', ifVersion: parent.version },
+        );
+
+        await expect(
+          harness.createOrLoadActiveSession(
+            createSampleSessionRecord({
+              id: 'retry-child',
+              threadId: 'thread-child',
+              parentSessionId: 'parent',
+            }),
+            { initialLease: { ownerId: 'h-3', ttlMs: 30_000 } },
+          ),
+        ).resolves.toMatchObject({
+          created: false,
+          leaseAcquired: false,
+          record: expect.objectContaining({ id: 'child' }),
+        });
+        await expect(harness.loadSession({ sessionId: 'retry-child' })).resolves.toBeNull();
+      });
+
+      it('checks parent availability before deterministic id conflicts', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ id: 'parent', closingAt: 1000, closeDeadlineAt: 2000 }), {
+          ownerId: 'h-1',
+          ifVersion: 0,
+        });
+        await harness.saveSession(createSampleSessionRecord({ id: 'colliding-child', threadId: 'other-thread' }), {
+          ownerId: 'h-2',
+          ifVersion: 0,
+        });
+
+        await expect(
+          harness.createOrLoadActiveSession(
+            createSampleSessionRecord({
+              id: 'colliding-child',
+              threadId: 'thread-child',
+              parentSessionId: 'parent',
+            }),
+            { initialLease: { ownerId: 'h-3', ttlMs: 30_000 } },
+          ),
+        ).rejects.toMatchObject({
+          name: 'HarnessStorageParentSessionUnavailableError',
+          reason: 'closing',
+        } satisfies Partial<HarnessStorageParentSessionUnavailableError>);
       });
 
       it('allows the same resource/thread active key in a different harness namespace', async () => {

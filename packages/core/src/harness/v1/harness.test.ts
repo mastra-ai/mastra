@@ -484,6 +484,72 @@ describe('Harness v1 — lifecycle', () => {
     expect(stored?.closedAt).toBeUndefined();
   });
 
+  it('does not cascade thread delete after shutdown begins', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const thread = await harness.threads.create({ resourceId: 'r1', threadId: 'delete-during-shutdown' });
+    const s = await harness.session({ threadId: thread.id, resourceId: 'r1' });
+    const originalRelease = storage.releaseSessionLease.bind(storage);
+    let releaseShutdown!: () => void;
+    let releaseStarted!: () => void;
+    const releaseGate = new Promise<void>(resolve => {
+      releaseShutdown = resolve;
+    });
+    const releaseSeen = new Promise<void>(resolve => {
+      releaseStarted = resolve;
+    });
+    storage.releaseSessionLease = (async (...args: Parameters<typeof storage.releaseSessionLease>) => {
+      releaseStarted();
+      await releaseGate;
+      return originalRelease(...args);
+    }) as typeof storage.releaseSessionLease;
+
+    const shutdown = harness.shutdown();
+    await releaseSeen;
+    await harness.threads.delete({ resourceId: 'r1', threadId: thread.id });
+    releaseShutdown();
+    await shutdown;
+
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeUndefined();
+  });
+
+  it('does not delete thread data when shutdown starts during a delete cascade', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const thread = await harness.threads.create({ resourceId: 'r1', threadId: 'delete-cascade-during-shutdown' });
+    const s = await harness.session({ threadId: thread.id, resourceId: 'r1' });
+    const originalSaveSession = storage.saveSession.bind(storage);
+    let releaseTerminalSave!: () => void;
+    let terminalSaveStarted!: () => void;
+    const terminalSaveGate = new Promise<void>(resolve => {
+      releaseTerminalSave = resolve;
+    });
+    const terminalSaveSeen = new Promise<void>(resolve => {
+      terminalSaveStarted = resolve;
+    });
+    storage.saveSession = (async (...args: Parameters<typeof storage.saveSession>) => {
+      const [record] = args;
+      if (record.id === s.id && record.closingAt !== undefined && record.closedAt !== undefined) {
+        terminalSaveStarted();
+        await terminalSaveGate;
+      }
+      return originalSaveSession(...args);
+    }) as typeof storage.saveSession;
+
+    const deleting = harness.threads.delete({ resourceId: 'r1', threadId: thread.id });
+    await terminalSaveSeen;
+    const shutdown = harness.shutdown();
+    releaseTerminalSave();
+    await Promise.all([deleting, shutdown]);
+
+    await expect(harness.threads.get({ resourceId: 'r1', threadId: thread.id })).resolves.toMatchObject({
+      id: thread.id,
+    });
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeDefined();
+  });
+
   it('aborts an active turn at the close deadline before terminalizing', async () => {
     const storage = makeStorage();
     const agent = new MockAgent({ id: 'default' });
@@ -983,6 +1049,75 @@ describe('Harness v1 — deterministic-id branch (§5.3)', () => {
     const second = await harness.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-different' });
     expect(second.id).toBe(first.id);
     expect(second.threadId).toBe('t1');
+  });
+
+  it('returns an existing active child when the parent closes after thread lookup misses', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1', sessionId: 'parent' });
+    const now = Date.now();
+    await storage.createOrLoadActiveSession(
+      {
+        ...parent.getRecord(),
+        id: 'existing-child',
+        threadId: 'child-thread',
+        parentSessionId: parent.id,
+        origin: 'subagent-tool',
+        subagentDepth: 1,
+        createdAt: now,
+        lastActivityAt: now,
+        version: 0,
+        ownerId: harness.ownerId,
+        leaseExpiresAt: now + 30_000,
+      },
+      { initialLease: { ownerId: harness.ownerId, ttlMs: 30_000 } },
+    );
+
+    const originalLoadSessionByThread = storage.loadSessionByThread.bind(storage);
+    let forcedThreadMiss = false;
+    storage.loadSessionByThread = (async (...args: Parameters<typeof storage.loadSessionByThread>) => {
+      const [opts] = args;
+      if (opts.threadId === 'child-thread' && opts.resourceId === 'r1' && !forcedThreadMiss) {
+        forcedThreadMiss = true;
+        return null;
+      }
+      return originalLoadSessionByThread(...args);
+    }) as typeof storage.loadSessionByThread;
+
+    const originalSaveSession = storage.saveSession.bind(storage);
+    let releaseClosingMarker!: () => void;
+    let closingMarkerStarted!: () => void;
+    const closingMarkerGate = new Promise<void>(resolve => {
+      releaseClosingMarker = resolve;
+    });
+    const closingMarkerSeen = new Promise<void>(resolve => {
+      closingMarkerStarted = resolve;
+    });
+    storage.saveSession = (async (...args: Parameters<typeof storage.saveSession>) => {
+      const [record] = args;
+      if (record.id === parent.id && record.closingAt !== undefined && record.closedAt === undefined) {
+        closingMarkerStarted();
+        await closingMarkerGate;
+      }
+      return originalSaveSession(...args);
+    }) as typeof storage.saveSession;
+
+    const closing = parent.close();
+    await closingMarkerSeen;
+
+    const child = await harness.session({
+      threadId: 'child-thread',
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+      sessionId: 'retry-child',
+      origin: 'subagent-tool',
+    });
+
+    expect(child.id).toBe('existing-child');
+    expect(forcedThreadMiss).toBe(true);
+    await expect(storage.loadSession({ sessionId: 'retry-child', harnessName: 'default' })).resolves.toBeNull();
+    releaseClosingMarker();
+    await closing;
   });
 });
 

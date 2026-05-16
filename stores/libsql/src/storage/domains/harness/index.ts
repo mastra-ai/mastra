@@ -7,6 +7,7 @@ import {
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageLeaseConflictError,
+  HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageVersionConflictError,
   TABLE_CONFIGS,
@@ -422,6 +423,25 @@ export class HarnessLibSQL extends HarnessStorage {
           expiresAt: existing.leaseExpiresAt,
           storageNow,
         };
+      }
+
+      if (record.parentSessionId !== undefined) {
+        const parent = await tx.execute({
+          sql: `SELECT resource_id, closed_at, closing_at FROM ${TABLE_HARNESS_SESSIONS}
+                WHERE harness_name = ? AND id = ?
+                LIMIT 1`,
+          args: [harnessName, record.parentSessionId],
+        });
+        const parentRow = parent.rows[0] as Record<string, unknown> | undefined;
+        if (!parentRow || String(parentRow.resource_id) !== record.resourceId) {
+          throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'not_found');
+        }
+        if (parentRow.closed_at != null) {
+          throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'closed');
+        }
+        if (parentRow.closing_at != null) {
+          throw new HarnessStorageParentSessionUnavailableError(record.parentSessionId, 'closing');
+        }
       }
 
       const existingById = await tx.execute({

@@ -10,7 +10,7 @@ import {
   TABLE_HARNESS_ATTACHMENTS,
   TABLE_HARNESS_SESSIONS,
 } from '@mastra/core/storage';
-import type { SessionRecord } from '@mastra/core/storage';
+import type { SessionRecord, HarnessStorageParentSessionUnavailableError } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { HarnessLibSQL } from './index';
@@ -222,6 +222,76 @@ describe('HarnessLibSQL legacy Harness table migrations', () => {
       'Cannot create Harness active-session uniqueness index while duplicate active rows exist',
     );
     await expect(primaryKeyColumns(client, TABLE_HARNESS_SESSIONS)).resolves.toEqual(['id']);
+  });
+});
+
+describe('HarnessLibSQL active session admission', () => {
+  let storage: HarnessLibSQL;
+
+  beforeEach(async () => {
+    const client = createHarnessTestClient();
+    storage = new HarnessLibSQL({ client });
+    await storage.init();
+  });
+
+  it('rejects child admission when the parent is closing', async () => {
+    await storage.saveSession(sampleSession({ id: 'parent', closingAt: 1000, closeDeadlineAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+
+    await expect(
+      storage.createOrLoadActiveSession(
+        sampleSession({
+          id: 'child',
+          threadId: 'thread-child',
+          parentSessionId: 'parent',
+        }),
+        { initialLease: { ownerId: 'h-2', ttlMs: 30_000 } },
+      ),
+    ).rejects.toMatchObject({
+      name: 'HarnessStorageParentSessionUnavailableError',
+      reason: 'closing',
+    } satisfies Partial<HarnessStorageParentSessionUnavailableError>);
+    await expect(storage.loadSession({ sessionId: 'child' })).resolves.toBeNull();
+  });
+
+  it('returns an existing active child session before re-validating a now-closing parent', async () => {
+    await storage.saveSession(sampleSession({ id: 'parent' }), { ownerId: 'h-1', ifVersion: 0 });
+    await storage.saveSession(
+      sampleSession({
+        id: 'child',
+        threadId: 'thread-child',
+        parentSessionId: 'parent',
+      }),
+      { ownerId: 'h-2', ifVersion: 0 },
+    );
+    const parent = await storage.loadSession({ sessionId: 'parent' });
+    if (!parent) throw new Error('expected parent session');
+    await storage.saveSession(
+      {
+        ...parent,
+        closingAt: 1000,
+        closeDeadlineAt: 2000,
+      },
+      { ownerId: 'h-1', ifVersion: parent.version },
+    );
+
+    await expect(
+      storage.createOrLoadActiveSession(
+        sampleSession({
+          id: 'retry-child',
+          threadId: 'thread-child',
+          parentSessionId: 'parent',
+        }),
+        { initialLease: { ownerId: 'h-3', ttlMs: 30_000 } },
+      ),
+    ).resolves.toMatchObject({
+      created: false,
+      leaseAcquired: false,
+      record: expect.objectContaining({ id: 'child' }),
+    });
+    await expect(storage.loadSession({ sessionId: 'retry-child' })).resolves.toBeNull();
   });
 });
 

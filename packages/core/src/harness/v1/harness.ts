@@ -887,8 +887,6 @@ export class Harness {
     if (!mode) {
       throw new HarnessConfigError('session().modeId', `unknown mode "${modeId}"`);
     }
-    await this._assertParentAcceptsChild(storage, init.parentSessionId, init.resourceId);
-
     const record: SessionRecord = {
       id: sessionId,
       harnessName: this._harnessName,
@@ -912,6 +910,22 @@ export class Harness {
       ownerId: this.ownerId,
       leaseExpiresAt: now + this._leaseTtlMs,
     };
+
+    const liveParentError = this._getLiveParentAdmissionError(init.parentSessionId, init.resourceId);
+    if (liveParentError) {
+      const existing = await storage.loadSessionByThread({
+        harnessName: this._harnessName,
+        threadId: init.threadId,
+        resourceId: init.resourceId,
+      });
+      if (existing) {
+        if (existing.closingAt !== undefined) {
+          throw new HarnessSessionClosingError(existing.id);
+        }
+        return this._hydrate(storage, existing);
+      }
+      throw liveParentError;
+    }
 
     let admitted;
     try {
@@ -942,37 +956,14 @@ export class Harness {
     return this._publish(storage, admitted.record);
   }
 
-  private async _assertParentAcceptsChild(
-    storage: HarnessStorage,
-    parentSessionId: string | undefined,
-    resourceId: string,
-  ): Promise<void> {
-    if (!parentSessionId) return;
-
-    const live = this._liveSessions.get(parentSessionId);
-    if (live) {
-      if (live.resourceId !== resourceId) {
-        throw new HarnessSessionNotFoundError(parentSessionId);
-      }
-      if (live.isClosing) {
-        throw new HarnessSessionClosingError(parentSessionId);
-      }
-      if (live.isClosed) {
-        throw new HarnessSessionClosedError(parentSessionId);
-      }
-      return;
-    }
-
-    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: parentSessionId });
-    if (!stored || stored.resourceId !== resourceId) {
-      throw new HarnessSessionNotFoundError(parentSessionId);
-    }
-    if (stored.closedAt !== undefined) {
-      throw new HarnessSessionClosedError(parentSessionId);
-    }
-    if (stored.closingAt !== undefined) {
-      throw new HarnessSessionClosingError(parentSessionId);
-    }
+  private _getLiveParentAdmissionError(parentSessionId: string | undefined, resourceId: string): Error | undefined {
+    if (!parentSessionId) return undefined;
+    const liveParent = this._liveSessions.get(parentSessionId);
+    if (!liveParent) return undefined;
+    if (liveParent.resourceId !== resourceId) return new HarnessSessionNotFoundError(parentSessionId);
+    if (liveParent.isClosing) return new HarnessSessionClosingError(parentSessionId);
+    if (liveParent.isClosed) return new HarnessSessionClosedError(parentSessionId);
+    return undefined;
   }
 
   private async _hydrate(storage: HarnessStorage, stored: SessionRecord): Promise<Session> {
@@ -1190,7 +1181,11 @@ export class Harness {
     }
   }
 
-  private async _prepareCloseNode(storage: HarnessStorage, record: SessionRecord, depth: number): Promise<CloseTreeNode> {
+  private async _prepareCloseNode(
+    storage: HarnessStorage,
+    record: SessionRecord,
+    depth: number,
+  ): Promise<CloseTreeNode> {
     const live = this._liveSessions.get(record.id);
     if (live) {
       return {
@@ -1274,10 +1269,7 @@ export class Harness {
     );
   }
 
-  private async _terminalizeCloseTree(
-    storage: HarnessStorage,
-    tree: CloseTreeNode[],
-  ): Promise<void> {
+  private async _terminalizeCloseTree(storage: HarnessStorage, tree: CloseTreeNode[]): Promise<void> {
     const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
     for (const node of bottomUp) {
       if (node.record.closedAt !== undefined) {
@@ -1618,8 +1610,11 @@ export class Harness {
     },
 
     delete: async (opts: ThreadDeleteOptions): Promise<void> => {
+      if (this._shutdown) return;
       const memory = await this._requireMemoryStorage('threads.delete()');
+      if (this._shutdown) return;
       const existing = await memory.getThreadById({ threadId: opts.threadId });
+      if (this._shutdown) return;
       if (!existing || existing.resourceId !== opts.resourceId) {
         // Idempotent: deleting a missing or foreign-owned thread is a no-op
         // from the caller's perspective. Cross-resource existence is never
@@ -1636,9 +1631,11 @@ export class Harness {
         threadId: opts.threadId,
         resourceId: opts.resourceId,
       });
+      if (this._shutdown) return;
       if (stored) {
         cascaded = true;
         await this._closeSessionRecord(storage, stored);
+        if (this._shutdown) return;
       }
 
       await memory.deleteThread({ threadId: opts.threadId });
