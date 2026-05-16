@@ -1,5 +1,94 @@
 # @mastra/server
 
+## 1.36.0-alpha.0
+
+### Minor Changes
+
+- Narrowed `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`. ([#16622](https://github.com/mastra-ai/mastra/pull/16622))
+
+  Fixed two signal-content bugs:
+  - `user-message` signal attributes now reach the LLM
+  - multimodal non-`user-message` signals no longer lose file parts
+
+  Callers that previously passed wrapped message shapes to `agent.sendSignal` should now pass a bare string or a bare parts array.
+
+  Before:
+  `{ type: 'user-message', contents: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }`
+
+  After:
+  `{ type: 'user-message', contents: [{ type: 'text', text: 'hi' }] }`
+
+  Added an optional `providerOptions` field to `agent.sendSignal` that flows through to the resulting prompt turn (as `providerOptions` on the LLM message) and is persisted on the stored signal message (as `content.providerMetadata`).
+
+### Patch Changes
+
+- Fixed CompositeAuth incorrectly advertising SSO, session, and user provider capabilities when no inner provider supports them. Studio would show an SSO login button even when no provider had SSO configured, leading to 401 errors on login attempts. The duck-typing check now verifies that interface methods are actual functions rather than just present on the prototype chain. ([#16664](https://github.com/mastra-ai/mastra/pull/16664))
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+
+## 1.35.0
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0
+
+## 1.35.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0-alpha.3
+
 ## 1.35.0-alpha.2
 
 ### Patch Changes
