@@ -22,6 +22,7 @@ export interface OMSettingsConfig {
   observationThreshold: number;
   reflectionThreshold: number;
   cavemanObservations: boolean;
+  observeAttachments: boolean;
 }
 
 export interface OMSettingsCallbacks {
@@ -30,7 +31,15 @@ export interface OMSettingsCallbacks {
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
   onCavemanObservationsChange: (enabled: boolean) => void;
+  onObserveAttachmentsChange: (enabled: boolean) => void;
   onClose: () => void;
+}
+
+interface BooleanSubmenuLabels {
+  onLabel?: string;
+  offLabel?: string;
+  onDescription?: string;
+  offDescription?: string;
 }
 
 // =============================================================================
@@ -164,10 +173,15 @@ class ThresholdSubmenu extends Container {
 // =============================================================================
 
 class BooleanSubmenu extends SelectList {
-  constructor(currentValue: boolean, onSelect: (value: boolean) => void, onBack: () => void) {
+  constructor(
+    currentValue: boolean,
+    onSelect: (value: boolean) => void,
+    onBack: () => void,
+    labels?: BooleanSubmenuLabels,
+  ) {
     const items: SelectItem[] = [
-      { value: 'on', label: '  On', description: 'Caveman-style terse compression' },
-      { value: 'off', label: '  Off', description: 'Standard prose observations' },
+      { value: 'on', label: `  ${labels?.onLabel ?? 'On'}`, description: labels?.onDescription ?? '' },
+      { value: 'off', label: `  ${labels?.offLabel ?? 'Off'}`, description: labels?.offDescription ?? '' },
     ];
     super(items, items.length, getSelectListTheme());
 
@@ -299,13 +313,39 @@ export class OMSettingsComponent extends Box implements Focusable {
               done(value ? 'On' : 'Off');
             },
             () => done(),
+            {
+              onDescription: 'Caveman-style terse compression',
+              offDescription: 'Standard prose observations',
+            },
+          ),
+      },
+      {
+        id: 'observe-attachments',
+        label: 'Observer attachments',
+        description:
+          'Forward image and file attachments to the Observer LLM. ' +
+          'Turn off when using a text-only observer model — placeholder text is preserved either way',
+        currentValue: config.observeAttachments ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new BooleanSubmenu(
+            config.observeAttachments,
+            value => {
+              config.observeAttachments = value;
+              callbacks.onObserveAttachmentsChange(value);
+              done(value ? 'On' : 'Off');
+            },
+            () => done(),
+            {
+              onDescription: 'Forward attachments to the observer',
+              offDescription: 'Drop attachments (placeholder text only)',
+            },
           ),
       },
     ];
 
     this.settingsList = new SettingsList(
       items,
-      10,
+      11,
       getSettingsListTheme(),
       (_id, _newValue) => {
         // All changes handled via submenu callbacks
