@@ -2,6 +2,7 @@ import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useAui } from '@assistant-ui/react';
 
 import type { MastraUIMessage } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -15,6 +16,7 @@ import {
   isBrowserToolError,
   useBrowserToolCallsSafe,
 } from '@/domains/agents/context/browser-tool-calls-context';
+import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
@@ -39,6 +41,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const { activateSkill } = useActivatedSkills();
   const { data: mcpAppToolsMap } = useMcpAppTools();
   const aui = useAui();
+  const queryClient = useQueryClient();
 
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
@@ -67,7 +70,25 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       status,
       timestamp: Date.now(),
     });
-  }, [isBrowser, toolCallId, toolName, args, result, browserCtx]);
+
+    // Seeing any browser tool call means the server has an active session,
+    // so the probe can flip to `hasSession: true` immediately without
+    // polling or a network round trip. `setQueriesData` always notifies
+    // observers (even on reference-equal updates), so calling it on every
+    // render would feed back into the provider → consumer re-render loop.
+    // Read the cache synchronously first via `getQueriesData` (no notify)
+    // and only write when the cached probe is still false.
+    const cachedProbes = queryClient.getQueriesData<BrowserSessionProbe>({
+      queryKey: ['browser-session-probe'],
+    });
+    const needsUpdate = cachedProbes.some(([, data]) => !data || !data.hasSession || !data.screencastAvailable);
+    if (needsUpdate) {
+      queryClient.setQueriesData<BrowserSessionProbe>({ queryKey: ['browser-session-probe'] }, () => ({
+        hasSession: true,
+        screencastAvailable: true,
+      }));
+    }
+  }, [isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
 
   // Detect skill activation tool calls
   useEffect(() => {

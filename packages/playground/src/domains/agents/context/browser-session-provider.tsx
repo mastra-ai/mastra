@@ -1,5 +1,6 @@
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useBrowserSessionProbe } from '../hooks/use-browser-session-probe';
 import type { StreamStatus } from '../hooks/use-browser-stream';
 import { useCloseBrowser } from '../hooks/use-close-browser';
 import { createBrowserFrameStore } from './browser-frame-store';
@@ -31,10 +32,38 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   const [hasSession, setHasSession] = useState(false);
   const [viewMode, setViewModeState] = useState<BrowserViewMode>('collapsed');
 
-  // Gate the WebSocket on the agent having browser tools (passed via `enabled`).
-  // A follow-up commit will add a server probe to also gate on whether a live
-  // session exists, eliminating the reconnect storm when no session is running.
-  const shouldConnect = enabled;
+  // Probe the server before opening a WebSocket. Avoids two failure modes:
+  //   1. Server doesn't have `ws` / `@hono/node-ws` installed → WS upgrade
+  //      would fail and trigger a reconnect storm.
+  //   2. Agent has browser tools configured but no active session yet → WS
+  //      would open and sit idle indefinitely.
+  // Falls back to legacy "always connect" behavior on older servers (404).
+  //
+  // The probe is invalidated/updated by `tool-fallback.tsx` via
+  // `setQueriesData` when a browser_* tool transitions, so there's no
+  // polling — the cache update flips `serverHasSession` to true the
+  // instant the first browser tool call's status is known.
+  const { data: probe } = useBrowserSessionProbe({ agentId, threadId, enabled });
+  const screencastAvailable = probe?.screencastAvailable ?? false;
+  const serverHasSession = probe?.hasSession ?? false;
+
+  // Open the WS when the server reports a live session OR the user has
+  // explicitly opened the browser panel and expects to see frames.
+  const userOpenedPanel = viewMode !== 'collapsed';
+  const shouldConnect = enabled && screencastAvailable && (serverHasSession || userOpenedPanel);
+
+  // Keep `shouldConnect` and identifiers accessible from inside stable
+  // callbacks without forcing those callbacks to take them as deps. Without
+  // this, every `shouldConnect` flip would change `connect`/`disconnect`
+  // identity, change the context `value`, and re-render every consumer.
+  const shouldConnectRef = useRef(shouldConnect);
+  const agentIdRef = useRef(agentId);
+  const threadIdRef = useRef(threadId);
+  useEffect(() => {
+    shouldConnectRef.current = shouldConnect;
+    agentIdRef.current = agentId;
+    threadIdRef.current = threadId;
+  });
 
   // Stream state
   const [status, setStatusState] = useState<StreamStatus>('idle');
@@ -86,7 +115,9 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   const intentionalCloseRef = useRef(false);
 
   const connect = useCallback(() => {
-    if (!shouldConnect) return;
+    if (!shouldConnectRef.current) return;
+    const agentId = agentIdRef.current;
+    const threadId = threadIdRef.current;
     if (!agentId || !threadId) return;
 
     // Skip if already connected/connecting to the same agent/thread
@@ -208,7 +239,7 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
     } catch {
       setStatusState('error');
     }
-  }, [shouldConnect, agentId, threadId, clearReconnectTimeout]);
+  }, [clearReconnectTimeout]);
 
   // Auto-connect whenever we should be connected for this agent/thread.
   useEffect(() => {

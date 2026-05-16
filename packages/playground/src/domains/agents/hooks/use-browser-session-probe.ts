@@ -14,9 +14,10 @@ interface UseBrowserSessionProbeOptions {
    * configured with browser tools to avoid an unnecessary request.
    */
   enabled?: boolean;
-  /** Poll interval in ms while the probe is active. Defaults to 5_000. */
-  refetchInterval?: number;
 }
+
+export const browserSessionProbeQueryKey = (agentId?: string, threadId?: string) =>
+  ['browser-session-probe', agentId, threadId] as const;
 
 const LEGACY_FALLBACK: BrowserSessionProbe = { hasSession: true, screencastAvailable: true };
 
@@ -43,16 +44,11 @@ const isNotFoundError = (error: unknown): boolean => {
  * the hook assumes screencast is available and a session is active so behavior
  * matches the legacy unconditional connect.
  */
-export function useBrowserSessionProbe({
-  agentId,
-  threadId,
-  enabled = true,
-  refetchInterval = 5_000,
-}: UseBrowserSessionProbeOptions) {
+export function useBrowserSessionProbe({ agentId, threadId, enabled = true }: UseBrowserSessionProbeOptions) {
   const client = useMastraClient();
 
   return useQuery<BrowserSessionProbe>({
-    queryKey: ['browser-session-probe', agentId, threadId],
+    queryKey: browserSessionProbeQueryKey(agentId, threadId),
     queryFn: async () => {
       if (!agentId) {
         return { hasSession: false, screencastAvailable: false };
@@ -69,7 +65,10 @@ export function useBrowserSessionProbe({
       }
     },
     enabled: enabled && Boolean(agentId),
-    refetchInterval,
+    // No polling: the probe fires once on mount, on window focus, and is
+    // updated via `setQueriesData` from `tool-fallback.tsx` when a browser
+    // tool call transitions. This avoids idle 5s polls and lets the probe
+    // flip to `hasSession: true` the instant a tool call is seen.
     refetchOnWindowFocus: true,
     staleTime: 0,
     retry: 1,
