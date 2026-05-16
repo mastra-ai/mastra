@@ -106,6 +106,23 @@ export class Deps extends MastraBase {
     await writeJSON(packageJsonPath, packageJson, { spaces: 2 });
   }
 
+  /**
+   * Ensure a `pnpm-workspace.yaml` exists next to the output `package.json`.
+   *
+   * pnpm walks up the file tree looking for a workspace manifest, so without
+   * a local one the install path would attach `.mastra/output` to the user's
+   * parent workspace. An empty `packages` list is enough: pnpm picks up the
+   * nearest manifest, sees no workspace packages, and runs a regular install.
+   *
+   * If a file is already present (carried over by another tool, or written
+   * by a future allowBuilds-carryover step) it is left untouched.
+   */
+  private async ensurePnpmWorkspaceYaml(dir: string): Promise<void> {
+    const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
+    if (fs.existsSync(workspaceYamlPath)) return;
+    await fsPromises.writeFile(workspaceYamlPath, 'packages: []\n', 'utf8');
+  }
+
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
     const yarnrcPath = path.join(dir, '.yarnrc.yml');
     const config = {
@@ -145,7 +162,16 @@ export class Deps extends MastraBase {
       case 'yarn':
         return `${cmd}`;
       case 'pnpm':
-        return cmd === 'install' ? `${cmd} --ignore-workspace --loglevel=error` : `${cmd} --loglevel=error`;
+        // Previously this passed `--ignore-workspace` to make pnpm skip the
+        // user's parent pnpm-workspace.yaml. pnpm v11 honors `pnpm-workspace.yaml`
+        // wherever it finds it walking up the tree, and `--ignore-workspace`
+        // is not enough on its own to keep `.mastra/output/package.json`
+        // isolated when the install runs inside a parent workspace. The
+        // install path now writes a local `pnpm-workspace.yaml` next to the
+        // output package.json, which pnpm picks up first (closer match wins),
+        // so the user's parent workspace stays out of scope without needing
+        // the flag. See #16613.
+        return `${cmd} --loglevel=error`;
       case 'bun':
         return cmd;
       default:
@@ -163,6 +189,12 @@ export class Deps extends MastraBase {
 
     switch (pm) {
       case 'pnpm':
+        // Write an empty pnpm-workspace.yaml so pnpm v11 finds it before
+        // traversing up into the user's parent workspace. Without this,
+        // `pnpm install` in `.mastra/output` would try to operate as a
+        // workspace member of the user's project and the install path
+        // breaks on pnpm v11 with ERR_PNPM_IGNORED_BUILDS (see #16613).
+        await this.ensurePnpmWorkspaceYaml(dir);
         if (architecture) {
           await this.writePnpmConfig(dir, architecture);
         }
