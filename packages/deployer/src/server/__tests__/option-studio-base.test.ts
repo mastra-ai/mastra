@@ -6,6 +6,7 @@
 
 import { readFile } from 'node:fs/promises';
 import type { Mastra } from '@mastra/core/mastra';
+import { SimpleAuth } from '@mastra/core/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHonoServer } from '../index';
 
@@ -47,6 +48,8 @@ vi.mock('../handlers/health', () => ({
 
 vi.mock('../handlers/client', () => ({
   handleClientsRefresh: vi.fn(ctx => ctx.json({ refresh: true })),
+  handleClientsRefreshRequest: vi.fn(() => new Response(JSON.stringify({ refresh: true }))),
+  getTriggerClientsRefreshPayload: vi.fn(() => ({ triggered: true })),
   handleTriggerClientsRefresh: vi.fn(ctx => ctx.json({ triggered: true })),
   isHotReloadDisabled: vi.fn(() => false),
 }));
@@ -169,6 +172,45 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
       const response = await app.request('/studio/__hot-reload-status');
       expect([200, 404]).toContain(response.status);
+    });
+  });
+
+  describe('studio route auth', () => {
+    const auth = new SimpleAuth({
+      tokens: {
+        'test-token': {
+          id: 'user-1',
+          email: 'admin@example.com',
+          name: 'Admin User',
+        },
+      },
+    });
+
+    it.each([
+      { route: '/studio/refresh-events', method: 'GET' },
+      { route: '/studio/__refresh', method: 'POST' },
+      { route: '/studio/__hot-reload-status', method: 'GET' },
+    ])('should require auth for $method $route when server auth is configured', async ({ route, method }) => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio', auth });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request(route, { method });
+      expect(response.status).toBe(401);
+    });
+
+    it.each([
+      { route: '/studio/refresh-events', method: 'GET' },
+      { route: '/studio/__refresh', method: 'POST' },
+      { route: '/studio/__hot-reload-status', method: 'GET' },
+    ])('should allow $method $route with valid auth when server auth is configured', async ({ route, method }) => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio', auth });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request(route, {
+        method,
+        headers: { Authorization: 'Bearer test-token' },
+      });
+      expect(response.status).toBe(200);
     });
   });
 
