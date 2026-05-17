@@ -2,4 +2,6 @@
 "@mastra/core": patch
 ---
 
-Fixed Harness v1 shutdown reliability when deleting threads with active sessions, and improved child session retries while their parent session is closing.
+Fixed race conditions that could cause errors during shutdown when sessions were still active.
+
+Improved reliability when creating child sessions while parent sessions are closing.

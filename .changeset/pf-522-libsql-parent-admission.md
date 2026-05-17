@@ -2,4 +2,6 @@
 "@mastra/libsql": patch
 ---
 
-Fixed Harness v1 child session admission in LibSQL storage so parent session closing and retry behavior matches the core storage contract.
+Fixed errors when creating child sessions with LibSQL storage during parent session lifecycle changes.
+
+Improved session creation and retry reliability when using LibSQL storage.
