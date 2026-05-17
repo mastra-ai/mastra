@@ -57,12 +57,14 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
   const modes: HarnessMode[] = opts.modes ?? [{ id: 'default', agentId: 'default' }];
   const compositeStorage = new InMemoryStore();
   const storage = (opts.sessions?.storage as InMemoryHarness | undefined) ?? (compositeStorage.stores.harness as InMemoryHarness);
+  compositeStorage.stores.harness = storage;
+  const { storage: _sessionStorage, ...sessionOverrides } = opts.sessions ?? {};
   const harness = new Harness({
     agents: agents as any,
     storage: compositeStorage,
     modes,
     defaultModeId: opts.defaultModeId ?? modes[0]!.id,
-    ...(opts.sessions ? { sessions: opts.sessions } : {}),
+    ...(Object.keys(sessionOverrides).length > 0 ? { sessions: sessionOverrides } : {}),
     ...(opts.goals ? { goals: opts.goals } : {}),
     ...(opts.workspace ? { workspace: opts.workspace } : {}),
     ...(opts.subagents ? { subagents: opts.subagents } : {}),

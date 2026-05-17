@@ -1637,6 +1637,7 @@ export class Harness {
     } catch {
       // No storage bound — nothing to release. Idempotent.
       this._liveSessions.clear();
+      this._untrackBoundStorage();
       return;
     }
 
@@ -1677,6 +1678,7 @@ export class Harness {
     } catch {
       // Best-effort: errors surface through the workspace_error event.
     }
+    this._untrackBoundStorage();
   }
 
   // -------------------------------------------------------------------------
@@ -2290,6 +2292,19 @@ export class Harness {
     boundHarnesses.add(this);
   }
 
+  private _untrackBoundStorage(): void {
+    const mastra = this._mastra;
+    if (mastra) {
+      boundHarnessesByMastra.get(mastra)?.delete(this);
+      this._untrackMemoryStorage(mastra.getStorage()?.stores?.memory);
+    }
+  }
+
+  private _untrackMemoryStorage(memory: unknown): void {
+    if (!memory || typeof memory !== 'object') return;
+    boundHarnessesByMemory.get(memory)?.delete(this);
+  }
+
   private _getEffectiveSessionStorage(): HarnessStorage | undefined {
     return this._storageOverride ?? this._mastra?.getStorage()?.stores?.harness;
   }
@@ -2320,7 +2335,8 @@ export class Harness {
         'session() cannot attach a separate session storage to a memory thread while threads.delete() is in progress',
       );
     }
-    if (hasExternalSessionStorageOwner(thread.metadata)) return;
+    const hadExternalOwner = hasExternalSessionStorageOwner(thread.metadata);
+    if (hadExternalOwner) return;
     await memory.updateThread({
       id: threadId,
       title: thread.title ?? '',
@@ -2331,6 +2347,14 @@ export class Harness {
     });
     const marked = await memory.getThreadById({ threadId });
     if (hasHarnessThreadDeleteInProgress(marked?.metadata)) {
+      await memory.updateThread({
+        id: threadId,
+        title: marked?.title ?? thread.title ?? '',
+        metadata: {
+          ...((marked?.metadata as Record<string, unknown> | undefined) ?? {}),
+          [EXTERNAL_SESSION_STORAGE_OWNER_METADATA_KEY]: false,
+        },
+      });
       throw new HarnessConfigError(
         'sessions.storage',
         'session() cannot attach a separate session storage to a memory thread while threads.delete() is in progress',

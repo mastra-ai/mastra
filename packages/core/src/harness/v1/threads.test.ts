@@ -701,7 +701,13 @@ describe('harness.threads — cascade-on-delete', () => {
 
   it('fails closed before deleting sessions through a separate session storage override', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
-    const { harness } = setupHarness({ sessions: { storage } });
+    const harness = new Harness({
+      agents: { default: new MockAgent({ id: 'default' }) } as any,
+      storage: new InMemoryStore(),
+      sessions: { storage },
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
     const thread = await harness.threads.create({ resourceId: 'r1', title: 'separate-storage' });
     const session = await harness.session({ threadId: thread.id, resourceId: 'r1' });
 
@@ -990,6 +996,83 @@ describe('harness.threads — cascade-on-delete', () => {
     await expect(primary.threads.delete({ resourceId: 'r1', threadId: thread.id })).rejects.toBeInstanceOf(
       HarnessConfigError,
     );
+  });
+
+  it('does not keep shutdown harnesses in shared-memory delete ownership checks', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const primaryStorage = new InMemoryHarness({ db: new InMemoryDB() });
+    const primary = new Harness({
+      mastra: setupMastraWithMemory({ memory, harness: primaryStorage }),
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const overrideStorage = new InMemoryHarness({ db: new InMemoryDB() });
+    const temporaryOverride = new Harness({
+      mastra: setupMastraWithMemory({ memory }),
+      sessions: { storage: overrideStorage },
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const thread = await primary.threads.create({ resourceId: 'r1', title: 'owned' });
+    const session = await primary.session({ threadId: thread.id, resourceId: 'r1' });
+
+    await temporaryOverride.shutdown();
+    await primary.threads.delete({ resourceId: 'r1', threadId: thread.id });
+
+    await expect(primaryStorage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(primary.threads.get({ resourceId: 'r1', threadId: thread.id })).resolves.toBeNull();
+  });
+
+  it('rolls back the external owner marker when attach loses a thread-delete race', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const primaryStorage = new InMemoryHarness({ db: new InMemoryDB() });
+    const primary = new Harness({
+      mastra: setupMastraWithMemory({ memory, harness: primaryStorage }),
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const overrideStorage = new InMemoryHarness({ db: new InMemoryDB() });
+    const override = new Harness({
+      mastra: setupMastraWithMemory({ memory }),
+      sessions: { storage: overrideStorage },
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const thread = await primary.threads.create({ resourceId: 'r1', title: 'owned' });
+    const originalUpdateThread = memory.updateThread.bind(memory);
+    let injectedDeleteRace = false;
+    const updateThreadSpy = vi
+      .spyOn(memory, 'updateThread')
+      .mockImplementation(async (...args: Parameters<typeof memory.updateThread>) => {
+        const [update] = args;
+        const updated = await originalUpdateThread(...args);
+        if (
+          update.id === thread.id &&
+          !injectedDeleteRace &&
+          update.metadata?.[externalSessionStorageOwnerMetadataKey] === true
+        ) {
+          injectedDeleteRace = true;
+          await originalUpdateThread({
+            id: thread.id,
+            title: updated.title ?? '',
+            metadata: { [harnessThreadDeleteInProgressMetadataKey]: true },
+          });
+        }
+        return updated;
+      });
+
+    await expect(override.session({ threadId: thread.id, resourceId: 'r2' })).rejects.toBeInstanceOf(
+      HarnessConfigError,
+    );
+
+    expect(injectedDeleteRace).toBe(true);
+    await expect(memory.getThreadById({ threadId: thread.id })).resolves.toMatchObject({
+      metadata: expect.objectContaining({
+        [externalSessionStorageOwnerMetadataKey]: false,
+        [harnessThreadDeleteInProgressMetadataKey]: true,
+      }),
+    });
+    updateThreadSpy.mockRestore();
   });
 
   it('rechecks root thread ownership before deleting the global memory thread', async () => {
