@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { InMemoryDB } from '../inmemory-db';
 import {
@@ -158,6 +158,7 @@ export class InMemoryHarness extends HarnessStorage {
     fn: (fence: ThreadDeleteFenceLease) => Promise<T>,
   ): Promise<T> {
     const now = Date.now();
+    const leaseId = randomUUID();
     const existing = this.db.harnessThreadDeleteFences.get(threadId);
     if (existing && existing.expiresAt > now) {
       throw new HarnessStorageThreadDeleteFenceConflictError(threadId, existing.ownerId);
@@ -165,13 +166,14 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessThreadDeleteFences.set(threadId, {
       threadId,
       ownerId,
+      leaseId,
       createdAt: now,
       expiresAt: now + ttlMs,
     });
     const renewalIntervalMs = Math.max(1, Math.floor(ttlMs / 3));
     const renewal = setInterval(() => {
       const current = this.db.harnessThreadDeleteFences.get(threadId);
-      if (current?.ownerId === ownerId && current.expiresAt > Date.now()) {
+      if (current?.ownerId === ownerId && current.leaseId === leaseId && current.expiresAt > Date.now()) {
         current.expiresAt = Date.now() + ttlMs;
       }
     }, renewalIntervalMs);
@@ -181,7 +183,7 @@ export class InMemoryHarness extends HarnessStorage {
       ownerId,
       assertActive: async () => {
         const current = this.db.harnessThreadDeleteFences.get(threadId);
-        if (current?.ownerId !== ownerId || current.expiresAt <= Date.now()) {
+        if (current?.ownerId !== ownerId || current.leaseId !== leaseId || current.expiresAt <= Date.now()) {
           throw new HarnessStorageThreadDeleteFenceConflictError(threadId, current?.ownerId);
         }
         current.expiresAt = Date.now() + ttlMs;
@@ -192,7 +194,7 @@ export class InMemoryHarness extends HarnessStorage {
     } finally {
       clearInterval(renewal);
       const current = this.db.harnessThreadDeleteFences.get(threadId);
-      if (current?.ownerId === ownerId) {
+      if (current?.ownerId === ownerId && current.leaseId === leaseId) {
         this.db.harnessThreadDeleteFences.delete(threadId);
       }
     }
@@ -899,6 +901,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessAttachmentReferences.clear();
     this.db.harnessMessageResultEvidence.clear();
     this.db.harnessOperationTombstones.clear();
+    this.db.harnessThreadDeleteFences.clear();
   }
 }
 

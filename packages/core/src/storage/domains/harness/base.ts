@@ -135,6 +135,14 @@ export class HarnessStorageThreadDeleteFenceConflictError extends Error {
   }
 }
 
+export class HarnessStorageThreadDeleteFenceUnsupportedError extends Error {
+  readonly name = 'HarnessStorageThreadDeleteFenceUnsupportedError';
+  readonly code = 'harness.storage.thread_delete_fence_unsupported' as const;
+  constructor() {
+    super('HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter');
+  }
+}
+
 /**
  * Storage domain for the v1 Harness — see HARNESS_V1_SPEC.md §5.
  *
@@ -245,7 +253,7 @@ export abstract class HarnessStorage extends StorageDomain {
     fn: (fence: ThreadDeleteFenceLease) => Promise<T>,
   ): Promise<T> {
     void fn;
-    throw new Error('HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter');
+    throw new HarnessStorageThreadDeleteFenceUnsupportedError();
   }
 
   /**

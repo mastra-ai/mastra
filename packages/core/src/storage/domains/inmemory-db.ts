@@ -100,7 +100,7 @@ export class InMemoryDB {
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
   readonly harnessThreadDeleteFences = new Map<
     string,
-    { threadId: string; ownerId: string; createdAt: number; expiresAt: number }
+    { threadId: string; ownerId: string; leaseId: string; createdAt: number; expiresAt: number }
   >();
 
   /**

@@ -15,7 +15,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Mastra } from '../../mastra';
-import { HarnessStorageThreadDeleteFenceConflictError } from '../../storage/domains/harness/base';
+import {
+  HarnessStorageThreadDeleteFenceConflictError,
+  HarnessStorageThreadDeleteFenceUnsupportedError,
+} from '../../storage/domains/harness/base';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
@@ -459,7 +462,7 @@ describe('harness.threads — cascade-on-delete', () => {
   it('fails closed when thread deletion uses storage adapters that do not implement delete fences', async () => {
     class LegacyHarnessStorage extends InMemoryHarness {
       override async withThreadDeleteFence<T>(): Promise<T> {
-        throw new Error('HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter');
+        throw new HarnessStorageThreadDeleteFenceUnsupportedError();
       }
     }
     const storage = new LegacyHarnessStorage({ db: new InMemoryDB() });
@@ -467,8 +470,8 @@ describe('harness.threads — cascade-on-delete', () => {
     const thread = await harness.threads.create({ resourceId: 'r1', title: 'legacy' });
     const session = await harness.session({ threadId: thread.id, resourceId: 'r1' });
 
-    await expect(harness.threads.delete({ resourceId: 'r1', threadId: thread.id })).rejects.toThrow(
-      'HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter',
+    await expect(harness.threads.delete({ resourceId: 'r1', threadId: thread.id })).rejects.toBeInstanceOf(
+      HarnessStorageThreadDeleteFenceUnsupportedError,
     );
 
     await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.not.toBeNull();
@@ -950,6 +953,43 @@ describe('harness.threads — cascade-on-delete', () => {
     await expect(storage.loadSession({ sessionId: owner.id, harnessName: 'default' })).resolves.not.toBeNull();
     await expect(harness.threads.get({ resourceId: 'r1', threadId: thread.id })).resolves.not.toBeNull();
     await expect(harness.threads.getSettings({ resourceId: 'r1', threadId: thread.id })).resolves.toEqual({});
+  });
+
+  it('preserves reserved ownership metadata when recreating an existing thread id', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const primaryStorage = new InMemoryHarness({ db: new InMemoryDB() });
+    const primary = new Harness({
+      mastra: setupMastraWithMemory({ memory, harness: primaryStorage }),
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const overrideStorage = new InMemoryHarness({ db: new InMemoryDB() });
+    const override = new Harness({
+      mastra: setupMastraWithMemory({ memory }),
+      sessions: { storage: overrideStorage },
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const thread = await primary.threads.create({ resourceId: 'r1', title: 'owned' });
+    await override.session({ threadId: thread.id, resourceId: 'r2' });
+
+    await expect(
+      primary.threads.create({
+        resourceId: 'r1',
+        threadId: thread.id,
+        title: 'recreated',
+        metadata: { color: 'blue' },
+      }),
+    ).resolves.toMatchObject({ title: 'recreated', metadata: { color: 'blue' } });
+    await expect(memory.getThreadById({ threadId: thread.id })).resolves.toMatchObject({
+      metadata: expect.objectContaining({
+        color: 'blue',
+        [externalSessionStorageOwnerMetadataKey]: true,
+      }),
+    });
+    await expect(primary.threads.delete({ resourceId: 'r1', threadId: thread.id })).rejects.toBeInstanceOf(
+      HarnessConfigError,
+    );
   });
 
   it('rechecks root thread ownership before deleting the global memory thread', async () => {

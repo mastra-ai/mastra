@@ -36,6 +36,7 @@ import {
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageThreadDeleteFenceConflictError,
+  HarnessStorageThreadDeleteFenceUnsupportedError,
   HarnessStorageVersionConflictError,
 } from '../../storage/domains/harness';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
@@ -811,7 +812,7 @@ export class Harness {
       throw new HarnessSessionClosingError(sessionId);
     }
 
-    await this._markExternalSessionStorageOwner(stored.threadId);
+    await this._markExternalSessionStorageOwner(stored.threadId, { requireExisting: false });
     return this._hydrate(storage, stored);
   }
 
@@ -856,7 +857,7 @@ export class Harness {
       if (stored.closingAt !== undefined) {
         throw new HarnessSessionClosingError(stored.id);
       }
-      await this._markExternalSessionStorageOwner(stored.threadId);
+      await this._markExternalSessionStorageOwner(stored.threadId, { requireExisting: false });
       return this._hydrate(storage, stored);
     }
 
@@ -898,7 +899,7 @@ export class Harness {
     for (const head of summaries) {
       const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: head.id });
       if (stored && stored.closedAt === undefined && stored.closingAt === undefined) {
-        await this._markExternalSessionStorageOwner(stored.threadId);
+        await this._markExternalSessionStorageOwner(stored.threadId, { requireExisting: false });
         return this._hydrate(storage, stored);
       }
     }
@@ -1197,7 +1198,11 @@ export class Harness {
     await this._closeSessionRecord(storage, session.getRecord());
   }
 
-  private async _closeSessionRecord(storage: HarnessStorage, rootRecord: SessionRecord): Promise<void> {
+  private async _closeSessionRecord(
+    storage: HarnessStorage,
+    rootRecord: SessionRecord,
+    closedLiveSessions?: Map<string, Session>,
+  ): Promise<void> {
     const existing = this._closePromises.get(rootRecord.id);
     if (existing) return existing;
 
@@ -1206,7 +1211,9 @@ export class Harness {
     this._liveSessions.get(rootRecord.id)?._beginClosing();
     let closePromise!: Promise<void>;
     closePromise = Promise.resolve()
-      .then(() => this._closeSessionRecordOnce(storage, rootRecord, closeIds, persistedCloseIds, closePromise))
+      .then(() =>
+        this._closeSessionRecordOnce(storage, rootRecord, closeIds, persistedCloseIds, closePromise, closedLiveSessions),
+      )
       .catch(err => {
         for (const id of closeIds) {
           if (!persistedCloseIds.has(id)) {
@@ -1232,6 +1239,7 @@ export class Harness {
     closeIds: Set<string>,
     persistedCloseIds: Set<string>,
     closePromise: Promise<void>,
+    closedLiveSessions?: Map<string, Session>,
   ): Promise<void> {
     const tree: CloseTreeNode[] = [];
     try {
@@ -1265,7 +1273,7 @@ export class Harness {
       }
 
       await this._drainCloseTree(tree);
-      await this._terminalizeCloseTree(storage, tree);
+      await this._terminalizeCloseTree(storage, tree, closedLiveSessions);
     } catch (err) {
       await this._releaseCloseTreeLeases(storage, tree);
       throw err;
@@ -1360,11 +1368,15 @@ export class Harness {
     );
   }
 
-  private async _terminalizeCloseTree(storage: HarnessStorage, tree: CloseTreeNode[]): Promise<void> {
+  private async _terminalizeCloseTree(
+    storage: HarnessStorage,
+    tree: CloseTreeNode[],
+    closedLiveSessions?: Map<string, Session>,
+  ): Promise<void> {
     const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
     for (const node of bottomUp) {
       if (node.record.closedAt !== undefined) {
-        await this._releaseClosedSessionResources(storage, node.record, node.live);
+        await this._releaseClosedSessionResources(storage, node.record, node.live, closedLiveSessions);
         continue;
       }
       const closedAt = Date.now();
@@ -1392,7 +1404,7 @@ export class Harness {
           throw new HarnessStorageError(closed.id, 'flush', err);
         }
       }
-      await this._releaseClosedSessionResources(storage, closed, node.live);
+      await this._releaseClosedSessionResources(storage, closed, node.live, closedLiveSessions);
     }
   }
 
@@ -1438,6 +1450,7 @@ export class Harness {
     storage: HarnessStorage,
     record: SessionRecord,
     session: Session | undefined,
+    closedLiveSessions?: Map<string, Session>,
   ): Promise<void> {
     try {
       await storage.releaseSessionLease({
@@ -1463,6 +1476,7 @@ export class Harness {
     }
 
     if (session) {
+      closedLiveSessions?.set(record.id, session);
       session._markClosed(record);
       // Emit session_closed BEFORE we tear down the per-session bridge so
       // harness-level subscribers see the lifecycle event for this session.
@@ -1499,7 +1513,7 @@ export class Harness {
       if (live) liveDeleteHandles.set(node.record.id, live);
     }
     if (latest.closedAt === undefined) {
-      await this._closeSessionRecord(storage, latest);
+      await this._closeSessionRecord(storage, latest, liveDeleteHandles);
       if (!shouldContinue()) return [];
     }
     const closed = await storage.loadSession({ harnessName: rootRecord.harnessName, sessionId: rootRecord.id });
@@ -1545,7 +1559,12 @@ export class Harness {
       if ((record.pendingQueue?.length ?? 0) > 0) blockers.push(`${record.id}:pending_queue`);
       if (record.pendingResume !== undefined) blockers.push(`${record.id}:pending_resume`);
       for (const receipt of Object.values(record.queueAdmissionReceipts ?? {})) {
-        if (receipt.status === 'queued' || receipt.status === 'admitting' || receipt.status === 'accepted') {
+        if (
+          receipt.status === 'queued' ||
+          receipt.status === 'admitting' ||
+          receipt.status === 'accepted' ||
+          (receipt.status === 'completed' && receipt.postRunFinalizedAt === undefined)
+        ) {
           blockers.push(`${record.id}:queue_receipt:${receipt.queuedItemId}`);
         }
       }
@@ -1676,24 +1695,29 @@ export class Harness {
       assertNoHarnessInternalThreadMetadata(opts.metadata, 'threads.create().metadata');
       const now = new Date();
       const threadId = opts.threadId ?? this._mintThreadId();
-      const saveThread = () =>
-        memory.saveThread({
+      const saveThread = (existing?: ThreadRecord | null) => {
+        const metadata = {
+          ...((existing?.metadata as Record<string, unknown> | undefined) ?? {}),
+          ...((opts.metadata as Record<string, unknown> | undefined) ?? {}),
+        };
+        return memory.saveThread({
           thread: {
             id: threadId,
             resourceId: opts.resourceId,
             title: opts.title,
-            createdAt: now,
+            createdAt: existing?.createdAt ?? now,
             updatedAt: now,
-            metadata: opts.metadata as Record<string, unknown> | undefined,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
           },
         });
+      };
       const saveThreadIfVisibleOwner = async (fence?: { assertActive(): Promise<void> }) => {
         const existing = await memory.getThreadById({ threadId });
         if (existing && existing.resourceId !== opts.resourceId) {
           throw new HarnessThreadNotFoundError(opts.resourceId, threadId);
         }
         await fence?.assertActive();
-        return saveThread();
+        return saveThread(existing);
       };
       let thread;
       if (opts.threadId === undefined) {
@@ -2427,8 +2451,8 @@ function toThreadRecord(thread: {
 
 function isMissingThreadDeleteFenceImplementation(err: unknown): boolean {
   return (
-    err instanceof Error &&
-    err.message === 'HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter'
+    err instanceof HarnessStorageThreadDeleteFenceUnsupportedError ||
+    (err instanceof Error && err.message === 'HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter')
   );
 }
 

@@ -2199,6 +2199,7 @@ export class Session {
         throw err;
       }
       await pendingEvidenceWrite.catch(() => {});
+      let streamCompletedEvidenceWriteFailed = false;
       void completion
         .then(full => {
           this._recordTurnCompletion(full);
@@ -2211,7 +2212,10 @@ export class Session {
             admissionId: opts.admissionId!,
             admissionHash: admissionHash!,
           })
-            .catch(() => {})
+            .catch(err => {
+              streamCompletedEvidenceWriteFailed = true;
+              throw err;
+            })
             .then(() => full);
         })
         .then(full => {
@@ -2225,7 +2229,7 @@ export class Session {
           });
         })
         .catch(err => {
-          if (admissionIdentity !== undefined) {
+          if (admissionIdentity !== undefined && !streamCompletedEvidenceWriteFailed) {
             void this._writeMessageResultEvidence({
               status: 'failed',
               signalId: signal.signal.id,
@@ -2248,6 +2252,7 @@ export class Session {
     // Default path: wait for stream startup and the completion watcher to
     // deliver this run's bundled `FullOutput`, then run post-turn bookkeeping.
     let streamStarted = signal.output === undefined;
+    let completedEvidenceWriteFailed = false;
     try {
       await pendingEvidenceWrite.catch(() => {});
       if (signal.output) {
@@ -2257,14 +2262,19 @@ export class Session {
       const full = await completion;
       this._recordTurnCompletion(full);
       if (admissionIdentity !== undefined) {
-        await this._writeMessageResultEvidenceBestEffort({
-          status: 'completed',
-          signalId: signal.signal.id,
-          runId: signal.runId,
-          result: full,
-          admissionId: opts.admissionId!,
-          admissionHash: admissionHash!,
-        });
+        try {
+          await this._writeMessageResultEvidenceBestEffort({
+            status: 'completed',
+            signalId: signal.signal.id,
+            runId: signal.runId,
+            result: full,
+            admissionId: opts.admissionId!,
+            admissionHash: admissionHash!,
+          });
+        } catch (err) {
+          completedEvidenceWriteFailed = true;
+          throw err;
+        }
       }
       await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
       this._emitTurnEvent({
@@ -2282,7 +2292,7 @@ export class Session {
         this._rememberCompletedRun(signal.runId, { ok: false, err });
         waiter?.reject(err);
       }
-      if (admissionIdentity !== undefined) {
+      if (admissionIdentity !== undefined && !completedEvidenceWriteFailed) {
         await this._writeMessageResultEvidence({
           status: 'failed',
           signalId: signal.signal.id,
@@ -2335,6 +2345,17 @@ export class Session {
           await this._ensureThreadSubscription(agent);
           const runId = await this._pendingMessageRunId(evidence);
           if (runId && this._completedRuns.has(runId)) {
+            const cached = this._completedRuns.get(runId);
+            if (cached?.ok && evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
+              await this._writeMessageResultEvidenceBestEffort({
+                status: 'completed',
+                signalId: evidence.signalId,
+                runId,
+                result: cached.full,
+                admissionId: evidence.admissionId,
+                admissionHash: evidence.admissionHash,
+              });
+            }
             throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
           }
           let output = runId ? (agent.getRunOutput(runId) as AgentStream | undefined) : undefined;
@@ -2380,6 +2401,21 @@ export class Session {
       if (runId) {
         const agent = this._harness.getAgentForMode(opts.mode ?? this._record.modeId);
         await this._ensureThreadSubscription(agent);
+        const cached = this._completedRuns.get(runId);
+        if (cached) {
+          if (!cached.ok) throw cached.err;
+          if (evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
+            await this._writeMessageResultEvidenceBestEffort({
+              status: 'completed',
+              signalId: evidence.signalId,
+              runId,
+              result: cached.full,
+              admissionId: evidence.admissionId,
+              admissionHash: evidence.admissionHash,
+            });
+          }
+          return cached.full;
+        }
         if (!this._hasLiveMessageRun(agent, runId)) {
           return this._awaitDurableMessageResult(evidence, opts);
         }
@@ -2483,10 +2519,11 @@ export class Session {
   ): Promise<void> {
     try {
       await this._writeMessageResultEvidence(status);
-    } catch {
+    } catch (err) {
+      if (status.admissionId !== undefined) throw err;
       // The initial pre-dispatch admission reservation is the durable barrier.
-      // Follow-up evidence writes must not convert a live or completed run into
-      // a caller-visible failure.
+      // Non-idempotent callers have no durable replay contract, so storage
+      // evidence is only best-effort for them.
     }
   }
 
@@ -5941,9 +5978,21 @@ export class Session {
 
   /** @internal — used by Harness hard-delete after storage has removed the row. */
   _markDeleted(): void {
+    const err = new HarnessSessionDeletedError(this.id);
     this._state = 'deleted';
-    this._tearDownThreadSubscription(new HarnessSessionDeletedError(this.id));
-    this._rejectIdleWaiters(new HarnessSessionDeletedError(this.id));
+    if (this._queuedResumeRecoveryTimer !== undefined) {
+      clearTimeout(this._queuedResumeRecoveryTimer);
+      this._queuedResumeRecoveryTimer = undefined;
+    }
+    this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
+    for (const [queuedItemId, resolver] of this._queueResolvers) {
+      this._queueResolvers.delete(queuedItemId);
+      resolver.reject(err);
+    }
+    this._tearDownThreadSubscription(err);
+    this._rejectIdleWaiters(err);
+    this._notifyMaybeIdle();
   }
 
   /** @internal — harness bridge subscription that remains valid while closing. */

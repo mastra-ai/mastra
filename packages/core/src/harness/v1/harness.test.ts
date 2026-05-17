@@ -607,7 +607,7 @@ describe('Harness v1 — lifecycle', () => {
       defaultModeId: 'default',
       sessions: { storage, closeTimeoutMs: 1 },
     });
-    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const s = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
 
     const message = s.message({ content: 'slow' });
     await new Promise(resolve => setImmediate(resolve));
@@ -633,7 +633,7 @@ describe('Harness v1 — lifecycle', () => {
       defaultModeId: 'default',
       sessions: { storage, closeTimeoutMs: 1 },
     });
-    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const s = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
     const message = s.message({ content: 'slow' });
     void message.catch(() => {});
     await new Promise(resolve => setImmediate(resolve));
@@ -658,7 +658,7 @@ describe('Harness v1 — lifecycle', () => {
       defaultModeId: 'default',
       sessions: { storage, closeTimeoutMs: 1000 },
     });
-    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const s = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
 
     const manual = s.message({ content: 'manual' });
     await new Promise(resolve => setImmediate(resolve));
@@ -691,7 +691,7 @@ describe('Harness v1 — lifecycle', () => {
       defaultModeId: 'default',
       sessions: { storage, closeTimeoutMs: 1000 },
     });
-    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const s = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
     const attachment = await harness.attachments.upload({
       sessionId: s.id,
       data: Buffer.from('queued attachment'),
@@ -748,7 +748,7 @@ describe('Harness v1 — lifecycle', () => {
       defaultModeId: 'default',
       sessions: { storage, closeTimeoutMs: 20 },
     });
-    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const s = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
 
     const queued = s.queue({ content: 'slow' });
     const queuedSecond = s.queue({ content: 'second' });
@@ -778,7 +778,7 @@ describe('Harness v1 — lifecycle', () => {
       defaultModeId: 'default',
       sessions: { storage, closeTimeoutMs: 20 },
     });
-    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const s = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
 
     const manual = s.message({ content: 'manual' });
     await new Promise(resolve => setImmediate(resolve));
@@ -1207,6 +1207,39 @@ describe('Harness v1 — delete lifecycle', () => {
     await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.not.toBeNull();
   });
 
+  it('blocks non-force delete for completed queue receipts until post-run finalization is marked', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
+    await session.close();
+    const stored = (await storage.loadSession({ sessionId: session.id, harnessName: 'default' }))!;
+    const now = Date.now();
+
+    await storage.saveSession(
+      {
+        ...stored,
+        queueAdmissionReceipts: {
+          queued: {
+            admissionId: 'admission-1',
+            admissionHash: 'hash-1',
+            queuedItemId: 'queued',
+            status: 'completed',
+            result: { text: 'done' },
+            attempts: 1,
+            enqueuedAt: now,
+            completedAt: now,
+            updatedAt: now,
+          },
+        },
+      },
+      { harnessName: 'default', ownerId: stored.ownerId ?? 'h', ifVersion: stored.version },
+    );
+
+    await expect(harness.deleteSession({ sessionId: session.id, resourceId: 'r1' })).rejects.toMatchObject({
+      blockers: expect.arrayContaining([`${session.id}:queue_receipt:queued`]),
+    } satisfies Partial<HarnessSessionDeleteBlockedError>);
+  });
+
   it('non-force deletes an already closed subtree and owned attachments bottom-up', async () => {
     const storage = makeStorage();
     const harness = makeHarness({ sessions: { storage } });
@@ -1256,6 +1289,35 @@ describe('Harness v1 — delete lifecycle', () => {
     expect(harness._internalLiveSessionCount()).toBe(0);
   });
 
+  it('marks live descendants created during force-delete discovery as deleted', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    const originalListSessions = storage.listSessions.bind(storage);
+    let child: Awaited<ReturnType<typeof harness.session>> | undefined;
+    let injected = false;
+    storage.listSessions = (async (...args: Parameters<typeof storage.listSessions>) => {
+      const [opts] = args;
+      const result = await originalListSessions(...args);
+      if (!injected && opts.parentSessionId === parent.id && opts.includeClosed === true) {
+        injected = true;
+        child = await harness.session({
+          threadId: { fresh: true },
+          resourceId: 'r1',
+          parentSessionId: parent.id,
+        });
+      }
+      return result;
+    }) as typeof storage.listSessions;
+
+    await harness.deleteSession({ sessionId: parent.id, resourceId: 'r1', force: true });
+
+    expect(child).toBeDefined();
+    await expect(storage.loadSession({ sessionId: child!.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(child!.setState({ afterDelete: true })).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+    expect(harness._internalLiveSessionCount()).toBe(0);
+  });
+
   it('does not flush a queued turn after force delete removes the row', async () => {
     const storage = makeStorage();
     const agent = new AbortIgnoringMockAgent({ id: 'default' });
@@ -1267,7 +1329,7 @@ describe('Harness v1 — delete lifecycle', () => {
       defaultModeId: 'default',
       sessions: { storage, closeTimeoutMs: 1 },
     });
-    const session = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const session = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
     const queued = session.queue({ content: 'queued' });
     void queued.catch(() => {});
     await waitFor(() => agent.streamCalls.length === 1, 'queued run start');

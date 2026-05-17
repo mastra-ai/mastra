@@ -1427,6 +1427,20 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         expect(await harness.loadSession({ sessionId: 'session-1' })).toBeNull();
         expect(await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).toBeNull();
       });
+
+      it('clears active thread delete fences', async () => {
+        if (!harness) return;
+
+        await harness.withThreadDeleteFence({ threadId: 'reset-thread', ownerId: 'deleter', ttlMs: 30_000 }, async () => {
+          await harness.dangerouslyClearAll();
+
+          await expect(
+            harness.createOrLoadActiveSession(sampleSession({ id: 'after-reset', threadId: 'reset-thread' }), {
+              initialLease: { ownerId: 'h', ttlMs: 30_000 },
+            }),
+          ).resolves.toMatchObject({ created: true });
+        });
+      });
     });
   });
 }

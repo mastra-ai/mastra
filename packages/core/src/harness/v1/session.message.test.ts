@@ -166,6 +166,34 @@ describe('Session.message() — default path', () => {
     expect(agent.calls).toHaveLength(1);
   });
 
+  it('does not convert completed admission evidence write failures into failed evidence', async () => {
+    class CompletedEvidenceFailingStorage extends InMemoryHarness {
+      readonly writes: string[] = [];
+
+      override async writeMessageResultEvidence(record: any): Promise<{ created: boolean }> {
+        this.writes.push(record.status);
+        if (record.status === 'completed') throw new Error('completed evidence unavailable');
+        return super.writeMessageResultEvidence(record);
+      }
+    }
+    const agent = new FakeAgent('default');
+    const storage = new CompletedEvidenceFailingStorage({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(session.message({ content: 'hi', admissionId: 'admission-1' })).rejects.toThrow(
+      'completed evidence unavailable',
+    );
+
+    expect(storage.writes).toContain('completed');
+    expect(storage.writes).not.toContain('failed');
+  });
+
   it('deduplicates concurrent exact admissionId retries before dispatching a second signal', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

@@ -732,6 +732,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_HARNESS_THREAD_DELETE_FENCES]: {
     thread_id: { type: 'text', nullable: false, primaryKey: true },
     owner_id: { type: 'text', nullable: false },
+    lease_id: { type: 'text', nullable: false },
     created_at: { type: 'bigint', nullable: false },
     expires_at: { type: 'bigint', nullable: false },
   },

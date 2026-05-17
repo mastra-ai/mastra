@@ -272,6 +272,7 @@ describe('InMemoryHarness admission storage contract', () => {
       db.harnessThreadDeleteFences.set('lost-thread', {
         threadId: 'lost-thread',
         ownerId: 'other-owner',
+        leaseId: 'other-lease',
         createdAt: Date.now(),
         expiresAt: Date.now() + 30_000,
       });
@@ -288,6 +289,7 @@ describe('InMemoryHarness admission storage contract', () => {
       db.harnessThreadDeleteFences.set('expired-thread', {
         threadId: 'expired-thread',
         ownerId: 'deleter',
+        leaseId: 'expired-lease',
         createdAt: Date.now() - 60_000,
         expiresAt: Date.now() - 1,
       });
