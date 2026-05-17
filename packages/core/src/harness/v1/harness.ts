@@ -23,12 +23,12 @@ import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import type {
-  HarnessStorage,
   PermissionRules,
   SessionGrants,
   SessionRecord,
   SessionSummary,
   TokenUsage,
+  HarnessStorage,
 } from '../../storage/domains/harness';
 import {
   HarnessStorageAttachmentInUseError,
@@ -1590,28 +1590,38 @@ export class Harness {
     deletedLiveSessions = new Map<string, Session>(),
   ): Promise<void> {
     const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
-    await storage.deleteSessions({
-      sessions: bottomUp.map(node => ({
-        harnessName: node.record.harnessName,
-        sessionId: node.record.id,
-        ifVersion: node.record.version,
-        expectedResourceId: node.record.resourceId,
-        expectedThreadId: node.record.threadId,
-        expectedParentSessionId: node.record.parentSessionId ?? null,
-        expectedCreatedAt: node.record.createdAt,
-        requireClosed: true,
-      })),
-    });
-    for (const node of bottomUp) {
-      const live = this._liveSessions.get(node.record.id) ?? deletedLiveSessions.get(node.record.id);
-      live?._markDeleted();
-      const bridge = this._sessionEventBridges.get(node.record.id);
-      if (bridge) {
-        bridge();
-        this._sessionEventBridges.delete(node.record.id);
+    const sessions = bottomUp.map(node => ({
+      harnessName: node.record.harnessName,
+      sessionId: node.record.id,
+      ifVersion: node.record.version,
+      expectedResourceId: node.record.resourceId,
+      expectedThreadId: node.record.threadId,
+      expectedParentSessionId: node.record.parentSessionId ?? null,
+      expectedCreatedAt: node.record.createdAt,
+      requireClosed: true,
+    }));
+    if (storage.supportsAtomicDeleteSessions) {
+      await storage.deleteSessions({ sessions });
+      for (const node of bottomUp) {
+        this._markDeletedSession(node, deletedLiveSessions);
       }
-      this._liveSessions.delete(node.record.id);
+      return;
     }
+    for (let index = 0; index < bottomUp.length; index++) {
+      await storage.deleteSession(sessions[index]!);
+      this._markDeletedSession(bottomUp[index]!, deletedLiveSessions);
+    }
+  }
+
+  private _markDeletedSession(node: CloseTreeNode, deletedLiveSessions: Map<string, Session>): void {
+    const live = this._liveSessions.get(node.record.id) ?? deletedLiveSessions.get(node.record.id);
+    live?._markDeleted();
+    const bridge = this._sessionEventBridges.get(node.record.id);
+    if (bridge) {
+      bridge();
+      this._sessionEventBridges.delete(node.record.id);
+    }
+    this._liveSessions.delete(node.record.id);
   }
 
   /**

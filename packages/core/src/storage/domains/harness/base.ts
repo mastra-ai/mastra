@@ -36,7 +36,8 @@ import type {
  */
 export class HarnessStorageVersionConflictError extends Error {
   readonly name: string = 'HarnessStorageVersionConflictError';
-  readonly code = 'harness.storage.version_conflict' as const;
+  readonly code: 'harness.storage.version_conflict' | 'harness.storage.delete_guard_conflict' =
+    'harness.storage.version_conflict';
   constructor(
     public readonly sessionId: string,
     public readonly expectedVersion: number,
@@ -56,6 +57,7 @@ export type HarnessStorageDeleteGuardField =
 
 export class HarnessStorageDeleteGuardConflictError extends HarnessStorageVersionConflictError {
   override readonly name = 'HarnessStorageDeleteGuardConflictError';
+  override readonly code = 'harness.storage.delete_guard_conflict' as const;
   readonly guardCode = 'harness.storage.delete_guard_conflict' as const;
   constructor(
     sessionId: string,
@@ -194,6 +196,10 @@ export class HarnessStorageThreadDeleteFenceUnsupportedError extends Error {
  * `MemoryStorage`. The harness layer composes the two.
  */
 export abstract class HarnessStorage extends StorageDomain {
+  get supportsAtomicDeleteSessions(): boolean {
+    return this.deleteSessions !== HarnessStorage.prototype.deleteSessions;
+  }
+
   constructor() {
     super({
       component: 'STORAGE',
@@ -336,9 +342,9 @@ export abstract class HarnessStorage extends StorageDomain {
   /**
    * Hard-delete a collected session subtree under one guarded adapter boundary.
    * Adapters must either delete every still-existing guarded row or reject
-   * without deleting any of them. The default preserves compatibility with
-   * legacy adapters by looping `deleteSession`; durable adapters should
-   * override to enforce all-or-nothing batch semantics.
+   * without deleting any of them. The default preserves legacy adapter
+   * compatibility by looping `deleteSession`; durable adapters should override
+   * to enforce all-or-nothing batch semantics.
    */
   async deleteSessions(opts: { sessions: DeleteSessionOptions[] }): Promise<void> {
     for (const session of opts.sessions) {

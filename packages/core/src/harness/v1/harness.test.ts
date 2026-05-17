@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
-import { HarnessStorageVersionConflictError } from '../../storage/domains/harness';
+import { HarnessStorage, HarnessStorageVersionConflictError } from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
@@ -1311,6 +1311,36 @@ describe('Harness v1 — delete lifecycle', () => {
     await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toMatchObject({
       id: child.id,
     });
+  });
+
+  it('keeps legacy deleteSession fallback behavior for adapters without batch delete override', async () => {
+    class LegacyDeleteSessionStorage extends InMemoryHarness {
+      override get supportsAtomicDeleteSessions(): boolean {
+        return false;
+      }
+
+      override async deleteSession(opts: Parameters<InMemoryHarness['deleteSession']>[0]): Promise<void> {
+        await InMemoryHarness.prototype.deleteSessions.call(this, { sessions: [opts] });
+      }
+
+      override async deleteSessions(opts: Parameters<HarnessStorage['deleteSessions']>[0]): Promise<void> {
+        await HarnessStorage.prototype.deleteSessions.call(this, opts);
+      }
+    }
+    const storage = new LegacyDeleteSessionStorage({ db: new InMemoryDB() });
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+
+    await parent.close();
+    await harness.deleteSession({ sessionId: parent.id, resourceId: 'r1' });
+
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toBeNull();
   });
 
   it('force deletes an active subtree after terminalizing it through close', async () => {
