@@ -612,21 +612,27 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
     activationMetadata?: {
-      triggeredBy: 'threshold' | 'ttl' | 'provider_change';
+      triggeredBy: 'threshold' | 'ttl' | 'provider_change' | 'system_change';
       lastActivityAt?: number;
       ttlExpiredMs?: number;
       previousModel?: string;
       currentModel?: string;
+      previousSystemPromptHash?: string;
+      currentSystemPromptHash?: string;
     },
   ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
     const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
-      // TTL and provider-change triggers should not block on in-progress
+      // TTL, provider-change, and system-change triggers should not block on in-progress
       // reflection buffering. The async op will finish in the background
       // and the buffered result will be available for activation on the next turn.
-      if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+      if (
+        activationMetadata?.triggeredBy === 'ttl' ||
+        activationMetadata?.triggeredBy === 'provider_change' ||
+        activationMetadata?.triggeredBy === 'system_change'
+      ) {
         omDebug(
           `[OM:reflect] tryActivateBufferedReflection: async op in progress, not blocking for ${activationMetadata.triggeredBy} trigger`,
         );
@@ -688,7 +694,11 @@ export class ReflectorRunner {
     //
     // If either check fails, keep the buffer in place for the eventual
     // threshold activation.
-    if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+    if (
+      activationMetadata?.triggeredBy === 'ttl' ||
+      activationMetadata?.triggeredBy === 'provider_change' ||
+      activationMetadata?.triggeredBy === 'system_change'
+    ) {
       const unreflectedTailTokens = unreflectedContent ? this.tokenCounter.countObservations(unreflectedContent) : 0;
       const bufferedReflectionTokens = freshRecord.bufferedReflectionTokens ?? 0;
       if (unreflectedTailTokens < bufferedReflectionTokens) {
@@ -748,6 +758,8 @@ export class ReflectorRunner {
         ttlExpiredMs: activationMetadata?.ttlExpiredMs,
         previousModel: activationMetadata?.previousModel,
         currentModel: activationMetadata?.currentModel,
+        previousSystemPromptHash: activationMetadata?.previousSystemPromptHash,
+        currentSystemPromptHash: activationMetadata?.currentSystemPromptHash,
         config: this.getObservationMarkerConfig(freshRecord),
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
@@ -782,6 +794,8 @@ export class ReflectorRunner {
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     lastActivityAt?: number;
+    /** Pre-computed system prompt hash for system-change activation checks. */
+    currentSystemPromptHash?: string;
   }): Promise<void> {
     const {
       record,
@@ -795,6 +809,7 @@ export class ReflectorRunner {
       observabilityContext,
       lastActivityAt,
       threadId: requestedThreadId,
+      currentSystemPromptHash,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
@@ -839,8 +854,14 @@ export class ReflectorRunner {
     const lastModel = getLastModelFromMessageList(messageList);
     const providerChanged =
       this.reflectionConfig.activateOnProviderChange === true && didProviderChange(actorModel, lastModel);
+    const storedSystemPromptHash = record.config?._systemPromptHash as string | undefined;
+    const systemPromptChanged =
+      this.reflectionConfig.activateOnSystemChange === true &&
+      currentSystemPromptHash !== undefined &&
+      storedSystemPromptHash !== undefined &&
+      currentSystemPromptHash !== storedSystemPromptHash;
 
-    if (observationTokens < reflectThreshold && !ttlExpired && !providerChanged) {
+    if (observationTokens < reflectThreshold && !ttlExpired && !providerChanged && !systemPromptChanged) {
       return;
     }
 
@@ -849,13 +870,17 @@ export class ReflectorRunner {
         ? ('threshold' as const)
         : providerChanged
           ? ('provider_change' as const)
-          : ('ttl' as const);
+          : systemPromptChanged
+            ? ('system_change' as const)
+            : ('ttl' as const);
     const activationMetadata = {
       triggeredBy: activationTriggeredBy,
       lastActivityAt: activationTriggeredBy === 'ttl' ? lastActivityAt : undefined,
       ttlExpiredMs: activationTriggeredBy === 'ttl' ? ttlExpiredMs : undefined,
       previousModel: activationTriggeredBy === 'provider_change' ? lastModel : undefined,
       currentModel: activationTriggeredBy === 'provider_change' ? actorModel : undefined,
+      previousSystemPromptHash: activationTriggeredBy === 'system_change' ? storedSystemPromptHash : undefined,
+      currentSystemPromptHash: activationTriggeredBy === 'system_change' ? currentSystemPromptHash : undefined,
     };
 
     // ═══════════════════════════════════════════════════════════
