@@ -282,6 +282,28 @@ describe('harness.threads — cascade-on-delete', () => {
     await expect(harness.threads.get({ resourceId: 'r1', threadId: childThread.id })).resolves.not.toBeNull();
   });
 
+  it('keeps an owned descendant thread when a new active session has reused it', async () => {
+    const { harness, storage } = setupHarness();
+    const thread = await harness.threads.create({ resourceId: 'r1', title: 'parent' });
+    const parent = await harness.session({ threadId: thread.id, resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+    await harness.threads.create({ resourceId: 'r1', threadId: child.threadId, title: 'child' });
+    await child.close();
+
+    const reused = await harness.session({ threadId: child.threadId, resourceId: 'r1' });
+
+    await harness.threads.delete({ resourceId: 'r1', threadId: thread.id });
+
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(storage.loadSession({ sessionId: reused.id, harnessName: 'default' })).resolves.not.toBeNull();
+    await expect(harness.threads.get({ resourceId: 'r1', threadId: child.threadId })).resolves.not.toBeNull();
+  });
+
   it('deletes cleanly when no live session exists', async () => {
     const { harness } = setupHarness();
     const thread = await harness.threads.create({ resourceId: 'r1', title: 't' });

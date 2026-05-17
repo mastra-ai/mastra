@@ -1112,7 +1112,7 @@ export class Harness {
     }
 
     if (opts.force) {
-      await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown);
+      await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown, { resourceId: opts.resourceId });
       return;
     }
 
@@ -1424,9 +1424,13 @@ export class Harness {
     storage: HarnessStorage,
     rootRecord: SessionRecord,
     shouldContinue: () => boolean = () => true,
+    scope: { resourceId?: string } = {},
   ): Promise<SessionRecord[]> {
     const latest = await storage.loadSession({ harnessName: rootRecord.harnessName, sessionId: rootRecord.id });
     if (!latest) return [];
+    if (scope.resourceId !== undefined && latest.resourceId !== scope.resourceId) {
+      throw new HarnessSessionNotFoundError(rootRecord.id);
+    }
     const preCloseTree = await this._collectDeleteTree(storage, latest);
     const liveDeleteHandles = new Map<string, Session>();
     for (const node of preCloseTree) {
@@ -1439,6 +1443,9 @@ export class Harness {
     }
     const closed = await storage.loadSession({ harnessName: rootRecord.harnessName, sessionId: rootRecord.id });
     if (!closed) return [];
+    if (scope.resourceId !== undefined && closed.resourceId !== scope.resourceId) {
+      throw new HarnessSessionNotFoundError(rootRecord.id);
+    }
     const tree = await this._collectDeleteTree(storage, closed);
     if (!shouldContinue()) return [];
     const deleted = tree.map(node => node.record);
@@ -1760,10 +1767,18 @@ export class Harness {
         });
         if (!stored || stored.threadId !== opts.threadId || stored.resourceId !== opts.resourceId) continue;
         cascaded = true;
-        const deletedRecords = await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown);
+        const deletedRecords = await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown, {
+          resourceId: opts.resourceId,
+        });
         for (const deleted of deletedRecords) {
           if (this._shutdown) return;
           if (!deleted.ownsThread || deleted.threadId === opts.threadId) continue;
+          const activeThreadSession = await storage.loadSessionByThread({
+            harnessName: this._harnessName,
+            threadId: deleted.threadId,
+            resourceId: deleted.resourceId,
+          });
+          if (activeThreadSession) continue;
           await memory.deleteThread({ threadId: deleted.threadId });
           if (this._shutdown) return;
           if (memory.supportsObservationalMemory) {

@@ -1285,6 +1285,31 @@ describe('Harness v1 — delete lifecycle', () => {
     );
     await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.not.toBeNull();
   });
+
+  it('rechecks resource scope before committing a force delete', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const originalLoadSession = storage.loadSession.bind(storage);
+    let loads = 0;
+    storage.loadSession = (async (...args: Parameters<typeof storage.loadSession>) => {
+      const record = await originalLoadSession(...args);
+      if (args[0].sessionId === session.id) {
+        loads += 1;
+        if (loads === 2 && record) {
+          return { ...record, resourceId: 'r2' };
+        }
+      }
+      return record;
+    }) as typeof storage.loadSession;
+
+    await expect(harness.deleteSession({ sessionId: session.id, resourceId: 'r1', force: true })).rejects.toBeInstanceOf(
+      HarnessSessionNotFoundError,
+    );
+    const stored = await originalLoadSession({ sessionId: session.id, harnessName: 'default' });
+    expect(stored).not.toBeNull();
+    expect(stored?.closedAt).toBeUndefined();
+  });
 });
 
 describe('Harness v1 — crash recovery (lease TTL)', () => {
