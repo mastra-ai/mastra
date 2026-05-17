@@ -641,7 +641,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   // their internals.
   [TABLE_HARNESS_SESSIONS]: {
     harness_name: { type: 'text', nullable: false },
-    id: { type: 'text', nullable: false, primaryKey: true },
+    id: { type: 'text', nullable: false },
     resource_id: { type: 'text', nullable: false },
     thread_id: { type: 'text', nullable: false },
     parent_session_id: { type: 'text', nullable: true },
