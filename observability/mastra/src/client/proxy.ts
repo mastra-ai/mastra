@@ -31,6 +31,7 @@ import type {
 } from '@mastra/core/observability';
 
 import { BaseObservabilityInstance } from '../instances/base';
+import { generateClientSignalId } from './id';
 import { buildExportedLog, buildExportedSpan, decodeResourceLogs, decodeResourceSpans } from './otlp';
 import type { DecodedOtlpLog, DecodedOtlpSpan } from './otlp';
 import { formatTraceparent, parseTraceparent } from './w3c';
@@ -183,6 +184,7 @@ class ClientObservabilityProxyImpl implements ClientObservabilityProxy {
       const metricEvent: MetricEvent = {
         type: 'metric',
         metric: {
+          metricId: generateClientSignalId(),
           timestamp: new Date(),
           traceId: parent.traceId,
           spanId: parent.spanId,

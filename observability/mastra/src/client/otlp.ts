@@ -16,6 +16,8 @@
 import { SpanType } from '@mastra/core/observability';
 import type { AnyExportedSpan, EntityType, ExportedLog, LogLevel } from '@mastra/core/observability';
 
+import { generateClientSignalId } from './id';
+
 /**
  * Convert an OTLP nanosecond timestamp (string or number) to a JS Date.
  *
@@ -238,6 +240,7 @@ export function buildExportedSpan(
 
 export function buildExportedLog(decoded: DecodedOtlpLog): ExportedLog {
   return {
+    logId: generateClientSignalId(),
     timestamp: decoded.timestamp,
     traceId: decoded.traceId,
     spanId: decoded.spanId,

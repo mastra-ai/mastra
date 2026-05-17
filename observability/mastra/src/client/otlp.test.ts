@@ -171,6 +171,7 @@ describe('buildExportedLog', () => {
       timestamp: new Date(0),
       body: 42,
     });
+    expect(log.logId).toEqual(expect.any(String));
     expect(log.message).toBe('42');
   });
 

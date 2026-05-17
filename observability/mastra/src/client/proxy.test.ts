@@ -174,6 +174,7 @@ describe('ingest happy path', () => {
     const metric = bus.events.find(e => (e as { type: string }).type === 'metric') as
       | {
           metric: {
+            metricId: string;
             name: string;
             value: number;
             labels: Record<string, string>;
@@ -182,6 +183,7 @@ describe('ingest happy path', () => {
         }
       | undefined;
     expect(metric).toBeDefined();
+    expect(metric!.metric.metricId).toEqual(expect.any(String));
     expect(metric!.metric.name).toBe('mastra_tool_duration_ms');
     expect(metric!.metric.labels).toMatchObject({ toolType: 'client' });
     expect(metric!.metric.value).toBe(234);
