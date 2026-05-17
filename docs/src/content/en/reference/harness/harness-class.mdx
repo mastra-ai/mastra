@@ -597,6 +597,20 @@ const result = await session.queue({
 
 When a later `session.queue()` call uses the same `admissionId` and the same queue payload, the session returns the retained result, joins the live in-process queued turn, or waits briefly for durable terminal evidence from the original queued turn. If the payload differs, the call fails with an admission conflict.
 
+#### `deleteSession({ sessionId, resourceId, force? })`
+
+Delete a Harness v1 session subtree for a resource.
+
+```typescript
+await harness.deleteSession({
+  sessionId: session.id,
+  resourceId: 'project-xyz',
+  force: true,
+})
+```
+
+Without `force`, the target session and descendants must already be closed. With `force`, Harness closes the subtree first, then deletes the session rows and owned attachments. The `resourceId` parameter is required so callers do not delete a session from another resource by ID.
+
 #### `listMessages(options?)`
 
 Retrieve messages for the current thread.

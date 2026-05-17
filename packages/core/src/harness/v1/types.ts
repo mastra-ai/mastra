@@ -754,6 +754,12 @@ export interface SessionLoadByIdOptions {
   includeClosed?: boolean;
 }
 
+export interface SessionDeleteOptions {
+  sessionId: string;
+  resourceId: string;
+  force?: boolean;
+}
+
 export interface AttachmentUploadOptions {
   sessionId: string;
   resourceId?: string;

@@ -17,6 +17,7 @@
  *   - 'closing' — the durable close marker has committed; new work is rejected
  *                 while previously admitted turns drain until the close deadline.
  *   - 'closed'  — `close()` has run; record has `closedAt` set in storage.
+ *   - 'deleted' — the session row has been hard-deleted from storage.
  *   - 'evicted' — flushed to storage and dropped from live map; the record
  *                 remains active and the session can be re-hydrated. Currently
  *                 unused; lands with §5.4 idle eviction.
@@ -71,6 +72,7 @@ import {
   HarnessQueueFullError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
+  HarnessSessionDeletedError,
   HarnessSkillArgsValidationError,
   HarnessSkillNotFoundError,
   HarnessValidationError,
@@ -165,7 +167,7 @@ const SUPPORTED_SKILL_ARG_SCHEMA_KEYS = new Set([
   'additionalProperties',
 ]);
 
-export type SessionLifecycleState = 'live' | 'closing' | 'closed' | 'evicted';
+export type SessionLifecycleState = 'live' | 'closing' | 'closed' | 'deleted' | 'evicted';
 
 /**
  * System prompt for the goal judge. Lifted verbatim from
@@ -899,9 +901,9 @@ export class Session {
     return this._state;
   }
 
-  /** True once `close()` has settled. */
+  /** True once the session has reached a terminal local state. */
   get isClosed(): boolean {
-    return this._state === 'closed';
+    return this._state === 'closed' || this._state === 'deleted';
   }
 
   /** True while close is draining admitted flushes or after the durable closing marker commits. */
@@ -5466,7 +5468,7 @@ export class Session {
    * whether to replay, await, or fail a previously admitted item.
    */
   private async _completeQueuedTurn(itemId: string, result: AgentResult): Promise<void> {
-    if (this._state === 'closed') {
+    if (this.isClosed) {
       const resolver = this._queueResolvers.get(itemId);
       if (resolver) {
         this._queueResolvers.delete(itemId);
@@ -5510,7 +5512,7 @@ export class Session {
 
   /** Same as `_completeQueuedTurn` but rejects the resolver with `err`. */
   private async _failQueuedTurn(itemId: string, err: unknown): Promise<void> {
-    if (this._state === 'closed') {
+    if (this.isClosed) {
       const resolver = this._queueResolvers.get(itemId);
       if (resolver) {
         this._queueResolvers.delete(itemId);
@@ -5665,6 +5667,9 @@ export class Session {
   // -------------------------------------------------------------------------
 
   private _assertLive(_method: string): void {
+    if (this._state === 'deleted') {
+      throw new HarnessSessionDeletedError(this.id);
+    }
     if (this.isClosing) {
       throw new HarnessSessionClosingError(this.id);
     }
@@ -5674,6 +5679,9 @@ export class Session {
   }
 
   private _assertOpenForTurn(_method: string): void {
+    if (this._state === 'deleted') {
+      throw new HarnessSessionDeletedError(this.id);
+    }
     if (this._state === 'closed') {
       throw new HarnessSessionClosedError(this.id);
     }
@@ -5695,6 +5703,12 @@ export class Session {
     opts?: { attachmentReferences?: SaveAttachmentReferenceInput[] },
   ): Promise<void> {
     if (this._state === 'closed') {
+      return Promise.reject(new HarnessSessionClosedError(this.id));
+    }
+    if (this._state === 'deleted') {
+      return Promise.reject(new HarnessSessionDeletedError(this.id));
+    }
+    if (this._state === 'evicted') {
       return Promise.reject(new HarnessSessionClosedError(this.id));
     }
     const run = async (): Promise<void> => {
@@ -5909,6 +5923,13 @@ export class Session {
     this._state = 'closed';
     this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
     this._rejectIdleWaiters(new HarnessSessionClosedError(this.id));
+  }
+
+  /** @internal — used by Harness hard-delete after storage has removed the row. */
+  _markDeleted(): void {
+    this._state = 'deleted';
+    this._tearDownThreadSubscription(new HarnessSessionDeletedError(this.id));
+    this._rejectIdleWaiters(new HarnessSessionDeletedError(this.id));
   }
 
   /** @internal — harness bridge subscription that remains valid while closing. */

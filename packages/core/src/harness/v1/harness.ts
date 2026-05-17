@@ -47,6 +47,7 @@ import {
   HarnessModelNotFoundError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
+  HarnessSessionDeleteBlockedError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
   HarnessStorageError,
@@ -67,6 +68,7 @@ import type {
   ModelInfo,
   PermissionPolicy,
   SessionListOptions,
+  SessionDeleteOptions,
   SessionLoadByIdOptions,
   SessionResolveOptions,
   ShutdownOptions,
@@ -1096,6 +1098,34 @@ export class Harness {
   }
 
   /**
+   * Hard-delete a session subtree. Non-force delete is a closed-record cleanup
+   * path; force delete first reuses the close cascade so pending local work is
+   * terminalized before storage rows and owned attachments are removed.
+   */
+  async deleteSession(opts: SessionDeleteOptions): Promise<void> {
+    if (this._shutdown) return;
+    const storage = this._requireStorage('deleteSession()');
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
+    if (!stored) throw new HarnessSessionNotFoundError(opts.sessionId);
+    if (stored.resourceId !== opts.resourceId) {
+      throw new HarnessSessionNotFoundError(opts.sessionId);
+    }
+
+    if (opts.force) {
+      await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown);
+      return;
+    }
+
+    const tree = await this._collectDeleteTree(storage, stored);
+    const blockers = this._collectDeleteBlockers(tree);
+    if (blockers.length > 0) {
+      throw new HarnessSessionDeleteBlockedError(stored.id, blockers);
+    }
+    if (this._shutdown) return;
+    await this._deleteClosedTree(storage, tree);
+  }
+
+  /**
    * @internal — used by `Session.close()` and `Harness.closeSession()`.
    */
   async _closeSession(session: Session): Promise<void> {
@@ -1390,6 +1420,95 @@ export class Harness {
     this._liveSessions.delete(record.id);
   }
 
+  private async _forceDeleteSessionRecord(
+    storage: HarnessStorage,
+    rootRecord: SessionRecord,
+    shouldContinue: () => boolean = () => true,
+  ): Promise<SessionRecord[]> {
+    const latest = await storage.loadSession({ harnessName: rootRecord.harnessName, sessionId: rootRecord.id });
+    if (!latest) return [];
+    const preCloseTree = await this._collectDeleteTree(storage, latest);
+    const liveDeleteHandles = new Map<string, Session>();
+    for (const node of preCloseTree) {
+      const live = this._liveSessions.get(node.record.id);
+      if (live) liveDeleteHandles.set(node.record.id, live);
+    }
+    if (latest.closedAt === undefined) {
+      await this._closeSessionRecord(storage, latest);
+      if (!shouldContinue()) return [];
+    }
+    const closed = await storage.loadSession({ harnessName: rootRecord.harnessName, sessionId: rootRecord.id });
+    if (!closed) return [];
+    const tree = await this._collectDeleteTree(storage, closed);
+    if (!shouldContinue()) return [];
+    const deleted = tree.map(node => node.record);
+    await this._deleteClosedTree(storage, tree, liveDeleteHandles);
+    return deleted;
+  }
+
+  private async _collectDeleteTree(storage: HarnessStorage, rootRecord: SessionRecord): Promise<CloseTreeNode[]> {
+    const tree: CloseTreeNode[] = [{ record: rootRecord, depth: 0, leaseAcquired: false }];
+    const seen = new Set<string>([rootRecord.id]);
+    for (let index = 0; index < tree.length; index++) {
+      const node = tree[index]!;
+      const children = await storage.listSessions({
+        harnessName: node.record.harnessName,
+        resourceId: rootRecord.resourceId,
+        includeClosed: true,
+        parentSessionId: node.record.id,
+      });
+      for (const child of children) {
+        if (seen.has(child.id)) continue;
+        const stored = await storage.loadSession({ harnessName: node.record.harnessName, sessionId: child.id });
+        if (!stored) continue;
+        if (stored.resourceId !== rootRecord.resourceId) continue;
+        seen.add(stored.id);
+        tree.push({ record: stored, depth: node.depth + 1, leaseAcquired: false });
+      }
+    }
+    return tree;
+  }
+
+  private _collectDeleteBlockers(tree: CloseTreeNode[]): string[] {
+    const blockers: string[] = [];
+    for (const node of tree) {
+      const record = node.record;
+      if (record.closedAt === undefined) blockers.push(`${record.id}:not_closed`);
+      if ((record.pendingQueue?.length ?? 0) > 0) blockers.push(`${record.id}:pending_queue`);
+      if (record.pendingResume !== undefined) blockers.push(`${record.id}:pending_resume`);
+      for (const receipt of Object.values(record.queueAdmissionReceipts ?? {})) {
+        if (receipt.status === 'queued' || receipt.status === 'admitting' || receipt.status === 'accepted') {
+          blockers.push(`${record.id}:queue_receipt:${receipt.queuedItemId}`);
+        }
+      }
+      for (const receipt of Object.values(record.inboxResponseReceipts ?? {})) {
+        if (receipt.status === 'accepted' || receipt.retryable === true) {
+          blockers.push(`${record.id}:inbox_receipt:${receipt.responseId}`);
+        }
+      }
+    }
+    return blockers;
+  }
+
+  private async _deleteClosedTree(
+    storage: HarnessStorage,
+    tree: CloseTreeNode[],
+    deletedLiveSessions = new Map<string, Session>(),
+  ): Promise<void> {
+    const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
+    for (const node of bottomUp) {
+      await storage.deleteSession({ harnessName: node.record.harnessName, sessionId: node.record.id });
+      const live = this._liveSessions.get(node.record.id) ?? deletedLiveSessions.get(node.record.id);
+      live?._markDeleted();
+      const bridge = this._sessionEventBridges.get(node.record.id);
+      if (bridge) {
+        bridge();
+        this._sessionEventBridges.delete(node.record.id);
+      }
+      this._liveSessions.delete(node.record.id);
+    }
+  }
+
   /**
    * Read-only listing of session records for a resource. Closed records are
    * excluded unless `includeClosed: true`.
@@ -1622,19 +1741,35 @@ export class Harness {
         return;
       }
 
-      // Cascade: close the live session (if any) before deleting the thread
-      // so the lease is released and any child sessions are torn down.
+      // Cascade: force-delete every session rooted on this thread before
+      // deleting the thread so descendants, leases, and owned attachments are
+      // cleaned through the same session lifecycle path.
       const storage = this._requireStorage('threads.delete()');
       let cascaded = false;
-      const stored = await storage.loadSessionByThread({
+      const candidates = await storage.listSessions({
         harnessName: this._harnessName,
-        threadId: opts.threadId,
         resourceId: opts.resourceId,
+        includeClosed: true,
       });
       if (this._shutdown) return;
-      if (stored) {
+      for (const candidate of candidates) {
+        if (candidate.threadId !== opts.threadId) continue;
+        const stored = await storage.loadSession({
+          harnessName: this._harnessName,
+          sessionId: candidate.id,
+        });
+        if (!stored || stored.threadId !== opts.threadId || stored.resourceId !== opts.resourceId) continue;
         cascaded = true;
-        await this._closeSessionRecord(storage, stored);
+        const deletedRecords = await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown);
+        for (const deleted of deletedRecords) {
+          if (this._shutdown) return;
+          if (!deleted.ownsThread || deleted.threadId === opts.threadId) continue;
+          await memory.deleteThread({ threadId: deleted.threadId });
+          if (this._shutdown) return;
+          if (memory.supportsObservationalMemory) {
+            await memory.clearObservationalMemory(deleted.threadId, deleted.resourceId);
+          }
+        }
         if (this._shutdown) return;
       }
 
@@ -1646,6 +1781,8 @@ export class Harness {
         type: 'thread_deleted',
         threadId: opts.threadId,
         resourceId: opts.resourceId,
+        // Historical event field name. For Harness v1 this now means a
+        // session subtree cascade ran; the cascade hard-deletes after close.
         cascadedSessionClose: cascaded,
       });
     },

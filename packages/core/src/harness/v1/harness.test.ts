@@ -22,6 +22,8 @@ import {
   HarnessConfigError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
+  HarnessSessionDeleteBlockedError,
+  HarnessSessionDeletedError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
 } from './errors';
@@ -546,6 +548,38 @@ describe('Harness v1 — lifecycle', () => {
     await expect(harness.threads.get({ resourceId: 'r1', threadId: thread.id })).resolves.toMatchObject({
       id: thread.id,
     });
+    const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
+    expect(stored?.closedAt).toBeDefined();
+  });
+
+  it('does not hard-delete session rows when shutdown starts during force delete', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const s = await harness.session({ threadId: 'delete-during-shutdown', resourceId: 'r1' });
+    const originalSaveSession = storage.saveSession.bind(storage);
+    let releaseTerminalSave!: () => void;
+    let terminalSaveStarted!: () => void;
+    const terminalSaveGate = new Promise<void>(resolve => {
+      releaseTerminalSave = resolve;
+    });
+    const terminalSaveSeen = new Promise<void>(resolve => {
+      terminalSaveStarted = resolve;
+    });
+    storage.saveSession = (async (...args: Parameters<typeof storage.saveSession>) => {
+      const [record] = args;
+      if (record.id === s.id && record.closingAt !== undefined && record.closedAt !== undefined) {
+        terminalSaveStarted();
+        await terminalSaveGate;
+      }
+      return originalSaveSession(...args);
+    }) as typeof storage.saveSession;
+
+    const deleting = harness.deleteSession({ sessionId: s.id, resourceId: 'r1', force: true });
+    await terminalSaveSeen;
+    const shutdown = harness.shutdown();
+    releaseTerminalSave();
+    await Promise.all([deleting, shutdown]);
+
     const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
     expect(stored?.closedAt).toBeDefined();
   });
@@ -1145,6 +1179,111 @@ describe('Harness v1 — deep cascade', () => {
     expect(storedChild?.closedAt).toBeDefined();
     expect(storedGrand?.closedAt).toBeDefined();
     expect(harness._internalLiveSessionCount()).toBe(0);
+  });
+});
+
+describe('Harness v1 — delete lifecycle', () => {
+  it('blocks non-force delete while the target subtree is still active', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+
+    await expect(harness.deleteSession({ sessionId: parent.id, resourceId: 'r1' })).rejects.toMatchObject({
+      name: 'HarnessSessionDeleteBlockedError',
+      sessionId: parent.id,
+      blockers: expect.arrayContaining([`${parent.id}:not_closed`, `${child.id}:not_closed`]),
+    } satisfies Partial<HarnessSessionDeleteBlockedError>);
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.not.toBeNull();
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.not.toBeNull();
+  });
+
+  it('non-force deletes an already closed subtree and owned attachments bottom-up', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+    const attachment = await harness.attachments.upload({
+      sessionId: child.id,
+      resourceId: 'r1',
+      data: Buffer.from('delete me'),
+      filename: 'delete.txt',
+      contentType: 'text/plain',
+    });
+
+    await parent.close();
+    await harness.deleteSession({ sessionId: parent.id, resourceId: 'r1' });
+
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(
+      storage.getAttachmentRecord({
+        harnessName: 'default',
+        sessionId: child.id,
+        attachmentId: attachment.attachmentId,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('force deletes an active subtree after terminalizing it through close', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+
+    await harness.deleteSession({ sessionId: parent.id, resourceId: 'r1', force: true });
+
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(parent.setState({ afterDelete: true })).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+    expect(harness._internalLiveSessionCount()).toBe(0);
+  });
+
+  it('does not flush a queued turn after force delete removes the row', async () => {
+    const storage = makeStorage();
+    const agent = new AbortIgnoringMockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise, text: 'queued after delete' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, closeTimeoutMs: 1 },
+    });
+    const session = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const queued = session.queue({ content: 'queued' });
+    void queued.catch(() => {});
+    await waitFor(() => agent.streamCalls.length === 1, 'queued run start');
+
+    await harness.deleteSession({ sessionId: session.id, resourceId: 'r1', force: true });
+    await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.toBeNull();
+
+    hold.resolve();
+    await expect(queued).rejects.toBeInstanceOf(HarnessSessionClosingError);
+    await new Promise(resolve => setImmediate(resolve));
+  });
+
+  it('does not leak existence across resources during delete', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const session = await harness.session({ threadId: 't1', resourceId: 'r1' });
+
+    await expect(harness.deleteSession({ sessionId: session.id, resourceId: 'r2', force: true })).rejects.toBeInstanceOf(
+      HarnessSessionNotFoundError,
+    );
+    await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.not.toBeNull();
   });
 });
 

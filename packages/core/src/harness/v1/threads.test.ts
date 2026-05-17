@@ -6,8 +6,8 @@
  *   - resource scoping: cross-resource reads return null, cross-resource
  *     writes throw `HarnessThreadNotFoundError`, cross-resource deletes are
  *     silent no-ops
- *   - cascade-on-delete: deleting a thread that has a live session walks
- *     `loadSessionByThread` and closes the session before deleting the row
+ *   - cascade-on-delete: deleting a thread force-deletes sessions rooted on
+ *     that thread before deleting the thread row
  *   - lifecycle events: `thread_created`, `thread_renamed`, `thread_cloned`,
  *     `thread_deleted` fire on the harness emitter with the right payload
  */
@@ -244,8 +244,8 @@ describe('harness.threads — resource scoping', () => {
 // ---------------------------------------------------------------------------
 
 describe('harness.threads — cascade-on-delete', () => {
-  it('closes a live session bound to the thread before deleting', async () => {
-    const { harness } = setupHarness();
+  it('force-deletes a live session bound to the thread before deleting', async () => {
+    const { harness, storage } = setupHarness();
     const thread = await harness.threads.create({ resourceId: 'r1', title: 't' });
 
     // Open a session that adopts this thread.
@@ -254,12 +254,32 @@ describe('harness.threads — cascade-on-delete', () => {
 
     await harness.threads.delete({ resourceId: 'r1', threadId: thread.id });
 
-    // The live session must have been cascade-closed.
+    // The live session must have been cascade-closed locally and deleted from storage.
     expect(session.isClosed).toBe(true);
+    await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.toBeNull();
 
     // The thread must be gone.
     const fetched = await harness.threads.get({ resourceId: 'r1', threadId: thread.id });
     expect(fetched).toBeNull();
+  });
+
+  it('force-deletes descendant sessions even when they use separate threads', async () => {
+    const { harness, storage } = setupHarness();
+    const thread = await harness.threads.create({ resourceId: 'r1', title: 'parent' });
+    const childThread = await harness.threads.create({ resourceId: 'r1', title: 'child' });
+    const parent = await harness.session({ threadId: thread.id, resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: childThread.id,
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+
+    await harness.threads.delete({ resourceId: 'r1', threadId: thread.id });
+
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(harness.threads.get({ resourceId: 'r1', threadId: thread.id })).resolves.toBeNull();
+    await expect(harness.threads.get({ resourceId: 'r1', threadId: childThread.id })).resolves.not.toBeNull();
   });
 
   it('deletes cleanly when no live session exists', async () => {

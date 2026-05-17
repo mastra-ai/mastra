@@ -60,6 +60,23 @@ export class HarnessSessionClosingError extends Error {
   }
 }
 
+export class HarnessSessionDeleteBlockedError extends Error {
+  readonly name = 'HarnessSessionDeleteBlockedError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly blockers: ReadonlyArray<string>,
+  ) {
+    super(`Session "${sessionId}" cannot be deleted: ${blockers.join(', ')}`);
+  }
+}
+
+export class HarnessSessionDeletedError extends Error {
+  readonly name = 'HarnessSessionDeletedError';
+  constructor(public readonly sessionId: string) {
+    super(`Session "${sessionId}" is deleted`);
+  }
+}
+
 /**
  * `harness.session(...)` could not acquire the session's write lease under
  * `lockMode: 'fail'`. Carries the current owner so callers can route the
