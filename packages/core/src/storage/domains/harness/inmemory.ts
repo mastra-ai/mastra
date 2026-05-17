@@ -220,11 +220,13 @@ export class InMemoryHarness extends HarnessStorage {
       if (fence && fence.expiresAt > Date.now()) {
         throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
       }
-      for (const active of this.db.harnessSessions.values()) {
-        if (active.harnessName !== harnessName) continue;
-        if (active.resourceId !== record.resourceId || active.threadId !== record.threadId) continue;
-        if (active.closedAt !== undefined) continue;
-        throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, active.version);
+      if (record.closedAt === undefined) {
+        for (const active of this.db.harnessSessions.values()) {
+          if (active.harnessName !== harnessName) continue;
+          if (active.resourceId !== record.resourceId || active.threadId !== record.threadId) continue;
+          if (active.closedAt !== undefined) continue;
+          throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, active.version);
+        }
       }
     }
 

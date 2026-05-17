@@ -1435,7 +1435,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           await harness.dangerouslyClearAll();
 
           await expect(
-            harness.createOrLoadActiveSession(sampleSession({ id: 'after-reset', threadId: 'reset-thread' }), {
+            harness.createOrLoadActiveSession(createSampleSessionRecord({ id: 'after-reset', threadId: 'reset-thread' }), {
               initialLease: { ownerId: 'h', ttlMs: 30_000 },
             }),
           ).resolves.toMatchObject({ created: true });
