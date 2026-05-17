@@ -189,6 +189,37 @@ describe('ObservabilityCollector', () => {
       });
       expect(getCurrentObservabilityCollector()).toBeUndefined();
     });
+
+    it('isolates overlapping async withContext calls', async () => {
+      const first = createObservabilityCollector(makeCarrier());
+      const second = createObservabilityCollector(makeCarrier());
+      let releaseFirst!: () => void;
+      let releaseSecond!: () => void;
+
+      const firstRun = first.withContext(async () => {
+        expect(getCurrentObservabilityCollector()).toBe(first);
+        await new Promise<void>(resolve => {
+          releaseFirst = resolve;
+        });
+        expect(getCurrentObservabilityCollector()).toBe(first);
+      });
+
+      const secondRun = second.withContext(async () => {
+        expect(getCurrentObservabilityCollector()).toBe(second);
+        await new Promise<void>(resolve => {
+          releaseSecond = resolve;
+        });
+        expect(getCurrentObservabilityCollector()).toBe(second);
+      });
+
+      releaseFirst();
+      await firstRun;
+      expect(getCurrentObservabilityCollector()).toBeUndefined();
+
+      releaseSecond();
+      await secondRun;
+      expect(getCurrentObservabilityCollector()).toBeUndefined();
+    });
   });
 
   it('degrades to a synthetic root when traceparent is malformed', async () => {
@@ -202,5 +233,22 @@ describe('ObservabilityCollector', () => {
     // and reject these (it validates traceId match against the actual
     // parentContext).
     expect(spans[0]!.traceId).toBe('00000000000000000000000000000000');
+  });
+
+  it('degrades to a synthetic root when traceparent components are W3C-invalid', async () => {
+    for (const traceparent of [
+      `ff-${TRACE_ID}-${PARENT_SPAN_ID}-01`,
+      `00-00000000000000000000000000000000-${PARENT_SPAN_ID}-01`,
+      `00-${TRACE_ID}-0000000000000000-01`,
+    ]) {
+      const collector = createObservabilityCollector({ traceparent });
+      await collector.withContext(async () => {
+        await collector.span('orphan', async () => null);
+      });
+      const spans = flushSpans(collector.flush());
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.traceId).toBe('00000000000000000000000000000000');
+      expect(spans[0]!.parentSpanId).toBe('0000000000000000');
+    }
   });
 });

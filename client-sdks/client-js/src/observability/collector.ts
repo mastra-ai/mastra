@@ -15,11 +15,14 @@
  * proxy in `@mastra/observability` actually reads are populated.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ClientObservabilityCarrier, ClientObservabilityPayload } from '@mastra/core/observability';
 
 import type { ObservabilityCollector, ObservabilityCollectorFactory } from './types';
 
 const TRACEPARENT_RE = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/;
+const ZERO_TRACE_ID = '00000000000000000000000000000000';
+const ZERO_SPAN_ID = '0000000000000000';
 
 interface BufferedSpan {
   spanId: string;
@@ -43,6 +46,15 @@ interface BufferedLog {
   data?: Record<string, unknown>;
 }
 
+interface CollectorContext {
+  collector: ObservabilityCollectorImpl;
+  spanStack: string[];
+  executionStartMs: number;
+  executionEndMs?: number;
+}
+
+const collectorContext = new AsyncLocalStorage<CollectorContext>();
+
 const LEVEL_TO_SEVERITY_NUMBER: Record<BufferedLog['level'], number> = {
   debug: 5,
   info: 9,
@@ -63,6 +75,14 @@ function nowNs(): bigint {
   // Use Date.now() for wall-clock timestamps that align with
   // server-side spans within roughly clock-skew bounds.
   return BigInt(Date.now()) * 1_000_000n;
+}
+
+function isValidTraceparentMatch(parsed: RegExpExecArray): boolean {
+  const version = parsed[1]!;
+  const traceId = parsed[2]!;
+  const spanId = parsed[3]!;
+
+  return version !== 'ff' && traceId !== ZERO_TRACE_ID && spanId !== ZERO_SPAN_ID;
 }
 
 function randomSpanIdHex(): string {
@@ -113,7 +133,7 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
   readonly #rootSpanId: string;
   readonly #spans: BufferedSpan[] = [];
   readonly #logs: BufferedLog[] = [];
-  /** Stack of currently-active span IDs (innermost last). */
+  /** Fallback stack used when span/log are called outside withContext. */
   readonly #spanStack: string[] = [];
   /** Wall-clock execution timing, captured by withContext. */
   #executionStartMs: number | undefined;
@@ -123,13 +143,13 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
   constructor(parentContext: ClientObservabilityCarrier) {
     this.parentContext = parentContext;
     const parsed = TRACEPARENT_RE.exec(parentContext.traceparent);
-    if (!parsed) {
+    if (!parsed || !isValidTraceparentMatch(parsed)) {
       // No usable parent — degrade to a synthetic root so the
       // collector still functions, but warn that nothing will be
       // ingestable on the server (validation will reject mismatched
       // traceIds).
-      this.#traceId = '00000000000000000000000000000000';
-      this.#rootSpanId = '0000000000000000';
+      this.#traceId = ZERO_TRACE_ID;
+      this.#rootSpanId = ZERO_SPAN_ID;
       return;
     }
     this.#traceId = parsed[2]!;
@@ -149,26 +169,30 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
     //     because the CLIENT_TOOL_CALL event span has no endTime; the
     //     measured value is shipped back via flush() and emitted as
     //     mastra_tool_duration_ms with toolType: "client" by the proxy.
-    this.#spanStack.push(this.#rootSpanId);
-    const previous = currentCollector;
-    currentCollector = this;
-    if (this.#executionStartMs === undefined) {
-      this.#executionStartMs = Date.now();
-    }
-    try {
-      return await fn();
-    } finally {
-      this.#executionEndMs = Date.now();
-      currentCollector = previous;
-      this.#spanStack.pop();
-    }
+    const executionStartMs = this.#executionStartMs ?? Date.now();
+    this.#executionStartMs = executionStartMs;
+    const context: CollectorContext = {
+      collector: this,
+      spanStack: [this.#rootSpanId],
+      executionStartMs,
+    };
+
+    return collectorContext.run(context, async () => {
+      try {
+        return await fn();
+      } finally {
+        context.executionEndMs = Date.now();
+        this.#executionEndMs = context.executionEndMs;
+      }
+    });
   }
 
   async span<T>(name: string, fn: () => Promise<T> | T, attributes?: Record<string, unknown>): Promise<T> {
     const spanId = randomSpanIdHex();
-    const parentSpanId = this.#spanStack[this.#spanStack.length - 1] ?? this.#rootSpanId;
+    const spanStack = this.#getSpanStack();
+    const parentSpanId = spanStack[spanStack.length - 1] ?? this.#rootSpanId;
     const startTimeNs = nowNs();
-    this.#spanStack.push(spanId);
+    spanStack.push(spanId);
     let statusCode = 1;
     let statusMessage: string | undefined;
     try {
@@ -178,7 +202,7 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
       statusMessage = err instanceof Error ? err.message : String(err);
       throw err;
     } finally {
-      this.#spanStack.pop();
+      spanStack.pop();
       this.#spans.push({
         spanId,
         parentSpanId,
@@ -194,7 +218,8 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
   }
 
   log(level: BufferedLog['level'], message: string, data?: Record<string, unknown>): void {
-    const spanId = this.#spanStack[this.#spanStack.length - 1] ?? this.#rootSpanId;
+    const spanStack = this.#getSpanStack();
+    const spanId = spanStack[spanStack.length - 1] ?? this.#rootSpanId;
     this.#logs.push({
       spanId,
       traceId: this.#traceId,
@@ -203,6 +228,11 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
       message,
       data,
     });
+  }
+
+  #getSpanStack(): string[] {
+    const context = collectorContext.getStore();
+    return context?.collector === this ? context.spanStack : this.#spanStack;
   }
 
   flush(): ClientObservabilityPayload {
@@ -285,20 +315,6 @@ export const createObservabilityCollector: ObservabilityCollectorFactory = paren
 // Current collector accessor
 // ============================================================================
 //
-// JavaScript is single-threaded, so a synchronous module-level "current
-// collector" works inside any execute() call as long as there is at most
-// one client tool running at a time. Concurrent client tool executions
-// would race on this global, but that scenario is degenerate today: the
-// agent loop sees one tool call at a time per agent run, and the SDK
-// processes them sequentially in `executeToolCallAndRespond`.
-//
-// AsyncLocalStorage would be the more correct primitive for Node, but
-// is not available in browsers, and the @mastra/client-js bundle is
-// browser-first. We accept the simpler global pattern as the price of
-// universal portability.
-
-let currentCollector: ObservabilityCollector | undefined;
-
 /**
  * Returns the collector active inside the currently-running client
  * tool's `execute` function, or `undefined` when no collector is in
@@ -318,5 +334,5 @@ let currentCollector: ObservabilityCollector | undefined;
  * ```
  */
 export function getCurrentObservabilityCollector(): ObservabilityCollector | undefined {
-  return currentCollector;
+  return collectorContext.getStore()?.collector;
 }
