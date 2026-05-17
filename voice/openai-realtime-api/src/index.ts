@@ -72,7 +72,7 @@ type RealtimeClientServerEventMap = {
   [K in RealtimeServerEvents.EventType]: [RealtimeServerEvents.EventMap[K]];
 } & {
   ['conversation.item.input_audio_transcription.delta']: [{ delta: string; response_id: string }];
-  ['conversation.item.input_audio_transcription.done']: [{ response_id: string }];
+  ['conversation.item.input_audio_transcription.completed']: [{ transcript: string; response_id: string }];
 };
 
 /**
@@ -585,7 +585,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('conversation.item.input_audio_transcription.delta', ev => {
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'user' });
     });
-    this.client.on('conversation.item.input_audio_transcription.done', ev => {
+    this.client.on('conversation.item.input_audio_transcription.completed', ev => {
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'user' });
     });
     this.client.on('response.audio.delta', ev => {
