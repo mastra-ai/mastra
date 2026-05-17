@@ -914,9 +914,14 @@ describe('MCPClient', () => {
   });
 
   describe('Per-server fault isolation (issue #13521)', () => {
-    it('listTools should return tools from healthy servers when one server fails', async () => {
-      const mixedMcp = new MCPClient({
-        id: 'test-fault-isolation-tools',
+    // Share a single MCPClient across tests to avoid reconnecting to the
+    // single-connection SSE weather fixture server (which rejects a second
+    // transport with "Already connected to a transport").
+    let mixedMcp: MCPClient;
+
+    beforeAll(() => {
+      mixedMcp = new MCPClient({
+        id: 'test-fault-isolation',
         servers: {
           weather: {
             url: new URL(`http://localhost:${weatherServerPort}/sse`),
@@ -927,62 +932,31 @@ describe('MCPClient', () => {
           },
         },
       });
+    });
 
-      try {
-        const tools = await mixedMcp.listTools();
+    afterAll(async () => {
+      await mixedMcp?.disconnect().catch(() => {});
+    });
 
-        // Should still get weather tools from the healthy server
-        expect(Object.keys(tools).length).toBeGreaterThan(0);
-        expect(tools).toHaveProperty('weather_getWeather');
-      } finally {
-        await mixedMcp.disconnect().catch(() => {});
-      }
+    it('listTools should return tools from healthy servers when one server fails', async () => {
+      const tools = await mixedMcp.listTools();
+
+      // Should still get weather tools from the healthy server
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+      expect(tools).toHaveProperty('weather_getWeather');
     });
 
     it('listToolsets should return toolsets from healthy servers when one server fails', async () => {
-      const mixedMcp = new MCPClient({
-        id: 'test-fault-isolation-toolsets',
-        servers: {
-          weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
-          },
-          brokenServer: {
-            command: 'nonexistent-binary-that-does-not-exist',
-            args: [],
-          },
-        },
-      });
+      const toolsets = await mixedMcp.listToolsets();
 
-      try {
-        const toolsets = await mixedMcp.listToolsets();
-
-        // Should still get weather toolset from the healthy server
-        expect(toolsets).toHaveProperty('weather');
-        expect(toolsets.weather).toHaveProperty('getWeather');
-        // Broken server should NOT be present (it failed)
-        expect(toolsets).not.toHaveProperty('brokenServer');
-      } finally {
-        await mixedMcp.disconnect().catch(() => {});
-      }
+      // Should still get weather toolset from the healthy server
+      expect(toolsets).toHaveProperty('weather');
+      expect(toolsets.weather).toHaveProperty('getWeather');
+      // Broken server should NOT be present (it failed)
+      expect(toolsets).not.toHaveProperty('brokenServer');
     });
 
     it('disconnect should not throw when one server fails to disconnect', async () => {
-      const mixedMcp = new MCPClient({
-        id: 'test-fault-isolation-disconnect',
-        servers: {
-          weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
-          },
-          brokenServer: {
-            command: 'nonexistent-binary-that-does-not-exist',
-            args: [],
-          },
-        },
-      });
-
-      // Load tools to establish connections before testing disconnect
-      await mixedMcp.listTools();
-
       // disconnect should not throw even if some servers had issues
       await expect(mixedMcp.disconnect()).resolves.toBeUndefined();
     });
