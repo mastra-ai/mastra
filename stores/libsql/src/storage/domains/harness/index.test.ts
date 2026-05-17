@@ -10,7 +10,9 @@ import {
   TABLE_HARNESS_ATTACHMENTS,
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
+  HarnessStorageDeleteGuardConflictError,
   HarnessStorageThreadDeleteFenceConflictError,
+  HarnessStorageVersionConflictError,
 } from '@mastra/core/storage';
 import type { SessionRecord, HarnessStorageParentSessionUnavailableError } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -297,6 +299,81 @@ describe('HarnessLibSQL active session admission', () => {
     await expect(storage.loadSession({ sessionId: 'retry-child' })).resolves.toBeNull();
   });
 
+  it('does not hard-delete when the guarded version is stale', async () => {
+    await storage.saveSession(sampleSession({ id: 'closed', closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    const observed = await storage.loadSession({ sessionId: 'closed' });
+    if (!observed) throw new Error('expected session');
+    await storage.saveSession(
+      {
+        ...observed,
+        state: { changed: true },
+      },
+      { ownerId: 'h-1', ifVersion: observed.version },
+    );
+
+    await expect(
+      storage.deleteSession({
+        sessionId: 'closed',
+        ifVersion: observed.version,
+        expectedResourceId: observed.resourceId,
+        expectedThreadId: observed.threadId,
+        expectedParentSessionId: observed.parentSessionId ?? null,
+        expectedCreatedAt: observed.createdAt,
+        requireClosed: true,
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageVersionConflictError);
+    await expect(storage.loadSession({ sessionId: 'closed' })).resolves.toMatchObject({
+      id: 'closed',
+      version: observed.version + 1,
+    });
+  });
+
+  it('does not hard-delete when non-version guards fail', async () => {
+    await storage.saveSession(sampleSession({ id: 'guarded', closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    const observed = await storage.loadSession({ sessionId: 'guarded' });
+    if (!observed) throw new Error('expected guarded session');
+
+    const guardMismatches = [
+      { expectedResourceId: 'other-resource' },
+      { expectedThreadId: 'other-thread' },
+      { expectedParentSessionId: 'other-parent' },
+      { expectedCreatedAt: observed.createdAt + 1 },
+    ];
+
+    for (const mismatch of guardMismatches) {
+      await expect(
+        storage.deleteSession({
+          sessionId: 'guarded',
+          ifVersion: observed.version,
+          ...mismatch,
+        }),
+      ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+      await expect(storage.loadSession({ sessionId: 'guarded' })).resolves.toMatchObject({ id: 'guarded' });
+    }
+
+    await storage.saveSession(sampleSession({ id: 'active', threadId: 'active-thread' }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    const active = await storage.loadSession({ sessionId: 'active' });
+    if (!active) throw new Error('expected active session');
+
+    await expect(
+      storage.deleteSession({
+        sessionId: 'active',
+        ifVersion: active.version,
+        requireClosed: true,
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+    await expect(storage.loadSession({ sessionId: 'active' })).resolves.toMatchObject({ id: 'active' });
+  });
+
   it('lists sessions by exact resource/thread and can include closed records', async () => {
     await storage.saveSession(
       sampleSession({ id: 'closed-a', resourceId: 'r1', threadId: 'thread-a', closedAt: 2000, lastActivityAt: 2000 }),
@@ -320,10 +397,7 @@ describe('HarnessLibSQL active session admission', () => {
     ]);
     await expect(
       storage.listSessionsByThread({ resourceId: 'r1', threadId: 'thread-a', includeClosed: true }),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: 'closed-a' }),
-      expect.objectContaining({ id: 'active-a' }),
-    ]);
+    ).resolves.toEqual([expect.objectContaining({ id: 'closed-a' }), expect.objectContaining({ id: 'active-a' })]);
     const allThreadSessions = await storage.listSessionsByThread({ threadId: 'thread-a', includeClosed: true });
     expect(allThreadSessions).toHaveLength(3);
     expect(allThreadSessions).toEqual(
@@ -446,16 +520,19 @@ describe('HarnessLibSQL active session admission', () => {
   });
 
   it('does not revive an expired delete fence before destructive work', async () => {
-    await storage.withThreadDeleteFence({ threadId: 'expired-thread', ownerId: 'deleter', ttlMs: 30_000 }, async fence => {
-      await client.execute({
-        sql: `UPDATE ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+    await storage.withThreadDeleteFence(
+      { threadId: 'expired-thread', ownerId: 'deleter', ttlMs: 30_000 },
+      async fence => {
+        await client.execute({
+          sql: `UPDATE ${TABLE_HARNESS_THREAD_DELETE_FENCES}
               SET expires_at = ?
               WHERE thread_id = ?`,
-        args: [Date.now() - 1, 'expired-thread'],
-      });
+          args: [Date.now() - 1, 'expired-thread'],
+        });
 
-      await expect(fence.assertActive()).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
-    });
+        await expect(fence.assertActive()).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
+      },
+    );
   });
 });
 

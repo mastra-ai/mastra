@@ -7,6 +7,7 @@ import type {
   AttachmentRecord,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  DeleteSessionOptions,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -34,7 +35,7 @@ import type {
  * (HARNESS_V1_SPEC.md §5.8).
  */
 export class HarnessStorageVersionConflictError extends Error {
-  readonly name = 'HarnessStorageVersionConflictError';
+  readonly name: string = 'HarnessStorageVersionConflictError';
   readonly code = 'harness.storage.version_conflict' as const;
   constructor(
     public readonly sessionId: string,
@@ -42,6 +43,28 @@ export class HarnessStorageVersionConflictError extends Error {
     public readonly actualVersion: number,
   ) {
     super(`Session "${sessionId}" version conflict: expected ${expectedVersion}, found ${actualVersion}`);
+  }
+}
+
+export type HarnessStorageDeleteGuardField =
+  | 'ifVersion'
+  | 'expectedResourceId'
+  | 'expectedThreadId'
+  | 'expectedParentSessionId'
+  | 'expectedCreatedAt'
+  | 'requireClosed';
+
+export class HarnessStorageDeleteGuardConflictError extends HarnessStorageVersionConflictError {
+  override readonly name = 'HarnessStorageDeleteGuardConflictError';
+  readonly guardCode = 'harness.storage.delete_guard_conflict' as const;
+  constructor(
+    sessionId: string,
+    public readonly guard: HarnessStorageDeleteGuardField,
+    expectedVersion: number,
+    actualVersion: number,
+  ) {
+    super(sessionId, expectedVersion, actualVersion);
+    this.message = `Session "${sessionId}" delete guard conflict on ${guard}`;
   }
 }
 
@@ -300,15 +323,28 @@ export abstract class HarnessStorage extends StorageDomain {
   ): Promise<CreateOrLoadActiveSessionResult>;
 
   /**
-   * Hard-delete of a single session record. The harness layer's
-   * `harness.deleteSession(...)` walks the `parentSessionId` chain and
-   * calls this method once per descendant — adapters do NOT implement
-   * cascade themselves. No-op when the record does not exist.
+   * Hard-delete of a single session record. Adapters do NOT implement cascade
+   * themselves. No-op when the record does not exist. Optional
+   * `DeleteSessionOptions` guard fields are CAS fences: if any provided guard
+   * does not match the stored row, adapters reject without deleting the row.
    *
    * Implementations should also delete attachments owned by the session
    * (equivalent to `deleteAttachmentsForSession`) to keep the index clean.
    */
-  abstract deleteSession(opts: { harnessName?: string; sessionId: string }): Promise<void>;
+  abstract deleteSession(opts: DeleteSessionOptions): Promise<void>;
+
+  /**
+   * Hard-delete a collected session subtree under one guarded adapter boundary.
+   * Adapters must either delete every still-existing guarded row or reject
+   * without deleting any of them. The default preserves compatibility with
+   * legacy adapters by looping `deleteSession`; durable adapters should
+   * override to enforce all-or-nothing batch semantics.
+   */
+  async deleteSessions(opts: { sessions: DeleteSessionOptions[] }): Promise<void> {
+    for (const session of opts.sessions) {
+      await this.deleteSession(session);
+    }
+  }
 
   // -------------------------------------------------------------------------
   // Session leases (HARNESS_V1_SPEC.md §5.8)

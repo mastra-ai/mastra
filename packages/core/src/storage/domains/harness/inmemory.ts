@@ -6,6 +6,7 @@ import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
+  HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
@@ -20,6 +21,7 @@ import type {
   AttachmentRecord,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  DeleteSessionOptions,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -353,23 +355,50 @@ export class InMemoryHarness extends HarnessStorage {
     };
   }
 
-  async deleteSession({ sessionId, harnessName }: { sessionId: string; harnessName?: string }): Promise<void> {
-    const namespace = resolveHarnessName(harnessName, this.harnessName);
-    const existing = this.db.harnessSessions.get(sessionKey(namespace, sessionId));
-    if (existing) {
-      await this.deleteOperationAdmissionTombstonesForSession({
-        harnessName: namespace,
-        sessionId,
-        resourceId: existing.resourceId,
-      });
+  async deleteSession(opts: DeleteSessionOptions): Promise<void> {
+    await this.deleteSessions({ sessions: [opts] });
+  }
+
+  async deleteSessions({ sessions }: { sessions: DeleteSessionOptions[] }): Promise<void> {
+    const existingSessions = new Map<string, { namespace: string; sessionId: string; record: SessionRecord }>();
+    for (const opts of sessions) {
+      const { sessionId } = opts;
+      const namespace = resolveHarnessName(opts.harnessName, this.harnessName);
+      const existing = this.db.harnessSessions.get(sessionKey(namespace, sessionId));
+      if (!existing) continue;
+      assertDeleteGuard(existing, opts);
+      existingSessions.set(sessionKey(namespace, sessionId), { namespace, sessionId, record: existing });
     }
+
+    for (const { namespace, sessionId } of existingSessions.values()) {
+      this.db.harnessSessions.delete(sessionKey(namespace, sessionId));
+    }
+
+    for (const { namespace, sessionId, record } of existingSessions.values()) {
+      await this.cleanupDeletedSession({ namespace, sessionId, resourceId: record.resourceId });
+    }
+  }
+
+  private async cleanupDeletedSession({
+    namespace,
+    sessionId,
+    resourceId,
+  }: {
+    namespace: string;
+    sessionId: string;
+    resourceId: string;
+  }): Promise<void> {
+    await this.deleteOperationAdmissionTombstonesForSession({
+      harnessName: namespace,
+      sessionId,
+      resourceId,
+    });
     const refPrefix = `${namespace}\u0000${sessionId}\u0000`;
     for (const key of this.db.harnessAttachmentReferences.keys()) {
       if (key.startsWith(refPrefix)) {
         this.db.harnessAttachmentReferences.delete(key);
       }
     }
-    this.db.harnessSessions.delete(sessionKey(namespace, sessionId));
     await this.deleteAttachmentsForSession({ harnessName: namespace, sessionId });
   }
 
@@ -1004,6 +1033,33 @@ function assertLeaseHolder(existing: SessionRecord, ownerId: string): void {
   if (existing.leaseExpiresAt !== undefined && existing.leaseExpiresAt <= now) return;
   if (existing.ownerId === ownerId) return;
   throw new HarnessStorageLeaseConflictError(existing.id, existing.ownerId, existing.leaseExpiresAt ?? 0);
+}
+
+function assertDeleteGuard(record: SessionRecord, opts: DeleteSessionOptions): void {
+  const mismatch = getDeleteGuardMismatch(record, opts);
+  if (!mismatch) return;
+  throw new HarnessStorageDeleteGuardConflictError(
+    record.id,
+    mismatch,
+    opts.ifVersion ?? record.version,
+    record.version,
+  );
+}
+
+function getDeleteGuardMismatch(
+  record: Pick<SessionRecord, 'version' | 'resourceId' | 'threadId' | 'parentSessionId' | 'createdAt' | 'closedAt'>,
+  opts: DeleteSessionOptions,
+): ConstructorParameters<typeof HarnessStorageDeleteGuardConflictError>[1] | undefined {
+  if (opts.ifVersion !== undefined && record.version !== opts.ifVersion) return 'ifVersion';
+  if (opts.expectedResourceId !== undefined && record.resourceId !== opts.expectedResourceId)
+    return 'expectedResourceId';
+  if (opts.expectedThreadId !== undefined && record.threadId !== opts.expectedThreadId) return 'expectedThreadId';
+  if (opts.expectedParentSessionId !== undefined && (record.parentSessionId ?? null) !== opts.expectedParentSessionId) {
+    return 'expectedParentSessionId';
+  }
+  if (opts.expectedCreatedAt !== undefined && record.createdAt !== opts.expectedCreatedAt) return 'expectedCreatedAt';
+  if (opts.requireClosed === true && record.closedAt === undefined) return 'requireClosed';
+  return undefined;
 }
 
 function toSummary(record: SessionRecord): SessionSummary {

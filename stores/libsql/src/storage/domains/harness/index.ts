@@ -6,6 +6,7 @@ import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
+  HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
@@ -29,6 +30,7 @@ import type {
   AttachmentRecord,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  DeleteSessionOptions,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -750,29 +752,83 @@ export class HarnessLibSQL extends HarnessStorage {
     }
   }
 
-  async deleteSession({ sessionId, harnessName }: { sessionId: string; harnessName?: string }): Promise<void> {
-    const namespace = this.#resolveHarnessName(harnessName);
-    const existing = await this.loadSession({ harnessName: namespace, sessionId });
-    if (existing) {
-      await this.deleteOperationAdmissionTombstonesForSession({
-        harnessName: namespace,
-        sessionId,
-        resourceId: existing.resourceId,
-      });
+  async deleteSession(opts: DeleteSessionOptions): Promise<void> {
+    await this.deleteSessions({ sessions: [opts] });
+  }
+
+  async deleteSessions({ sessions }: { sessions: DeleteSessionOptions[] }): Promise<void> {
+    await this.#ensureMessageResultsTable();
+    const tx = await this.#client.transaction('write');
+    const deleteCandidates = new Map<string, { namespace: string; sessionId: string; resourceId: string }>();
+    try {
+      for (const opts of sessions) {
+        const { sessionId } = opts;
+        const namespace = this.#resolveHarnessName(opts.harnessName);
+        const existing = await tx.execute({
+          sql: `SELECT version, resource_id, thread_id, parent_session_id, created_at, closed_at
+                FROM ${TABLE_HARNESS_SESSIONS}
+                WHERE harness_name = ? AND id = ?
+                LIMIT 1`,
+          args: [namespace, sessionId],
+        });
+        const existingRow = existing.rows[0] as Record<string, unknown> | undefined;
+        if (!existingRow) continue;
+
+        const record = rowToDeleteGuardRecord(existingRow);
+        const mismatch = getDeleteGuardMismatch(record, opts);
+        if (mismatch) {
+          throw new HarnessStorageDeleteGuardConflictError(
+            sessionId,
+            mismatch,
+            opts.ifVersion ?? record.version,
+            record.version,
+          );
+        }
+        deleteCandidates.set(`${namespace}\u0000${sessionId}`, { namespace, sessionId, resourceId: record.resourceId });
+      }
+
+      for (const { namespace, sessionId, resourceId } of deleteCandidates.values()) {
+        const result = await tx.execute({
+          sql: `DELETE FROM ${TABLE_HARNESS_SESSIONS}
+                WHERE harness_name = ? AND id = ?`,
+          args: [namespace, sessionId],
+        });
+        if (result.rowsAffected === 0) {
+          throw new HarnessStorageVersionConflictError(sessionId, 0, 0);
+        }
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
+                WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
+          args: [namespace, sessionId, resourceId],
+        });
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}
+                WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
+          args: [namespace, sessionId, resourceId],
+        });
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+                WHERE harness_name = ? AND session_id = ?`,
+          args: [namespace, sessionId],
+        });
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}
+                WHERE harness_name = ? AND session_id = ?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES} refs
+                    WHERE refs.harness_name = ${TABLE_HARNESS_ATTACHMENTS}.harness_name
+                      AND refs.session_id = ${TABLE_HARNESS_ATTACHMENTS}.session_id
+                      AND refs.attachment_id = ${TABLE_HARNESS_ATTACHMENTS}.attachment_id
+                  )`,
+          args: [namespace, sessionId],
+        });
+      }
+
+      await tx.commit();
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      throw err;
     }
-    await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
-            WHERE harness_name = ? AND session_id = ?`,
-      args: [namespace, sessionId],
-    });
-    // Cascade attachments first; we don't rely on FK cascades because the
-    // schema deliberately doesn't declare a FK (sessions can be hard-deleted
-    // independently of how attachments were uploaded).
-    await this.deleteAttachmentsForSession({ harnessName: namespace, sessionId });
-    await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_HARNESS_SESSIONS} WHERE harness_name = ? AND id = ?`,
-      args: [namespace, sessionId],
-    });
   }
 
   // -------------------------------------------------------------------------
@@ -1785,6 +1841,42 @@ function rowToSummary(row: Record<string, unknown>): SessionSummary {
     closeDeadlineAt: row.close_deadline_at != null ? Number(row.close_deadline_at) : undefined,
     closedAt: row.closed_at != null ? Number(row.closed_at) : undefined,
   };
+}
+
+type DeleteGuardRecord = {
+  version: number;
+  resourceId: string;
+  threadId: string;
+  parentSessionId?: string;
+  createdAt: number;
+  closedAt?: number;
+};
+
+function rowToDeleteGuardRecord(row: Record<string, unknown>): DeleteGuardRecord {
+  return {
+    version: Number(row.version),
+    resourceId: String(row.resource_id),
+    threadId: String(row.thread_id),
+    parentSessionId: row.parent_session_id == null ? undefined : String(row.parent_session_id),
+    createdAt: Number(row.created_at),
+    closedAt: row.closed_at == null ? undefined : Number(row.closed_at),
+  };
+}
+
+function getDeleteGuardMismatch(
+  record: DeleteGuardRecord,
+  opts: DeleteSessionOptions,
+): ConstructorParameters<typeof HarnessStorageDeleteGuardConflictError>[1] | undefined {
+  if (opts.ifVersion !== undefined && record.version !== opts.ifVersion) return 'ifVersion';
+  if (opts.expectedResourceId !== undefined && record.resourceId !== opts.expectedResourceId)
+    return 'expectedResourceId';
+  if (opts.expectedThreadId !== undefined && record.threadId !== opts.expectedThreadId) return 'expectedThreadId';
+  if (opts.expectedParentSessionId !== undefined && (record.parentSessionId ?? null) !== opts.expectedParentSessionId) {
+    return 'expectedParentSessionId';
+  }
+  if (opts.expectedCreatedAt !== undefined && record.createdAt !== opts.expectedCreatedAt) return 'expectedCreatedAt';
+  if (opts.requireClosed === true && record.closedAt === undefined) return 'requireClosed';
+  return undefined;
 }
 
 function parseJson(value: unknown): any {

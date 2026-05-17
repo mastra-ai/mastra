@@ -13,16 +13,17 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { HarnessStorageVersionConflictError } from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
 
 import { extractSignalContents, MockAgent } from './__test-utils__';
+import type { HarnessSessionDeleteBlockedError } from './errors';
 import {
   HarnessConfigError,
   HarnessSessionClosedError,
   HarnessSessionClosingError,
-  HarnessSessionDeleteBlockedError,
   HarnessSessionDeletedError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
@@ -1272,6 +1273,46 @@ describe('Harness v1 — delete lifecycle', () => {
     ).resolves.toBeNull();
   });
 
+  it('does not hard-delete when storage observes a stale closed-tree version', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+    await parent.close();
+    const originalDeleteSessions = storage.deleteSessions.bind(storage);
+    let mutated = false;
+    storage.deleteSessions = (async (...args: Parameters<typeof storage.deleteSessions>) => {
+      if (!mutated) {
+        mutated = true;
+        const current = await storage.loadSession({ harnessName: 'default', sessionId: parent.id });
+        if (!current) throw new Error('expected session before guarded delete');
+        await storage.saveSession(
+          {
+            ...current,
+            state: { raced: true },
+          },
+          { harnessName: 'default', ownerId: current.ownerId ?? 'racer', ifVersion: current.version },
+        );
+      }
+      return originalDeleteSessions(...args);
+    }) as typeof storage.deleteSessions;
+
+    await expect(harness.deleteSession({ sessionId: parent.id, resourceId: 'r1' })).rejects.toBeInstanceOf(
+      HarnessStorageVersionConflictError,
+    );
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toMatchObject({
+      id: parent.id,
+      state: { raced: true },
+    });
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toMatchObject({
+      id: child.id,
+    });
+  });
+
   it('force deletes an active subtree after terminalizing it through close', async () => {
     const storage = makeStorage();
     const harness = makeHarness({ sessions: { storage } });
@@ -1348,9 +1389,9 @@ describe('Harness v1 — delete lifecycle', () => {
     const harness = makeHarness({ sessions: { storage } });
     const session = await harness.session({ threadId: 't1', resourceId: 'r1' });
 
-    await expect(harness.deleteSession({ sessionId: session.id, resourceId: 'r2', force: true })).rejects.toBeInstanceOf(
-      HarnessSessionNotFoundError,
-    );
+    await expect(
+      harness.deleteSession({ sessionId: session.id, resourceId: 'r2', force: true }),
+    ).rejects.toBeInstanceOf(HarnessSessionNotFoundError);
     await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.not.toBeNull();
   });
 
@@ -1371,9 +1412,9 @@ describe('Harness v1 — delete lifecycle', () => {
       return record;
     }) as typeof storage.loadSession;
 
-    await expect(harness.deleteSession({ sessionId: session.id, resourceId: 'r1', force: true })).rejects.toBeInstanceOf(
-      HarnessSessionNotFoundError,
-    );
+    await expect(
+      harness.deleteSession({ sessionId: session.id, resourceId: 'r1', force: true }),
+    ).rejects.toBeInstanceOf(HarnessSessionNotFoundError);
     const stored = await originalLoadSession({ sessionId: session.id, harnessName: 'default' });
     expect(stored).not.toBeNull();
     expect(stored?.closedAt).toBeUndefined();

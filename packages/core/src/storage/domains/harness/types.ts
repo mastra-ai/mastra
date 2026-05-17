@@ -322,6 +322,21 @@ export interface SessionSummary {
   closedAt?: number;
 }
 
+export interface DeleteSessionOptions {
+  harnessName?: string;
+  sessionId: string;
+  /**
+   * Optional delete guard. When provided, adapters must only delete the row if
+   * the stored version still matches the caller's observed version.
+   */
+  ifVersion?: number;
+  expectedResourceId?: string;
+  expectedThreadId?: string;
+  expectedParentSessionId?: string | null;
+  expectedCreatedAt?: number;
+  requireClosed?: boolean;
+}
+
 export type HarnessOperationKind = 'message' | 'queue';
 
 export interface HarnessStoredPublicError {

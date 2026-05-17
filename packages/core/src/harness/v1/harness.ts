@@ -1212,7 +1212,14 @@ export class Harness {
     let closePromise!: Promise<void>;
     closePromise = Promise.resolve()
       .then(() =>
-        this._closeSessionRecordOnce(storage, rootRecord, closeIds, persistedCloseIds, closePromise, closedLiveSessions),
+        this._closeSessionRecordOnce(
+          storage,
+          rootRecord,
+          closeIds,
+          persistedCloseIds,
+          closePromise,
+          closedLiveSessions,
+        ),
       )
       .catch(err => {
         for (const id of closeIds) {
@@ -1583,8 +1590,19 @@ export class Harness {
     deletedLiveSessions = new Map<string, Session>(),
   ): Promise<void> {
     const bottomUp = [...tree].sort((a, b) => b.depth - a.depth);
+    await storage.deleteSessions({
+      sessions: bottomUp.map(node => ({
+        harnessName: node.record.harnessName,
+        sessionId: node.record.id,
+        ifVersion: node.record.version,
+        expectedResourceId: node.record.resourceId,
+        expectedThreadId: node.record.threadId,
+        expectedParentSessionId: node.record.parentSessionId ?? null,
+        expectedCreatedAt: node.record.createdAt,
+        requireClosed: true,
+      })),
+    });
     for (const node of bottomUp) {
-      await storage.deleteSession({ harnessName: node.record.harnessName, sessionId: node.record.id });
       const live = this._liveSessions.get(node.record.id) ?? deletedLiveSessions.get(node.record.id);
       live?._markDeleted();
       const bridge = this._sessionEventBridges.get(node.record.id);
@@ -2476,7 +2494,8 @@ function toThreadRecord(thread: {
 function isMissingThreadDeleteFenceImplementation(err: unknown): boolean {
   return (
     err instanceof HarnessStorageThreadDeleteFenceUnsupportedError ||
-    (err instanceof Error && err.message === 'HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter')
+    (err instanceof Error &&
+      err.message === 'HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter')
   );
 }
 

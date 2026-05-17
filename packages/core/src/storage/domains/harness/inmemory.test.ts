@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryDB } from '../inmemory-db';
+import type { HarnessStorageParentSessionUnavailableError } from './base';
 import {
-  HarnessStorageParentSessionUnavailableError,
+  HarnessStorageDeleteGuardConflictError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
 } from './base';
@@ -36,6 +37,170 @@ describe('InMemoryHarness admission storage contract', () => {
       storage.saveSession(sampleSession({ id: 'second' }), { ownerId: 'h-2', ifVersion: 0 }),
     ).rejects.toBeInstanceOf(HarnessStorageVersionConflictError);
     await expect(storage.loadSession({ sessionId: 'second' })).resolves.toBeNull();
+  });
+
+  it('does not hard-delete when the guarded version is stale', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ id: 'closed', closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    const observed = await storage.loadSession({ sessionId: 'closed' });
+    if (!observed) throw new Error('expected session');
+    await storage.saveSession(
+      {
+        ...observed,
+        state: { changed: true },
+      },
+      { ownerId: 'h-1', ifVersion: observed.version },
+    );
+
+    await expect(
+      storage.deleteSession({
+        sessionId: 'closed',
+        ifVersion: observed.version,
+        expectedResourceId: observed.resourceId,
+        expectedThreadId: observed.threadId,
+        expectedParentSessionId: observed.parentSessionId ?? null,
+        expectedCreatedAt: observed.createdAt,
+        requireClosed: true,
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageVersionConflictError);
+    await expect(storage.loadSession({ sessionId: 'closed' })).resolves.toMatchObject({
+      id: 'closed',
+      version: observed.version + 1,
+    });
+  });
+
+  it('does not hard-delete when non-version guards fail', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ id: 'guarded', closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    const observed = await storage.loadSession({ sessionId: 'guarded' });
+    if (!observed) throw new Error('expected guarded session');
+
+    const guardMismatches = [
+      { expectedResourceId: 'other-resource' },
+      { expectedThreadId: 'other-thread' },
+      { expectedParentSessionId: 'other-parent' },
+      { expectedCreatedAt: observed.createdAt + 1 },
+    ];
+
+    for (const mismatch of guardMismatches) {
+      await expect(
+        storage.deleteSession({
+          sessionId: 'guarded',
+          ifVersion: observed.version,
+          ...mismatch,
+        }),
+      ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+      await expect(storage.loadSession({ sessionId: 'guarded' })).resolves.toMatchObject({ id: 'guarded' });
+    }
+
+    await storage.saveSession(sampleSession({ id: 'active', threadId: 'active-thread' }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    const active = await storage.loadSession({ sessionId: 'active' });
+    if (!active) throw new Error('expected active session');
+
+    await expect(
+      storage.deleteSession({
+        sessionId: 'active',
+        ifVersion: active.version,
+        requireClosed: true,
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+    await expect(storage.loadSession({ sessionId: 'active' })).resolves.toMatchObject({ id: 'active' });
+  });
+
+  it('rejects guarded batch delete without deleting earlier rows', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ id: 'parent', closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    await storage.saveSession(
+      sampleSession({
+        id: 'child',
+        threadId: 'child-thread',
+        parentSessionId: 'parent',
+        closedAt: 2000,
+        lastActivityAt: 2000,
+      }),
+      { ownerId: 'h-1', ifVersion: 0 },
+    );
+    const parent = await storage.loadSession({ sessionId: 'parent' });
+    const child = await storage.loadSession({ sessionId: 'child' });
+    if (!parent || !child) throw new Error('expected parent and child sessions');
+
+    await storage.saveSession(
+      {
+        ...parent,
+        state: { changed: true },
+      },
+      { ownerId: 'h-1', ifVersion: parent.version },
+    );
+
+    await expect(
+      storage.deleteSessions({
+        sessions: [
+          {
+            sessionId: 'child',
+            ifVersion: child.version,
+            expectedResourceId: child.resourceId,
+            expectedThreadId: child.threadId,
+            expectedParentSessionId: child.parentSessionId ?? null,
+            expectedCreatedAt: child.createdAt,
+            requireClosed: true,
+          },
+          {
+            sessionId: 'parent',
+            ifVersion: parent.version,
+            expectedResourceId: parent.resourceId,
+            expectedThreadId: parent.threadId,
+            expectedParentSessionId: parent.parentSessionId ?? null,
+            expectedCreatedAt: parent.createdAt,
+            requireClosed: true,
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+    await expect(storage.loadSession({ sessionId: 'child' })).resolves.toMatchObject({ id: 'child' });
+    await expect(storage.loadSession({ sessionId: 'parent' })).resolves.toMatchObject({
+      id: 'parent',
+      version: parent.version + 1,
+    });
+  });
+
+  it('rejects duplicate guarded batch entries before deleting the row', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ id: 'duplicate', closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h-1',
+      ifVersion: 0,
+    });
+    const observed = await storage.loadSession({ sessionId: 'duplicate' });
+    if (!observed) throw new Error('expected duplicate session');
+
+    await expect(
+      storage.deleteSessions({
+        sessions: [
+          {
+            sessionId: 'duplicate',
+            ifVersion: observed.version,
+            requireClosed: true,
+          },
+          {
+            sessionId: 'duplicate',
+            ifVersion: observed.version,
+            expectedThreadId: 'other-thread',
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+    await expect(storage.loadSession({ sessionId: 'duplicate' })).resolves.toMatchObject({ id: 'duplicate' });
   });
 
   it('rejects child admission when the parent is closing', async () => {
@@ -148,10 +313,7 @@ describe('InMemoryHarness admission storage contract', () => {
     ]);
     await expect(
       storage.listSessionsByThread({ resourceId: 'r1', threadId: 'thread-a', includeClosed: true }),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: 'closed-a' }),
-      expect.objectContaining({ id: 'active-a' }),
-    ]);
+    ).resolves.toEqual([expect.objectContaining({ id: 'closed-a' }), expect.objectContaining({ id: 'active-a' })]);
     const allThreadSessions = await storage.listSessionsByThread({ threadId: 'thread-a', includeClosed: true });
     expect(allThreadSessions).toHaveLength(3);
     expect(allThreadSessions).toEqual(
@@ -285,17 +447,20 @@ describe('InMemoryHarness admission storage contract', () => {
     const db = new InMemoryDB();
     const storage = new InMemoryHarness({ db });
 
-    await storage.withThreadDeleteFence({ threadId: 'expired-thread', ownerId: 'deleter', ttlMs: 30_000 }, async fence => {
-      db.harnessThreadDeleteFences.set('expired-thread', {
-        threadId: 'expired-thread',
-        ownerId: 'deleter',
-        leaseId: 'expired-lease',
-        createdAt: Date.now() - 60_000,
-        expiresAt: Date.now() - 1,
-      });
+    await storage.withThreadDeleteFence(
+      { threadId: 'expired-thread', ownerId: 'deleter', ttlMs: 30_000 },
+      async fence => {
+        db.harnessThreadDeleteFences.set('expired-thread', {
+          threadId: 'expired-thread',
+          ownerId: 'deleter',
+          leaseId: 'expired-lease',
+          createdAt: Date.now() - 60_000,
+          expiresAt: Date.now() - 1,
+        });
 
-      await expect(fence.assertActive()).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
-    });
+        await expect(fence.assertActive()).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
+      },
+    );
   });
 
   it('compacts terminal queue receipts into namespace-scoped tombstones', async () => {

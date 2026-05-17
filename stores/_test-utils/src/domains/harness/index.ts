@@ -1,6 +1,7 @@
 import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageAttachmentUnavailableError,
+  HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
@@ -495,7 +496,12 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           ifVersion: 0,
         });
         await harness.saveSession(
-          createSampleSessionRecord({ id: 'closed-a', threadId: 'thread-1', closedAt: Date.now(), lastActivityAt: 2000 }),
+          createSampleSessionRecord({
+            id: 'closed-a',
+            threadId: 'thread-1',
+            closedAt: Date.now(),
+            lastActivityAt: 2000,
+          }),
           {
             ownerId: 'h',
             ifVersion: 0,
@@ -590,20 +596,23 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
       it('blocks active-session admission while a thread delete fence is held', async () => {
         if (!harness) return;
 
-        await harness.withThreadDeleteFence({ threadId: 'thread-1', ownerId: 'deleter', ttlMs: 30_000 }, async fence => {
-          await expect(
-            harness.createOrLoadActiveSession(createSampleSessionRecord(), {
-              initialLease: { ownerId: 'h', ttlMs: 30_000 },
-            }),
-          ).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
-          await expect(
-            harness.saveSession(createSampleSessionRecord({ id: 'direct-blocked' }), {
-              ownerId: 'h',
-              ifVersion: 0,
-            }),
-          ).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
-          await expect(fence.assertActive()).resolves.toBeUndefined();
-        });
+        await harness.withThreadDeleteFence(
+          { threadId: 'thread-1', ownerId: 'deleter', ttlMs: 30_000 },
+          async fence => {
+            await expect(
+              harness.createOrLoadActiveSession(createSampleSessionRecord(), {
+                initialLease: { ownerId: 'h', ttlMs: 30_000 },
+              }),
+            ).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
+            await expect(
+              harness.saveSession(createSampleSessionRecord({ id: 'direct-blocked' }), {
+                ownerId: 'h',
+                ifVersion: 0,
+              }),
+            ).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
+            await expect(fence.assertActive()).resolves.toBeUndefined();
+          },
+        );
 
         await expect(
           harness.createOrLoadActiveSession(createSampleSessionRecord(), {
@@ -671,6 +680,170 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           [],
         );
         await expect(harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).resolves.toBeNull();
+      });
+
+      it('rejects guarded delete when the observed version is stale', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ closedAt: 2000, lastActivityAt: 2000 }), {
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+        const observed = await harness.loadSession({ sessionId: 'session-1' });
+        expect(observed).not.toBeNull();
+        await harness.saveSession(
+          {
+            ...observed!,
+            state: { changed: true },
+          },
+          { ownerId: 'h', ifVersion: observed!.version },
+        );
+
+        await expect(
+          harness.deleteSession({
+            sessionId: 'session-1',
+            ifVersion: observed!.version,
+            expectedResourceId: observed!.resourceId,
+            expectedThreadId: observed!.threadId,
+            expectedParentSessionId: observed!.parentSessionId ?? null,
+            expectedCreatedAt: observed!.createdAt,
+            requireClosed: true,
+          }),
+        ).rejects.toBeInstanceOf(HarnessStorageVersionConflictError);
+        await expect(harness.loadSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+          id: 'session-1',
+          version: observed!.version + 1,
+        });
+      });
+
+      it('rejects guarded delete when non-version guards fail', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ id: 'guarded', closedAt: 2000, lastActivityAt: 2000 }), {
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+        const observed = await harness.loadSession({ sessionId: 'guarded' });
+        expect(observed).not.toBeNull();
+
+        const guardMismatches = [
+          { expectedResourceId: 'other-resource' },
+          { expectedThreadId: 'other-thread' },
+          { expectedParentSessionId: 'other-parent' },
+          { expectedCreatedAt: observed!.createdAt + 1 },
+        ];
+
+        for (const mismatch of guardMismatches) {
+          await expect(
+            harness.deleteSession({
+              sessionId: 'guarded',
+              ifVersion: observed!.version,
+              ...mismatch,
+            }),
+          ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+          await expect(harness.loadSession({ sessionId: 'guarded' })).resolves.toMatchObject({ id: 'guarded' });
+        }
+
+        await harness.saveSession(createSampleSessionRecord({ id: 'active', threadId: 'active-thread' }), {
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+        const active = await harness.loadSession({ sessionId: 'active' });
+        expect(active).not.toBeNull();
+
+        await expect(
+          harness.deleteSession({
+            sessionId: 'active',
+            ifVersion: active!.version,
+            requireClosed: true,
+          }),
+        ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+        await expect(harness.loadSession({ sessionId: 'active' })).resolves.toMatchObject({ id: 'active' });
+      });
+
+      it('rejects guarded batch delete without deleting earlier rows', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ id: 'parent', closedAt: 2000, lastActivityAt: 2000 }), {
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+        await harness.saveSession(
+          createSampleSessionRecord({
+            id: 'child',
+            threadId: 'child-thread',
+            parentSessionId: 'parent',
+            closedAt: 2000,
+            lastActivityAt: 2000,
+          }),
+          { ownerId: 'h', ifVersion: 0 },
+        );
+        const parent = await harness.loadSession({ sessionId: 'parent' });
+        const child = await harness.loadSession({ sessionId: 'child' });
+        expect(parent).not.toBeNull();
+        expect(child).not.toBeNull();
+        await harness.saveSession(
+          { ...parent!, state: { changed: true } },
+          { ownerId: 'h', ifVersion: parent!.version },
+        );
+
+        await expect(
+          harness.deleteSessions({
+            sessions: [
+              {
+                sessionId: 'child',
+                ifVersion: child!.version,
+                expectedResourceId: child!.resourceId,
+                expectedThreadId: child!.threadId,
+                expectedParentSessionId: child!.parentSessionId ?? null,
+                expectedCreatedAt: child!.createdAt,
+                requireClosed: true,
+              },
+              {
+                sessionId: 'parent',
+                ifVersion: parent!.version,
+                expectedResourceId: parent!.resourceId,
+                expectedThreadId: parent!.threadId,
+                expectedParentSessionId: parent!.parentSessionId ?? null,
+                expectedCreatedAt: parent!.createdAt,
+                requireClosed: true,
+              },
+            ],
+          }),
+        ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+        await expect(harness.loadSession({ sessionId: 'child' })).resolves.toMatchObject({ id: 'child' });
+        await expect(harness.loadSession({ sessionId: 'parent' })).resolves.toMatchObject({
+          id: 'parent',
+          version: parent!.version + 1,
+        });
+      });
+
+      it('rejects duplicate guarded batch entries before deleting the row', async () => {
+        if (!harness) return;
+        await harness.saveSession(
+          createSampleSessionRecord({ id: 'duplicate', closedAt: 2000, lastActivityAt: 2000 }),
+          {
+            ownerId: 'h',
+            ifVersion: 0,
+          },
+        );
+        const observed = await harness.loadSession({ sessionId: 'duplicate' });
+        expect(observed).not.toBeNull();
+
+        await expect(
+          harness.deleteSessions({
+            sessions: [
+              {
+                sessionId: 'duplicate',
+                ifVersion: observed!.version,
+                requireClosed: true,
+              },
+              {
+                sessionId: 'duplicate',
+                ifVersion: observed!.version,
+                expectedThreadId: 'other-thread',
+              },
+            ],
+          }),
+        ).rejects.toBeInstanceOf(HarnessStorageDeleteGuardConflictError);
+        await expect(harness.loadSession({ sessionId: 'duplicate' })).resolves.toMatchObject({ id: 'duplicate' });
       });
     });
 
@@ -1431,15 +1604,21 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
       it('clears active thread delete fences', async () => {
         if (!harness) return;
 
-        await harness.withThreadDeleteFence({ threadId: 'reset-thread', ownerId: 'deleter', ttlMs: 30_000 }, async () => {
-          await harness.dangerouslyClearAll();
+        await harness.withThreadDeleteFence(
+          { threadId: 'reset-thread', ownerId: 'deleter', ttlMs: 30_000 },
+          async () => {
+            await harness.dangerouslyClearAll();
 
-          await expect(
-            harness.createOrLoadActiveSession(createSampleSessionRecord({ id: 'after-reset', threadId: 'reset-thread' }), {
-              initialLease: { ownerId: 'h', ttlMs: 30_000 },
-            }),
-          ).resolves.toMatchObject({ created: true });
-        });
+            await expect(
+              harness.createOrLoadActiveSession(
+                createSampleSessionRecord({ id: 'after-reset', threadId: 'reset-thread' }),
+                {
+                  initialLease: { ownerId: 'h', ttlMs: 30_000 },
+                },
+              ),
+            ).resolves.toMatchObject({ created: true });
+          },
+        );
       });
     });
   });
