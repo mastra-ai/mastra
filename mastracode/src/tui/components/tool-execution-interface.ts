@@ -22,6 +22,9 @@ export interface IToolExecutionComponent {
   setExpanded(expanded: boolean): void;
   setQuietModeDisplay?(mode: QuietToolDisplayMode): void;
   getChatSpacingKind?(): ChatSpacingKind | undefined;
+  getCompactToolGroupKey?(): string | undefined;
+  getCompactToolGroupSummary?(): string | undefined;
+  setCompactToolContinuation?(continuation: boolean, previousSummary?: string): void;
   isComplete?(): boolean;
   /** Append streaming output for shell commands */
   appendStreamingOutput?(output: string): void;

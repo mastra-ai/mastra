@@ -19,7 +19,7 @@ import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
-import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
+import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
@@ -164,14 +164,12 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
     const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
     const idx = state.chatContainer.children.indexOf(component as never);
     if (idx >= 0) {
-      (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-      reconcileChatBoundarySpacers(state.chatContainer);
+      insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
       return;
     }
   }
 
-  state.chatContainer.addChild(child);
-  reconcileChatBoundarySpacers(state.chatContainer);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, child);
 }
 
 export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
@@ -180,8 +178,7 @@ export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Compone
     if (anchor) {
       const idx = state.chatContainer.children.indexOf(anchor as never);
       if (idx >= 0) {
-        (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        reconcileChatBoundarySpacers(state.chatContainer);
+        insertChatComponentWithBoundarySpacing(state.chatContainer, child, idx);
         return;
       }
     }

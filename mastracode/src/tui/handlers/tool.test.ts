@@ -1,9 +1,19 @@
 import { Container } from '@mariozechner/pi-tui';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TUIState } from '../state.js';
 import { handleToolEnd, handleToolInputDelta, handleToolInputStart, handleToolStart } from './tool.js';
 import type { EventHandlerContext } from './types.js';
+
+function visibleChildren(ctx: EventHandlerContext) {
+  return ctx.state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
+}
+
+function stripAnsi(text: string): string {
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
 
 function createToolHandlerContext(): EventHandlerContext {
   const chatContainer = new Container();
@@ -31,6 +41,7 @@ function createToolHandlerContext(): EventHandlerContext {
     state,
     addChildBeforeFollowUps: (child: any) => {
       state.chatContainer.addChild(child);
+      reconcileChatBoundarySpacers(state.chatContainer);
     },
   } as EventHandlerContext;
 }
@@ -57,8 +68,8 @@ describe('task tool rendering', () => {
     expect(ctx.state.pendingTools.has('call-1')).toBe(false);
     expect(ctx.state.pendingTaskToolIds.has('call-1')).toBe(false);
     expect(ctx.state.allToolComponents).toHaveLength(1);
-    expect(ctx.state.chatContainer.children).toHaveLength(2);
-    expect(ctx.state.chatContainer.children[0]).toBe(ctx.state.allToolComponents[0]);
+    expect(visibleChildren(ctx)).toHaveLength(2);
+    expect(visibleChildren(ctx)[0]).toBe(ctx.state.allToolComponents[0]);
   });
 
   it('does not recreate task tool state when input streaming starts after tool start', () => {
@@ -84,9 +95,30 @@ describe('task tool rendering', () => {
     handleToolInputStart(ctx, 'call-2', 'find_files');
     const second = ctx.state.pendingTools.get('call-2')!;
 
-    expect(ctx.state.chatContainer.children).toHaveLength(4);
+    expect(visibleChildren(ctx)).toHaveLength(4);
+    expect(ctx.state.chatContainer.children.some(child => isChatBoundarySpacer(child))).toBe(true);
     expect((first as any).render(100).join('\n')).not.toContain('╭──');
     expect((second as any).render(100).join('\n')).not.toContain('╭──');
+  });
+
+  it('regroups quiet tools as streamed args arrive', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    const buffers = new Map([
+      ['call-1', { toolName: 'view', text: '{"path":"src/example.ts","offset":80,"limit":90}' }],
+      ['call-2', { toolName: 'view', text: '{"path":"src/example.ts","offset":1,"limit":25}' }],
+    ]);
+    vi.mocked(ctx.state.harness.getDisplayState).mockReturnValue({ toolInputBuffers: buffers } as any);
+
+    handleToolInputStart(ctx, 'call-1', 'view');
+    handleToolInputDelta(ctx, 'call-1', '');
+    handleToolInputStart(ctx, 'call-2', 'view');
+    handleToolInputDelta(ctx, 'call-2', '');
+
+    const output = stripAnsi(ctx.state.chatContainer.render(120).join('\n'));
+    expect(output).toContain('view');
+    expect(output).toContain('src/example.ts:80-169');
+    expect(output).toContain('╰────────────────:1-25');
   });
 
   it('streams submit_plan args into a plan box instead of rendering a generic tool', () => {
@@ -102,7 +134,7 @@ describe('task tool rendering', () => {
     expect(ctx.state.pendingTools.has('call-1')).toBe(false);
     expect(ctx.state.allToolComponents).toHaveLength(0);
     expect(ctx.state.pendingSubmitPlanComponents.has('call-1')).toBe(true);
-    expect(ctx.state.chatContainer.children).toHaveLength(2);
+    expect(visibleChildren(ctx)).toHaveLength(2);
     expect(ctx.state.chatContainer.render(80).join('\n')).toContain('Build the feature');
   });
 });

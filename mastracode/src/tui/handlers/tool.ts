@@ -18,6 +18,7 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { showModalOverlay } from '../overlay.js';
 import { getMarkdownTheme } from '../theme.js';
 
@@ -31,6 +32,10 @@ function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolEx
   if (!ctx.state.quietMode) return;
 
   component.setQuietModeDisplay('quiet');
+}
+
+function reconcileToolBoundaries(ctx: EventHandlerContext): void {
+  reconcileChatBoundarySpacers(ctx.state.chatContainer);
 }
 
 function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unknown): void {
@@ -63,6 +68,7 @@ function ensureSubmitPlanComponent(
     ctx.addChildBeforeFollowUps(state.streamingComponent);
   }
   component.updateArgs(args);
+  reconcileToolBoundaries(ctx);
   return component;
 }
 
@@ -162,6 +168,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
   if (existingComponent) {
     // Component was created during input streaming — update with final args
     existingComponent.updateArgs(args);
+    reconcileToolBoundaries(ctx);
   } else if (existingSubmitPlanComponent) {
     existingSubmitPlanComponent.updateArgs(args);
   } else if (!state.seenToolCallIds.has(toolCallId)) {
@@ -233,6 +240,7 @@ export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, p
       isError: false,
     };
     component.updateResult(result, true);
+    reconcileToolBoundaries(ctx);
     state.ui.requestRender();
   }
 }
@@ -250,6 +258,7 @@ export function handleShellOutput(
   const component = state.pendingTools.get(toolCallId);
   if (component?.appendStreamingOutput) {
     component.appendStreamingOutput(output);
+    reconcileToolBoundaries(ctx);
     state.ui.requestRender();
   }
 }
@@ -354,6 +363,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
       const component = state.pendingTools.get(toolCallId);
       if (component) {
         component.updateArgs(partialArgs);
+        reconcileToolBoundaries(ctx);
       }
 
       // For ask_user, stream partial args into the question component
@@ -457,6 +467,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       isError,
     };
     component.updateResult(toolResult, false);
+    reconcileToolBoundaries(ctx);
 
     state.pendingTools.delete(toolCallId);
     state.pendingTaskToolIds?.delete(toolCallId);

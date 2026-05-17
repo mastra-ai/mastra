@@ -11,6 +11,7 @@ import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../components/user-message.js';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
@@ -254,6 +255,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         const component = state.pendingTools.get(content.id);
         if (component) {
           component.updateArgs(content.args);
+          reconcileChatBoundarySpacers(state.chatContainer);
         }
       }
     }
@@ -299,6 +301,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
           false,
         );
       }
+      reconcileChatBoundarySpacers(state.chatContainer);
       state.pendingTools.clear();
       state.pendingTaskToolIds?.clear();
     }

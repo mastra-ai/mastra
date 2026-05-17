@@ -1,5 +1,5 @@
 import type { Component } from '@mariozechner/pi-tui';
-import { getChatSpacingKind, getSpacingBetween } from './chat-spacing.js';
+import { getSpacingBetweenComponents } from './chat-spacing.js';
 
 export class ChatBoundarySpacer implements Component {
   readonly isChatBoundarySpacer = true;
@@ -12,7 +12,7 @@ export class ChatBoundarySpacer implements Component {
   invalidate(): void {}
 
   render(): string[] {
-    const spacing = getSpacingBetween(getChatSpacingKind(this.getPrev()), getChatSpacingKind(this.getNext()));
+    const spacing = getSpacingBetweenComponents(this.getPrev(), this.getNext());
     return Array.from({ length: spacing }, () => '');
   }
 }

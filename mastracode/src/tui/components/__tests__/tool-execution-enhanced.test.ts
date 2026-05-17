@@ -4,7 +4,24 @@ import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-e
 const ui = { requestRender() {} } as any;
 
 describe('ToolExecutionComponentEnhanced quiet display', () => {
-  it('renders non-shell quiet tools as a single summary line', () => {
+  it('renders quiet view tools with a path range summary', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'src/example.ts', offset: 10, limit: 5, showLineNumbers: true },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain('view');
+    expect(output).toContain('src/example.ts:10-14');
+    expect(output).not.toContain('path=');
+    expect(output).not.toContain('✓');
+    expect(output).not.toContain('╭──');
+    expect(output.split('\n')).toHaveLength(1);
+  });
+
+  it('shows a red failure marker for failed quiet compact tools', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts' },
@@ -12,10 +29,40 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ui,
     );
 
+    component.updateResult({ content: [{ type: 'text', text: 'failed' }], isError: true });
+
     const output = component.render(100).join('\n');
-    expect(output).toContain('view');
-    expect(output).toContain('path=');
-    expect(output).not.toContain('╭──');
+    expect(output).toContain('✗');
+  });
+
+  it('renders quiet write tools with path and content preview lines', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: '/tmp/example.ts', content: "import { Container } from '@mariozechner/pi-tui';\nconsole.log(Container);" },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain('write');
+    expect(output).toContain('/tmp/example.ts');
+    expect(output).toContain('import { Container }');
+    expect(output).not.toContain('content=');
+    expect(output.split('\n')).toHaveLength(2);
+  });
+
+  it('renders quiet skill tools with the skill name only', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'skill',
+      { name: 'testing-mastracode-tui' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain('skill');
+    expect(output).toContain('testing-mastracode-tui');
+    expect(output).not.toContain('name=');
     expect(output.split('\n')).toHaveLength(1);
   });
 

@@ -1,13 +1,17 @@
 import { Container } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import { describe, expect, it } from 'vitest';
-import { reconcileChatBoundarySpacers } from '../../chat-boundary-reconciliation.js';
+import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from '../../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../assistant-message.js';
 import { PlanApprovalInlineComponent } from '../plan-approval-inline.js';
 import { ToolExecutionComponentEnhanced } from '../tool-execution-enhanced.js';
 import { UserMessageComponent } from '../user-message.js';
 
 const ui = { requestRender() {} } as any;
+
+function stripAnsi(text: string): string {
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
 
 function renderSequence(components: Component[]): string[] {
   const container = new Container();
@@ -25,9 +29,60 @@ function assistant(text = 'assistant text'): AssistantMessageComponent {
 }
 
 describe('ChatBoundarySpacer', () => {
-  it('renders no blank line between adjacent quiet compact tools', () => {
-    const lines = renderSequence([quietTool('view'), quietTool('string_replace_lsp')]);
+  it('inserts boundary spacing together with live components', () => {
+    const container = new Container();
+    insertChatComponentWithBoundarySpacing(container, quietTool('view'));
+    insertChatComponentWithBoundarySpacing(container, assistant());
+
+    expect(container.render(100).filter(line => line === '')).toHaveLength(1);
+  });
+
+  it('spaces across empty streaming message placeholders', () => {
+    const container = new Container();
+    insertChatComponentWithBoundarySpacing(container, quietTool('view'));
+    insertChatComponentWithBoundarySpacing(container, new AssistantMessageComponent());
+    insertChatComponentWithBoundarySpacing(container, quietTool('string_replace_lsp'));
+
+    expect(container.render(100).filter(line => line === '')).toHaveLength(1);
+  });
+
+  it('renders no blank line between adjacent quiet compact tools with the same tool name', () => {
+    const lines = renderSequence([quietTool('view'), quietTool('view')]);
     expect(lines).not.toContain('');
+  });
+
+  it('renders one blank line between adjacent quiet compact tools with different tool names', () => {
+    const lines = renderSequence([quietTool('view'), quietTool('string_replace_lsp')]);
+    expect(lines.filter(line => line === '')).toHaveLength(1);
+  });
+
+  it('groups adjacent quiet compact tools of the same type and blanks shared prefixes', () => {
+    const lines = renderSequence([
+      new ToolExecutionComponentEnhanced(
+        'view',
+        { path: 'mastracode/src/tui/components/tool-execution-enhanced.ts', offset: 301, limit: 84 },
+        { quietDisplayMode: 'quiet' },
+        ui,
+      ),
+      new ToolExecutionComponentEnhanced(
+        'view',
+        { path: 'mastracode/src/tui/chat-boundary-reconciliation.ts', offset: 1, limit: 45 },
+        { quietDisplayMode: 'quiet' },
+        ui,
+      ),
+      new ToolExecutionComponentEnhanced(
+        'view',
+        { path: 'mastracode/src/tui/chat-boundary-reconciliation.ts', offset: 50, limit: 10 },
+        { quietDisplayMode: 'quiet' },
+        ui,
+      ),
+    ]);
+
+    expect(lines).not.toContain('');
+    expect(stripAnsi(lines[0]!)).toContain('view mastracode/src/tui/components/tool-execution-enhanced.ts:301-384');
+    expect(stripAnsi(lines[1]!)).not.toContain('view');
+    expect(stripAnsi(lines[1]!)).toContain('  ╰────────────────────/chat-boundary-reconciliation.ts:1-45');
+    expect(stripAnsi(lines[2]!)).toContain('  ╰────────────────────────────────────────────────────:50-59');
   });
 
   it('renders one blank line between a quiet compact tool and quiet shell tool', () => {
@@ -40,8 +95,8 @@ describe('ChatBoundarySpacer', () => {
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
-  it('renders one blank line between a quiet tool run and assistant text', () => {
-    const lines = renderSequence([quietTool('view'), quietTool('string_replace_lsp'), assistant()]);
+  it('renders one blank line between a same-tool quiet run and assistant text', () => {
+    const lines = renderSequence([quietTool('view'), quietTool('view'), assistant()]);
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
