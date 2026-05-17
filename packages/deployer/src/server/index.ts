@@ -61,16 +61,24 @@ function isCorsPathMap(corsConfig: CorsOptions | CorsPathMap | false | undefined
   return Object.keys(corsConfig).some(key => key === '*' || key.startsWith('/'));
 }
 
+function matchesCorsPath(pattern: string, pathname: string) {
+  if (pattern === '*') return true;
+  if (pattern.endsWith('*')) return pathname.startsWith(pattern.slice(0, -1));
+  return pattern === pathname;
+}
+
+function getCorsPathSpecificity(pattern: string) {
+  return pattern === '*' ? 0 : pattern.replace(/\*$/, '').length;
+}
+
 function resolveCorsPathConfig(corsMap: CorsPathMap, pathname: string) {
   let matchedConfig: CorsOptions | undefined;
   let matchedSpecificity = -1;
 
   for (const [pattern, config] of Object.entries(corsMap)) {
-    const matches =
-      pattern === '*' || (pattern.endsWith('*') ? pathname.startsWith(pattern.slice(0, -1)) : pattern === pathname);
-    if (!matches) continue;
+    if (!matchesCorsPath(pattern, pathname)) continue;
 
-    const specificity = pattern === '*' ? 0 : pattern.replace(/\*$/, '').length;
+    const specificity = getCorsPathSpecificity(pattern);
     if (specificity > matchedSpecificity) {
       matchedConfig = config;
       matchedSpecificity = specificity;
@@ -236,7 +244,7 @@ export async function createHonoServer(
     },
   });
 
-  //Global cors config
+  // Global CORS config
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
