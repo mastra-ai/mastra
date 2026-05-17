@@ -8,6 +8,7 @@ import type { Client } from '@libsql/client';
 import {
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   HarnessStorageDeleteGuardConflictError,
@@ -538,9 +539,10 @@ describe('HarnessLibSQL active session admission', () => {
 
 describe('HarnessLibSQL message result evidence', () => {
   let storage: HarnessLibSQL;
+  let client: Client;
 
   beforeEach(async () => {
-    const client = createHarnessTestClient();
+    client = createHarnessTestClient();
     storage = new HarnessLibSQL({ client });
     await storage.init();
   });
@@ -622,6 +624,56 @@ describe('HarnessLibSQL message result evidence', () => {
         attemptedAdmissionHash: 'different-hash',
       }),
     ).resolves.toMatchObject({ status: 'conflict', storedAdmissionHash: 'hash-1' });
+  });
+
+  it('rejects completed message evidence without a run id', async () => {
+    await expect(
+      storage.writeMessageResultEvidence({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-1',
+        admissionId: 'admission-1',
+        admissionHash: 'hash-1',
+        status: 'completed',
+        result: { text: 'done' },
+        createdAt: 1000,
+        updatedAt: 2000,
+      } as unknown as Parameters<HarnessLibSQL['writeMessageResultEvidence']>[0]),
+    ).rejects.toThrow('completed status requires run_id');
+
+    await client.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_MESSAGE_RESULTS}
+            (id, harness_name, session_id, resource_id, thread_id, signal_id, run_id,
+             admission_id, admission_hash, status, result, error, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'default\0session-1\0signal-1',
+        'default',
+        'session-1',
+        'resource-1',
+        'thread-1',
+        'signal-1',
+        null,
+        'admission-1',
+        'hash-1',
+        'completed',
+        JSON.stringify({ text: 'done' }),
+        null,
+        1000,
+        2000,
+      ],
+    });
+
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-1',
+      }),
+    ).rejects.toThrow('completed status requires run_id');
   });
 
   it('compacts terminal message evidence into tombstones', async () => {

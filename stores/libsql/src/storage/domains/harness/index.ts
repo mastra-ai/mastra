@@ -1161,6 +1161,7 @@ export class HarnessLibSQL extends HarnessStorage {
   async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<{ created: boolean }> {
     await this.#ensureMessageResultsTable();
     const namespacedRecord = { ...record, harnessName: this.#resolveHarnessName(record.harnessName) };
+    if (namespacedRecord.status === 'completed') completedMessageEvidenceRunId(namespacedRecord);
     const id = messageEvidenceId(namespacedRecord);
     const loadCurrent = async () => {
       const current = await this.loadMessageResultEvidence({
@@ -1968,10 +1969,11 @@ function rowToMessageResultEvidence(row: Record<string, unknown>): AgentSignalRe
   };
   const status = String(row.status);
   if (status === 'completed') {
+    const runId = completedMessageEvidenceRunId(base);
     return {
       ...base,
       status: 'completed',
-      runId: base.runId ?? '',
+      runId,
       result: parseJson(row.result),
     };
   }
@@ -1992,6 +1994,14 @@ function tombstoneId(record: OperationAdmissionTombstone): string {
 
 function messageEvidenceId(record: Pick<AgentSignalResultEvidence, 'harnessName' | 'sessionId' | 'signalId'>): string {
   return `${record.harnessName}\u0000${record.sessionId}\u0000${record.signalId}`;
+}
+
+/** Completed message evidence is only useful for recovery when it preserves the runtime run id. */
+function completedMessageEvidenceRunId(record: { runId?: string; sessionId: string; signalId: string }): string {
+  if (record.runId !== undefined && record.runId.length > 0) return record.runId;
+  throw new Error(
+    `Invalid Harness message result evidence for session "${record.sessionId}" signal "${record.signalId}": completed status requires run_id`,
+  );
 }
 
 function sameTombstoneIdentity(a: OperationAdmissionTombstone, b: OperationAdmissionTombstone): boolean {
