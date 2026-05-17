@@ -1005,7 +1005,9 @@ describe('MCPServer', () => {
       expect(closeSpy).toHaveBeenCalled();
       expect((server as any).sseTransport).not.toBe(firstTransport);
 
-      // Clean up
+      // Clean up: close the active transport so the protocol is reset for subsequent tests
+      await (server as any).sseTransport?.close?.();
+      (server as any).sseTransport = undefined;
       await firstRes.body?.cancel().catch(() => {});
       await secondRes.body?.cancel().catch(() => {});
     });
