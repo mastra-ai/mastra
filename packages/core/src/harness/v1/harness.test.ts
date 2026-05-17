@@ -759,6 +759,7 @@ describe('Harness v1 — lifecycle', () => {
     await expect(queuedSecond).rejects.toBeInstanceOf(HarnessSessionClosingError);
     await close;
     hold.resolve();
+    await new Promise(resolve => setImmediate(resolve));
 
     const stored = await storage.loadSession({ sessionId: s.id, harnessName: 'default' });
     expect(stored?.pendingQueue).toEqual([]);

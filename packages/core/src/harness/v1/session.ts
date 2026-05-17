@@ -2004,10 +2004,21 @@ export class Session {
     // both paths converge on a single signal handed to the agent.
     const turnAbortController = this._beginTurn(opts.abortSignal);
     const turnAbortSignal = turnAbortController.signal;
-    const requestContext = await this._buildRequestContext({
-      modeId: effectiveModeId,
-      abortSignal: turnAbortSignal,
-    });
+    const failOwnedMessageTurnBeforeDispatch = (err: unknown) => {
+      this._endTurn(turnAbortController);
+      admissionStart?.reject(err);
+      if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
+    };
+    let requestContext;
+    try {
+      requestContext = await this._buildRequestContext({
+        modeId: effectiveModeId,
+        abortSignal: turnAbortSignal,
+      });
+    } catch (err) {
+      failOwnedMessageTurnBeforeDispatch(err);
+      throw err;
+    }
 
     const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
       memory: { thread: this.threadId, resource: this.resourceId },
@@ -2054,7 +2065,12 @@ export class Session {
     // `agent.stream(signal, streamOptions)`; on an active same-agent run
     // the signal drains mid-flight into the running execution loop. Both
     // paths surface chunks through the same subscription stream.
-    await this._ensureThreadSubscription(agent);
+    try {
+      await this._ensureThreadSubscription(agent);
+    } catch (err) {
+      failOwnedMessageTurnBeforeDispatch(err);
+      throw err;
+    }
 
     if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
       try {
@@ -2081,8 +2097,7 @@ export class Session {
           }
         }
       } catch (err) {
-        this._messageAdmissionStarts.delete(opts.admissionId!);
-        admissionStart.reject(err);
+        failOwnedMessageTurnBeforeDispatch(err);
         throw err;
       }
     }
@@ -2103,8 +2118,6 @@ export class Session {
         },
       );
     } catch (err) {
-      admissionStart?.reject(err);
-      if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
       if (admissionIdentity !== undefined && admissionHash !== undefined) {
         await this._writeMessageResultEvidence({
           status: 'failed',
@@ -2115,6 +2128,7 @@ export class Session {
           error: projectHarnessPublicError(err),
         }).catch(() => {});
       }
+      failOwnedMessageTurnBeforeDispatch(err);
       throw err;
     }
 
@@ -2608,28 +2622,34 @@ export class Session {
       // Owned-turn path: same bookkeeping as the message() default path.
       const turnAbortController = this._beginTurn(opts.abortSignal);
       const turnAbortSignal = turnAbortController.signal;
-      const toolsets = this._buildToolsets(mode, opts.additionalTools);
-      const requestContext = await this._buildRequestContext({
-        modeId: effectiveModeId,
-        abortSignal: turnAbortSignal,
-      });
-      const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
-        memory: { thread: this.threadId, resource: this.resourceId },
-        abortSignal: turnAbortSignal,
-        requestContext,
-        ...(toolsets ? { toolsets } : {}),
-        ...(mode.instructions ? { instructions: mode.instructions } : {}),
-      };
-      this._emitTurnEvent({ type: 'agent_start' });
+      let dispatched;
+      try {
+        const toolsets = this._buildToolsets(mode, opts.additionalTools);
+        const requestContext = await this._buildRequestContext({
+          modeId: effectiveModeId,
+          abortSignal: turnAbortSignal,
+        });
+        const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
+          memory: { thread: this.threadId, resource: this.resourceId },
+          abortSignal: turnAbortSignal,
+          requestContext,
+          ...(toolsets ? { toolsets } : {}),
+          ...(mode.instructions ? { instructions: mode.instructions } : {}),
+        };
+        this._emitTurnEvent({ type: 'agent_start' });
 
-      const dispatched = agent.sendSignal(
-        { type: 'user-message', contents: opts.content as never },
-        {
-          resourceId: this.resourceId,
-          threadId: this.threadId,
-          ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
-        },
-      );
+        dispatched = agent.sendSignal(
+          { type: 'user-message', contents: opts.content as never },
+          {
+            resourceId: this.resourceId,
+            threadId: this.threadId,
+            ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
+          },
+        );
+      } catch (err) {
+        this._endTurn(turnAbortController);
+        throw err;
+      }
 
       // Register the completion waiter before any terminal chunks land.
       const completion = this._awaitRunCompletion(dispatched.runId);
@@ -2728,33 +2748,39 @@ export class Session {
       // continuation. Caller doesn't get a result handle.
       const turnAbortController = this._beginTurn(undefined);
       const turnAbortSignal = turnAbortController.signal;
-      const toolsets = this._buildToolsets(mode, undefined);
-      const requestContext = await this._buildRequestContext({
-        modeId: effectiveModeId,
-        abortSignal: turnAbortSignal,
-      });
-      const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
-        memory: { thread: this.threadId, resource: this.resourceId },
-        abortSignal: turnAbortSignal,
-        requestContext,
-        ...(toolsets ? { toolsets } : {}),
-        ...(mode.instructions ? { instructions: mode.instructions } : {}),
-      };
-      this._emitTurnEvent({ type: 'agent_start' });
+      let dispatched;
+      try {
+        const toolsets = this._buildToolsets(mode, undefined);
+        const requestContext = await this._buildRequestContext({
+          modeId: effectiveModeId,
+          abortSignal: turnAbortSignal,
+        });
+        const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
+          memory: { thread: this.threadId, resource: this.resourceId },
+          abortSignal: turnAbortSignal,
+          requestContext,
+          ...(toolsets ? { toolsets } : {}),
+          ...(mode.instructions ? { instructions: mode.instructions } : {}),
+        };
+        this._emitTurnEvent({ type: 'agent_start' });
 
-      const dispatched = agent.sendSignal(
-        {
-          type: 'system-reminder',
-          contents: content,
-          ...(opts?.attributes ? { attributes: opts.attributes } : {}),
-          ...(opts?.metadata ? { metadata: opts.metadata } : {}),
-        },
-        {
-          resourceId: this.resourceId,
-          threadId: this.threadId,
-          ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
-        },
-      );
+        dispatched = agent.sendSignal(
+          {
+            type: 'system-reminder',
+            contents: content,
+            ...(opts?.attributes ? { attributes: opts.attributes } : {}),
+            ...(opts?.metadata ? { metadata: opts.metadata } : {}),
+          },
+          {
+            resourceId: this.resourceId,
+            threadId: this.threadId,
+            ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
+          },
+        );
+      } catch (err) {
+        this._endTurn(turnAbortController);
+        throw err;
+      }
 
       const completion = this._awaitRunCompletion(dispatched.runId);
       const result = completion
@@ -5216,6 +5242,22 @@ export class Session {
     return undefined;
   }
 
+  private _queueReceiptTerminalFailureError(queuedItemId: string): Error | undefined {
+    return this._queueReceiptTerminalFailureErrorFromReceipt(this._record.queueAdmissionReceipts?.[queuedItemId]);
+  }
+
+  private _queueReceiptTerminalFailureErrorFromReceipt(receipt: QueueAdmissionReceipt | undefined): Error | undefined {
+    if (!receipt || (receipt.status !== 'failed' && receipt.status !== 'dead' && receipt.status !== 'admission_failed')) {
+      return undefined;
+    }
+    return publicErrorProjectionToError(
+      receipt.error ?? {
+        code: receipt.status === 'dead' ? 'harness.queue_exhausted' : 'harness.queue_failed',
+        message: receipt.status === 'dead' ? 'queued turn exhausted retry attempts' : 'queued turn failed',
+      },
+    );
+  }
+
   private async _awaitQueuedRunCompletion(
     item: QueuedItem,
     runId: string,
@@ -5234,6 +5276,9 @@ export class Session {
       }).catch(() => {});
       throw err;
     }
+
+    const terminalFailure = this._queueReceiptTerminalFailureError(item.id);
+    if (terminalFailure) throw terminalFailure;
 
     if (full.finishReason !== 'suspended') {
       await this._markQueuedTurnCompleted(item.id, full);
@@ -5273,9 +5318,15 @@ export class Session {
     full: FullOutput<unknown>,
     opts?: { modeId?: string },
   ): Promise<void> {
+    let terminalFailure: Error | undefined;
     await this._flushUpdate(prev => {
       const receipt = prev.queueAdmissionReceipts?.[queuedItemId];
       if (!receipt && opts?.modeId === undefined) return prev;
+      const receiptTerminalFailure = this._queueReceiptTerminalFailureErrorFromReceipt(receipt);
+      if (receiptTerminalFailure) {
+        terminalFailure = receiptTerminalFailure;
+        return prev;
+      }
       const now = Date.now();
       const next: SessionRecord = { ...prev };
       if (opts?.modeId !== undefined) next.modeId = opts.modeId;
@@ -5296,6 +5347,7 @@ export class Session {
       }
       return next;
     });
+    if (terminalFailure) throw terminalFailure;
   }
 
   private async _finalizeQueuedRunCompletion(
@@ -5528,8 +5580,14 @@ export class Session {
       return;
     }
     const now = Date.now();
+    let terminalFailure: Error | undefined;
     await this._flushUpdate(prev => {
       const receipt = prev.queueAdmissionReceipts?.[itemId];
+      const receiptTerminalFailure = this._queueReceiptTerminalFailureErrorFromReceipt(receipt);
+      if (receiptTerminalFailure) {
+        terminalFailure = receiptTerminalFailure;
+        return prev;
+      }
       return {
         ...prev,
         pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
@@ -5554,9 +5612,14 @@ export class Session {
     const resolver = this._queueResolvers.get(itemId);
     if (resolver) {
       this._queueResolvers.delete(itemId);
-      resolver.resolve(result);
+      if (terminalFailure) {
+        resolver.reject(terminalFailure);
+      } else {
+        resolver.resolve(result);
+      }
     }
     this._notifyMaybeIdle();
+    if (terminalFailure) return;
     // Kick the drain again — there may be more items waiting.
     void this._maybeDrainQueue();
   }
