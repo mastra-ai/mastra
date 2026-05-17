@@ -10,6 +10,7 @@ function createToolHandlerContext(): EventHandlerContext {
   const state = {
     chatContainer,
     ui: { requestRender: vi.fn() },
+    terminal: { columns: 100 },
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
     seenToolCallIds: new Set(),
@@ -17,6 +18,7 @@ function createToolHandlerContext(): EventHandlerContext {
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     allToolComponents: [],
+    quietMode: false,
     toolOutputExpanded: false,
     hideThinkingBlock: false,
     taskToolInsertIndex: -1,
@@ -71,6 +73,20 @@ describe('task tool rendering', () => {
     expect(ctx.state.pendingTools.get('call-1')).toBe(component);
     expect(ctx.state.pendingTaskToolIds.has('call-1')).toBe(true);
     expect(ctx.state.chatContainer.children).toHaveLength(childCount);
+  });
+
+  it('renders regular tools in quiet mode without demoting previous tools', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+
+    handleToolInputStart(ctx, 'call-1', 'view');
+    const first = ctx.state.pendingTools.get('call-1')!;
+    handleToolInputStart(ctx, 'call-2', 'find_files');
+    const second = ctx.state.pendingTools.get('call-2')!;
+
+    expect(ctx.state.chatContainer.children).toHaveLength(4);
+    expect((first as any).render(100).join('\n')).not.toContain('╭──');
+    expect((second as any).render(100).join('\n')).not.toContain('╭──');
   });
 
   it('streams submit_plan args into a plan box instead of rendering a generic tool', () => {

@@ -1,5 +1,47 @@
 import { describe, it, expect } from 'vitest';
-import { parseErrorFromContent } from '../tool-execution-enhanced.js';
+import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
+
+const ui = { requestRender() {} } as any;
+
+describe('ToolExecutionComponentEnhanced quiet display', () => {
+  it('renders non-shell quiet tools as a single summary line', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain('view');
+    expect(output).toContain('path=');
+    expect(output).not.toContain('╭──');
+    expect(output.split('\n')).toHaveLength(1);
+  });
+
+  it('limits quiet shell output to eight content lines', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'printf lines' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult(
+      {
+        content: [{ type: 'text', text: Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n') }],
+        isError: false,
+      },
+      false,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain('line 3');
+    expect(output).toContain('line 10');
+    expect(output).not.toContain('line 2');
+    expect(output.split('\n').filter(line => line.includes('│'))).toHaveLength(8);
+  });
+});
 
 describe('parseErrorFromContent', () => {
   it('parses a standard Error: message line', () => {

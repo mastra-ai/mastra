@@ -13,6 +13,7 @@ import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enh
 import { UserMessageComponent } from '../components/user-message.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
+import { MC_TOOLS } from '../../tool-names.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -241,6 +242,9 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
           state.ui,
         );
         component.setExpanded(state.toolOutputExpanded);
+        if (state.quietMode) {
+          component.setQuietModeDisplay('quiet');
+        }
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);
         state.allToolComponents.push(component);
@@ -249,6 +253,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
           undefined,
           state.hideThinkingBlock,
           getMarkdownTheme(),
+          state.quietMode && content.name === MC_TOOLS.EXECUTE_COMMAND,
         );
         ctx.addChildBeforeFollowUps(state.streamingComponent);
       } else {
@@ -287,7 +292,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         ...message,
         content: trailingParts,
       });
-    }
+      }
 
     if (message.stopReason === 'aborted' || message.stopReason === 'error') {
       const errorMessage = message.errorMessage || 'Operation aborted';

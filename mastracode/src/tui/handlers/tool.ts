@@ -11,6 +11,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { MC_TOOLS } from '../../tool-names.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -25,6 +26,16 @@ import type { EventHandlerContext } from './types.js';
 
 export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
+}
+
+function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
+  if (!ctx.state.quietMode) return;
+
+  component.setQuietModeDisplay('quiet');
+}
+
+function shouldSuppressPostToolTextGap(ctx: EventHandlerContext, toolName: string): boolean {
+  return ctx.state.quietMode && toolName === MC_TOOLS.EXECUTE_COMMAND;
 }
 
 function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unknown): void {
@@ -203,12 +214,18 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
+    applyQuietDisplayForNewTool(ctx, component);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    state.streamingComponent = new AssistantMessageComponent(
+      undefined,
+      state.hideThinkingBlock,
+      getMarkdownTheme(),
+      shouldSuppressPostToolTextGap(ctx, toolName),
+    );
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
     state.ui.requestRender();
@@ -284,7 +301,12 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.pendingAskUserComponents.set(toolCallId, askComponent);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    state.streamingComponent = new AssistantMessageComponent(
+      undefined,
+      state.hideThinkingBlock,
+      getMarkdownTheme(),
+      shouldSuppressPostToolTextGap(ctx, toolName),
+    );
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
     state.ui.requestRender();
@@ -315,12 +337,18 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
+    applyQuietDisplayForNewTool(ctx, component);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    state.streamingComponent = new AssistantMessageComponent(
+      undefined,
+      state.hideThinkingBlock,
+      getMarkdownTheme(),
+      shouldSuppressPostToolTextGap(ctx, toolName),
+    );
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
     state.ui.requestRender();

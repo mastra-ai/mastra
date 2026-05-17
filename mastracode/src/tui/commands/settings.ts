@@ -1,10 +1,23 @@
 import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
+import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
+
+function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean): void {
+  const tools = ctx.state.allToolComponents.filter(
+    (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
+  );
+
+  tools.forEach(tool => {
+    tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
+  });
+
+  ctx.state.ui.requestRender();
+}
 
 export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<void> {
   const state = ctx.state.harness.getState() as any;
@@ -46,6 +59,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         current.preferences.quietMode = enabled;
         saveSettings(current);
         ctx.state.quietMode = enabled;
+        applyQuietModeToRenderedTools(ctx, enabled);
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();

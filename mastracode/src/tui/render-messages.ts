@@ -26,6 +26,15 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+function isLastRenderedChildTool(state: TUIState): boolean {
+  for (let i = state.chatContainer.children.length - 1; i >= 0; i--) {
+    const child = state.chatContainer.children[i];
+    if (state.followUpComponents.includes(child as never)) continue;
+    return !!child && state.allToolComponents.includes(child as never);
+  }
+  return false;
+}
+
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
@@ -193,7 +202,9 @@ export function addPendingUserMessage(
     state.chatContainer.removeChild(existing.component as never);
   }
 
-  const component = new PendingUserMessageComponent(text, images?.length ?? 0);
+  const component = new PendingUserMessageComponent(text, images?.length ?? 0, {
+    leadingSpacer: state.quietMode && isLastRenderedChildTool(state),
+  });
   state.pendingSignalMessageComponentsById.set(messageId, { component, text });
   state.chatContainer.addChild(component);
   state.ui.requestRender();
@@ -215,7 +226,9 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const confirmed = new UserMessageComponent(text);
+  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+    trailingSpacer: !state.quietMode,
+  });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
     (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -249,7 +262,9 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
-    const confirmed = new UserMessageComponent(text);
+    const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+      trailingSpacer: !state.quietMode,
+    });
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -392,7 +407,10 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
-    const userComponent = new UserMessageComponent(prefix + displayText);
+    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
+      leadingSpacer: state.quietMode && isLastRenderedChildTool(state),
+      trailingSpacer: !state.quietMode,
+    });
 
     state.messageComponentsById.set(message.id, userComponent);
 
@@ -598,7 +616,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 cancelled,
               );
               state.chatContainer.addChild(askComponent);
-              continue;
+                continue;
             }
           }
 
@@ -689,8 +707,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (!replacedWithInline) {
+            if (state.quietMode) {
+              toolComponent.setQuietModeDisplay('quiet');
+            }
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
+          } else {
           }
         } else if (
           content.type === 'om_observation_start' ||

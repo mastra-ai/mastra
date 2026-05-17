@@ -13,7 +13,7 @@ import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
+import type { IToolExecutionComponent, QuietToolDisplayMode, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 
 export type { ToolResult };
@@ -22,6 +22,7 @@ export interface ToolExecutionOptions {
   showImages?: boolean;
   autoCollapse?: boolean;
   collapsedByDefault?: boolean;
+  quietDisplayMode?: QuietToolDisplayMode;
 }
 /**
  * Convert absolute path to tilde notation if it's in home directory
@@ -115,6 +116,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
+  private quietDisplayMode: QuietToolDisplayMode;
 
   constructor(toolName: string, args: unknown, options: ToolExecutionOptions = {}, ui: TUI) {
     super();
@@ -127,11 +129,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       ...options,
     };
     this.expanded = !this.options.collapsedByDefault;
+    this.quietDisplayMode = this.options.quietDisplayMode ?? 'normal';
 
     // Content box - left indent for chat history alignment, no background
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
-    this.addChild(new Spacer(2));
+    this.updateTrailingSpacer();
 
     this.rebuild();
   }
@@ -169,6 +172,16 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.rebuild();
   }
 
+  setQuietModeDisplay(mode: QuietToolDisplayMode): void {
+    this.quietDisplayMode = mode;
+    this.updateTrailingSpacer();
+    this.rebuild();
+  }
+
+  isComplete(): boolean {
+    return !this.isPartial;
+  }
+
   toggleExpanded(): void {
     this.setExpanded(!this.expanded);
   }
@@ -184,6 +197,39 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.contentBox.setBgFn((text: string) => text);
   }
 
+  private updateTrailingSpacer(): void {
+    const trailingSpacerHeight =
+      this.quietDisplayMode === 'normal' ? 2 : this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 1 : 0;
+    const desiredChildren = trailingSpacerHeight > 0 ? 2 : 1;
+    while (this.children.length > desiredChildren) {
+      this.children.pop();
+    }
+    if (this.children.length < desiredChildren) {
+      this.addChild(new Spacer(trailingSpacerHeight));
+    }
+  }
+
+  private getCollapsedLineLimit(defaultLimit: number): number {
+    return defaultLimit;
+  }
+
+  private shouldShowLeadingPadding(): boolean {
+    return this.quietDisplayMode === 'normal';
+  }
+
+  private addLeadingPadding(): void {
+    if (this.shouldShowLeadingPadding()) {
+      this.contentBox.addChild(new Text('', 0, 0));
+    }
+  }
+
+  private limitQuietShellLines(lines: string[]): string[] {
+    if (this.quietDisplayMode !== 'quiet' || lines.length <= 8) {
+      return lines;
+    }
+    return lines.slice(-8);
+  }
+
   /**
    * Full clear-and-rebuild. Called when:
    * - args change (updateArgs)
@@ -194,6 +240,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private rebuild(): void {
     this.updateBgColor();
     this.contentBox.clear();
+
+    if (this.quietDisplayMode === 'quiet' && this.toolName !== MC_TOOLS.EXECUTE_COMMAND) {
+      this.renderCompactTool();
+      return;
+    }
 
     switch (this.toolName) {
       case MC_TOOLS.VIEW:
@@ -227,6 +278,31 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         } else {
           this.renderGenericToolEnhanced();
         }
+    }
+  }
+
+  private renderCompactTool(): void {
+    const status = this.getStatusIndicator();
+    const toolLabel = this.getCompactToolLabel();
+    const argsSummary = this.formatArgsSummary();
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - BOX_INDENT * 2 - 2;
+    const line = truncateAnsi(`${theme.bold(theme.fg('textHighlight', toolLabel))}${argsSummary}${status}`, maxLineWidth);
+    this.contentBox.addChild(new Text(line, 0, 0));
+  }
+
+  private getCompactToolLabel(): string {
+    switch (this.toolName) {
+      case MC_TOOLS.EXECUTE_COMMAND:
+        return '$';
+      case MC_TOOLS.STRING_REPLACE_LSP:
+        return 'edit';
+      case MC_TOOLS.WRITE_FILE:
+        return 'write';
+      case MC_TOOLS.FIND_FILES:
+        return 'list';
+      default:
+        return this.toolName;
     }
   }
 
@@ -280,7 +356,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
 
     // Empty line padding above
-    this.contentBox.addChild(new Text('', 0, 0));
+    this.addLeadingPadding();
 
     // Top border
     this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -294,7 +370,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       let lines = highlighted.split('\n');
 
       // Limit lines when collapsed
-      const collapsedLines = 20;
+      const collapsedLines = this.getCollapsedLineLimit(20);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
@@ -345,7 +421,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // Helper to render shell command with bordered box
     const renderBorderedShell = (status: string, outputLines: string[]) => {
       const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
-      const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('toolArgs', command)}${cwdSuffix}${timeSuffix}${status}`;
+      const shellLabelColor = this.quietDisplayMode === 'quiet' ? 'textHighlight' : 'toolTitle';
+      const footerText = `${theme.bold(theme.fg(shellLabelColor, '$'))} ${theme.fg('toolArgs', command)}${cwdSuffix}${timeSuffix}${status}`;
+
+      if (this.quietDisplayMode === 'quiet') {
+        this.contentBox.addChild(new Spacer(1));
+      }
 
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -381,7 +462,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       if (maxStreamLines && lines.length > maxStreamLines) {
         lines = lines.slice(-maxStreamLines);
       }
-      renderBorderedShell(status, lines);
+      renderBorderedShell(status, this.limitQuietShellLines(lines));
       return;
     }
 
@@ -406,7 +487,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (this.result.isError) {
       const status = theme.fg('error', ' ✗');
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, prepareOutputLines(output));
+      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
     }
 
@@ -418,14 +499,16 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (looksLikeError) {
       const status = theme.fg('error', ' ✗');
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, prepareOutputLines(output));
+      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
     }
 
     // Success - use bordered box with checkmark
     const status = theme.fg('success', ' ✓');
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    renderBorderedShell(status, prepareOutputLines(output));
+    {
+      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
+    }
   }
 
   private renderProcessToolEnhanced(): void {
@@ -475,7 +558,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const status = this.result.isError ? theme.fg('error', ' ✗') : theme.fg('success', ' ✓');
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    renderBorderedProcess(status, prepareOutputLines(output));
+    {
+      renderBorderedProcess(status, prepareOutputLines(output));
+    }
   }
 
   private renderEditToolEnhanced(): void {
@@ -501,13 +586,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
         const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
 
-        this.contentBox.addChild(new Text('', 0, 0));
+        this.addLeadingPadding();
         this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
         const { lines: diffLines } = this.generateDiffLines(String(oldStr), String(newStr));
 
         // While streaming, show the tail so new content scrolls in at the bottom
-        const collapsedLines = 15;
+        const collapsedLines = this.getCollapsedLineLimit(15);
         const totalLines = diffLines.length;
         const hasMore = !this.expanded && totalLines > collapsedLines + 1;
         let linesToShow = diffLines;
@@ -559,7 +644,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
 
     // Empty line padding above
-    this.contentBox.addChild(new Text('', 0, 0));
+    this.addLeadingPadding();
 
     // Top border
     this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -571,7 +656,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const { lines: diffLines, firstChangeIndex } = this.generateDiffLines(String(finalOldStr), String(finalNewStr));
 
       // Limit lines when collapsed, windowed around first change
-      const collapsedLines = 15;
+      const collapsedLines = this.getCollapsedLineLimit(15);
       const totalLines = diffLines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
@@ -772,13 +857,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
       const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
-      this.contentBox.addChild(new Text('', 0, 0));
+      this.addLeadingPadding();
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
       const highlighted = highlightCode(content, fullPath);
       let lines = highlighted.split('\n');
 
-      const collapsedLines = 20;
+      const collapsedLines = this.getCollapsedLineLimit(20);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
       let skippedAbove = 0;
@@ -818,7 +903,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
-    this.contentBox.addChild(new Text('', 0, 0));
+    this.addLeadingPadding();
     this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
     if (this.result.isError) {
@@ -834,7 +919,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const highlighted = highlightCode(content, fullPath);
       let lines = highlighted.split('\n');
 
-      const collapsedLines = 20;
+      const collapsedLines = this.getCollapsedLineLimit(20);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
       let skippedAbove = 0;
@@ -889,7 +974,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         lines = lines.slice(0, -1);
       }
 
-      const collapsedLines = 15;
+      const collapsedLines = this.getCollapsedLineLimit(15);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
       let skippedAbove = 0;
@@ -1202,7 +1287,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
-      this.contentBox.addChild(new Text('', 0, 0));
+      this.addLeadingPadding();
 
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -1210,7 +1295,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       let lines = output.split('\n');
 
       // Limit lines when collapsed
-      const collapsedLines = 10;
+      const collapsedLines = this.getCollapsedLineLimit(10);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
@@ -1337,13 +1422,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
-      this.contentBox.addChild(new Text('', 0, 0));
+      this.addLeadingPadding();
 
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
       let lines = output.split('\n');
-      const collapsedLines = 10;
+      const collapsedLines = this.getCollapsedLineLimit(10);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 

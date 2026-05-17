@@ -328,7 +328,7 @@ export class SettingsComponent extends Box implements Focusable {
       {
         id: 'quietMode',
         label: 'Quiet mode',
-        description: 'Collapse subagent output to a single line after completion.',
+        description: 'Render tool calls compactly and collapse subagent output after completion.',
         currentValue: config.quietMode ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
@@ -336,12 +336,12 @@ export class SettingsComponent extends Box implements Focusable {
               {
                 value: 'on',
                 label: '  On',
-                description: 'Auto-collapse subagent output when done',
+                description: 'Compact older tool calls and completed subagents',
               },
               {
                 value: 'off',
                 label: '  Off',
-                description: 'Keep subagent output visible when done',
+                description: 'Keep normal tool and subagent rendering',
               },
             ],
             config.quietMode ? 'on' : 'off',
