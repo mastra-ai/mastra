@@ -19,6 +19,7 @@ import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
+import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
@@ -164,12 +165,13 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
     const idx = state.chatContainer.children.indexOf(component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-      state.chatContainer.invalidate();
+      reconcileChatBoundarySpacers(state.chatContainer);
       return;
     }
   }
 
   state.chatContainer.addChild(child);
+  reconcileChatBoundarySpacers(state.chatContainer);
 }
 
 export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
@@ -179,7 +181,7 @@ export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Compone
       const idx = state.chatContainer.children.indexOf(anchor as never);
       if (idx >= 0) {
         (state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        state.chatContainer.invalidate();
+        reconcileChatBoundarySpacers(state.chatContainer);
         return;
       }
     }
@@ -200,6 +202,7 @@ export function addPendingUserMessage(
   const existing = state.pendingSignalMessageComponentsById.get(messageId);
   if (existing) {
     state.chatContainer.removeChild(existing.component as never);
+    reconcileChatBoundarySpacers(state.chatContainer);
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0, {
@@ -207,6 +210,7 @@ export function addPendingUserMessage(
   });
   state.pendingSignalMessageComponentsById.set(messageId, { component, text });
   state.chatContainer.addChild(component);
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 
@@ -226,13 +230,11 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
-    trailingSpacer: !state.quietMode,
-  });
+  const confirmed = new UserMessageComponent(text, getMarkdownTheme());
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
     (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
-    state.chatContainer.invalidate();
+    reconcileChatBoundarySpacers(state.chatContainer);
   } else {
     addChildBeforeFollowUps(state, confirmed);
   }
@@ -262,13 +264,11 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
-    const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
-      trailingSpacer: !state.quietMode,
-    });
+    const confirmed = new UserMessageComponent(text, getMarkdownTheme());
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
-      state.chatContainer.invalidate();
+      reconcileChatBoundarySpacers(state.chatContainer);
     } else {
       addChildBeforeFollowUps(state, confirmed);
     }
@@ -310,7 +310,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
       const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
       if (idx >= 0) {
         (state.chatContainer.children as unknown[]).splice(idx, 0, reminderComponent);
-        state.chatContainer.invalidate();
+        reconcileChatBoundarySpacers(state.chatContainer);
         state.ui.requestRender();
         return;
       }
@@ -407,16 +407,14 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
-    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
-      leadingSpacer: state.quietMode && isLastRenderedChildTool(state),
-      trailingSpacer: !state.quietMode,
-    });
+    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme());
 
     state.messageComponentsById.set(message.id, userComponent);
 
     if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
+      reconcileChatBoundarySpacers(state.chatContainer);
       return;
     }
 
@@ -805,6 +803,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
   }
 
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 

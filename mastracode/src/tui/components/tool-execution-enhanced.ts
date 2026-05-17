@@ -13,6 +13,7 @@ import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import { ErrorDisplayComponent } from './error-display.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 import type { IToolExecutionComponent, QuietToolDisplayMode, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 
@@ -178,6 +179,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.rebuild();
   }
 
+  getChatSpacingKind(): ChatSpacingKind {
+    if (this.quietDisplayMode === 'quiet') {
+      return this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 'quiet-shell-tool' : 'quiet-compact-tool';
+    }
+    return 'normal-tool';
+  }
+
   isComplete(): boolean {
     return !this.isPartial;
   }
@@ -198,8 +206,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private updateTrailingSpacer(): void {
-    const trailingSpacerHeight =
-      this.quietDisplayMode === 'normal' ? 2 : this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 1 : 0;
+    const trailingSpacerHeight = 0;
     const desiredChildren = trailingSpacerHeight > 0 ? 2 : 1;
     while (this.children.length > desiredChildren) {
       this.children.pop();
@@ -423,10 +430,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
       const shellLabelColor = this.quietDisplayMode === 'quiet' ? 'textHighlight' : 'toolTitle';
       const footerText = `${theme.bold(theme.fg(shellLabelColor, '$'))} ${theme.fg('toolArgs', command)}${cwdSuffix}${timeSuffix}${status}`;
-
-      if (this.quietDisplayMode === 'quiet') {
-        this.contentBox.addChild(new Spacer(1));
-      }
 
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));

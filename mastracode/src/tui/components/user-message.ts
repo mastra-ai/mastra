@@ -5,6 +5,7 @@
 import { Container, Markdown, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
+import type { ChatSpacingKind } from './chat-spacing.js';
 import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
 
 /**
@@ -99,13 +100,9 @@ export class UserMessageComponent extends Container {
   constructor(
     text: string,
     markdownTheme: MarkdownTheme = getMarkdownTheme(),
-    options: { pending?: boolean; leadingSpacer?: boolean; borderColor?: string; trailingSpacer?: boolean } = {},
+    options: { pending?: boolean; borderColor?: string } = {},
   ) {
     super();
-
-    if (options.leadingSpacer) {
-      this.addChild(new Spacer(1));
-    }
 
     const md = new Markdown(text, 0, 0, markdownTheme, {
       color: (text: string) => (options.pending ? theme.fg('dim', text) : theme.fg('text', text)),
@@ -113,9 +110,10 @@ export class UserMessageComponent extends Container {
     });
 
     this.addChild(new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor }));
-    if (options.trailingSpacer !== false) {
-      this.addChild(new Spacer(1));
-    }
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'user-message';
   }
 }
 

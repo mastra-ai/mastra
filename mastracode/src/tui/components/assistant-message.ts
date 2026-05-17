@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Container, Markdown, Spacer, Text } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
+import type { ChatSpacingKind } from './chat-spacing.js';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 
 let _compId = 0;
@@ -21,20 +22,13 @@ function asmDebugLog(...args: unknown[]) {
 }
 
 export class AssistantMessageComponent extends Container {
-  private leadingSpacer: Spacer;
   private contentContainer: Container;
-  private trailingSpacer: Spacer;
   private hideThinkingBlock: boolean;
   private markdownTheme: MarkdownTheme;
   private lastMessage?: HarnessMessage;
   private _id: number;
 
-  constructor(
-    message?: HarnessMessage,
-    hideThinkingBlock = false,
-    markdownTheme: MarkdownTheme = getMarkdownTheme(),
-    private suppressLeadingSpacer = false,
-  ) {
+  constructor(message?: HarnessMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
     super();
     this._id = ++_compId;
 
@@ -42,9 +36,7 @@ export class AssistantMessageComponent extends Container {
     this.markdownTheme = markdownTheme;
 
     // Container for text/thinking content
-    this.leadingSpacer = new Spacer(1);
     this.contentContainer = new Container();
-    this.trailingSpacer = new Spacer(1);
     this.addChild(this.contentContainer);
 
     asmDebugLog(`COMP#${this._id} CREATED`);
@@ -69,22 +61,8 @@ export class AssistantMessageComponent extends Container {
     this.hideThinkingBlock = hide;
   }
 
-  private updateSpacers(): void {
-    const hasVisibleContent = this.contentContainer.children.length > 0;
-    const hasLeadingSpacer = this.children.includes(this.leadingSpacer);
-    const hasTrailingSpacer = this.children.includes(this.trailingSpacer);
-
-    if (hasVisibleContent && !this.suppressLeadingSpacer && !hasLeadingSpacer) {
-      this.children.unshift(this.leadingSpacer);
-    } else if ((!hasVisibleContent || this.suppressLeadingSpacer) && hasLeadingSpacer) {
-      this.children = this.children.filter(child => child !== this.leadingSpacer);
-    }
-
-    if (hasVisibleContent && !hasTrailingSpacer) {
-      this.addChild(this.trailingSpacer);
-    } else if (!hasVisibleContent && hasTrailingSpacer) {
-      this.children = this.children.filter(child => child !== this.trailingSpacer);
-    }
+  getChatSpacingKind(): ChatSpacingKind | undefined {
+    return this.contentContainer.children.length > 0 ? 'assistant-message' : undefined;
   }
 
   updateContent(message: HarnessMessage): void {
@@ -142,7 +120,5 @@ export class AssistantMessageComponent extends Container {
       const errorMsg = message.errorMessage || 'Unknown error';
       this.contentContainer.addChild(new Text(theme.fg('error', `Error: ${errorMsg}`), CHAT_INDENT, 0));
     }
-
-    this.updateSpacers();
   }
 }

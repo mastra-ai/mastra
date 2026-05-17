@@ -5,10 +5,15 @@ import { AssistantMessageComponent } from '../../components/assistant-message.js
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { UserMessageComponent } from '../../components/user-message.js';
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import { addPendingUserMessage, addUserMessage } from '../../render-messages.js';
 import type { TUIState } from '../../state.js';
 import { handleMessageUpdate } from '../message.js';
 import type { EventHandlerContext } from '../types.js';
+
+function visibleChildren(state: TUIState) {
+  return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
+}
 
 function createAssistantMessage(content: HarnessMessage['content']): HarnessMessage {
   return {
@@ -129,7 +134,7 @@ describe('handleMessageUpdate system reminders', () => {
     state.currentRunSystemReminderKeys.clear();
 
     handleMessageUpdate(ctx, secondMessage);
-    expect(state.chatContainer.children).toHaveLength(2);
+    expect(visibleChildren(state)).toHaveLength(2);
   });
 
   it('starts a new assistant component below an echoed signal user message', () => {
@@ -139,7 +144,7 @@ describe('handleMessageUpdate system reminders', () => {
     state.chatContainer.addChild(streamingMessage);
 
     addPendingUserMessage(state, 'signal-1', 'follow up');
-    const pending = state.chatContainer.children[1];
+    const pending = visibleChildren(state)[1];
 
     addUserMessage(state, {
       id: 'signal-1',
@@ -147,18 +152,20 @@ describe('handleMessageUpdate system reminders', () => {
       content: [{ type: 'text', text: 'follow up' }],
     } as HarnessMessage);
 
-    expect(state.chatContainer.children[0]).toBe(streamingMessage);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.chatContainer.children[1]).not.toBe(pending);
+    let children = visibleChildren(state);
+    expect(children[0]).toBe(streamingMessage);
+    expect(children[1]).toBeInstanceOf(UserMessageComponent);
+    expect(children[1]).not.toBe(pending);
     expect(state.streamingComponent).toBeUndefined();
 
     handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'second assistant text' }]));
 
-    expect(state.chatContainer.children).toHaveLength(3);
-    expect(state.chatContainer.children[0]).toBe(streamingMessage);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.chatContainer.children[2]).toBeInstanceOf(AssistantMessageComponent);
-    expect(state.streamingComponent).toBe(state.chatContainer.children[2]);
+    children = visibleChildren(state);
+    expect(children).toHaveLength(3);
+    expect(children[0]).toBe(streamingMessage);
+    expect(children[1]).toBeInstanceOf(UserMessageComponent);
+    expect(children[2]).toBeInstanceOf(AssistantMessageComponent);
+    expect(state.streamingComponent).toBe(children[2]);
   });
 
   it('inserts temporal-gap reminders before the preceded user message', () => {
@@ -185,13 +192,12 @@ describe('handleMessageUpdate system reminders', () => {
       ]),
     );
 
-    expect(state.chatContainer.children).toHaveLength(4);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(TemporalGapComponent);
-    expect((state.chatContainer.children[1] as TemporalGapComponent).render(80).join('\n')).toContain(
-      '⏳ 1 hour later',
-    );
-    expect(state.chatContainer.children[2]).toBe(userMessage);
-    expect(state.chatContainer.children[3]).toBe(streamingMessage);
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(4);
+    expect(children[1]).toBeInstanceOf(TemporalGapComponent);
+    expect((children[1] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 1 hour later');
+    expect(children[2]).toBe(userMessage);
+    expect(children[3]).toBe(streamingMessage);
   });
 
   it('falls back to the latest rendered user message when a streamed temporal-gap anchor id is not mapped yet', () => {

@@ -31,6 +31,7 @@ import {
   runUpdate,
 } from '../utils/update-check.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
+import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
@@ -786,11 +787,12 @@ export class MastraTUI {
       const idx = this.state.chatContainer.children.indexOf(component as any);
       if (idx >= 0) {
         (this.state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        this.state.chatContainer.invalidate();
+        reconcileChatBoundarySpacers(this.state.chatContainer);
         return;
       }
     }
     this.state.chatContainer.addChild(child);
+    reconcileChatBoundarySpacers(this.state.chatContainer);
   }
 
   // ===========================================================================
