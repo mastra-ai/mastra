@@ -186,7 +186,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallDeltaIdNameMap: Record<string, string> = {};
   #toolCallStreamingMeta: Record<
     string,
-    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata; dynamic?: boolean }
+    {
+      toolName: string;
+      providerExecuted?: boolean;
+      providerMetadata?: ProviderMetadata;
+      dynamic?: boolean;
+      observability?: ToolCallChunk['payload']['observability'];
+    }
   > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
@@ -456,6 +462,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
                 dynamic: chunk.payload.dynamic,
+                observability: chunk.payload.observability,
               };
               break;
             case 'tool-call-input-streaming-end': {
@@ -486,6 +493,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
                     dynamic: meta.dynamic,
+                    observability: meta.observability,
                   },
                 };
                 self.#toolCalls.push(synthetic);
@@ -573,7 +581,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (chunk.payload.dynamic != null && existingSynthetic.payload.dynamic == null) {
                   existingSynthetic.payload.dynamic = chunk.payload.dynamic;
                 }
-
+                if (chunk.payload.observability && !existingSynthetic.payload.observability) {
+                  existingSynthetic.payload.observability = chunk.payload.observability;
+                }
                 return;
               }
               self.#toolCalls.push(chunk);

@@ -826,10 +826,47 @@ export class Agent<
     if (!Array.isArray(messages)) return;
 
     const proxy = this.#mastra?.observability?.getClientObservabilityProxy?.();
-    if (!proxy) return;
+
+    const handleObservabilityBlock = (block: Record<string, unknown>) => {
+      const obs = block.__mastraObservability as
+        | {
+            parentContext?: { traceparent: string; tracestate?: string; baggage?: string };
+            payload?: { spans?: unknown; logs?: unknown; executionDurationMs?: number; toolName?: string };
+          }
+        | undefined;
+
+      if (proxy && obs?.payload && obs.parentContext) {
+        try {
+          proxy.receive(
+            obs.payload as Parameters<typeof proxy.receive>[0],
+            obs.parentContext as Parameters<typeof proxy.receive>[1],
+          );
+        } catch (err) {
+          // Tracing must never break the agent run.
+          this.logger?.warn?.('[ClientObservabilityProxy] failed to receive client observability payload', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // Strip the metadata so the model doesn't see it
+      delete block.__mastraObservability;
+    };
 
     for (const msg of messages) {
       if (!msg || typeof msg !== 'object' || !('role' in msg)) continue;
+      const parts = (msg as { parts?: unknown }).parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (!part || typeof part !== 'object') continue;
+          const block = part as Record<string, unknown>;
+          if (block.type !== 'tool-invocation') continue;
+          const toolInvocation = block.toolInvocation;
+          if (!toolInvocation || typeof toolInvocation !== 'object') continue;
+          handleObservabilityBlock(toolInvocation as Record<string, unknown>);
+        }
+      }
+
       if ((msg as { role: string }).role !== 'tool') continue;
       const content = (msg as { content?: unknown }).content;
       if (!Array.isArray(content)) continue;
@@ -838,30 +875,7 @@ export class Agent<
         if (!part || typeof part !== 'object') continue;
         const block = part as Record<string, unknown>;
         if (block.type !== 'tool-result') continue;
-
-        const obs = block.__mastraObservability as
-          | {
-              parentContext?: { traceparent: string; tracestate?: string; baggage?: string };
-              payload?: { spans?: unknown; logs?: unknown; executionDurationMs?: number; toolName?: string };
-            }
-          | undefined;
-
-        if (obs?.payload && obs.parentContext) {
-          try {
-            proxy.receive(
-              obs.payload as Parameters<typeof proxy.receive>[0],
-              obs.parentContext as Parameters<typeof proxy.receive>[1],
-            );
-          } catch (err) {
-            // Tracing must never break the agent run.
-            this.logger?.warn?.('[ClientObservabilityProxy] failed to receive client observability payload', {
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        }
-
-        // Strip the metadata so the model doesn't see it
-        delete block.__mastraObservability;
+        handleObservabilityBlock(block);
       }
     }
   }

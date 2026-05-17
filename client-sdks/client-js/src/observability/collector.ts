@@ -60,8 +60,7 @@ const LEVEL_TO_SEVERITY_TEXT: Record<BufferedLog['level'], string> = {
 };
 
 function nowNs(): bigint {
-  // performance.now() is monotonic but relative; combine with the
-  // initial Date.now() so the absolute timestamp lines up with
+  // Use Date.now() for wall-clock timestamps that align with
   // server-side spans within roughly clock-skew bounds.
   return BigInt(Date.now()) * 1_000_000n;
 }
@@ -149,7 +148,7 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
     //     function. The server has no way to recover this otherwise
     //     because the CLIENT_TOOL_CALL event span has no endTime; the
     //     measured value is shipped back via flush() and emitted as
-    //     mastra_client_tool_duration_ms by the proxy.
+    //     mastra_tool_duration_ms with toolType: "client" by the proxy.
     this.#spanStack.push(this.#rootSpanId);
     const previous = currentCollector;
     currentCollector = this;

@@ -28,6 +28,10 @@ describe('w3c traceparent', () => {
     expect(parseTraceparent('00-0af7651916cd43dd-b7ad6b7169203331-01')).toBeNull();
     // non-hex characters
     expect(parseTraceparent('00-zzf7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01')).toBeNull();
+    // semantically invalid values
+    expect(parseTraceparent('ff-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01')).toBeNull();
+    expect(parseTraceparent('00-00000000000000000000000000000000-b7ad6b7169203331-01')).toBeNull();
+    expect(parseTraceparent('00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01')).toBeNull();
   });
 
   it('roundtrips format -> parse', () => {

@@ -68,7 +68,7 @@ it) so they land in whatever exporters the user already has configured.
 > 3. Request 2: server reads `observability.parentContext` from the body
 >    and uses it as the parent for the new `AGENT_RUN` span, so request
 >    2's trace inherits request 1's traceId. Reads `observability.payload`
->    and feeds it through `ClientToolObservabilityIngest.ingest()` which
+>    and feeds it through `ClientObservabilityProxy.ingest()` which
 >    decodes the OTLP, validates that all spans have the expected traceId
 >    and that parents resolve, and forwards each span/log into the
 >    observability bus. The client's spans land under the prior deferred
@@ -79,7 +79,7 @@ it) so they land in whatever exporters the user already has configured.
 > arrive "late" (at request-2 time). OTLP traces explicitly allow
 > out-of-order span arrival within a trace, so this is well-defined.
 
-```
+```text
 [server, request 1]
   └─ AGENT_RUN span (traceId = T1)
       └─ model emits tool call with providerExecuted=false
@@ -136,7 +136,7 @@ not require the client and server to share JS imports — they only share bytes.
   `MCP_TOOL_CALL` spans currently set `success` as an attribute; that is a
   pre-existing inconsistency and is **out of scope** for this PR.
 
-**New: `packages/core/src/observability/types/client-tool.ts`**
+**New: `packages/core/src/observability/types/client.ts`**
 
 Lives in the `types/` folder alongside the existing tracing types — these
 are pure interfaces, no runtime code. Naming is `client-tool` (singular)
@@ -167,7 +167,7 @@ export interface ClientToolObservabilityPayload {
   logs?: unknown;
 }
 
-export interface ClientToolObservabilityIngest {
+export interface ClientObservabilityProxy {
   /**
    * Called from request 1 when the agent emits a client-side tool
    * call. Returns a W3C carrier for the parent span.
@@ -208,7 +208,7 @@ function:
    `toolType`. Created regardless of whether client-side observability
    is enabled — every user gets the server-side marker showing that a
    client tool was invoked.
-2. If `mastra.observability.getClientToolObservabilityIngest()` returns
+2. If `mastra.observability.getClientObservabilityProxy()` returns
    an implementation, call `inject(span)` and attach the result to the
    tool-call chunk's `observability` field.
 3. End the span immediately with
@@ -227,7 +227,7 @@ When a request body carries an `observability` field:
    correlation mechanism — the client echoes back the same W3C carrier
    it received, and the server treats it as authoritative.
 2. If `observability.payload` is present and
-   `getClientToolObservabilityIngest()` returns an implementation, call
+   `getClientObservabilityProxy()` returns an implementation, call
    `ingest(payload, parentContext)`. The ingest validates traceIds,
    resolves parent links, and forwards each span/log into the
    observability bus where existing exporters pick them up.
@@ -266,7 +266,7 @@ observability: z.object({
   (`packages/core/src/observability/types/core.ts:263-319`):
 
   ```ts
-  getClientToolObservabilityIngest(): ClientToolObservabilityIngest | undefined;
+  getClientObservabilityProxy(): ClientObservabilityProxy | undefined;
   ```
 
   - `NoOpObservability` returns `undefined`.
@@ -284,9 +284,9 @@ observability package.
 
 **New: `observability/mastra/src/client-tool/index.ts`**
 
-- Exports `createClientToolObservabilityIngest(): ClientToolObservabilityIngest`
+- Exports `createClientObservabilityProxy(): ClientObservabilityProxy`
   and registers it on the `Observability` class so
-  `getClientToolObservabilityIngest()` returns it by default.
+  `getClientObservabilityProxy()` returns it by default.
 - `inject(parentSpan)`:
   - Builds an OTEL `Context` from `parentSpan.traceId` / `parentSpan.spanId`.
   - Uses `W3CTraceContextPropagator.inject()` and
@@ -476,11 +476,11 @@ server-side `CLIENT_TOOL_CALL` parent span in their existing exporters.
    `ObservabilityEntrypoint` interface
    (`packages/core/src/observability/types/core.ts:263-319`) is the right
    home for a new accessor: add
-   `getClientToolObservabilityIngest(): ClientToolObservabilityIngest | undefined`.
+   `getClientObservabilityProxy(): ClientObservabilityProxy | undefined`.
    `NoOpObservability` returns `undefined`; the real `Observability`
    class in `@mastra/observability` returns a working implementation
    that uses the OTEL libraries. Tool builder reads
-   `mastra.observability.getClientToolObservabilityIngest()` and skips
+   `mastra.observability.getClientObservabilityProxy()` and skips
    the cross-boundary flow when undefined. No new registration call site
    — purely additive to an existing interface.
 

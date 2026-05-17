@@ -201,6 +201,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * stream is not memory-backed.
      */
     flushMessages?: () => Promise<void>;
+    /** Observability helper to expose on the final tool execution context. */
+    observe?: ToolObserve;
   };
 
 /**
@@ -462,7 +464,7 @@ export interface ToolExecutionContext<
    * }
    * ```
    */
-  observe?: ToolObserve;
+  observe: ToolObserve;
 }
 
 export interface ToolAction<

@@ -217,6 +217,7 @@ interface ToolCallInputStreamingStartPayload {
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
+  observability?: ClientObservabilityCarrier;
 }
 
 interface ToolCallDeltaPayload {

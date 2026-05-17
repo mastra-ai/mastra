@@ -10,3 +10,5 @@ execute: async ({ userId }, { observe }) => {
   return observe.span('fetch user', () => fetch(`/api/users/${userId}`))
 }
 ```
+
+The `createTool()` helper now calls `execute(input, context)` so client tools receive the same execution context shape as core tools.

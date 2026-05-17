@@ -25,6 +25,9 @@ export function parseTraceparent(value: string | undefined): TraceparentParts | 
   if (!value) return null;
   const m = TRACEPARENT_RE.exec(value.trim());
   if (!m) return null;
+  if (m[1] === 'ff') return null;
+  if (m[2] === '00000000000000000000000000000000') return null;
+  if (m[3] === '0000000000000000') return null;
   return { version: m[1]!, traceId: m[2]!, spanId: m[3]!, flags: m[4]! };
 }
 

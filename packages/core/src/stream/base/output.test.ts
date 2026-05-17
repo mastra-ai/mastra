@@ -598,4 +598,121 @@ describe('MastraModelOutput', () => {
       expect('raw' in finishPayload.totalUsage).toBe(false);
     });
   });
+
+  describe('client tool observability carriers', () => {
+    it('preserves observability on synthetic tool calls created from streaming input', async () => {
+      const runId = 'test-run';
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            providerExecuted: false,
+            observability,
+          },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            argsTextDelta: '{"location":"Paris"}',
+          },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+          },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const result = await output.getFullOutput();
+
+      expect(result.toolCalls[0]?.payload).toMatchObject({
+        toolCallId: 'call-1',
+        toolName: 'getWeather',
+        args: { location: 'Paris' },
+        observability,
+      });
+    });
+
+    it('merges observability from the final tool-call onto an existing synthetic tool call', async () => {
+      const runId = 'test-run';
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            providerExecuted: false,
+          },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+          },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            args: { location: 'Paris' },
+            providerExecuted: false,
+            observability,
+          },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const result = await output.getFullOutput();
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.payload.observability).toEqual(observability);
+    });
+  });
 });

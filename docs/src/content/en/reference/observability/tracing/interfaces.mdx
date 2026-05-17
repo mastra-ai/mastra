@@ -274,7 +274,7 @@ enum SpanType {
    * Client-side tool execution. Recorded as an event span on the
    * server (occurs at a point in time, no endTime). Child spans/logs
    * from the client SDK flow back as OTLP/JSON via the
-   * ClientToolObservabilityIngest interface in @mastra/observability
+   * ClientObservabilityProxy interface in @mastra/observability
    * and parent themselves under this event span. See the "Client
    * tools" section in the @mastra/client-js reference for the full
    * flow.
