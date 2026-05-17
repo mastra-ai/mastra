@@ -866,6 +866,20 @@ export class ReflectorRunner {
       storedSystemPromptHash !== undefined &&
       currentSystemPromptHash !== storedSystemPromptHash;
 
+    // Persist updated system prompt hash so future checks use the latest value
+    if (
+      this.reflectionConfig.activateOnSystemChange === true &&
+      currentSystemPromptHash !== undefined &&
+      currentSystemPromptHash !== storedSystemPromptHash
+    ) {
+      await this.storage
+        .updateObservationalMemoryConfig({
+          id: record.id,
+          config: { _systemPromptHash: currentSystemPromptHash },
+        })
+        .catch(() => {});
+    }
+
     if (observationTokens < reflectThreshold && !ttlExpired && !providerChanged && !systemPromptChanged) {
       return;
     }

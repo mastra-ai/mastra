@@ -1809,12 +1809,9 @@ ${formattedMessages}
    */
   async computeSystemPromptHash(messageList?: MessageList): Promise<string | undefined> {
     if (!messageList) return undefined;
-    const all = messageList.getAllSystemMessages();
-    const om = messageList.getSystemMessages('observational-memory');
-    const omSet = new Set(om);
-    const nonOm = all.filter(msg => !omSet.has(msg));
-    if (!nonOm.length) return undefined;
-    const content = nonOm
+    const untagged = messageList.getSystemMessages();
+    if (!untagged.length) return undefined;
+    const content = untagged
       .map(msg => (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)))
       .join('\n');
     if (!content) return undefined;
