@@ -1,5 +1,12 @@
 # mastracode
 
+## 0.20.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`6b8a53e`](https://github.com/mastra-ai/mastra/commit/6b8a53eea3b255a4fd0b29bc0237cdd1906bf55c)]:
+  - @mastra/stagehand@0.2.3-alpha.0
+
 ## 0.20.0-alpha.0
 
 ### Minor Changes
