@@ -162,11 +162,12 @@ export class ObservationTurn {
   }
 
   /**
-   * Finalize the turn: save any remaining messages and return the latest record state.
+   * Finalize the turn: save any remaining messages and return the current cached record.
    *
    * When async observation buffering is enabled and there are unobserved messages,
    * a background buffer operation is kicked off so that observations are computed
    * proactively while the agent is idle, rather than waiting for the next turn.
+   * The returned record does not wait for that background buffering pass to finish.
    */
   async end(): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
