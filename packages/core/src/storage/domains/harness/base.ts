@@ -342,11 +342,16 @@ export abstract class HarnessStorage extends StorageDomain {
   /**
    * Hard-delete a collected session subtree under one guarded adapter boundary.
    * Adapters must either delete every still-existing guarded row or reject
-   * without deleting any of them. The default preserves legacy adapter
-   * compatibility by looping `deleteSession`; durable adapters should override
-   * to enforce all-or-nothing batch semantics.
+   * without deleting any of them. The default preserves single-session legacy
+   * adapter compatibility; adapters must override this for multi-session
+   * all-or-nothing batch semantics.
    */
   async deleteSessions(opts: { sessions: DeleteSessionOptions[] }): Promise<void> {
+    if (opts.sessions.length > 1) {
+      throw new Error(
+        'HarnessStorage.deleteSessions must be overridden by this storage adapter for atomic batch deletes',
+      );
+    }
     for (const session of opts.sessions) {
       await this.deleteSession(session);
     }

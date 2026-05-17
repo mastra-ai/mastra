@@ -1337,6 +1337,14 @@ describe('Harness v1 — delete lifecycle', () => {
     });
 
     await parent.close();
+    await expect(
+      storage.deleteSessions({
+        sessions: [
+          { sessionId: parent.id, requireClosed: true },
+          { sessionId: child.id, requireClosed: true },
+        ],
+      }),
+    ).rejects.toThrow('HarnessStorage.deleteSessions must be overridden');
     await harness.deleteSession({ sessionId: parent.id, resourceId: 'r1' });
 
     await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
