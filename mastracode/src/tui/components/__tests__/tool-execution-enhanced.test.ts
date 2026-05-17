@@ -35,6 +35,26 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('✗');
   });
 
+  it('renders quiet edit tools with line ranges from the tool result', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'src/example.ts', old_string: 'old', new_string: 'new' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult({
+      content: [{ type: 'text', text: 'Replaced 1 occurrence in src/example.ts (lines 42-44)' }],
+      isError: false,
+    });
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain('edit');
+    expect(output).toContain('src/example.ts:42-44');
+    expect(output).not.toContain('old_string=');
+    expect(output.split('\n')).toHaveLength(1);
+  });
+
   it('renders quiet write tools with path and content preview lines', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',

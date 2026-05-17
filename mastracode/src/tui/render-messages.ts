@@ -751,6 +751,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.chatContainer.addChild(new OMMarkerComponent(content));
           }
         } else if (content.type === 'om_thread_title_updated') {
+          if (state.quietMode) continue;
           // Render thread title update marker in history
           state.chatContainer.addChild(
             new OMMarkerComponent({

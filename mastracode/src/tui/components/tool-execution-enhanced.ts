@@ -346,7 +346,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const linePrefix = lineMatch?.[0] ?? '';
     const separator = linePrefix ? '' : ' ';
     const branch = `╰─${separator}${linePrefix}`;
-    return `${theme.fg('dim', branch)}${theme.fg('toolArgs', summary.slice(linePrefix.length))}`;
+    return `${chalk.hex('#3f3f46')(branch)}${theme.fg('toolArgs', summary.slice(linePrefix.length))}`;
   }
 
   private getCompactContinuationSummary(): string {
@@ -389,7 +389,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       case MC_TOOLS.VIEW:
         return this.formatPathWithRange();
       case MC_TOOLS.STRING_REPLACE_LSP:
-        return this.getFirstStringArg('path');
+        return this.formatEditSummary();
       case MC_TOOLS.WRITE_FILE:
         return this.getFirstStringArg('path');
       case MC_TOOLS.FIND_FILES:
@@ -441,6 +441,16 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     if (start === undefined) return path;
     return end !== undefined && end !== start ? `${path}:${start}-${end}` : `${path}:${start}`;
+  }
+
+  private formatEditSummary(): string {
+    const path = this.getFirstStringArg('path');
+    if (!path) return '';
+
+    const output = this.getFormattedOutput();
+    const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = output.match(new RegExp(`Replaced \\d+ occurrences? in ${escapedPath} \\(lines ([^)]+)\\)`));
+    return match?.[1] ? `${path}:${match[1]}` : path;
   }
 
   private getFirstStringArg(key: string): string {

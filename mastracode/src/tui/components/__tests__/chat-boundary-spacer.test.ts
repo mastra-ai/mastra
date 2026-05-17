@@ -37,13 +37,13 @@ describe('ChatBoundarySpacer', () => {
     expect(container.render(100).filter(line => line === '')).toHaveLength(1);
   });
 
-  it('spaces across empty streaming message placeholders', () => {
+  it('does not space singleton tool changes across empty streaming message placeholders', () => {
     const container = new Container();
     insertChatComponentWithBoundarySpacing(container, quietTool('view'));
     insertChatComponentWithBoundarySpacing(container, new AssistantMessageComponent());
     insertChatComponentWithBoundarySpacing(container, quietTool('string_replace_lsp'));
 
-    expect(container.render(100).filter(line => line === '')).toHaveLength(1);
+    expect(container.render(100).filter(line => line === '')).toHaveLength(0);
   });
 
   it('renders no blank line between adjacent quiet compact tools with the same tool name', () => {
@@ -51,9 +51,21 @@ describe('ChatBoundarySpacer', () => {
     expect(lines).not.toContain('');
   });
 
-  it('renders one blank line between adjacent quiet compact tools with different tool names', () => {
-    const lines = renderSequence([quietTool('view'), quietTool('string_replace_lsp')]);
-    expect(lines.filter(line => line === '')).toHaveLength(1);
+  it('renders no blank line between adjacent singleton quiet compact tools with different tool names', () => {
+    const lines = renderSequence([quietTool('view'), quietTool('string_replace_lsp'), quietTool('view'), quietTool('string_replace_lsp')]);
+    expect(lines.filter(line => line === '')).toHaveLength(0);
+  });
+
+  it('renders blank lines around repeated quiet compact tool runs', () => {
+    const lines = renderSequence([
+      quietTool('view'),
+      quietTool('string_replace_lsp'),
+      quietTool('string_replace_lsp'),
+      quietTool('string_replace_lsp'),
+      quietTool('view'),
+      quietTool('string_replace_lsp'),
+    ]);
+    expect(lines.filter(line => line === '')).toHaveLength(2);
   });
 
   it('groups adjacent quiet compact tools of the same type and blanks shared prefixes', () => {

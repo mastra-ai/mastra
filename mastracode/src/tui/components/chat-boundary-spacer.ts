@@ -7,12 +7,14 @@ export class ChatBoundarySpacer implements Component {
   constructor(
     private readonly getPrev: () => Component | undefined,
     private readonly getNext: () => Component | undefined,
+    private readonly getPrevPrev: () => Component | undefined = () => undefined,
+    private readonly getNextNext: () => Component | undefined = () => undefined,
   ) {}
 
   invalidate(): void {}
 
   render(): string[] {
-    const spacing = getSpacingBetweenComponents(this.getPrev(), this.getNext());
+    const spacing = getSpacingBetweenComponents(this.getPrev(), this.getNext(), this.getPrevPrev(), this.getNextNext());
     return Array.from({ length: spacing }, () => '');
   }
 }

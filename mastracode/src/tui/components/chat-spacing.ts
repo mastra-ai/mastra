@@ -24,15 +24,28 @@ export function getChatSpacingKind(component: Component | undefined): ChatSpacin
   return participant?.getChatSpacingKind?.();
 }
 
-export function getSpacingBetweenComponents(prev: Component | undefined, next: Component | undefined): number {
+export function getSpacingBetweenComponents(
+  prev: Component | undefined,
+  next: Component | undefined,
+  prevPrev?: Component | undefined,
+  nextNext?: Component | undefined,
+): number {
   const prevKind = getChatSpacingKind(prev);
   const nextKind = getChatSpacingKind(next);
   if (prevKind === 'quiet-compact-tool' && nextKind === 'quiet-compact-tool') {
-    const prevKey = (prev as CompactToolSpacingParticipant | undefined)?.getCompactToolGroupKey?.();
-    const nextKey = (next as CompactToolSpacingParticipant | undefined)?.getCompactToolGroupKey?.();
-    return prevKey && nextKey && prevKey === nextKey ? 0 : 1;
+    const prevKey = getCompactToolGroupKey(prev);
+    const nextKey = getCompactToolGroupKey(next);
+    if (prevKey && nextKey && prevKey === nextKey) return 0;
+
+    const prevIsRunEnd = !!prevKey && prevKey === getCompactToolGroupKey(prevPrev);
+    const nextIsRunStart = !!nextKey && nextKey === getCompactToolGroupKey(nextNext);
+    return prevIsRunEnd || nextIsRunStart ? 1 : 0;
   }
   return getSpacingBetween(prevKind, nextKind);
+}
+
+function getCompactToolGroupKey(component: Component | undefined): string | undefined {
+  return (component as CompactToolSpacingParticipant | undefined)?.getCompactToolGroupKey?.();
 }
 
 export function getSpacingBetween(prev: ChatSpacingKind | undefined, next: ChatSpacingKind | undefined): number {

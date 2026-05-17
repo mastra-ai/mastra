@@ -16,15 +16,17 @@ export function insertChatComponentWithBoundarySpacing(
   const children = chatContainer.children as Component[];
   const boundedIndex = Math.max(0, Math.min(index, children.length));
   const previous = findPreviousSpacingComponent(children, boundedIndex);
+  const previousPrevious = findPreviousSpacingComponent(children, previous ? children.indexOf(previous) : -1);
   const next = findNextSpacingComponent(children, boundedIndex);
+  const nextNext = findNextSpacingComponent(children, next ? children.indexOf(next) + 1 : children.length);
   const inserted: Component[] = [];
 
   if (previous) {
-    inserted.push(new ChatBoundarySpacer(() => previous, () => child));
+    inserted.push(new ChatBoundarySpacer(() => previous, () => child, () => previousPrevious, () => next));
   }
   inserted.push(child);
   if (next) {
-    inserted.push(new ChatBoundarySpacer(() => child, () => next));
+    inserted.push(new ChatBoundarySpacer(() => child, () => next, () => previous, () => nextNext));
   }
 
   children.splice(boundedIndex, 0, ...inserted);
@@ -43,6 +45,14 @@ function findNextSpacingComponent(children: Component[], index: number): Compone
   for (let i = index; i < children.length; i++) {
     const child = children[i];
     if (child && !isChatBoundarySpacer(child) && getChatSpacingKind(child)) return child;
+  }
+  return undefined;
+}
+
+function findPreviousSpacingComponentInList(components: Component[], index: number): Component | undefined {
+  for (let i = index - 1; i >= 0; i--) {
+    const child = components[i];
+    if (child && getChatSpacingKind(child)) return child;
   }
   return undefined;
 }
@@ -76,9 +86,12 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
     nextChildren.push(component);
 
     if (getChatSpacingKind(component)) {
+      const previous = findPreviousSpacingComponentInList(components, i);
       const next = findNextSpacingComponentInList(components, i);
+      const nextIndex = next ? components.indexOf(next) : -1;
+      const nextNext = nextIndex >= 0 ? findNextSpacingComponentInList(components, nextIndex) : undefined;
       if (next) {
-        nextChildren.push(new ChatBoundarySpacer(() => component, () => next));
+        nextChildren.push(new ChatBoundarySpacer(() => component, () => next, () => previous, () => nextNext));
       }
     }
   }
