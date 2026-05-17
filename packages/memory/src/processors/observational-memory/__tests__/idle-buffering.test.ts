@@ -27,7 +27,10 @@ function createTestMessage(
   return {
     id: id ?? `msg-${Math.random().toString(36).slice(2)}`,
     role,
-    content: { format: 2, parts: [{ type: 'text', text: content }] } as MastraMessageContentV2,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content, createdAt: Date.now() }],
+    } as MastraMessageContentV2,
     type: 'text',
     createdAt: createdAt ?? new Date(),
   };
