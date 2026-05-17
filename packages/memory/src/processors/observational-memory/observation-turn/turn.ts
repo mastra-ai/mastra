@@ -4,6 +4,7 @@ import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { omDebug } from '../debug';
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
@@ -162,6 +163,10 @@ export class ObservationTurn {
 
   /**
    * Finalize the turn: save any remaining messages and return the latest record state.
+   *
+   * When async observation buffering is enabled and there are unobserved messages,
+   * a background buffer operation is kicked off so that observations are computed
+   * proactively while the agent is idle, rather than waiting for the next turn.
    */
   async end(): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
@@ -173,6 +178,30 @@ export class ObservationTurn {
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+    }
+
+    // When the agent goes idle, start buffering any unobserved messages in the background.
+    // This ensures messages accumulated during the turn are observed proactively
+    // rather than waiting for the next turn's step.prepare() to trigger buffering.
+    if (this.om.buffering.isAsyncObservationEnabled()) {
+      const allMessages = this.messageList.get.all.db();
+      const record = this._record!;
+      const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
+      if (unobservedMessages.length > 0) {
+        void this.om
+          .buffer({
+            threadId: this.threadId,
+            resourceId: this.resourceId,
+            messages: unobservedMessages,
+            record,
+            writer: this.writer,
+            requestContext: this.requestContext,
+            observabilityContext: this.observabilityContext,
+          })
+          .catch((err: Error) => {
+            omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
+          });
+      }
     }
 
     return { record: this._record! };
