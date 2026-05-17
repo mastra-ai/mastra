@@ -7,6 +7,8 @@ import type {
   AttachmentRecord,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  ListActiveSessionsByThreadInput,
+  ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
   OperationAdmissionEvidence,
@@ -22,6 +24,8 @@ import type {
   SessionLeaseResult,
   SessionRecord,
   SessionSummary,
+  ThreadDeleteFenceLease,
+  WithThreadDeleteFenceInput,
 } from './types';
 
 /**
@@ -120,10 +124,21 @@ export class HarnessStorageAdmissionConflictError extends Error {
   }
 }
 
+export class HarnessStorageThreadDeleteFenceConflictError extends Error {
+  readonly name = 'HarnessStorageThreadDeleteFenceConflictError';
+  readonly code = 'harness.storage.thread_delete_fence_conflict' as const;
+  constructor(
+    public readonly threadId: string,
+    public readonly ownerId?: string,
+  ) {
+    super(`Thread "${threadId}" is currently fenced for deletion`);
+  }
+}
+
 /**
  * Storage domain for the v1 Harness — see HARNESS_V1_SPEC.md §5.
  *
- * Owns three resources:
+ * Owns four resource groups:
  *
  *   1. **Session records** — durable session state (mode, model, permissions,
  *      pending queue, pending approval/suspension/question/plan, goal,
@@ -139,6 +154,10 @@ export class HarnessStorageAdmissionConflictError extends Error {
  *      `(ownerSessionId, name, mimeType, bytes, sha256, source)` and the
  *      underlying bytes. Adapters are free to delegate the bytes to a
  *      separate blob store (S3, R2, local disk) under the same interface.
+ *
+ *   4. **Thread delete fences** — short-lived thread-scoped ownership tokens
+ *      that block active-session admission while `threads.delete(...)` proves
+ *      storage ownership before deleting global MemoryStorage thread rows.
  *
  * Threads and messages are NOT in this domain — they live under
  * `MemoryStorage`. The harness layer composes the two.
@@ -186,6 +205,48 @@ export abstract class HarnessStorage extends StorageDomain {
    * storage layer (no in-memory fan-out).
    */
   abstract listSessions(opts: ListSessionsInput): Promise<SessionSummary[]>;
+
+  /**
+   * List session summaries for an exact `(resourceId, threadId)` key. Closed
+   * records are excluded by default; pass `includeClosed: true` to surface
+   * closed historical owners. Adapters must push the thread filter to the
+   * storage layer because this powers `threads.delete(...)` root discovery.
+   * The base implementation fails closed so custom adapters do not silently
+   * fall back to resource-wide scans.
+   */
+  async listSessionsByThread(_opts: ListSessionsByThreadInput): Promise<SessionSummary[]> {
+    throw new Error('HarnessStorage.listSessionsByThread must be implemented by this storage adapter');
+  }
+
+  /**
+   * List active sessions for a thread across all resources and, by default,
+   * every harness namespace visible to this adapter. Pass `harnessName` only
+   * when a caller explicitly needs a namespace-scoped view. Used before global
+   * `MemoryStorage.deleteThread(...)` calls, where deleting by thread id could
+   * otherwise remove messages for a live session in another resource or
+   * harness namespace backed by the same Harness storage adapter. Adapters
+   * that back `threads.delete(...)` must override this method; the base
+   * implementation fails closed because returning incomplete ownership data
+   * before a global memory-thread delete could cause data loss.
+   */
+  async listActiveSessionsByThread(_opts: ListActiveSessionsByThreadInput): Promise<SessionSummary[]> {
+    throw new Error('HarnessStorage.listActiveSessionsByThread must be implemented by this storage adapter');
+  }
+
+  /**
+   * Run a small critical section while new active-session admission for this
+   * thread is fenced. Durable adapters persist the fence so another process
+   * cannot create a session after the active-session guard and before the
+   * global memory-thread delete. The base implementation fails closed because a
+   * no-op fence is unsafe for `threads.delete(...)`.
+   */
+  async withThreadDeleteFence<T>(
+    _opts: WithThreadDeleteFenceInput,
+    fn: (fence: ThreadDeleteFenceLease) => Promise<T>,
+  ): Promise<T> {
+    void fn;
+    throw new Error('HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter');
+  }
 
   /**
    * Optimistic-CAS write of a session record.

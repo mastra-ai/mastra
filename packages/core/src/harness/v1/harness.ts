@@ -35,8 +35,10 @@ import {
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
+  HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
 } from '../../storage/domains/harness';
+import type { MemoryStorage } from '../../storage/domains/memory/base';
 
 import { InMemoryStore } from '../../storage/mock';
 import type { Workspace } from '../../workspace';
@@ -171,6 +173,53 @@ function hasOnlyCloneableSkillMetadataValues(value: unknown, seen: WeakSet<objec
     return supported;
   }
   return true;
+}
+
+function hasExternalSessionStorageOwner(metadata: unknown): boolean {
+  return (
+    !!metadata &&
+    typeof metadata === 'object' &&
+    !Array.isArray(metadata) &&
+    (metadata as Record<string, unknown>)[EXTERNAL_SESSION_STORAGE_OWNER_METADATA_KEY] === true
+  );
+}
+
+function hasHarnessThreadDeleteInProgress(metadata: unknown): boolean {
+  return (
+    !!metadata &&
+    typeof metadata === 'object' &&
+    !Array.isArray(metadata) &&
+    (metadata as Record<string, unknown>)[HARNESS_THREAD_DELETE_IN_PROGRESS_METADATA_KEY] === true
+  );
+}
+
+const boundHarnessesByMastra = new WeakMap<Mastra, Set<Harness>>();
+const boundHarnessesByMemory = new WeakMap<object, Set<Harness>>();
+const EXTERNAL_SESSION_STORAGE_OWNER_METADATA_KEY = '__mastraHarnessExternalSessionStorageOwner';
+const HARNESS_THREAD_DELETE_IN_PROGRESS_METADATA_KEY = '__mastraHarnessThreadDeleteInProgress';
+const HARNESS_INTERNAL_THREAD_METADATA_KEYS = new Set([
+  EXTERNAL_SESSION_STORAGE_OWNER_METADATA_KEY,
+  HARNESS_THREAD_DELETE_IN_PROGRESS_METADATA_KEY,
+]);
+
+function assertNoHarnessInternalThreadMetadata(metadata: unknown, callsite: string): void {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return;
+  for (const key of Object.keys(metadata)) {
+    if (HARNESS_INTERNAL_THREAD_METADATA_KEYS.has(key)) {
+      throw new HarnessConfigError(callsite, `metadata key "${key}" is reserved for Harness internals`);
+    }
+  }
+}
+
+function stripHarnessInternalThreadMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!metadata) return undefined;
+  const publicMetadata: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (!HARNESS_INTERNAL_THREAD_METADATA_KEYS.has(key)) publicMetadata[key] = value;
+  }
+  return Object.keys(publicMetadata).length > 0 ? publicMetadata : undefined;
 }
 
 export class Harness {
@@ -539,7 +588,14 @@ export class Harness {
         );
       }
     }
+    let boundHarnesses = boundHarnessesByMastra.get(mastra);
+    if (!boundHarnesses) {
+      boundHarnesses = new Set();
+      boundHarnessesByMastra.set(mastra, boundHarnesses);
+    }
+    boundHarnesses.add(this);
     this._mastra = mastra;
+    this._trackMemoryStorage(mastra.getStorage()?.stores?.memory);
   }
 
   // -------------------------------------------------------------------------
@@ -755,6 +811,7 @@ export class Harness {
       throw new HarnessSessionClosingError(sessionId);
     }
 
+    await this._markExternalSessionStorageOwner(stored.threadId);
     return this._hydrate(storage, stored);
   }
 
@@ -799,6 +856,7 @@ export class Harness {
       if (stored.closingAt !== undefined) {
         throw new HarnessSessionClosingError(stored.id);
       }
+      await this._markExternalSessionStorageOwner(stored.threadId);
       return this._hydrate(storage, stored);
     }
 
@@ -840,6 +898,7 @@ export class Harness {
     for (const head of summaries) {
       const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: head.id });
       if (stored && stored.closedAt === undefined && stored.closingAt === undefined) {
+        await this._markExternalSessionStorageOwner(stored.threadId);
         return this._hydrate(storage, stored);
       }
     }
@@ -928,6 +987,8 @@ export class Harness {
       }
       throw liveParentError;
     }
+
+    await this._markExternalSessionStorageOwner(init.threadId, { requireExisting: !init.ownsThread });
 
     let admitted;
     try {
@@ -1612,17 +1673,50 @@ export class Harness {
   threads = {
     create: async (opts: ThreadCreateOptions): Promise<ThreadRecord> => {
       const memory = await this._requireMemoryStorage('threads.create()');
+      assertNoHarnessInternalThreadMetadata(opts.metadata, 'threads.create().metadata');
       const now = new Date();
-      const thread = await memory.saveThread({
-        thread: {
-          id: opts.threadId ?? this._mintThreadId(),
-          resourceId: opts.resourceId,
-          title: opts.title,
-          createdAt: now,
-          updatedAt: now,
-          metadata: opts.metadata as Record<string, unknown> | undefined,
-        },
-      });
+      const threadId = opts.threadId ?? this._mintThreadId();
+      const saveThread = () =>
+        memory.saveThread({
+          thread: {
+            id: threadId,
+            resourceId: opts.resourceId,
+            title: opts.title,
+            createdAt: now,
+            updatedAt: now,
+            metadata: opts.metadata as Record<string, unknown> | undefined,
+          },
+        });
+      const saveThreadIfVisibleOwner = async (fence?: { assertActive(): Promise<void> }) => {
+        const existing = await memory.getThreadById({ threadId });
+        if (existing && existing.resourceId !== opts.resourceId) {
+          throw new HarnessThreadNotFoundError(opts.resourceId, threadId);
+        }
+        await fence?.assertActive();
+        return saveThread();
+      };
+      let thread;
+      if (opts.threadId === undefined) {
+        thread = await saveThread();
+      } else {
+        try {
+          thread = await this._requireStorage('threads.create()').withThreadDeleteFence(
+            {
+              threadId,
+              ownerId: `${this.ownerId}:thread-create:${randomUUID()}`,
+              ttlMs: Math.max(this._closeTimeoutMs, this._leaseTtlMs),
+            },
+            saveThreadIfVisibleOwner,
+          );
+        } catch (err) {
+          if (err instanceof HarnessConfigError) {
+            thread = await saveThreadIfVisibleOwner();
+          } else {
+            if (!isMissingThreadDeleteFenceImplementation(err)) throw err;
+            thread = await saveThreadIfVisibleOwner();
+          }
+        }
+      }
       const record = toThreadRecord(thread);
       this._emitter.emit({
         type: 'thread_created',
@@ -1635,6 +1729,7 @@ export class Harness {
 
     list: async (opts: ThreadListOptions): Promise<ThreadListResult> => {
       const memory = await this._requireMemoryStorage('threads.list()');
+      assertNoHarnessInternalThreadMetadata(opts.metadata, 'threads.list().metadata');
       const out = await memory.listThreads({
         perPage: opts.perPage ?? 100,
         page: opts.page ?? 0,
@@ -1662,6 +1757,7 @@ export class Harness {
 
     rename: async (opts: ThreadRenameOptions): Promise<ThreadRecord> => {
       const memory = await this._requireMemoryStorage('threads.rename()');
+      assertNoHarnessInternalThreadMetadata(opts.metadata, 'threads.rename().metadata');
       const existing = await memory.getThreadById({ threadId: opts.threadId });
       if (!existing || existing.resourceId !== opts.resourceId) {
         throw new HarnessThreadNotFoundError(opts.resourceId, opts.threadId);
@@ -1689,6 +1785,7 @@ export class Harness {
 
     clone: async (opts: ThreadCloneOptions): Promise<ThreadRecord> => {
       const memory = await this._requireMemoryStorage('threads.clone()');
+      assertNoHarnessInternalThreadMetadata(opts.metadata, 'threads.clone().metadata');
       const source = await memory.getThreadById({ threadId: opts.threadId });
       if (!source || source.resourceId !== opts.resourceId) {
         throw new HarnessThreadNotFoundError(opts.resourceId, opts.threadId);
@@ -1747,51 +1844,181 @@ export class Harness {
         // leaked.
         return;
       }
+      if (hasExternalSessionStorageOwner(existing.metadata)) {
+        throw new HarnessConfigError(
+          'sessions.storage',
+          'threads.delete() cannot delete global memory thread rows after a separate Harness session storage has attached to this thread',
+        );
+      }
 
       // Cascade: force-delete every session rooted on this thread before
       // deleting the thread so descendants, leases, and owned attachments are
-      // cleaned through the same session lifecycle path.
-      const storage = this._requireStorage('threads.delete()');
+      // cleaned through the same session lifecycle path. Without Harness
+      // session storage we cannot prove cross-process ownership, so deletion
+      // fails closed before mutating global memory rows.
+      let storage: HarnessStorage;
+      try {
+        storage = this._requireStorage('threads.delete()');
+      } catch (err) {
+        if (!(err instanceof HarnessConfigError)) throw err;
+        throw new HarnessConfigError(
+          'sessions.storage',
+          'threads.delete() requires Harness session storage so it can prove thread ownership before deleting global memory thread rows',
+        );
+      }
+      if (!this._canDeleteGlobalMemoryThreadWithStorage(storage, memory)) {
+        throw new HarnessConfigError(
+          'sessions.storage',
+          'threads.delete() cannot cascade with a separate session storage override because MemoryStorage.deleteThread deletes global thread rows',
+        );
+      }
       let cascaded = false;
-      const candidates = await storage.listSessions({
-        harnessName: this._harnessName,
-        resourceId: opts.resourceId,
-        includeClosed: true,
-      });
-      if (this._shutdown) return;
-      for (const candidate of candidates) {
-        if (candidate.threadId !== opts.threadId) continue;
-        const stored = await storage.loadSession({
-          harnessName: this._harnessName,
-          sessionId: candidate.id,
-        });
-        if (!stored || stored.threadId !== opts.threadId || stored.resourceId !== opts.resourceId) continue;
-        cascaded = true;
-        const deletedRecords = await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown, {
-          resourceId: opts.resourceId,
-        });
-        for (const deleted of deletedRecords) {
-          if (this._shutdown) return;
-          if (!deleted.ownsThread || deleted.threadId === opts.threadId) continue;
-          const activeThreadSession = await storage.loadSessionByThread({
-            harnessName: this._harnessName,
-            threadId: deleted.threadId,
-            resourceId: deleted.resourceId,
-          });
-          if (activeThreadSession) continue;
-          await memory.deleteThread({ threadId: deleted.threadId });
-          if (this._shutdown) return;
-          if (memory.supportsObservationalMemory) {
-            await memory.clearObservationalMemory(deleted.threadId, deleted.resourceId);
+      let deletedRootThread = false;
+      const rootDeleteMarked = await this._setThreadDeleteInProgress(memory, opts.threadId, true, opts.resourceId);
+      try {
+        while (!this._shutdown) {
+          try {
+            await storage.withThreadDeleteFence(
+              {
+                threadId: opts.threadId,
+                ownerId: `${this.ownerId}:thread-delete:${randomUUID()}`,
+                ttlMs: Math.max(this._closeTimeoutMs, this._leaseTtlMs),
+              },
+              async rootFence => {
+                if (this._shutdown) return;
+                // Preflight before deleting session rows: custom adapters must
+                // prove they can see active thread owners across their visible
+                // namespaces before we mutate storage or global memory rows.
+                await storage.listActiveSessionsByThread({ threadId: opts.threadId });
+                const candidates = await storage.listSessionsByThread({
+                  harnessName: this._harnessName,
+                  resourceId: opts.resourceId,
+                  threadId: opts.threadId,
+                  includeClosed: true,
+                });
+                if (this._shutdown) return;
+                for (const candidate of candidates) {
+                  const stored = await storage.loadSession({
+                    harnessName: this._harnessName,
+                    sessionId: candidate.id,
+                  });
+                  if (!stored || stored.threadId !== opts.threadId || stored.resourceId !== opts.resourceId) continue;
+                  cascaded = true;
+                  const deletedRecords = await this._forceDeleteSessionRecord(storage, stored, () => !this._shutdown, {
+                    resourceId: opts.resourceId,
+                  });
+                  for (const deleted of deletedRecords) {
+                    if (this._shutdown) return;
+                    if (!deleted.ownsThread || deleted.threadId === opts.threadId) continue;
+                    try {
+                      await storage.withThreadDeleteFence(
+                        {
+                          threadId: deleted.threadId,
+                          ownerId: `${this.ownerId}:thread-delete:${randomUUID()}`,
+                          ttlMs: Math.max(this._closeTimeoutMs, this._leaseTtlMs),
+                        },
+                        async descendantFence => {
+                          const descendantDeleteMarked = await this._setThreadDeleteInProgress(
+                            memory,
+                            deleted.threadId,
+                            true,
+                            deleted.resourceId,
+                          );
+                          let deletedDescendantThread = false;
+                          try {
+                            const deletedThread = await memory.getThreadById({ threadId: deleted.threadId });
+                            if (!deletedThread || deletedThread.resourceId !== deleted.resourceId) return;
+                            if (hasExternalSessionStorageOwner(deletedThread.metadata)) return;
+                            const activeThreadSessions = await storage.listActiveSessionsByThread({
+                              threadId: deleted.threadId,
+                            });
+                            if (activeThreadSessions.length > 0) return;
+                            const remainingThreadSessions = await storage.listSessionsByThread({
+                              threadId: deleted.threadId,
+                              includeClosed: true,
+                            });
+                            if (remainingThreadSessions.length > 0) return;
+                            if (!this._canDeleteGlobalMemoryThreadWithStorage(storage, memory)) return;
+                            if (await this._hasVisibleHarnessSessionsForThread(storage, deleted.threadId)) return;
+                            await descendantFence.assertActive();
+                            await memory.deleteThread({ threadId: deleted.threadId });
+                            deletedDescendantThread = true;
+                            if (this._shutdown) return;
+                            if (memory.supportsObservationalMemory) {
+                              await memory.clearObservationalMemory(deleted.threadId, deleted.resourceId);
+                            }
+                          } finally {
+                            if (descendantDeleteMarked && !deletedDescendantThread) {
+                              await this._setThreadDeleteInProgress(
+                                memory,
+                                deleted.threadId,
+                                false,
+                                deleted.resourceId,
+                              );
+                            }
+                          }
+                        },
+                      );
+                    } catch (err) {
+                      if (err instanceof HarnessStorageThreadDeleteFenceConflictError) continue;
+                      throw err;
+                    }
+                  }
+                  if (this._shutdown) return;
+                }
+
+                const activeRootThreadSessions = await storage.listActiveSessionsByThread({
+                  threadId: opts.threadId,
+                });
+                if (activeRootThreadSessions.length > 0) {
+                  return;
+                }
+                const remainingRootThreadSessions = await storage.listSessionsByThread({
+                  threadId: opts.threadId,
+                  includeClosed: true,
+                });
+                if (remainingRootThreadSessions.length > 0) {
+                  return;
+                }
+                const rootThread = await memory.getThreadById({ threadId: opts.threadId });
+                if (!rootThread || rootThread.resourceId !== opts.resourceId) {
+                  return;
+                }
+                if (hasExternalSessionStorageOwner(rootThread.metadata)) {
+                  return;
+                }
+                if (!this._canDeleteGlobalMemoryThreadWithStorage(storage, memory)) {
+                  return;
+                }
+                if (await this._hasVisibleHarnessSessionsForThread(storage, opts.threadId)) {
+                  return;
+                }
+                await rootFence.assertActive();
+                await memory.deleteThread({ threadId: opts.threadId });
+                deletedRootThread = true;
+                if (memory.supportsObservationalMemory) {
+                  await memory.clearObservationalMemory(opts.threadId, opts.resourceId);
+                }
+              },
+            );
+            break;
+          } catch (err) {
+            if (
+              err instanceof HarnessStorageThreadDeleteFenceConflictError &&
+              err.ownerId?.includes(':thread-delete:')
+            ) {
+              await waitForThreadDeleteFenceRetry();
+              continue;
+            }
+            throw err;
           }
         }
-        if (this._shutdown) return;
+      } finally {
+        if (rootDeleteMarked && !deletedRootThread) {
+          await this._setThreadDeleteInProgress(memory, opts.threadId, false, opts.resourceId);
+        }
       }
-
-      await memory.deleteThread({ threadId: opts.threadId });
-      if (memory.supportsObservationalMemory) {
-        await memory.clearObservationalMemory(opts.threadId, opts.resourceId);
-      }
+      if (!deletedRootThread) return;
       this._emitter.emit({
         type: 'thread_deleted',
         threadId: opts.threadId,
@@ -1829,6 +2056,12 @@ export class Harness {
       const removedKeys: string[] = [];
 
       for (const [key, value] of Object.entries(opts.patch)) {
+        if (HARNESS_INTERNAL_THREAD_METADATA_KEYS.has(key)) {
+          throw new HarnessConfigError(
+            'threads.setSettings().patch',
+            `metadata key "${key}" is reserved for Harness internals`,
+          );
+        }
         if (value === undefined) {
           if (key in next) {
             delete next[key];
@@ -1878,7 +2111,7 @@ export class Harness {
         throw new HarnessThreadNotFoundError(opts.resourceId, opts.threadId);
       }
       const metadata = (existing.metadata as Record<string, unknown> | undefined) ?? {};
-      return Object.freeze({ ...metadata });
+      return Object.freeze(stripHarnessInternalThreadMetadata(metadata) ?? {});
     },
 
     /**
@@ -2012,6 +2245,102 @@ export class Harness {
     );
   }
 
+  private _canDeleteGlobalMemoryThreadWithStorage(storage: HarnessStorage, memory: object): boolean {
+    const mastra = this._mastra;
+    if (!mastra || mastra.getStorage()?.stores?.harness !== storage) return false;
+    const boundHarnesses = boundHarnessesByMemory.get(memory);
+    if (!boundHarnesses) return false;
+    for (const harness of boundHarnesses) {
+      if (harness._getEffectiveSessionStorage() !== storage) return false;
+    }
+    return true;
+  }
+
+  private _trackMemoryStorage(memory: unknown): void {
+    if (!memory || typeof memory !== 'object') return;
+    let boundHarnesses = boundHarnessesByMemory.get(memory);
+    if (!boundHarnesses) {
+      boundHarnesses = new Set();
+      boundHarnessesByMemory.set(memory, boundHarnesses);
+    }
+    boundHarnesses.add(this);
+  }
+
+  private _getEffectiveSessionStorage(): HarnessStorage | undefined {
+    return this._storageOverride ?? this._mastra?.getStorage()?.stores?.harness;
+  }
+
+  private _usesSeparateSessionStorage(): boolean {
+    if (!this._storageOverride) return false;
+    return this._storageOverride !== this._mastra?.getStorage()?.stores?.harness;
+  }
+
+  private async _markExternalSessionStorageOwner(
+    threadId: string,
+    opts: { requireExisting?: boolean } = {},
+  ): Promise<void> {
+    if (!this._usesSeparateSessionStorage()) return;
+    const memory = await this._internalTryGetMemoryStorage();
+    if (!memory) return;
+    const thread = await memory.getThreadById({ threadId });
+    if (!thread) {
+      if (opts.requireExisting === false) return;
+      throw new HarnessConfigError(
+        'sessions.storage',
+        'session() cannot attach a separate session storage to a memory thread that does not exist',
+      );
+    }
+    if (hasHarnessThreadDeleteInProgress(thread.metadata)) {
+      throw new HarnessConfigError(
+        'sessions.storage',
+        'session() cannot attach a separate session storage to a memory thread while threads.delete() is in progress',
+      );
+    }
+    if (hasExternalSessionStorageOwner(thread.metadata)) return;
+    await memory.updateThread({
+      id: threadId,
+      title: thread.title ?? '',
+      metadata: {
+        ...(thread.metadata as Record<string, unknown> | undefined),
+        [EXTERNAL_SESSION_STORAGE_OWNER_METADATA_KEY]: true,
+      },
+    });
+    const marked = await memory.getThreadById({ threadId });
+    if (hasHarnessThreadDeleteInProgress(marked?.metadata)) {
+      throw new HarnessConfigError(
+        'sessions.storage',
+        'session() cannot attach a separate session storage to a memory thread while threads.delete() is in progress',
+      );
+    }
+  }
+
+  private async _setThreadDeleteInProgress(
+    memory: MemoryStorage,
+    threadId: string,
+    value: boolean,
+    resourceId?: string,
+  ): Promise<boolean> {
+    const thread = await memory.getThreadById({ threadId });
+    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return false;
+    await memory.updateThread({
+      id: threadId,
+      title: thread.title ?? '',
+      metadata: {
+        ...(thread.metadata as Record<string, unknown> | undefined),
+        [HARNESS_THREAD_DELETE_IN_PROGRESS_METADATA_KEY]: value,
+      },
+    });
+    return true;
+  }
+
+  private async _hasVisibleHarnessSessionsForThread(storage: HarnessStorage, threadId: string): Promise<boolean> {
+    const sessions = await storage.listSessionsByThread({
+      threadId,
+      includeClosed: true,
+    });
+    return sessions.length > 0;
+  }
+
   /**
    * Thread CRUD is owned by Mastra's memory storage domain, not by the
    * harness storage domain. We resolve it lazily through the bound Mastra
@@ -2039,6 +2368,7 @@ export class Harness {
         `required for ${callsite} — the bound Mastra storage has no memory domain registered`,
       );
     }
+    this._trackMemoryStorage(memory);
     return memory;
   }
 
@@ -2053,6 +2383,7 @@ export class Harness {
     const composite = this._mastra.getStorage();
     if (!composite) return null;
     const memory = await composite.getStore('memory');
+    this._trackMemoryStorage(memory);
     return memory ?? null;
   }
 
@@ -2090,8 +2421,19 @@ function toThreadRecord(thread: {
     title: thread.title,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
-    metadata: thread.metadata,
+    metadata: stripHarnessInternalThreadMetadata(thread.metadata),
   };
+}
+
+function isMissingThreadDeleteFenceImplementation(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    err.message === 'HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter'
+  );
+}
+
+async function waitForThreadDeleteFenceRetry(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 25));
 }
 
 function emptyPermissionRules(): PermissionRules {

@@ -337,6 +337,16 @@ export interface HarnessConfigCommon {
      * instance's storage (`mastra.getStorage().stores.harness`). Pass
      * a custom adapter only if the harness needs to persist into a
      * different store than the rest of the Mastra app.
+     *
+     * Thread records and messages still live in the bound Mastra memory
+     * store. If the session storage override is not the same object as the
+     * bound Mastra storage's `stores.harness` domain, `threads.delete(...)`
+     * fails closed before deleting session rows or global memory
+     * thread/message rows for that harness. A separate session storage may only
+     * attach to an existing memory thread; Harness writes a reserved internal
+     * marker so later `threads.delete(...)` calls in other processes fail
+     * closed instead of deleting global thread/message rows they cannot prove
+     * are unowned.
      */
     storage?: HarnessStorage;
 

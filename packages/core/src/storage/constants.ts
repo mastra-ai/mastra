@@ -50,6 +50,7 @@ export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
 export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
 export const TABLE_HARNESS_MESSAGE_RESULTS = 'mastra_harness_message_results';
 export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
+export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_fences';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -89,7 +90,8 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_ATTACHMENTS
   | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES
   | typeof TABLE_HARNESS_MESSAGE_RESULTS
-  | typeof TABLE_HARNESS_OPERATION_TOMBSTONES;
+  | typeof TABLE_HARNESS_OPERATION_TOMBSTONES
+  | typeof TABLE_HARNESS_THREAD_DELETE_FENCES;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -727,6 +729,12 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     compacted_at: { type: 'bigint', nullable: false },
     expires_at: { type: 'bigint', nullable: false },
   },
+  [TABLE_HARNESS_THREAD_DELETE_FENCES]: {
+    thread_id: { type: 'text', nullable: false, primaryKey: true },
+    owner_id: { type: 'text', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    expires_at: { type: 'bigint', nullable: false },
+  },
 };
 
 /**
@@ -752,6 +760,9 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
+  },
+  [TABLE_HARNESS_THREAD_DELETE_FENCES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
   },
 };
 

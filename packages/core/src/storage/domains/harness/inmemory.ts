@@ -9,6 +9,7 @@ import {
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
+  HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
 } from './base';
 import type {
@@ -19,6 +20,8 @@ import type {
   AttachmentRecord,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  ListActiveSessionsByThreadInput,
+  ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
   OperationAdmissionEvidence,
@@ -34,6 +37,8 @@ import type {
   SessionLeaseResult,
   SessionRecord,
   SessionSummary,
+  ThreadDeleteFenceLease,
+  WithThreadDeleteFenceInput,
 } from './types';
 
 /**
@@ -114,6 +119,85 @@ export class InMemoryHarness extends HarnessStorage {
     return matched.map(toSummary);
   }
 
+  async listSessionsByThread({
+    resourceId,
+    threadId,
+    includeClosed = false,
+    harnessName,
+  }: ListSessionsByThreadInput): Promise<SessionSummary[]> {
+    const matched: SessionRecord[] = [];
+    const namespace = harnessName === undefined ? undefined : resolveHarnessName(harnessName, this.harnessName);
+    for (const record of this.db.harnessSessions.values()) {
+      if (namespace !== undefined && record.harnessName !== namespace) continue;
+      if (resourceId !== undefined && record.resourceId !== resourceId) continue;
+      if (record.threadId !== threadId) continue;
+      if (!includeClosed && record.closedAt !== undefined) continue;
+      matched.push(record);
+    }
+    matched.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+    return matched.map(toSummary);
+  }
+
+  async listActiveSessionsByThread({
+    threadId,
+    harnessName,
+  }: ListActiveSessionsByThreadInput): Promise<SessionSummary[]> {
+    const matched: SessionRecord[] = [];
+    const namespace = harnessName === undefined ? undefined : resolveHarnessName(harnessName, this.harnessName);
+    for (const record of this.db.harnessSessions.values()) {
+      if (namespace !== undefined && record.harnessName !== namespace) continue;
+      if (record.threadId !== threadId || record.closedAt !== undefined) continue;
+      matched.push(record);
+    }
+    matched.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+    return matched.map(toSummary);
+  }
+
+  async withThreadDeleteFence<T>(
+    { threadId, ownerId, ttlMs }: WithThreadDeleteFenceInput,
+    fn: (fence: ThreadDeleteFenceLease) => Promise<T>,
+  ): Promise<T> {
+    const now = Date.now();
+    const existing = this.db.harnessThreadDeleteFences.get(threadId);
+    if (existing && existing.expiresAt > now) {
+      throw new HarnessStorageThreadDeleteFenceConflictError(threadId, existing.ownerId);
+    }
+    this.db.harnessThreadDeleteFences.set(threadId, {
+      threadId,
+      ownerId,
+      createdAt: now,
+      expiresAt: now + ttlMs,
+    });
+    const renewalIntervalMs = Math.max(1, Math.floor(ttlMs / 3));
+    const renewal = setInterval(() => {
+      const current = this.db.harnessThreadDeleteFences.get(threadId);
+      if (current?.ownerId === ownerId && current.expiresAt > Date.now()) {
+        current.expiresAt = Date.now() + ttlMs;
+      }
+    }, renewalIntervalMs);
+    (renewal as ReturnType<typeof setInterval> & { unref?: () => void }).unref?.();
+    const fence: ThreadDeleteFenceLease = {
+      threadId,
+      ownerId,
+      assertActive: async () => {
+        const current = this.db.harnessThreadDeleteFences.get(threadId);
+        if (current?.ownerId !== ownerId || current.expiresAt <= Date.now()) {
+          throw new HarnessStorageThreadDeleteFenceConflictError(threadId, current?.ownerId);
+        }
+        current.expiresAt = Date.now() + ttlMs;
+      },
+    };
+    try {
+      return await fn(fence);
+    } finally {
+      clearInterval(renewal);
+      const current = this.db.harnessThreadDeleteFences.get(threadId);
+      if (current?.ownerId === ownerId) {
+        this.db.harnessThreadDeleteFences.delete(threadId);
+      }
+    }
+  }
+
   async saveSession(record: SessionRecord, opts: SaveSessionOptions): Promise<SaveSessionResult> {
     const harnessName = opts.harnessName ?? record.harnessName ?? this.harnessName;
     const existing = this.db.harnessSessions.get(sessionKey(harnessName, record.id));
@@ -129,6 +213,10 @@ export class InMemoryHarness extends HarnessStorage {
       // First insert: ifVersion must be 0.
       if (opts.ifVersion !== 0) {
         throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
+      }
+      const fence = this.db.harnessThreadDeleteFences.get(record.threadId);
+      if (fence && fence.expiresAt > Date.now()) {
+        throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
       }
       for (const active of this.db.harnessSessions.values()) {
         if (active.harnessName !== harnessName) continue;
@@ -204,6 +292,11 @@ export class InMemoryHarness extends HarnessStorage {
   ): Promise<CreateOrLoadActiveSessionResult> {
     const namespace = resolveHarnessName(record.harnessName, this.harnessName);
     const storageNow = Date.now();
+    const fence = this.db.harnessThreadDeleteFences.get(record.threadId);
+    if (fence && fence.expiresAt > storageNow) {
+      throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
+    }
+
     for (const existing of this.db.harnessSessions.values()) {
       if (existing.harnessName !== namespace) continue;
       if (existing.resourceId !== record.resourceId || existing.threadId !== record.threadId) continue;

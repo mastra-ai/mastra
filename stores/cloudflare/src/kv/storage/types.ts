@@ -5,6 +5,7 @@ import type {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_BACKGROUND_TASKS,
   TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_NAMES,
@@ -33,6 +34,12 @@ import type {
   TABLE_SKILL_BLOBS,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
+  TABLE_HARNESS_SESSIONS,
+  TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_ATTACHMENT_REFERENCES,
+  TABLE_HARNESS_MESSAGE_RESULTS,
+  TABLE_HARNESS_OPERATION_TOMBSTONES,
+  TABLE_HARNESS_THREAD_DELETE_FENCES,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -52,6 +59,17 @@ import type { SkillVersion } from '@mastra/core/storage/domains/skills';
 import type { WorkspaceVersion } from '@mastra/core/storage/domains/workspaces';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
+
+type RequiredCloudflareKVBindingTable =
+  | typeof TABLE_THREADS
+  | typeof TABLE_MESSAGES
+  | typeof TABLE_RESOURCES
+  | typeof TABLE_WORKFLOW_SNAPSHOT
+  | typeof TABLE_SCORERS
+  | typeof TABLE_BACKGROUND_TASKS;
+
+export type CloudflareKVBindings = Record<RequiredCloudflareKVBindingTable, KVNamespace> &
+  Partial<Record<Exclude<TABLE_NAMES, RequiredCloudflareKVBindingTable>, KVNamespace>>;
 
 /**
  * Base configuration options shared across Cloudflare configurations
@@ -102,9 +120,7 @@ export interface CloudflareRestConfig extends CloudflareBaseConfig {
  */
 export interface CloudflareWorkersConfig extends CloudflareBaseConfig {
   /** KV namespace bindings from Workers environment */
-  bindings: {
-    [key in TABLE_NAMES]: KVNamespace;
-  };
+  bindings: CloudflareKVBindings;
   /** Optional prefix for keys within namespaces */
   keyPrefix?: string;
 }
@@ -168,6 +184,12 @@ export type RecordTypes = {
   [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;
   mastra_channel_installations: Record<string, any>;
   mastra_channel_config: Record<string, any>;
+  [TABLE_HARNESS_SESSIONS]: Record<string, any>;
+  [TABLE_HARNESS_ATTACHMENTS]: Record<string, any>;
+  [TABLE_HARNESS_ATTACHMENT_REFERENCES]: Record<string, any>;
+  [TABLE_HARNESS_MESSAGE_RESULTS]: Record<string, any>;
+  [TABLE_HARNESS_OPERATION_TOMBSTONES]: Record<string, any>;
+  [TABLE_HARNESS_THREAD_DELETE_FENCES]: Record<string, any>;
 };
 
 export type ListOptions = {
@@ -199,9 +221,7 @@ export interface CloudflareDomainClientConfig {
  * Pass existing KV bindings (Workers Binding API)
  */
 export interface CloudflareDomainBindingsConfig {
-  bindings: {
-    [key in TABLE_NAMES]: KVNamespace;
-  };
+  bindings: CloudflareKVBindings;
   keyPrefix?: string;
 }
 

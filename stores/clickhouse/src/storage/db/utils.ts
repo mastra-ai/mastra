@@ -29,6 +29,12 @@ import {
   TABLE_SKILL_BLOBS,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
+  TABLE_HARNESS_ATTACHMENT_REFERENCES,
+  TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_MESSAGE_RESULTS,
+  TABLE_HARNESS_OPERATION_TOMBSTONES,
+  TABLE_HARNESS_SESSIONS,
+  TABLE_HARNESS_THREAD_DELETE_FENCES,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -67,6 +73,12 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SCHEDULE_TRIGGERS]: `MergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_SESSIONS]: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_ATTACHMENTS]: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_ATTACHMENT_REFERENCES]: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_MESSAGE_RESULTS]: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_OPERATION_TOMBSTONES]: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_THREAD_DELETE_FENCES]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

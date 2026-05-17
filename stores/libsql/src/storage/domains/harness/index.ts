@@ -9,6 +9,7 @@ import {
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
+  HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
   TABLE_CONFIGS,
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
@@ -16,6 +17,7 @@ import {
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_SESSIONS,
+  TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_SCHEMAS,
   getSqlType,
 } from '@mastra/core/storage';
@@ -27,6 +29,8 @@ import type {
   AttachmentRecord,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  ListActiveSessionsByThreadInput,
+  ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
   OperationAdmissionEvidence,
@@ -43,6 +47,8 @@ import type {
   SessionRecord,
   SessionSummary,
   StorageColumn,
+  ThreadDeleteFenceLease,
+  WithThreadDeleteFenceInput,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -65,6 +71,7 @@ export class HarnessLibSQL extends HarnessStorage {
   #client: Client;
   #harnessName: string;
   #compactionLocks = new Map<string, Promise<void>>();
+  #localThreadDeleteFences = new Map<string, { ownerId: string; ttlMs: number }>();
 
   constructor(config: LibSQLDomainConfig) {
     super();
@@ -104,6 +111,12 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
       compositePrimaryKey: tombstonesConfig?.compositePrimaryKey,
     });
+    const threadDeleteFencesConfig = TABLE_CONFIGS[TABLE_HARNESS_THREAD_DELETE_FENCES];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_THREAD_DELETE_FENCES,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
+      compositePrimaryKey: threadDeleteFencesConfig?.compositePrimaryKey,
+    });
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_SESSIONS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
@@ -136,15 +149,39 @@ export class HarnessLibSQL extends HarnessStorage {
             WHERE "closed_at" IS NULL`,
       args: [],
     });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_sessions_thread_scope
+            ON "${TABLE_HARNESS_SESSIONS}" ("harness_name", "resource_id", "thread_id", "last_activity_at")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_sessions_thread_global
+            ON "${TABLE_HARNESS_SESSIONS}" ("thread_id", "last_activity_at")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_sessions_active_thread
+            ON "${TABLE_HARNESS_SESSIONS}" ("harness_name", "thread_id", "last_activity_at")
+            WHERE "closed_at" IS NULL`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_sessions_active_thread_global
+            ON "${TABLE_HARNESS_SESSIONS}" ("thread_id", "last_activity_at")
+            WHERE "closed_at" IS NULL`,
+      args: [],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#ensureMessageResultsTable();
     await this.#ensureOperationTombstonesTable();
+    await this.#ensureThreadDeleteFencesTable();
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSIONS}`);
   }
 
@@ -216,6 +253,176 @@ export class HarnessLibSQL extends HarnessStorage {
     return result.rows.map(row => rowToSummary(row as Record<string, unknown>));
   }
 
+  async listSessionsByThread({
+    resourceId,
+    threadId,
+    includeClosed = false,
+    harnessName,
+  }: ListSessionsByThreadInput): Promise<SessionSummary[]> {
+    await this.#renewLocalThreadDeleteFence(threadId);
+    const conditions: string[] = ['thread_id = ?'];
+    const args: (string | number)[] = [threadId];
+    if (harnessName !== undefined) {
+      conditions.unshift('harness_name = ?');
+      args.unshift(this.#resolveHarnessName(harnessName));
+    }
+    if (resourceId !== undefined) {
+      conditions.push('resource_id = ?');
+      args.push(resourceId);
+    }
+
+    if (!includeClosed) conditions.push('closed_at IS NULL');
+
+    const result = await this.#client.execute({
+      sql: `SELECT harness_name, id, resource_id, thread_id, parent_session_id, origin, mode_id, model_id,
+                   last_activity_at, closing_at, close_deadline_at, closed_at
+            FROM ${TABLE_HARNESS_SESSIONS}
+            WHERE ${conditions.join(' AND ')}
+            ORDER BY last_activity_at DESC`,
+      args,
+    });
+
+    return result.rows.map(row => rowToSummary(row as Record<string, unknown>));
+  }
+
+  async listActiveSessionsByThread({
+    threadId,
+    harnessName,
+  }: ListActiveSessionsByThreadInput): Promise<SessionSummary[]> {
+    await this.#renewLocalThreadDeleteFence(threadId);
+    const conditions = ['thread_id = ?', 'closed_at IS NULL'];
+    const args: (string | number)[] = [threadId];
+    if (harnessName !== undefined) {
+      conditions.unshift('harness_name = ?');
+      args.unshift(this.#resolveHarnessName(harnessName));
+    }
+
+    const result = await this.#client.execute({
+      sql: `SELECT harness_name, id, resource_id, thread_id, parent_session_id, origin, mode_id, model_id,
+                   last_activity_at, closing_at, close_deadline_at, closed_at
+            FROM ${TABLE_HARNESS_SESSIONS}
+            WHERE ${conditions.join(' AND ')}
+            ORDER BY last_activity_at DESC`,
+      args,
+    });
+
+    return result.rows.map(row => rowToSummary(row as Record<string, unknown>));
+  }
+
+  async withThreadDeleteFence<T>(
+    { threadId, ownerId, ttlMs }: WithThreadDeleteFenceInput,
+    fn: (fence: ThreadDeleteFenceLease) => Promise<T>,
+  ): Promise<T> {
+    await this.#ensureThreadDeleteFencesTable();
+    for (;;) {
+      const now = Date.now();
+      const expiresAt = now + ttlMs;
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+              WHERE expires_at <= ?`,
+        args: [now],
+      });
+      const result = await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+                (thread_id, owner_id, created_at, expires_at)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(thread_id) DO UPDATE SET
+                owner_id = excluded.owner_id,
+                created_at = excluded.created_at,
+                expires_at = excluded.expires_at
+              WHERE ${TABLE_HARNESS_THREAD_DELETE_FENCES}.expires_at <= ?`,
+        args: [threadId, ownerId, now, expiresAt, now],
+      });
+      if (result.rowsAffected !== 0) break;
+      const existing = await this.#client.execute({
+        sql: `SELECT owner_id FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+              WHERE thread_id = ? AND expires_at > ?
+              LIMIT 1`,
+        args: [threadId, now],
+      });
+      const existingOwnerId = (existing.rows[0] as any)?.owner_id as string | undefined;
+      if (existingOwnerId === undefined) continue;
+      throw new HarnessStorageThreadDeleteFenceConflictError(threadId, existingOwnerId);
+    }
+    this.#localThreadDeleteFences.set(threadId, { ownerId, ttlMs });
+    const renewalIntervalMs = Math.max(1, Math.floor(ttlMs / 3));
+    let renewals = Promise.resolve();
+    let renewalFailure: unknown;
+    const renewal = setInterval(() => {
+      renewals = renewals
+        .catch(err => {
+          renewalFailure ??= err;
+        })
+        .then(async () => {
+          await this.#renewLocalThreadDeleteFence(threadId);
+        })
+        .then(
+          () => undefined,
+          err => {
+            renewalFailure ??= err;
+          },
+        );
+    }, renewalIntervalMs);
+    (renewal as ReturnType<typeof setInterval> & { unref?: () => void }).unref?.();
+    const assertActive = async () => {
+      try {
+        await renewals;
+      } catch (err) {
+        renewalFailure ??= err;
+      }
+      if (renewalFailure) throw renewalFailure;
+      await this.#renewLocalThreadDeleteFence(threadId);
+      if (renewalFailure) throw renewalFailure;
+    };
+    const fence: ThreadDeleteFenceLease = {
+      threadId,
+      ownerId,
+      assertActive,
+    };
+    try {
+      const result = await fn(fence);
+      if (renewalFailure) throw renewalFailure;
+      return result;
+    } finally {
+      clearInterval(renewal);
+      try {
+        await renewals;
+      } catch (err) {
+        renewalFailure ??= err;
+      }
+      const localFence = this.#localThreadDeleteFences.get(threadId);
+      if (localFence?.ownerId === ownerId) {
+        this.#localThreadDeleteFences.delete(threadId);
+      }
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+              WHERE thread_id = ? AND owner_id = ?`,
+        args: [threadId, ownerId],
+      });
+    }
+  }
+
+  async #renewLocalThreadDeleteFence(threadId: string): Promise<void> {
+    const fence = this.#localThreadDeleteFences.get(threadId);
+    if (!fence) return;
+    const now = Date.now();
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+            SET expires_at = ?
+            WHERE thread_id = ? AND owner_id = ? AND expires_at > ?`,
+      args: [now + fence.ttlMs, threadId, fence.ownerId, now],
+    });
+    if (result.rowsAffected === 0) {
+      const existing = await this.#client.execute({
+        sql: `SELECT owner_id FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+              WHERE thread_id = ? AND expires_at > ?
+              LIMIT 1`,
+        args: [threadId, Date.now()],
+      });
+      throw new HarnessStorageThreadDeleteFenceConflictError(threadId, (existing.rows[0] as any)?.owner_id as string);
+    }
+  }
+
   async saveSession(record: SessionRecord, opts: SaveSessionOptions): Promise<SaveSessionResult> {
     const harnessName = this.#resolveHarnessName(opts.harnessName ?? record.harnessName);
     const namespacedRecord: SessionRecord = { ...record, harnessName };
@@ -223,16 +430,32 @@ export class HarnessLibSQL extends HarnessStorage {
     const cols = sessionColumnValues(namespacedRecord, nextVersion);
 
     if (opts.ifVersion === 0) {
+      await this.#renewLocalThreadDeleteFence(record.threadId);
+      if (this.#localThreadDeleteFences.has(record.threadId)) {
+        throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
+      }
       // First insert. Race with another writer is caught by the PRIMARY KEY
       // constraint — translate that into the same conflict error.
+      const tx = await this.#client.transaction('write');
       try {
-        await this.#client.execute({
+        const fence = await tx.execute({
+          sql: `SELECT thread_id FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+                WHERE thread_id = ? AND expires_at > ?
+                LIMIT 1`,
+          args: [record.threadId, Date.now()],
+        });
+        if (fence.rows[0]) {
+          throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
+        }
+        await tx.execute({
           sql: `INSERT INTO ${TABLE_HARNESS_SESSIONS}
                 (${cols.names.join(', ')})
                 VALUES (${cols.names.map(() => '?').join(', ')})`,
           args: cols.values,
         });
+        await tx.commit();
       } catch (err) {
+        if (!tx.closed) await tx.rollback();
         if (isUniqueConstraintError(err)) {
           const existing = await this.loadSession({ harnessName, sessionId: record.id });
           const active = await this.loadSessionByThread({
@@ -401,9 +624,23 @@ export class HarnessLibSQL extends HarnessStorage {
     opts: CreateOrLoadActiveSessionOptions,
   ): Promise<CreateOrLoadActiveSessionResult> {
     const harnessName = this.#resolveHarnessName(record.harnessName);
+    await this.#renewLocalThreadDeleteFence(record.threadId);
+    if (this.#localThreadDeleteFences.has(record.threadId)) {
+      throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
+    }
     const storageNow = Date.now();
     const tx = await this.#client.transaction('write');
     try {
+      const fence = await tx.execute({
+        sql: `SELECT thread_id FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+              WHERE thread_id = ? AND expires_at > ?
+              LIMIT 1`,
+        args: [record.threadId, storageNow],
+      });
+      if (fence.rows[0]) {
+        throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
+      }
+
       const active = await tx.execute({
         sql: `SELECT * FROM ${TABLE_HARNESS_SESSIONS}
               WHERE harness_name = ? AND resource_id = ? AND thread_id = ? AND closed_at IS NULL
@@ -1261,6 +1498,15 @@ export class HarnessLibSQL extends HarnessStorage {
       tableName: TABLE_HARNESS_OPERATION_TOMBSTONES,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
       compositePrimaryKey: tombstonesConfig?.compositePrimaryKey,
+    });
+  }
+
+  async #ensureThreadDeleteFencesTable(): Promise<void> {
+    const threadDeleteFencesConfig = TABLE_CONFIGS[TABLE_HARNESS_THREAD_DELETE_FENCES];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_THREAD_DELETE_FENCES,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
+      compositePrimaryKey: threadDeleteFencesConfig?.compositePrimaryKey,
     });
   }
 

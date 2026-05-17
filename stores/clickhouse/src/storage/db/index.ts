@@ -8,6 +8,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SPANS,
   TABLE_SCHEMAS,
+  TABLE_CONFIGS,
   getDefaultValue,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
@@ -509,13 +510,15 @@ export class ClickhouseDB extends MastraBase {
             SETTINGS index_granularity = 8192
           `;
       } else {
+        const keyColumns = isHarnessTable(tableName) ? getClickHouseKeyColumns(tableName, schema) : ['createdAt', 'id'];
+        const keyClause = keyColumns.join(', ');
         sql = `
             CREATE TABLE IF NOT EXISTS ${tableName} (
               ${columns}
             )
             ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
-            PRIMARY KEY (createdAt, ${'id'})
-            ORDER BY (createdAt, ${'id'})
+            PRIMARY KEY (${keyClause})
+            ORDER BY (${keyClause})
             ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
             SETTINGS index_granularity = 8192
           `;
@@ -790,4 +793,30 @@ export class ClickhouseDB extends MastraBase {
       );
     }
   }
+}
+
+function getClickHouseKeyColumns(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string[] {
+  const compositePrimaryKey = TABLE_CONFIGS[tableName]?.compositePrimaryKey;
+  if (compositePrimaryKey && compositePrimaryKey.length > 0) {
+    return compositePrimaryKey.map(column => `"${column}"`);
+  }
+
+  if (schema.createdAt && schema.id) return ['createdAt', 'id'];
+
+  const primaryColumns = Object.entries(schema)
+    .filter(([, column]) => column.primaryKey === true)
+    .map(([name]) => `"${name}"`);
+  if (primaryColumns.length > 0) return primaryColumns;
+
+  if (schema.createdAt) return ['createdAt'];
+  if (schema.created_at) return ['created_at'];
+  if (schema.id) return ['id'];
+
+  const firstColumn = Object.keys(schema)[0];
+  if (firstColumn) return [`"${firstColumn}"`];
+  throw new Error(`Cannot derive ClickHouse key columns for empty table schema: ${tableName}`);
+}
+
+function isHarnessTable(tableName: TABLE_NAMES): boolean {
+  return tableName.startsWith('mastra_harness_');
 }

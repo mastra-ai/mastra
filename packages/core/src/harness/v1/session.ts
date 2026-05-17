@@ -1143,10 +1143,7 @@ export class Session {
    */
   private _isExplicitWorkspaceSkillRef(ref: string): boolean {
     return (
-      ref.includes('/') ||
-      ref.startsWith('./') ||
-      ref.startsWith('../') ||
-      /\.(?:md|mdx|txt|yaml|yml)$/i.test(ref)
+      ref.includes('/') || ref.startsWith('./') || ref.startsWith('../') || /\.(?:md|mdx|txt|yaml|yml)$/i.test(ref)
     );
   }
 
@@ -2144,7 +2141,7 @@ export class Session {
     if (opts.stream === true) {
       let out = agent.getRunOutput(signal.runId) as MastraModelOutput<unknown> | undefined;
       if (!out && (signal.output || admissionIdentity !== undefined)) {
-        await pendingEvidenceWrite;
+        await pendingEvidenceWrite.catch(() => {});
         try {
           out = signal.output
             ? ((await signal.output) as MastraModelOutput<unknown>)
@@ -2164,7 +2161,7 @@ export class Session {
           this._rememberCompletedRun(signal.runId, { ok: false, err });
           waiter?.reject(err);
           if (admissionIdentity !== undefined) {
-            await this._writeMessageResultEvidence({
+            await this._writeMessageResultEvidenceBestEffort({
               status: 'failed',
               signalId: signal.signal.id,
               runId: signal.runId,
@@ -2190,7 +2187,7 @@ export class Session {
         this._rememberCompletedRun(signal.runId, { ok: false, err });
         waiter?.reject(err);
         if (admissionIdentity !== undefined) {
-          await this._writeMessageResultEvidence({
+          await this._writeMessageResultEvidenceBestEffort({
             status: 'failed',
             signalId: signal.signal.id,
             runId: signal.runId,
@@ -2201,7 +2198,7 @@ export class Session {
         }
         throw err;
       }
-      await pendingEvidenceWrite;
+      await pendingEvidenceWrite.catch(() => {});
       void completion
         .then(full => {
           this._recordTurnCompletion(full);
@@ -2213,7 +2210,9 @@ export class Session {
             result: full,
             admissionId: opts.admissionId!,
             admissionHash: admissionHash!,
-          }).then(() => full);
+          })
+            .catch(() => {})
+            .then(() => full);
         })
         .then(full => {
           return this._maybeCaptureSuspend(full, undefined, effectiveModeId).then(() => {
@@ -2250,7 +2249,7 @@ export class Session {
     // deliver this run's bundled `FullOutput`, then run post-turn bookkeeping.
     let streamStarted = signal.output === undefined;
     try {
-      await pendingEvidenceWrite;
+      await pendingEvidenceWrite.catch(() => {});
       if (signal.output) {
         await signal.output;
         streamStarted = true;
@@ -2258,7 +2257,7 @@ export class Session {
       const full = await completion;
       this._recordTurnCompletion(full);
       if (admissionIdentity !== undefined) {
-        await this._writeMessageResultEvidence({
+        await this._writeMessageResultEvidenceBestEffort({
           status: 'completed',
           signalId: signal.signal.id,
           runId: signal.runId,
@@ -2356,9 +2355,9 @@ export class Session {
             );
             try {
               output = (await Promise.race([
-                (agent.waitForRunOutput(runId, { abortSignal: waitAbortController.signal }) as Promise<AgentStream>).catch(
-                  () => undefined,
-                ),
+                (
+                  agent.waitForRunOutput(runId, { abortSignal: waitAbortController.signal }) as Promise<AgentStream>
+                ).catch(() => undefined),
                 ...(completion ? [completion] : []),
                 delay(MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS, waitAbortController.signal).then(
                   () => undefined,
@@ -2366,7 +2365,9 @@ export class Session {
                 ),
               ])) as AgentStream | undefined;
             } finally {
-              waitAbortController.abort(new HarnessValidationError('message().admissionId', 'duplicate stream wait ended'));
+              waitAbortController.abort(
+                new HarnessValidationError('message().admissionId', 'duplicate stream wait ended'),
+              );
             }
           }
           if (output) return output;
@@ -2466,13 +2467,26 @@ export class Session {
       });
     } catch (err) {
       if (err instanceof HarnessStorageAdmissionConflictError && status.admissionId && status.admissionHash) {
-        await this._resolveMessageAdmissionDuplicate({
+        const duplicate = await this._resolveMessageAdmissionDuplicate({
           admissionId: status.admissionId,
           admissionHash: status.admissionHash,
         });
+        if (duplicate) return { created: false };
         throw new HarnessAdmissionConflictError(this.id, status.admissionId, '', status.admissionHash);
       }
       throw err;
+    }
+  }
+
+  private async _writeMessageResultEvidenceBestEffort(
+    status: AgentSignalResultStatus & { admissionId?: string; admissionHash?: string },
+  ): Promise<void> {
+    try {
+      await this._writeMessageResultEvidence(status);
+    } catch {
+      // The initial pre-dispatch admission reservation is the durable barrier.
+      // Follow-up evidence writes must not convert a live or completed run into
+      // a caller-visible failure.
     }
   }
 

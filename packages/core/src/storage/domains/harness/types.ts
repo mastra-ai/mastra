@@ -461,6 +461,39 @@ export interface ListSessionsInput {
   parentSessionId?: string;
 }
 
+export interface ListSessionsByThreadInput {
+  /** When omitted, searches every resource visible to this adapter. */
+  harnessName?: string;
+  resourceId?: string;
+  threadId: string;
+  /** When true, includes records with `closedAt` set. */
+  includeClosed?: boolean;
+}
+
+export interface ListActiveSessionsByThreadInput {
+  /** When omitted, searches every harness namespace visible to this adapter. */
+  harnessName?: string;
+  threadId: string;
+}
+
+export interface WithThreadDeleteFenceInput {
+  threadId: string;
+  /** Unique acquisition token; only the current matching owner may release a fence. */
+  ownerId: string;
+  ttlMs: number;
+}
+
+export interface ThreadDeleteFenceLease {
+  threadId: string;
+  ownerId: string;
+  /**
+   * Assert that this owner still holds a live delete fence. Durable adapters
+   * should renew the fence during this check so callers can place it
+   * immediately before destructive global-memory operations.
+   */
+  assertActive(): Promise<void>;
+}
+
 export interface SaveSessionOptions {
   harnessName?: string;
   /** The Harness instance currently holding the lease. */

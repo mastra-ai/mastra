@@ -50,6 +50,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_harness_attachment_references: new Map(),
       mastra_harness_message_results: new Map(),
       mastra_harness_operation_tombstones: new Map(),
+      mastra_harness_thread_delete_fences: new Map(),
     };
   }
 

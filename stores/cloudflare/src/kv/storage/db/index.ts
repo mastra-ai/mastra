@@ -1,4 +1,3 @@
-import type { KVNamespace } from '@cloudflare/workers-types';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -11,10 +10,10 @@ import {
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
-import type { CloudflareDomainConfig, ListOptions, RecordTypes } from '../types';
+import type { CloudflareDomainConfig, CloudflareKVBindings, ListOptions, RecordTypes } from '../types';
 
 export interface CloudflareKVDBConfig {
-  bindings?: Record<TABLE_NAMES, KVNamespace>;
+  bindings?: CloudflareKVBindings;
   namespacePrefix?: string;
   client?: Cloudflare;
   accountId?: string;
@@ -51,7 +50,7 @@ export function resolveCloudflareConfig(config: CloudflareDomainConfig): Cloudfl
 }
 
 export class CloudflareKVDB extends MastraBase {
-  private bindings?: Record<TABLE_NAMES, KVNamespace>;
+  private bindings?: CloudflareKVBindings;
   client?: Cloudflare;
   accountId?: string;
   namespacePrefix: string;

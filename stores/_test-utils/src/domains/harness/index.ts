@@ -4,6 +4,7 @@ import {
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
+  HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
 } from '@mastra/core/storage';
 import type { HarnessStorage, MastraStorage } from '@mastra/core/storage';
@@ -17,8 +18,8 @@ export interface HarnessTestOptions {
 /**
  * Shared HarnessStorage conformance suite. Every adapter that registers the
  * harness domain (`storage.getStore('harness')`) gets the same coverage —
- * CAS write contract, lease lifecycle, scoped lookups, attachment isolation,
- * cascade-delete, JSON round-trips.
+ * CAS write contract, lease lifecycle, thread-scoped lookups, delete fences,
+ * attachment isolation, cascade-delete, JSON round-trips.
  *
  * Adapters without the domain are skipped silently.
  */
@@ -483,6 +484,132 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           parentSessionId: 'parent',
         });
         expect(summaries.map(s => s.id)).toEqual(['child-1']);
+      });
+    });
+
+    describe('thread delete safety hooks', () => {
+      it('lists sessions by exact thread, optional resource, namespace, and closed-state filters', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ id: 'open-a', lastActivityAt: 1000 }), {
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+        await harness.saveSession(
+          createSampleSessionRecord({ id: 'closed-a', threadId: 'thread-1', closedAt: Date.now(), lastActivityAt: 2000 }),
+          {
+            ownerId: 'h',
+            ifVersion: 0,
+          },
+        );
+        await harness.saveSession(
+          createSampleSessionRecord({
+            id: 'other-resource',
+            threadId: 'thread-1',
+            resourceId: 'resource-2',
+            lastActivityAt: 3000,
+          }),
+          {
+            ownerId: 'h',
+            ifVersion: 0,
+          },
+        );
+        await harness.saveSession(
+          createSampleSessionRecord({
+            id: 'other-namespace',
+            harnessName: 'other',
+            threadId: 'thread-1',
+            resourceId: 'resource-3',
+            lastActivityAt: 4000,
+          }),
+          {
+            harnessName: 'other',
+            ownerId: 'h',
+            ifVersion: 0,
+          },
+        );
+        await harness.saveSession(createSampleSessionRecord({ id: 'different-thread', threadId: 'thread-2' }), {
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+
+        await expect(
+          harness.listSessionsByThread({ harnessName: 'default', resourceId: 'resource-1', threadId: 'thread-1' }),
+        ).resolves.toEqual([expect.objectContaining({ id: 'open-a' })]);
+        await expect(
+          harness.listSessionsByThread({
+            harnessName: 'default',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            includeClosed: true,
+          }),
+        ).resolves.toEqual([expect.objectContaining({ id: 'closed-a' }), expect.objectContaining({ id: 'open-a' })]);
+        await expect(harness.listSessionsByThread({ threadId: 'thread-1', includeClosed: true })).resolves.toEqual([
+          expect.objectContaining({ id: 'other-namespace' }),
+          expect.objectContaining({ id: 'other-resource' }),
+          expect.objectContaining({ id: 'closed-a' }),
+          expect.objectContaining({ id: 'open-a' }),
+        ]);
+      });
+
+      it('lists active sessions by thread across resources and visible harness namespaces', async () => {
+        if (!harness) return;
+        await harness.saveSession(createSampleSessionRecord({ id: 'open-a', lastActivityAt: 1000 }), {
+          ownerId: 'h',
+          ifVersion: 0,
+        });
+        await harness.saveSession(
+          createSampleSessionRecord({
+            id: 'open-b',
+            harnessName: 'other',
+            resourceId: 'resource-2',
+            lastActivityAt: 2000,
+          }),
+          {
+            harnessName: 'other',
+            ownerId: 'h',
+            ifVersion: 0,
+          },
+        );
+        await harness.saveSession(
+          createSampleSessionRecord({ id: 'closed-a', closedAt: Date.now(), lastActivityAt: 3000 }),
+          {
+            ownerId: 'h',
+            ifVersion: 0,
+          },
+        );
+
+        await expect(harness.listActiveSessionsByThread({ threadId: 'thread-1' })).resolves.toEqual([
+          expect.objectContaining({ id: 'open-b' }),
+          expect.objectContaining({ id: 'open-a' }),
+        ]);
+        await expect(
+          harness.listActiveSessionsByThread({ harnessName: 'default', threadId: 'thread-1' }),
+        ).resolves.toEqual([expect.objectContaining({ id: 'open-a' })]);
+      });
+
+      it('blocks active-session admission while a thread delete fence is held', async () => {
+        if (!harness) return;
+
+        await harness.withThreadDeleteFence({ threadId: 'thread-1', ownerId: 'deleter', ttlMs: 30_000 }, async fence => {
+          await expect(
+            harness.createOrLoadActiveSession(createSampleSessionRecord(), {
+              initialLease: { ownerId: 'h', ttlMs: 30_000 },
+            }),
+          ).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
+          await expect(
+            harness.saveSession(createSampleSessionRecord({ id: 'direct-blocked' }), {
+              ownerId: 'h',
+              ifVersion: 0,
+            }),
+          ).rejects.toBeInstanceOf(HarnessStorageThreadDeleteFenceConflictError);
+          await expect(fence.assertActive()).resolves.toBeUndefined();
+        });
+
+        await expect(
+          harness.createOrLoadActiveSession(createSampleSessionRecord(), {
+            initialLease: { ownerId: 'h', ttlMs: 30_000 },
+          }),
+        ).resolves.toMatchObject({ created: true, record: expect.objectContaining({ id: 'session-1' }) });
       });
     });
 

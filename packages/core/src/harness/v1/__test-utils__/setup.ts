@@ -7,7 +7,7 @@
  */
 
 import { InMemoryHarness } from '../../../storage/domains/harness/inmemory';
-import { InMemoryDB } from '../../../storage/domains/inmemory-db';
+import { InMemoryStore } from '../../../storage/mock';
 import { Harness } from '../harness';
 import type { HarnessConfig, HarnessMode } from '../types';
 
@@ -55,12 +55,14 @@ export interface HarnessTestSetup {
 export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSetup {
   const agents = opts.agents ?? { default: new MockAgent({ id: 'default' }) };
   const modes: HarnessMode[] = opts.modes ?? [{ id: 'default', agentId: 'default' }];
-  const storage = new InMemoryHarness({ db: new InMemoryDB() });
+  const compositeStorage = new InMemoryStore();
+  const storage = (opts.sessions?.storage as InMemoryHarness | undefined) ?? (compositeStorage.stores.harness as InMemoryHarness);
   const harness = new Harness({
     agents: agents as any,
+    storage: compositeStorage,
     modes,
     defaultModeId: opts.defaultModeId ?? modes[0]!.id,
-    sessions: { storage, ...(opts.sessions ?? {}) },
+    ...(opts.sessions ? { sessions: opts.sessions } : {}),
     ...(opts.goals ? { goals: opts.goals } : {}),
     ...(opts.workspace ? { workspace: opts.workspace } : {}),
     ...(opts.subagents ? { subagents: opts.subagents } : {}),

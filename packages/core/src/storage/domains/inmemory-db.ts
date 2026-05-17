@@ -98,6 +98,10 @@ export class InMemoryDB {
   readonly harnessAttachmentReferences = new Map<string, AttachmentReference>();
   readonly harnessMessageResultEvidence = new Map<string, AgentSignalResultEvidence>();
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
+  readonly harnessThreadDeleteFences = new Map<
+    string,
+    { threadId: string; ownerId: string; createdAt: number; expiresAt: number }
+  >();
 
   /**
    * Clears all data from all collections.
@@ -143,5 +147,6 @@ export class InMemoryDB {
     this.harnessAttachmentReferences.clear();
     this.harnessMessageResultEvidence.clear();
     this.harnessOperationTombstones.clear();
+    this.harnessThreadDeleteFences.clear();
   }
 }

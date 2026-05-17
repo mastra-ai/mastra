@@ -1,10 +1,10 @@
-import type { KVNamespace } from '@cloudflare/workers-types';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
   MastraCompositeStore,
   TABLE_BACKGROUND_TASKS,
   TABLE_MESSAGES,
+  TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
@@ -25,7 +25,12 @@ export {
   WorkflowsStorageCloudflare,
 };
 export type { CloudflareDomainConfig } from './storage/types';
-import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './storage/types';
+import type {
+  CloudflareKVBindings,
+  CloudflareStoreConfig,
+  CloudflareWorkersConfig,
+  CloudflareRestConfig,
+} from './storage/types';
 
 /**
  * Cloudflare KV storage adapter for Mastra.
@@ -50,7 +55,7 @@ export class CloudflareKVStorage extends MastraCompositeStore {
   private client?: Cloudflare;
   private accountId?: string;
   private namespacePrefix: string;
-  private bindings?: Record<TABLE_NAMES, KVNamespace>;
+  private bindings?: CloudflareKVBindings;
 
   private validateWorkersConfig(config: CloudflareStoreConfig): asserts config is CloudflareWorkersConfig {
     if (!isWorkersConfig(config)) {
@@ -64,6 +69,7 @@ export class CloudflareKVStorage extends MastraCompositeStore {
     const requiredTables = [
       TABLE_THREADS,
       TABLE_MESSAGES,
+      TABLE_RESOURCES,
       TABLE_WORKFLOW_SNAPSHOT,
       TABLE_SCORERS,
       TABLE_BACKGROUND_TASKS,

@@ -69,13 +69,18 @@ class AbortIgnoringMockAgent extends MockAgent {
 }
 
 function makeHarness(overrides?: Partial<ConstructorParameters<typeof Harness>[0]>) {
-  const storage = overrides?.sessions?.storage ?? makeStorage();
+  const { sessions: overrideSessions, ...restOverrides } = overrides ?? {};
+  const storage = overrideSessions?.storage ?? makeStorage();
+  const compositeStorage = new InMemoryStore();
+  compositeStorage.stores.harness = storage;
+  const { storage: _sessionStorage, ...sessionOverrides } = overrideSessions ?? {};
   return new Harness({
     agents: { default: makeAgent() },
+    storage: compositeStorage,
     modes: [{ id: 'default', agentId: 'default' }],
     defaultModeId: 'default',
-    sessions: { storage },
-    ...overrides,
+    ...(Object.keys(sessionOverrides).length > 0 ? { sessions: sessionOverrides } : {}),
+    ...restOverrides,
   });
 }
 
