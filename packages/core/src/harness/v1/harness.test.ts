@@ -13,7 +13,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
-import { HarnessStorage, HarnessStorageVersionConflictError } from '../../storage/domains/harness';
+import {
+  HarnessStorage,
+  HarnessStorageDeleteGuardConflictError,
+  HarnessStorageVersionConflictError,
+} from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
@@ -1349,6 +1353,63 @@ describe('Harness v1 — delete lifecycle', () => {
 
     await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
     await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toBeNull();
+  });
+
+  it('reconciles live sessions after a custom batch delete partially fails', async () => {
+    class PartiallyFailingBatchStorage extends InMemoryHarness {
+      override async deleteSessions(opts: Parameters<InMemoryHarness['deleteSessions']>[0]): Promise<void> {
+        await InMemoryHarness.prototype.deleteSessions.call(this, { sessions: [opts.sessions[0]!] });
+        throw new HarnessStorageDeleteGuardConflictError(opts.sessions[1]!.sessionId, 'ifVersion', 1, 2);
+      }
+    }
+    const storage = new PartiallyFailingBatchStorage({ db: new InMemoryDB() });
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+
+    await expect(harness.deleteSession({ sessionId: parent.id, resourceId: 'r1', force: true })).rejects.toBeInstanceOf(
+      HarnessStorageDeleteGuardConflictError,
+    );
+
+    await expect(storage.loadSession({ sessionId: child.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(storage.loadSession({ sessionId: parent.id, harnessName: 'default' })).resolves.toMatchObject({
+      id: parent.id,
+    });
+    await expect(child.setState({ afterPartialDelete: true })).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+  });
+
+  it('preserves the original batch delete error when reconciliation reads fail', async () => {
+    const deleteError = new HarnessStorageDeleteGuardConflictError('parent', 'ifVersion', 1, 2);
+    class ReconciliationReadFailingStorage extends InMemoryHarness {
+      private failLoads = false;
+
+      override async deleteSessions(opts: Parameters<InMemoryHarness['deleteSessions']>[0]): Promise<void> {
+        await InMemoryHarness.prototype.deleteSessions.call(this, { sessions: [opts.sessions[0]!] });
+        this.failLoads = true;
+        throw deleteError;
+      }
+
+      override async loadSession(opts: Parameters<InMemoryHarness['loadSession']>[0]) {
+        if (this.failLoads) throw new Error('load failed during reconciliation');
+        return InMemoryHarness.prototype.loadSession.call(this, opts);
+      }
+    }
+    const storage = new ReconciliationReadFailingStorage({ db: new InMemoryDB() });
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 'parent-thread', resourceId: 'r1' });
+    await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+
+    await expect(harness.deleteSession({ sessionId: parent.id, resourceId: 'r1', force: true })).rejects.toBe(
+      deleteError,
+    );
   });
 
   it('force deletes an active subtree after terminalizing it through close', async () => {

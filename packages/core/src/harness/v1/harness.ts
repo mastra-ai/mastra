@@ -1601,7 +1601,24 @@ export class Harness {
       requireClosed: true,
     }));
     if (storage.supportsAtomicDeleteSessions) {
-      await storage.deleteSessions({ sessions });
+      try {
+        await storage.deleteSessions({ sessions });
+      } catch (err) {
+        for (const node of bottomUp) {
+          let stillExists: SessionRecord | null;
+          try {
+            stillExists = await storage.loadSession({
+              harnessName: node.record.harnessName,
+              sessionId: node.record.id,
+            });
+          } catch {
+            continue;
+          }
+          if (stillExists) continue;
+          this._markDeletedSession(node, deletedLiveSessions);
+        }
+        throw err;
+      }
       for (const node of bottomUp) {
         this._markDeletedSession(node, deletedLiveSessions);
       }
