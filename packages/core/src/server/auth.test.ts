@@ -331,5 +331,46 @@ describe('Composite auth', () => {
         expect(authzResult).toBe(false);
       });
     });
+
+    describe('duck-typing detection', () => {
+      it('should NOT advertise SSO when no inner provider has it', () => {
+        const compositeAuth = new CompositeAuth([new MockAuthProvider(true, true)]);
+        expect(typeof (compositeAuth as any).getLoginUrl).not.toBe('function');
+        expect(typeof (compositeAuth as any).handleCallback).not.toBe('function');
+      });
+
+      it('should NOT advertise sessions when no inner provider has it', () => {
+        const compositeAuth = new CompositeAuth([new MockAuthProvider(true, true)]);
+        expect(typeof (compositeAuth as any).createSession).not.toBe('function');
+        expect(typeof (compositeAuth as any).getSessionIdFromRequest).not.toBe('function');
+      });
+
+      it('should NOT advertise user provider when no inner provider has it', () => {
+        const compositeAuth = new CompositeAuth([new MockAuthProvider(true, true)]);
+        expect(typeof (compositeAuth as any).getCurrentUser).not.toBe('function');
+        expect(typeof (compositeAuth as any).getUser).not.toBe('function');
+      });
+
+      it('should advertise SSO when an inner provider supports it', () => {
+        const ssoProvider = new MockAuthProvider(true, true) as any;
+        ssoProvider.getLoginUrl = () => 'https://example.com/login';
+        ssoProvider.handleCallback = async () => ({ user: { id: '1' } });
+        ssoProvider.getLoginButtonConfig = () => ({ provider: 'test', text: 'Sign in' });
+
+        const compositeAuth = new CompositeAuth([ssoProvider]);
+        expect(typeof (compositeAuth as any).getLoginUrl).toBe('function');
+        expect(typeof (compositeAuth as any).handleCallback).toBe('function');
+      });
+
+      it('should advertise user provider when an inner provider supports it', () => {
+        const userProvider = new MockAuthProvider(true, true) as any;
+        userProvider.getCurrentUser = async () => ({ id: '1' });
+        userProvider.getUser = async () => ({ id: '1' });
+
+        const compositeAuth = new CompositeAuth([userProvider]);
+        expect(typeof (compositeAuth as any).getCurrentUser).toBe('function');
+        expect(typeof (compositeAuth as any).getUser).toBe('function');
+      });
+    });
   });
 });

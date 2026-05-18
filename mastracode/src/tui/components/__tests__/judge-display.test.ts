@@ -81,4 +81,19 @@ describe('JudgeDisplayComponent', () => {
     expect(rendered).not.toContain('continue');
     expect(rendered).toContain('(1/20)');
   });
+
+  it('separates judge activity from the final reason', () => {
+    const component = new JudgeDisplayComponent(null, 1, 20);
+    component.addActivity('read src/file.ts');
+    component.setResult({ decision: 'continue', reason: 'Keep going.' }, 1, 20);
+
+    const lines = renderPlain(component);
+    const activityIndex = lines.findIndex(line => line.includes('• read src/file.ts'));
+    const reasonIndex = lines.findIndex(line => line.includes('Keep going.'));
+    const separator = lines[activityIndex + 1];
+
+    expect(activityIndex).toBeGreaterThan(-1);
+    expect(reasonIndex).toBe(activityIndex + 2);
+    expect(separator).toMatch(/^\s*│\s+│\s*$/);
+  });
 });

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -9,7 +10,7 @@ test('renders metrics dashboard with title and date preset', async ({ page }) =>
   await page.goto('/metrics');
 
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('h1').first()).toHaveText('Metrics');
+  await expectCurrentBreadcrumb(page, 'Metrics');
   await expect(page.getByRole('combobox').filter({ hasText: 'Last 24 hours' })).toBeVisible();
 });
 
