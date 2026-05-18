@@ -151,6 +151,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@internal/voice": "workspace:*",
     "hono": "^4.12.8"
   }
 }

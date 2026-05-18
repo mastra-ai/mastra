@@ -3408,6 +3408,15 @@ importers:
       '@ai-sdk/provider-v6':
         specifier: npm:@ai-sdk/provider@3.0.10
         version: '@ai-sdk/provider@3.0.10'
+      '@ai-sdk/ui-utils-v5':
+        specifier: npm:@ai-sdk/ui-utils@1.2.11
+        version: '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../_internal-core
+      '@internal/voice':
+        specifier: workspace:*
+        version: link:../_internals/voice
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
@@ -3562,9 +3571,6 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../_vendored/ai_v6
-      '@internal/core':
-        specifier: workspace:*
-        version: link:../_internal-core
       '@internal/external-types':
         specifier: workspace:*
         version: link:../_external-types
@@ -4980,6 +4986,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@internal/voice':
+        specifier: workspace:*
+        version: link:../_internals/voice
       hono:
         specifier: ^4.12.8
         version: 4.12.18
@@ -41242,7 +41251,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.59.2
       debug: 4.4.3
       minimatch: 10.2.4
-      semver: 7.8.0
+      semver: 7.7.4
       tinyglobby: 0.2.16
       ts-api-utils: 2.5.0(typescript@6.0.3)
       typescript: 6.0.3
