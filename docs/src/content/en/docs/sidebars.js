@@ -153,7 +153,7 @@ const sidebars = {
           id: 'agents/response-caching',
           label: 'Response Caching',
           customProps: {
-            tags: ['experimental'],
+            tags: ['alpha'],
           },
         },
         {

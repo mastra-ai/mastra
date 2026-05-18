@@ -7,6 +7,12 @@ packages:
 
 # ResponseCache
 
+:::tip Alpha
+
+`ResponseCache` is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 `ResponseCache` is an input processor that caches LLM responses on the request/response boundary inside the agentic loop. It hooks into `processLLMRequest` (cache lookup; short-circuits on hit) and `processLLMResponse` (cache write on completion).
 
 The cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. _after_ memory has loaded and earlier input processors have transformed the prompt — so two users with different memory contexts produce different cache keys. Each step in an agentic tool loop is independently cached.
