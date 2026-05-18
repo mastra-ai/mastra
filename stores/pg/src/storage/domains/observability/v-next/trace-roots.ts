@@ -1,10 +1,10 @@
 /**
- * Trace-roots reads for the v-next Postgres observability domain.
+ * Trace-root reads for the v-next Postgres observability domain.
  *
- * `mastra_trace_roots` is populated by an AFTER INSERT trigger on
- * `mastra_span_events` (see ddl.ts). It contains exactly the root spans
- * (`parentSpanId IS NULL`) and is the read target for `listTraces` and
- * `getRootSpan`.
+ * Reads against `mastra_span_events` with the `parentSpanId IS NULL`
+ * predicate. The partial indexes declared in ddl.ts make this predicate
+ * selective enough to act as the root-span projection, without the
+ * write amplification or consistency window of a separate table.
  */
 
 import { listTracesArgsSchema, TraceStatus, toTraceSpans } from '@mastra/core/storage';
@@ -17,7 +17,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
-import { qualifiedTable, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import { rowToSpanRecord } from './helpers';
 import { SPAN_SELECT_COLUMNS } from './sql';
 
@@ -26,11 +26,11 @@ export async function getRootSpan(
   schema: string,
   args: GetRootSpanArgs,
 ): Promise<GetRootSpanResponse | null> {
-  const table = qualifiedTable(schema, TABLE_TRACE_ROOTS);
+  const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const row = await client.oneOrNone<Record<string, any>>(
     `SELECT ${SPAN_SELECT_COLUMNS}
      FROM ${table}
-     WHERE "traceId" = $1
+     WHERE "traceId" = $1 AND "parentSpanId" IS NULL
      ORDER BY "endedAt" DESC
      LIMIT 1`,
     [args.traceId],
@@ -44,10 +44,11 @@ export async function listTraces(client: DbClient, schema: string, args: ListTra
   const page = pagination?.page ?? 0;
   const perPage = pagination?.perPage ?? 10;
 
-  const roots = qualifiedTable(schema, TABLE_TRACE_ROOTS);
   const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
 
-  const conditions: string[] = [];
+  // Root-span predicate is always present so the partial index on span_events
+  // (`WHERE "parentSpanId" IS NULL`) gets picked up by the planner.
+  const conditions: string[] = [`r."parentSpanId" IS NULL`];
   const params: unknown[] = [];
   let i = 1;
 
@@ -155,7 +156,7 @@ export async function listTraces(client: DbClient, schema: string, args: ListTra
     }
   }
 
-  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const orderField = orderBy?.field ?? 'startedAt';
   const orderDir = orderBy?.direction ?? 'DESC';
   const orderClause =
@@ -164,7 +165,7 @@ export async function listTraces(client: DbClient, schema: string, args: ListTra
       : `ORDER BY r."${orderField}" ${orderDir}`;
 
   const countRow = await client.oneOrNone<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM ${roots} r ${whereClause}`,
+    `SELECT COUNT(*)::text AS count FROM ${span} r ${whereClause}`,
     params,
   );
   const count = Number(countRow?.count ?? 0);
@@ -181,7 +182,7 @@ export async function listTraces(client: DbClient, schema: string, args: ListTra
       .split(',')
       .map(c => `r.${c.trim()}`)
       .join(', ')}
-     FROM ${roots} r
+     FROM ${span} r
      ${whereClause}
      ${orderClause}
      LIMIT $${i++} OFFSET $${i++}`,

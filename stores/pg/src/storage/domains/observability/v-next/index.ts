@@ -98,7 +98,7 @@ import type {
 import type { DbClient } from '../../../client';
 import { resolvePgConfig } from '../../../db';
 import type { PgDomainConfig } from '../../../db';
-import { allIndexDDL, allTableDDL, qualifiedTable, TABLE_DISCOVERY, triggerDDL } from './ddl';
+import { allIndexDDL, allTableDDL, qualifiedTable, TABLE_DISCOVERY } from './ddl';
 import * as discoveryOps from './discovery';
 import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
@@ -171,9 +171,6 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
-        await this.#client.none(ddl);
-      }
-      for (const ddl of triggerDDL(this.#schema)) {
         await this.#client.none(ddl);
       }
       for (const ddl of allIndexDDL(this.#schema)) {

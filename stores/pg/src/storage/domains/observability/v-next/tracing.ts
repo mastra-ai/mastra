@@ -19,7 +19,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
-import { qualifiedTable, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import { rowToSpanRecord, spanRecordToRow } from './helpers';
 import { buildInsert, SPAN_LIGHT_SELECT_COLUMNS, SPAN_SELECT_COLUMNS } from './sql';
 
@@ -98,19 +98,12 @@ export async function getTraceLight(
 export async function batchDeleteTraces(client: DbClient, schema: string, args: BatchDeleteTracesArgs): Promise<void> {
   if (args.traceIds.length === 0) return;
   const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-  const roots = qualifiedTable(schema, TABLE_TRACE_ROOTS);
   const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-  await Promise.all([
-    client.query(`DELETE FROM ${span} WHERE "traceId" IN (${placeholders})`, args.traceIds),
-    client.query(`DELETE FROM ${roots} WHERE "traceId" IN (${placeholders})`, args.traceIds),
-  ]);
+  await client.query(`DELETE FROM ${span} WHERE "traceId" IN (${placeholders})`, args.traceIds);
 }
 
-/** Truncate the tracing tables. */
+/** Truncate the span_events table. */
 export async function dangerouslyClearTracing(client: DbClient, schema: string): Promise<void> {
   const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-  const roots = qualifiedTable(schema, TABLE_TRACE_ROOTS);
-  // CASCADE so the trigger function (which has a dependency on span_events) is
-  // not affected, but partitions are.
-  await Promise.all([client.none(`TRUNCATE TABLE ${span}`), client.none(`TRUNCATE TABLE ${roots}`)]);
+  await client.none(`TRUNCATE TABLE ${span}`);
 }

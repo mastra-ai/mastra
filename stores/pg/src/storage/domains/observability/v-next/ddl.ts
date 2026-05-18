@@ -1,9 +1,9 @@
 /**
  * Raw DDL for Postgres v-next observability tables.
  *
- * One table per signal, mirroring the ClickHouse v-next layout:
- *   - mastra_span_events       (insert-only ended spans)
- *   - mastra_trace_roots       (root-span projection populated by a trigger)
+ * One table per signal:
+ *   - mastra_span_events       (insert-only ended spans; root spans surfaced
+ *                               via partial indexes, not a separate table)
  *   - mastra_metric_events
  *   - mastra_log_events
  *   - mastra_score_events
@@ -17,6 +17,14 @@
  *   - Range partitioning by day on the time column (endedAt for spans, timestamp
  *     for others). Partition key is part of every primary key, as Postgres
  *     requires for partitioned tables.
+ *   - Root-span lookups (the `listTraces` / `getRootSpan` read surface) are
+ *     served by partial indexes on `mastra_span_events`
+ *     (`WHERE "parentSpanId" IS NULL`). This is the Postgres-idiomatic
+ *     equivalent of the ClickHouse `mastra_trace_roots` incremental MV:
+ *     selective enough to act as a projection while avoiding the trigger,
+ *     duplicate storage, and write amplification of a second table. The
+ *     partial indexes are also chunk-local on a Timescale hypertable, so the
+ *     same plan applies there.
  *   - Retention is intentionally NOT implemented in this domain; the partition
  *     skeleton exists so a future `mastra retention` CLI command can drop or
  *     compress old partitions. pg_partman is detected and used when available.
@@ -31,7 +39,6 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 // ---------------------------------------------------------------------------
 
 export const TABLE_SPAN_EVENTS = 'mastra_span_events';
-export const TABLE_TRACE_ROOTS = 'mastra_trace_roots';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
@@ -40,7 +47,6 @@ export const TABLE_DISCOVERY = 'mastra_observability_discovery';
 
 export const ALL_SIGNAL_TABLES = [
   TABLE_SPAN_EVENTS,
-  TABLE_TRACE_ROOTS,
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
@@ -52,7 +58,6 @@ export const ALL_TABLE_NAMES = [...ALL_SIGNAL_TABLES, TABLE_DISCOVERY] as const;
 /** Maps each signal table to the column used as its partition / TTL key. */
 export const SIGNAL_TIME_COLUMN: Record<(typeof ALL_SIGNAL_TABLES)[number], string> = {
   [TABLE_SPAN_EVENTS]: 'endedAt',
-  [TABLE_TRACE_ROOTS]: 'endedAt',
   [TABLE_METRIC_EVENTS]: 'timestamp',
   [TABLE_LOG_EVENTS]: 'timestamp',
   [TABLE_SCORE_EVENTS]: 'timestamp',
@@ -146,111 +151,6 @@ CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} (
 )
 ${partitionClause(mode, 'endedAt')}
 `.trim();
-}
-
-// ---------------------------------------------------------------------------
-// Trace roots DDL — root span projection
-// ---------------------------------------------------------------------------
-
-function traceRootsTableDDL(schema: string, mode: TableDDLMode): string {
-  return `
-CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_TRACE_ROOTS)} (
-  "traceId"               text NOT NULL,
-  "spanId"                text NOT NULL,
-  "parentSpanId"          text,
-  "experimentId"          text,
-  "entityType"            text,
-  "entityId"              text,
-  "entityName"            text,
-  "entityVersionId"       text,
-  "parentEntityType"      text,
-  "parentEntityId"        text,
-  "parentEntityName"      text,
-  "parentEntityVersionId" text,
-  "rootEntityType"        text,
-  "rootEntityId"          text,
-  "rootEntityName"        text,
-  "rootEntityVersionId"   text,
-  "userId"                text,
-  "organizationId"        text,
-  "resourceId"            text,
-  "runId"                 text,
-  "sessionId"             text,
-  "threadId"              text,
-  "requestId"             text,
-  "environment"           text,
-  "executionSource"       text,
-  "serviceName"           text,
-  "name"                  text NOT NULL,
-  "spanType"              text NOT NULL,
-  "isEvent"               boolean NOT NULL DEFAULT false,
-  "startedAt"             timestamptz NOT NULL,
-  "endedAt"               timestamptz NOT NULL,
-  "tags"                  text[] NOT NULL DEFAULT '{}',
-  "metadataSearch"        jsonb NOT NULL DEFAULT '{}'::jsonb,
-  "attributes"            jsonb,
-  "scope"                 jsonb,
-  "links"                 jsonb,
-  "input"                 jsonb,
-  "output"                jsonb,
-  "error"                 jsonb,
-  "metadataRaw"           jsonb,
-  "requestContext"        jsonb,
-  PRIMARY KEY ("traceId", "endedAt")
-)
-${partitionClause(mode, 'endedAt')}
-`.trim();
-}
-
-/**
- * Trigger function + trigger that copies root-span inserts into trace_roots.
- * Postgres MATERIALIZED VIEW is non-incremental, so a row-level trigger is the
- * cheapest equivalent of the ClickHouse incremental MV.
- */
-function traceRootsTriggerDDL(schema: string): string[] {
-  const fnName = qualifiedName(schema, 'mastra_trace_roots_propagate');
-  const triggerName = parseSqlIdentifier('mastra_trace_roots_after_insert', 'trigger name');
-  const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-  const roots = qualifiedTable(schema, TABLE_TRACE_ROOTS);
-  return [
-    `
-CREATE OR REPLACE FUNCTION ${fnName}() RETURNS trigger AS $$
-BEGIN
-  IF NEW."parentSpanId" IS NULL THEN
-    INSERT INTO ${roots} (
-      "traceId", "spanId", "parentSpanId", "experimentId",
-      "entityType", "entityId", "entityName", "entityVersionId",
-      "parentEntityType", "parentEntityId", "parentEntityName", "parentEntityVersionId",
-      "rootEntityType", "rootEntityId", "rootEntityName", "rootEntityVersionId",
-      "userId", "organizationId", "resourceId",
-      "runId", "sessionId", "threadId", "requestId",
-      "environment", "executionSource", "serviceName",
-      "name", "spanType", "isEvent", "startedAt", "endedAt",
-      "tags", "metadataSearch",
-      "attributes", "scope", "links", "input", "output", "error", "metadataRaw", "requestContext"
-    ) VALUES (
-      NEW."traceId", NEW."spanId", NEW."parentSpanId", NEW."experimentId",
-      NEW."entityType", NEW."entityId", NEW."entityName", NEW."entityVersionId",
-      NEW."parentEntityType", NEW."parentEntityId", NEW."parentEntityName", NEW."parentEntityVersionId",
-      NEW."rootEntityType", NEW."rootEntityId", NEW."rootEntityName", NEW."rootEntityVersionId",
-      NEW."userId", NEW."organizationId", NEW."resourceId",
-      NEW."runId", NEW."sessionId", NEW."threadId", NEW."requestId",
-      NEW."environment", NEW."executionSource", NEW."serviceName",
-      NEW."name", NEW."spanType", NEW."isEvent", NEW."startedAt", NEW."endedAt",
-      NEW."tags", NEW."metadataSearch",
-      NEW."attributes", NEW."scope", NEW."links", NEW."input", NEW."output", NEW."error", NEW."metadataRaw", NEW."requestContext"
-    )
-    ON CONFLICT ("traceId", "endedAt") DO NOTHING;
-  END IF;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql
-`.trim(),
-    `DROP TRIGGER IF EXISTS "${triggerName}" ON ${span}`,
-    `CREATE TRIGGER "${triggerName}"
-       AFTER INSERT ON ${span}
-       FOR EACH ROW EXECUTE FUNCTION ${fnName}()`,
-  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +352,8 @@ CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_DISCOVERY)} (
 }
 
 // ---------------------------------------------------------------------------
-// Index definitions per table — partition-local btrees and GINs
+// Index definitions per table — partition-local btrees, GINs, and partial
+// indexes that act as a root-span projection on span_events.
 // ---------------------------------------------------------------------------
 
 interface IndexSpec {
@@ -463,9 +364,15 @@ interface IndexSpec {
   where?: string;
 }
 
+/**
+ * Filter that selects only root spans. Used to make several span_events
+ * indexes act as a projection for the `listTraces` / `getRootSpan` read path.
+ */
+const ROOT_SPAN_WHERE = '"parentSpanId" IS NULL';
+
 function tableIndexes(): IndexSpec[] {
   return [
-    // span_events
+    // span_events — full-table indexes used by getTrace / getSpan
     { name: 'mastra_span_events_traceid_idx', table: TABLE_SPAN_EVENTS, columns: '("traceId", "endedAt" DESC)' },
     {
       name: 'mastra_span_events_parentspan_idx',
@@ -474,11 +381,7 @@ function tableIndexes(): IndexSpec[] {
     },
     { name: 'mastra_span_events_name_idx', table: TABLE_SPAN_EVENTS, columns: '("name")' },
     { name: 'mastra_span_events_spantype_idx', table: TABLE_SPAN_EVENTS, columns: '("spanType", "endedAt" DESC)' },
-    {
-      name: 'mastra_span_events_entity_idx',
-      table: TABLE_SPAN_EVENTS,
-      columns: '("entityType", "entityId")',
-    },
+    { name: 'mastra_span_events_entity_idx', table: TABLE_SPAN_EVENTS, columns: '("entityType", "entityId")' },
     {
       name: 'mastra_span_events_orgid_userid_idx',
       table: TABLE_SPAN_EVENTS,
@@ -490,34 +393,42 @@ function tableIndexes(): IndexSpec[] {
       columns: '("metadataSearch" jsonb_path_ops)',
       using: 'gin',
     },
-    {
-      name: 'mastra_span_events_tags_gin',
-      table: TABLE_SPAN_EVENTS,
-      columns: '("tags")',
-      using: 'gin',
-    },
+    { name: 'mastra_span_events_tags_gin', table: TABLE_SPAN_EVENTS, columns: '("tags")', using: 'gin' },
 
-    // trace_roots — same listTraces filter surface
-    { name: 'mastra_trace_roots_startedat_idx', table: TABLE_TRACE_ROOTS, columns: '("startedAt" DESC)' },
-    { name: 'mastra_trace_roots_spantype_idx', table: TABLE_TRACE_ROOTS, columns: '("spanType", "startedAt" DESC)' },
-    { name: 'mastra_trace_roots_entity_idx', table: TABLE_TRACE_ROOTS, columns: '("entityType", "entityId")' },
+    // span_events — partial indexes acting as the root-span projection. The
+    // listTraces filter surface (startedAt / spanType / entityType / etc.) is
+    // covered by these; rows where parentSpanId IS NOT NULL are excluded from
+    // the index, so the index is the size of a separate trace_roots table.
     {
-      name: 'mastra_trace_roots_entityname_idx',
-      table: TABLE_TRACE_ROOTS,
-      columns: '("entityType", "entityName")',
+      name: 'mastra_span_events_root_startedat_idx',
+      table: TABLE_SPAN_EVENTS,
+      columns: '("startedAt" DESC)',
+      where: ROOT_SPAN_WHERE,
     },
     {
-      name: 'mastra_trace_roots_orgid_userid_idx',
-      table: TABLE_TRACE_ROOTS,
-      columns: '("organizationId", "userId")',
+      name: 'mastra_span_events_root_endedat_idx',
+      table: TABLE_SPAN_EVENTS,
+      columns: '("endedAt" DESC)',
+      where: ROOT_SPAN_WHERE,
     },
     {
-      name: 'mastra_trace_roots_metadatasearch_gin',
-      table: TABLE_TRACE_ROOTS,
-      columns: '("metadataSearch" jsonb_path_ops)',
-      using: 'gin',
+      name: 'mastra_span_events_root_spantype_idx',
+      table: TABLE_SPAN_EVENTS,
+      columns: '("spanType", "startedAt" DESC)',
+      where: ROOT_SPAN_WHERE,
     },
-    { name: 'mastra_trace_roots_tags_gin', table: TABLE_TRACE_ROOTS, columns: '("tags")', using: 'gin' },
+    {
+      name: 'mastra_span_events_root_entityname_idx',
+      table: TABLE_SPAN_EVENTS,
+      columns: '("entityType", "entityName", "startedAt" DESC)',
+      where: ROOT_SPAN_WHERE,
+    },
+    {
+      name: 'mastra_span_events_root_traceid_idx',
+      table: TABLE_SPAN_EVENTS,
+      columns: '("traceId")',
+      where: ROOT_SPAN_WHERE,
+    },
 
     // metric_events
     { name: 'mastra_metric_events_name_ts_idx', table: TABLE_METRIC_EVENTS, columns: '("name", "timestamp" DESC)' },
@@ -542,16 +453,8 @@ function tableIndexes(): IndexSpec[] {
     { name: 'mastra_log_events_tags_gin', table: TABLE_LOG_EVENTS, columns: '("tags")', using: 'gin' },
 
     // score_events
-    {
-      name: 'mastra_score_events_traceid_idx',
-      table: TABLE_SCORE_EVENTS,
-      columns: '("traceId", "timestamp" DESC)',
-    },
-    {
-      name: 'mastra_score_events_scorerid_idx',
-      table: TABLE_SCORE_EVENTS,
-      columns: '("scorerId", "timestamp" DESC)',
-    },
+    { name: 'mastra_score_events_traceid_idx', table: TABLE_SCORE_EVENTS, columns: '("traceId", "timestamp" DESC)' },
+    { name: 'mastra_score_events_scorerid_idx', table: TABLE_SCORE_EVENTS, columns: '("scorerId", "timestamp" DESC)' },
     {
       name: 'mastra_score_events_entity_idx',
       table: TABLE_SCORE_EVENTS,
@@ -597,18 +500,12 @@ function indexDDL(schema: string, spec: IndexSpec): string {
 export function allTableDDL(schema: string, mode: TableDDLMode): string[] {
   return [
     spanEventsTableDDL(schema, mode),
-    traceRootsTableDDL(schema, mode),
     metricEventsTableDDL(schema, mode),
     logEventsTableDDL(schema, mode),
     scoreEventsTableDDL(schema, mode),
     feedbackEventsTableDDL(schema, mode),
     discoveryTableDDL(schema),
   ];
-}
-
-/** Trigger DDL for trace_roots projection. Run after both span_events and trace_roots exist. */
-export function triggerDDL(schema: string): string[] {
-  return traceRootsTriggerDDL(schema);
 }
 
 /** Index CREATEs. Safe to run repeatedly. */
