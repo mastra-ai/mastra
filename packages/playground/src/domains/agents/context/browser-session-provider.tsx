@@ -26,6 +26,41 @@ export interface BrowserSessionProviderProps {
  *
  * Manages a single WebSocket connection per provider instance.
  * All browser views (thumbnail, expanded, modal, sidebar) share this connection.
+ *
+ * ## Design notes
+ *
+ * This provider has three coordinated mechanisms that all exist to keep the
+ * WebSocket from being opened (or kept open) when it shouldn't be, and to
+ * keep the surrounding UI from re-rendering at frame rate.
+ *
+ * 1. **`enabled` gate (client-side, cheap pre-filter).** Callers pass
+ *    `enabled={agent.browserTools?.length > 0}`. When false, the probe never
+ *    fires and the WS never opens. This is the cheap "we already know this
+ *    agent has no browser, don't even ask the server" check.
+ *
+ * 2. **Probe (server-side, authoritative).** When enabled, the provider asks
+ *    the server `{ hasSession, screencastAvailable }` once. `tool-fallback.tsx`
+ *    writes `{ hasSession: true, screencastAvailable: true }` into the
+ *    react-query cache the instant the first `browser_*` tool call transitions
+ *    state, so the WS opens without polling. The probe is the source of
+ *    truth — the `enabled` gate just avoids asking when we know the answer.
+ *
+ * 3. **Frame store (out-of-band state).** Incoming WebSocket frames arrive at
+ *    15-30 fps. Storing them in React state would re-render every consumer of
+ *    this provider at that rate (chat thread, sidebar, agent info, etc.).
+ *    Frames live in an external ref-based store consumed via
+ *    `useSyncExternalStore`, so only the components that actually paint
+ *    frames (thumbnail, viewer) re-render at frame rate.
+ *
+ * ## Why callbacks read from refs
+ *
+ * `connect`/`disconnect` could naturally depend on `shouldConnect`, `agentId`,
+ * `threadId` directly — but then every `shouldConnect` flip (every probe
+ * update) would change those callbacks' identity, change the memoized context
+ * value, and re-render every `useBrowserSession()` consumer. We stash the
+ * latest values in refs (updated in a layout-less effect below) and read them
+ * from inside the callbacks, so the callbacks themselves stay stable across
+ * probe updates.
  */
 export function BrowserSessionProvider({ children, agentId, threadId, enabled = true }: BrowserSessionProviderProps) {
   // UI state
