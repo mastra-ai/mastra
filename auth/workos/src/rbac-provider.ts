@@ -64,12 +64,23 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
   private rolesCache: LRUCache<string, Promise<string[]>>;
 
   /**
+   * Cache for role definitions with their permissions (from WorkOS API).
+   * Used when useProviderPermissions is enabled.
+   */
+  private roleDefinitionsCache: LRUCache<string, Promise<Map<string, string[]>>>;
+
+  /**
+   * Whether to use permissions from WorkOS role definitions instead of roleMapping.
+   */
+  private useProviderPermissions: boolean;
+
+  /**
    * Expose roleMapping for middleware access.
    * This allows the authorization middleware to resolve permissions
    * without needing to call the async methods.
    */
   get roleMapping(): RoleMapping {
-    return this.options.roleMapping;
+    return this.options.roleMapping ?? {};
   }
 
   /**
@@ -91,9 +102,18 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     this.workos = new WorkOS(apiKey, { clientId });
     this.options = options;
 
-    // Initialize LRU cache with configurable size and TTL
+    // Determine permission source: explicit flag > inferred from missing roleMapping
+    this.useProviderPermissions = options.useProviderPermissions ?? !options.roleMapping;
+
+    // Initialize LRU cache for user roles (the expensive WorkOS API call)
     this.rolesCache = new LRUCache<string, Promise<string[]>>({
       max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
+      ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
+    });
+
+    // Initialize cache for role definitions with permissions (used when useProviderPermissions is true)
+    this.roleDefinitionsCache = new LRUCache<string, Promise<Map<string, string[]>>>({
+      max: 1, // Single org's role definitions
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
 
@@ -125,7 +145,8 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     try {
       // Collect all unique permissions from roleMapping
       const mastraPermissions = new Set<string>();
-      for (const permissions of Object.values(this.options.roleMapping)) {
+      const roleMapping = this.options.roleMapping ?? {};
+      for (const permissions of Object.values(roleMapping)) {
         for (const permission of permissions) {
           // Skip wildcards - they're not actual permissions in WorkOS
           if (!permission.includes('*')) {
@@ -213,7 +234,9 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       providerManagedRoles: true,
       // Roles come from the provider (WorkOS)
       roleSource: 'provider',
-      // Permissions are derived from static roleMapping config
+      // Permissions come from provider when useProviderPermissions is true
+      permissionSource: this.useProviderPermissions ? 'provider' : 'roleMapping',
+      // Permissions are derived from static roleMapping config (or from provider if useProviderPermissions)
       permissionEditing: false,
       // Role assignment is supported via WorkOS API
       roleAssignment: true,
@@ -239,22 +262,23 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
         });
 
         // Map WorkOS roles to RoleDefinition
-        // - providerPermissions: the actual permissions from WorkOS (for display)
-        // - permissions: Mastra permissions from roleMapping (for authorization)
+        const roleMapping = this.options.roleMapping ?? {};
         return workosRoles.data.map(role => {
           const workosPermissions = role.permissions ?? [];
-          const mappedPermissions = (this.options.roleMapping[role.slug] ??
-            this.options.roleMapping['_default'] ??
-            []) as RoleDefinition['permissions'];
+
+          // If useProviderPermissions, use WorkOS permissions directly
+          // Otherwise, use roleMapping for authorization
+          const permissions = this.useProviderPermissions
+            ? (workosPermissions as RoleDefinition['permissions'])
+            : ((roleMapping[role.slug] ?? roleMapping['_default'] ?? []) as RoleDefinition['permissions']);
 
           return {
             id: role.slug,
             name: role.name,
             description: role.description ?? this.getRoleDescription(role.slug),
-            // Mastra permissions for authorization (from roleMapping)
-            permissions: mappedPermissions,
-            // WorkOS permissions for display purposes
-            providerPermissions: workosPermissions,
+            permissions,
+            // Store provider permissions for display when using roleMapping mode
+            providerPermissions: this.useProviderPermissions ? undefined : workosPermissions,
             metadata: {
               source: 'provider' as const,
               resourceTypeSlug: role.resourceTypeSlug,
@@ -269,7 +293,8 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     }
 
     // Fall back: convert roleMapping to role definitions
-    return Object.entries(this.options.roleMapping)
+    const roleMapping = this.options.roleMapping ?? {};
+    return Object.entries(roleMapping)
       .filter(([key]) => key !== '_default')
       .map(([roleName, permissions]) => ({
         id: roleName,
@@ -286,7 +311,8 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
    * Get a description for a role based on its permissions.
    */
   private getRoleDescription(roleName: string): string {
-    const permissions = this.options.roleMapping[roleName] ?? [];
+    const roleMapping = this.options.roleMapping ?? {};
+    const permissions = roleMapping[roleName] ?? [];
     if (permissions.includes('*')) {
       return 'Full access to all resources';
     }
@@ -388,14 +414,18 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
   }
 
   /**
-   * Get all permissions for a user by mapping their WorkOS roles.
+   * Get all permissions for a user.
    *
-   * Uses the configured roleMapping to translate WorkOS role slugs
-   * into Mastra permission strings. Roles are cached; permissions
-   * are derived on-the-fly (cheap, synchronous operation).
+   * Two modes of operation:
+   * 1. useProviderPermissions=false (default when roleMapping provided):
+   *    Uses the configured roleMapping to translate WorkOS role slugs
+   *    into Mastra permission strings.
    *
-   * If the user has no roles (no organization memberships), the
-   * _default permissions from the role mapping are applied.
+   * 2. useProviderPermissions=true (default when no roleMapping):
+   *    Fetches permissions directly from WorkOS role definitions.
+   *    Permissions in WorkOS must match Mastra's resource:action pattern.
+   *
+   * Roles are cached; permissions are derived on-the-fly.
    *
    * @param user - WorkOS user to get permissions for
    * @returns Array of permission strings
@@ -404,10 +434,103 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     const roles = await this.getRoles(user);
 
     if (roles.length === 0) {
-      return this.options.roleMapping['_default'] ?? [];
+      return this.options.roleMapping?.['_default'] ?? [];
     }
 
-    return resolvePermissionsFromMapping(roles, this.options.roleMapping);
+    // Use provider permissions if enabled
+    if (this.useProviderPermissions) {
+      return this.getPermissionsFromProvider(roles);
+    }
+
+    // Use static roleMapping
+    return resolvePermissionsFromMapping(roles, this.options.roleMapping ?? {});
+  }
+
+  /**
+   * Fetch permissions from WorkOS role definitions.
+   *
+   * Fetches role definitions from WorkOS API and extracts permissions
+   * for the user's roles. Results are cached.
+   *
+   * @param userRoles - User's role slugs
+   * @returns Array of permission strings from WorkOS
+   */
+  private async getPermissionsFromProvider(userRoles: string[]): Promise<string[]> {
+    const rolePermissionsMap = await this.getRoleDefinitionsMap();
+
+    const permissions = new Set<string>();
+    for (const roleSlug of userRoles) {
+      const rolePerms = rolePermissionsMap.get(roleSlug);
+      if (rolePerms) {
+        for (const perm of rolePerms) {
+          permissions.add(perm);
+        }
+      }
+    }
+
+    return Array.from(permissions);
+  }
+
+  /**
+   * Get a map of role slugs to their permissions from WorkOS.
+   *
+   * Fetches role definitions from WorkOS API and caches the result.
+   * This is used when useProviderPermissions is enabled.
+   */
+  private async getRoleDefinitionsMap(): Promise<Map<string, string[]>> {
+    const cacheKey = this.options.organizationId ?? 'default';
+
+    const cached = this.roleDefinitionsCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const fetchPromise = this.fetchRoleDefinitionsFromWorkOS();
+    this.roleDefinitionsCache.set(cacheKey, fetchPromise);
+
+    return fetchPromise;
+  }
+
+  /**
+   * Fetch role definitions with permissions from WorkOS API.
+   */
+  private async fetchRoleDefinitionsFromWorkOS(): Promise<Map<string, string[]>> {
+    const roleMap = new Map<string, string[]>();
+
+    if (!this.options.organizationId) {
+      // Without organization, fall back to roleMapping if available
+      if (this.options.roleMapping) {
+        for (const [roleSlug, perms] of Object.entries(this.options.roleMapping)) {
+          if (roleSlug !== '_default') {
+            roleMap.set(roleSlug, perms);
+          }
+        }
+      }
+      return roleMap;
+    }
+
+    try {
+      const rolesResponse = await this.workos.organizations.listOrganizationRoles({
+        organizationId: this.options.organizationId,
+      });
+
+      for (const role of rolesResponse.data) {
+        // WorkOS role.permissions is an array of permission strings
+        roleMap.set(role.slug, role.permissions ?? []);
+      }
+    } catch (error) {
+      console.warn('[MastraRBACWorkos] Failed to fetch role definitions from WorkOS:', error);
+      // Fall back to roleMapping if available
+      if (this.options.roleMapping) {
+        for (const [roleSlug, perms] of Object.entries(this.options.roleMapping)) {
+          if (roleSlug !== '_default') {
+            roleMap.set(roleSlug, perms);
+          }
+        }
+      }
+    }
+
+    return roleMap;
   }
 
   /**

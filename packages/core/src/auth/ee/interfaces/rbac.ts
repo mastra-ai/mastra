@@ -74,6 +74,14 @@ export interface RBACCapabilities {
    * - 'hybrid': Combination of sources
    */
   roleSource: 'provider' | 'config' | 'storage' | 'hybrid';
+
+  /**
+   * The source of permissions for authorization.
+   * - 'provider': Permissions fetched from provider role definitions
+   * - 'roleMapping': Permissions derived from static roleMapping config
+   * - 'storage': Permissions stored in Mastra storage
+   */
+  permissionSource: 'provider' | 'roleMapping' | 'storage';
 }
 
 /**
@@ -87,6 +95,7 @@ export const DEFAULT_RBAC_CAPABILITIES: RBACCapabilities = {
   roleAssignment: false,
   roleInheritance: false,
   roleSource: 'config',
+  permissionSource: 'roleMapping',
 };
 
 /**
