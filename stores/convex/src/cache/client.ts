@@ -15,6 +15,14 @@ export type RawCacheResult<T = unknown> = {
 const DEFAULT_CACHE_FUNCTION = 'mastra/cache:handle';
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
+const trimTrailingSlashes = (value: string): string => {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+};
+
 export class ConvexCacheClient {
   private readonly deploymentUrl: string;
   private readonly adminAuthToken: string;
@@ -38,7 +46,7 @@ export class ConvexCacheClient {
       throw new Error('ConvexCacheClient: requestTimeoutMs must be greater than or equal to 0.');
     }
 
-    this.deploymentUrl = normalizedDeploymentUrl.replace(/\/+$/, '');
+    this.deploymentUrl = trimTrailingSlashes(normalizedDeploymentUrl);
     this.adminAuthToken = normalizedAdminAuthToken;
     this.cacheFunction = normalizedCacheFunction || DEFAULT_CACHE_FUNCTION;
     this.requestTimeoutMs = requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
