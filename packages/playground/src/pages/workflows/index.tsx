@@ -55,17 +55,15 @@ function Workflows() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+        <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button as={Link} to="/workflows/schedules" variant="ghost">
-              <CalendarClockIcon />
-              Schedules
-            </Button>
-          </div>
-        </div>
+          <Button as={Link} to="/workflows/schedules" variant="ghost" className="shrink-0">
+            <CalendarClockIcon />
+            Schedules
+          </Button>
+        </PageLayout.Row>
       </PageLayout.TopArea>
 
       <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />

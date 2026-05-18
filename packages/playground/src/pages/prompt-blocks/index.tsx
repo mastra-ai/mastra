@@ -59,19 +59,17 @@ export default function PromptBlocks() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+        <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter prompts" placeholder="Filter by name or description" />
           </div>
           {isCmsAvailable && (
-            <div className="flex shrink-0 items-center gap-2">
-              <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
-                <Plus />
-                Create Prompt
-              </Button>
-            </div>
+            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" className="shrink-0">
+              <Plus />
+              Create Prompt
+            </Button>
           )}
-        </div>
+        </PageLayout.Row>
       </PageLayout.TopArea>
 
       <PromptsList promptBlocks={promptBlocks} isLoading={isLoading} search={search} />
