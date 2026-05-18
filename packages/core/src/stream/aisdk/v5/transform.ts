@@ -249,7 +249,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           args: toolCallInput,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
-          observability: (value as { observability?: unknown }).observability as any,
+          ...((value as { observability?: unknown }).observability
+            ? { observability: (value as { observability?: unknown }).observability as any }
+            : {}),
         },
       };
     }
@@ -280,7 +282,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
           dynamic: (value as { dynamic?: boolean }).dynamic,
-          observability: (value as { observability?: unknown }).observability as any,
+          ...((value as { observability?: unknown }).observability
+            ? { observability: (value as { observability?: unknown }).observability as any }
+            : {}),
         },
       };
 

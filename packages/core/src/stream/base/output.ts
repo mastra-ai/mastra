@@ -462,7 +462,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
                 dynamic: chunk.payload.dynamic,
-                observability: chunk.payload.observability,
+                ...(chunk.payload.observability ? { observability: chunk.payload.observability } : {}),
               };
               break;
             case 'tool-call-input-streaming-end': {
@@ -493,7 +493,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
                     dynamic: meta.dynamic,
-                    observability: meta.observability,
+                    ...(meta.observability ? { observability: meta.observability } : {}),
                   },
                 };
                 self.#toolCalls.push(synthetic);
