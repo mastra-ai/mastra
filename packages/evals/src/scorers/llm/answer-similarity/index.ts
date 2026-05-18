@@ -1,6 +1,6 @@
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { createExtractPrompt, createAnalyzePrompt, createReasonPrompt } from './prompts';
@@ -37,29 +37,54 @@ Key Principles:
 6. Be strict but fair - partial credit for partial matches
 `;
 
-const extractOutputSchema = z.object({
-  outputUnits: z.array(z.string()),
-  groundTruthUnits: z.array(z.string()),
-});
+const stringSchema = { type: 'string' } satisfies JSONSchema7;
+const nullSchema = { type: 'null' } satisfies JSONSchema7;
 
-const analyzeOutputSchema = z.object({
-  matches: z.array(
-    z.object({
-      groundTruthUnit: z.string(),
-      outputUnit: z.string().nullable(),
-      matchType: z.enum(['exact', 'semantic', 'partial', 'missing']),
-      explanation: z.string(),
-    }),
-  ),
-  extraInOutput: z.array(z.string()),
-  contradictions: z.array(
-    z.object({
-      outputUnit: z.string(),
-      groundTruthUnit: z.string(),
-      explanation: z.string(),
-    }),
-  ),
-});
+const nullableStringSchema = {
+  anyOf: [stringSchema, nullSchema],
+} satisfies JSONSchema7;
+
+const extractOutputSchema = {
+  type: 'object',
+  properties: {
+    outputUnits: { type: 'array', items: { type: 'string' } },
+    groundTruthUnits: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['outputUnits', 'groundTruthUnits'],
+} satisfies JSONSchema7;
+
+const analyzeOutputSchema = {
+  type: 'object',
+  properties: {
+    matches: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          groundTruthUnit: { type: 'string' },
+          outputUnit: nullableStringSchema,
+          matchType: { type: 'string', enum: ['exact', 'semantic', 'partial', 'missing'] },
+          explanation: { type: 'string' },
+        },
+        required: ['groundTruthUnit', 'outputUnit', 'matchType', 'explanation'],
+      },
+    },
+    extraInOutput: { type: 'array', items: { type: 'string' } },
+    contradictions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          outputUnit: { type: 'string' },
+          groundTruthUnit: { type: 'string' },
+          explanation: { type: 'string' },
+        },
+        required: ['outputUnit', 'groundTruthUnit', 'explanation'],
+      },
+    },
+  },
+  required: ['matches', 'extraInOutput', 'contradictions'],
+} satisfies JSONSchema7;
 
 export function createAnswerSimilarityScorer({
   model,
@@ -79,7 +104,7 @@ export function createAnswerSimilarityScorer({
     },
     type: 'agent',
   })
-    .preprocess({
+    .preprocess<{ outputUnits: string[]; groundTruthUnits: string[] }>({
       description: 'Extract semantic units from output and ground truth',
       outputSchema: extractOutputSchema,
       createPrompt: ({ run }) => {
@@ -104,7 +129,16 @@ export function createAnswerSimilarityScorer({
         });
       },
     })
-    .analyze({
+    .analyze<{
+      matches: {
+        groundTruthUnit: string;
+        outputUnit: string | null;
+        matchType: 'exact' | 'semantic' | 'partial' | 'missing';
+        explanation: string;
+      }[];
+      extraInOutput: string[];
+      contradictions: { outputUnit: string; groundTruthUnit: string; explanation: string }[];
+    }>({
       description: 'Compare semantic units between output and ground truth',
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ results }) => {
