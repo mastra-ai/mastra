@@ -583,6 +583,47 @@ const session = await harness.getSession()
 // { currentThreadId, currentModeId, threads }
 ```
 
+#### `session(options)`
+
+Resolve a durable Harness v1 `Session` from an existing session, a thread, or a resource. The resolver returns an active live session when one is already loaded, hydrates an active stored session when possible, or creates a fresh session when the selected resolver shape requires one.
+
+This method is available on the Harness v1 export, `@mastra/core/harness/v1`.
+
+Use `sessionId` to load an existing active session. Add `resourceId` to scope the lookup and avoid leaking session existence across resources.
+
+```typescript
+import { Harness } from '@mastra/core/harness/v1'
+
+const session = await harness.session({ sessionId: 'sess-abc123' })
+
+const scoped = await harness.session({
+  sessionId: 'sess-abc123',
+  resourceId: 'project-xyz',
+})
+```
+
+Use `threadId` with `resourceId` to resolve or create the active session bound to a thread. Pass `{ fresh: true }` to create a new owned thread and session for the resource.
+
+```typescript
+const existingThreadSession = await harness.session({
+  resourceId: 'project-xyz',
+  threadId: 'thread-abc123',
+})
+
+const freshThreadSession = await harness.session({
+  resourceId: 'project-xyz',
+  threadId: { fresh: true },
+})
+```
+
+Use `resourceId` by itself to hydrate the most recent active session for that resource, or create a fresh owned thread and session if none exists.
+
+```typescript
+const session = await harness.session({ resourceId: 'project-xyz' })
+```
+
+Resolver options also accept `parentSessionId`, `origin`, `modeId`, and `modelId`. These values apply when `session()` creates a new session. Existing live or stored sessions keep their persisted values. New sessions use the configured default mode unless `modeId` is provided.
+
 ### Messages
 
 #### `sendMessage({ content, files?, requestContext? })`
