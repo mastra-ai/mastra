@@ -201,6 +201,67 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(testCtx.patch).not.toHaveBeenCalled();
   });
 
+  it('returns an error when a step result merge finds malformed stored snapshot JSON', async () => {
+    const testCtx = createWorkflowSnapshotCtx('{bad snapshot json');
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'step-1',
+      result: JSON.stringify({ status: 'success' }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected malformed snapshot JSON to fail');
+    expect(result.error).toContain('Invalid workflow snapshot JSON for runId run-1');
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('returns an error when a step result merge receives malformed result JSON', async () => {
+    const testCtx = createWorkflowSnapshotCtx(
+      JSON.stringify({ runId: 'run-1', status: 'running', context: { step: { status: 'running' } } }),
+    );
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'step-1',
+      result: '{bad result json',
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected malformed result JSON to fail');
+    expect(result.error).toContain('Invalid workflow result JSON for runId run-1');
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('returns an error when a step result merge receives malformed request context JSON', async () => {
+    const testCtx = createWorkflowSnapshotCtx(
+      JSON.stringify({ runId: 'run-1', status: 'running', context: { step: { status: 'running' } } }),
+    );
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'step-1',
+      result: JSON.stringify({ status: 'success' }),
+      requestContext: '{bad request context json',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected malformed requestContext JSON to fail');
+    expect(result.error).toContain('Invalid workflow requestContext JSON for runId run-1');
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
   it('atomically merges workflow state and preserves existing context', async () => {
     const snapshot = {
       runId: 'run-1',
@@ -261,6 +322,29 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(testCtx.patch).toHaveBeenCalledTimes(1);
   });
 
+  it('returns an error when an object snapshot cannot be serialized for workflow state merge', async () => {
+    const snapshot: Record<string, unknown> = {
+      runId: 'run-1',
+      status: 'running',
+      context: { step: { status: 'success' } },
+    };
+    snapshot.self = snapshot;
+    const testCtx = createWorkflowSnapshotCtx(snapshot);
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      opts: JSON.stringify({ status: 'success' }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected unserializable snapshot to fail');
+    expect(result.error).toContain('Invalid workflow snapshot JSON for runId run-1');
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
   it('returns an error when workflow state update has no snapshot row', async () => {
     const testCtx = createWorkflowSnapshotCtx(null, { missing: true });
 
@@ -273,6 +357,42 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     });
 
     expect(result).toEqual({ ok: false, error: 'Workflow snapshot not found for runId run-1' });
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('returns an error when a workflow state merge finds malformed stored snapshot JSON', async () => {
+    const testCtx = createWorkflowSnapshotCtx('{bad snapshot json');
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      opts: JSON.stringify({ status: 'success' }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected malformed snapshot JSON to fail');
+    expect(result.error).toContain('Invalid workflow snapshot JSON for runId run-1');
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('returns an error when a workflow state merge receives malformed opts JSON', async () => {
+    const testCtx = createWorkflowSnapshotCtx(
+      JSON.stringify({ runId: 'run-1', status: 'running', context: { step: { status: 'success' } } }),
+    );
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      opts: '{bad opts json',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected malformed opts JSON to fail');
+    expect(result.error).toContain('Invalid workflow opts JSON for runId run-1');
     expect(testCtx.patch).not.toHaveBeenCalled();
   });
 

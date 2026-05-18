@@ -21,6 +21,32 @@ const STORAGE_MUTATION_BATCH_SIZE = 25;
 
 type ConvexDocWithId = { _id: GenericId<string> };
 type StorageRecord = Record<string, unknown> & { id?: unknown };
+type JsonParseResult = { ok: true; value: any } | { ok: false; error: string };
+
+function parseWorkflowJson(value: string, field: string, runId: string): JsonParseResult {
+  try {
+    return { ok: true, value: JSON.parse(value) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: `Invalid workflow ${field} JSON for runId ${runId}: ${message}` };
+  }
+}
+
+function parseStoredWorkflowSnapshot(existing: any, runId: string): JsonParseResult {
+  if (typeof existing.snapshot === 'string') {
+    return parseWorkflowJson(existing.snapshot, 'snapshot', runId);
+  }
+
+  try {
+    return {
+      ok: true,
+      value: JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(runId))),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: `Invalid workflow snapshot JSON for runId ${runId}: ${message}` };
+  }
+}
 
 async function mapInBatches<TInput, TOutput>(
   inputs: TInput[],
@@ -301,20 +327,31 @@ export async function handleTypedOperation(
         return { ok: false, error: `Workflow snapshot not found for runId ${request.runId}` };
       }
 
-      const snapshot =
-        typeof existing.snapshot === 'string'
-          ? JSON.parse(existing.snapshot)
-          : JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(request.runId)));
+      const parsedSnapshot = parseStoredWorkflowSnapshot(existing, request.runId);
+      if (!parsedSnapshot.ok) {
+        return { ok: false, error: parsedSnapshot.error };
+      }
+      const snapshot = parsedSnapshot.value;
 
       if (!snapshot.context) {
         throw new Error(`Snapshot for runId ${request.runId} is missing or has invalid context`);
       }
 
+      const parsedResult = parseWorkflowJson(request.result, 'result', request.runId);
+      if (!parsedResult.ok) {
+        return { ok: false, error: parsedResult.error };
+      }
+
+      const parsedRequestContext = parseWorkflowJson(request.requestContext, 'requestContext', request.runId);
+      if (!parsedRequestContext.ok) {
+        return { ok: false, error: parsedRequestContext.error };
+      }
+
       const context = mergeWorkflowStepResult({
         snapshot,
         stepId: request.stepId,
-        result: JSON.parse(request.result),
-        requestContext: JSON.parse(request.requestContext),
+        result: parsedResult.value,
+        requestContext: parsedRequestContext.value,
       });
 
       await ctx.db.patch(existing._id, {
@@ -341,16 +378,22 @@ export async function handleTypedOperation(
         return { ok: false, error: `Workflow snapshot not found for runId ${request.runId}` };
       }
 
-      const snapshot =
-        typeof existing.snapshot === 'string'
-          ? JSON.parse(existing.snapshot)
-          : JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(request.runId)));
+      const parsedSnapshot = parseStoredWorkflowSnapshot(existing, request.runId);
+      if (!parsedSnapshot.ok) {
+        return { ok: false, error: parsedSnapshot.error };
+      }
+      const snapshot = parsedSnapshot.value;
 
       if (!snapshot.context) {
         throw new Error(`Snapshot for runId ${request.runId} is missing or has invalid context`);
       }
 
-      const mergedSnapshot = { ...snapshot, ...JSON.parse(request.opts) };
+      const parsedOpts = parseWorkflowJson(request.opts, 'opts', request.runId);
+      if (!parsedOpts.ok) {
+        return { ok: false, error: parsedOpts.error };
+      }
+
+      const mergedSnapshot = { ...snapshot, ...parsedOpts.value };
       await ctx.db.patch(existing._id, {
         snapshot: JSON.stringify(mergedSnapshot),
         updatedAt: new Date().toISOString(),
