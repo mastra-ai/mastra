@@ -105,12 +105,29 @@ describe('extractResource', () => {
       expect(extractResource('/stored/agents/:agentId')).toBe('stored-agents');
     });
 
+    it('should extract stored-skills from /stored/skills', () => {
+      expect(extractResource('/stored/skills')).toBe('stored-skills');
+    });
+
+    it('should extract stored-skills from /stored/skills/:skillId/publish', () => {
+      expect(extractResource('/stored/skills/:skillId/publish')).toBe('stored-skills');
+    });
+
     it('should extract specific stored resource families', () => {
       expect(extractResource('/stored/mcp-clients/:mcpClientId')).toBe('stored-mcp-clients');
       expect(extractResource('/stored/prompt-blocks/:promptBlockId')).toBe('stored-prompt-blocks');
       expect(extractResource('/stored/scorers/:scorerId')).toBe('stored-scorers');
       expect(extractResource('/stored/skills/:skillId')).toBe('stored-skills');
       expect(extractResource('/stored/workspaces/:workspaceId')).toBe('stored-workspaces');
+    });
+
+    it('should NOT collapse /stored/skills-archive into stored-skills', () => {
+      // Segment equality only; /stored/skills-archive is not a stored family.
+      expect(extractResource('/stored/skills-archive')).toBeNull();
+    });
+
+    it('should return null for unknown stored families', () => {
+      expect(extractResource('/stored/unknown-family')).toBeNull();
     });
 
     it('should extract a2a from /.well-known paths', () => {
@@ -244,6 +261,36 @@ describe('deriveAction', () => {
     });
   });
 
+  describe('POST publish action derivation', () => {
+    it('should derive publish for POST ending in /publish', () => {
+      expect(deriveAction('POST', '/stored/skills/:id/publish')).toBe('publish');
+    });
+
+    it('should derive publish for POST ending in /activate', () => {
+      expect(deriveAction('POST', '/stored/agents/:id/versions/:vid/activate')).toBe('publish');
+    });
+
+    it('should derive publish for POST ending in /restore', () => {
+      expect(deriveAction('POST', '/stored/agents/:id/versions/:vid/restore')).toBe('publish');
+    });
+
+    it('should derive publish for /restore on non-agent stored families', () => {
+      expect(deriveAction('POST', '/stored/prompt-blocks/:id/versions/:vid/restore')).toBe('publish');
+      expect(deriveAction('POST', '/stored/mcp-clients/:id/versions/:vid/restore')).toBe('publish');
+      expect(deriveAction('POST', '/stored/scorers/:id/versions/:vid/restore')).toBe('publish');
+    });
+
+    it('should NOT derive publish when suffix is not at the end', () => {
+      // /publish appears mid-path, not as terminal segment
+      expect(deriveAction('POST', '/stored/skills/publish/something')).toBe('write');
+    });
+
+    it('should prefer publish over execute if both could match', () => {
+      // Defensive: a hypothetical /activate path is treated as publish, not execute
+      expect(deriveAction('POST', '/stored/agents/:id/versions/:vid/activate')).toBe('publish');
+    });
+  });
+
   describe('case insensitivity', () => {
     it('should handle lowercase method', () => {
       expect(deriveAction('get', '/agents')).toBe('read');
@@ -340,6 +387,105 @@ describe('derivePermission', () => {
     });
   });
 
+  describe('stored-* resource families CRUD derivation', () => {
+    const families = [
+      { segment: 'agents', resource: 'stored-agents' },
+      { segment: 'skills', resource: 'stored-skills' },
+      { segment: 'prompt-blocks', resource: 'stored-prompt-blocks' },
+      { segment: 'mcp-clients', resource: 'stored-mcp-clients' },
+      { segment: 'scorers', resource: 'stored-scorers' },
+      { segment: 'workspaces', resource: 'stored-workspaces' },
+    ];
+
+    for (const { segment, resource } of families) {
+      describe(`/${segment} (${resource})`, () => {
+        it(`should derive ${resource}:read for GET /stored/${segment}`, () => {
+          expect(derivePermission({ path: `/stored/${segment}`, method: 'GET' })).toBe(`${resource}:read`);
+        });
+
+        it(`should derive ${resource}:read for GET /stored/${segment}/:id`, () => {
+          expect(derivePermission({ path: `/stored/${segment}/:id`, method: 'GET' })).toBe(`${resource}:read`);
+        });
+
+        it(`should derive ${resource}:write for POST /stored/${segment}`, () => {
+          expect(derivePermission({ path: `/stored/${segment}`, method: 'POST' })).toBe(`${resource}:write`);
+        });
+
+        it(`should derive ${resource}:write for PATCH /stored/${segment}/:id`, () => {
+          expect(derivePermission({ path: `/stored/${segment}/:id`, method: 'PATCH' })).toBe(`${resource}:write`);
+        });
+
+        it(`should derive ${resource}:delete for DELETE /stored/${segment}/:id`, () => {
+          expect(derivePermission({ path: `/stored/${segment}/:id`, method: 'DELETE' })).toBe(`${resource}:delete`);
+        });
+      });
+    }
+  });
+
+  describe('stored-* publish/activate/restore derivation', () => {
+    it('should derive stored-skills:publish for POST /stored/skills/:id/publish', () => {
+      expect(derivePermission({ path: '/stored/skills/:id/publish', method: 'POST' })).toBe('stored-skills:publish');
+    });
+
+    it('should derive stored-agents:publish for POST /stored/agents/:id/versions/:vid/activate', () => {
+      expect(derivePermission({ path: '/stored/agents/:id/versions/:vid/activate', method: 'POST' })).toBe(
+        'stored-agents:publish',
+      );
+    });
+
+    it('should derive stored-agents:publish for POST /stored/agents/:id/versions/:vid/restore', () => {
+      expect(derivePermission({ path: '/stored/agents/:id/versions/:vid/restore', method: 'POST' })).toBe(
+        'stored-agents:publish',
+      );
+    });
+
+    it('should derive stored-prompt-blocks:publish for /restore', () => {
+      expect(derivePermission({ path: '/stored/prompt-blocks/:id/versions/:vid/restore', method: 'POST' })).toBe(
+        'stored-prompt-blocks:publish',
+      );
+    });
+
+    it('should derive stored-mcp-clients:publish for /restore', () => {
+      expect(derivePermission({ path: '/stored/mcp-clients/:id/versions/:vid/restore', method: 'POST' })).toBe(
+        'stored-mcp-clients:publish',
+      );
+    });
+
+    it('should derive stored-scorers:publish for /restore', () => {
+      expect(derivePermission({ path: '/stored/scorers/:id/versions/:vid/restore', method: 'POST' })).toBe(
+        'stored-scorers:publish',
+      );
+    });
+
+    // Create-version routes: POST /stored/*/:id/versions → write (NOT publish)
+    it('should derive stored-agents:write for POST /stored/agents/:id/versions', () => {
+      expect(derivePermission({ path: '/stored/agents/:id/versions', method: 'POST' })).toBe('stored-agents:write');
+    });
+
+    it('should derive stored-prompt-blocks:write for POST /stored/prompt-blocks/:id/versions', () => {
+      expect(derivePermission({ path: '/stored/prompt-blocks/:id/versions', method: 'POST' })).toBe(
+        'stored-prompt-blocks:write',
+      );
+    });
+
+    it('should derive stored-mcp-clients:write for POST /stored/mcp-clients/:id/versions', () => {
+      expect(derivePermission({ path: '/stored/mcp-clients/:id/versions', method: 'POST' })).toBe(
+        'stored-mcp-clients:write',
+      );
+    });
+
+    it('should derive stored-scorers:write for POST /stored/scorers/:id/versions', () => {
+      expect(derivePermission({ path: '/stored/scorers/:id/versions', method: 'POST' })).toBe('stored-scorers:write');
+    });
+
+    // preview-instructions should NOT derive to publish
+    it('should derive stored-agents:write for POST /stored/agents/preview-instructions', () => {
+      expect(derivePermission({ path: '/stored/agents/preview-instructions', method: 'POST' })).toBe(
+        'stored-agents:write',
+      );
+    });
+  });
+
   describe('ALL method handling', () => {
     it('should return null for ALL method (MCP transport)', () => {
       expect(derivePermission({ path: '/mcp', method: 'ALL' })).toBe(null);
@@ -381,6 +527,15 @@ describe('getEffectivePermission', () => {
       });
       // Would derive to agents:execute, but explicit takes precedence
       expect(getEffectivePermission(route)).toBe('agents:admin');
+    });
+
+    it('should return array when requiresPermission is an array', () => {
+      const route = createRoute({
+        path: '/agents/:agentId/stream-until-idle',
+        method: 'POST',
+        requiresPermission: ['agents:execute', 'stored-agents:execute'],
+      });
+      expect(getEffectivePermission(route)).toEqual(['agents:execute', 'stored-agents:execute']);
     });
   });
 
