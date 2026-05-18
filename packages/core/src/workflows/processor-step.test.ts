@@ -1,3 +1,4 @@
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -11,19 +12,29 @@ import { createStep, createWorkflow, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
 function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
+  let systemMessages: CoreMessage[] = [];
   const mockMessageList = {
     get: {
       all: { db: () => messages },
       input: { db: () => messages.filter(m => m.role === 'user') },
       response: { db: () => messages.filter(m => m.role === 'assistant') },
     },
-    add: vi.fn(),
-    addSystem: vi.fn(),
-    removeByIds: vi.fn(),
+    add: vi.fn((message: MastraDBMessage) => {
+      messages.push(message);
+    }),
+    addSystem: vi.fn((message: CoreMessage) => {
+      systemMessages.push(message);
+    }),
+    replaceAllSystemMessages: vi.fn((messages: CoreMessage[]) => {
+      systemMessages = [...messages];
+    }),
+    removeByIds: vi.fn((ids: string[]) => {
+      messages = messages.filter(m => !ids.includes(m.id));
+    }),
     startRecording: vi.fn(),
     stopRecording: vi.fn(() => []),
     makeMessageSourceChecker: vi.fn(() => ({ getSource: () => 'input' })),
-    getAllSystemMessages: vi.fn(() => []),
+    getAllSystemMessages: vi.fn(() => systemMessages),
   } as unknown as MessageList;
   return mockMessageList;
 }

@@ -1200,11 +1200,13 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Preserve the realized MessageList state in return so span output and subsequent steps
               // can observe mutations made via messageList even when the processor returns the same MessageList.
+              const { messages: _messages, systemMessages: _systemMessages, ...validatedRest } = validatedResult;
+
               return {
                 ...passThrough,
                 messages: updatedMessages,
                 systemMessages: updatedSystemMessages,
-                ...validatedResult,
+                ...validatedRest,
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
