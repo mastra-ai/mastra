@@ -76023,7 +76023,7 @@ export type GetEditorBuilderRegistriesRegistryIdSearch_PathParams = {
 export type GetEditorBuilderRegistriesRegistryIdSearch_QueryParams = {
   /** Search query */
   q: string;
-  /** Maximum number of results */
+  /** Maximum number of results (1-100) */
   limit: number | undefined;
 };
 
@@ -76069,9 +76069,9 @@ export type GetEditorBuilderRegistriesRegistryIdPopular_PathParams = {
 };
 
 export type GetEditorBuilderRegistriesRegistryIdPopular_QueryParams = {
-  /** Maximum number of results */
+  /** Maximum number of results (1-100) */
   limit: number | undefined;
-  /** Offset for pagination */
+  /** Offset for pagination (must be a multiple of `limit`) */
   offset: number | undefined;
 };
 
