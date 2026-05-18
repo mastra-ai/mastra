@@ -57,9 +57,11 @@ export function useModelUsageCostMetrics() {
         return modelMap.get(model)!;
       };
 
-      // total_input / total_output already roll up cache read/write costs server-side,
-      // so the row cost is just total_input + total_output — cache_read/cache_write
-      // breakdowns are fetched only for their token counts.
+      // The estimatedCost on total_input and total_output already includes every
+      // input/output detail cost (cache read, cache write, image, audio, ...), so
+      // the row cost only accumulates from those two breakdowns. The cache_read
+      // and cache_write breakdowns are fetched purely for their token counts,
+      // which the table displays in dedicated columns.
       const addCost = (entry: ModelEntry, group: { estimatedCost?: number | null; costUnit?: string | null }) => {
         if (group.estimatedCost != null) {
           entry.cost = (entry.cost ?? 0) + group.estimatedCost;
