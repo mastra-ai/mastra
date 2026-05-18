@@ -149,7 +149,7 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
    * The reverse of hydrateSnapshotToWorkspace — extracts provider IDs and config
    * from live filesystem/sandbox instances so the workspace can be persisted to the DB.
    */
-  snapshotFromWorkspace(workspace: Workspace): StorageWorkspaceSnapshotType {
+  async snapshotFromWorkspace(workspace: Workspace): Promise<StorageWorkspaceSnapshotType> {
     const snapshot: StorageWorkspaceSnapshotType = {
       name: workspace.name,
     };
@@ -160,20 +160,24 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
         // Workspace uses mounts — serialize each mounted filesystem
         const mounts: Record<string, StorageFilesystemConfig> = {};
         for (const [mountPath, mountedFs] of fs.mounts) {
-          mounts[mountPath] = this.serializeFilesystem(mountedFs);
+          mounts[mountPath] = await this.serializeFilesystem(mountedFs);
         }
         snapshot.mounts = mounts;
       } else {
         // Single filesystem
-        snapshot.filesystem = this.serializeFilesystem(fs);
+        snapshot.filesystem = await this.serializeFilesystem(fs);
       }
     }
 
     const sandbox = workspace.sandbox;
     if (sandbox) {
+      // Sandbox.getInfo() is async and returns metadata that we round-trip through the
+      // stored config so resolveSandbox() can re-instantiate the provider with its
+      // original constructor configuration.
+      const info = typeof sandbox.getInfo === 'function' ? await sandbox.getInfo() : undefined;
       snapshot.sandbox = {
         provider: sandbox.provider,
-        config: {},
+        config: info?.metadata ?? {},
       };
     }
 
@@ -193,13 +197,11 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
   /**
    * Serialize a runtime WorkspaceFilesystem into a StorageFilesystemConfig.
-   * Uses getInfo() metadata when available, falls back to provider ID only.
+   * Awaits getInfo() so async providers like CompositeFilesystem keep their mount metadata.
    */
-  private serializeFilesystem(fs: WorkspaceFilesystem): StorageFilesystemConfig {
-    const info = typeof fs.getInfo === 'function' ? fs.getInfo() : undefined;
-    // getInfo() can return a Promise — but for serialization we only support sync results.
-    // LocalFilesystem.getInfo() is sync. Async providers will fall back to empty config.
-    const metadata = info && typeof info === 'object' && 'metadata' in info ? (info as any).metadata : {};
+  private async serializeFilesystem(fs: WorkspaceFilesystem): Promise<StorageFilesystemConfig> {
+    const info = typeof fs.getInfo === 'function' ? await fs.getInfo() : undefined;
+    const metadata = info && typeof info === 'object' && 'metadata' in info ? (info as any).metadata : undefined;
     return {
       provider: fs.provider,
       config: metadata ?? {},

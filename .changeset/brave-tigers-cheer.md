@@ -2,8 +2,16 @@
 '@mastra/editor': minor
 ---
 
-Editor namespace polish:
+`EditorWorkspaceNamespace` can now snapshot a live `Workspace` for persistence — the reverse of `hydrateSnapshotToWorkspace()`:
 
-- `CrudEditorNamespace.clearCache(id)` now always calls `onCacheEvict(id)`, even when the entity wasn't cached. This lets subclasses clean up runtime registries (e.g. removing an agent from `mastra.#agents`) for version-specific lookups that bypass the editor cache.
-- `EditorSkillNamespace.publishSkillFromSource()` now stores the new `files` field on the published skill version and strips `undefined` keys from the snapshot before calling `update()` — matches the libsql/pg adapter behavior of rejecting `undefined` as a bind argument.
-- `EditorWorkspaceNamespace` adds `snapshotFromWorkspace(workspace)` — the reverse of `hydrateSnapshotToWorkspace()` — to serialize a live `Workspace` instance (including `CompositeFilesystem` mounts, sandbox provider, and tools config) into a `StorageWorkspaceSnapshotType` for persistence.
+```ts
+const snapshot = await editor.workspace.snapshotFromWorkspace(runtimeWorkspace);
+await editor.workspace.create({ id: 'my-workspace', ...snapshot });
+```
+
+`snapshotFromWorkspace()` is `async` and awaits `sandbox.getInfo()` and `filesystem.getInfo()` so async providers like `CompositeFilesystem` keep their mount metadata in the stored config.
+
+Also includes two smaller behavioral fixes:
+
+- `EditorSkillNamespace.publishSkillFromSource()` stores the new `files` field on the published skill version and strips `undefined` keys before calling `update()` (libsql/pg adapters reject `undefined` bind arguments).
+- `CrudEditorNamespace.clearCache(id)` always calls `onCacheEvict(id)`, even when the entity wasn't cached, so subclasses can clean up runtime registries for version-specific lookups that bypass the editor cache.
