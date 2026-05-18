@@ -7,11 +7,10 @@ export const cookingTool = createTool({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
-  requestContextSchema: z.object({
-    userId: z.string().default('default-user-id'),
-  }),
   execute: async (inputData, { requestContext }) => {
-    const userId = requestContext?.get('userId');
+    // Get authenticated user from request context (set by auth middleware)
+    const user = requestContext?.get('user') as { id?: string; name?: string } | undefined;
+    const userId = user?.id;
     console.log('My cooking tool is running!', inputData.ingredient, userId);
     return `My tool result: ${inputData.ingredient} from ${userId}`;
   },
