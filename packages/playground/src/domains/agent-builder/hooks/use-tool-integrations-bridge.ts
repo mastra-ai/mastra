@@ -36,11 +36,15 @@ export function useToolIntegrationsBridge(): UseToolIntegrationsBridgeResult {
   const integrationsData = integrationsQuery.data;
 
   const integrationMetaById = useMemo(() => {
-    const map = new Map<string, { displayName: string; multipleConnectionsPerService: boolean }>();
+    const map = new Map<
+      string,
+      { displayName: string; multipleConnectionsPerService: boolean; supportsRevoke: boolean }
+    >();
     for (const integration of integrationsData?.integrations ?? []) {
       map.set(integration.id, {
         displayName: integration.displayName ?? integration.id,
         multipleConnectionsPerService: integration.capabilities?.multipleConnectionsPerService ?? false,
+        supportsRevoke: integration.capabilities?.supportsRevoke ?? false,
       });
     }
     return map;
@@ -54,6 +58,7 @@ export function useToolIntegrationsBridge(): UseToolIntegrationsBridgeResult {
       const meta = integrationMetaById.get(providerId);
       const integrationDisplayName = meta?.displayName ?? providerId;
       const multipleAllowed = meta?.multipleConnectionsPerService ?? false;
+      const supportsRevoke = meta?.supportsRevoke ?? false;
 
       const services = new Set<string>([
         ...Object.keys(config.connections ?? {}),
@@ -76,6 +81,7 @@ export function useToolIntegrationsBridge(): UseToolIntegrationsBridgeResult {
           toolService,
           toolServiceDisplayName: toolService,
           multipleAllowed,
+          supportsRevoke,
           hasSelectedTools,
           connections,
         });

@@ -77432,6 +77432,7 @@ export type GetToolIntegrations_Response = {
       multipleConnectionsPerService: boolean;
       batchConnectionStatus: boolean;
       reauthorizeReusesConnectionId: boolean;
+      supportsRevoke?: boolean | undefined;
     };
   }[];
 };

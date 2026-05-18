@@ -1,10 +1,13 @@
-import { Button, Input, Txt, cn } from '@mastra/playground-ui';
-import { Trash2, Plus, RefreshCw, AlertCircle, Link2 } from 'lucide-react';
+import { AlertDialog, Button, DropdownMenu, Input, Txt, cn } from '@mastra/playground-ui';
+import { AlertCircle, Link2, MoreVertical, Pencil, Plus, RefreshCw, Trash2, Unlink2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useAuthorize } from '../hooks/use-authorize';
 import { useConnectionFields } from '../hooks/use-connection-fields';
+import { useConnectionUsage } from '../hooks/use-connection-usage';
+import { useDisconnectConnection } from '../hooks/use-disconnect-connection';
 import { useExistingConnections } from '../hooks/use-existing-connections';
+import { useRenameConnection } from '../hooks/use-rename-connection';
 
 type ConnectionField = {
   name: string;
@@ -35,6 +38,8 @@ export interface ConnectionPickerProps {
   toolService: string;
   /** From `useToolIntegrations()[i].capabilities`. */
   multipleAllowed: boolean;
+  /** From `integration.capabilities.supportsRevoke`. Gates the Disconnect menu item. */
+  supportsRevoke?: boolean;
   /** Controlled value. */
   connections: PickerConnection[];
   /** Controlled change. */
@@ -93,11 +98,14 @@ export const ConnectionPicker = ({
   integrationId,
   toolService,
   multipleAllowed,
+  supportsRevoke = false,
   connections,
   onChange,
   disabled,
 }: ConnectionPickerProps) => {
   const authorize = useAuthorize();
+  const rename = useRenameConnection();
+  const disconnect = useDisconnectConnection();
   const existing = useExistingConnections(integrationId, toolService);
   const fieldsQuery = useConnectionFields(integrationId, toolService);
   const fields = useMemo<ConnectionField[]>(
@@ -265,6 +273,51 @@ export const ConnectionPicker = ({
     onChange(next);
   };
 
+  // Inline rename: clicking "Rename" in the kebab swaps the label cell
+  // into edit mode. Submitting calls PATCH /connections/:id and, on
+  // success, mirrors the new label onto the pinned row so the local
+  // form stays in sync without waiting for a refetch.
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const renameDraftError = useMemo(() => {
+    if (renameTargetId === null) return undefined;
+    return validateDraft(renameDraft);
+  }, [renameTargetId, renameDraft, connections]);
+
+  const submitRename = async (index: number, connectionId: string) => {
+    if (renameDraftError) return;
+    const next = renameDraft.trim();
+    await rename.mutateAsync({ integrationId, connectionId, label: next || null });
+    const list = [...connections];
+    const current = list[index];
+    if (current) {
+      list[index] = { ...current, ...(next ? { label: next } : { label: undefined }) };
+      onChange(list);
+    }
+    setRenameTargetId(null);
+    setRenameDraft('');
+  };
+
+  // Disconnect confirm flow. We don't pre-check usage server-side here;
+  // instead the dialog renders the count from `useConnectionUsage` so
+  // the user knows how many *other* agents will lose this account.
+  const [disconnectTargetId, setDisconnectTargetId] = useState<string | null>(null);
+  const usageQuery = useConnectionUsage(integrationId, disconnectTargetId, !!disconnectTargetId);
+  const otherAgentCount = useMemo(() => {
+    if (!disconnectTargetId) return 0;
+    // The current agent isn't saved yet (it's just a form pin), so the
+    // server-side scan only sees *other* agents that already pin this
+    // connection. No subtraction needed.
+    return usageQuery.data?.agents?.length ?? 0;
+  }, [usageQuery.data?.agents, disconnectTargetId]);
+
+  const confirmDisconnect = async () => {
+    if (!disconnectTargetId) return;
+    await disconnect.mutateAsync({ integrationId, connectionId: disconnectTargetId, force: true });
+    onChange(connections.filter(c => c.connectionId !== disconnectTargetId));
+    setDisconnectTargetId(null);
+  };
+
   const canAddMore = multipleAllowed || connections.length === 0;
   const showAddButton = multipleAllowed;
 
@@ -417,6 +470,7 @@ export const ConnectionPicker = ({
           // `connections.length >= 2` and bring the inputs back so the user
           // can label both.
           const showLabelInput = connections.length >= 2 || Boolean(conn.label) || Boolean(error);
+          const isRenaming = renameTargetId === conn.connectionId;
           return (
             <div
               key={conn.connectionId}
@@ -424,7 +478,51 @@ export const ConnectionPicker = ({
               data-testid={`connection-row-${toolService}-${index}`}
             >
               <div className="flex-1">
-                {showLabelInput ? (
+                {isRenaming ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      size="sm"
+                      value={renameDraft}
+                      placeholder="Account name"
+                      onChange={e => setRenameDraft(e.target.value)}
+                      disabled={disabled || rename.isPending}
+                      error={Boolean(renameDraftError)}
+                      aria-invalid={Boolean(renameDraftError)}
+                      data-testid={`connection-rename-input-${toolService}-${index}`}
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void submitRename(index, conn.connectionId);
+                        } else if (e.key === 'Escape') {
+                          setRenameTargetId(null);
+                          setRenameDraft('');
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => submitRename(index, conn.connectionId)}
+                      disabled={disabled || rename.isPending || Boolean(renameDraftError)}
+                      data-testid={`connection-rename-save-${toolService}-${index}`}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setRenameTargetId(null);
+                        setRenameDraft('');
+                      }}
+                      aria-label="Cancel rename"
+                      data-testid={`connection-rename-cancel-${toolService}-${index}`}
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  </div>
+                ) : showLabelInput ? (
                   <>
                     <Input
                       size="sm"
@@ -457,30 +555,96 @@ export const ConnectionPicker = ({
                   </Txt>
                 )}
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleReauthorize(index)}
-                disabled={disabled || authorize.isPending}
-                aria-label="Reauthorize"
-                data-testid={`connection-reauthorize-${toolService}-${index}`}
-              >
-                <RefreshCw className="size-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleRemove(index)}
-                disabled={disabled}
-                aria-label="Remove connection"
-                data-testid={`connection-remove-${toolService}-${index}`}
-              >
-                <Trash2 className="size-3" />
-              </Button>
+              {!isRenaming && (
+                <DropdownMenu>
+                  <DropdownMenu.Trigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={disabled}
+                      aria-label="Connection actions"
+                      data-testid={`connection-actions-${toolService}-${index}`}
+                    >
+                      <MoreVertical className="size-3" />
+                    </Button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item
+                      onSelect={() => handleReauthorize(index)}
+                      disabled={disabled || authorize.isPending}
+                      data-testid={`connection-reauthorize-${toolService}-${index}`}
+                    >
+                      <RefreshCw />
+                      Reauthorize
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onSelect={() => {
+                        setRenameTargetId(conn.connectionId);
+                        setRenameDraft(conn.label ?? '');
+                      }}
+                      data-testid={`connection-rename-${toolService}-${index}`}
+                    >
+                      <Pencil />
+                      Rename
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onSelect={() => handleRemove(index)}
+                      disabled={disabled}
+                      data-testid={`connection-unpin-${toolService}-${index}`}
+                    >
+                      <Unlink2 />
+                      Unpin from this agent
+                    </DropdownMenu.Item>
+                    {supportsRevoke && (
+                      <>
+                        <DropdownMenu.Separator />
+                        <DropdownMenu.Item
+                          onSelect={() => setDisconnectTargetId(conn.connectionId)}
+                          disabled={disabled}
+                          className="text-error"
+                          data-testid={`connection-disconnect-${toolService}-${index}`}
+                        >
+                          <Trash2 />
+                          Disconnect everywhere
+                        </DropdownMenu.Item>
+                      </>
+                    )}
+                  </DropdownMenu.Content>
+                </DropdownMenu>
+              )}
             </div>
           );
         })
       )}
+
+      <AlertDialog open={!!disconnectTargetId} onOpenChange={open => !open && setDisconnectTargetId(null)}>
+        <AlertDialog.Content data-testid={`connection-disconnect-dialog-${toolService}`}>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Disconnect this account?</AlertDialog.Title>
+            <AlertDialog.Description>
+              This revokes the connection at the provider and removes the saved row. The connection
+              is currently pinned by{' '}
+              <strong data-testid={`connection-disconnect-usage-${toolService}`}>
+                {otherAgentCount}
+              </strong>{' '}
+              other agent{otherAgentCount === 1 ? '' : 's'}. Those agents will lose access to this
+              account&apos;s tools.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel data-testid={`connection-disconnect-cancel-${toolService}`}>
+              Cancel
+            </AlertDialog.Cancel>
+            <AlertDialog.Action
+              onClick={confirmDisconnect}
+              disabled={disconnect.isPending}
+              data-testid={`connection-disconnect-confirm-${toolService}`}
+            >
+              Disconnect
+            </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
 
       {showAddButton && connections.length > 0 && (
         <div className="flex items-start gap-2">

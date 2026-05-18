@@ -176,6 +176,7 @@ const capabilitiesSchema = z.object({
   multipleConnectionsPerService: z.boolean(),
   batchConnectionStatus: z.boolean(),
   reauthorizeReusesConnectionId: z.boolean(),
+  supportsRevoke: z.boolean().optional(),
 });
 
 export const listToolIntegrationsResponseSchema = z.object({

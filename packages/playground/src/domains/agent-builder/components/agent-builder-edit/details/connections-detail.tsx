@@ -87,6 +87,7 @@ export const ConnectionsDetail = ({
                     integrationId={group.integrationId}
                     toolService={group.toolService}
                     multipleAllowed={group.multipleAllowed}
+                    supportsRevoke={group.supportsRevoke}
                     connections={group.connections}
                     disabled={!editable}
                     onChange={next => onConnectionsChange?.(group.integrationId, group.toolService, next)}

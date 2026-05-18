@@ -11,6 +11,22 @@ import { ConnectionPicker } from './connection-picker';
 import type { PickerConnection } from './connection-picker';
 import { server } from '@/test/msw-server';
 
+// Radix DropdownMenu relies on PointerEvent APIs jsdom doesn't implement.
+if (typeof Element !== 'undefined') {
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false;
+  }
+  if (!Element.prototype.setPointerCapture) {
+    Element.prototype.setPointerCapture = () => {};
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = () => {};
+  }
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
+}
+
 // Stub useAuthorize so tests don't need to drive the popup + polling loop.
 const authorizeMock = vi.fn();
 vi.mock('../hooks/use-authorize', () => ({
@@ -27,10 +43,11 @@ const TOOL_SERVICE = 'gmail';
 interface HarnessProps {
   initial: PickerConnection[];
   multipleAllowed?: boolean;
+  supportsRevoke?: boolean;
   onChange?: (next: PickerConnection[]) => void;
 }
 
-const Harness = ({ initial, multipleAllowed = true, onChange }: HarnessProps) => {
+const Harness = ({ initial, multipleAllowed = true, supportsRevoke, onChange }: HarnessProps) => {
   const [connections, setConnections] = useState<PickerConnection[]>(initial);
   const handleChange = (next: PickerConnection[]) => {
     setConnections(next);
@@ -45,6 +62,7 @@ const Harness = ({ initial, multipleAllowed = true, onChange }: HarnessProps) =>
             integrationId={INTEGRATION_ID}
             toolService={TOOL_SERVICE}
             multipleAllowed={multipleAllowed}
+            supportsRevoke={supportsRevoke}
             connections={connections}
             onChange={handleChange}
           />
@@ -140,7 +158,18 @@ describe('ConnectionPicker', () => {
     expect(screen.queryByRole('button', { name: /add connection/i })).toBeNull();
   });
 
-  it('invokes the authorize flow with the existing connectionId when reauthorize is clicked', async () => {
+  const openKebab = async (index: number) => {
+    const trigger = screen.getByTestId(`connection-actions-${TOOL_SERVICE}-${index}`);
+    // Radix DropdownMenu opens on pointerdown for mouse input; jsdom's
+    // `click` doesn't synthesize that. Keyboard (Enter/Space on the focused
+    // trigger) is the supported a11y path and works in jsdom.
+    await act(async () => {
+      trigger.focus();
+      fireEvent.keyDown(trigger, { key: 'Enter', code: 'Enter' });
+    });
+  };
+
+  it('invokes the authorize flow with the existing connectionId when reauthorize is selected', async () => {
     authorizeMock.mockResolvedValueOnce({ status: 'completed', connectionId: 'refreshed-1' });
 
     const onChange = vi.fn();
@@ -149,9 +178,10 @@ describe('ConnectionPicker', () => {
       onChange,
     });
 
-    const button = screen.getByTestId(`connection-reauthorize-${TOOL_SERVICE}-0`);
+    await openKebab(0);
+    const reauth = await screen.findByTestId(`connection-reauthorize-${TOOL_SERVICE}-0`);
     await act(async () => {
-      fireEvent.click(button);
+      fireEvent.click(reauth);
     });
 
     await waitFor(() => {
@@ -167,13 +197,17 @@ describe('ConnectionPicker', () => {
     expect(lastCall[0].connectionId).toBe('refreshed-1');
   });
 
-  it('removes a connection when the trash button is clicked', () => {
+  it('unpins a connection from the agent via the kebab menu', async () => {
     const onChange = vi.fn();
     renderPicker({
       initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Work' }],
       onChange,
     });
-    fireEvent.click(screen.getByTestId(`connection-remove-${TOOL_SERVICE}-0`));
+    await openKebab(0);
+    const unpin = await screen.findByTestId(`connection-unpin-${TOOL_SERVICE}-0`);
+    await act(async () => {
+      fireEvent.click(unpin);
+    });
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
@@ -405,5 +439,107 @@ describe('ConnectionPicker', () => {
     // No override typed → pin inherits persisted label so it carries across agents.
     expect(lastCall[0].label).toBe('Saved label');
     expect(lastCall[0].connectionId).toBe('ca_existing_1');
+  });
+
+  it('renames a connection inline via PATCH and mirrors the new label on the pin', async () => {
+    const renameRequests: Array<{ connectionId: string; body: unknown }> = [];
+    server.use(
+      http.patch(
+        `${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId`,
+        async ({ params, request }) => {
+          const body = await request.json();
+          renameRequests.push({ connectionId: String(params.connectionId), body });
+          return HttpResponse.json({ connectionId: params.connectionId, label: (body as { label: string | null }).label });
+        },
+      ),
+    );
+
+    const onChange = vi.fn();
+    renderPicker({
+      initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Old' }],
+      onChange,
+    });
+
+    await openKebab(0);
+    const renameItem = await screen.findByTestId(`connection-rename-${TOOL_SERVICE}-0`);
+    await act(async () => {
+      fireEvent.click(renameItem);
+    });
+
+    const input = (await screen.findByTestId(
+      `connection-rename-input-${TOOL_SERVICE}-0`,
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'New name' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId(`connection-rename-save-${TOOL_SERVICE}-0`));
+    });
+
+    await waitFor(() => {
+      expect(renameRequests).toHaveLength(1);
+    });
+    expect(renameRequests[0].connectionId).toBe('c1');
+    expect(renameRequests[0].body).toEqual({ label: 'New name' });
+
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall[0].label).toBe('New name');
+  });
+
+  it('hides the Disconnect menu item when the integration does not support revoke', async () => {
+    renderPicker({
+      initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Work' }],
+      supportsRevoke: false,
+    });
+
+    await openKebab(0);
+    await screen.findByTestId(`connection-unpin-${TOOL_SERVICE}-0`);
+    expect(screen.queryByTestId(`connection-disconnect-${TOOL_SERVICE}-0`)).toBeNull();
+  });
+
+  it('confirms disconnect with the usage count and calls DELETE with force=true', async () => {
+    const deleteRequests: Array<{ connectionId: string; url: string }> = [];
+    server.use(
+      http.get(
+        `${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId/usage`,
+        () => HttpResponse.json({ agents: [{ id: 'a1', name: 'Other agent' }, { id: 'a2', name: 'Another' }] }),
+      ),
+      http.delete(
+        `${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId`,
+        ({ params, request }) => {
+          deleteRequests.push({ connectionId: String(params.connectionId), url: request.url });
+          return HttpResponse.json({ connectionId: params.connectionId });
+        },
+      ),
+    );
+
+    const onChange = vi.fn();
+    renderPicker({
+      initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Work' }],
+      supportsRevoke: true,
+      onChange,
+    });
+
+    await openKebab(0);
+    const disconnectItem = await screen.findByTestId(`connection-disconnect-${TOOL_SERVICE}-0`);
+    await act(async () => {
+      fireEvent.click(disconnectItem);
+    });
+
+    const usage = await screen.findByTestId(`connection-disconnect-usage-${TOOL_SERVICE}`);
+    await waitFor(() => {
+      expect(usage.textContent).toContain('2');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId(`connection-disconnect-confirm-${TOOL_SERVICE}`));
+    });
+
+    await waitFor(() => {
+      expect(deleteRequests).toHaveLength(1);
+    });
+    expect(deleteRequests[0].connectionId).toBe('c1');
+    expect(deleteRequests[0].url).toContain('force=true');
+
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall).toEqual([]);
   });
 });

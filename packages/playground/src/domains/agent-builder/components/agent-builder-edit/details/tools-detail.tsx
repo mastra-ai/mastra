@@ -21,6 +21,8 @@ export interface ToolIntegrationServiceGroup {
   toolServiceDisplayName: string;
   /** From `integration.capabilities.multipleConnectionsPerService`. */
   multipleAllowed: boolean;
+  /** From `integration.capabilities.supportsRevoke`. Gates the Disconnect option. */
+  supportsRevoke: boolean;
   /** Whether at least one tool from this service is currently selected. */
   hasSelectedTools: boolean;
   connections: PickerConnection[];
