@@ -3659,9 +3659,6 @@ importers:
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
-      '@internal/voice':
-        specifier: workspace:*
-        version: link:../_internals/voice
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
@@ -5252,9 +5249,6 @@ importers:
 
   packages/server:
     dependencies:
-      '@internal/voice':
-        specifier: workspace:*
-        version: link:../_internals/voice
       hono:
         specifier: ^4.12.8
         version: 4.12.25
