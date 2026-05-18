@@ -376,6 +376,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             // In branches mode the row identity is (traceId, anchorSpanId) — spanIdParam may
             // have drifted via intra-panel span nav and shouldn't decide which row is featured.
             featuredSpanId={url.listMode === 'branches' ? url.anchorSpanIdParam : null}
+            isBranchesMode={url.listMode === 'branches'}
             onTraceClick={trace => {
               const isBranches = url.listMode === 'branches';
               const isSameRow = isBranches
