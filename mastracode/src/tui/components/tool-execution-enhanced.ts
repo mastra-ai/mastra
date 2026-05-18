@@ -183,8 +183,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.rebuild();
   }
 
-  clearQuietActiveMarquee(): void {}
-
   getChatSpacingKind(): ChatSpacingKind {
     if (this.quietDisplayMode === 'quiet') {
       return this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 'quiet-shell-tool' : 'quiet-compact-tool';
@@ -332,7 +330,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
   }
 
-  private getQuietActiveMarqueeLines(maxLineWidth: number): string[] {
+  private getQuietPreviewLines(maxLineWidth: number): string[] {
     if (this.quietDisplayMode !== 'quiet' || this.toolName === MC_TOOLS.EXECUTE_COMMAND) return [];
 
     const preview = this.getQuietActivePreview();
@@ -409,7 +407,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
       : `${theme.bold(theme.fg(toolLabelColor, toolLabel))}${summary ? ` ${theme.fg('toolArgs', summary)}` : ''}${status}`;
 
-    const detailLines = this.getQuietActiveMarqueeLines(getTermWidth() - BOX_INDENT * 2 - 2);
+    const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
     if (detailLines.length === 0) return [firstLine];
     if (!this.shouldCloseQuietPreview()) return [firstLine, ...detailLines];
     return [firstLine, ...detailLines, this.getQuietPreviewCapLine()];

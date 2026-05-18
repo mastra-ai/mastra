@@ -214,7 +214,7 @@ describe('handleMessageUpdate system reminders', () => {
     expect(children[3]).toBe(streamingMessage);
   });
 
-  it('adds boundary spacing when assistant text replaces a retained quiet marquee', () => {
+  it('adds boundary spacing between a quiet tool preview and assistant text', () => {
     const tool = new ToolExecutionComponentEnhanced(
       'write_file',
       {},
@@ -228,12 +228,11 @@ describe('handleMessageUpdate system reminders', () => {
     state.chatContainer.addChild(tool);
     state.chatContainer.addChild(assistant);
     state.streamingComponent = assistant;
-    state.retainedQuietActiveMarquee = tool;
 
     handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'assistant text' }]));
 
     const rendered = state.chatContainer.render(100);
-    const toolLineIndex = rendered.findIndex(line => line.includes('write_file'));
+    const toolLineIndex = rendered.findIndex(line => line.includes('write'));
     const textLineIndex = rendered.findIndex(line => line.includes('assistant text'));
     expect(rendered.slice(toolLineIndex + 1, textLineIndex)).toContain('');
   });

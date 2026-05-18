@@ -118,8 +118,6 @@ export interface TUIState {
   currentRunSystemReminderKeys: Set<string>;
   /** Track all tools for expand/collapse */
   allToolComponents: IToolExecutionComponent[];
-  /** Quiet active marquee that should stay visible until the next streamed part takes its place. */
-  retainedQuietActiveMarquee?: IToolExecutionComponent;
   /** Track slash command boxes for expand/collapse */
   allSlashCommandComponents: SlashCommandComponent[];
   /** Track inline system reminders for expand/collapse */

@@ -61,7 +61,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).not.toContain('mastracode/s');
   });
 
-  it('does not render an active quiet view marquee line that duplicates the summary', () => {
+  it('does not render a quiet view preview line that duplicates the summary', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts', offset: 10, limit: 5, showLineNumbers: true },
@@ -158,7 +158,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(3);
   });
 
-  it('updates the active quiet edit marquee line from partial args', () => {
+  it('updates the quiet edit preview line from partial args', () => {
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'src/example.ts', old_string: 'old value' },
@@ -201,7 +201,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(4);
   });
 
-  it('renders an active quiet write marquee line with content preview', () => {
+  it('renders a quiet write preview line with content preview', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/example.ts', content: 'first line\nsecond line' },
@@ -365,7 +365,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n').filter(line => line.includes('│'))).toHaveLength(8);
   });
 
-  it('keeps quiet detail lines visible even when cleared', () => {
+  it('keeps quiet detail lines visible after completion', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       {},
@@ -377,17 +377,12 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(component.render(100)).toHaveLength(4);
 
     component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false }, false);
-    let lines = component.render(100);
-    expect(lines).toHaveLength(4);
-    expect(lines[1]).toContain('│');
-
-    component.clearQuietActiveMarquee();
-    lines = component.render(100);
+    const lines = component.render(100);
     expect(lines).toHaveLength(4);
     expect(lines[1]).toContain('│');
   });
 
-  it('does not add a marquee line to quiet shell tools and keeps the prompt orange', () => {
+  it('does not add a preview line to quiet shell tools and keeps the prompt orange', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf lines' },

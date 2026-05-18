@@ -30,7 +30,6 @@ export interface IToolExecutionComponent {
   setCompactToolGroupLabelColor?(color: CompactToolLabelColor | undefined): void;
   setCompactToolContinuation?(continuation: boolean, previousSummary?: string): void;
   setCompactToolHasFollowingContinuation?(hasFollowingContinuation: boolean): void;
-  clearQuietActiveMarquee?(): void;
   isComplete?(): boolean;
   /** Append streaming output for shell commands */
   appendStreamingOutput?(output: string): void;

@@ -178,13 +178,6 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   const { state } = ctx;
   if (message.role !== 'assistant') return;
 
-  const clearRetainedQuietActiveMarquee = () => {
-    const retained = state.retainedQuietActiveMarquee;
-    retained?.clearQuietActiveMarquee?.();
-    state.retainedQuietActiveMarquee = undefined;
-    return retained !== undefined;
-  };
-
   const systemReminderParts = message.content
     .map(toStreamedSystemReminderPart)
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
@@ -251,7 +244,6 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         );
         component.setExpanded(state.toolOutputExpanded);
         if (state.quietMode) {
-          clearRetainedQuietActiveMarquee();
           component.setQuietModeDisplay('quiet');
         }
         ctx.addChildBeforeFollowUps(component);
@@ -274,7 +266,6 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   // Avoid replacing visible assistant text with an empty trailing segment
   // (commonly happens immediately after tool_result-only updates).
   if (trailingParts.length > 0) {
-    clearRetainedQuietActiveMarquee();
     state.streamingComponent.updateContent({
       ...message,
       content: trailingParts,
@@ -300,7 +291,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         content: trailingParts,
       });
       reconcileChatBoundarySpacers(state.chatContainer);
-      }
+    }
 
     if (message.stopReason === 'aborted' || message.stopReason === 'error') {
       const errorMessage = message.errorMessage || 'Operation aborted';

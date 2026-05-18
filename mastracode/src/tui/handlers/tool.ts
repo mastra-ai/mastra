@@ -28,15 +28,9 @@ export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
 }
 
-function clearRetainedQuietActiveMarquee(ctx: EventHandlerContext): void {
-  ctx.state.retainedQuietActiveMarquee?.clearQuietActiveMarquee?.();
-  ctx.state.retainedQuietActiveMarquee = undefined;
-}
-
 function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
   if (!ctx.state.quietMode) return;
 
-  clearRetainedQuietActiveMarquee(ctx);
   component.setQuietModeDisplay('quiet');
 }
 
@@ -478,9 +472,6 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       isError: effectiveIsError,
     };
     component.updateResult(toolResult, false);
-    if (state.quietMode && !isPendingTaskTool) {
-      state.retainedQuietActiveMarquee = component;
-    }
     reconcileToolBoundaries(ctx);
 
     state.pendingTools.delete(toolCallId);

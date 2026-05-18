@@ -600,7 +600,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 cancelled,
               );
               state.chatContainer.addChild(askComponent);
-                continue;
+              continue;
             }
           }
 
