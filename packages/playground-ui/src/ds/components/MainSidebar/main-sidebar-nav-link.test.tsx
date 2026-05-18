@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
+import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
 import { MainSidebarProvider } from './main-sidebar-context';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
 
 // MainSidebarProvider reads matchMedia at mount to decide mobile vs desktop.
 // jsdom does not implement it, so polyfill before any render.

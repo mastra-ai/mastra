@@ -1,6 +1,7 @@
 import { Slot } from '@radix-ui/react-slot';
 import { CircleAlertIcon } from 'lucide-react';
-import React, { type ComponentPropsWithoutRef } from 'react';
+import React from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebar } from './main-sidebar-context';
 import { MainSidebarNavLabel } from './main-sidebar-nav-label';
