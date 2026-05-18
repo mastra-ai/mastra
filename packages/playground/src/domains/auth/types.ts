@@ -46,6 +46,32 @@ export type AuthenticatedUser = {
 };
 
 /**
+ * RBAC provider capabilities
+ */
+export type RBACCapabilities = {
+  /** Whether the provider supports multiple roles per user */
+  multiRole: boolean;
+  /** Whether roles can be created/updated/deleted dynamically */
+  dynamicRoles: boolean;
+  /** Whether roles come from the provider (vs static config) */
+  providerManagedRoles: boolean;
+  /** Whether permissions can be edited on roles */
+  permissionEditing: boolean;
+};
+
+/**
+ * FGA provider capabilities
+ */
+export type FGACapabilities = {
+  /** Whether the provider supports resource management */
+  resourceManagement: boolean;
+  /** Whether the provider supports role assignment on resources */
+  roleAssignment: boolean;
+  /** Whether the provider supports hierarchical resources */
+  hierarchicalResources: boolean;
+};
+
+/**
  * Capability flags
  */
 export type CapabilityFlags = {
@@ -53,7 +79,12 @@ export type CapabilityFlags = {
   session: boolean;
   sso: boolean;
   rbac: boolean;
+  /** Detailed RBAC capabilities (null if RBAC not available) */
+  rbacCapabilities: RBACCapabilities | null;
   acl: boolean;
+  fga: boolean;
+  /** Detailed FGA capabilities (null if FGA not available) */
+  fgaCapabilities: FGACapabilities | null;
 };
 
 /**

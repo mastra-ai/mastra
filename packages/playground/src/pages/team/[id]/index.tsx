@@ -15,7 +15,9 @@ import {
 import { ArrowLeftIcon, SettingsIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { isAuthenticated } from '@/domains/auth/types';
 import { RoleManagementModal } from '@/domains/team/components';
 import { useRoles, useTeamMember } from '@/domains/team/hooks';
 
@@ -48,10 +50,16 @@ function TeamMemberDetail() {
   const { id: userId } = useParams<{ id: string }>();
   const { data: member, isLoading: memberLoading, error: memberError } = useTeamMember(userId || '');
   const { data: allRoles = [] } = useRoles();
+  const { data: capabilities } = useAuthCapabilities();
   const { hasPermission } = usePermissions();
   const [showRoleModal, setShowRoleModal] = useState(false);
 
   const canManageRoles = hasPermission('team:write');
+
+  // Get RBAC capabilities to determine single vs multi-role UI
+  const rbacCapabilities =
+    capabilities && isAuthenticated(capabilities) ? capabilities.capabilities.rbacCapabilities : null;
+  const isMultiRole = rbacCapabilities?.multiRole ?? false;
 
   const userRoles = member?.roles || [];
   const userPermissions = member?.permissions || [];
@@ -126,8 +134,10 @@ function TeamMemberDetail() {
 
         {/* Role section */}
         <SectionCard
-          title="Role"
-          description="The role assigned to this team member."
+          title={isMultiRole ? 'Roles' : 'Role'}
+          description={
+            isMultiRole ? 'The roles assigned to this team member.' : 'The role assigned to this team member.'
+          }
           action={
             canManageRoles ? (
               <Button variant="outline" size="sm" onClick={() => setShowRoleModal(true)}>
@@ -140,7 +150,21 @@ function TeamMemberDetail() {
           <div className="py-2">
             {memberLoading ? (
               <Skeleton className="h-5 w-20" />
+            ) : isMultiRole ? (
+              // Multi-role: show all roles
+              userRoles.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {userRoles.map(role => (
+                    <Badge key={role} variant="default" className="capitalize">
+                      {role}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-text2 text-sm">No roles assigned</span>
+              )
             ) : currentRole ? (
+              // Single-role: show current role
               <Badge variant="default" className="capitalize">
                 {currentRole}
               </Badge>
@@ -176,7 +200,9 @@ function TeamMemberDetail() {
           userId={member.id}
           userName={member.name || member.email || member.id}
           currentRole={currentRole ?? undefined}
+          currentRoles={userRoles}
           availableRoles={allRoles}
+          rbacCapabilities={rbacCapabilities}
           onClose={() => setShowRoleModal(false)}
         />
       )}

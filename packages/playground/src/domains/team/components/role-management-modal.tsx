@@ -1,7 +1,8 @@
 import { Button, Badge } from '@mastra/playground-ui';
 import { XIcon, CheckIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useAssignRole } from '@/domains/team/hooks';
+import type { RBACCapabilities } from '@/domains/auth/types';
+import { useAssignRole, useRemoveRole } from '@/domains/team/hooks';
 
 interface RoleDefinition {
   id: string;
@@ -13,29 +14,47 @@ interface RoleDefinition {
 interface RoleManagementModalProps {
   userId: string;
   userName: string;
-  currentRole?: string; // WorkOS: single role per org membership
+  /** For single-role providers: the current role ID */
+  currentRole?: string;
+  /** For multi-role providers: array of current role IDs */
+  currentRoles?: string[];
   availableRoles: RoleDefinition[];
+  /** RBAC provider capabilities - determines UI behavior */
+  rbacCapabilities?: RBACCapabilities | null;
   onClose: () => void;
 }
 
 /**
- * Role management modal for WorkOS.
+ * Role management modal that adapts to provider capabilities.
  *
- * WorkOS uses a single role per organization membership model.
- * Users can have one role at a time - changing roles replaces the current one.
+ * Single-role providers (WorkOS): radio button UI, changing roles replaces current one
+ * Multi-role providers: checkbox UI, can add/remove multiple roles
  */
 export function RoleManagementModal({
   userId,
   userName,
   currentRole,
+  currentRoles = [],
   availableRoles,
+  rbacCapabilities,
   onClose,
 }: RoleManagementModalProps) {
-  const { mutate: assignRole, isPending } = useAssignRole();
+  const { mutate: assignRole, isPending: isAssigning } = useAssignRole();
+  const { mutate: removeRole, isPending: isRemoving } = useRemoveRole();
+  const isPending = isAssigning || isRemoving;
+
+  // Determine if this is a multi-role provider
+  const isMultiRole = rbacCapabilities?.multiRole ?? false;
+
+  // For single-role mode, track the selected role
   const [selectedRole, setSelectedRole] = useState<string | null>(currentRole ?? null);
+
+  // For multi-role mode, track selected roles
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set(currentRoles));
+
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
 
-  const handleChangeRole = (roleId: string) => {
+  const handleSingleRoleChange = (roleId: string) => {
     setSelectedRole(roleId);
     assignRole(
       { userId, roleId },
@@ -47,7 +66,39 @@ export function RoleManagementModal({
     );
   };
 
+  const handleMultiRoleToggle = (roleId: string) => {
+    const isCurrentlySelected = selectedRoles.has(roleId);
+    const newSelectedRoles = new Set(selectedRoles);
+
+    if (isCurrentlySelected) {
+      // Remove role
+      newSelectedRoles.delete(roleId);
+      setSelectedRoles(newSelectedRoles);
+      removeRole(
+        { userId, roleId },
+        {
+          onSuccess: () => {
+            // Role removed successfully
+          },
+        },
+      );
+    } else {
+      // Add role
+      newSelectedRoles.add(roleId);
+      setSelectedRoles(newSelectedRoles);
+      assignRole(
+        { userId, roleId },
+        {
+          onSuccess: () => {
+            // Role added successfully
+          },
+        },
+      );
+    }
+  };
+
   const currentRoleObj = availableRoles.find(r => r.id === currentRole);
+  const currentRoleObjs = availableRoles.filter(r => currentRoles.includes(r.id));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -59,7 +110,7 @@ export function RoleManagementModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border1">
           <div>
-            <h2 className="text-lg font-semibold text-neutral6">Change Role</h2>
+            <h2 className="text-lg font-semibold text-neutral6">{isMultiRole ? 'Manage Roles' : 'Change Role'}</h2>
             <p className="text-sm text-neutral4 mt-0.5">{userName}</p>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-surface3 rounded transition-colors" aria-label="Close">
@@ -69,27 +120,46 @@ export function RoleManagementModal({
 
         {/* Content */}
         <div className="p-4 overflow-y-auto max-h-[60vh]">
-          {/* Current Role */}
-          {currentRoleObj && (
-            <div className="mb-4 p-3 bg-surface3 rounded-lg border border-border1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-medium text-neutral4 uppercase tracking-wide">Current Role</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="default">{currentRoleObj.name}</Badge>
-                {currentRoleObj.description && (
-                  <span className="text-sm text-neutral4">— {currentRoleObj.description}</span>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Current Role(s) */}
+          {isMultiRole
+            ? // Multi-role: show all current roles
+              currentRoleObjs.length > 0 && (
+                <div className="mb-4 p-3 bg-surface3 rounded-lg border border-border1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-medium text-neutral4 uppercase tracking-wide">Current Roles</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {currentRoleObjs.map(role => (
+                      <Badge key={role.id} variant="default">
+                        {role.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )
+            : // Single-role: show current role
+              currentRoleObj && (
+                <div className="mb-4 p-3 bg-surface3 rounded-lg border border-border1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-medium text-neutral4 uppercase tracking-wide">Current Role</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">{currentRoleObj.name}</Badge>
+                    {currentRoleObj.description && (
+                      <span className="text-sm text-neutral4">— {currentRoleObj.description}</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
           {/* Role Options */}
           <div className="space-y-2">
-            <span className="text-xs font-medium text-neutral4 uppercase tracking-wide">Select Role</span>
+            <span className="text-xs font-medium text-neutral4 uppercase tracking-wide">
+              {isMultiRole ? 'Toggle Roles' : 'Select Role'}
+            </span>
             {availableRoles.map(role => {
-              const isSelected = selectedRole === role.id;
-              const isCurrent = currentRole === role.id;
+              const isSelected = isMultiRole ? selectedRoles.has(role.id) : selectedRole === role.id;
+              const isCurrent = isMultiRole ? currentRoles.includes(role.id) : currentRole === role.id;
 
               return (
                 <div
@@ -100,23 +170,45 @@ export function RoleManagementModal({
                 >
                   <button
                     className="w-full flex items-center justify-between p-3 text-left hover:bg-surface3 transition-colors disabled:opacity-50"
-                    onClick={() => !isCurrent && handleChangeRole(role.id)}
-                    disabled={isPending || isCurrent}
+                    onClick={() => {
+                      if (isMultiRole) {
+                        handleMultiRoleToggle(role.id);
+                      } else if (!isCurrent) {
+                        handleSingleRoleChange(role.id);
+                      }
+                    }}
+                    disabled={isPending || (!isMultiRole && isCurrent)}
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          isSelected ? 'border-accent1 bg-accent1' : 'border-border2'
-                        }`}
-                      >
-                        {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
-                      </div>
+                      {isMultiRole ? (
+                        // Checkbox for multi-role
+                        <div
+                          className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                            isSelected ? 'border-accent1 bg-accent1' : 'border-border2'
+                          }`}
+                        >
+                          {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
+                        </div>
+                      ) : (
+                        // Radio for single-role
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                            isSelected ? 'border-accent1 bg-accent1' : 'border-border2'
+                          }`}
+                        >
+                          {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
+                        </div>
+                      )}
                       <div>
                         <span className="font-medium text-neutral6">{role.name}</span>
                         {role.description && <p className="text-sm text-neutral4 mt-0.5">{role.description}</p>}
                       </div>
                     </div>
-                    {isCurrent && <span className="text-xs text-neutral4 bg-surface4 px-2 py-1 rounded">Current</span>}
+                    {isCurrent && (
+                      <span className="text-xs text-neutral4 bg-surface4 px-2 py-1 rounded">
+                        {isMultiRole ? 'Assigned' : 'Current'}
+                      </span>
+                    )}
                   </button>
 
                   {/* Permissions preview */}
