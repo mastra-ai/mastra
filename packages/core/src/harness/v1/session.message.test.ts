@@ -7,10 +7,13 @@
  * the session forwarded without standing up a real model.
  */
 
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
+import { HarnessStorageAdmissionConflictError } from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
@@ -87,6 +90,43 @@ class FakeAgent extends Agent<any, any, any> {
   }
 }
 
+class LiveStreamFakeAgent extends FakeAgent {
+  releaseStream?: () => void;
+
+  override async stream(messages: any, options?: any): Promise<any> {
+    this.calls.push({ type: 'stream', messages, options });
+    const runId = options?.runId ?? this.fullOutput.runId;
+    const fullOutput = { ...this.fullOutput, runId };
+    let releaseStream!: () => void;
+    let finishStream!: () => void;
+    const release = new Promise<void>(resolve => {
+      releaseStream = resolve;
+    });
+    const finished = new Promise<void>(resolve => {
+      finishStream = resolve;
+    });
+    const fullStream = (async function* () {
+      try {
+        await release;
+      } finally {
+        finishStream();
+      }
+    })();
+    const out = {
+      runId,
+      getFullOutput: async () => fullOutput,
+      fullStream,
+      text: Promise.resolve(fullOutput.text),
+      finishReason: Promise.resolve(fullOutput.finishReason),
+      usage: Promise.resolve(fullOutput.usage),
+      _waitUntilFinished: () => finished,
+    };
+    this.releaseStream = releaseStream;
+    this._internalRegisterStreamRun(out as any, (options ?? {}) as any);
+    return out;
+  }
+}
+
 function setup(modes?: any) {
   const agent = new FakeAgent('default');
   const storage = new InMemoryHarness({ db: new InMemoryDB() });
@@ -97,6 +137,47 @@ function setup(modes?: any) {
     sessions: { storage },
   });
   return { harness, agent, storage };
+}
+
+function setupTwoModes() {
+  const defaultAgent = new FakeAgent('default');
+  const otherAgent = new FakeAgent('other');
+  const storage = new InMemoryHarness({ db: new InMemoryDB() });
+  const harness = new Harness({
+    agents: { default: defaultAgent, other: otherAgent } as any,
+    modes: [
+      { id: 'default', agentId: 'default' },
+      { id: 'other', agentId: 'other' },
+    ],
+    defaultModeId: 'default',
+    sessions: { storage },
+  });
+  return { harness, defaultAgent, otherAgent, storage };
+}
+
+function legacyMessageAdmissionHash(opts: { content: unknown; modeId: string; modelId: string }) {
+  return createHash('sha256')
+    .update(
+      canonicalJsonForTest({
+        kind: 'message',
+        content: opts.content,
+        mode: opts.modeId,
+        model: opts.modelId,
+        attachments: [],
+      }),
+      'utf8',
+    )
+    .digest('hex');
+}
+
+function canonicalJsonForTest(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJsonForTest).join(',')}]`;
+  return `{${Object.entries(value)
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJsonForTest(entry)}`)
+    .join(',')}}`;
 }
 
 describe('Session.message() — default path', () => {
@@ -164,6 +245,185 @@ describe('Session.message() — default path', () => {
     expect(first.text).toBe('hello back');
     expect(second.text).toBe('hello back');
     expect(agent.calls).toHaveLength(1);
+  });
+
+  it('does not treat a later default mode switch as a conflicting duplicate admission', async () => {
+    const { harness, defaultAgent, otherAgent } = setupTwoModes();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = await session.message({ content: 'hi', admissionId: 'admission-mode-default' });
+    await session.switchMode({ mode: 'other' });
+    const second = await session.message({ content: 'hi', admissionId: 'admission-mode-default' });
+
+    expect(first.text).toBe('hello back');
+    expect(second.text).toBe('hello back');
+    expect(defaultAgent.calls).toHaveLength(1);
+    expect(otherAgent.calls).toHaveLength(0);
+  });
+
+  it('returns a live stream duplicate from the original mode after a default mode switch', async () => {
+    const defaultAgent = new LiveStreamFakeAgent('default');
+    const otherAgent = new FakeAgent('other');
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: defaultAgent, other: otherAgent } as any,
+      modes: [
+        { id: 'default', agentId: 'default' },
+        { id: 'other', agentId: 'other' },
+      ],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = await session.message({ content: 'hi', admissionId: 'admission-live-stream', stream: true });
+    await session.switchMode({ mode: 'other' });
+    const duplicate = await session.message({ content: 'hi', admissionId: 'admission-live-stream', stream: true });
+
+    expect(duplicate).toBe(first);
+    expect(defaultAgent.calls).toHaveLength(1);
+    expect(otherAgent.calls).toHaveLength(0);
+
+    defaultAgent.releaseStream?.();
+    await session.waitForIdle({ timeoutMs: 1_000 });
+  });
+
+  it('treats an explicit default mode as distinct from an omitted default mode for admission hashing', async () => {
+    const { harness, defaultAgent } = setupTwoModes();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'hi', admissionId: 'admission-explicit-mode' });
+    await expect(
+      session.message({ content: 'hi', mode: 'default', admissionId: 'admission-explicit-mode' }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+    expect(defaultAgent.calls).toHaveLength(1);
+  });
+
+  it('does not treat a later default model switch as a conflicting duplicate admission', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = await session.message({ content: 'hi', admissionId: 'admission-model-default' });
+    await session.models.switch({ model: 'gpt-5' });
+    const second = await session.message({ content: 'hi', admissionId: 'admission-model-default' });
+
+    expect(first.text).toBe('hello back');
+    expect(second.text).toBe('hello back');
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('treats an explicit selected model as distinct from an omitted selected model for admission hashing', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.models.switch({ model: 'gpt-5' });
+    await session.message({ content: 'hi', admissionId: 'admission-explicit-model' });
+    await expect(
+      session.message({ content: 'hi', model: 'gpt-5', admissionId: 'admission-explicit-model' }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('rejects legacy effective mode/model evidence after mode drift unless the original mode is explicit', async () => {
+    const { harness, defaultAgent, otherAgent, storage } = setupTwoModes();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const legacyAdmissionHash = legacyMessageAdmissionHash({
+      content: 'hi',
+      modeId: 'default',
+      modelId: (session as any)._record.modelId,
+    });
+
+    await storage.writeMessageResultEvidence({
+      harnessName: (session as any)._record.harnessName,
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+      status: 'completed',
+      signalId: 'legacy-signal',
+      runId: 'legacy-run',
+      result: defaultAgent.fullOutput,
+      admissionId: 'legacy-admission',
+      admissionHash: legacyAdmissionHash,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    await session.switchMode({ mode: 'other' });
+    await expect(session.message({ content: 'hi', admissionId: 'legacy-admission' })).rejects.toBeInstanceOf(
+      HarnessAdmissionConflictError,
+    );
+
+    expect(defaultAgent.calls).toHaveLength(0);
+    expect(otherAgent.calls).toHaveLength(0);
+  });
+
+  it('replays legacy duplicate admissions when the caller supplies the original effective mode', async () => {
+    const { harness, defaultAgent, otherAgent, storage } = setupTwoModes();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const legacyAdmissionHash = legacyMessageAdmissionHash({
+      content: 'hi',
+      modeId: 'default',
+      modelId: (session as any)._record.modelId,
+    });
+
+    await storage.writeMessageResultEvidence({
+      harnessName: (session as any)._record.harnessName,
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+      status: 'completed',
+      signalId: 'legacy-signal',
+      runId: 'legacy-run',
+      result: defaultAgent.fullOutput,
+      admissionId: 'legacy-explicit-admission',
+      admissionHash: legacyAdmissionHash,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    await session.switchMode({ mode: 'other' });
+    const duplicate = await session.message({
+      content: 'hi',
+      mode: 'default',
+      admissionId: 'legacy-explicit-admission',
+    });
+
+    expect(duplicate.text).toBe('hello back');
+    expect(defaultAgent.calls).toHaveLength(0);
+    expect(otherAgent.calls).toHaveLength(0);
+  });
+
+  it('replays legacy duplicate admissions that race with the reservation write', async () => {
+    const { harness, defaultAgent, otherAgent, storage } = setupTwoModes();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const writeMessageResultEvidence = storage.writeMessageResultEvidence.bind(storage);
+    let raced = false;
+    storage.writeMessageResultEvidence = async record => {
+      if (!raced && record.status === 'pending' && record.admissionId === 'legacy-race') {
+        raced = true;
+        const legacyAdmissionHash = legacyMessageAdmissionHash({
+          content: 'hi',
+          modeId: 'default',
+          modelId: (session as any)._record.modelId,
+        });
+        await writeMessageResultEvidence({
+          ...record,
+          status: 'completed',
+          signalId: 'legacy-race-signal',
+          runId: 'legacy-race-run',
+          result: defaultAgent.fullOutput,
+          admissionHash: legacyAdmissionHash,
+        });
+        throw new HarnessStorageAdmissionConflictError(record.sessionId, 'message', record.admissionId);
+      }
+      return writeMessageResultEvidence(record);
+    };
+
+    const duplicate = await session.message({ content: 'hi', admissionId: 'legacy-race' });
+
+    expect(duplicate.text).toBe('hello back');
+    expect(defaultAgent.calls).toHaveLength(0);
+    expect(otherAgent.calls).toHaveLength(0);
   });
 
   it('does not convert completed admission evidence write failures into failed evidence', async () => {

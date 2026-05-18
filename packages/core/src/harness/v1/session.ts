@@ -134,7 +134,13 @@ type Deferred<T> = {
 
 type MessageAdmissionStart = {
   admissionHash: string;
+  modeId: string;
   promise: Promise<string>;
+};
+
+type MessageAdmissionHashes = {
+  primary: string;
+  legacyCompatible: readonly string[];
 };
 
 type QueueResumeRecoveryResult =
@@ -1941,18 +1947,21 @@ export class Session {
     const effectiveModeId = opts.mode ?? this._record.modeId;
     const mode = this._harness._getMode(effectiveModeId);
     const agent = this._harness.getAgentForMode(effectiveModeId);
-    const admissionHash =
+    const admissionHashes =
       opts.admissionId !== undefined
-        ? this._computeMessageAdmissionHash(opts, {
+        ? this._computeMessageAdmissionHashes(opts, {
             modeId: effectiveModeId,
             modelId: opts.model ?? this._record.modelId,
           })
         : undefined;
+    const admissionHash = admissionHashes?.primary;
+    const compatibleAdmissionHashes = admissionHashes?.legacyCompatible;
     const duplicate =
       opts.admissionId !== undefined
         ? await this._resolveMessageAdmissionDuplicate({
             admissionId: opts.admissionId,
             admissionHash: admissionHash!,
+            compatibleAdmissionHashes,
           })
         : undefined;
     if (duplicate) {
@@ -1995,7 +2004,11 @@ export class Session {
           opts,
         );
       }
-      this._messageAdmissionStarts.set(opts.admissionId!, { admissionHash, promise: admissionStart.promise });
+      this._messageAdmissionStarts.set(opts.admissionId!, {
+        admissionHash,
+        modeId: effectiveModeId,
+        promise: admissionStart.promise,
+      });
     }
 
     // Every turn runs under a session-owned AbortController so
@@ -2074,19 +2087,23 @@ export class Session {
 
     if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
       try {
-        const reservation = await this._writeMessageResultEvidence({
-          status: 'pending',
-          signalId: admissionIdentity.signalId,
-          runId: admissionIdentity.runId,
-          admissionId: opts.admissionId!,
-          admissionHash,
-        });
+        const reservation = await this._writeMessageResultEvidence(
+          {
+            status: 'pending',
+            signalId: admissionIdentity.signalId,
+            runId: admissionIdentity.runId,
+            admissionId: opts.admissionId!,
+            admissionHash,
+          },
+          { compatibleAdmissionHashes },
+        );
         if (!reservation.created) {
           this._messageAdmissionStarts.delete(opts.admissionId!);
           admissionStart.resolve(admissionIdentity.runId);
           const existing = await this._resolveMessageAdmissionDuplicate({
             admissionId: opts.admissionId!,
             admissionHash,
+            compatibleAdmissionHashes,
           });
           if (existing) {
             try {
@@ -2119,14 +2136,17 @@ export class Session {
       );
     } catch (err) {
       if (admissionIdentity !== undefined && admissionHash !== undefined) {
-        await this._writeMessageResultEvidence({
-          status: 'failed',
-          signalId: admissionIdentity.signalId,
-          runId: admissionIdentity.runId,
-          admissionId: opts.admissionId!,
-          admissionHash,
-          error: projectHarnessPublicError(err),
-        }).catch(() => {});
+        await this._writeMessageResultEvidence(
+          {
+            status: 'failed',
+            signalId: admissionIdentity.signalId,
+            runId: admissionIdentity.runId,
+            admissionId: opts.admissionId!,
+            admissionHash,
+            error: projectHarnessPublicError(err),
+          },
+          { compatibleAdmissionHashes },
+        ).catch(() => {});
       }
       failOwnedMessageTurnBeforeDispatch(err);
       throw err;
@@ -2140,13 +2160,16 @@ export class Session {
 
     const pendingEvidenceWrite =
       admissionIdentity !== undefined
-        ? this._writeMessageResultEvidence({
-            status: 'pending',
-            signalId: signal.signal.id,
-            runId: signal.runId,
-            ...(opts.admissionId !== undefined ? { admissionId: opts.admissionId } : {}),
-            ...(admissionHash !== undefined ? { admissionHash } : {}),
-          })
+        ? this._writeMessageResultEvidence(
+            {
+              status: 'pending',
+              signalId: signal.signal.id,
+              runId: signal.runId,
+              ...(opts.admissionId !== undefined ? { admissionId: opts.admissionId } : {}),
+              ...(admissionHash !== undefined ? { admissionHash } : {}),
+            },
+            { compatibleAdmissionHashes },
+          )
         : Promise.resolve();
 
     // Streaming path: hand the live `MastraModelOutput` back. The drain
@@ -2175,14 +2198,17 @@ export class Session {
           this._rememberCompletedRun(signal.runId, { ok: false, err });
           waiter?.reject(err);
           if (admissionIdentity !== undefined) {
-            await this._writeMessageResultEvidenceBestEffort({
-              status: 'failed',
-              signalId: signal.signal.id,
-              runId: signal.runId,
-              error: projectHarnessPublicError(err),
-              admissionId: opts.admissionId!,
-              admissionHash: admissionHash!,
-            });
+            await this._writeMessageResultEvidenceBestEffort(
+              {
+                status: 'failed',
+                signalId: signal.signal.id,
+                runId: signal.runId,
+                error: projectHarnessPublicError(err),
+                admissionId: opts.admissionId!,
+                admissionHash: admissionHash!,
+              },
+              { compatibleAdmissionHashes },
+            );
           }
           if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
           void this._maybeDrainQueue();
@@ -2201,14 +2227,17 @@ export class Session {
         this._rememberCompletedRun(signal.runId, { ok: false, err });
         waiter?.reject(err);
         if (admissionIdentity !== undefined) {
-          await this._writeMessageResultEvidenceBestEffort({
-            status: 'failed',
-            signalId: signal.signal.id,
-            runId: signal.runId,
-            error: projectHarnessPublicError(err),
-            admissionId: opts.admissionId!,
-            admissionHash: admissionHash!,
-          });
+          await this._writeMessageResultEvidenceBestEffort(
+            {
+              status: 'failed',
+              signalId: signal.signal.id,
+              runId: signal.runId,
+              error: projectHarnessPublicError(err),
+              admissionId: opts.admissionId!,
+              admissionHash: admissionHash!,
+            },
+            { compatibleAdmissionHashes },
+          );
         }
         throw err;
       }
@@ -2218,14 +2247,17 @@ export class Session {
         .then(full => {
           this._recordTurnCompletion(full);
           if (admissionIdentity === undefined) return full;
-          return this._writeMessageResultEvidence({
-            status: 'completed',
-            signalId: signal.signal.id,
-            runId: signal.runId,
-            result: full,
-            admissionId: opts.admissionId!,
-            admissionHash: admissionHash!,
-          })
+          return this._writeMessageResultEvidence(
+            {
+              status: 'completed',
+              signalId: signal.signal.id,
+              runId: signal.runId,
+              result: full,
+              admissionId: opts.admissionId!,
+              admissionHash: admissionHash!,
+            },
+            { compatibleAdmissionHashes },
+          )
             .catch(err => {
               streamCompletedEvidenceWriteFailed = true;
               throw err;
@@ -2244,14 +2276,17 @@ export class Session {
         })
         .catch(err => {
           if (admissionIdentity !== undefined && !streamCompletedEvidenceWriteFailed) {
-            void this._writeMessageResultEvidence({
-              status: 'failed',
-              signalId: signal.signal.id,
-              runId: signal.runId,
-              error: projectHarnessPublicError(err),
-              admissionId: opts.admissionId!,
-              admissionHash: admissionHash!,
-            }).catch(() => {});
+            void this._writeMessageResultEvidence(
+              {
+                status: 'failed',
+                signalId: signal.signal.id,
+                runId: signal.runId,
+                error: projectHarnessPublicError(err),
+                admissionId: opts.admissionId!,
+                admissionHash: admissionHash!,
+              },
+              { compatibleAdmissionHashes },
+            ).catch(() => {});
           }
           // The caller owns the visible stream; swallow drain-side errors.
         })
@@ -2277,14 +2312,17 @@ export class Session {
       this._recordTurnCompletion(full);
       if (admissionIdentity !== undefined) {
         try {
-          await this._writeMessageResultEvidenceBestEffort({
-            status: 'completed',
-            signalId: signal.signal.id,
-            runId: signal.runId,
-            result: full,
-            admissionId: opts.admissionId!,
-            admissionHash: admissionHash!,
-          });
+          await this._writeMessageResultEvidenceBestEffort(
+            {
+              status: 'completed',
+              signalId: signal.signal.id,
+              runId: signal.runId,
+              result: full,
+              admissionId: opts.admissionId!,
+              admissionHash: admissionHash!,
+            },
+            { compatibleAdmissionHashes },
+          );
         } catch (err) {
           completedEvidenceWriteFailed = true;
           throw err;
@@ -2307,14 +2345,17 @@ export class Session {
         waiter?.reject(err);
       }
       if (admissionIdentity !== undefined && !completedEvidenceWriteFailed) {
-        await this._writeMessageResultEvidence({
-          status: 'failed',
-          signalId: signal.signal.id,
-          runId: signal.runId,
-          error: projectHarnessPublicError(err),
-          admissionId: opts.admissionId!,
-          admissionHash: admissionHash!,
-        }).catch(() => {});
+        await this._writeMessageResultEvidence(
+          {
+            status: 'failed',
+            signalId: signal.signal.id,
+            runId: signal.runId,
+            error: projectHarnessPublicError(err),
+            admissionId: opts.admissionId!,
+            admissionHash: admissionHash!,
+          },
+          { compatibleAdmissionHashes },
+        ).catch(() => {});
       }
       throw err;
     } finally {
@@ -2329,9 +2370,11 @@ export class Session {
   private async _resolveMessageAdmissionDuplicate({
     admissionId,
     admissionHash,
+    compatibleAdmissionHashes,
   }: {
     admissionId: string;
     admissionHash: string;
+    compatibleAdmissionHashes?: readonly string[];
   }): Promise<AgentSignalResultEvidence | OperationAdmissionTombstone | undefined> {
     const resolved = await this._storage.resolveOperationAdmissionEvidence({
       harnessName: this._record.harnessName,
@@ -2343,6 +2386,12 @@ export class Session {
     });
     if (resolved.status === 'none') return undefined;
     if (resolved.status === 'conflict') {
+      if (
+        resolved.storedAdmissionHash !== undefined &&
+        compatibleAdmissionHashes?.includes(resolved.storedAdmissionHash)
+      ) {
+        return resolved.evidence as AgentSignalResultEvidence | OperationAdmissionTombstone | undefined;
+      }
       throw new HarnessAdmissionConflictError(this.id, admissionId, resolved.storedAdmissionHash ?? '', admissionHash);
     }
     return resolved.evidence as AgentSignalResultEvidence | OperationAdmissionTombstone | undefined;
@@ -2355,7 +2404,7 @@ export class Session {
     if ('status' in evidence) {
       if (opts.stream === true) {
         if (evidence.status === 'pending') {
-          const agent = this._harness.getAgentForMode(opts.mode ?? this._record.modeId);
+          const agent = this._harness.getAgentForMode(this._messageDuplicateModeId(evidence, opts));
           await this._ensureThreadSubscription(agent);
           const runId = await this._pendingMessageRunId(evidence);
           if (runId && this._completedRuns.has(runId)) {
@@ -2413,7 +2462,7 @@ export class Session {
       if (evidence.status === 'failed') throw publicErrorProjectionToError(evidence.error);
       const runId = await this._pendingMessageRunId(evidence);
       if (runId) {
-        const agent = this._harness.getAgentForMode(opts.mode ?? this._record.modeId);
+        const agent = this._harness.getAgentForMode(this._messageDuplicateModeId(evidence, opts));
         await this._ensureThreadSubscription(agent);
         const cached = this._completedRuns.get(runId);
         if (cached) {
@@ -2448,6 +2497,11 @@ export class Session {
     } catch {
       return evidence.runId;
     }
+  }
+
+  private _messageDuplicateModeId(evidence: AgentSignalResultEvidence, opts: MessageOptions): string {
+    const starting = evidence.admissionId ? this._messageAdmissionStarts.get(evidence.admissionId) : undefined;
+    return starting?.modeId ?? opts.mode ?? this._record.modeId;
   }
 
   private _hasLiveMessageRun(agent: Agent, runId: string): boolean {
@@ -2503,6 +2557,7 @@ export class Session {
 
   private async _writeMessageResultEvidence(
     status: AgentSignalResultStatus & { admissionId?: string; admissionHash?: string },
+    options?: { compatibleAdmissionHashes?: readonly string[] },
   ): Promise<{ created: boolean }> {
     const now = Date.now();
     try {
@@ -2520,6 +2575,7 @@ export class Session {
         const duplicate = await this._resolveMessageAdmissionDuplicate({
           admissionId: status.admissionId,
           admissionHash: status.admissionHash,
+          compatibleAdmissionHashes: options?.compatibleAdmissionHashes,
         });
         if (duplicate) return { created: false };
         throw new HarnessAdmissionConflictError(this.id, status.admissionId, '', status.admissionHash);
@@ -2530,9 +2586,10 @@ export class Session {
 
   private async _writeMessageResultEvidenceBestEffort(
     status: AgentSignalResultStatus & { admissionId?: string; admissionHash?: string },
+    options?: { compatibleAdmissionHashes?: readonly string[] },
   ): Promise<void> {
     try {
-      await this._writeMessageResultEvidence(status);
+      await this._writeMessageResultEvidence(status, options);
     } catch (err) {
       if (status.admissionId !== undefined) throw err;
       // The initial pre-dispatch admission reservation is the durable barrier.
@@ -2541,12 +2598,33 @@ export class Session {
     }
   }
 
-  private _computeMessageAdmissionHash(opts: MessageOptions, stable: { modeId: string; modelId: string }): string {
-    return sha256CanonicalJson({
+  private _computeMessageAdmissionHashes(
+    opts: MessageOptions,
+    stable: { modeId: string; modelId: string },
+  ): MessageAdmissionHashes {
+    const primary = sha256CanonicalJson(this._messageAdmissionHashInput(opts, undefined, { hashVersion: 2 }));
+    // Pre-v2 evidence hashed the effective mode/model. Keep one exact legacy
+    // candidate for the current effective tuple only; old evidence does not
+    // persist enough metadata to safely infer previous defaults after drift.
+    const legacyCompatible = sha256CanonicalJson(this._messageAdmissionHashInput(opts, stable));
+    return { primary, legacyCompatible: legacyCompatible === primary ? [] : [legacyCompatible] };
+  }
+
+  private _messageAdmissionHashInput(
+    opts: MessageOptions,
+    stable?: { modeId: string; modelId: string },
+    options?: { hashVersion?: number },
+  ) {
+    return {
       kind: 'message',
+      ...(options?.hashVersion !== undefined ? { hashVersion: options.hashVersion } : {}),
       content: opts.content,
-      mode: stable.modeId,
-      model: stable.modelId,
+      ...(stable !== undefined
+        ? { mode: stable.modeId, model: stable.modelId }
+        : {
+            ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+            ...(opts.model !== undefined ? { model: opts.model } : {}),
+          }),
       attachments: (opts.attachments ?? []).map(attachment => ({
         attachmentId: attachment.attachmentId,
         resourceId: attachment.resourceId,
@@ -2555,7 +2633,7 @@ export class Session {
         ...(attachment.sha256 !== undefined ? { sha256: attachment.sha256 } : {}),
         ...(attachment.source !== undefined ? { source: attachment.source } : {}),
       })),
-    });
+    };
   }
 
   // -------------------------------------------------------------------------
