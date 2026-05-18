@@ -57,7 +57,7 @@ export const FAVORITE_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Throws 404 if the caller cannot read the agent (private + not owner/admin).
-      assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: agent });
+      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
       const result = await favoritesStore.favorite({
         userId: callerId,
@@ -101,7 +101,7 @@ export const UNFAVORITE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: agent });
+      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
       const result = await favoritesStore.unfavorite({
         userId: callerId,

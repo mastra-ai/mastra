@@ -1147,6 +1147,32 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
+    it('should allow stored-agents:* admin to update any agent (resource-scoped wildcard)', async () => {
+      // Regression: the handler's authorship layer must use the same resource
+      // string (`stored-agents`) as the RBAC permissions, otherwise an admin
+      // granted `stored-agents:*` passes route auth but is treated as a
+      // non-admin by the handler and can't edit private records of others.
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+        activeVersionId: 'v-other-1',
+      });
+
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['stored-agents:*']),
+        storedAgentId: 'other-agent',
+        name: 'Admin Updated',
+      });
+
+      expect(result).toMatchObject({
+        id: 'other-agent',
+        name: 'Admin Updated',
+      });
+    });
+
     it('should throw when non-owner tries to update avatar via metadata', async () => {
       mockAgentsData.set('other-agent', {
         id: 'other-agent',

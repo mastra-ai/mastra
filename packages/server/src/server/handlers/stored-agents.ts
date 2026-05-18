@@ -130,7 +130,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       // return the caller's rows plus legacy unowned records.
       const filter = resolveAuthorFilter({
         requestContext,
-        resource: 'agents',
+        resource: 'stored-agents',
         queryAuthorId: authorId,
         queryVisibility: visibility === 'public' ? 'public' : undefined,
       });
@@ -251,7 +251,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 
       // Throws 404 if the caller isn't the owner, admin, `agents:read[:<id>]`
       // holder, and the record isn't public/legacy-unowned.
-      assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: agent });
+      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
       const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
       if (enrichment) {
@@ -496,7 +496,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Throws 404 if the caller isn't the owner, admin, or `agents:edit[:<id>]` holder.
       assertWriteAccess({
         requestContext,
-        resource: 'agents',
+        resource: 'stored-agents',
         resourceId: storedAgentId,
         action: 'edit',
         record: existing,
@@ -666,7 +666,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       // Throws 404 if the caller isn't the owner, admin, or `agents:delete[:<id>]` holder.
       assertWriteAccess({
         requestContext,
-        resource: 'agents',
+        resource: 'stored-agents',
         resourceId: storedAgentId,
         action: 'delete',
         record: existing,

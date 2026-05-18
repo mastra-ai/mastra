@@ -145,7 +145,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
 
       const filter = resolveAuthorFilter({
         requestContext,
-        resource: 'skills',
+        resource: 'stored-skills',
         queryAuthorId: authorId,
         queryVisibility: visibility,
       });
@@ -271,7 +271,7 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       }
       assertStoredResourceScope(skill, await getStoredResourceScope(mastra, requestContext));
 
-      assertReadAccess({ requestContext, resource: 'skills', resourceId: storedSkillId, record: skill });
+      assertReadAccess({ requestContext, resource: 'stored-skills', resourceId: storedSkillId, record: skill });
 
       const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'skill', [skill.id]);
       if (enrichment) {
@@ -440,7 +440,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       // Throws 404 if the caller isn't the owner, admin, or `skills:edit[:<id>]` holder.
       assertWriteAccess({
         requestContext,
-        resource: 'skills',
+        resource: 'stored-skills',
         resourceId: storedSkillId,
         action: 'edit',
         record: existing,
@@ -530,7 +530,7 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       // Throws 404 if the caller isn't the owner, admin, or `skills:delete[:<id>]` holder.
       assertWriteAccess({
         requestContext,
-        resource: 'skills',
+        resource: 'stored-skills',
         resourceId: storedSkillId,
         action: 'delete',
         record: existing,
@@ -604,7 +604,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       // Throws 404 if the caller isn't the owner, admin, or `skills:edit[:<id>]` holder.
       assertWriteAccess({
         requestContext,
-        resource: 'skills',
+        resource: 'stored-skills',
         resourceId: storedSkillId,
         action: 'edit',
         record: existing,
