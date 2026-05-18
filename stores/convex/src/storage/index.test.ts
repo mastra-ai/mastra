@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ConvexAdminClient } from './client';
+import { ConvexDB } from './db';
 import { MemoryConvex } from './domains/memory';
 import { SchedulesConvex } from './domains/schedules';
 import { ScoresConvex } from './domains/scores';
@@ -240,6 +241,28 @@ describe('ConvexStore domains', () => {
     });
 
     expect(store.stores.schedules).toBeInstanceOf(SchedulesConvex);
+  });
+});
+
+describe('ConvexDB schedule operations', () => {
+  it('requires schedule ids before normalizing records', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.createSchedule({ cron: '* * * * *' })).rejects.toThrow('Schedule is missing an id');
+
+    expect(callStorage).not.toHaveBeenCalled();
+  });
+
+  it('requires schedule trigger ids before normalizing records', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.recordScheduleTrigger({ schedule_id: 'schedule-1' })).rejects.toThrow(
+      'Schedule trigger is missing an id',
+    );
+
+    expect(callStorage).not.toHaveBeenCalled();
   });
 });
 

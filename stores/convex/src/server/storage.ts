@@ -29,7 +29,11 @@ function normalizeScheduleQueryLimit(limit: number | undefined): number {
   return Math.max(0, Math.floor(limit));
 }
 
-function applyConvexEqualityFilters(query: any, filters: EqualityFilter[] | undefined, indexedFields = new Set<string>()) {
+function applyConvexEqualityFilters(
+  query: any,
+  filters: EqualityFilter[] | undefined,
+  indexedFields = new Set<string>(),
+) {
   const remainingFilters = filters?.filter(filter => !indexedFields.has(filter.field));
   if (!remainingFilters?.length) return query;
 
@@ -377,27 +381,25 @@ export async function handleTypedOperation(
           query = ctx.db
             .query(convexTable)
             .withIndex('by_workflow', (q: any) => q.eq('workflow_name', hint.workflowName));
-          indexedFields = new Set(['workflow_name']);
         } else if (hint.index === 'by_workflow_run') {
           query = ctx.db
             .query(convexTable)
-            .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', hint.workflowName).eq('run_id', hint.runId));
-          indexedFields = new Set(['workflow_name', 'run_id']);
+            .withIndex('by_workflow_run', (q: any) =>
+              q.eq('workflow_name', hint.workflowName).eq('run_id', hint.runId),
+            );
         } else {
           query = ctx.db.query(convexTable);
         }
       } else if (request.filters && request.filters.length > 0) {
         const match = findBestIndex(convexTable, request.filters);
         if (match) {
-          query = ctx.db
-            .query(convexTable)
-            .withIndex(match.indexName, (q: any) => {
-              let builder = q;
-              for (const filter of match.indexedFilters) {
-                builder = builder.eq(filter.field, filter.value);
-              }
-              return builder;
-            });
+          query = ctx.db.query(convexTable).withIndex(match.indexName, (q: any) => {
+            let builder = q;
+            for (const filter of match.indexedFilters) {
+              builder = builder.eq(filter.field, filter.value);
+            }
+            return builder;
+          });
           indexedFields = new Set(match.indexedFilters.map(filter => filter.field));
         } else {
           query = ctx.db.query(convexTable);

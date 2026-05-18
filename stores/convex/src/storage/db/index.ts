@@ -157,6 +157,10 @@ export class ConvexDB extends MastraBase {
   }
 
   public async createSchedule(record: Record<string, any>): Promise<void> {
+    if (!record.id) {
+      throw new Error(`Schedule is missing an id`);
+    }
+
     await this.client.callStorage({
       op: 'createSchedule',
       tableName: TABLE_SCHEDULES,
@@ -165,6 +169,10 @@ export class ConvexDB extends MastraBase {
   }
 
   public async recordScheduleTrigger(record: Record<string, any>): Promise<void> {
+    if (!record.id) {
+      throw new Error(`Schedule trigger is missing an id`);
+    }
+
     await this.client.callStorage({
       op: 'recordScheduleTrigger',
       tableName: TABLE_SCHEDULE_TRIGGERS,

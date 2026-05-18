@@ -177,6 +177,7 @@ describe('findBestIndex', () => {
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_workflow_snapshots');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_scorers');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_schedules');
+      expect(TABLE_INDEX_MAP).toHaveProperty('mastra_schedule_triggers');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_vector_indexes');
     });
 
@@ -203,6 +204,9 @@ describe('findBestIndex', () => {
 
       const scheduleWorkflowStatus = TABLE_INDEX_MAP['mastra_schedules']!.find(i => i.name === 'by_workflow_status');
       expect(scheduleWorkflowStatus!.fields).toEqual(['workflow_id', 'status']);
+
+      const scheduleActual = TABLE_INDEX_MAP['mastra_schedule_triggers']!.find(i => i.name === 'by_schedule_actual');
+      expect(scheduleActual!.fields).toEqual(['schedule_id', 'actual_fire_at']);
     });
   });
 });

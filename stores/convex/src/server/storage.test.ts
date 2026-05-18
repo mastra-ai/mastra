@@ -333,6 +333,45 @@ describe('mastraStorage schedules', () => {
     expect(take).toHaveBeenCalledWith(10_000);
   });
 
+  it('applies explicit filters even when an index hint uses the same fields', async () => {
+    const docs = [{ _id: asConvexId('snapshot-1'), id: 'snapshot-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: unknown) => builder),
+    };
+    const filterQuery = { take: vi.fn(async () => docs) };
+    const queryFilter = vi.fn((predicate: (q: any) => unknown) => {
+      const q = {
+        field: vi.fn((field: string) => ({ field })),
+        eq: vi.fn((field: unknown, value: unknown) => ({ field, value })),
+        and: vi.fn((...predicates: unknown[]) => predicates),
+      };
+      predicate(q);
+      expect(q.field).toHaveBeenCalledWith('workflow_name');
+      expect(q.eq).toHaveBeenCalledWith({ field: 'workflow_name' }, 'workflow-b');
+      return filterQuery;
+    });
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { filter: queryFilter, take: vi.fn(async () => docs) };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_workflow_snapshots', {
+      op: 'queryTable',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      filters: [{ field: 'workflow_name', value: 'workflow-b' }],
+      indexHint: { index: 'by_workflow', workflowName: 'workflow-a' },
+      limit: 10,
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(withIndex).toHaveBeenCalledWith('by_workflow', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('workflow_name', 'workflow-a');
+    expect(queryFilter).toHaveBeenCalledTimes(1);
+    expect(filterQuery.take).toHaveBeenCalledWith(20);
+  });
+
   it('lists trigger history through the schedule and actual-fire index newest first', async () => {
     const docs = [{ _id: asConvexId('trigger-1'), id: 'trigger-1' }];
     const builder: TestQueryBuilder = {
