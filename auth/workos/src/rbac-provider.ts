@@ -75,6 +75,12 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
   private useProviderPermissions: boolean;
 
   /**
+   * Auto-detected multi-role mode from WorkOS environment.
+   * null = not yet detected, true/false = detected from API response
+   */
+  private detectedMultiRole: boolean | null = null;
+
+  /**
    * Expose roleMapping for middleware access.
    * This allows the authorization middleware to resolve permissions
    * without needing to call the async methods.
@@ -124,6 +130,36 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     if (this.useProviderPermissions && options.roleMapping) {
       void this.checkSeedModeSetup();
     }
+  }
+
+  /**
+   * Check if multi-role mode is enabled in WorkOS environment.
+   * Auto-detects by checking if memberships have a `roles` array.
+   * The result is cached after first detection.
+   */
+  private isMultiRoleEnabled(): boolean {
+    // If explicitly configured, use that
+    if (this.options.multiRole !== undefined) {
+      return this.options.multiRole;
+    }
+    // If auto-detected, use cached value
+    if (this.detectedMultiRole !== null) {
+      return this.detectedMultiRole;
+    }
+    // Default to false until we detect otherwise
+    return false;
+  }
+
+  /**
+   * Detect multi-role mode from a membership object.
+   * Called when we first see a membership response from WorkOS.
+   */
+  private detectMultiRoleFromMembership(membership: any): void {
+    if (this.detectedMultiRole !== null || this.options.multiRole !== undefined) {
+      return; // Already detected or explicitly configured
+    }
+    // If membership has a `roles` array, multi-role is enabled
+    this.detectedMultiRole = Array.isArray(membership.roles);
   }
 
   /**
@@ -424,8 +460,8 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
     return {
       ...DEFAULT_RBAC_CAPABILITIES,
-      // Multi-role support depends on WorkOS environment configuration
-      multiRole: this.options.multiRole ?? false,
+      // Multi-role support auto-detected from WorkOS environment
+      multiRole: this.isMultiRoleEnabled(),
       // Dynamic roles only available in seed mode (WorkOS is source of truth)
       dynamicRoles: !isStaticMode,
       // Roles are provider-managed only in seed mode
@@ -824,6 +860,11 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       ? user.memberships.filter(m => m.organizationId === this.options.organizationId)
       : user.memberships;
 
+    // Auto-detect multi-role from first membership
+    if (relevantMemberships.length > 0) {
+      this.detectMultiRoleFromMembership(relevantMemberships[0]);
+    }
+
     // Collect all roles from all memberships
     const roles = new Set<string>();
     for (const membership of relevantMemberships) {
@@ -836,9 +877,12 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
           }
         }
       }
-      // Single-role mode: use role.slug
-      else if (membership.role?.slug) {
-        roles.add(membership.role.slug);
+      // Single-role mode: use role.slug or role string
+      else if (membership.role) {
+        const roleSlug = typeof membership.role === 'string' ? membership.role : membership.role.slug;
+        if (roleSlug) {
+          roles.add(roleSlug);
+        }
       }
     }
 
@@ -872,7 +916,10 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
     const membership = memberships.data[0]!;
 
-    if (this.options.multiRole) {
+    // Auto-detect multi-role from membership response
+    this.detectMultiRoleFromMembership(membership);
+
+    if (this.isMultiRoleEnabled()) {
       // Multi-role mode: add role to existing roles
       const membershipAny = membership as any;
       const currentRoles: string[] = Array.isArray(membershipAny.roles)
@@ -908,7 +955,7 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
    * @param roleId - The role slug to remove
    */
   async removeRole(userId: string, roleId: string): Promise<void> {
-    if (!this.options.multiRole) {
+    if (!this.isMultiRoleEnabled()) {
       throw new Error(
         'WorkOS single-role mode does not support removing roles. Use assignRole to change roles, ' +
           'or remove the membership entirely via the WorkOS dashboard.',

@@ -412,13 +412,24 @@ export class MastraAuthWorkos
         memberships.map(async membership => {
           try {
             const user = await this.workos.userManagement.getUser(membership.userId);
+            // Handle both single-role and multi-role modes
+            // WorkOS multi-role: membership.roles is an array
+            // WorkOS single-role: membership.role is an object with slug
+            const membershipAny = membership as any;
+            const roles: string[] = membershipAny.roles
+              ? membershipAny.roles.map((r: any) => (typeof r === 'string' ? r : r.slug))
+              : membershipAny.role?.slug
+                ? [membershipAny.role.slug]
+                : [];
+
             return {
               id: user.id,
               email: user.email,
               name: [user.firstName, user.lastName].filter(Boolean).join(' ') || undefined,
               avatarUrl: user.profilePictureUrl || undefined,
               metadata: {
-                role: membership.role?.slug,
+                role: roles[0], // Keep for backward compatibility
+                roles, // New: array of all roles
                 membershipId: membership.id,
                 organizationId: membership.organizationId,
                 createdAt: membership.createdAt,

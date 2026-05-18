@@ -79,9 +79,19 @@ function TeamMemberRow({ member, canManageRoles }: { member: TeamMember; canMana
               {/* Email - fixed width */}
               <div className="w-52 shrink-0 text-text2 text-sm truncate pr-4">{member.email || '—'}</div>
 
-              {/* Role - fixed width */}
-              <div className="w-24 shrink-0 pr-4">
-                {member.role ? <Badge variant="default">{member.role}</Badge> : <span className="text-text2">—</span>}
+              {/* Role(s) - fixed width */}
+              <div className="w-32 shrink-0 pr-4 flex flex-wrap gap-1">
+                {member.roles && member.roles.length > 0 ? (
+                  member.roles.map(role => (
+                    <Badge key={role} variant="default">
+                      {role}
+                    </Badge>
+                  ))
+                ) : member.role ? (
+                  <Badge variant="default">{member.role}</Badge>
+                ) : (
+                  <span className="text-text2">—</span>
+                )}
               </div>
 
               {/* Last Active - fixed width */}

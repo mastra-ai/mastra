@@ -777,6 +777,7 @@ export const GET_TEAM_MEMBERS_ROUTE = createRoute({
           name: user.name,
           avatarUrl: user.avatarUrl,
           role: (user.metadata as any)?.role,
+          roles: (user.metadata as any)?.roles || [], // New: array of all roles
           createdAt: (user.metadata as any)?.createdAt,
           lastActiveAt: (user.metadata as any)?.lastActiveAt,
         })),
