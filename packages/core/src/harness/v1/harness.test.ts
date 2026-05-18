@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
+import type { ChannelProvider } from '../../channels';
 import { Mastra } from '../../mastra';
 import {
   HarnessStorage,
@@ -34,6 +35,7 @@ import {
   HarnessSessionNotFoundError,
 } from './errors';
 import { Harness } from './harness';
+import type { HarnessChannelConfig } from './types';
 
 function makeAgent(name = 'test-agent') {
   return new Agent({
@@ -48,6 +50,30 @@ function makeStorage() {
   const db = new InMemoryDB();
   const storage = new InMemoryHarness({ db });
   return storage;
+}
+
+function makeChannelProvider(id = 'slack'): ChannelProvider {
+  return {
+    id,
+    getRoutes: () => [],
+  };
+}
+
+function makeHarnessChannelConfig(overrides: Partial<HarnessChannelConfig> = {}): HarnessChannelConfig {
+  return {
+    providerId: 'slack',
+    platform: 'slack',
+    adapter: {
+      deliver: async () => ({}),
+    },
+    ingress: {
+      resolveResource: async () => ({
+        resourceId: 'resource-1',
+        mode: 'shared-resource',
+      }),
+    },
+    ...overrides,
+  };
 }
 
 function deferred() {
@@ -100,6 +126,260 @@ function makeHarness(overrides?: Partial<ConstructorParameters<typeof Harness>[0
 describe('Harness v1 — construction', () => {
   it('accepts a valid config', () => {
     expect(() => makeHarness()).not.toThrow();
+  });
+
+  it('registers harness channel bindings with stable durable identity', () => {
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      channels: {
+        support: makeHarnessChannelConfig({
+          bindingId: 'support-binding',
+          callbackTarget: 'slack-support-webhook',
+        }),
+      },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+
+    expect(harness.listChannelBindings()).toEqual([
+      {
+        harnessName: 'primary',
+        channelId: 'support',
+        bindingId: 'support-binding',
+        providerId: 'slack',
+        platform: 'slack',
+        callbackTarget: 'slack-support-webhook',
+        durableId: 'primary:support:support-binding',
+      },
+    ]);
+    expect(harness.getChannelBinding('support')).toMatchObject({
+      harnessName: 'primary',
+      channelId: 'support',
+      providerId: 'slack',
+    });
+    expect(harness.getChannelBinding('missing')).toBeUndefined();
+  });
+
+  it('does not validate harness names for durable channel ids when no channels are configured', () => {
+    expect(
+      () =>
+        new Mastra({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          harnesses: {
+            'legacy.name:ok-without-channels': new Harness({
+              modes: [{ id: 'default', agentId: 'default' }],
+              defaultModeId: 'default',
+            }),
+          },
+        }),
+    ).not.toThrow();
+  });
+
+  it('rejects harness channel bindings that reference a missing provider', () => {
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      channels: {
+        support: makeHarnessChannelConfig({ providerId: 'missing', platform: 'missing' }),
+      },
+    });
+
+    expect(
+      () =>
+        new Mastra({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          channels: { slack: makeChannelProvider('slack') },
+          harnesses: { primary: harness },
+        }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('rolls back Mastra binding when harness channel provider validation fails', () => {
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      channels: {
+        support: makeHarnessChannelConfig({ providerId: 'missing', platform: 'missing' }),
+      },
+    });
+
+    expect(
+      () =>
+        new Mastra({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          channels: { slack: makeChannelProvider('slack') },
+          harnesses: { primary: harness },
+        }),
+    ).toThrow(HarnessConfigError);
+
+    expect(
+      () =>
+        new Mastra({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          channels: { missing: makeChannelProvider('missing') },
+          harnesses: { primary: harness },
+        }),
+    ).not.toThrow();
+    expect(harness.getChannelBinding('support')).toMatchObject({
+      providerId: 'missing',
+      durableId: 'primary:support:support',
+    });
+  });
+
+  it('rejects duplicate harness channel binding ids', () => {
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          channels: {
+            support: makeHarnessChannelConfig({ bindingId: 'shared-binding' }),
+            alerts: makeHarnessChannelConfig({ bindingId: 'shared-binding' }),
+          },
+        }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('rejects harness channel ids or binding ids that cannot form stable durable ids', () => {
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          channels: {
+            'support:slack': makeHarnessChannelConfig(),
+          },
+        }),
+    ).toThrow(HarnessConfigError);
+
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          channels: {
+            support: makeHarnessChannelConfig({ bindingId: 'support:binding' }),
+          },
+        }),
+    ).toThrow(HarnessConfigError);
+
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      channels: {
+        support: makeHarnessChannelConfig(),
+      },
+    });
+    expect(
+      () =>
+        new Mastra({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          channels: { slack: makeChannelProvider('slack') },
+          harnesses: { 'primary:bad': harness },
+        }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('rejects harness channel adapters without a delivery function', () => {
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          channels: {
+            support: makeHarnessChannelConfig({ adapter: {} as any }),
+          },
+        }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('rejects harness channel callback targets that cannot be routed', () => {
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          channels: {
+            support: makeHarnessChannelConfig({ callbackTarget: '' }),
+          },
+        }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('rejects inline agents with harness channels because no channel providers are available', () => {
+    expect(
+      () =>
+        new Harness({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          modes: [{ id: 'default', agentId: 'default' }],
+          defaultModeId: 'default',
+          channels: {
+            support: makeHarnessChannelConfig(),
+          },
+        }),
+    ).toThrow(/channel bindings require a Mastra with channel providers/);
+  });
+
+  it('rejects harness channel platform mismatches with the registered provider', () => {
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      channels: {
+        support: makeHarnessChannelConfig({ platform: 'discord' }),
+      },
+    });
+
+    expect(
+      () =>
+        new Mastra({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          channels: { slack: makeChannelProvider('slack') },
+          harnesses: { primary: harness },
+        }),
+    ).toThrow(HarnessConfigError);
+  });
+
+  it('coexists with existing AgentChannels route registration', () => {
+    const agent = makeAgent();
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      channels: {
+        support: makeHarnessChannelConfig(),
+      },
+    });
+    const mastra = new Mastra({
+      agents: { default: agent },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+
+    expect(mastra.getChannels()).toEqual({});
+    expect(mastra.getChannelProvider('slack')).toBeDefined();
+    expect(harness.listChannelBindings()).toHaveLength(1);
   });
 
   it('throws HarnessConfigError for unknown agentId on a mode', () => {

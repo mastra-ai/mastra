@@ -13,6 +13,7 @@ import type { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
+import type { ChannelProvider } from '../../channels';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage/base';
@@ -154,6 +155,193 @@ export interface ModelInfo {
  * {@link HarnessConfigCommon.modelAuthStatusResolver} is configured).
  */
 export type ModelAuthStatus = 'authenticated' | 'needs_auth' | 'unknown';
+
+// ---------------------------------------------------------------------------
+// Harness channel registry (§9.3 / §14.1).
+//
+// PF-369 wires static provider/binding registration and validation only.
+// Ingress/action/outbox workers consume these descriptors in later slices.
+// ---------------------------------------------------------------------------
+
+export type ChannelConversationKind = 'dm' | 'group-dm' | 'channel' | 'thread';
+export type ChannelIngressTrigger = 'message' | 'mention' | 'subscribed-message' | 'command';
+export type ChannelIngressDelivery = 'message' | 'queue';
+export type ChannelBindingMode = 'per-user-resource' | 'shared-resource' | 'thread-resource' | 'custom';
+export type ChannelDeliverySemantics = 'native-idempotency' | 'client-message-id' | 'lookup-reconcile' | 'at-least-once';
+export type ChannelOutboxOperationKind =
+  | 'message-create'
+  | 'message-edit'
+  | 'reaction-add'
+  | 'reaction-remove'
+  | 'file-upload'
+  | 'custom';
+
+export interface HarnessChannelTransportRequest {
+  method: string;
+  path: string;
+  url?: string;
+  headers: Record<string, string | string[]>;
+  query?: Record<string, string | string[]>;
+  rawBody?: Uint8Array | string;
+  body?: unknown;
+  receivedAt?: number;
+}
+
+export interface ChannelActorContext {
+  platformUserId: string;
+  displayName?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface ChannelIngressEnvelope {
+  platform: string;
+  conversationKind: ChannelConversationKind;
+  trigger: ChannelIngressTrigger;
+  externalTenantId?: string;
+  externalChannelId?: string;
+  externalThreadId: string;
+  externalMessageId: string;
+  content: string;
+  actor?: ChannelActorContext;
+  files?: AttachmentRef[];
+  receivedAt: number;
+  raw?: unknown;
+}
+
+export interface ChannelActionEnvelope {
+  actionId: string;
+  token: string;
+  response: unknown;
+  actor?: ChannelActorContext;
+  raw?: unknown;
+}
+
+export interface HarnessChannelRouteContext {
+  harnessName: string;
+  channelId: string;
+  providerId: string;
+  platform: string;
+  provider: ChannelProvider;
+  route: 'inbound' | 'action';
+}
+
+export interface ChannelIngressContext extends ChannelIngressEnvelope {
+  harnessName: string;
+  channelId: string;
+  providerId: string;
+}
+
+export interface ChannelOutboxEnqueueOptions {
+  bindingId: string;
+  operationKind: ChannelOutboxOperationKind;
+  operationName?: string;
+  payload: JsonValue;
+}
+
+export interface ChannelProviderDeliveryReceipt {
+  id: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface ChannelOutboxItem extends ChannelOutboxEnqueueOptions {
+  id: string;
+  harnessName: string;
+  channelId: string;
+  providerId: string;
+  platform: string;
+  deliverySemantics: ChannelDeliverySemantics;
+  attempt: number;
+  createdAt: number;
+}
+
+export interface HarnessChannelDeliveryContext extends Omit<HarnessChannelRouteContext, 'route'> {
+  binding: HarnessChannelBinding;
+}
+
+export interface ChannelOutboxDeliveryPlan {
+  operationKind: ChannelOutboxOperationKind;
+  operationName?: string;
+  deliverySemantics: ChannelDeliverySemantics;
+}
+
+export interface HarnessChannelAdapter {
+  verifyInbound?(
+    request: HarnessChannelTransportRequest,
+    ctx: HarnessChannelRouteContext,
+  ): Promise<ChannelIngressEnvelope>;
+  verifyAction?(request: HarnessChannelTransportRequest, ctx: HarnessChannelRouteContext): Promise<ChannelActionEnvelope>;
+  deliverySemantics?: ChannelDeliverySemantics;
+  deliverySemanticsByOperation?: Partial<Record<ChannelOutboxOperationKind, ChannelDeliverySemantics>>;
+  resolveDeliveryPlan?(
+    item: ChannelOutboxEnqueueOptions,
+    ctx: HarnessChannelDeliveryContext,
+  ): Promise<ChannelOutboxDeliveryPlan> | ChannelOutboxDeliveryPlan;
+  reconcileDelivery?(
+    item: ChannelOutboxItem,
+    ctx: HarnessChannelDeliveryContext,
+  ): Promise<{
+    delivered: boolean;
+    providerMessageId?: string;
+    providerReceipt?: ChannelProviderDeliveryReceipt;
+  }>;
+  deliver(
+    item: ChannelOutboxItem,
+    ctx: HarnessChannelDeliveryContext,
+  ): Promise<{
+    providerMessageId?: string;
+    providerReceipt?: ChannelProviderDeliveryReceipt;
+  }>;
+}
+
+export interface ChannelIngressPolicy {
+  defaultDelivery?: ChannelIngressDelivery;
+  dms?: 'per-user-resource' | 'shared-resource' | 'reject';
+  mentions?: 'thread-resource' | 'shared-resource' | 'reject';
+  sharedThreads?: 'shared-resource' | 'reject';
+  resolveResource(ctx: ChannelIngressContext): Promise<{
+    resourceId: string;
+    threadId?: string;
+    sessionId?: string;
+    mode: ChannelBindingMode;
+    admission?: {
+      delivery?: ChannelIngressDelivery;
+      mode?: string;
+      model?: string;
+    };
+  }>;
+}
+
+export interface HarnessChannelWorkerConfig {
+  maxAttempts?: number;
+  claimTtlMs?: number;
+  claimRenewMs?: number;
+  maxClockSkewMs?: number;
+  batchSize?: number;
+  pollIntervalMs?: number;
+  retryBackoffMs?: (attempt: number) => number;
+}
+
+export interface HarnessChannelConfig {
+  providerId?: string;
+  platform?: string;
+  adapter: HarnessChannelAdapter;
+  ingress: ChannelIngressPolicy;
+  bindingId?: string;
+  callbackTarget?: string;
+  inbox?: HarnessChannelWorkerConfig;
+  actions?: HarnessChannelWorkerConfig;
+  outbox?: HarnessChannelWorkerConfig;
+}
+
+export interface HarnessChannelBinding {
+  harnessName: string;
+  channelId: string;
+  bindingId: string;
+  providerId: string;
+  platform: string;
+  callbackTarget: string;
+  durableId: string;
+}
 
 // ---------------------------------------------------------------------------
 // HarnessSkill (§4.6).
@@ -476,6 +664,17 @@ export interface HarnessConfigCommon {
    * If omitted, every authenticated lookup resolves to `'unknown'`.
    */
   modelAuthStatusResolver?: (modelId: string) => ModelAuthStatus | Promise<ModelAuthStatus>;
+
+  /**
+   * Harness channel bridge configuration (§9.3 / §14). Each record binds a
+   * harness-local `channelId` to a registered Mastra `ChannelProvider`.
+   * When set, construct with a parent `mastra` or register the harness through
+   * `new Mastra({ channels, harnesses })` so provider bindings exist.
+   *
+   * PF-369 validates identity only. Later channel PRs consume these bindings
+   * to mount ingress/action routes and durable inbox/outbox workers.
+   */
+  channels?: Record<string, HarnessChannelConfig>;
 
   /**
    * Workspace configuration (§2.7). Selects one of three ownership models —

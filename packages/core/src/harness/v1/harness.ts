@@ -46,6 +46,7 @@ import type { MemoryStorage } from '../../storage/domains/memory/base';
 import { InMemoryStore } from '../../storage/mock';
 import type { Workspace } from '../../workspace';
 
+import { HarnessChannelRegistry } from './channel-registry';
 import {
   HarnessAttachmentInUseError,
   HarnessConfigError,
@@ -67,6 +68,7 @@ import type {
   AttachmentDeleteOptions,
   AttachmentRef,
   AttachmentUploadOptions,
+  HarnessChannelBinding,
   HarnessConfig,
   HarnessMode,
   HarnessSkill,
@@ -321,6 +323,7 @@ export class Harness {
   private readonly _modelCatalog: ReadonlyMap<string, ModelInfo>;
   private readonly _modelAuthStatusResolver?: (modelId: string) => ModelAuthStatus | Promise<ModelAuthStatus>;
   private readonly _codeSkills: ReadonlyMap<string, HarnessSkill>;
+  private readonly _channelRegistry: HarnessChannelRegistry;
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -490,6 +493,8 @@ export class Harness {
     }
     this._codeSkills = codeSkills;
 
+    this._channelRegistry = new HarnessChannelRegistry(config.channels);
+
     // Workspace (§2.7). Three ownership models; registry handles lifecycle.
     // Cross-checks against the subagent registry happen below.
     this._workspaceKind = config.workspace?.kind;
@@ -568,6 +573,12 @@ export class Harness {
     if (config.mastra) {
       this._bindMastra(config.mastra);
     } else if (config.agents !== undefined || config.storage !== undefined) {
+      if (this._channelRegistry.hasPending()) {
+        throw new HarnessConfigError(
+          'channels',
+          'channel bindings require a Mastra with channel providers; pass `mastra` or register the harness on a parent Mastra',
+        );
+      }
       const storage = config.storage ?? new InMemoryStore();
       const internal = new Mastra({
         agents: config.agents,
@@ -620,11 +631,23 @@ export class Harness {
 
     if (this._mastra === mastra) {
       if (harnessName !== undefined) {
+        const previousHarnessName = this._harnessName;
+        const previousRegisteredHarnessName = this._registeredHarnessName;
+        const previousGuardPreboundDefaultNamespace = this._guardPreboundDefaultNamespace;
         if (this._registeredHarnessName === undefined && this._harnessName === 'default' && harnessName !== 'default') {
           this._guardPreboundDefaultNamespace = true;
         }
         this._harnessName = harnessName;
         this._registeredHarnessName = harnessName;
+        try {
+          this._channelRegistry.bind(mastra, this._harnessName);
+        } catch (err) {
+          this._harnessName = previousHarnessName;
+          this._registeredHarnessName = previousRegisteredHarnessName;
+          this._guardPreboundDefaultNamespace = previousGuardPreboundDefaultNamespace;
+          this._channelRegistry.bind(mastra, previousHarnessName);
+          throw err;
+        }
       }
       return;
     }
@@ -692,7 +715,14 @@ export class Harness {
     }
     boundHarnesses.add(this);
     this._mastra = mastra;
-    this._trackMemoryStorage(mastra.getStorage()?.stores?.memory);
+    try {
+      this._channelRegistry.bind(mastra, this._harnessName);
+      this._trackMemoryStorage(mastra.getStorage()?.stores?.memory);
+    } catch (err) {
+      boundHarnesses.delete(this);
+      this._mastra = undefined;
+      throw err;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -830,6 +860,25 @@ export class Harness {
    */
   getMode(modeId: string): HarnessMode | undefined {
     return this._modesById.get(modeId);
+  }
+
+  /**
+   * Enumerate Harness channel bindings after the harness is bound to Mastra.
+   * Once parent registration completes, the returned durable ids include the
+   * resolved harness namespace and are stable inputs for later route, ingress,
+   * and outbox workers.
+   */
+  listChannelBindings(): HarnessChannelBinding[] {
+    void this.mastra;
+    return this._channelRegistry.list();
+  }
+
+  /**
+   * Look up one registered Harness channel binding by `channelId`.
+   */
+  getChannelBinding(channelId: string): HarnessChannelBinding | undefined {
+    void this.mastra;
+    return this._channelRegistry.get(channelId);
   }
 
   // -------------------------------------------------------------------------
