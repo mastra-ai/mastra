@@ -245,7 +245,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           return;
         }
 
-        const snapshot = workspaceNs.snapshotFromWorkspace(runtimeWorkspace);
+        const snapshot = await workspaceNs.snapshotFromWorkspace(runtimeWorkspace);
         await workspaceNs.create({
           id: workspaceRef.workspaceId,
           metadata: { source: 'builder', builderWorkspaceId: workspaceRef.workspaceId },

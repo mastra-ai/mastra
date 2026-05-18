@@ -184,7 +184,7 @@ export class MastraEditor implements IMastraEditor {
     const runtimeWorkspace = this.__mastra?.getWorkspaceById(workspaceRef.workspaceId);
     if (!runtimeWorkspace) return;
 
-    const snapshot = this.workspace.snapshotFromWorkspace(runtimeWorkspace);
+    const snapshot = await this.workspace.snapshotFromWorkspace(runtimeWorkspace);
     const builderMetadata = { source: 'builder' as const, builderWorkspaceId: workspaceRef.workspaceId };
 
     const existing = await this.workspace.getById(workspaceRef.workspaceId);
