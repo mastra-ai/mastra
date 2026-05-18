@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   normalizeQueryParams,
+  redactSensitiveQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type Koa from 'koa';
@@ -1004,7 +1005,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       };
 
       if (server.httpLoggingConfig?.includeQueryParams) {
-        logData.query = ctx.query;
+        logData.query = redactSensitiveQueryParams(ctx.query);
       }
 
       if (server.httpLoggingConfig?.includeHeaders) {

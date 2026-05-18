@@ -3,7 +3,9 @@
  */
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MASTRA_AUTH_TOKEN_KEY, MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { MastraServer } from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
@@ -14,6 +16,10 @@ class TestMastraServer extends MastraServer<any, any, any> {
   registerContextMiddleware = vi.fn();
   registerAuthMiddleware = vi.fn();
   registerHttpLoggingMiddleware = vi.fn();
+
+  checkAuthForTest(route: any, context: any) {
+    return this.checkRouteAuth(route, context);
+  }
 }
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
@@ -192,6 +198,267 @@ describe('FGA Middleware - checkRouteFGA', () => {
         context: { resourceId: 'tenant-1:resource-1', requestContext },
       },
     );
+  });
+});
+
+describe('Harness route auth boundary', () => {
+  function makeRoute(path: string, extra: Record<string, unknown> = {}) {
+    return {
+      method: 'GET',
+      path,
+      responseType: 'json',
+      handler: async () => ({}),
+      ...extra,
+    } as any;
+  }
+
+  function makeContext({
+    path,
+    query = {},
+    headers = {},
+    request = new Request(`http://localhost${path}`),
+    requestContext = new RequestContext(),
+  }: {
+    path: string;
+    query?: Record<string, unknown>;
+    headers?: Record<string, string | undefined>;
+    request?: Request;
+    requestContext?: RequestContext;
+  }) {
+    return {
+      path,
+      method: 'GET',
+      getHeader: (name: string) => headers[name.toLowerCase()],
+      getQuery: (name: string) => query[name],
+      requestContext,
+      request,
+      buildAuthorizeContext: () => null,
+    };
+  }
+
+  it('rejects bearer-equivalent query credentials on Harness routes before principal resolution', async () => {
+    const authenticateToken = vi.fn(async () => ({ id: 'user-1' }));
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          protected: ['/api/*'],
+          authenticateToken,
+          mapUserToResourceId: () => 'resource-1',
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const requestContext = new RequestContext();
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/harness/:harnessName/sessions'),
+      makeContext({
+        path: '/api/harness/default/sessions',
+        query: { apiKey: 'secret' },
+        requestContext,
+      }),
+    );
+
+    expect(result).toEqual({
+      status: 400,
+      error: 'Bearer-equivalent query credentials are not accepted on Harness routes: apiKey',
+    });
+    expect(authenticateToken).not.toHaveBeenCalled();
+    expect(requestContext.get(MASTRA_AUTH_TOKEN_KEY)).toBeUndefined();
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+  });
+
+  it('rejects Harness query credentials even when an Authorization header is present', async () => {
+    const authenticateToken = vi.fn(async () => ({ id: 'user-1' }));
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          protected: ['/api/*'],
+          authenticateToken,
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/harness/:harnessName/sessions'),
+      makeContext({
+        path: '/api/harness/default/sessions',
+        query: { apiKey: 'secret' },
+        headers: { authorization: 'Bearer header-secret' },
+      }),
+    );
+
+    expect(result).toEqual({
+      status: 400,
+      error: 'Bearer-equivalent query credentials are not accepted on Harness routes: apiKey',
+    });
+    expect(authenticateToken).not.toHaveBeenCalled();
+  });
+
+  it('forces auth for Harness routes outside the protected API prefix', async () => {
+    const authenticateToken = vi.fn(async (token: string) => (token === 'header-secret' ? { id: 'user-1' } : null));
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          protected: ['/api/*'],
+          public: ['/harness/*'],
+          authenticateToken,
+          mapUserToResourceId: () => 'resource-1',
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const requestContext = new RequestContext();
+    const request = new Request('http://localhost/harness/default/sessions', {
+      headers: { authorization: 'Bearer header-secret' },
+    });
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/harness/:harnessName/sessions'),
+      makeContext({
+        path: '/harness/default/sessions',
+        headers: { authorization: 'Bearer header-secret' },
+        request,
+        requestContext,
+      }),
+    );
+
+    expect(result).toBeNull();
+    expect(authenticateToken).toHaveBeenCalledWith('header-secret', request);
+    expect(requestContext.get(MASTRA_AUTH_TOKEN_KEY)).toBe('header-secret');
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
+  });
+
+  it('preserves the legacy apiKey query fallback for non-Harness routes', async () => {
+    const authenticateToken = vi.fn(async (token: string) => (token === 'secret' ? { id: 'user-1' } : null));
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          protected: ['/api/*'],
+          authenticateToken,
+          mapUserToResourceId: () => 'resource-1',
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const requestContext = new RequestContext();
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/agents/:agentId'),
+      makeContext({
+        path: '/api/agents/agent-1',
+        query: { apiKey: 'secret' },
+        requestContext,
+      }),
+    );
+
+    expect(result).toBeNull();
+    expect(authenticateToken).toHaveBeenCalledWith('secret', expect.any(Request));
+    expect(requestContext.get(MASTRA_AUTH_TOKEN_KEY)).toBe('secret');
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
+  });
+
+  it('allows scoped SSE subscription tokens only when route metadata opts in', async () => {
+    const authenticateToken = vi.fn(async (token: string, request: Request) => {
+      const url = new URL(request.url);
+      return !token && url.searchParams.get('subscriptionToken') === 'scoped' ? { id: 'user-1' } : null;
+    });
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          protected: ['/api/*'],
+          authenticateToken,
+          mapUserToResourceId: () => 'resource-1',
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const requestContext = new RequestContext();
+    const request = new Request('http://localhost/api/harness/default/sessions/session-1/events?subscriptionToken=scoped');
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/harness/:harnessName/sessions/:sessionId/events', {
+        harnessAuth: { allowSseSubscriptionToken: true },
+      }),
+      makeContext({
+        path: '/api/harness/default/sessions/session-1/events',
+        query: { subscriptionToken: 'scoped' },
+        request,
+        requestContext,
+      }),
+    );
+
+    expect(result).toBeNull();
+    expect(authenticateToken).toHaveBeenCalledWith('', request);
+    expect(requestContext.get(MASTRA_AUTH_TOKEN_KEY)).toBeUndefined();
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
+  });
+
+  it('rejects scoped SSE subscription tokens on other Harness routes', async () => {
+    const authenticateToken = vi.fn(async () => ({ id: 'user-1' }));
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          protected: ['/api/*'],
+          authenticateToken,
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/harness/:harnessName/sessions/:sessionId'),
+      makeContext({
+        path: '/api/harness/default/sessions/session-1',
+        query: { subscriptionToken: 'scoped' },
+      }),
+    );
+
+    expect(result).toEqual({
+      status: 400,
+      error: 'Scoped Harness SSE subscription tokens are only accepted on the session events route',
+    });
+    expect(authenticateToken).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a Harness route has no server auth configuration', async () => {
+    const mastra = new Mastra({});
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/harness/:harnessName/sessions'),
+      makeContext({ path: '/api/harness/default/sessions' }),
+    );
+
+    expect(result).toEqual({
+      status: 500,
+      error: 'Harness routes require server auth configuration',
+    });
+  });
+
+  it('fails closed when a Harness route opts out of auth', async () => {
+    const authenticateToken = vi.fn(async () => ({ id: 'user-1' }));
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          protected: ['/api/*'],
+          authenticateToken,
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    const result = await adapter.checkAuthForTest(
+      makeRoute('/harness/:harnessName/sessions', { requiresAuth: false }),
+      makeContext({ path: '/api/harness/default/sessions' }),
+    );
+
+    expect(result).toEqual({
+      status: 500,
+      error: 'Harness routes require authentication',
+    });
+    expect(authenticateToken).not.toHaveBeenCalled();
   });
 });
 

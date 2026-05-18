@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
+import type { HarnessRouteAuthConfig } from '../../auth/helpers';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import type { AGENT_BUILDER_ROUTES } from './agent-builder';
@@ -154,6 +155,12 @@ export type ServerRoute<
       | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
     permission?: MastraFGAPermissionInput;
   };
+  /**
+   * Harness-specific route auth metadata. The server auth boundary uses this
+   * to reject bearer-equivalent query credentials and to keep the optional SSE
+   * subscription-token fallback route-scoped.
+   */
+  harnessAuth?: HarnessRouteAuthConfig;
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;

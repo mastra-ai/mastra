@@ -3,11 +3,16 @@ import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it } from 'vitest';
 
 import {
+  allowsHarnessSseSubscriptionToken,
   canAccessPublicly,
   checkRules,
+  findBearerEquivalentHarnessQueryParam,
+  getHarnessSseSubscriptionTokenQueryParam,
+  hasHarnessSseSubscriptionToken,
   coreAuthMiddleware,
   isCustomRoutePublic,
   isDevPlaygroundRequest,
+  isHarnessClientRoute,
   isProtectedCustomRoute,
   isProtectedPath,
   matchesOrIncludes,
@@ -17,6 +22,47 @@ import {
 } from './helpers';
 
 describe('auth helpers', () => {
+  describe('Harness route auth helpers', () => {
+    function getQuery(params: Record<string, unknown>) {
+      return (name: string) => params[name];
+    }
+
+    it('detects built-in Harness route paths as client routes', () => {
+      expect(isHarnessClientRoute({ path: '/harness/:harnessName/sessions' })).toBe(true);
+      expect(isHarnessClientRoute({ path: '/agents/:agentId' })).toBe(false);
+    });
+
+    it('allows route metadata to mark future mounted Harness routes', () => {
+      expect(isHarnessClientRoute({ path: '/events', harnessAuth: { clientRoute: true } })).toBe(true);
+    });
+
+    it('finds bearer-equivalent query credentials for Harness rejection', () => {
+      expect(findBearerEquivalentHarnessQueryParam(getQuery({ apiKey: 'secret' }))).toBe('apiKey');
+      expect(findBearerEquivalentHarnessQueryParam(getQuery({ access_token: 'secret' }))).toBe('access_token');
+      expect(findBearerEquivalentHarnessQueryParam(getQuery({ apikey: 'secret' }))).toBe('apikey');
+      expect(findBearerEquivalentHarnessQueryParam(getQuery({ authtoken: 'secret' }))).toBe('authtoken');
+      expect(findBearerEquivalentHarnessQueryParam(getQuery({ token: [' ', 'secret'] }))).toBe('token');
+      expect(findBearerEquivalentHarnessQueryParam(getQuery({ apiKey: { nested: 'secret' } }))).toBeNull();
+      expect(findBearerEquivalentHarnessQueryParam(getQuery({ subscriptionToken: 'scoped' }))).toBeNull();
+    });
+
+    it('keeps the scoped SSE token on the session events route or explicit metadata', () => {
+      const route = { path: '/harness/:harnessName/sessions/:sessionId/events' };
+      expect(getHarnessSseSubscriptionTokenQueryParam(route)).toBe('subscriptionToken');
+      expect(hasHarnessSseSubscriptionToken(route, getQuery({ subscriptionToken: 'scoped' }))).toBe(true);
+      expect(allowsHarnessSseSubscriptionToken(route)).toBe(true);
+      expect(allowsHarnessSseSubscriptionToken({ path: '/harness/:name/sessions/:sessionId/events' })).toBe(true);
+      expect(allowsHarnessSseSubscriptionToken({ path: '/harness/:harnessName/sessions/:sessionId' })).toBe(false);
+
+      expect(
+        allowsHarnessSseSubscriptionToken({
+          path: '/future-harness-events',
+          harnessAuth: { allowSseSubscriptionToken: true },
+        }),
+      ).toBe(true);
+    });
+  });
+
   describe('pathMatchesPattern', () => {
     it('should match exact paths', () => {
       expect(pathMatchesPattern('/api/users', '/api/users')).toBe(true);
@@ -614,6 +660,25 @@ describe('auth helpers', () => {
 
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('org-456:user-123');
     });
+
+    it('should prefer the auth-derived resource ID over caller-supplied context', async () => {
+      const requestContext = createRequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'caller-resource');
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => 'auth-resource',
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('auth-resource');
+    });
+
     it('should not set resource ID when mapUserToResourceId returns null', async () => {
       const requestContext = createRequestContext();
 

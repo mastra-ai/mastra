@@ -9,6 +9,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   normalizeQueryParams,
+  redactSensitiveQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
@@ -737,7 +738,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       };
 
       if (this.httpLoggingConfig?.includeQueryParams) {
-        logData.query = c.req.query();
+        logData.query = redactSensitiveQueryParams(c.req.query());
       }
 
       if (this.httpLoggingConfig?.includeHeaders) {

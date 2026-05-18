@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   normalizeQueryParams,
+  redactSensitiveQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
@@ -717,7 +718,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         };
 
         if (this.httpLoggingConfig?.includeQueryParams) {
-          logData.query = req.query;
+          logData.query = redactSensitiveQueryParams(req.query);
         }
 
         if (this.httpLoggingConfig?.includeHeaders) {

@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import type { HttpLoggingConfig } from '@mastra/core/server';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { MastraServer } from './index';
+import { MastraServer, redactSensitiveQueryParams } from './index';
 
 // Mock server adapter for testing
 class TestMastraServer extends MastraServer<any, any, any> {
@@ -246,6 +246,30 @@ describe('HTTP Logging Configuration', () => {
       await adapter.init();
 
       expect(adapter.registerHttpLoggingMiddleware).toHaveBeenCalled();
+    });
+  });
+
+  describe('redactSensitiveQueryParams', () => {
+    it('redacts credential-like query params while preserving ordinary params', () => {
+      expect(
+        redactSensitiveQueryParams({
+          foo: 'bar',
+          subscriptionToken: 'scoped',
+          apiKey: 'secret',
+          access_token: 'secret',
+          'apiKey[0]': 'secret',
+          'token.value': 'secret',
+          'access_token[1]': 'secret',
+        }),
+      ).toEqual({
+        foo: 'bar',
+        subscriptionToken: '[REDACTED]',
+        apiKey: '[REDACTED]',
+        access_token: '[REDACTED]',
+        'apiKey[0]': '[REDACTED]',
+        'token.value': '[REDACTED]',
+        'access_token[1]': '[REDACTED]',
+      });
     });
   });
 });

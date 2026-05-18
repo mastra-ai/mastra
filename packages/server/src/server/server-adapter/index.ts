@@ -10,7 +10,14 @@ import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware } from '../auth/helpers';
+import {
+  allowsHarnessSseSubscriptionToken,
+  coreAuthMiddleware,
+  findBearerEquivalentHarnessQueryParam,
+  HARNESS_SSE_SUBSCRIPTION_TOKEN_QUERY_PARAM,
+  hasHarnessSseSubscriptionToken,
+  isHarnessClientRoute,
+} from '../auth/helpers';
 import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
@@ -98,6 +105,35 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+const SENSITIVE_QUERY_PARAMS = new Set([
+  HARNESS_SSE_SUBSCRIPTION_TOKEN_QUERY_PARAM.toLowerCase(),
+  'access_token',
+  'accesstoken',
+  'apikey',
+  'authorization',
+  'authtoken',
+  'bearer',
+  'token',
+]);
+
+function normalizeSensitiveQueryParamKey(key: string): string {
+  return key.toLowerCase().split('[')[0]?.split('.')[0] ?? key.toLowerCase();
+}
+
+export function redactSensitiveQueryParams<T extends Record<string, unknown>>(queryParams: T): T {
+  const redacted: Record<string, unknown> = { ...queryParams };
+
+  for (const key of Object.keys(redacted)) {
+    const normalizedKey = key.toLowerCase();
+    const baseKey = normalizeSensitiveQueryParamKey(key);
+    if (SENSITIVE_QUERY_PARAMS.has(normalizedKey) || SENSITIVE_QUERY_PARAMS.has(baseKey)) {
+      redacted[key] = '[REDACTED]';
+    }
+  }
+
+  return redacted as T;
 }
 
 function isAbortSignalError(error: unknown): boolean {
@@ -423,22 +459,56 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     const authConfig = this.mastra.getServer()?.auth;
+    const harnessClientRoute = isHarnessClientRoute(route);
 
-    // No auth config means no auth required
+    if (harnessClientRoute) {
+      const queryCredential = findBearerEquivalentHarnessQueryParam(context.getQuery);
+      if (queryCredential) {
+        return {
+          status: 400,
+          error: `Bearer-equivalent query credentials are not accepted on Harness routes: ${queryCredential}`,
+        };
+      }
+
+      if (hasHarnessSseSubscriptionToken(route, context.getQuery) && !allowsHarnessSseSubscriptionToken(route)) {
+        return {
+          status: 400,
+          error: 'Scoped Harness SSE subscription tokens are only accepted on the session events route',
+        };
+      }
+
+      if (route.requiresAuth === false) {
+        return {
+          status: 500,
+          error: 'Harness routes require authentication',
+        };
+      }
+
+      if (!authConfig) {
+        return {
+          status: 500,
+          error: 'Harness routes require server auth configuration',
+        };
+      }
+    }
+
+    // No auth config means no auth required for legacy/non-Harness routes.
     if (!authConfig) {
       return null;
     }
 
-    // Check route-level requiresAuth flag first (explicit per-route setting)
-    // This opt-out is route-specific and not available in the global middleware
+    // Check route-level requiresAuth flag first (explicit per-route setting).
+    // This opt-out is route-specific and not available in the global middleware.
     if (route.requiresAuth === false) {
       return null;
     }
 
-    // Extract token from headers/query
+    // Extract token from headers/query. Harness routes intentionally skip the
+    // legacy apiKey query fallback; scoped SSE tokens stay in the raw request
+    // for route-scoped auth providers and are never forwarded as auth context.
     const authHeader = context.getHeader('authorization');
     let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
-    if (!token) {
+    if (!token && !harnessClientRoute) {
       token = context.getQuery('apiKey') || null;
     }
 
@@ -453,6 +523,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       requestContext: context.requestContext,
       rawRequest: context.request,
       token,
+      forceAuth: harnessClientRoute,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
     });
 

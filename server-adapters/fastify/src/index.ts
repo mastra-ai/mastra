@@ -9,6 +9,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   normalizeQueryParams,
+  redactSensitiveQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
@@ -886,7 +887,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         };
 
         if (this.httpLoggingConfig?.includeQueryParams) {
-          logData.query = request.query;
+          logData.query = redactSensitiveQueryParams(request.query as Record<string, unknown>);
         }
 
         if (this.httpLoggingConfig?.includeHeaders) {

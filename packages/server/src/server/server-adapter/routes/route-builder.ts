@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ValidationErrorHook } from '@mastra/core/server';
 import type { ZodRawShape, ZodTypeAny } from 'zod/v4';
 import { z, ZodObject, ZodOptional, ZodNullable, ZodArray, ZodRecord } from 'zod/v4';
+import type { HarnessRouteAuthConfig } from '../../auth/helpers';
 import { generateRouteOpenAPI } from '../openapi-utils';
 import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
@@ -186,6 +187,7 @@ interface RouteConfig<
       | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
     permission?: MastraFGAPermissionInput;
   };
+  harnessAuth?: HarnessRouteAuthConfig;
   onValidationError?: ValidationErrorHook;
 }
 

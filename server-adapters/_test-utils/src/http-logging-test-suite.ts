@@ -196,6 +196,39 @@ export function createHttpLoggingTestSuite<TApp>(config: HttpLoggingTestSuiteCon
       );
     });
 
+    it('should redact credential-like query params when configured', async () => {
+      const mastra = new Mastra({
+        server: {
+          build: {
+            apiReqLogs: {
+              enabled: true,
+              includeQueryParams: true,
+            },
+          },
+        },
+      });
+      const { adapter } = await setupAdapter(app, mastra);
+
+      logSpy = vi.spyOn(adapter.logger, 'info');
+
+      await adapter.init();
+
+      await addRoute(app, 'GET', '/test', () => ({ message: 'success' }));
+
+      await executeRequest(app, 'GET', 'http://localhost/test?foo=bar&subscriptionToken=scoped&apiKey=secret');
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          query: expect.objectContaining({
+            foo: 'bar',
+            subscriptionToken: '[REDACTED]',
+            apiKey: '[REDACTED]',
+          }),
+        }),
+      );
+    });
+
     it('should include headers when configured', async () => {
       const mastra = new Mastra({
         server: {
