@@ -74,8 +74,8 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
           <TooltipPrimitive.Arrow
             className={cn(
               'flex',
-              'data-[side=top]:-bottom-1.5 data-[side=top]:rotate-180',
-              'data-[side=bottom]:-top-1.5',
+              'data-[side=top]:-bottom-[7px] data-[side=top]:rotate-180',
+              'data-[side=bottom]:-top-[7px]',
               'data-[side=left]:-right-[9px] data-[side=left]:rotate-90',
               'data-[side=right]:-left-[9px] data-[side=right]:-rotate-90',
             )}
@@ -91,8 +91,8 @@ TooltipContent.displayName = 'TooltipContent';
 
 function TooltipArrowSvg() {
   return (
-    <svg width="12" height="6" viewBox="0 0 12 6" fill="none" overflow="visible">
-      <path d="M0 6L6 0L12 6Z" className="fill-surface3" />
+    <svg width="12" height="8" viewBox="0 0 12 8" fill="none" overflow="visible">
+      <path d="M0 6L6 0L12 6L12 8L0 8Z" className="fill-surface3" />
       <path
         d="M0 6L6 0L12 6"
         className="fill-none stroke-border1"
