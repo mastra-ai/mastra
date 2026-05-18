@@ -19647,6 +19647,8 @@ export type GetStoredAgents_QueryParams = {
     | undefined;
   /** When true, return only agents favorited by the caller (requires the `favorites` EE feature) */
   favoritedOnly?: boolean | undefined;
+  /** When set, treat the given subject (user/role) as the favoriting principal for `favoritedOnly` instead of the caller */
+  pinFavoritedFor?: string | undefined;
 };
 
 export type GetStoredAgents_Response = {
@@ -72315,6 +72317,8 @@ export type GetStoredSkills_QueryParams = {
     | undefined;
   /** When true, return only skills favorited by the caller (requires the `favorites` EE feature) */
   favoritedOnly?: boolean | undefined;
+  /** When set, treat the given subject (user/role) as the favoriting principal for `favoritedOnly` instead of the caller */
+  pinFavoritedFor?: string | undefined;
 };
 
 type GetStoredSkills_Response_Auxiliary_5 = {
@@ -76019,7 +76023,7 @@ export type GetEditorBuilderRegistriesRegistryIdSearch_PathParams = {
 export type GetEditorBuilderRegistriesRegistryIdSearch_QueryParams = {
   /** Search query */
   q: string;
-  /** Maximum number of results */
+  /** Maximum number of results (1-100) */
   limit: number | undefined;
 };
 
@@ -76065,9 +76069,9 @@ export type GetEditorBuilderRegistriesRegistryIdPopular_PathParams = {
 };
 
 export type GetEditorBuilderRegistriesRegistryIdPopular_QueryParams = {
-  /** Maximum number of results */
+  /** Maximum number of results (1-100) */
   limit: number | undefined;
-  /** Offset for pagination */
+  /** Offset for pagination (must be a multiple of `limit`) */
   offset: number | undefined;
 };
 

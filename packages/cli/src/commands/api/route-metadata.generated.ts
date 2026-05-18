@@ -3075,6 +3075,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "perPage",
+      "pinFavoritedFor",
       "status",
       "visibility"
     ],
@@ -4080,6 +4081,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "perPage",
+      "pinFavoritedFor",
       "status",
       "visibility"
     ],

@@ -103,6 +103,17 @@ describe('StoredAgent Resource', () => {
         }),
       );
     });
+
+    it('should pass favoritedOnly and pinFavoritedFor on listStoredAgents', async () => {
+      const mockResponse = { agents: [], total: 0, page: 0, perPage: 100, hasMore: false };
+      mockFetchResponse(mockResponse);
+
+      await client.listStoredAgents({ favoritedOnly: true, pinFavoritedFor: 'user-1' });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents?favoritedOnly=true&pinFavoritedFor=user-1`,
+        expect.anything(),
+      );
+    });
   });
 
   describe('createStoredAgent', () => {
@@ -261,17 +272,6 @@ describe('StoredAgent Resource', () => {
           }),
         );
       });
-    });
-
-    it('should pass favoritedOnly and pinFavoritedFor on listStoredAgents', async () => {
-      const mockResponse = { agents: [], total: 0, page: 0, perPage: 100, hasMore: false };
-      mockFetchResponse(mockResponse);
-
-      await client.listStoredAgents({ favoritedOnly: true, pinFavoritedFor: 'user-1' });
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/stored/agents?favoritedOnly=true&pinFavoritedFor=user-1`,
-        expect.anything(),
-      );
     });
 
     it('should handle special characters in storedAgentId', async () => {

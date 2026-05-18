@@ -1193,7 +1193,7 @@ export interface StoredAgentResponse {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
-  browser?: ConditionalField<StoredBrowserRef>;
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   // Favorites (EE feature, present when `favorites` feature is enabled)
   isFavorited?: boolean;
@@ -1212,7 +1212,12 @@ export interface ListStoredAgentsParams {
   };
   status?: 'draft' | 'published' | 'archived';
   authorId?: string;
-  visibility?: 'private' | 'public';
+  /**
+   * Restrict the list to public records. Only `'public'` is accepted by the
+   * server filter; private records are surfaced via the default scope-aware
+   * filter (caller's own rows + legacy unowned).
+   */
+  visibility?: 'public';
   metadata?: Record<string, unknown>;
   /** When true, only return agents favorited by the caller (or by `pinFavoritedFor`). */
   favoritedOnly?: boolean;
@@ -1991,7 +1996,12 @@ export interface ListStoredSkillsParams {
     direction?: 'ASC' | 'DESC';
   };
   authorId?: string;
-  visibility?: 'private' | 'public';
+  /**
+   * Restrict the list to public records. Only `'public'` is accepted by the
+   * server filter; private records are surfaced via the default scope-aware
+   * filter (caller's own rows + legacy unowned).
+   */
+  visibility?: 'public';
   metadata?: Record<string, unknown>;
   /** When true, only return skills favorited by the caller (or by `pinFavoritedFor`). */
   favoritedOnly?: boolean;
@@ -2843,7 +2853,13 @@ export interface ExperimentReviewCounts {
 
 /**
  * Agent feature flags for the builder.
- * Omitted keys default to `false` (blocklist model).
+ *
+ * The `GET /editor/builder/settings` response always carries a fully-resolved
+ * object. On admin input, omitted keys default to `true` (default-on / allowlist
+ * model — admins opt out by setting a key to `false`). Special case: `browser`
+ * is only `true` when `configuration.agent.browser` is provided.
+ *
+ * Clients should still use strict `=== true` checks.
  */
 export interface BuilderAgentFeatures {
   tools?: boolean;

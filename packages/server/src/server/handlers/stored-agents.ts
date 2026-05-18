@@ -111,6 +111,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
     visibility,
     metadata,
     favoritedOnly,
+    pinFavoritedFor,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -129,7 +130,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       // return the caller's rows plus legacy unowned records.
       const filter = resolveAuthorFilter({
         requestContext,
-        resource: 'agents',
+        resource: 'stored-agents',
         queryAuthorId: authorId,
         queryVisibility: visibility === 'public' ? 'public' : undefined,
       });
@@ -140,18 +141,19 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const callerId = getCallerAuthorId(requestContext);
       const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'favorites');
       const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
+      const favoriteSubjectId = pinFavoritedFor ?? callerId;
 
       // `?favoritedOnly=true`: fetch caller's favorited IDs, then refilter + recompute total.
       if (honoredStarredOnly) {
         const effectivePerPage: number = perPage ?? 100;
-        if (!callerId) {
+        if (!favoriteSubjectId) {
           return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
         const favoritesStore = await storage.getStore('favorites');
         if (!favoritesStore) {
           throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
         }
-        const starredIds = await favoritesStore.listFavoritedIds({ userId: callerId, entityType: 'agent' });
+        const starredIds = await favoritesStore.listFavoritedIds({ userId: favoriteSubjectId, entityType: 'agent' });
         if (starredIds.length === 0) {
           return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
@@ -249,7 +251,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 
       // Throws 404 if the caller isn't the owner, admin, `agents:read[:<id>]`
       // holder, and the record isn't public/legacy-unowned.
-      assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: agent });
+      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
       const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
       if (enrichment) {
@@ -342,6 +344,15 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
+
+      // Enforce admin model allowlist before persisting. Mirrors UPDATE; when
+      // `model` is omitted the builder applies `defaults.model` server-side.
+      if (model !== undefined) {
+        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+        if (policy.active) {
+          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
+        }
+      }
 
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
@@ -485,7 +496,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Throws 404 if the caller isn't the owner, admin, or `agents:edit[:<id>]` holder.
       assertWriteAccess({
         requestContext,
-        resource: 'agents',
+        resource: 'stored-agents',
         resourceId: storedAgentId,
         action: 'edit',
         record: existing,
@@ -655,7 +666,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       // Throws 404 if the caller isn't the owner, admin, or `agents:delete[:<id>]` holder.
       assertWriteAccess({
         requestContext,
-        resource: 'agents',
+        resource: 'stored-agents',
         resourceId: storedAgentId,
         action: 'delete',
         record: existing,

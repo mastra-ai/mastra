@@ -587,6 +587,31 @@ describe('Stored Skills Handlers', () => {
       });
     });
 
+    it('should allow stored-skills:* admin to update any skill (resource-scoped wildcard)', async () => {
+      // Regression: the handler's authorship layer must use the same resource
+      // string (`stored-skills`) as the RBAC permissions, otherwise an admin
+      // granted `stored-skills:*` passes route auth but is treated as a
+      // non-admin by the handler and can't edit private records of others.
+      mockSkillsData.set('other-skill', {
+        id: 'other-skill',
+        name: 'Other Skill',
+        instructions: 'other',
+        authorId: 'user-a',
+        visibility: 'private',
+      });
+
+      const result = await UPDATE_STORED_SKILL_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin-user', ['stored-skills:*']),
+        storedSkillId: 'other-skill',
+        name: 'Admin Updated',
+      });
+
+      expect(result).toMatchObject({
+        id: 'other-skill',
+        name: 'Admin Updated',
+      });
+    });
+
     it('should allow updating visibility', async () => {
       mockSkillsData.set('vis-skill', {
         id: 'vis-skill',

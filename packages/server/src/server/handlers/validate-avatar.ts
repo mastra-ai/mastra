@@ -22,12 +22,18 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
     });
   }
 
-  let byteLength: number;
-  try {
-    byteLength = Buffer.from(match[2]!, 'base64').byteLength;
-  } catch {
+  // `Buffer.from(..., 'base64')` decodes leniently — it silently ignores
+  // invalid characters and never throws. Validate the payload format strictly
+  // before measuring its byte length so malformed input is rejected.
+  const base64Payload = match[2]!;
+  const isStrictBase64 =
+    base64Payload.length > 0 &&
+    base64Payload.length % 4 === 0 &&
+    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64Payload);
+  if (!isStrictBase64) {
     throw new HTTPException(400, { message: 'metadata.avatarUrl contains invalid base64' });
   }
+  const byteLength = Buffer.from(base64Payload, 'base64').byteLength;
 
   if (byteLength === 0) {
     throw new HTTPException(400, { message: 'metadata.avatarUrl is empty' });

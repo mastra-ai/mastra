@@ -23,7 +23,7 @@ import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';

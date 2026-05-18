@@ -101,12 +101,14 @@ export function assertSafeSkillName(name: string): string {
  * directory.
  */
 export function assertSafeFilePath(filePath: string): string {
-  if (filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)) {
+  if (filePath.startsWith('/') || filePath.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(filePath)) {
     throw new HTTPException(400, {
       message: `Invalid file path "${filePath}". Absolute paths are not allowed.`,
     });
   }
-  const segments = filePath.split('/');
+  // Normalize backslashes to forward slashes so Windows-style traversal
+  // (e.g. "..\\..\\etc\\passwd") cannot bypass the segment check below.
+  const segments = filePath.split(/[\\/]/);
   for (const segment of segments) {
     if (segment === '..' || segment === '.') {
       throw new HTTPException(400, {
@@ -221,8 +223,13 @@ export async function previewSkillsSh({
     const response = await fetch(url, { signal: controller.signal });
 
     if (!response.ok) {
-      throw new HTTPException(404, {
-        message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
+      if (response.status === 404) {
+        throw new HTTPException(404, {
+          message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
+        });
+      }
+      throw new HTTPException(502, {
+        message: `Skills API error: ${response.status} ${response.statusText}`,
       });
     }
 

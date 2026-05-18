@@ -16,11 +16,19 @@ import {
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
-vi.mock('./agent-versions', () => ({
-  handleAutoVersioning: vi.fn().mockImplementation(async (_store: any, _id: any, _existing: any, updatedAgent: any) => {
-    return { agent: updatedAgent, versionCreated: false };
-  }),
-}));
+import type * as VersionHelpers from './version-helpers';
+
+vi.mock('./version-helpers', async importOriginal => {
+  const actual = await importOriginal<typeof VersionHelpers>();
+  return {
+    ...actual,
+    handleAutoVersioning: vi
+      .fn()
+      .mockImplementation(async (_store: any, _id: any, _existing: any, updatedAgent: any) => {
+        return { agent: updatedAgent, versionCreated: false };
+      }),
+  };
+});
 
 // =============================================================================
 // Mock Factories
@@ -46,6 +54,7 @@ interface MockStoredAgent {
   memory?: unknown;
   scorers?: unknown[];
   authorId?: string;
+  visibility?: 'public' | 'private';
   metadata?: Record<string, unknown>;
   activeVersionId?: string;
 }
@@ -854,6 +863,14 @@ describe('Stored Agents Handlers', () => {
         activeVersionId: 'v-autopub-1',
       });
 
+      // Override the global mock for this test to simulate a new version being created.
+      // The auto-publish branch only runs when versionCreated is true.
+      const { handleAutoVersioning } = await import('./version-helpers');
+      vi.mocked(handleAutoVersioning).mockImplementationOnce(async (_store, _id, _existing, updatedAgent) => ({
+        agent: updatedAgent as any,
+        versionCreated: true,
+      }));
+
       // listVersions is called multiple times: once by enforceRetentionLimit
       // inside handleAutoVersioning, then again by the auto-publish code.
       // Return the new version each time so auto-publish can activate it.
@@ -1120,6 +1137,32 @@ describe('Stored Agents Handlers', () => {
 
       const result = await UPDATE_STORED_AGENT_ROUTE.handler({
         ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        storedAgentId: 'other-agent',
+        name: 'Admin Updated',
+      });
+
+      expect(result).toMatchObject({
+        id: 'other-agent',
+        name: 'Admin Updated',
+      });
+    });
+
+    it('should allow stored-agents:* admin to update any agent (resource-scoped wildcard)', async () => {
+      // Regression: the handler's authorship layer must use the same resource
+      // string (`stored-agents`) as the RBAC permissions, otherwise an admin
+      // granted `stored-agents:*` passes route auth but is treated as a
+      // non-admin by the handler and can't edit private records of others.
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+        activeVersionId: 'v-other-1',
+      });
+
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['stored-agents:*']),
         storedAgentId: 'other-agent',
         name: 'Admin Updated',
       });
@@ -1418,5 +1461,35 @@ describe('Phase 6: UPDATE_STORED_AGENT_ROUTE allowlist enforcement', () => {
       model: { provider: 'anthropic', name: 'claude-opus-4-7' },
     });
     expect(result).toMatchObject({ id: 'a1' });
+  });
+
+  it('rejects creates whose model is outside the allowlist with HTTP 422', async () => {
+    const agentsStore = createMockAgentsStore(new Map());
+    const storage = createMockStorage(agentsStore);
+    const editor = makeBuilderEditor({
+      allowed: [{ provider: 'openai', modelId: 'gpt-5.5' }],
+    });
+    const mastra = {
+      getStorage: vi.fn().mockReturnValue(storage),
+      getEditor: vi.fn().mockReturnValue(editor),
+    };
+
+    let caught: HTTPException | undefined;
+    try {
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra as unknown as MockMastra),
+        name: 'New Agent',
+        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      });
+    } catch (e) {
+      caught = e as HTTPException;
+    }
+
+    expect(caught).toBeInstanceOf(HTTPException);
+    expect(caught?.status).toBe(422);
+
+    const body = await caught!.getResponse().json();
+    expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
+    expect(body.error.attempted).toMatchObject({ provider: 'anthropic', modelId: 'claude-opus-4-7' });
   });
 });

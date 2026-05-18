@@ -47,6 +47,13 @@ describe('assertSafeFilePath', () => {
     expect(() => assertSafeFilePath('foo/../bar')).toThrow(HTTPException);
     expect(() => assertSafeFilePath('./local')).toThrow(HTTPException);
   });
+
+  it('rejects backslash-based path traversal', () => {
+    expect(() => assertSafeFilePath('..\\escape')).toThrow(HTTPException);
+    expect(() => assertSafeFilePath('foo\\..\\bar')).toThrow(HTTPException);
+    expect(() => assertSafeFilePath('\\absolute\\path')).toThrow(HTTPException);
+    expect(() => assertSafeFilePath('C:\\Windows\\System32')).toThrow(HTTPException);
+  });
 });
 
 describe('searchSkillsSh', () => {

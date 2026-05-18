@@ -57,7 +57,7 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
       }
 
       // Throws 404 if the caller cannot read the skill (private + not owner/admin).
-      assertReadAccess({ requestContext, resource: 'skills', resourceId: storedSkillId, record: skill });
+      assertReadAccess({ requestContext, resource: 'stored-skills', resourceId: storedSkillId, record: skill });
 
       const result = await favoritesStore.favorite({
         userId: callerId,
@@ -101,7 +101,7 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
 
-      assertReadAccess({ requestContext, resource: 'skills', resourceId: storedSkillId, record: skill });
+      assertReadAccess({ requestContext, resource: 'stored-skills', resourceId: storedSkillId, record: skill });
 
       const result = await favoritesStore.unfavorite({
         userId: callerId,
