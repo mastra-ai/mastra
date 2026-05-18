@@ -374,6 +374,54 @@ describe('formatOutboundText', () => {
   });
 });
 
+describe('tripwire surface', () => {
+  it('posts the block reason when a tripwire chunk is emitted', async () => {
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([
+      { type: 'tripwire', payload: { reason: 'Contains profanity', processorId: 'profanity-filter' } },
+    ]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(sdkThread.postedContent).toEqual(['🛡️ Blocked by profanity-filter: Contains profanity']);
+  });
+
+  it('skips the post when payload.retry is true', async () => {
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([
+      { type: 'tripwire', payload: { reason: 'Will be retried', processorId: 'retry-processor', retry: true } },
+    ]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(sdkThread.post).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a generic message when reason and processorId are absent', async () => {
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([{ type: 'tripwire', payload: {} }]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(sdkThread.postedContent).toEqual(['🛡️ Your message was blocked by a safety check.']);
+  });
+});
+
 describe('matchesDomain', () => {
   it('matches exact hostname', () => {
     expect(matchesDomain('https://youtube.com/watch?v=123', 'youtube.com')).toBe(true);
