@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
-import type { MastraDBMessage, MessageList } from '../agent/message-list';
+import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
@@ -255,6 +256,43 @@ describe('createStep with Processor', () => {
       expect(result).toEqual(
         expect.objectContaining({
           messages: [{ id: '1', content: 'test', step: 5 }],
+        }),
+      );
+    });
+
+    it('should expose MessageList system mutations from processInputStep output', async () => {
+      const processor: Processor = {
+        id: 'input-step-message-list-processor',
+        processInputStep: async ({ messageList }) => {
+          messageList.addSystem({ role: 'system', content: 'Injected policy' });
+          return messageList;
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const message = {
+        id: '1',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'test' }] },
+      } as MastraDBMessage;
+      messageList.add([message], 'input');
+
+      const result = await step.execute({
+        inputData: {
+          phase: 'inputStep',
+          messages: [message],
+          messageList,
+          stepNumber: 0,
+          systemMessages: [],
+        },
+      } as any);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          messages: [message],
+          systemMessages: [expect.objectContaining({ role: 'system', content: 'Injected policy' })],
         }),
       );
     });
