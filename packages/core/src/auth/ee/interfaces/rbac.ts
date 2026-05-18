@@ -100,10 +100,29 @@ export interface RoleDefinition {
   name: string;
   /** Role description */
   description?: string;
-  /** Permissions granted by this role (type-safe) */
+  /** Permissions granted by this role (type-safe Mastra permissions) */
   permissions: PermissionPattern[];
   /** Role IDs this role inherits from */
   inherits?: string[];
+  /**
+   * Provider-specific permissions (for display purposes).
+   * These are the raw permissions from the auth provider (WorkOS, Auth0, etc.)
+   * that may not match Mastra's permission patterns.
+   */
+  providerPermissions?: string[];
+  /**
+   * Additional metadata about the role.
+   */
+  metadata?: {
+    /** Where the role definition comes from */
+    source?: 'provider' | 'roleMapping' | 'storage';
+    /** Resource type slug (WorkOS-specific) */
+    resourceTypeSlug?: string;
+    /** Role type (environment-level or organization-specific) */
+    type?: string;
+    /** Custom metadata from provider */
+    [key: string]: unknown;
+  };
 }
 
 /**

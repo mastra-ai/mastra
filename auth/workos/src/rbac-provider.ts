@@ -136,19 +136,33 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
           organizationId: this.options.organizationId,
         });
 
-        // Merge WorkOS roles with permissions from roleMapping
-        return workosRoles.data.map(role => ({
-          id: role.slug,
-          name: role.name,
-          description: role.description ?? this.getRoleDescription(role.slug),
-          // Get permissions from roleMapping, or _default if not mapped
-          permissions: (this.options.roleMapping[role.slug] ??
+        // Map WorkOS roles to RoleDefinition
+        // - providerPermissions: the actual permissions from WorkOS (for display)
+        // - permissions: Mastra permissions from roleMapping (for authorization)
+        return workosRoles.data.map(role => {
+          const workosPermissions = role.permissions ?? [];
+          const mappedPermissions = (this.options.roleMapping[role.slug] ??
             this.options.roleMapping['_default'] ??
-            []) as RoleDefinition['permissions'],
-        }));
-      } catch {
+            []) as RoleDefinition['permissions'];
+
+          return {
+            id: role.slug,
+            name: role.name,
+            description: role.description ?? this.getRoleDescription(role.slug),
+            // Mastra permissions for authorization (from roleMapping)
+            permissions: mappedPermissions,
+            // WorkOS permissions for display purposes
+            providerPermissions: workosPermissions,
+            metadata: {
+              source: 'provider' as const,
+              resourceTypeSlug: role.resourceTypeSlug,
+              type: role.type,
+            },
+          };
+        });
+      } catch (error) {
         // Fall back to roleMapping-derived roles on error
-        console.warn('[MastraRBACWorkos] Failed to fetch roles from WorkOS, falling back to roleMapping');
+        console.warn('[MastraRBACWorkos] Failed to fetch roles from WorkOS, falling back to roleMapping', error);
       }
     }
 
@@ -160,6 +174,9 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
         name: roleName.charAt(0).toUpperCase() + roleName.slice(1), // Capitalize
         description: this.getRoleDescription(roleName),
         permissions: permissions as RoleDefinition['permissions'],
+        metadata: {
+          source: 'roleMapping' as const,
+        },
       }));
   }
 
