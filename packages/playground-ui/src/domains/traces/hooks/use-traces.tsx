@@ -1,6 +1,6 @@
 import type { ListBranchesArgs, ListBranchesResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
-import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { TraceListMode } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
@@ -51,15 +51,14 @@ export function getTracesNextPageParam(
   return undefined;
 }
 
-type TracesPageResponse = (ListTracesResponse | ListBranchesResponse) & { threadTitles?: Record<string, string> };
+type TracesPageResponse = ListTracesResponse | ListBranchesResponse;
 
 function getPageSpans(page: TracesPageResponse) {
   if ('branches' in page) return page.branches ?? [];
   return page.spans ?? [];
 }
 
-/** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
- *  Also merges threadTitles from all pages for thread grouping display. */
+/** Deduplicates trace/branch rows by traceId + spanId across all loaded pages. */
 export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
   const seen = new Set<string>();
   const spans = data.pages
@@ -71,14 +70,7 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
       return true;
     });
 
-  const threadTitles: Record<string, string> = {};
-  for (const page of data.pages) {
-    if (page.threadTitles) {
-      Object.assign(threadTitles, page.threadTitles);
-    }
-  }
-
-  return { spans, threadTitles };
+  return { spans };
 }
 
 export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
@@ -98,7 +90,6 @@ export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
     initialPageParam: 0,
     getNextPageParam: getTracesNextPageParam,
     select: selectUniqueTraces,
-    placeholderData: keepPreviousData,
     retry: false,
     // Disable polling on 403 to prevent flickering
     refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 10000),

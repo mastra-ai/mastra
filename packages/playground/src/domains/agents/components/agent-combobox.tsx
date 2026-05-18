@@ -13,6 +13,7 @@ export interface AgentComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
 }
 
 export function AgentCombobox({
@@ -24,6 +25,7 @@ export function AgentCombobox({
   className,
   disabled = false,
   variant = 'default',
+  size,
 }: AgentComboboxProps) {
   const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();
@@ -59,6 +61,7 @@ export function AgentCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={size}
     />
   );
 }

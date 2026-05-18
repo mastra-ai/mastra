@@ -14,6 +14,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -145,13 +146,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       });
     }
 
-    for (const ddl of ALL_DDL) {
-      await this.db.execute(ddl);
-    }
-
-    for (const migration of ALL_MIGRATIONS) {
-      await this.db.execute(migration);
-    }
+    await this.db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
   }
 
   /**
@@ -230,6 +225,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
+  }
+  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    return tracingOps.listTracesLight(this.db, args);
   }
   async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
     return tracingOps.listBranches(this.db, args);

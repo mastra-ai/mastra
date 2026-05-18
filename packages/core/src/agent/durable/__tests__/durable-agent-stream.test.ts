@@ -170,8 +170,9 @@ describe('DurableAgent streaming execution', () => {
       expect(runId).toBeDefined();
       expect(output).toBeDefined();
 
-      // Wait for events to propagate
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Drain the stream to deterministically wait for all chunks (and onChunk
+      // callbacks) instead of relying on a wall-clock timeout.
+      await output.consumeStream();
 
       expect(chunks.length).toBeGreaterThan(0);
 
@@ -191,13 +192,13 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { cleanup } = await durableAgent.stream('Say hello in parts', {
+      const { output, cleanup } = await durableAgent.stream('Say hello in parts', {
         onChunk: chunk => {
           chunks.push(chunk);
         },
       });
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await output.consumeStream();
 
       expect(chunks.length).toBeGreaterThan(0);
 
@@ -245,14 +246,15 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { cleanup } = await durableAgent.stream('Test', {
+      const { output, cleanup } = await durableAgent.stream('Test', {
         onFinish: data => {
           finishData = data;
         },
       });
 
-      // Wait for workflow to complete
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Drain the stream so we deterministically wait for the FINISH event
+      // (which fires onFinish) instead of using a wall-clock timeout.
+      await output.consumeStream();
 
       expect(finishData).not.toBeNull();
 
@@ -277,14 +279,15 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { cleanup } = await durableAgent.stream('Test', {
+      const { output, cleanup } = await durableAgent.stream('Test', {
         onError: error => {
           errorReceived = error;
         },
       });
 
-      // Wait for error to propagate
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Drain the stream so we deterministically wait for the ERROR event
+      // (which fires onError and errors the stream) instead of using a wall-clock timeout.
+      await output.consumeStream({ onError: () => {} });
 
       expect(errorReceived).not.toBeNull();
 
@@ -304,13 +307,13 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { cleanup } = await durableAgent.stream('Test', {
+      const { output, cleanup } = await durableAgent.stream('Test', {
         onStepFinish: result => {
           stepResults.push(result);
         },
       });
 
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await output.consumeStream();
 
       // stepResults may or may not contain entries depending on workflow execution timing
       expect(Array.isArray(stepResults)).toBe(true);
@@ -343,13 +346,12 @@ describe('DurableAgent streaming execution', () => {
 
       // Now we need to manually emit events since the workflow isn't actually running
       // In a real integration test, the workflow would emit these
+      // EventEmitter.emit is synchronous; awaiting publish is sufficient.
       await pubsub.publish(AGENT_STREAM_TOPIC(preparation.runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId: preparation.runId,
         data: { type: 'text-delta', payload: { text: 'test' } },
       });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(receivedEvents.length).toBe(1);
       expect(receivedEvents[0].type).toBe(AgentStreamEventTypes.CHUNK);
@@ -380,14 +382,13 @@ describe('DurableAgent streaming execution', () => {
         eventsRun2.push(event as unknown as AgentStreamEvent);
       });
 
-      // Emit event to run1 only
+      // Emit event to run1 only. EventEmitter.emit is synchronous; awaiting
+      // publish is sufficient — no wall-clock wait needed.
       await pubsub.publish(AGENT_STREAM_TOPIC(prep1.runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId: prep1.runId,
         data: { type: 'text-delta', payload: { text: 'for run 1' } },
       });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(eventsRun1.length).toBe(1);
       expect(eventsRun2.length).toBe(0);
@@ -541,13 +542,15 @@ describe('DurableAgent error handling', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { cleanup } = await durableAgent.stream('Test', {
+    const { output, cleanup } = await durableAgent.stream('Test', {
       onError: error => {
         errorReceived = error;
       },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Drain the stream so we deterministically wait for the ERROR event
+    // (which fires onError and errors the stream) instead of using a wall-clock timeout.
+    await output.consumeStream({ onError: () => {} });
 
     expect(errorReceived).not.toBeNull();
 
@@ -568,9 +571,8 @@ describe('DurableAgent error handling', () => {
 
     const testError = new Error('Test error message');
     testError.name = 'TestError';
+    // EventEmitter.emit is synchronous; awaiting emit is sufficient.
     await emitErrorEvent(pubsub, runId, testError);
-
-    await new Promise(resolve => setTimeout(resolve, 50));
 
     expect(receivedErrors.length).toBe(1);
     expect(receivedErrors[0].error.name).toBe('TestError');
@@ -593,12 +595,14 @@ describe('DurableAgent error handling', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { runId, cleanup } = await durableAgent.stream('Test');
+    const { output, runId, cleanup } = await durableAgent.stream('Test');
 
     // Run should be registered initially
     expect(durableAgent.runRegistry.has(runId)).toBe(true);
 
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Drain the stream so we deterministically wait for the workflow to
+    // finish erroring instead of using a wall-clock timeout.
+    await output.consumeStream({ onError: () => {} });
 
     // Manual cleanup should work
     cleanup();

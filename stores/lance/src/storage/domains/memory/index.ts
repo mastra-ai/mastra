@@ -112,11 +112,17 @@ export class StoreMemoryLance extends MemoryStorage {
     return str.replace(/'/g, "''");
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const thread = await this.#db.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
 
-      if (!thread) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
 

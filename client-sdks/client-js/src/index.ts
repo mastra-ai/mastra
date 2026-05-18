@@ -9,6 +9,12 @@ export type {
   ChannelConnectImmediate,
   ChannelConnectResult,
 } from './resources/channels';
+export type {
+  AgentCardSignatureKeyProviderInput,
+  AgentCardVerificationKey,
+  GetAgentCardOptions,
+  VerifyAgentCardSignatureOptions,
+} from './resources/a2a';
 export { RequestContext } from '@mastra/core/request-context';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
 export type {

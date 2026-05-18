@@ -588,19 +588,23 @@ https://mastra.ai/en/docs/memory/overview`,
     const fgaProvider = mastra?.getServer()?.fga;
     if (!fgaProvider) return;
 
-    const { checkFGA } = await import('../auth/ee/fga-check');
-    await checkFGA({
+    const { requireFGA } = await import('../auth/ee/fga-check');
+    await requireFGA({
       fgaProvider,
       user,
       resource: { type: 'thread', id: threadId },
       permission,
+      requestContext,
       context:
         resourceId || requestContext
           ? {
               resourceId,
-              requestContext,
             }
           : undefined,
+      metadata: {
+        threadId,
+        resourceId,
+      },
     });
   }
 

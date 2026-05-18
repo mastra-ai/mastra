@@ -6,13 +6,14 @@
  * Also includes formatToolResult helper.
  */
 
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/harness';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
 import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.js';
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
@@ -21,6 +22,43 @@ import { showModalOverlay } from '../overlay.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
+
+export function isTaskMutationTool(toolName: string): boolean {
+  return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
+}
+
+function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unknown): void {
+  const { state } = ctx;
+  if (state.streamingComponent) {
+    const insertIndex = state.chatContainer.children.indexOf(state.streamingComponent as never);
+    if (insertIndex >= 0) {
+      (state.chatContainer.children as unknown[]).splice(insertIndex, 0, component);
+      state.chatContainer.invalidate();
+      return;
+    }
+  }
+  ctx.addChildBeforeFollowUps(component as never);
+}
+
+function ensureSubmitPlanComponent(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  args?: unknown,
+): PlanApprovalInlineComponent {
+  const { state } = ctx;
+  let component = state.pendingSubmitPlanComponents.get(toolCallId);
+  if (!component) {
+    component = PlanApprovalInlineComponent.createStreaming(state.ui);
+    state.pendingSubmitPlanComponents.set(toolCallId, component);
+    state.lastSubmitPlanComponent = component;
+    ctx.addChildBeforeFollowUps(component);
+
+    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    ctx.addChildBeforeFollowUps(state.streamingComponent);
+  }
+  component.updateArgs(args);
+  return component;
+}
 
 /**
  * Format a tool result for display.
@@ -113,10 +151,13 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
   const { state } = ctx;
   // Component may already exist if created early by handleToolInputStart
   const existingComponent = state.pendingTools.get(toolCallId);
+  const existingSubmitPlanComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
 
   if (existingComponent) {
     // Component was created during input streaming — update with final args
     existingComponent.updateArgs(args);
+  } else if (existingSubmitPlanComponent) {
+    existingSubmitPlanComponent.updateArgs(args);
   } else if (!state.seenToolCallIds.has(toolCallId)) {
     state.seenToolCallIds.add(toolCallId);
 
@@ -129,6 +170,29 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     // Skip creating regular component for ask_user — it uses AskQuestionInlineComponent
     // (normally created by handleToolInputStart, but handleToolStart may fire first)
     if (toolName === 'ask_user') {
+      return;
+    }
+
+    if (toolName === 'submit_plan') {
+      ensureSubmitPlanComponent(ctx, toolCallId, args);
+      state.ui.requestRender();
+      return;
+    }
+
+    if (isTaskMutationTool(toolName)) {
+      state.taskToolInsertIndex = state.chatContainer.children.length;
+      const component = new ToolExecutionComponentEnhanced(
+        toolName,
+        args,
+        { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+        state.ui,
+      );
+      component.setExpanded(state.toolOutputExpanded);
+      state.pendingTools.set(toolCallId, component);
+      state.pendingTaskToolIds?.add(toolCallId);
+      state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+      ctx.addChildBeforeFollowUps(state.streamingComponent);
+      state.ui.requestRender();
       return;
     }
 
@@ -148,12 +212,6 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
     state.ui.requestRender();
-  }
-
-  // Track submit_plan tool components for inline plan approval placement
-  const component = state.pendingTools.get(toolCallId);
-  if (component && toolName === 'submit_plan') {
-    state.lastSubmitPlanComponent = component;
   }
 
   // File modification tracking is handled by the Harness display state
@@ -201,11 +259,25 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.seenToolCallIds.add(toolCallId);
   }
 
+  if (state.pendingTools.has(toolCallId)) {
+    if (isTaskMutationTool(toolName)) {
+      state.pendingTaskToolIds?.add(toolCallId);
+    }
+    return;
+  }
+
   // Create the component early so deltas can update it
   // Skip for subagent (handled by SubagentExecutionComponent),
-  // task_write (streams to pinned TaskProgressComponent),
+  // task tools (they stream to or update the pinned TaskProgressComponent),
   // and ask_user (uses AskQuestionInlineComponent)
-  if (toolName === 'ask_user') {
+  if (toolName === 'submit_plan') {
+    ensureSubmitPlanComponent(ctx, toolCallId);
+    state.ui.requestRender();
+  } else if (toolName === 'ask_user') {
+    if (state.goalManager?.isActive()) {
+      return;
+    }
+
     const askComponent = AskQuestionInlineComponent.createStreaming(state.ui);
     ctx.addChildBeforeFollowUps(askComponent);
     state.lastAskUserComponent = askComponent;
@@ -216,9 +288,18 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
     state.ui.requestRender();
-  } else if (toolName === 'task_write') {
+  } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
-    state.taskWriteInsertIndex = state.chatContainer.children.length;
+    state.taskToolInsertIndex = state.chatContainer.children.length;
+    const component = new ToolExecutionComponentEnhanced(
+      toolName,
+      {},
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      state.ui,
+    );
+    component.setExpanded(state.toolOutputExpanded);
+    state.pendingTools.set(toolCallId, component);
+    state.pendingTaskToolIds?.add(toolCallId);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
     // (even though task_write doesn't render a tool component inline, we still need
@@ -279,25 +360,35 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
         }
       }
 
+      // For submit_plan, stream the title/plan args into the inline purple plan box.
+      if (buffer.toolName === 'submit_plan') {
+        const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
+        if (planComponent) {
+          planComponent.updateArgs(partialArgs);
+        }
+      }
+
       // For task_write, stream partial tasks into the pinned TaskProgressComponent.
       // The last array item is actively being written so its content is unstable.
       // If all existing pinned items are already completed, the list is stable and
       // we can stream in new items immediately (including the last one).
       // Otherwise, exclude the last item to avoid jumpy partial-content matches.
       if (buffer.toolName === 'task_write' && state.taskProgress) {
-        const tasks = (partialArgs as { tasks?: TaskItem[] }).tasks;
+        const tasks = (partialArgs as { tasks?: TaskItemInput[] }).tasks;
         if (tasks && tasks.length > 0) {
           const existing = state.taskProgress.getTasks();
           const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
           if (allExistingDone) {
             // Old list is done — start fresh, stream new items immediately
-            state.taskProgress.updateTasks(tasks as TaskItem[]);
+            state.taskProgress.updateTasks(tasks);
           } else if (tasks.length > 1) {
             // Merge only completed items (exclude the last still-streaming one)
             const merged = [...existing];
             for (const task of tasks.slice(0, -1)) {
               if (!task.content) continue;
-              const idx = merged.findIndex(t => t.content === task.content);
+              const idx = task.id
+                ? merged.findIndex(t => t.id === task.id)
+                : merged.findIndex(t => !t.id && t.content === task.content);
               if (idx >= 0) {
                 merged[idx] = task;
               } else {
@@ -340,8 +431,19 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   // Clean up ask_user component tracking
   state.pendingAskUserComponents.delete(toolCallId);
 
+  if (state.pendingSubmitPlanComponents?.has(toolCallId)) {
+    // submit_plan renders through PlanApprovalInlineComponent, not the generic tool box.
+    return;
+  }
+
   const component = state.pendingTools.get(toolCallId);
   if (component) {
+    const isPendingTaskTool = state.pendingTaskToolIds?.has(toolCallId) ?? false;
+    if (isPendingTaskTool && isError) {
+      insertTaskToolErrorComponent(ctx, component);
+      state.allToolComponents.push(component);
+    }
+
     const toolResult: ToolResult = {
       content: [{ type: 'text', text: formatToolResult(result) }],
       isError,
@@ -349,6 +451,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     component.updateResult(toolResult, false);
 
     state.pendingTools.delete(toolCallId);
+    state.pendingTaskToolIds?.delete(toolCallId);
     state.ui.requestRender();
   }
 }

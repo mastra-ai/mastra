@@ -1,7 +1,10 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
+import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import type { ObservabilityStorageDuckDB } from './index';
+import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
 
 async function setupLegacyStore(): Promise<DuckDBStore> {
   const legacyStore = new DuckDBStore({ path: ':memory:' });
@@ -71,6 +74,22 @@ describe('ObservabilityStorageDuckDB', () => {
       preferred: 'event-sourced',
       supported: ['event-sourced'],
     });
+  });
+
+  it('batches schema DDL and migrations during initialization', async () => {
+    const db = {
+      // Empty migration-status query results mean no legacy signal tables need migrating.
+      query: vi.fn().mockResolvedValue([]),
+      execute: vi.fn(),
+      executeBatch: vi.fn().mockResolvedValue(undefined),
+    } as unknown as DuckDBConnection;
+    const storage = new ConcreteObservabilityStorageDuckDB({ db });
+
+    await storage.init();
+
+    expect(db.executeBatch).toHaveBeenCalledTimes(1);
+    expect(db.executeBatch).toHaveBeenCalledWith([...ALL_DDL, ...ALL_MIGRATIONS]);
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   // ==========================================================================

@@ -7,6 +7,7 @@ import {
   calculatePagination,
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
+  TABLE_FAVORITES,
   SKILLS_SCHEMA,
   SKILL_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
@@ -25,7 +26,7 @@ import type {
 } from '@mastra/core/storage/domains/skills';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import { buildSelectColumns } from '../../db/utils';
+import { buildSelectColumns, buildSelectColumnsWithAlias } from '../../db/utils';
 
 /**
  * Config fields that live on version rows (from StorageSkillSnapshotType).
@@ -40,6 +41,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
@@ -60,6 +62,19 @@ export class SkillsLibSQL extends SkillsStorage {
     await this.#db.createTable({
       tableName: TABLE_SKILL_VERSIONS,
       schema: SKILL_VERSIONS_SCHEMA,
+    });
+
+    // Add new columns for backwards compatibility with intermediate schema versions
+    await this.#db.alterTable({
+      tableName: TABLE_SKILLS,
+      schema: SKILLS_SCHEMA,
+      ifNotExists: ['visibility', 'favoriteCount'],
+    });
+
+    await this.#db.alterTable({
+      tableName: TABLE_SKILL_VERSIONS,
+      schema: SKILL_VERSIONS_SCHEMA,
+      ifNotExists: ['files'],
     });
 
     // Unique constraint on (skillId, versionNumber) to prevent duplicate versions from concurrent updates
@@ -103,6 +118,8 @@ export class SkillsLibSQL extends SkillsStorage {
     try {
       const now = new Date();
 
+      const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
+
       // Insert thin skill record (no metadata on entity table)
       await this.#db.insert({
         tableName: TABLE_SKILLS,
@@ -111,13 +128,15 @@ export class SkillsLibSQL extends SkillsStorage {
           status: 'draft',
           activeVersionId: null,
           authorId: skill.authorId ?? null,
+          visibility: visibility ?? null,
+          favoriteCount: 0,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
         },
       });
 
       // Extract config fields for version 1
-      const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+      const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
       const versionId = crypto.randomUUID();
       try {
         await this.createVersion({
@@ -169,7 +188,16 @@ export class SkillsLibSQL extends SkillsStorage {
         });
       }
 
-      const { authorId, activeVersionId, status, ...configFields } = updates;
+      const { authorId, visibility, activeVersionId, status, ...rawConfigFields } = updates;
+
+      // Filter out undefined keys: callers may spread partial snapshots into
+      // update() and rely on "omit = no change" semantics. Forwarding
+      // undefined would overwrite populated columns with undefined and trip
+      // libsql's "undefined cannot be passed as argument" guard.
+      const configFields: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawConfigFields)) {
+        if (value !== undefined) configFields[key] = value;
+      }
 
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
       const hasConfigUpdate = configFieldNames.some(field => field in configFields);
@@ -180,6 +208,7 @@ export class SkillsLibSQL extends SkillsStorage {
       };
 
       if (authorId !== undefined) updateData.authorId = authorId;
+      if (visibility !== undefined) updateData.visibility = visibility;
       if (activeVersionId !== undefined) {
         updateData.activeVersionId = activeVersionId;
         if (status === undefined) {
@@ -285,26 +314,80 @@ export class SkillsLibSQL extends SkillsStorage {
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId } = args || {};
+      const {
+        page = 0,
+        perPage: perPageInput,
+        orderBy,
+        authorId,
+        visibility,
+        status,
+        entityIds,
+        pinFavoritedFor,
+        favoritedOnly,
+      } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
+
+      // Empty entityIds: short-circuit to no rows.
+      if (entityIds && entityIds.length === 0) {
+        return {
+          skills: [],
+          total: 0,
+          page,
+          perPage: perPageInput ?? 100,
+          hasMore: false,
+        };
+      }
 
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
       if (authorId !== undefined) {
-        conditions.push('authorId = ?');
+        conditions.push('s_e.authorId = ?');
         queryParams.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        conditions.push('s_e.visibility = ?');
+        queryParams.push(visibility);
+      }
+
+      if (status !== undefined) {
+        conditions.push('s_e.status = ?');
+        queryParams.push(status);
+      }
+
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => '?').join(', ');
+        conditions.push(`s_e.id IN (${placeholders})`);
+        queryParams.push(...entityIds);
       }
 
       // Note: metadata filter is ignored for skills since the entity table doesn't have a metadata column.
       // Metadata lives on the version table.
 
+      // Optional LEFT JOIN on favorites for favorited-first ordering / favoritedOnly filter.
+      const joinUserId = pinFavoritedFor;
+      const useJoin = Boolean(joinUserId);
+
+      let joinClause = '';
+      const joinParams: InValue[] = [];
+      if (useJoin && joinUserId) {
+        joinClause = `LEFT JOIN "${TABLE_FAVORITES}" st ON st."entityType" = 'skill' AND st."entityId" = s_e.id AND st."userId" = ?`;
+        joinParams.push(joinUserId);
+        if (favoritedOnly) {
+          conditions.push('st."userId" IS NOT NULL');
+        }
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        conditions.push('1=0');
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM "${TABLE_SKILLS}" ${whereClause}`,
-        args: queryParams,
+        sql: `SELECT COUNT(*) as count FROM "${TABLE_SKILLS}" s_e ${joinClause} ${whereClause}`,
+        args: [...joinParams, ...queryParams],
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
@@ -323,9 +406,18 @@ export class SkillsLibSQL extends SkillsStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
+      const orderByParts: string[] = [];
+      if (useJoin && joinUserId) {
+        orderByParts.push(`(st."userId" IS NOT NULL) DESC`);
+      }
+      orderByParts.push(`s_e."${field}" ${direction}`);
+      orderByParts.push(`s_e."id" ASC`);
+      const orderByClause = `ORDER BY ${orderByParts.join(', ')}`;
+
+      const selectCols = buildSelectColumnsWithAlias(TABLE_SKILLS, 's_e');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_SKILLS)} FROM "${TABLE_SKILLS}" ${whereClause} ORDER BY ${field} ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, limitValue, start],
+        sql: `SELECT ${selectCols} FROM "${TABLE_SKILLS}" s_e ${joinClause} ${whereClause} ${orderByClause} LIMIT ? OFFSET ?`,
+        args: [...joinParams, ...queryParams, limitValue, start],
       });
 
       const skills = result.rows?.map(row => this.#parseSkillRow(row)) ?? [];
@@ -362,9 +454,9 @@ export class SkillsLibSQL extends SkillsStorage {
         sql: `INSERT INTO "${TABLE_SKILL_VERSIONS}" (
           id, "skillId", "versionNumber",
           name, description, instructions, license, compatibility,
-          source, "references", scripts, assets, metadata, tree,
+          source, "references", scripts, assets, files, metadata, tree,
           "changedFields", "changeMessage", "createdAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           input.id,
           input.skillId,
@@ -378,6 +470,7 @@ export class SkillsLibSQL extends SkillsStorage {
           input.references ? JSON.stringify(input.references) : null,
           input.scripts ? JSON.stringify(input.scripts) : null,
           input.assets ? JSON.stringify(input.assets) : null,
+          input.files ? JSON.stringify(input.files) : null,
           input.metadata ? JSON.stringify(input.metadata) : null,
           input.tree ? JSON.stringify(input.tree) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
@@ -588,6 +681,8 @@ export class SkillsLibSQL extends SkillsStorage {
       status: (row.status as StorageSkillType['status']) ?? 'draft',
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
+      visibility: (row.visibility as StorageSkillType['visibility']) ?? undefined,
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
@@ -619,6 +714,7 @@ export class SkillsLibSQL extends SkillsStorage {
       references: safeParseJSON(row.references) as SkillVersion['references'],
       scripts: safeParseJSON(row.scripts) as SkillVersion['scripts'],
       assets: safeParseJSON(row.assets) as SkillVersion['assets'],
+      files: safeParseJSON(row.files) as SkillVersion['files'],
       metadata: safeParseJSON(row.metadata) as Record<string, unknown> | undefined,
       tree: safeParseJSON(row.tree) as SkillVersion['tree'],
       changedFields: safeParseJSON(row.changedFields) as string[] | undefined,

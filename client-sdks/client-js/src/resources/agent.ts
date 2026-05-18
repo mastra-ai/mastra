@@ -21,6 +21,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type {
   ZodSchema,
   GenerateLegacyParams,
+  GetAgentBrowserSessionResponse,
   GetAgentResponse,
   GetToolResponse,
   ClientOptions,
@@ -38,6 +39,8 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -267,11 +270,94 @@ export class Agent extends BaseResource {
     return this.request(`/agents/${this.agentId}${this.getQueryString(requestContext)}`);
   }
 
+  /**
+   * Probe the agent's browser session state before opening a screencast WebSocket.
+   *
+   * Returns `{ hasSession, screencastAvailable }`. Use this to avoid opening a WS
+   * that would either fail (screencast packages not installed) or sit idle (no
+   * active browser session yet). See {@link GetAgentBrowserSessionResponse}.
+   *
+   * @param threadId - Optional thread ID for thread-scoped browser sessions
+   */
+  browserSession(threadId?: string): Promise<GetAgentBrowserSessionResponse> {
+    const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
+    return this.request(`/agents/${this.agentId}/browser/session${query}`);
+  }
+
+  /**
+   * Close the agent's browser session.
+   *
+   * For thread-scoped browsers, pass `threadId` to close only that thread's
+   * session. Omit it to close the shared session (or all sessions for the agent
+   * depending on the toolset's scope).
+   *
+   * @param threadId - Optional thread ID for thread-scoped browser sessions
+   */
+  closeBrowser(threadId?: string): Promise<{ success: boolean }> {
+    return this.request(`/agents/${this.agentId}/browser/close`, {
+      method: 'POST',
+      body: { threadId },
+    });
+  }
+
   enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
     return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
     });
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    return this.request(`/agents/${this.agentId}/signals`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    })) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    if (!streamResponse.body) {
+      throw new Error('No response body');
+    }
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+        signal: this.options.abortSignal,
+      });
+    };
+
+    return streamResponse;
   }
 
   /**
@@ -303,8 +389,14 @@ export class Agent extends BaseResource {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
     if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
-    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);
@@ -1463,8 +1555,16 @@ export class Agent extends BaseResource {
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing.
-                // Forward `route` so stream-until-idle (and future non-default routes)
-                // stay on the same endpoint across client-tool continuations.
+                // Resume routes are one-shot (they consume server-side resumeData),
+                // so client-tool continuations must fall back to the corresponding
+                // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
+                // are idempotent continuations and stay on the same endpoint.
+                const recursionRoute =
+                  route === 'resume-stream'
+                    ? 'stream'
+                    : route === 'resume-stream-until-idle'
+                      ? 'stream-until-idle'
+                      : route;
                 try {
                   await this.processStreamResponse(
                     {
@@ -1472,7 +1572,7 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
-                    route,
+                    recursionRoute,
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);

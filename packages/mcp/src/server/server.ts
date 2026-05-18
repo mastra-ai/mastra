@@ -1840,6 +1840,13 @@ export class MCPServer extends MCPServerBase {
   }) {
     try {
       this.logger.debug('Received SSE connection');
+
+      // Close the previous transport so the underlying protocol accepts a new one.
+      if (this.sseTransport) {
+        await this.sseTransport.close?.();
+        this.sseTransport = undefined;
+      }
+
       this.sseTransport = new SSEServerTransport(messagePath, res);
       await this.server.connect(this.sseTransport);
 

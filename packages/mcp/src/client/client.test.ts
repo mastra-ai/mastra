@@ -2779,15 +2779,13 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
           const authHeader = req.headers['authorization'];
           if (authHeader !== `Bearer ${VALID_TOKEN}`) {
             unauthorizedPostCount++;
-            res
-              .writeHead(401, { 'content-type': 'application/json' })
-              .end(
-                JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: body?.id ?? null,
-                  error: { code: -32001, message: 'unauthorized' },
-                }),
-              );
+            res.writeHead(401, { 'content-type': 'application/json' }).end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: body?.id ?? null,
+                error: { code: -32001, message: 'unauthorized' },
+              }),
+            );
             return;
           }
         }

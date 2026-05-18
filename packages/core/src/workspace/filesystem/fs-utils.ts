@@ -124,8 +124,63 @@ const MIME_TYPES: Record<string, string> = {
   svg: 'image/svg+xml',
   webp: 'image/webp',
   ico: 'image/x-icon',
+  bmp: 'image/bmp',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  avif: 'image/avif',
   // Documents
   pdf: 'application/pdf',
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  // Video
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska',
+  // Archives
+  zip: 'application/zip',
+  tar: 'application/x-tar',
+  gz: 'application/gzip',
+  tgz: 'application/gzip',
+  bz2: 'application/x-bzip2',
+  '7z': 'application/x-7z-compressed',
+  rar: 'application/vnd.rar',
+  // Executables / binaries
+  exe: 'application/vnd.microsoft.portable-executable',
+  dll: 'application/vnd.microsoft.portable-executable',
+  so: 'application/x-sharedlib',
+  dylib: 'application/x-sharedlib',
+  bin: 'application/x-binary',
+  dat: 'application/x-binary',
+  // Disk images / packages
+  dmg: 'application/x-apple-diskimage',
+  iso: 'application/x-iso9660-image',
+  deb: 'application/vnd.debian.binary-package',
+  rpm: 'application/x-rpm',
+  // Office documents
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  // Fonts
+  ttf: 'font/ttf',
+  otf: 'font/otf',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+  // Compiled code
+  wasm: 'application/wasm',
+  class: 'application/java-vm',
+  pyc: 'application/x-python-code',
 };
 
 /**

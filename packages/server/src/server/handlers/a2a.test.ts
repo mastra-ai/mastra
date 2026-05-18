@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import type { Task, MessageSendParams } from '@mastra/core/a2a';
 import { MastraA2AError } from '@mastra/core/a2a';
@@ -6,6 +7,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
+import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultPushNotificationSender, DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
@@ -212,6 +214,64 @@ describe('A2A Handler', () => {
       expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
       expect(response.capabilities.pushNotifications).toBe(true);
     });
+
+    it('should sign the agent card when A2A signing is configured', async () => {
+      const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
+        namedCurve: 'P-256',
+      });
+      const privateJwk = privateKey.export({ format: 'jwk' });
+      mockMastra.setServer({
+        a2a: {
+          agentCardSigning: {
+            privateKey: privateJwk,
+            protectedHeader: {
+              alg: 'ES256',
+              kid: 'test-key',
+            },
+            header: {
+              issuer: 'mastra-test',
+            },
+          },
+        },
+      } as any);
+
+      const agentCard = await getAgentCardByIdHandler({
+        mastra: mockMastra,
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+      });
+
+      expect(agentCard.signatures).toHaveLength(1);
+
+      const [signature] = agentCard.signatures!;
+      const unsignedCard = structuredClone(agentCard) as typeof agentCard & {
+        signatures?: typeof agentCard.signatures;
+      };
+      delete unsignedCard.signatures;
+      const canonicalPayload = canonicalize(unsignedCard);
+
+      expect(canonicalPayload).toBeTruthy();
+
+      const signingInput = `${signature.protected}.${Buffer.from(canonicalPayload!, 'utf8').toString('base64url')}`;
+      const verification = crypto.verify(
+        'sha256',
+        Buffer.from(signingInput, 'utf8'),
+        {
+          key: publicKey,
+          dsaEncoding: 'ieee-p1363',
+        },
+        Buffer.from(signature.signature, 'base64url'),
+      );
+
+      expect(verification).toBe(true);
+      expect(JSON.parse(Buffer.from(signature.protected, 'base64url').toString('utf8'))).toMatchObject({
+        alg: 'ES256',
+        kid: 'test-key',
+      });
+      expect(signature.header).toEqual({
+        issuer: 'mastra-test',
+      });
+    });
   });
 
   describe('handleMessageSend', () => {
@@ -311,6 +371,92 @@ describe('A2A Handler', () => {
           kind: 'task',
         },
       });
+    });
+
+    it('should accept file parts (FileWithUri + FileWithBytes) and pass them through to the converter', async () => {
+      // Regression test for the handler-level schema rejecting non-text parts.
+      // Pre-fix, params.message.parts was validated as `kind: z.enum(['text'])`
+      // which rejected `kind: 'file'` and `kind: 'data'` before convertToCoreMessage
+      // (which already handles all three) could see them.
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [
+            { kind: 'text', text: 'Please summarize the attached invoice.' },
+            {
+              kind: 'file',
+              file: { uri: 'https://example.com/invoice.pdf', mimeType: 'application/pdf', name: 'invoice.pdf' },
+            },
+            { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/png', name: 'screenshot.png' } },
+          ],
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Summary attached.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      // Validation passes — no JSON-RPC error returned.
+      expect('error' in result).toBe(false);
+
+      // convertToCoreMessage forwarded the file parts as CoreMessage `file` parts.
+      const generateArgs = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0];
+      const coreMessages = generateArgs[0] as Array<{ role: string; content: Array<unknown> }>;
+      expect(coreMessages).toHaveLength(1);
+      expect(coreMessages[0].role).toBe('user');
+      expect(coreMessages[0].content).toEqual([
+        { type: 'text', text: 'Please summarize the attached invoice.' },
+        { type: 'file', data: new URL('https://example.com/invoice.pdf'), mimeType: 'application/pdf' },
+        { type: 'file', data: 'AAAA', mimeType: 'image/png' },
+      ]);
+    });
+
+    it('should reject parts with an unknown discriminator', async () => {
+      // The widened schema is still strict on the part kind — discriminatedUnion
+      // rejects anything other than text | file | data, matching the @a2a-js/sdk
+      // Part union exactly.
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+
+      const params = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'bogus', text: 'nope' }],
+        },
+      } as unknown as MessageSendParams;
+
+      const result = await getAgentExecutionHandler({
+        requestId,
+        mastra: mockMastra,
+        method: 'message/send',
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect('error' in result).toBe(true);
+      // -32602 is the JSON-RPC "invalid params" code that MastraA2AError.invalidParams produces.
+      // @ts-expect-error - error is present in the failure branch
+      expect(result.error.code).toBe(-32602);
     });
 
     it('should handle errors from agent.generate and save failed state', async () => {
