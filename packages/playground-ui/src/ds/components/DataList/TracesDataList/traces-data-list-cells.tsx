@@ -3,6 +3,7 @@ import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { DataListCell } from '../data-list-cells';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Colors } from '@/ds/tokens/colors';
 import { cn } from '@/lib/utils';
 
@@ -32,28 +33,6 @@ export function TracesDataListIdCell({ traceId }: TracesDataListIdCellProps) {
   return (
     <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
       {getShortId(traceId)}
-    </DataListCell>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// KindCell
-// ---------------------------------------------------------------------------
-
-export interface TracesDataListKindCellProps {
-  /** `null`/missing → root span (Trace). Set → nested span (Subtrace). */
-  parentSpanId?: string | null;
-}
-
-export function TracesDataListKindCell({ parentSpanId }: TracesDataListKindCellProps) {
-  const isRoot = parentSpanId == null;
-  const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
-  const label = isRoot ? 'Trace' : 'Subtrace';
-  return (
-    <DataListCell height="compact" className="flex items-center justify-center">
-      <span title={label} aria-label={label} className="inline-flex">
-        <Icon className={cn('shrink-0', isRoot ? 'size-4 text-neutral3' : 'size-3 text-neutral3')} aria-hidden />
-      </span>
     </DataListCell>
   );
 }
@@ -105,12 +84,33 @@ export function TracesDataListTimeCell({ timestamp }: TracesDataListTimeCellProp
 
 export interface TracesDataListNameCellProps {
   name?: string | null;
+  /** `null`/missing → root span (Trace). Set → nested span (Subtrace). Drives the leading level icon. */
+  parentSpanId?: string | null;
+  /** When true, the leading level icon is wrapped in a Trace/Subtrace tooltip. Off by default —
+   *  only meaningful in branches mode, where rows mix root traces and subtraces. */
+  showLevelTooltip?: boolean;
 }
 
-export function TracesDataListNameCell({ name }: TracesDataListNameCellProps) {
+export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }: TracesDataListNameCellProps) {
+  const isRoot = parentSpanId == null;
+  const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
+  const label = isRoot ? 'Trace' : 'Subtrace';
+  const icon = (
+    <span aria-label={label} className="inline-flex shrink-0">
+      <Icon className={cn('shrink-0 text-neutral3', isRoot ? 'size-4' : 'size-3')} aria-hidden />
+    </span>
+  );
   return (
-    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 truncate">
-      {name || '-'}
+    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 flex items-center gap-2">
+      {showLevelTooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{icon}</TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      ) : (
+        icon
+      )}
+      <span className="min-w-0 truncate">{name || '-'}</span>
     </DataListCell>
   );
 }
