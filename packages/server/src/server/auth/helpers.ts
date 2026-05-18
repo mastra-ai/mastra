@@ -269,8 +269,6 @@ export interface AuthMiddlewareContext {
   rawRequest: unknown;
   token: string | null;
   buildAuthorizeContext: () => unknown;
-  /** Auth mode: 'studio' for internal team members, 'server' for external users */
-  authMode?: 'studio' | 'server';
 }
 
 export type AuthResult =
@@ -323,18 +321,7 @@ export function supportsSessionRefresh(
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
  */
 export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
-  const {
-    path,
-    method,
-    getHeader,
-    mastra,
-    authConfig,
-    customRouteAuthConfig,
-    requestContext,
-    rawRequest,
-    token,
-    authMode,
-  } = ctx;
+  const { path, method, getHeader, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
 
   // ── Skip checks (evaluated once) ──
 
@@ -454,11 +441,8 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     try {
-      // Select RBAC provider based on auth mode (studio uses studio RBAC, server uses server RBAC)
-      const rbacProvider =
-        authMode === 'studio'
-          ? ((mastra.getStudio()?.rbac ?? mastra.getServer()?.rbac) as IRBACProvider<EEUser> | undefined)
-          : (mastra.getServer()?.rbac as IRBACProvider<EEUser> | undefined);
+      const serverConfig = mastra.getServer();
+      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
 
       if (rbacProvider) {
         if (!user || typeof user !== 'object' || !('id' in user)) {

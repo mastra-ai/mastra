@@ -382,23 +382,28 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
    *
    * WorkOS supports both single-role and multi-role modes, configured at the
    * environment level in the WorkOS Dashboard.
+   *
+   * When roleMapping is provided, roles/permissions are static (config-driven).
+   * When roleMapping is absent, roles/permissions are dynamic (WorkOS-driven).
    */
   getCapabilities(): RBACCapabilities {
+    const isStaticConfig = !!this.options.roleMapping;
+
     return {
       ...DEFAULT_RBAC_CAPABILITIES,
       // Multi-role support depends on WorkOS environment configuration
       multiRole: this.options.multiRole ?? false,
-      // Roles can be created/updated via WorkOS API (delete not supported for environment roles)
-      dynamicRoles: true,
-      // Roles are managed in WorkOS dashboard (or via API)
-      providerManagedRoles: true,
-      // Roles come from the provider (WorkOS)
-      roleSource: 'provider',
-      // Permissions come from provider when useProviderPermissions is true
-      permissionSource: this.useProviderPermissions ? 'provider' : 'roleMapping',
-      // Permissions can be edited on roles via WorkOS API
-      permissionEditing: true,
-      // Role assignment is supported via WorkOS API
+      // Dynamic roles only available when NOT using static roleMapping
+      dynamicRoles: !isStaticConfig,
+      // Roles are provider-managed only when NOT using static roleMapping
+      providerManagedRoles: !isStaticConfig,
+      // Roles come from config when roleMapping provided, otherwise from WorkOS
+      roleSource: isStaticConfig ? 'config' : 'provider',
+      // Permissions come from config when roleMapping provided, otherwise from WorkOS
+      permissionSource: isStaticConfig ? 'roleMapping' : 'provider',
+      // Permissions can only be edited when NOT using static roleMapping
+      permissionEditing: !isStaticConfig,
+      // Role assignment is always supported via WorkOS API
       roleAssignment: true,
     };
   }

@@ -3,7 +3,17 @@ import type { MastraAuthConfig } from '@mastra/core/server';
 // Default configuration that can be extended by clients
 export const defaultAuthConfig: MastraAuthConfig = {
   protected: ['/api/*'],
-  public: ['/api', '/api/auth/*'],
+  // Auth callback routes are public (login, logout, SSO flows)
+  // but management routes (/api/auth/team, /api/auth/roles, etc.) require auth
+  public: [
+    '/api',
+    '/api/auth/sso/*',
+    '/api/auth/callback',
+    '/api/auth/login',
+    '/api/auth/logout',
+    '/api/auth/session',
+    '/api/auth/capabilities',
+  ],
   // Simple rule system
   rules: [
     // Admin users can do anything
