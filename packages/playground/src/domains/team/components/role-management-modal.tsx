@@ -52,7 +52,7 @@ export function RoleManagementModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative bg-surface0 border border-border1 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] overflow-hidden">

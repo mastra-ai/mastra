@@ -1102,24 +1102,39 @@ export const GET_ROLES_ROUTE = createRoute({
       const studioConfig = mastra.getStudio?.();
       const rbac = studioConfig?.rbac;
 
-      if (!rbac || !('listRoles' in rbac)) {
-        // Return default roles if no RBAC manager
-        return {
-          roles: [
-            { id: 'admin', name: 'Admin', description: 'Full access', permissions: ['*'] },
-            {
-              id: 'member',
-              name: 'Member',
-              description: 'Read and execute access',
-              permissions: ['*:read', '*:execute'],
-            },
-            { id: 'viewer', name: 'Viewer', description: 'Read-only access', permissions: ['*:read'] },
-          ],
-        };
+      // If RBAC provider has listRoles method, use it
+      if (rbac && 'listRoles' in rbac) {
+        const roles = await (rbac as any).listRoles();
+        return { roles };
       }
 
-      const roles = await (rbac as any).listRoles();
-      return { roles };
+      // If RBAC provider has roleMapping, derive roles from it
+      if (rbac && 'roleMapping' in rbac) {
+        const roleMapping = (rbac as any).roleMapping as Record<string, string[]>;
+        const roles = Object.entries(roleMapping)
+          .filter(([key]) => key !== '_default') // Exclude _default fallback
+          .map(([id, permissions]) => ({
+            id,
+            name: id.charAt(0).toUpperCase() + id.slice(1), // Capitalize first letter
+            description: formatRoleDescription(permissions),
+            permissions,
+          }));
+        return { roles };
+      }
+
+      // Fallback to default roles if no RBAC configured
+      return {
+        roles: [
+          { id: 'admin', name: 'Admin', description: 'Full access', permissions: ['*'] },
+          {
+            id: 'member',
+            name: 'Member',
+            description: 'Read and execute access',
+            permissions: ['*:read', '*:execute'],
+          },
+          { id: 'viewer', name: 'Viewer', description: 'Read-only access', permissions: ['*:read'] },
+        ],
+      };
     } catch (error) {
       if (error instanceof HTTPException) throw error;
       mastra?.getLogger?.()?.error('Failed to list roles', { error });
@@ -1127,6 +1142,32 @@ export const GET_ROLES_ROUTE = createRoute({
     }
   },
 });
+
+/**
+ * Generate a human-readable description from a permission list.
+ */
+function formatRoleDescription(permissions: string[]): string {
+  if (permissions.includes('*')) return 'Full access';
+  if (permissions.length === 0) return 'No permissions';
+
+  const actions = new Set<string>();
+  for (const perm of permissions) {
+    const parts = perm.split(':');
+    const action = parts[1];
+    if (action) {
+      if (action === '*') {
+        actions.add('full');
+      } else {
+        actions.add(action);
+      }
+    }
+  }
+
+  if (actions.has('full')) return 'Full access to some resources';
+  const actionList = Array.from(actions);
+  if (actionList.length === 0) return 'Custom permissions';
+  return actionList.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ') + ' access';
+}
 
 // POST /auth/roles - Create a new role
 // ============================================================================
