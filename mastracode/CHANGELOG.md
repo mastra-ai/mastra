@@ -1,5 +1,52 @@
 # mastracode
 
+## 0.20.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9430352`](https://github.com/mastra-ai/mastra/commit/94303523460cb09dcd0d8139c11926029631d6ba), [`7f6a053`](https://github.com/mastra-ai/mastra/commit/7f6a053b6a76f12b8ab0f25da1709adbd5134cd6)]:
+  - @mastra/mcp@1.7.1-alpha.0
+  - @mastra/memory@1.18.3-alpha.0
+
+## 0.20.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`6b8a53e`](https://github.com/mastra-ai/mastra/commit/6b8a53eea3b255a4fd0b29bc0237cdd1906bf55c)]:
+  - @mastra/stagehand@0.2.3-alpha.0
+
+## 0.20.0-alpha.0
+
+### Minor Changes
+
+- Added the `/skill/<name>` command to explicitly activate an installed workspace skill in the current conversation. This complements automatic skill activation. ([#16618](https://github.com/mastra-ai/mastra/pull/16618))
+
+  ```text
+  /skill/github-triage
+  /skill/release-check focus tests
+  ```
+
+  The command loads the skill's instructions (plus any `references/`, `scripts/`, and `assets/` paths the skill ships) and sends them to the agent. Use `/skills` to list available skills.
+
+  Skills can opt out of direct user invocation by setting `user-invocable: false` in their frontmatter — those skills remain available for automatic activation by the agent but do not appear in `/skill/<name>` autocomplete, the `/skills` listing, or accept direct invocation.
+
+  ```md title=".mastracode/skills/internal-helper/SKILL.md"
+  ---
+  name: internal-helper
+  description: Used by the agent internally; not for direct user invocation.
+  user-invocable: false
+  ---
+  ```
+
+  Closes #16344.
+
+### Patch Changes
+
+- Improved thread signal handling in the TUI to work with the simplified signal contents shape. ([#16622](https://github.com/mastra-ai/mastra/pull/16622))
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+
 ## 0.19.1
 
 ### Patch Changes

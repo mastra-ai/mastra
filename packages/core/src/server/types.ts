@@ -20,6 +20,7 @@ export type ApiRoute =
       handler: Handler;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      cors?: CorsOptions;
       requiresAuth?: boolean;
       requiresPermission?: MastraFGAPermissionInput;
       fga?: RouteFGAConfig;
@@ -32,6 +33,7 @@ export type ApiRoute =
       createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      cors?: CorsOptions;
       requiresAuth?: boolean;
       requiresPermission?: MastraFGAPermissionInput;
       fga?: RouteFGAConfig;
@@ -40,6 +42,8 @@ export type ApiRoute =
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+
+export type CorsOptions = Parameters<typeof cors>[0];
 
 export type ContextWithMastra = Context<{
   Variables: {
@@ -227,10 +231,10 @@ export type ServerConfig = {
    */
   middleware?: Middleware | Middleware[];
   /**
-   * CORS configuration for the server
-   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   * CORS configuration for the server.
+   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
-  cors?: Parameters<typeof cors>[0] | false;
+  cors?: CorsOptions | false;
   /**
    * Build configuration for the server
    */
