@@ -45,8 +45,14 @@ test('agent without browser tools: no WebSocket and no session probe', async ({ 
   await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
   await expect(page.locator('a:has-text("New Chat")')).toBeVisible();
 
-  // Give the playground a generous window to (incorrectly) initiate traffic.
-  await page.waitForTimeout(2000);
+  // Negative assertion: poll for any browser traffic and fail fast if it appears.
+  // The poll resolves at the timeout with the final count, which we expect to be 0.
+  await expect
+    .poll(() => observed.wsUrls.length + observed.probeUrls.length, {
+      message: 'no browser traffic should occur for agents without browser tools',
+      timeout: 2000,
+    })
+    .toBe(0);
 
   const browserStreamWs = observed.wsUrls.filter(url => /\/browser\/[^/]+\/stream/.test(url));
   expect(browserStreamWs, 'no browser-stream WebSocket should be opened').toEqual([]);
