@@ -1,7 +1,8 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import type { ExpectedStep, Trajectory, TrajectoryExpectation, TrajectoryStep } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 import { getUserMessageFromRunInput, getAssistantMessageFromRunOutput, roundToTwoDecimals } from '../../utils';
 import { TRAJECTORY_EVALUATION_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
@@ -12,36 +13,21 @@ export interface TrajectoryAccuracyLLMOptions {
   expectedTrajectory?: Trajectory | ExpectedStep[];
 }
 
-const analyzeOutputSchema = {
-  type: 'object',
-  properties: {
-    stepEvaluations: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          stepName: { type: 'string', description: 'Name of the step (tool name or action)' },
-          wasNecessary: { type: 'boolean', description: 'Whether this step was necessary for the task' },
-          wasInOrder: { type: 'boolean', description: 'Whether this step was in a logical position in the sequence' },
-          reasoning: { type: 'string', description: 'Brief explanation of the evaluation' },
-        },
-        required: ['stepName', 'wasNecessary', 'wasInOrder', 'reasoning'],
-      },
-    },
-    missingSteps: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Steps that should have been taken but were not',
-    },
-    extraSteps: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Steps that were unnecessary or redundant',
-    },
-    overallAssessment: { type: 'string', description: 'Brief overall assessment of the trajectory quality' },
-  },
-  required: ['stepEvaluations', 'overallAssessment'],
-} satisfies JSONSchema7;
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    stepEvaluations: z.array(
+      z.object({
+        stepName: z.string().describe('Name of the step (tool name or action)'),
+        wasNecessary: z.boolean().describe('Whether this step was necessary for the task'),
+        wasInOrder: z.boolean().describe('Whether this step was in a logical position in the sequence'),
+        reasoning: z.string().describe('Brief explanation of the evaluation'),
+      }),
+    ),
+    missingSteps: z.array(z.string()).optional().describe('Steps that should have been taken but were not'),
+    extraSteps: z.array(z.string()).optional().describe('Steps that were unnecessary or redundant'),
+    overallAssessment: z.string().describe('Brief overall assessment of the trajectory quality'),
+  }),
+);
 
 function formatStepDetails(step: TrajectoryStep): string {
   switch (step.stepType) {
@@ -172,12 +158,7 @@ export function createTrajectoryAccuracyScorerLLM({
         hasSteps: actualTrajectory.steps.length > 0,
       };
     })
-    .analyze<{
-      stepEvaluations: { stepName: string; wasNecessary: boolean; wasInOrder: boolean; reasoning: string }[];
-      missingSteps?: string[];
-      extraSteps?: string[];
-      overallAssessment: string;
-    }>({
+    .analyze({
       description: 'Analyze the quality and appropriateness of the agent trajectory',
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ run, results }) => {

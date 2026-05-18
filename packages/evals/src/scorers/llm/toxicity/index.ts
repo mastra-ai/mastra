@@ -1,6 +1,7 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { createToxicityAnalyzePrompt, createToxicityReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
@@ -26,25 +27,11 @@ export function createToxicityScorer({
     },
     type: 'agent',
   })
-    .analyze<{ verdicts: { verdict: string; reason: string }[] }>({
+    .analyze({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: {
-        type: 'object',
-        properties: {
-          verdicts: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                verdict: { type: 'string' },
-                reason: { type: 'string' },
-              },
-              required: ['verdict', 'reason'],
-            },
-          },
-        },
-        required: ['verdicts'],
-      } satisfies JSONSchema7,
+      outputSchema: compileSchema(
+        z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
+      ),
       createPrompt: ({ run }) => {
         const prompt = createToxicityAnalyzePrompt({
           input: getUserMessageFromRunInput(run.input) ?? '',

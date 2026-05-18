@@ -1,6 +1,7 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
@@ -42,39 +43,23 @@ export function createFaithfulnessScorer({
     },
     type: 'agent',
   })
-    .preprocess<{ claims: string[] }>({
+    .preprocess({
       description: 'Extract relevant statements from the LLM output',
-      outputSchema: {
-        type: 'object',
-        properties: {
-          claims: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['claims'],
-      } satisfies JSONSchema7,
+      outputSchema: compileSchema(
+        z.object({
+          claims: z.array(z.string()),
+        }),
+      ),
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
       },
     })
-    .analyze<{ verdicts: { verdict: string; reason: string }[] }>({
+    .analyze({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: {
-        type: 'object',
-        properties: {
-          verdicts: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                verdict: { type: 'string' },
-                reason: { type: 'string' },
-              },
-              required: ['verdict', 'reason'],
-            },
-          },
-        },
-        required: ['verdicts'],
-      } satisfies JSONSchema7,
+      outputSchema: compileSchema(
+        z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
+      ),
       createPrompt: ({ results, run }) => {
         // Use the context provided by the user, or the context from the tool invocations
         const context = options?.context ?? getToolInvocationContext(run.output);

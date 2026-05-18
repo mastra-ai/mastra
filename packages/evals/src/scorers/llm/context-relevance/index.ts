@@ -1,7 +1,8 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 import {
   roundToTwoDecimals,
   getAssistantMessageFromRunOutput,
@@ -23,28 +24,21 @@ export interface ContextRelevanceOptions {
   };
 }
 
-const analyzeOutputSchema = {
-  type: 'object',
-  properties: {
-    evaluations: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          context_index: { type: 'number' },
-          contextPiece: { type: 'string' },
-          relevanceLevel: { type: 'string', enum: ['high', 'medium', 'low', 'none'] },
-          wasUsed: { type: 'boolean' },
-          reasoning: { type: 'string' },
-        },
-        required: ['context_index', 'contextPiece', 'relevanceLevel', 'wasUsed', 'reasoning'],
-      },
-    },
-    missingContext: { type: 'array', items: { type: 'string' }, default: [] },
-    overallAssessment: { type: 'string' },
-  },
-  required: ['evaluations', 'overallAssessment'],
-} satisfies JSONSchema7;
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    evaluations: z.array(
+      z.object({
+        context_index: z.number(),
+        contextPiece: z.string(),
+        relevanceLevel: z.enum(['high', 'medium', 'low', 'none']),
+        wasUsed: z.boolean(),
+        reasoning: z.string(),
+      }),
+    ),
+    missingContext: z.array(z.string()).optional().default([]),
+    overallAssessment: z.string(),
+  }),
+);
 
 // Default penalty constants for maintainability and clarity
 const DEFAULT_PENALTIES = {
@@ -93,17 +87,7 @@ export function createContextRelevanceScorerLLM({
     },
     type: 'agent',
   })
-    .analyze<{
-      evaluations: {
-        context_index: number;
-        contextPiece: string;
-        relevanceLevel: 'high' | 'medium' | 'low' | 'none';
-        wasUsed: boolean;
-        reasoning: string;
-      }[];
-      missingContext?: string[];
-      overallAssessment: string;
-    }>({
+    .analyze({
       description: 'Analyze the relevance and utility of provided context',
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ run }) => {

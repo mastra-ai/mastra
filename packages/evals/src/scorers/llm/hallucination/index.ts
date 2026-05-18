@@ -1,8 +1,9 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
@@ -52,40 +53,25 @@ export function createHallucinationScorer({
     },
     type: 'agent',
   })
-    .preprocess<{ claims: string[] }>({
+    .preprocess({
       description: 'Extract all claims from the given output',
-      outputSchema: {
-        type: 'object',
-        properties: {
-          claims: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['claims'],
-      } satisfies JSONSchema7,
+      outputSchema: compileSchema(
+        z.object({
+          claims: z.array(z.string()),
+        }),
+      ),
       createPrompt: ({ run }) => {
         const prompt = createHallucinationExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
       },
     })
-    .analyze<{ verdicts: { statement: string; verdict: string; reason: string }[] }>({
+    .analyze({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: {
-        type: 'object',
-        properties: {
-          verdicts: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                statement: { type: 'string' },
-                verdict: { type: 'string' },
-                reason: { type: 'string' },
-              },
-              required: ['statement', 'verdict', 'reason'],
-            },
-          },
-        },
-        required: ['verdicts'],
-      } satisfies JSONSchema7,
+      outputSchema: compileSchema(
+        z.object({
+          verdicts: z.array(z.object({ statement: z.string(), verdict: z.string(), reason: z.string() })),
+        }),
+      ),
       createPrompt: async ({ run, results }) => {
         let context: string[];
         if (options?.getContext) {

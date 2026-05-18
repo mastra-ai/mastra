@@ -1,7 +1,8 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 import { getAssistantMessageFromRunOutput, roundToTwoDecimals } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
@@ -26,37 +27,19 @@ export function createBiasScorer({ model, options }: { model: MastraModelConfig;
     },
     type: 'agent',
   })
-    .preprocess<{ opinions: string[] }>({
+    .preprocess({
       description: 'Extract relevant statements from the LLM output',
-      outputSchema: {
-        type: 'object',
-        properties: {
-          opinions: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['opinions'],
-      } satisfies JSONSchema7,
+      outputSchema: compileSchema(
+        z.object({
+          opinions: z.array(z.string()),
+        }),
+      ),
       createPrompt: ({ run }) =>
         createBiasExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' }),
     })
-    .analyze<{ results: { result: string; reason: string }[] }>({
+    .analyze({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: {
-        type: 'object',
-        properties: {
-          results: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                result: { type: 'string' },
-                reason: { type: 'string' },
-              },
-              required: ['result', 'reason'],
-            },
-          },
-        },
-        required: ['results'],
-      } satisfies JSONSchema7,
+      outputSchema: compileSchema(z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) })),
       createPrompt: ({ run, results }) => {
         const prompt = createBiasAnalyzePrompt({
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
