@@ -134,89 +134,139 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
    *
    * @experimental This feature requires WorkOS Permissions API access.
    */
-  async syncPermissionsToWorkOS(): Promise<{ created: string[]; existing: string[]; errors: string[] }> {
-    const apiKey = this.options.apiKey ?? process.env.WORKOS_API_KEY;
-    if (!apiKey) {
-      throw new Error('WorkOS API key is required for permission sync');
-    }
-
-    const result = { created: [] as string[], existing: [] as string[], errors: [] as string[] };
+  async syncPermissionsToWorkOS(): Promise<{
+    created: string[];
+    updated: string[];
+    unchanged: string[];
+    errors: string[];
+  }> {
+    const result = {
+      created: [] as string[],
+      updated: [] as string[],
+      unchanged: [] as string[],
+      errors: [] as string[],
+    };
 
     try {
-      // Collect all unique permissions from roleMapping
-      const mastraPermissions = new Set<string>();
-      const roleMapping = this.options.roleMapping ?? {};
-      for (const permissions of Object.values(roleMapping)) {
-        for (const permission of permissions) {
-          // Skip wildcards - they're not actual permissions in WorkOS
-          if (!permission.includes('*')) {
-            mastraPermissions.add(permission);
-          }
+      // Import all generated Mastra permissions
+      const { PERMISSIONS, ACTIONS, RESOURCES } = await import('@mastra/core/auth/ee');
+
+      // Build full permission set including wildcards
+      const mastraPermissions = new Set<string>([
+        // Global wildcard
+        '*',
+        // Action wildcards (*:read, *:write, etc.)
+        ...ACTIONS.map((action: string) => `*:${action}`),
+        // Resource wildcards (agents:*, workflows:*, etc.)
+        ...RESOURCES.map((resource: string) => `${resource}:*`),
+        // Specific permissions (agents:read, workflows:write, etc.)
+        ...PERMISSIONS,
+      ]);
+
+      // Fetch all existing permissions from WorkOS (paginated)
+      const existingPermissionsMap = new Map<string, { slug: string; name?: string; description?: string | null }>();
+      let after: string | undefined;
+      do {
+        const response = await this.workos.authorization.listPermissions({ after, limit: 100 });
+        for (const p of response.data ?? []) {
+          existingPermissionsMap.set(p.slug, p);
         }
-      }
+        after = response.listMetadata?.after ?? undefined;
+      } while (after);
 
-      // Fetch existing permissions from WorkOS
-      const existingResponse = await fetch('https://api.workos.com/roles/permissions', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!existingResponse.ok) {
-        const error = await existingResponse.text();
-        throw new Error(`Failed to fetch WorkOS permissions: ${existingResponse.status} ${error}`);
-      }
-
-      const existingData = (await existingResponse.json()) as { data: Array<{ slug: string }> };
-      const existingPermissions = new Set(existingData.data?.map(p => p.slug) ?? []);
-
-      // Create missing permissions
+      // Create or update permissions
       for (const permission of mastraPermissions) {
-        if (existingPermissions.has(permission)) {
-          result.existing.push(permission);
-          continue;
-        }
+        const { name, description } = this.getPermissionDisplayInfo(permission);
+        const existing = existingPermissionsMap.get(permission);
 
         try {
-          const createResponse = await fetch('https://api.workos.com/roles/permissions', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+          if (existing) {
+            // Check if update needed
+            if (existing.name !== name || existing.description !== description) {
+              await this.workos.authorization.updatePermission(permission, { name, description });
+              result.updated.push(permission);
+              console.info(`[MastraRBACWorkos] Updated permission in WorkOS: ${permission}`);
+            } else {
+              result.unchanged.push(permission);
+            }
+          } else {
+            // Create new permission
+            await this.workos.authorization.createPermission({
               slug: permission,
-              name: permission
-                .split(':')
-                .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-                .join(': '),
-              description: `Mastra permission: ${permission}`,
-            }),
-          });
-
-          if (createResponse.ok) {
+              name,
+              description,
+            });
             result.created.push(permission);
             console.info(`[MastraRBACWorkos] Created permission in WorkOS: ${permission}`);
-          } else {
-            const error = await createResponse.text();
-            result.errors.push(`${permission}: ${error}`);
           }
         } catch (error) {
-          result.errors.push(`${permission}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          const errorMsg = `${permission}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          result.errors.push(errorMsg);
+          console.warn(`[MastraRBACWorkos] Failed to sync permission: ${errorMsg}`);
         }
       }
 
       console.info(
-        `[MastraRBACWorkos] Permission sync complete: ${result.created.length} created, ${result.existing.length} existing, ${result.errors.length} errors`,
+        `[MastraRBACWorkos] Permission sync complete: ${result.created.length} created, ${result.updated.length} updated, ${result.unchanged.length} unchanged, ${result.errors.length} errors`,
       );
+      if (result.errors.length > 0) {
+        console.warn(
+          `[MastraRBACWorkos] Errors:\n  ${result.errors.slice(0, 10).join('\n  ')}${result.errors.length > 10 ? `\n  ... and ${result.errors.length - 10} more` : ''}`,
+        );
+      }
     } catch (error) {
       console.error('[MastraRBACWorkos] Permission sync failed:', error);
       throw error;
     }
 
     return result;
+  }
+
+  /**
+   * Generate human-readable name and description for a permission slug.
+   */
+  private getPermissionDisplayInfo(permission: string): { name: string; description: string } {
+    if (permission === '*') {
+      return { name: 'Full Access', description: 'Full access to all resources and actions' };
+    }
+
+    if (permission.startsWith('*:')) {
+      const action = permission.slice(2);
+      const actionLabel = this.formatLabel(action);
+      return {
+        name: `All: ${actionLabel}`,
+        description: `${actionLabel} access to all resources`,
+      };
+    }
+
+    if (permission.endsWith(':*')) {
+      const resource = permission.slice(0, -2);
+      const resourceLabel = this.formatLabel(resource);
+      return {
+        name: `${resourceLabel}: All`,
+        description: `Full access to ${resourceLabel.toLowerCase()}`,
+      };
+    }
+
+    // Specific permission like "agents:read"
+    const [resource = '', action = ''] = permission.split(':');
+    const resourceLabel = this.formatLabel(resource);
+    const actionLabel = this.formatLabel(action);
+    return {
+      name: `${resourceLabel}: ${actionLabel}`,
+      description: `${actionLabel} access to ${resourceLabel.toLowerCase()}`,
+    };
+  }
+
+  /**
+   * Format a slug segment into a human-readable label.
+   * e.g., "agents" -> "Agents", "mcp-servers" -> "MCP Servers"
+   */
+  private formatLabel(slug: string): string {
+    return slug
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   }
 
   /**

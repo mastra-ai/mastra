@@ -184,13 +184,8 @@ export const mastra = new Mastra({
     }),
     rbac: new MastraRBACWorkos({
       organizationId: process.env.WORKOS_ORGANIZATION_ID, // Only get roles from this org
-      roleMapping: {
-        owner: ['*'],
-        admin: ['*:read', '*:write', '*:execute'],
-        member: ['*:read', '*:execute'],
-        viewer: ['*:read'],
-        _default: [],
-      },
+      syncPermissions: true, // Sync Mastra permissions to WorkOS on startup
+      // When syncPermissions is true and no roleMapping, permissions come from WorkOS roles
     }),
   },
   backgroundTasks: {
