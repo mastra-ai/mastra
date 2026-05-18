@@ -28,7 +28,7 @@ npm install @mastra/convex@latest
 ## Convex setup
 
 Before using `ConvexStore`, set up the Convex schema and storage handler in your Convex project.
-If you also use `ConvexServerCache`, add the cache tables and cache handler.
+The schema example below includes the full `ConvexStore` and `ConvexServerCache` setup. If you only use `ConvexStore`, omit `mastraCacheTable` and `mastraCacheListItemsTable`; if you use `ConvexServerCache`, include those tables and create the cache handler.
 
 ### 1. Set up Convex Schema
 
@@ -215,7 +215,9 @@ const cache = new ConvexServerCache({
 
 Each scalar cache value and each list item is stored as one Convex row and must stay within Convex's row-size limits. Very large lists are still bounded by Convex query limits when replaying a range.
 
-Cache cleanup and `clear()` run in bounded batches. A single client call can loop through up to 1,000 Convex mutations, with each mutation handling up to 25 list items. Clear very large cache namespaces incrementally or use narrower prefixes. While `clear()` is cleaning a key, reads for that key can return empty results until cleanup finishes.
+Cache cleanup and `clear()` run in bounded batches. A single client call can loop through up to 1,000 Convex mutations, with each mutation handling up to 25 list items. While `clear()` is cleaning a key, reads for that key can return empty results until cleanup finishes.
+
+For very large cache namespaces, clear incrementally or use narrower prefixes to avoid long-running cleanup operations.
 
 During batched cleanup, cache metadata can temporarily use an internal `deleted` state. The next cleanup pass removes those rows. Avoid writing new values with the same prefix until `clear()` finishes.
 

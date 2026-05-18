@@ -22,11 +22,15 @@ export class ConvexCacheClient {
   private readonly requestTimeoutMs: number;
 
   constructor({ deploymentUrl, adminAuthToken, cacheFunction, requestTimeoutMs }: ConvexCacheClientConfig) {
-    if (!deploymentUrl) {
+    const normalizedDeploymentUrl = deploymentUrl.trim();
+    const normalizedAdminAuthToken = adminAuthToken.trim();
+    const normalizedCacheFunction = cacheFunction?.trim();
+
+    if (!normalizedDeploymentUrl) {
       throw new Error('ConvexCacheClient: deploymentUrl is required.');
     }
 
-    if (!adminAuthToken) {
+    if (!normalizedAdminAuthToken) {
       throw new Error('ConvexCacheClient: adminAuthToken is required.');
     }
 
@@ -34,9 +38,9 @@ export class ConvexCacheClient {
       throw new Error('ConvexCacheClient: requestTimeoutMs must be greater than or equal to 0.');
     }
 
-    this.deploymentUrl = deploymentUrl.replace(/\/$/, '');
-    this.adminAuthToken = adminAuthToken;
-    this.cacheFunction = cacheFunction ?? DEFAULT_CACHE_FUNCTION;
+    this.deploymentUrl = normalizedDeploymentUrl.replace(/\/+$/, '');
+    this.adminAuthToken = normalizedAdminAuthToken;
+    this.cacheFunction = normalizedCacheFunction || DEFAULT_CACHE_FUNCTION;
     this.requestTimeoutMs = requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
@@ -77,12 +81,15 @@ export class ConvexCacheClient {
       status?: string;
       errorMessage?: string;
       errorCode?: string;
+      code?: string;
+      details?: Record<string, unknown>;
       value?: CacheResponse;
     };
 
     if (result.status === 'error') {
       const error = new Error(result.errorMessage || 'Unknown Convex error');
-      (error as any).code = result.errorCode;
+      (error as any).code = result.errorCode ?? result.code;
+      (error as any).details = result.details;
       throw error;
     }
 

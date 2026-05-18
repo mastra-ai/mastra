@@ -176,4 +176,126 @@ describe('ConvexCacheClient', () => {
       }),
     );
   });
+
+  it('normalizes config values before sending requests', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ value: { ok: true, result: 'cached' } }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new ConvexCacheClient({
+      deploymentUrl: ' https://example.convex.cloud/// ',
+      adminAuthToken: ' token ',
+      cacheFunction: ' ',
+    });
+
+    await client.callCache({ op: 'get', key: 'key' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.convex.cloud/api/mutation',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Convex token',
+        }),
+        body: JSON.stringify({
+          path: 'mastra/cache:handle',
+          args: { op: 'get', key: 'key' },
+          format: 'json',
+        }),
+      }),
+    );
+  });
+
+  it('rejects blank required config values', () => {
+    expect(
+      () =>
+        new ConvexCacheClient({
+          deploymentUrl: ' ',
+          adminAuthToken: 'token',
+        }),
+    ).toThrow('ConvexCacheClient: deploymentUrl is required.');
+
+    expect(
+      () =>
+        new ConvexCacheClient({
+          deploymentUrl: 'https://example.convex.cloud',
+          adminAuthToken: ' ',
+        }),
+    ).toThrow('ConvexCacheClient: adminAuthToken is required.');
+  });
+
+  it('throws non-2xx Convex API errors with status text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        text: async () => 'service unavailable',
+      })),
+    );
+
+    const client = new ConvexCacheClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'token',
+    });
+
+    await expect(client.callCache({ op: 'get', key: 'key' })).rejects.toThrow(
+      'Convex API error: 503 service unavailable',
+    );
+  });
+
+  it('propagates top-level Convex errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          status: 'error',
+          errorMessage: 'mutation failed',
+          code: 'ConvexMutationFailed',
+          details: { retryable: false },
+        }),
+      })),
+    );
+
+    const client = new ConvexCacheClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'token',
+    });
+
+    await expect(client.callCache({ op: 'get', key: 'key' })).rejects.toMatchObject({
+      message: 'mutation failed',
+      code: 'ConvexMutationFailed',
+      details: { retryable: false },
+    });
+  });
+
+  it('propagates nested cache errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          value: {
+            ok: false,
+            error: 'Wrong cache value type',
+            code: 'CACHE_TYPE_CONFLICT',
+            details: { expected: 'list', actual: 'value' },
+          },
+        }),
+      })),
+    );
+
+    const client = new ConvexCacheClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'token',
+    });
+
+    await expect(client.callCache({ op: 'listLength', key: 'key' })).rejects.toMatchObject({
+      message: 'Wrong cache value type',
+      code: 'CACHE_TYPE_CONFLICT',
+      details: { expected: 'list', actual: 'value' },
+    });
+  });
 });
