@@ -471,4 +471,75 @@ describe('Memory Schema Query Parsing', () => {
       });
     });
   });
+
+  /**
+   * Regression tests for the 1.31.0 / 1.31.1 follow-up to PR #15969.
+   *
+   * PR #15969 changed `z.preprocess(fn, inner.optional())` to
+   * `z.preprocess(fn, inner).optional()` to fix omitted-key validation under
+   * Zod 4.4.0+. That fix worked for omitted params, but it broke clients that
+   * pass non-JSON "bare-string" query values (e.g. `?orderBy=updatedAt`,
+   * which the JSON.parse preprocess collapses to undefined). The outer
+   * `.optional()` no longer triggers when the input is a defined string, so
+   * the inner object schema then receives `undefined` and fails with
+   * `expected object, received undefined`.
+   *
+   * The correct fix keeps optionality both inside and outside the preprocess:
+   * `z.preprocess(fn, inner.optional()).optional()`. Bare-string values
+   * silently resolve to `undefined`, matching the pre-1.31.0 behavior, while
+   * omitted keys and valid JSON values continue to work.
+   */
+  describe('bare-string query params (post-#15969 regression)', () => {
+    it('listThreadsQuerySchema should accept ?orderBy=updatedAt&sortDirection=DESC bare-string params', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        orderBy: 'updatedAt',
+        sortDirection: 'DESC',
+        page: '0',
+        perPage: '100',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        // Bare-string orderBy isn't a JSON object, so it silently resolves to undefined
+        // (matching pre-1.31.0 behavior). The handler's storage fallback handles ordering.
+        expect(result.data.orderBy).toBeUndefined();
+      }
+    });
+
+    it('listMessagesQuerySchema should accept bare-string orderBy without throwing', () => {
+      const result = listMessagesQuerySchema.safeParse({
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+        page: '0',
+        perPage: '40',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toBeUndefined();
+      }
+    });
+
+    it('listThreadsQuerySchema should still reject malformed JSON in metadata', () => {
+      // metadata's preprocess intentionally returns the original string on parse
+      // failure so that bad JSON surfaces a clear validation error to the client.
+      const result = listThreadsQuerySchema.safeParse({
+        metadata: '{not-json',
+        page: '0',
+        perPage: '100',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('listMessagesQuerySchema should still reject malformed JSON in include', () => {
+      const result = listMessagesQuerySchema.safeParse({
+        include: '[not-json',
+        page: '0',
+        perPage: '40',
+      });
+
+      expect(result.success).toBe(false);
+    });
+  });
 });

@@ -38,10 +38,12 @@ const storageOrderBySchema = z
       }
       return val;
     },
-    z.object({
-      field: z.enum(['createdAt', 'updatedAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    }),
+    z
+      .object({
+        field: z.enum(['createdAt', 'updatedAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
   )
   .optional();
 
@@ -62,10 +64,12 @@ const messageOrderBySchema = z
       }
       return val;
     },
-    z.object({
-      field: z.enum(['createdAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    }),
+    z
+      .object({
+        field: z.enum(['createdAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
   )
   .optional();
 
@@ -86,14 +90,16 @@ const includeSchema = z
       }
       return val;
     },
-    z.array(
-      z.object({
-        id: z.string(),
-        threadId: z.string().optional(),
-        withPreviousMessages: z.number().optional(),
-        withNextMessages: z.number().optional(),
-      }),
-    ),
+    z
+      .array(
+        z.object({
+          id: z.string(),
+          threadId: z.string().optional(),
+          withPreviousMessages: z.number().optional(),
+          withNextMessages: z.number().optional(),
+        }),
+      )
+      .optional(),
   )
   .optional();
 
@@ -114,17 +120,19 @@ const filterSchema = z
       }
       return val;
     },
-    z.object({
-      dateRange: z
-        .object({
-          start: z.coerce.date().optional(),
-          end: z.coerce.date().optional(),
-          startExclusive: z.boolean().optional(),
-          endExclusive: z.boolean().optional(),
-        })
-        .optional(),
-      roles: z.array(z.string()).optional(),
-    }),
+    z
+      .object({
+        dateRange: z
+          .object({
+            start: z.coerce.date().optional(),
+            end: z.coerce.date().optional(),
+            startExclusive: z.boolean().optional(),
+            endExclusive: z.boolean().optional(),
+          })
+          .optional(),
+        roles: z.array(z.string()).optional(),
+      })
+      .optional(),
   )
   .optional();
 
@@ -132,21 +140,18 @@ const filterSchema = z
  * Memory config schema - handles JSON parsing from query strings
  */
 const memoryConfigSchema = z
-  .preprocess(
-    val => {
-      if (val === undefined) return val;
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          // Return invalid string to fail validation (z.record will reject string type)
-          return val;
-        }
+  .preprocess(val => {
+    if (val === undefined) return val;
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        // Return invalid string to fail validation (z.record will reject string type)
+        return val;
       }
-      return val;
-    },
-    z.record(z.string(), z.unknown()),
-  )
+    }
+    return val;
+  }, z.record(z.string(), z.unknown()).optional())
   .optional();
 
 /**
@@ -201,21 +206,18 @@ export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
   metadata: z
-    .preprocess(
-      val => {
-        if (val === undefined) return val;
-        if (typeof val === 'string') {
-          try {
-            return JSON.parse(val);
-          } catch {
-            // Return invalid string to fail validation (z.record will reject string type)
-            return val;
-          }
+    .preprocess(val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
         }
-        return val;
-      },
-      z.record(z.string(), z.any()),
-    )
+      }
+      return val;
+    }, z.record(z.string(), z.any()).optional())
     .optional(),
   orderBy: storageOrderBySchema,
 });
@@ -245,7 +247,7 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
       if (val === 'true') return true;
       if (val === 'false') return false;
       return val;
-    }, z.boolean())
+    }, z.boolean().optional())
     .optional(),
 });
 
@@ -295,21 +297,18 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
   metadata: z
-    .preprocess(
-      val => {
-        if (val === undefined) return val;
-        if (typeof val === 'string') {
-          try {
-            return JSON.parse(val);
-          } catch {
-            // Return invalid string to fail validation (z.record will reject string type)
-            return val;
-          }
+    .preprocess(val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
         }
-        return val;
-      },
-      z.record(z.string(), z.any()),
-    )
+      }
+      return val;
+    }, z.record(z.string(), z.any()).optional())
     .optional(),
   orderBy: storageOrderBySchema,
 });

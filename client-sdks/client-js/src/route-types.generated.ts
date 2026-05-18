@@ -10337,15 +10337,21 @@ export type GetMemoryThreads_QueryParams = {
   agentId?: string | undefined;
   resourceId?: string | undefined;
   metadata?:
-    | {
-        [key: string]: any;
-      }
+    | (
+        | {
+            [key: string]: any;
+          }
+        | undefined
+      )
     | undefined;
   orderBy?:
-    | {
-        field?: ('createdAt' | 'updatedAt') | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: ('createdAt' | 'updatedAt') | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
 };
 
@@ -10446,33 +10452,42 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
   agentId?: string | undefined;
   resourceId?: string | undefined;
   orderBy?:
-    | {
-        field?: 'createdAt' | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: 'createdAt' | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
   include?:
-    | {
-        id: string;
-        threadId?: string | undefined;
-        withPreviousMessages?: number | undefined;
-        withNextMessages?: number | undefined;
-      }[]
+    | (
+        | {
+            id: string;
+            threadId?: string | undefined;
+            withPreviousMessages?: number | undefined;
+            withNextMessages?: number | undefined;
+          }[]
+        | undefined
+      )
     | undefined;
   filter?:
-    | {
-        dateRange?:
-          | {
-              start?: Date | undefined;
-              end?: Date | undefined;
-              startExclusive?: boolean | undefined;
-              endExclusive?: boolean | undefined;
-            }
-          | undefined;
-        roles?: string[] | undefined;
-      }
+    | (
+        | {
+            dateRange?:
+              | {
+                  start?: Date | undefined;
+                  end?: Date | undefined;
+                  startExclusive?: boolean | undefined;
+                  endExclusive?: boolean | undefined;
+                }
+              | undefined;
+            roles?: string[] | undefined;
+          }
+        | undefined
+      )
     | undefined;
-  includeSystemReminders?: boolean | undefined;
+  includeSystemReminders?: (boolean | undefined) | undefined;
 };
 
 export type GetMemoryThreadsThreadIdMessages_Response = {
@@ -10513,9 +10528,12 @@ export type GetMemoryThreadsThreadIdWorkingMemory_QueryParams = {
   agentId: string;
   resourceId?: string | undefined;
   memoryConfig?:
-    | {
-        [key: string]: unknown;
-      }
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
     | undefined;
 };
 
@@ -10918,9 +10936,12 @@ export type GetMemorySearch_QueryParams = {
   threadId?: string | undefined;
   limit: number | undefined;
   memoryConfig?:
-    | {
-        [key: string]: unknown;
-      }
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
     | undefined;
 };
 
@@ -11003,15 +11024,21 @@ export type GetMemoryNetworkThreads_QueryParams = {
   agentId?: string | undefined;
   resourceId?: string | undefined;
   metadata?:
-    | {
-        [key: string]: any;
-      }
+    | (
+        | {
+            [key: string]: any;
+          }
+        | undefined
+      )
     | undefined;
   orderBy?:
-    | {
-        field?: ('createdAt' | 'updatedAt') | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: ('createdAt' | 'updatedAt') | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
 };
 
@@ -11114,31 +11141,40 @@ export type GetMemoryNetworkThreadsThreadIdMessages_QueryParams = {
   agentId?: string | undefined;
   resourceId?: string | undefined;
   orderBy?:
-    | {
-        field?: 'createdAt' | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: 'createdAt' | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
   include?:
-    | {
-        id: string;
-        threadId?: string | undefined;
-        withPreviousMessages?: number | undefined;
-        withNextMessages?: number | undefined;
-      }[]
+    | (
+        | {
+            id: string;
+            threadId?: string | undefined;
+            withPreviousMessages?: number | undefined;
+            withNextMessages?: number | undefined;
+          }[]
+        | undefined
+      )
     | undefined;
   filter?:
-    | {
-        dateRange?:
-          | {
-              start?: Date | undefined;
-              end?: Date | undefined;
-              startExclusive?: boolean | undefined;
-              endExclusive?: boolean | undefined;
-            }
-          | undefined;
-        roles?: string[] | undefined;
-      }
+    | (
+        | {
+            dateRange?:
+              | {
+                  start?: Date | undefined;
+                  end?: Date | undefined;
+                  startExclusive?: boolean | undefined;
+                  endExclusive?: boolean | undefined;
+                }
+              | undefined;
+            roles?: string[] | undefined;
+          }
+        | undefined
+      )
     | undefined;
 };
 
