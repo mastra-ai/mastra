@@ -89,7 +89,37 @@ function pickFilterFields(metadata: Record<string, any> | undefined, filterField
   return fields;
 }
 
-function clearMissingFilterFields(patch: Record<string, any>, metadata: Record<string, any>, filterFields: string[] | undefined) {
+function isMetadataRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validateMetadataArray(metadata: unknown, idsLength: number): Array<Record<string, any>> | undefined {
+  if (metadata === undefined) return undefined;
+  if (!Array.isArray(metadata)) {
+    throw new Error('Native vector upsert: metadata must be an array matching ids when provided');
+  }
+  if (metadata.length !== idsLength) {
+    throw new Error(`Native vector upsert: metadata length (${metadata.length}) must match ids length (${idsLength})`);
+  }
+  if (!metadata.every(isMetadataRecord)) {
+    throw new Error('Native vector upsert: metadata entries must be objects when provided');
+  }
+  return metadata;
+}
+
+function validateMetadataRecord(metadata: unknown): Record<string, any> | undefined {
+  if (metadata === undefined) return undefined;
+  if (!isMetadataRecord(metadata)) {
+    throw new Error('Native vector update: metadata must be an object when provided');
+  }
+  return metadata;
+}
+
+function clearMissingFilterFields(
+  patch: Record<string, any>,
+  metadata: Record<string, any>,
+  filterFields: string[] | undefined,
+) {
   if (!filterFields) return;
 
   for (const field of filterFields) {
@@ -97,6 +127,11 @@ function clearMissingFilterFields(patch: Record<string, any>, metadata: Record<s
       patch[field] = undefined;
     }
   }
+}
+
+function omitVectorField(doc: NativeVectorDocument, config: NativeVectorIndexConfig): NativeVectorDocument {
+  const { [vectorField(config)]: _, ...docWithoutVector } = doc;
+  return docWithoutVector;
 }
 
 function buildRecord({
@@ -118,7 +153,11 @@ function buildRecord({
   };
 }
 
-async function findByRecordId(ctx: any, config: NativeVectorIndexConfig, id: string): Promise<NativeVectorDocument | null> {
+async function findByRecordId(
+  ctx: any,
+  config: NativeVectorIndexConfig,
+  id: string,
+): Promise<NativeVectorDocument | null> {
   return ctx.db
     .query(asTableName(config.tableName))
     .withIndex(idIndexName(config), (q: any) => q.eq(idField(config), id))
@@ -133,7 +172,9 @@ async function mapInBatches<TInput, TOutput>(
   for (let index = 0; index < inputs.length; index += NATIVE_VECTOR_BATCH_SIZE) {
     results.push(
       ...(await Promise.all(
-        inputs.slice(index, index + NATIVE_VECTOR_BATCH_SIZE).map((input, batchIndex) => mapper(input, index + batchIndex)),
+        inputs
+          .slice(index, index + NATIVE_VECTOR_BATCH_SIZE)
+          .map((input, batchIndex) => mapper(input, index + batchIndex)),
       )),
     );
   }
@@ -162,8 +203,8 @@ export const mastraNativeVectorAction = actionGeneric({
     const limit = args.limit as number | undefined;
     const filter = args.filter as NativeVectorFilter | undefined;
 
-    if (limit !== undefined && (limit < 1 || limit > MAX_CONVEX_VECTOR_RESULTS)) {
-      throw new Error(`Native vector query: limit must be between 1 and ${MAX_CONVEX_VECTOR_RESULTS}`);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_CONVEX_VECTOR_RESULTS)) {
+      throw new Error(`Native vector query: limit must be an integer between 1 and ${MAX_CONVEX_VECTOR_RESULTS}`);
     }
 
     const results = await ctx.vectorSearch(asTableName(config.tableName), config.vectorIndexName as any, {
@@ -184,6 +225,7 @@ export const mastraNativeVectorQuery = queryGeneric({
     op: v.union(v.literal('getByConvexIds'), v.literal('describe'), v.literal('listByIds')),
     config: nativeVectorIndexConfigValidator,
     ids: v.optional(v.array(v.string())),
+    includeVector: v.optional(v.boolean()),
     countLimit: v.optional(v.number()),
   },
   handler: async (ctx, args: any) => {
@@ -195,8 +237,11 @@ export const mastraNativeVectorQuery = queryGeneric({
         if (!ids) {
           throw new Error('Native vector query: ids are required');
         }
+        const includeVector = args.includeVector === true;
         const docs = await mapInBatches(ids, id => ctx.db.get(asConvexId(id)));
-        return docs.filter(Boolean);
+        return docs
+          .filter((doc): doc is NativeVectorDocument => Boolean(doc))
+          .map(doc => (includeVector ? doc : omitVectorField(doc, config)));
       }
 
       case 'describe': {
@@ -239,17 +284,16 @@ export const mastraNativeVectorMutation = mutationGeneric({
       case 'upsert': {
         const ids = args.ids as string[];
         const vectors = args.vectors as number[][];
-        const metadata = args.metadata as Array<Record<string, any> | undefined> | undefined;
 
         if (!ids || !vectors) {
           throw new Error('Native vector upsert: ids and vectors are required');
         }
         if (vectors.length !== ids.length) {
-          throw new Error(`Native vector upsert: vectors length (${vectors.length}) must match ids length (${ids.length})`);
+          throw new Error(
+            `Native vector upsert: vectors length (${vectors.length}) must match ids length (${ids.length})`,
+          );
         }
-        if (metadata && metadata.length !== ids.length) {
-          throw new Error(`Native vector upsert: metadata length (${metadata.length}) must match ids length (${ids.length})`);
-        }
+        const metadata = validateMetadataArray(args.metadata, ids.length);
         if (new Set(ids).size !== ids.length) {
           throw new Error('Native vector upsert: ids must be unique');
         }
@@ -284,8 +328,12 @@ export const mastraNativeVectorMutation = mutationGeneric({
 
         const patch: Record<string, any> = {};
         if (args.vector) patch[vectorField(config)] = args.vector;
-        if (args.metadata) {
-          patch[metadataField(config)] = { ...(existing[metadataField(config)] ?? {}), ...args.metadata };
+        const metadata = validateMetadataRecord(args.metadata);
+        if (metadata !== undefined) {
+          const existingMetadata = isMetadataRecord(existing[metadataField(config)])
+            ? existing[metadataField(config)]
+            : {};
+          patch[metadataField(config)] = { ...existingMetadata, ...metadata };
           Object.assign(patch, pickFilterFields(patch[metadataField(config)], config.filterFields));
         }
 

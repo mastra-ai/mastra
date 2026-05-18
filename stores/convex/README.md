@@ -105,11 +105,7 @@ export default defineSchema({
 Export the native vector handlers in `convex/mastra/nativeVector.ts`:
 
 ```ts
-import {
-  mastraNativeVectorAction,
-  mastraNativeVectorMutation,
-  mastraNativeVectorQuery,
-} from '@mastra/convex/server';
+import { mastraNativeVectorAction, mastraNativeVectorMutation, mastraNativeVectorQuery } from '@mastra/convex/server';
 
 export const query = mastraNativeVectorAction;
 export const read = mastraNativeVectorQuery;

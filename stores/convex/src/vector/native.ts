@@ -131,6 +131,10 @@ const DEFAULT_NATIVE_MUTATION = 'mastra/nativeVector:write';
 const MAX_CONVEX_VECTOR_RESULTS = 256;
 const NATIVE_VECTOR_UPSERT_BATCH_SIZE = 100;
 
+function isMetadataRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
   private readonly client: ConvexAdminClient;
   private readonly indexes: Record<string, Required<ConvexNativeVectorIndexConfig> & { filterFields: string[] }>;
@@ -215,6 +219,9 @@ export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
         `ConvexNativeVector.upsert: metadata length (${metadata.length}) must match vectors length (${vectors.length})`,
       );
     }
+    if (metadata && !metadata.every(isMetadataRecord)) {
+      throw new Error('ConvexNativeVector.upsert: metadata entries must be objects when provided');
+    }
     const vectorIds = ids ?? vectors.map(() => crypto.randomUUID());
     if (new Set(vectorIds).size !== vectorIds.length) {
       throw new Error('ConvexNativeVector.upsert: ids must be unique');
@@ -250,8 +257,8 @@ export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
         details: { indexName },
       });
     }
-    if (topK < 1 || topK > MAX_CONVEX_VECTOR_RESULTS) {
-      throw new Error(`ConvexNativeVector.query: topK must be between 1 and ${MAX_CONVEX_VECTOR_RESULTS}`);
+    if (!Number.isFinite(topK) || !Number.isInteger(topK) || topK < 1 || topK > MAX_CONVEX_VECTOR_RESULTS) {
+      throw new Error(`ConvexNativeVector.query: topK must be an integer between 1 and ${MAX_CONVEX_VECTOR_RESULTS}`);
     }
 
     const index = this.getIndex(indexName);
@@ -269,6 +276,7 @@ export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
       op: 'getByConvexIds',
       config: index,
       ids: searchResults.map(result => result.id),
+      includeVector,
     });
     const scoresByConvexId = new Map(searchResults.map(result => [result.id, result.score]));
 
@@ -288,6 +296,9 @@ export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
   async updateVector(params: UpdateVectorParams<ConvexNativeVectorFilter>): Promise<void> {
     if ('filter' in params && params.filter !== undefined) {
       throw new Error('ConvexNativeVector.updateVector: filter-based updates are not supported. Update by ID instead.');
+    }
+    if (params.update.metadata !== undefined && !isMetadataRecord(params.update.metadata)) {
+      throw new Error('ConvexNativeVector.updateVector: metadata must be an object when provided');
     }
     const index = this.getIndex(params.indexName);
     await this.client.callMutation(this.nativeVectorMutation, {
@@ -310,7 +321,9 @@ export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
 
   async deleteVectors(params: DeleteVectorsParams<ConvexNativeVectorFilter>): Promise<void> {
     if (params.filter !== undefined) {
-      throw new Error('ConvexNativeVector.deleteVectors: filter-based deletes are not supported. Delete by IDs instead.');
+      throw new Error(
+        'ConvexNativeVector.deleteVectors: filter-based deletes are not supported. Delete by IDs instead.',
+      );
     }
     if (!params.ids || params.ids.length === 0) {
       throw new Error('ConvexNativeVector.deleteVectors: ids are required');
@@ -357,7 +370,9 @@ export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
   ): NativeFilterClause {
     const entries = Object.entries(filter).filter(([, value]) => value !== undefined);
     if (entries.length !== 1) {
-      throw new Error('ConvexNativeVector.query: native Convex filters support one equality field or $or of equality fields');
+      throw new Error(
+        'ConvexNativeVector.query: native Convex filters support one equality field or $or of equality fields',
+      );
     }
 
     const [field, rawValue] = entries[0]!;
@@ -366,10 +381,14 @@ export class ConvexNativeVector extends MastraVector<ConvexNativeVectorFilter> {
     }
 
     const value =
-      typeof rawValue === 'object' && rawValue !== null && '$eq' in rawValue ? rawValue.$eq : (rawValue as NativeFilterValue);
+      typeof rawValue === 'object' && rawValue !== null && '$eq' in rawValue
+        ? rawValue.$eq
+        : (rawValue as NativeFilterValue);
 
     if (!['string', 'number', 'boolean'].includes(typeof value) && value !== null) {
-      throw new Error('ConvexNativeVector.query: native Convex filters support string, number, boolean, and null values');
+      throw new Error(
+        'ConvexNativeVector.query: native Convex filters support string, number, boolean, and null values',
+      );
     }
 
     return { field, value };
