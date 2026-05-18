@@ -25,7 +25,13 @@ interface Role {
   name: string;
   description?: string;
   permissions: string[];
+  providerPermissions?: string[];
   inherits?: string[];
+  metadata?: {
+    source?: 'provider' | 'roleMapping';
+    resourceTypeSlug?: string;
+    type?: string;
+  };
 }
 
 // Available permissions that can be assigned to roles
@@ -155,43 +161,108 @@ function RoleRow({
   onEdit,
   onDelete,
   canManage,
+  expanded,
+  onToggleExpand,
 }: {
   role: Role;
   onEdit: (role: Role) => void;
   onDelete: (role: Role) => void;
   canManage: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
 }) {
+  const hasProviderPermissions = role.providerPermissions && role.providerPermissions.length > 0;
+  const isFromProvider = role.metadata?.source === 'provider';
+
   return (
-    <div className="flex items-center p-4 border-b border-border1 last:border-b-0 hover:bg-surface2/50 transition-colors">
-      {/* Role name and description */}
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-text1">{role.name}</div>
-        {role.description && <div className="text-sm text-text2 mt-0.5">{role.description}</div>}
+    <div className="border-b border-border1 last:border-b-0">
+      <div
+        className="flex items-center p-4 hover:bg-surface2/50 transition-colors cursor-pointer"
+        onClick={onToggleExpand}
+      >
+        {/* Role name and description */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-text1">{role.name}</span>
+            {isFromProvider && (
+              <Badge variant="info" className="text-xs">
+                WorkOS
+              </Badge>
+            )}
+          </div>
+          {role.description && <div className="text-sm text-text2 mt-0.5">{role.description}</div>}
+        </div>
+
+        {/* Permissions count */}
+        <div className="w-40 shrink-0 text-center">
+          <Badge variant="default">
+            {role.permissions.length} Mastra {role.permissions.length === 1 ? 'permission' : 'permissions'}
+          </Badge>
+          {hasProviderPermissions && (
+            <Badge variant="info" className="ml-1">
+              {role.providerPermissions!.length} WorkOS
+            </Badge>
+          )}
+        </div>
+
+        {/* Inherits */}
+        <div className="w-32 shrink-0 text-center text-text2 text-sm">
+          {role.inherits && role.inherits.length > 0 ? `Inherits: ${role.inherits.join(', ')}` : '—'}
+        </div>
+
+        {/* Actions */}
+        {canManage && (
+          <div className="w-24 shrink-0 flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+            <Button variant="ghost" size="sm" onClick={() => onEdit(role)} aria-label={`Edit ${role.name}`}>
+              <Icon>
+                <PencilIcon className="h-4 w-4" />
+              </Icon>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => onDelete(role)} aria-label={`Delete ${role.name}`}>
+              <Icon>
+                <TrashIcon className="h-4 w-4" />
+              </Icon>
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Permissions count */}
-      <div className="w-32 shrink-0 text-center">
-        <Badge variant="default">{role.permissions.length} permissions</Badge>
-      </div>
+      {/* Expanded permissions detail */}
+      {expanded && (
+        <div className="px-4 pb-4 bg-surface2/30">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Mastra Permissions */}
+            <div>
+              <div className="text-xs font-medium text-text2 uppercase tracking-wide mb-2">Mastra Permissions</div>
+              <div className="flex flex-wrap gap-1">
+                {role.permissions.length > 0 ? (
+                  role.permissions.map(perm => (
+                    <Badge key={perm} variant="default" className="text-xs">
+                      {perm}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-sm text-text3">No permissions assigned</span>
+                )}
+              </div>
+              <p className="text-xs text-text3 mt-2">Used for authorization within Mastra Studio</p>
+            </div>
 
-      {/* Inherits */}
-      <div className="w-32 shrink-0 text-center text-text2 text-sm">
-        {role.inherits && role.inherits.length > 0 ? `Inherits: ${role.inherits.join(', ')}` : '—'}
-      </div>
-
-      {/* Actions */}
-      {canManage && (
-        <div className="w-24 shrink-0 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onEdit(role)} aria-label={`Edit ${role.name}`}>
-            <Icon>
-              <PencilIcon className="h-4 w-4" />
-            </Icon>
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onDelete(role)} aria-label={`Delete ${role.name}`}>
-            <Icon>
-              <TrashIcon className="h-4 w-4" />
-            </Icon>
-          </Button>
+            {/* Provider Permissions (WorkOS) */}
+            {hasProviderPermissions && (
+              <div>
+                <div className="text-xs font-medium text-text2 uppercase tracking-wide mb-2">WorkOS Permissions</div>
+                <div className="flex flex-wrap gap-1">
+                  {role.providerPermissions!.map(perm => (
+                    <Badge key={perm} variant="info" className="text-xs">
+                      {perm}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-text3 mt-2">Configured in WorkOS Dashboard</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -211,13 +282,19 @@ function RolesTable({
   onDelete: (role: Role) => void;
   canManage: boolean;
 }) {
+  const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null);
+
+  const toggleExpand = (roleId: string) => {
+    setExpandedRoleId(prev => (prev === roleId ? null : roleId));
+  };
+
   if (isLoading) {
     return (
       <div className="border border-border1 rounded-lg overflow-hidden">
         {/* Header */}
         <div className="flex items-center p-4 bg-surface2/80 border-b border-border1">
           <div className="flex-1 text-xs font-medium text-text2 uppercase tracking-wide">Role</div>
-          <div className="w-32 shrink-0 text-xs font-medium text-text2 uppercase tracking-wide text-center">
+          <div className="w-40 shrink-0 text-xs font-medium text-text2 uppercase tracking-wide text-center">
             Permissions
           </div>
           <div className="w-32 shrink-0 text-xs font-medium text-text2 uppercase tracking-wide text-center">
@@ -232,8 +309,9 @@ function RolesTable({
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-3 w-48" />
             </div>
-            <div className="w-32 shrink-0 flex justify-center">
-              <Skeleton className="h-5 w-24" />
+            <div className="w-40 shrink-0 flex justify-center gap-1">
+              <Skeleton className="h-5 w-28" />
+              <Skeleton className="h-5 w-20" />
             </div>
             <div className="w-32 shrink-0 flex justify-center">
               <Skeleton className="h-4 w-16" />
@@ -264,14 +342,22 @@ function RolesTable({
       {/* Header */}
       <div className="flex items-center p-4 bg-surface2/80 border-b border-border1">
         <div className="flex-1 text-xs font-medium text-text2 uppercase tracking-wide">Role</div>
-        <div className="w-32 shrink-0 text-xs font-medium text-text2 uppercase tracking-wide text-center">
+        <div className="w-40 shrink-0 text-xs font-medium text-text2 uppercase tracking-wide text-center">
           Permissions
         </div>
         <div className="w-32 shrink-0 text-xs font-medium text-text2 uppercase tracking-wide text-center">Inherits</div>
         {canManage && <div className="w-24 shrink-0" />}
       </div>
       {roles.map(role => (
-        <RoleRow key={role.id} role={role} onEdit={onEdit} onDelete={onDelete} canManage={canManage} />
+        <RoleRow
+          key={role.id}
+          role={role}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          canManage={canManage}
+          expanded={expandedRoleId === role.id}
+          onToggleExpand={() => toggleExpand(role.id)}
+        />
       ))}
     </div>
   );
