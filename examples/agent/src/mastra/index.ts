@@ -186,14 +186,17 @@ export const mastra = new Mastra({
       organizationId: process.env.WORKOS_ORGANIZATION_ID, // Only get roles from this org
       syncPermissions: true, // Sync Mastra permissions to WorkOS on startup
       syncRoles: true, // Sync roles and their permissions to WorkOS
+      useWorkOSRoles: true, // Use WorkOS as source of truth at runtime
       roleMapping: {
         owner: ['*'], // Full access
         admin: ['*:read', '*:write', '*:execute', '*:delete'], // All actions
         member: ['*:read', '*:execute'], // Read and execute
         viewer: ['*:read'], // Read only
       },
-      // With syncRoles: true, roleMapping is synced to WorkOS on startup,
-      // then WorkOS becomes the source of truth for permissions at runtime
+      // With syncRoles + useWorkOSRoles:
+      // - roleMapping is synced to WorkOS on startup
+      // - At runtime, permissions come from WorkOS (edits in dashboard take effect)
+      // To stop syncing after initial setup, set syncRoles: false but keep useWorkOSRoles: true
     }),
   },
   backgroundTasks: {

@@ -103,10 +103,10 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     this.options = options;
 
     // Determine permission source:
-    // - syncRoles enabled → WorkOS is source of truth (we synced roleMapping to WorkOS)
+    // - useWorkOSRoles explicitly set → use that value
     // - No roleMapping → use provider permissions directly from WorkOS
-    // - roleMapping without syncRoles → use static roleMapping
-    this.useProviderPermissions = options.syncRoles || !options.roleMapping;
+    // - roleMapping without useWorkOSRoles → use static roleMapping
+    this.useProviderPermissions = options.useWorkOSRoles ?? !options.roleMapping;
 
     // Initialize LRU cache for user roles (the expensive WorkOS API call)
     this.rolesCache = new LRUCache<string, Promise<string[]>>({
