@@ -112,6 +112,31 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     // positioner saw a real trigger ref.
     expect(popup.getAttribute('data-side')).toMatch(/^(top|bottom|left|right)$/);
   });
+
+  it('exposes role="tooltip" on the popup so consumers can query via getByRole("tooltip")', async () => {
+    // Regression: Base UI's Popup does not set role="tooltip" automatically
+    // (unlike Radix). Several Playwright E2E tests assert on `getByRole`, so
+    // the wrapper must add it explicitly. Without this the agent observability
+    // tab tests fail with a 5s tooltip-not-found timeout.
+    render(
+      <TooltipProvider delay={0}>
+        <TooltipPrimitive.Root open>
+          <TooltipTrigger asChild>
+            <span tabIndex={0}>Traces</span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Add @mastra/observability to enable this tab.</TooltipContent>
+        </TooltipPrimitive.Root>
+      </TooltipProvider>,
+    );
+
+    const popup = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>('.bg-surface3');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    expect(popup.getAttribute('role')).toBe('tooltip');
+  });
 });
 
 describe('TooltipTrigger render prop', () => {

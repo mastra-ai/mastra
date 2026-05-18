@@ -2,7 +2,7 @@
 '@mastra/playground-ui': patch
 ---
 
-Migrated the Tooltip primitive to Base UI while preserving the existing API. Existing `<TooltipTrigger asChild>` usage continues to work unchanged, and Base UI's native `render` prop is now also supported on `TooltipTrigger` so consumers wrapping anchors, custom router links, or icons can pass the element directly without an `asChild` adapter:
+Migrated the Tooltip primitive to Base UI while preserving the existing API. The popup explicitly sets `role="tooltip"` so consumers can keep querying it via `getByRole('tooltip')` (Base UI does not add this role automatically). Existing `<TooltipTrigger asChild>` usage continues to work unchanged, and Base UI's native `render` prop is now also supported on `TooltipTrigger` so consumers wrapping anchors, custom router links, or icons can pass the element directly without an `asChild` adapter:
 
 ```tsx
 // Still supported

@@ -63,6 +63,10 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
       >
         <TooltipPrimitive.Popup
           ref={ref}
+          // Base UI's Popup omits `role="tooltip"` by default (only the trigger
+          // gets `aria-describedby`). Radix used to set it on Content, and our
+          // consumers query via `getByRole('tooltip')`, so set it explicitly.
+          role="tooltip"
           className={cn(
             'relative z-[100] flex flex-col origin-(--transform-origin) rounded-lg border border-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition-[transform,scale,opacity] duration-150',
             'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
