@@ -186,6 +186,18 @@ describe('Convex Schema Sync', () => {
         'last_run_id',
         'created_at',
         'updated_at',
+        'workflow_id',
+      ]),
+    );
+
+    const indexes = ((mastraSchedulesTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        ['by_workflow_status', ['workflow_id', 'status']],
+        ['by_workflow_id', ['workflow_id']],
+        ['by_owner_id', ['owner_id']],
       ]),
     );
   });

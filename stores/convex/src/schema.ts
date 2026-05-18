@@ -156,10 +156,14 @@ export const mastraSchedulesTable = defineTable({
   metadata: v.optional(v.union(v.string(), v.null())),
   owner_type: v.optional(v.union(v.string(), v.null())),
   owner_id: v.optional(v.union(v.string(), v.null())),
+  workflow_id: v.optional(v.union(v.string(), v.null())),
 })
   .index('by_record_id', ['id'])
   .index('by_status_next_fire_at', ['status', 'next_fire_at'])
+  .index('by_workflow_status', ['workflow_id', 'status'])
+  .index('by_workflow_id', ['workflow_id'])
   .index('by_owner', ['owner_type', 'owner_id'])
+  .index('by_owner_id', ['owner_id'])
   .index('by_created', ['created_at']);
 
 /**

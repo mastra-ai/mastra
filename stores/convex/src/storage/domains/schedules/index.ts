@@ -28,6 +28,7 @@ type ScheduleRecord = {
   metadata?: Record<string, unknown> | string | null;
   owner_type?: string | null;
   owner_id?: string | null;
+  workflow_id?: string | null;
 };
 
 type TriggerRecord = {
@@ -42,6 +43,8 @@ type TriggerRecord = {
   parent_trigger_id?: string | null;
   metadata?: Record<string, unknown> | string | null;
 };
+
+const SCHEDULE_LIST_LIMIT = 8_000;
 
 function serializeJson(value: unknown): string {
   return JSON.stringify(value);
@@ -61,9 +64,8 @@ function parseJson<T>(value: T | string | null | undefined): T | undefined {
 
 function isMissingSchedulesSchemaError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return (
-    /mastra_schedules|mastra_schedule_triggers/.test(message) &&
-    /(schema|table|not found|not exist|does not exist|missing)/i.test(message)
+  return /(?:Table|table)\s+(?:["'`])?(?:mastra_schedules|mastra_schedule_triggers)(?:["'`])?\s+(?:is\s+)?(?:not\s+in\s+the\s+schema|not\s+found\s+in\s+schema|not\s+found|does\s+not\s+exist)/i.test(
+    message,
   );
 }
 
@@ -79,9 +81,10 @@ function scheduleToRecord(schedule: Schedule): ScheduleRecord {
     last_run_id: schedule.lastRunId ?? null,
     created_at: schedule.createdAt,
     updated_at: schedule.updatedAt,
-    metadata: schedule.metadata === undefined ? null : serializeJson(schedule.metadata),
+    metadata: schedule.metadata == null ? null : serializeJson(schedule.metadata),
     owner_type: schedule.ownerType ?? null,
     owner_id: schedule.ownerId ?? null,
+    workflow_id: schedule.target.type === 'workflow' ? schedule.target.workflowId : null,
   };
 }
 
@@ -104,7 +107,7 @@ function recordToSchedule(record: ScheduleRecord): Schedule {
   if (record.last_fire_at != null) schedule.lastFireAt = Number(record.last_fire_at);
   if (record.last_run_id != null) schedule.lastRunId = String(record.last_run_id);
   const metadata = parseJson<Record<string, unknown>>(record.metadata);
-  if (metadata !== undefined) schedule.metadata = metadata;
+  if (metadata != null) schedule.metadata = metadata;
   if (record.owner_type != null) schedule.ownerType = String(record.owner_type) as Schedule['ownerType'];
   if (record.owner_id != null) schedule.ownerId = String(record.owner_id);
   return schedule;
@@ -121,7 +124,7 @@ function triggerToRecord(trigger: ScheduleTrigger): TriggerRecord {
     error: trigger.error ?? null,
     trigger_kind: trigger.triggerKind ?? 'schedule-fire',
     parent_trigger_id: trigger.parentTriggerId ?? null,
-    metadata: trigger.metadata === undefined ? null : serializeJson(trigger.metadata),
+    metadata: trigger.metadata == null ? null : serializeJson(trigger.metadata),
   };
 }
 
@@ -139,7 +142,7 @@ function recordToTrigger(record: TriggerRecord): ScheduleTrigger {
   if (record.error != null) trigger.error = String(record.error);
   if (record.parent_trigger_id != null) trigger.parentTriggerId = String(record.parent_trigger_id);
   const metadata = parseJson<Record<string, unknown>>(record.metadata);
-  if (metadata !== undefined) trigger.metadata = metadata;
+  if (metadata != null) trigger.metadata = metadata;
   return trigger;
 }
 
@@ -172,18 +175,45 @@ export class SchedulesConvex extends SchedulesStorage {
   }
 
   async listSchedules(filter?: ScheduleFilter): Promise<Schedule[]> {
-    const queryFilters: Array<{ field: string; value: string }> = [];
+    const queryFilters: Array<{ field: string; value: string | null }> = [];
     if (filter?.status) queryFilters.push({ field: 'status', value: filter.status });
     if (filter?.ownerType !== undefined && filter.ownerType !== null) {
       queryFilters.push({ field: 'owner_type', value: filter.ownerType });
     }
+    if (filter?.ownerType === null) {
+      queryFilters.push({ field: 'owner_type', value: null });
+    }
     if (filter?.ownerId !== undefined && filter.ownerId !== null) {
       queryFilters.push({ field: 'owner_id', value: filter.ownerId });
     }
+    if (filter?.ownerId === null) {
+      queryFilters.push({ field: 'owner_id', value: null });
+    }
+    if (filter?.workflowId) queryFilters.push({ field: 'workflow_id', value: filter.workflowId });
 
-    let schedules = (
-      await this.#db.queryTable<ScheduleRecord>(TABLE_SCHEDULES, queryFilters.length ? queryFilters : undefined)
-    ).map(recordToSchedule);
+    let records: ScheduleRecord[];
+    try {
+      records = await this.#db.queryTable<ScheduleRecord>(
+        TABLE_SCHEDULES,
+        queryFilters.length ? queryFilters : undefined,
+        undefined,
+        SCHEDULE_LIST_LIMIT,
+      );
+    } catch (error) {
+      if (isMissingSchedulesSchemaError(error)) {
+        this.logger.warn('Convex schedules schema is not available; returning no schedules', { error });
+        return [];
+      }
+      throw error;
+    }
+
+    if (records.length >= SCHEDULE_LIST_LIMIT) {
+      this.logger.warn('Convex schedules list reached the adapter limit; results may be truncated', {
+        limit: SCHEDULE_LIST_LIMIT,
+      });
+    }
+
+    let schedules = records.map(recordToSchedule);
 
     if (filter?.workflowId) {
       schedules = schedules.filter(
@@ -231,9 +261,10 @@ export class SchedulesConvex extends SchedulesStorage {
     }
     if ('target' in patch && patch.target !== undefined) {
       updates.target = serializeJson(patch.target);
+      updates.workflow_id = patch.target.type === 'workflow' ? patch.target.workflowId : null;
     }
     if ('metadata' in patch) {
-      updates.metadata = patch.metadata === undefined ? null : serializeJson(patch.metadata);
+      updates.metadata = patch.metadata == null ? null : serializeJson(patch.metadata);
     }
     if ('ownerType' in patch) {
       updates.owner_type = patch.ownerType ?? null;

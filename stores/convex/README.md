@@ -112,6 +112,8 @@ All typed tables include:
 - An `id` field for Mastra's record ID (distinct from Convex's auto-generated `_id`)
 - A `by_record_id` index for efficient lookups by Mastra ID
 
+Schedule due reads and trigger-history reads use bounded Convex queries to avoid deployment read limits. When no explicit trigger-history limit is provided, the adapter returns the newest 100 rows. Schedule listing is capped at 8,000 rows per call. Schedule rows also store a normalized `workflow_id` alongside the serialized target so workflow filters can run inside Convex before the listing cap is applied.
+
 ## Testing
 
 Set the following environment variables before running tests:

@@ -132,12 +132,18 @@ export class ConvexDB extends MastraBase {
     return result;
   }
 
-  public async queryTable<R>(tableName: TABLE_NAMES, filters?: EqualityFilter[], indexHint?: IndexHint): Promise<R[]> {
+  public async queryTable<R>(
+    tableName: TABLE_NAMES,
+    filters?: EqualityFilter[],
+    indexHint?: IndexHint,
+    limit?: number,
+  ): Promise<R[]> {
     return this.client.callStorage<R[]>({
       op: 'queryTable',
       tableName,
       filters,
       indexHint,
+      limit,
     });
   }
 

@@ -11,7 +11,7 @@ import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 import type { GenericId } from 'convex/values';
 
-import type { StorageRequest, StorageResponse } from '../storage/types';
+import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
 
 // Vector-specific table names (not in @mastra/core)
@@ -19,9 +19,25 @@ const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
 const VECTOR_TABLE_PREFIX = 'mastra_vector_';
 const CONVEX_TABLE_WORKFLOW_SNAPSHOTS = 'mastra_workflow_snapshots';
 const STORAGE_MUTATION_BATCH_SIZE = 25;
+const DEFAULT_SCHEDULE_QUERY_LIMIT = 100;
 
 type ConvexDocWithId = { _id: GenericId<string> };
 type StorageRecord = Record<string, unknown> & { id?: unknown };
+
+function normalizeScheduleQueryLimit(limit: number | undefined): number {
+  if (limit == null || !Number.isFinite(limit)) return DEFAULT_SCHEDULE_QUERY_LIMIT;
+  return Math.max(0, Math.floor(limit));
+}
+
+function applyConvexEqualityFilters(query: any, filters: EqualityFilter[] | undefined, indexedFields = new Set<string>()) {
+  const remainingFilters = filters?.filter(filter => !indexedFields.has(filter.field));
+  if (!remainingFilters?.length) return query;
+
+  return query.filter((q: any) => {
+    const predicates = remainingFilters.map(filter => q.eq(q.field(filter.field), filter.value));
+    return predicates.length === 1 ? predicates[0] : q.and(...predicates);
+  });
+}
 
 async function mapInBatches<TInput, TOutput>(
   inputs: TInput[],
@@ -194,7 +210,7 @@ export async function handleTypedOperation(
       const query = ctx.db
         .query(convexTable)
         .withIndex('by_status_next_fire_at', (q: any) => q.eq('status', 'active').lte('next_fire_at', request.now));
-      const docs = request.limit == null ? await query.collect() : await query.take(request.limit);
+      const docs = await query.take(normalizeScheduleQueryLimit(request.limit));
       return { ok: true, result: docs };
     }
 
@@ -256,7 +272,7 @@ export async function handleTypedOperation(
           return builder;
         })
         .order('desc');
-      const docs = request.limit == null ? await query.collect() : await query.take(request.limit);
+      const docs = await query.take(normalizeScheduleQueryLimit(request.limit));
       return { ok: true, result: docs };
     }
 
@@ -353,26 +369,27 @@ export async function handleTypedOperation(
       const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
 
       // Build query with index if hint provided for efficient filtering
-      let docs: any[];
+      let query: any;
+      let indexedFields = new Set<string>();
       if (request.indexHint) {
         const hint = request.indexHint;
         if (hint.index === 'by_workflow') {
-          docs = await ctx.db
+          query = ctx.db
             .query(convexTable)
-            .withIndex('by_workflow', (q: any) => q.eq('workflow_name', hint.workflowName))
-            .take(maxDocs);
+            .withIndex('by_workflow', (q: any) => q.eq('workflow_name', hint.workflowName));
+          indexedFields = new Set(['workflow_name']);
         } else if (hint.index === 'by_workflow_run') {
-          docs = await ctx.db
+          query = ctx.db
             .query(convexTable)
-            .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', hint.workflowName).eq('run_id', hint.runId))
-            .take(maxDocs);
+            .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', hint.workflowName).eq('run_id', hint.runId));
+          indexedFields = new Set(['workflow_name', 'run_id']);
         } else {
-          docs = await ctx.db.query(convexTable).take(maxDocs);
+          query = ctx.db.query(convexTable);
         }
       } else if (request.filters && request.filters.length > 0) {
         const match = findBestIndex(convexTable, request.filters);
         if (match) {
-          docs = await ctx.db
+          query = ctx.db
             .query(convexTable)
             .withIndex(match.indexName, (q: any) => {
               let builder = q;
@@ -380,19 +397,16 @@ export async function handleTypedOperation(
                 builder = builder.eq(filter.field, filter.value);
               }
               return builder;
-            })
-            .take(maxDocs);
+            });
+          indexedFields = new Set(match.indexedFilters.map(filter => filter.field));
         } else {
-          docs = await ctx.db.query(convexTable).take(maxDocs);
+          query = ctx.db.query(convexTable);
         }
       } else {
-        docs = await ctx.db.query(convexTable).take(maxDocs);
+        query = ctx.db.query(convexTable);
       }
 
-      // Apply additional filters if provided
-      if (request.filters && request.filters.length > 0) {
-        docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
-      }
+      let docs = await applyConvexEqualityFilters(query, request.filters, indexedFields).take(maxDocs);
 
       // Apply limit if provided
       if (request.limit) {

@@ -41,8 +41,11 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_record_id', fields: ['id'] },
   ],
   mastra_schedules: [
-    { name: 'by_status_next_fire_at', fields: ['status', 'next_fire_at'] },
+    { name: 'by_workflow_status', fields: ['workflow_id', 'status'] },
+    { name: 'by_workflow_id', fields: ['workflow_id'] },
     { name: 'by_owner', fields: ['owner_type', 'owner_id'] },
+    { name: 'by_owner_id', fields: ['owner_id'] },
+    { name: 'by_status_next_fire_at', fields: ['status', 'next_fire_at'] },
     { name: 'by_created', fields: ['created_at'] },
     { name: 'by_record_id', fields: ['id'] },
   ],

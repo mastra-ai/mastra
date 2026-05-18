@@ -77,6 +77,7 @@ describe('SchedulesConvex', () => {
         metadata: null,
         owner_type: null,
         owner_id: null,
+        workflow_id: 'workflow-1',
       },
     });
   });
@@ -164,10 +165,83 @@ describe('SchedulesConvex', () => {
         op: 'updateSchedule',
         patch: expect.objectContaining({
           target: JSON.stringify(nextTarget),
+          workflow_id: 'workflow-2',
           metadata: JSON.stringify({ $schema: 'https://example.test/schema.json' }),
         }),
       }),
     );
+  });
+
+  it('pushes workflow and null-owner filters into the Convex query', async () => {
+    const { client, callStorage } = createClient({
+      callStorage: vi.fn(async () => []),
+    });
+    const storage = new SchedulesConvex({ client });
+
+    await storage.listSchedules({ workflowId: 'workflow-1', ownerType: null, ownerId: null });
+
+    expect(callStorage).toHaveBeenCalledWith({
+      op: 'queryTable',
+      tableName: TABLE_SCHEDULES,
+      filters: [
+        { field: 'owner_type', value: null },
+        { field: 'owner_id', value: null },
+        { field: 'workflow_id', value: 'workflow-1' },
+      ],
+      indexHint: undefined,
+      limit: 8_000,
+    });
+  });
+
+  it('uses an explicit cap when listing schedules', async () => {
+    const schedule = createSchedule();
+    const { client, callStorage } = createClient({
+      callStorage: vi.fn(async (request: StorageRequest) => {
+        if (request.op === 'queryTable') {
+          return [
+            {
+              id: schedule.id,
+              target: JSON.stringify(schedule.target),
+              cron: schedule.cron,
+              timezone: null,
+              status: schedule.status,
+              next_fire_at: schedule.nextFireAt,
+              last_fire_at: null,
+              last_run_id: null,
+              created_at: schedule.createdAt,
+              updated_at: schedule.updatedAt,
+              metadata: null,
+              owner_type: null,
+              owner_id: null,
+              workflow_id: 'workflow-1',
+            },
+          ];
+        }
+        return undefined;
+      }),
+    });
+    const storage = new SchedulesConvex({ client });
+
+    await expect(storage.listSchedules()).resolves.toEqual([schedule]);
+
+    expect(callStorage).toHaveBeenCalledWith({
+      op: 'queryTable',
+      tableName: TABLE_SCHEDULES,
+      filters: undefined,
+      indexHint: undefined,
+      limit: 8_000,
+    });
+  });
+
+  it('treats a missing schedules schema as an empty schedule list for bootstrap cleanup', async () => {
+    const { client } = createClient({
+      callStorage: vi.fn(async () => {
+        throw new Error('Table mastra_schedules is not in the schema');
+      }),
+    });
+    const storage = new SchedulesConvex({ client });
+
+    await expect(storage.listSchedules()).resolves.toEqual([]);
   });
 
   it('uses scheduler-specific operations for due listing and CAS claims', async () => {
