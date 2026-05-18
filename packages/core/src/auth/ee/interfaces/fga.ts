@@ -29,7 +29,11 @@ export interface FGACheckContext {
    * Optional request context for providers that need additional request-scoped
    * data to derive the authorization resource identifier.
    */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
+  /**
+   * Optional provider-specific metadata about the attempted action.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -55,7 +59,7 @@ export interface FGARouteConfig {
   /** Static or dynamic resource ID resolver. */
   resourceId?:
     | string
-    | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
+    | ((params: Record<string, unknown>, context: { requestContext?: RequestContext<any> }) => string | undefined);
   /** Permission to check for this route. Falls back to the route permission when omitted. */
   permission?: MastraFGAPermissionInput;
 }
@@ -77,7 +81,7 @@ export interface FGARouteInfo {
 export interface FGARouteResolverContext {
   route: FGARouteInfo;
   params: Record<string, unknown>;
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
 }
 
 /**
@@ -234,9 +238,9 @@ export interface FGAListResourcesOptions {
  *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {
- *     agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     workflows: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
+ *     agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     thread: { fgaResourceType: 'user', deriveId: (ctx) => ctx.resourceId ?? ctx.user.userId },
  *   },
  *   permissionMapping: {
  *     [MastraFGAPermissions.AGENTS_READ]: 'read',

@@ -4865,6 +4865,15 @@
       "docUrl": "https://www.qhaigc.net/docs",
       "gateway": "models.dev"
     },
+    "lilac": {
+      "url": "https://api.getlilac.com/v1",
+      "apiKeyEnvVar": "LILAC_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Lilac",
+      "models": ["google/gemma-4-31b-it", "minimaxai/minimax-m2.7", "moonshotai/kimi-k2.6", "zai-org/glm-5.1"],
+      "docUrl": "https://docs.getlilac.com/inference/models",
+      "gateway": "models.dev"
+    },
     "alibaba-cn": {
       "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
       "apiKeyEnvVar": "DASHSCOPE_API_KEY",
@@ -9239,6 +9248,7 @@
       "gpt-5.2",
       "gpt-5.2-codex"
     ],
+    "lilac": ["google/gemma-4-31b-it", "minimaxai/minimax-m2.7", "moonshotai/kimi-k2.6", "zai-org/glm-5.1"],
     "alibaba-cn": [
       "MiniMax-M2.5",
       "MiniMax/MiniMax-M2.7",

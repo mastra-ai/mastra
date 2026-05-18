@@ -147,11 +147,23 @@
   "changesets": [
     "automated-provider-registry-20260516-010339",
     "cozy-walls-teach",
+    "fix-mcp-sse-transport-cleanup",
     "goofy-lines-fail",
     "green-birds-knock",
+    "happy-sites-punch",
+    "hungry-pens-glow",
+    "internal-usage-attribute",
+    "jolly-games-cheer",
+    "moody-bottles-turn",
     "quiet-stagehand-logs",
+    "responsive-prompts-workflows-toparea",
+    "rollup-internal-usage",
+    "seven-boats-like",
     "shared-skill-formatter",
     "signals-narrow-contents",
+    "slick-games-stand",
+    "storage-init-retry-on-rejection",
+    "ten-mangos-follow",
     "whole-results-give"
   ]
 }
