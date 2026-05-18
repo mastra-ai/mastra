@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { formatCompact } from '../components/metrics-utils';
+import { MODEL_COST_METRICS } from './model-cost-metrics';
 import { useMetricsFilters } from './use-metrics-filters';
 
 export interface ModelUsageRow {
@@ -20,15 +21,8 @@ export function useModelUsageCostMetrics() {
   return useQuery({
     queryKey: ['metrics', 'model-usage-cost', filterKey],
     queryFn: async (): Promise<ModelUsageRow[]> => {
-      const metrics = [
-        'mastra_model_total_input_tokens',
-        'mastra_model_total_output_tokens',
-        'mastra_model_input_cache_read_tokens',
-        'mastra_model_input_cache_write_tokens',
-      ] as const;
-
       const [inputRes, outputRes, cacheReadRes, cacheWriteRes] = await Promise.all(
-        metrics.map(name =>
+        MODEL_COST_METRICS.map(name =>
           client.getMetricBreakdown({
             name: [name],
             groupBy: ['model'],
