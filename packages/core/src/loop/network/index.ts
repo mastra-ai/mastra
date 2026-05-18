@@ -1573,7 +1573,7 @@ export async function createNetworkLoop({
                       isNetwork: true,
                       selectionReason: inputData.selectionReason,
                       primitiveType: inputData.primitiveType,
-                      primitiveId: inputData.primitiveId,
+                      primitiveId: toolId,
                       finalResult: { result: rejectionResult, toolCallId },
                       input: inputDataToUse,
                     }),
@@ -1740,7 +1740,7 @@ export async function createNetworkLoop({
                         isNetwork: true,
                         selectionReason: inputData.selectionReason,
                         primitiveType: inputData.primitiveType,
-                        primitiveId: inputData.primitiveId,
+                        primitiveId: toolId,
                         finalResult: { result: '', toolCallId },
                         input: inputDataToUse,
                       }),
@@ -1750,15 +1750,16 @@ export async function createNetworkLoop({
                   metadata: {
                     mode: 'network',
                     requireApprovalMetadata: {
+                      // Keep the lookup key on the registry primitive id so in-flight resumes stay compatible.
                       [inputData.primitiveId]: {
                         toolCallId,
-                        toolName: inputData.primitiveId,
+                        toolName: toolId,
                         args: inputDataToUse,
                         type: 'approval',
                         resumeSchema: requireApprovalResumeSchema,
                         runId,
                         primitiveType: 'tool',
-                        primitiveId: inputData.primitiveId,
+                        primitiveId: toolId,
                       },
                     },
                   },
@@ -1774,7 +1775,7 @@ export async function createNetworkLoop({
           await writer?.write({
             type: 'tool-execution-approval',
             payload: {
-              toolName: inputData.primitiveId,
+              toolName: toolId,
               toolCallId,
               args: inputDataToUse,
               selectionReason: inputData.selectionReason,
@@ -1785,7 +1786,7 @@ export async function createNetworkLoop({
 
           return suspend({
             requireToolApproval: {
-              toolName: inputData.primitiveId,
+              toolName: toolId,
               args: inputDataToUse,
               toolCallId,
             },
@@ -1848,9 +1849,10 @@ export async function createNetworkLoop({
                       metadata: {
                         mode: 'network',
                         suspendedTools: {
+                          // Keep the lookup key on the registry primitive id so in-flight resumes stay compatible.
                           [inputData.primitiveId]: {
                             toolCallId,
-                            toolName: inputData.primitiveId,
+                            toolName: toolId,
                             args: inputDataToUse,
                             suspendPayload,
                             type: 'suspension',
@@ -1859,7 +1861,7 @@ export async function createNetworkLoop({
                               JSON.stringify(schemaToJsonSchema((tool as any).resumeSchema)),
                             runId,
                             primitiveType: 'tool',
-                            primitiveId: inputData.primitiveId,
+                            primitiveId: toolId,
                           },
                         },
                       },
@@ -1875,7 +1877,7 @@ export async function createNetworkLoop({
               await writer?.write({
                 type: 'tool-execution-suspended',
                 payload: {
-                  toolName: inputData.primitiveId,
+                  toolName: toolId,
                   toolCallId,
                   args: inputDataToUse,
                   resumeSchema:
@@ -1903,7 +1905,7 @@ export async function createNetworkLoop({
       if (toolSuspendPayload) {
         return await suspend({
           toolCallSuspended: toolSuspendPayload,
-          toolName: inputData.primitiveId,
+          toolName: toolId,
           args: inputDataToUse,
           toolCallId,
         });
