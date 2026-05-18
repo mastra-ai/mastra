@@ -61,8 +61,6 @@ function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3') {
         ...(version === 'v1'
           ? {}
           : {
-              subAgentResourceId: expect.any(String),
-              subAgentThreadId: expect.any(String),
               subAgentToolResults: expect.any(Array),
             }),
         text: 'Dummy response',

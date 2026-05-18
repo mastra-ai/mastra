@@ -271,6 +271,47 @@ describe('A2AAgent', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('does not expose memory thread identifiers for a memoryless remote subagent', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      jsonRpcResult(createMessage('Remote subagent response')),
+    ]);
+
+    const remote = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const parent = new Agent({
+      id: 'parent-agent',
+      name: 'Parent Agent',
+      instructions: 'Delegate to subagents when needed.',
+      model: createParentModel(),
+      agents: {
+        remote,
+      },
+    });
+
+    const tools = await parent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+    });
+
+    const agentTool = tools['agent-remote'];
+    expect(agentTool).toBeDefined();
+
+    const result = await agentTool.execute!({ prompt: 'Do the remote thing' }, {
+      toolCallId: 'call-1',
+      messages: [],
+    } as any);
+
+    expect(result.text).toBe('Remote subagent response');
+    expect(result.subAgentThreadId).toBeUndefined();
+    expect(result.subAgentResourceId).toBeUndefined();
+  });
+
   it('streams through the generated subagent tool when the parent agent uses stream mode', async () => {
     const fetchMock = createFetchMock([
       new Response(JSON.stringify(baseCard), { status: 200 }),
@@ -332,6 +373,8 @@ describe('A2AAgent', () => {
     } as any);
 
     expect(result.text).toBe('Hello from remote stream');
+    expect(result.subAgentThreadId).toBeUndefined();
+    expect(result.subAgentResourceId).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

@@ -3720,6 +3720,7 @@ export class Agent<
                     }
 
                     // Save rejection messages to sub-agent's memory so the UI can display them
+                    let savedSubAgentMessages = false;
                     const memory = await resolvedAgent.getMemory({ requestContext });
                     if (memory) {
                       try {
@@ -3769,6 +3770,8 @@ export class Agent<
                         await memory.saveMessages({
                           messages: [userMessage, assistantMessage],
                         });
+
+                        savedSubAgentMessages = true;
                       } catch (memoryError) {
                         this.logger.error('Failed to save rejection to sub-agent memory', {
                           agent: this.name,
@@ -3786,8 +3789,7 @@ export class Agent<
 
                     return {
                       text: `[Delegation Rejected] ${rejectionMessage}`,
-                      subAgentThreadId,
-                      subAgentResourceId,
+                      ...(savedSubAgentMessages ? { subAgentThreadId, subAgentResourceId } : {}),
                     };
                   }
                   // Apply modifications
@@ -3941,6 +3943,7 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
+                let savedSubAgentMessages = false;
                 const memory = await resolvedAgent.getMemory({ requestContext });
                 if (memory) {
                   try {
@@ -3952,6 +3955,8 @@ export class Agent<
                     await memory.saveMessages({
                       messages: fullSubAgentMessages,
                     });
+
+                    savedSubAgentMessages = true;
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
                       agent: this.name,
@@ -3974,7 +3979,11 @@ export class Agent<
                   });
                 }
 
-                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
+                result = {
+                  text: generateResult.text,
+                  ...(savedSubAgentMessages ? { subAgentThreadId, subAgentResourceId } : {}),
+                  subAgentToolResults,
+                };
               } else if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 resolvedModelVersion === 'v1'
@@ -4096,6 +4105,7 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
+                let savedSubAgentMessages = false;
                 const streamMemory = await resolvedAgent.getMemory({ requestContext });
                 if (streamMemory) {
                   try {
@@ -4107,6 +4117,8 @@ export class Agent<
                     await streamMemory.saveMessages({
                       messages: fullSubAgentMessages,
                     });
+
+                    savedSubAgentMessages = true;
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
                       agent: this.name,
@@ -4135,8 +4147,7 @@ export class Agent<
                 const processedText = await streamResult.text;
                 result = {
                   text: processedText,
-                  subAgentThreadId,
-                  subAgentResourceId,
+                  ...(savedSubAgentMessages ? { subAgentThreadId, subAgentResourceId } : {}),
                   subAgentToolResults,
                 };
               } else {
