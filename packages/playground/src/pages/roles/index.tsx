@@ -10,10 +10,14 @@ import {
   Skeleton,
   Badge,
   Icon,
+  Input,
+  Textarea,
+  Checkbox,
 } from '@mastra/playground-ui';
-import { PlusIcon, PencilIcon, TrashIcon } from 'lucide-react';
-import { useState } from 'react';
+import { PlusIcon, PencilIcon, TrashIcon, XIcon } from 'lucide-react';
+import { useState, useCallback } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 import { useRoles } from '@/domains/team/hooks';
 
 interface Role {
@@ -22,6 +26,128 @@ interface Role {
   description?: string;
   permissions: string[];
   inherits?: string[];
+}
+
+// Available permissions that can be assigned to roles
+const AVAILABLE_PERMISSIONS = [
+  { value: '*', label: 'All Permissions', description: 'Full access to everything' },
+  { value: '*:read', label: 'Read All', description: 'Read access to all resources' },
+  { value: '*:write', label: 'Write All', description: 'Write access to all resources' },
+  { value: '*:execute', label: 'Execute All', description: 'Execute access to all resources' },
+  { value: 'agents:read', label: 'Agents: Read', description: 'View agents' },
+  { value: 'agents:write', label: 'Agents: Write', description: 'Create and modify agents' },
+  { value: 'agents:execute', label: 'Agents: Execute', description: 'Run agents' },
+  { value: 'workflows:read', label: 'Workflows: Read', description: 'View workflows' },
+  { value: 'workflows:write', label: 'Workflows: Write', description: 'Create and modify workflows' },
+  { value: 'workflows:execute', label: 'Workflows: Execute', description: 'Run workflows' },
+  { value: 'tools:read', label: 'Tools: Read', description: 'View tools' },
+  { value: 'tools:execute', label: 'Tools: Execute', description: 'Run tools' },
+  { value: 'team:read', label: 'Team: Read', description: 'View team members' },
+  { value: 'team:write', label: 'Team: Write', description: 'Manage team members and roles' },
+  { value: 'users:read', label: 'Users: Read', description: 'View customers/users' },
+  { value: 'observability:read', label: 'Observability: Read', description: 'View traces and logs' },
+];
+
+function RoleFormModal({
+  role,
+  onSave,
+  onClose,
+  isSaving,
+}: {
+  role: Role | null; // null = create new role
+  onSave: (role: Omit<Role, 'id'> & { id?: string }) => void;
+  onClose: () => void;
+  isSaving: boolean;
+}) {
+  const isEditing = role !== null;
+  const [name, setName] = useState(role?.name ?? '');
+  const [description, setDescription] = useState(role?.description ?? '');
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>(role?.permissions ?? []);
+
+  const handleTogglePermission = (permission: string) => {
+    setSelectedPermissions(prev =>
+      prev.includes(permission) ? prev.filter(p => p !== permission) : [...prev, permission],
+    );
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    onSave({
+      ...(isEditing ? { id: role.id } : {}),
+      name: name.trim(),
+      description: description.trim() || undefined,
+      permissions: selectedPermissions,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-surface1 border border-border1 rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-text1">{isEditing ? `Edit Role: ${role.name}` : 'Create Role'}</h3>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <Icon>
+              <XIcon className="h-4 w-4" />
+            </Icon>
+          </Button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-text1 mb-1">Role Name *</label>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g., Developer, Support, Analyst"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text1 mb-1">Description</label>
+            <Textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Describe what this role is for..."
+              rows={2}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text1 mb-2">Permissions</label>
+            <div className="border border-border1 rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
+              {AVAILABLE_PERMISSIONS.map(perm => (
+                <label key={perm.value} className="flex items-start gap-3 cursor-pointer hover:bg-surface2 p-2 rounded">
+                  <Checkbox
+                    checked={selectedPermissions.includes(perm.value)}
+                    onCheckedChange={() => handleTogglePermission(perm.value)}
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-text1">{perm.label}</div>
+                    <div className="text-xs text-text2">{perm.description}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            {selectedPermissions.length > 0 && (
+              <div className="mt-2 text-xs text-text2">{selectedPermissions.length} permission(s) selected</div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-border1">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!name.trim() || isSaving}>
+              {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Role'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function RoleRow({
@@ -36,7 +162,7 @@ function RoleRow({
   canManage: boolean;
 }) {
   return (
-    <div className="flex items-center p-4 border-b border-border1 last:border-b-0 hover:bg-surface1 transition-colors">
+    <div className="flex items-center p-4 border-b border-border1 last:border-b-0 hover:bg-surface2/50 transition-colors">
       {/* Role name and description */}
       <div className="flex-1 min-w-0">
         <div className="font-medium text-text1">{role.name}</div>
@@ -125,7 +251,12 @@ function RolesTable({
   }
 
   if (roles.length === 0) {
-    return <div className="text-center py-8 text-text2">No roles defined</div>;
+    return (
+      <div className="text-center py-12 border border-border1 rounded-lg">
+        <div className="text-text2 mb-2">No roles defined</div>
+        <div className="text-sm text-text3">Create a role to get started with access control.</div>
+      </div>
+    );
   }
 
   return (
@@ -149,22 +280,24 @@ function RolesTable({
 function Roles() {
   const { data: roles = [], isLoading, error, refetch } = useRoles();
   const { hasPermission } = usePermissions();
+  const { baseUrl, apiPrefix } = useStudioConfig();
   const canManage = hasPermission('team:write');
 
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleEdit = (role: Role) => {
     setEditingRole(role);
   };
 
   const handleDelete = async (role: Role) => {
-    if (!confirm(`Are you sure you want to delete the "${role.name}" role?`)) {
+    if (!confirm(`Are you sure you want to delete the "${role.name}" role? This action cannot be undone.`)) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/auth/roles/${role.id}`, {
+      const response = await fetch(`${baseUrl}${apiPrefix}/auth/roles/${role.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -184,6 +317,47 @@ function Roles() {
       alert('Failed to delete role');
     }
   };
+
+  const handleSaveRole = useCallback(
+    async (roleData: Omit<Role, 'id'> & { id?: string }) => {
+      setIsSaving(true);
+      try {
+        const isEditing = !!roleData.id;
+        const url = isEditing
+          ? `${baseUrl}${apiPrefix}/auth/roles/${roleData.id}`
+          : `${baseUrl}${apiPrefix}/auth/roles`;
+
+        const response = await fetch(url, {
+          method: isEditing ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-mastra-client-type': 'studio',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: roleData.name,
+            description: roleData.description,
+            permissions: roleData.permissions,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          alert(data.message || `Failed to ${isEditing ? 'update' : 'create'} role`);
+          return;
+        }
+
+        void refetch();
+        setShowCreateModal(false);
+        setEditingRole(null);
+      } catch {
+        alert('Failed to save role');
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [baseUrl, apiPrefix, refetch],
+  );
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -236,33 +410,24 @@ function Roles() {
         canManage={canManage}
       />
 
-      {/* TODO: Add CreateRoleModal and EditRoleModal components */}
+      {/* Create Role Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface1 rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-text1 mb-4">Create Role</h3>
-            <p className="text-text2 mb-4">Role creation UI coming soon.</p>
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
+        <RoleFormModal
+          role={null}
+          onSave={handleSaveRole}
+          onClose={() => setShowCreateModal(false)}
+          isSaving={isSaving}
+        />
       )}
 
+      {/* Edit Role Modal */}
       {editingRole && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface1 rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-text1 mb-4">Edit Role: {editingRole.name}</h3>
-            <p className="text-text2 mb-4">Role editing UI coming soon.</p>
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setEditingRole(null)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
+        <RoleFormModal
+          role={editingRole}
+          onSave={handleSaveRole}
+          onClose={() => setEditingRole(null)}
+          isSaving={isSaving}
+        />
       )}
     </PageLayout>
   );
