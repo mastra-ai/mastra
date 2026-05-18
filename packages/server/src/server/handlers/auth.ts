@@ -1027,7 +1027,7 @@ export const PUT_USER_ROLE_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'User not found' });
       }
 
-      await (rbac as any).assignRole(user, roleId);
+      await (rbac as any).assignRole(user.id, roleId);
       return { success: true };
     } catch (error) {
       if (error instanceof HTTPException) throw error;
@@ -1073,7 +1073,7 @@ export const DELETE_USER_ROLE_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'User not found' });
       }
 
-      await (rbac as any).removeRole(user, roleId);
+      await (rbac as any).removeRole(user.id, roleId);
       return { success: true };
     } catch (error) {
       if (error instanceof HTTPException) throw error;
