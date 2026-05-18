@@ -11,7 +11,7 @@ packages:
 The editor gives you three ways to add tools to agents:
 
 - **Code tools**: Tools already registered in your Mastra instance.
-- **Integration providers**: Third-party tool platforms like Composio and Arcade.
+- **Integration providers**: Third-party tool platforms like Composio, Arcade, and Scalekit.
 - **MCP clients**: Tools from MCP servers, configured as reusable client definitions.
 
 You can manage all three sources through the Studio UI or programmatically through the server API. Non-technical team members can browse tool catalogs, add tools to agents, and test different tool combinations without code changes. Tool configurations are versioned alongside the rest of the agent, so you can roll back tool changes, compare versions, and experiment safely.
@@ -112,6 +112,37 @@ Integration providers connect external tool platforms to the editor. Once regist
 
    Arcade tools use a `Toolkit.ToolName` format (for example, `Github.GetRepository`). The provider pre-seeds common toolkits to reduce API calls during browsing.
 
+### Scalekit
+
+[Scalekit](https://scalekit.com) provides access to third-party tools through connected accounts. Uses plain HTTP with no external SDK — authentication is handled via OAuth 2.0 client credentials.
+
+1. Get credentials from your Scalekit dashboard (environment URL, client ID, and client secret).
+
+1. Register the provider in your Editor configuration:
+
+   ```typescript title="src/mastra/index.ts"
+   import { Mastra } from '@mastra/core'
+   import { MastraEditor } from '@mastra/editor'
+   import { ScalekitToolProvider } from '@mastra/editor/scalekit'
+
+   export const mastra = new Mastra({
+     agents: {
+       /* your agents */
+     },
+     editor: new MastraEditor({
+       toolProviders: {
+         scalekit: new ScalekitToolProvider({
+           envURL: process.env.SCALEKIT_ENVIRONMENT_URL!,
+           clientId: process.env.SCALEKIT_CLIENT_ID!,
+           clientSecret: process.env.SCALEKIT_CLIENT_SECRET!,
+         }),
+       },
+     }),
+   })
+   ```
+
+   Scalekit tools use a `provider_action` format (for example, `gmail_send_email`). When a user hasn't connected their third-party account, the tool execution returns an authorization URL that the user can visit to connect. Tool calls are scoped to the `resourceId` passed through request context for per-user authentication.
+
 ## MCP clients
 
 The editor lets you create stored MCP client configurations that connect to MCP servers. Once created, you can reference these clients in any agent to give it access to the server's tools.
@@ -160,5 +191,5 @@ See the [ToolProvider reference](/reference/editor/tool-provider) for the full p
 
 - [Editor overview](/docs/editor/overview): Setup and versioning.
 - [Prompts](/docs/editor/prompts): Display conditions reference for prompt blocks.
-- [ToolProvider reference](/reference/editor/tool-provider): Composio and Arcade API details.
+- [ToolProvider reference](/reference/editor/tool-provider): Composio, Arcade, and Scalekit API details.
 - [MCP overview](/docs/mcp/overview): General MCP documentation.

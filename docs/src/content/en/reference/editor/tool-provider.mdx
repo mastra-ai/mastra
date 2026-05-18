@@ -7,7 +7,7 @@ packages:
 
 # ToolProvider
 
-The `ToolProvider` interface defines how the editor discovers and resolves integration tools from external platforms. Mastra ships with two built-in implementations: `ComposioToolProvider` and `ArcadeToolProvider`.
+The `ToolProvider` interface defines how the editor discovers and resolves integration tools from external platforms. Mastra ships with three built-in implementations: `ComposioToolProvider`, `ArcadeToolProvider`, and `ScalekitToolProvider`.
 
 See [Tools](/docs/editor/tools) for a guide on setting up tool providers.
 
@@ -128,3 +128,74 @@ Arcade tools use `Toolkit.ToolName` format: `Github.GetRepository`, `Slack.SendM
 ### Authentication
 
 Like Composio, tool execution uses `resourceId` from request context for per-user authorization. The provider maps that value to the user identity required by Arcade's auth flow.
+
+---
+
+## ScalekitToolProvider
+
+Connects to [Scalekit](https://scalekit.com) for access to third-party tools via Scalekit's AgentKit connected accounts API. Unlike the other providers, this uses plain `fetch` with no external SDK dependencies.
+
+### Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+import { ScalekitToolProvider } from '@mastra/editor/scalekit'
+
+const editor = new MastraEditor({
+  toolProviders: {
+    scalekit: new ScalekitToolProvider({
+      envURL: process.env.SCALEKIT_ENVIRONMENT_URL!,
+      clientId: process.env.SCALEKIT_CLIENT_ID!,
+      clientSecret: process.env.SCALEKIT_CLIENT_SECRET!,
+    }),
+  },
+})
+```
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'envURL',
+    type: 'string',
+    description: 'Your Scalekit environment URL (e.g. `https://acme.scalekit.dev`).',
+  },
+  {
+    name: 'clientId',
+    type: 'string',
+    description: 'Scalekit client ID (`SCALEKIT_CLIENT_ID`).',
+  },
+  {
+    name: 'clientSecret',
+    type: 'string',
+    description: 'Scalekit client secret (`SCALEKIT_CLIENT_SECRET`).',
+  },
+]}
+/>
+
+### Tool slugs
+
+Scalekit tools use `provider_action` format: `gmail_send_email`, `slack_chat_postMessage`, `notion_create_page`.
+
+### Authentication
+
+Scalekit uses a two-layer auth model:
+
+1. **Server-to-server** — OAuth 2.0 `client_credentials` grant using `clientId` and `clientSecret`. Tokens are cached and refreshed automatically.
+1. **End-user to third-party** — When a user's tool execution fails because they haven't connected their account, the provider generates a magic link URL for account authorization. The execute function returns an object with `__authRequired: true` and an `authUrl` that the user can visit to connect their account.
+
+Like Composio and Arcade, tool execution uses `resourceId` from request context as the user identifier for per-user tool access.
+
+### Additional methods
+
+The provider exposes one method beyond the `ToolProvider` interface:
+
+```typescript
+// Generate a magic link for connecting a user's third-party account
+const { link, expiry } = await scalekit.getAuthorizationURL({
+  connector: 'gmail',
+  identifier: 'user@example.com',
+  redirectURL: 'https://myapp.com/callback', // optional
+})
+```

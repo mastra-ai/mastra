@@ -37,6 +37,16 @@
         "default": "./dist/arcade.cjs"
       }
     },
+    "./scalekit": {
+      "import": {
+        "types": "./dist/scalekit.d.ts",
+        "default": "./dist/scalekit.js"
+      },
+      "require": {
+        "types": "./dist/scalekit.d.ts",
+        "default": "./dist/scalekit.cjs"
+      }
+    },
     "./storage": {
       "import": {
         "types": "./dist/storage/index.d.ts",
@@ -53,8 +63,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/scalekit.ts src/storage/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/scalekit.ts src/storage/index.ts --format cjs,esm --dts --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

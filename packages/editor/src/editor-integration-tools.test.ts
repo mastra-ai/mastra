@@ -17,6 +17,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { MastraEditor } from './index';
 import { ComposioToolProvider } from './providers/composio';
 import { ArcadeToolProvider } from './providers/arcade';
+import { ScalekitToolProvider } from './providers/scalekit';
 
 /**
  * A mock tool provider for tests. Implements the full ToolProvider interface.
@@ -754,5 +755,127 @@ describe.skipIf(!process.env.ARCADE_API_KEY)('ArcadeToolProvider e2e (real API)'
     const tools = await agent!.listTools();
     expect(tools['Github.GetRepository']).toBeDefined();
     expect(tools['Github.GetRepository'].description).toBe('Arcade hydrated override');
+  }, 60_000);
+});
+
+// ---------------------------------------------------------------------------
+// Scalekit e2e tests — skipped unless SCALEKIT_CLIENT_ID is set
+// ---------------------------------------------------------------------------
+describe.skipIf(!process.env.SCALEKIT_CLIENT_ID)('ScalekitToolProvider e2e (real API)', () => {
+  let provider: InstanceType<typeof ScalekitToolProvider>;
+
+  beforeEach(() => {
+    provider = new ScalekitToolProvider({
+      envURL: process.env.SCALEKIT_ENV_URL ?? process.env.SCALEKIT_ENVIRONMENT_URL!,
+      clientId: process.env.SCALEKIT_CLIENT_ID!,
+      clientSecret: process.env.SCALEKIT_CLIENT_SECRET!,
+    });
+  });
+
+  it('should list toolkits (providers)', async () => {
+    const result = await provider.listToolkits();
+    expect(result.data.length).toBeGreaterThan(0);
+    for (const tk of result.data.slice(0, 3)) {
+      expect(tk.slug).toBeTruthy();
+      expect(tk.name).toBeTruthy();
+    }
+  }, 30_000);
+
+  it('should list tools with pagination', async () => {
+    const result = await provider.listTools({ perPage: 5 });
+    expect(result.data.length).toBeGreaterThan(0);
+    expect(result.data.length).toBeLessThanOrEqual(5);
+    expect(result.data[0]!.slug).toBeTruthy();
+    expect(result.pagination?.hasMore).toBeDefined();
+  }, 30_000);
+
+  it('should search tools via filter.query', async () => {
+    const result = await provider.listTools({ search: 'send', perPage: 10 });
+    expect(result.data).toBeDefined();
+  }, 30_000);
+
+  it('should get a tool schema via filter.tool_name', async () => {
+    const tools = await provider.listTools({ perPage: 1 });
+    if (tools.data.length === 0) return;
+
+    const slug = tools.data[0]!.slug;
+    const schema = await provider.getToolSchema(slug);
+    // Schema may be null for tools without input_schema
+    if (schema) {
+      expect(typeof schema).toBe('object');
+    }
+  }, 30_000);
+
+  it('should return null for nonexistent tool schema', async () => {
+    const schema = await provider.getToolSchema('fake_tool_99999');
+    expect(schema).toBeNull();
+  }, 30_000);
+
+  it('should resolve tools with description overrides', async () => {
+    const tools = await provider.listTools({ perPage: 1 });
+    if (tools.data.length === 0) return;
+
+    const slug = tools.data[0]!.slug;
+    const resolved = await provider.resolveTools(
+      [slug],
+      { [slug]: { description: 'Scalekit test override' } },
+      { userId: 'test-user@example.com' },
+    );
+
+    expect(resolved[slug]).toBeDefined();
+    expect(resolved[slug]!.id).toBe(slug);
+    expect(resolved[slug]!.description).toBe('Scalekit test override');
+    expect(typeof resolved[slug]!.execute).toBe('function');
+    expect(resolved[slug]!.inputSchema).toBeDefined();
+  }, 30_000);
+
+  it('should return empty for empty tool slugs', async () => {
+    const result = await provider.resolveTools([]);
+    expect(Object.keys(result).length).toBe(0);
+  });
+
+  it('should generate a magic link', async () => {
+    const result = await provider.getAuthorizationURL({
+      connector: 'gmail',
+      identifier: 'test-user@example.com',
+    });
+    expect(result.link).toBeTruthy();
+    expect(result.link).toMatch(/^https?:\/\//);
+  }, 30_000);
+
+  it('should hydrate a stored agent with Scalekit integration tools', async () => {
+    const tools = await provider.listTools({ perPage: 1 });
+    if (tools.data.length === 0) return;
+
+    const slug = tools.data[0]!.slug;
+    const _storage = new LibSQLStore({ id: `scalekit-e2e-${randomUUID()}`, url: ':memory:' });
+    const _editor = new MastraEditor({ toolProviders: { scalekit: provider } });
+    const _mastra = new Mastra({ storage: _storage, editor: _editor });
+    await _storage.init();
+
+    const agentsStore = await _storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'scalekit-e2e-agent',
+        name: 'Scalekit E2E Agent',
+        instructions: 'Test agent',
+        model: { provider: 'openai', name: 'gpt-4' },
+        integrationTools: {
+          scalekit: {
+            tools: {
+              [slug]: { description: 'Scalekit hydrated override' },
+            },
+          },
+        },
+      },
+    });
+
+    const agent = await _editor.agent.getById('scalekit-e2e-agent');
+    expect(agent).toBeInstanceOf(Agent);
+
+    const agentTools = await agent!.listTools();
+    expect(agentTools[slug]).toBeDefined();
+    expect(agentTools[slug]!.description).toBe('Scalekit hydrated override');
+    expect(typeof agentTools[slug]!.execute).toBe('function');
   }, 60_000);
 });
