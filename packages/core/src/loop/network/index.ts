@@ -11,7 +11,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
 import type { ObservabilityContext } from '../../observability';
-import { createObservabilityContext, resolveObservabilityContext } from '../../observability';
+import { createObservabilityContext, InternalSpans, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
@@ -2000,6 +2000,12 @@ export async function createNetworkLoop({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      // Internal agent.network() plumbing — the workflow exists to coordinate
+      // routing and primitive execution, but only the user-facing
+      // agent/tool/model spans should appear in exported traces.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   });
 
@@ -2588,6 +2594,10 @@ export async function networkLoop<OUTPUT = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      // Internal agent.network() plumbing — see networkWorkflow above.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .then(networkWorkflow)
@@ -2621,6 +2631,10 @@ export async function networkLoop<OUTPUT = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      // Internal agent.network() plumbing — see networkWorkflow above.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .dountil(iterationWithValidation, async ({ inputData }) => {
