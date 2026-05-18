@@ -1502,6 +1502,7 @@ export class HarnessLibSQL extends HarnessStorage {
       return tombstone;
     }
     return this.#withCompactionLock(`${namespace}\0${sessionId}`, async () => {
+      let lastReceipt: QueueAdmissionReceipt | undefined;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const result = await this.#client.execute({
           sql: `SELECT * FROM ${TABLE_HARNESS_SESSIONS} WHERE harness_name = ? AND id = ?`,
@@ -1513,6 +1514,7 @@ export class HarnessLibSQL extends HarnessStorage {
         if (session.resourceId !== resourceId) return null;
         const receipt = queuedItemId ? session.queueAdmissionReceipts?.[queuedItemId] : undefined;
         if (!receipt || !isTerminalQueueReceipt(receipt)) return null;
+        lastReceipt = receipt;
         const tombstone: OperationAdmissionTombstone = {
           kind: 'queue',
           harnessName: namespace,
@@ -1545,7 +1547,12 @@ export class HarnessLibSQL extends HarnessStorage {
         });
         if (updateResult.rowsAffected > 0) return tombstone;
       }
-      throw new Error(`Harness LibSQL compaction for session "${sessionId}" conflicted after retries`);
+      const receiptDetails = lastReceipt
+        ? `queued item "${lastReceipt.queuedItemId}" admission "${lastReceipt.admissionId}"`
+        : `queued item "${queuedItemId ?? '<unknown>'}"`;
+      throw new Error(
+        `Harness LibSQL queue compaction for harness "${namespace}" session "${sessionId}" resource "${resourceId}" ${receiptDetails} conflicted after retries`,
+      );
     });
   }
 

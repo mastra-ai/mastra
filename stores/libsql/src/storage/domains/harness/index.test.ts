@@ -16,7 +16,7 @@ import {
   HarnessStorageVersionConflictError,
 } from '@mastra/core/storage';
 import type { SessionRecord, HarnessStorageParentSessionUnavailableError } from '@mastra/core/storage';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HarnessLibSQL } from './index';
 
@@ -771,9 +771,10 @@ describe('HarnessLibSQL message result evidence', () => {
 
 describe('HarnessLibSQL queue admission evidence', () => {
   let storage: HarnessLibSQL;
+  let client: Client;
 
   beforeEach(async () => {
-    const client = createHarnessTestClient();
+    client = createHarnessTestClient();
     storage = new HarnessLibSQL({ client });
     await storage.init();
   });
@@ -821,6 +822,50 @@ describe('HarnessLibSQL queue admission evidence', () => {
         queuedItemId: 'queued-1',
       }),
     ).resolves.toMatchObject({ admissionId: 'admission-1', status: 'queued' });
+  });
+
+  it('reports queue compaction retry conflicts with receipt context', async () => {
+    await storage.saveSession(
+      sampleSession({
+        queueAdmissionReceipts: {
+          'queued-1': {
+            admissionId: 'admission-1',
+            admissionHash: 'hash-1',
+            queuedItemId: 'queued-1',
+            status: 'completed',
+            attempts: 1,
+            enqueuedAt: 1000,
+            updatedAt: 2000,
+            completedAt: 3000,
+            result: { ok: true },
+          },
+        },
+      }),
+      { ownerId: 'h', ifVersion: 0 },
+    );
+
+    const originalExecute = client.execute.bind(client);
+    vi.spyOn(client, 'execute').mockImplementation(async (statement: Parameters<Client['execute']>[0]) => {
+      const sql = typeof statement === 'string' ? statement : statement.sql;
+      if (sql.includes(`UPDATE ${TABLE_HARNESS_SESSIONS}`) && sql.includes('queue_admission_receipts')) {
+        const result = await originalExecute('SELECT 1');
+        return { ...result, rowsAffected: 0 };
+      }
+      return originalExecute(statement);
+    });
+
+    await expect(
+      storage.compactOperationResultEvidence({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        kind: 'queue',
+        queuedItemId: 'queued-1',
+        now: 4000,
+      }),
+    ).rejects.toThrow(
+      'Harness LibSQL queue compaction for harness "default" session "session-1" resource "resource-1" queued item "queued-1" admission "admission-1" conflicted after retries',
+    );
   });
 });
 
