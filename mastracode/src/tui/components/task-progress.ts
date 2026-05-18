@@ -14,6 +14,7 @@ export class TaskProgressComponent extends Container {
 
   constructor() {
     super();
+    this.rebuildDisplay();
   }
 
   /**
@@ -34,15 +35,16 @@ export class TaskProgressComponent extends Container {
   private rebuildDisplay(): void {
     this.clear();
 
-    // No tasks = no render (component takes zero vertical space)
-    if (this.tasks.length === 0) return;
-
-    // Progress header
     const completed = this.tasks.filter(t => t.status === 'completed').length;
     const total = this.tasks.length;
+    const hasVisibleTasks = total > 0 && completed !== total;
 
-    // Hide the component when all tasks are completed
-    if (completed === total) return;
+    if (!hasVisibleTasks) {
+      this.addChild(new Spacer(1));
+      return;
+    }
+
+    // Progress header
     const headerText =
       '  ' + theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${completed}/${total} completed]`);
 

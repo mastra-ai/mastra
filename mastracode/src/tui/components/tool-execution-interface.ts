@@ -5,6 +5,7 @@
 import type { ChatSpacingKind } from './chat-spacing.js';
 
 export type QuietToolDisplayMode = 'normal' | 'quiet';
+export type CompactToolLabelColor = 'toolTitle' | 'error';
 
 export interface ToolResult {
   content: Array<{
@@ -24,7 +25,12 @@ export interface IToolExecutionComponent {
   getChatSpacingKind?(): ChatSpacingKind | undefined;
   getCompactToolGroupKey?(): string | undefined;
   getCompactToolGroupSummary?(): string | undefined;
+  hasQuietStreamingPreview?(): boolean;
+  getOwnCompactToolLabelColor?(): CompactToolLabelColor | undefined;
+  setCompactToolGroupLabelColor?(color: CompactToolLabelColor | undefined): void;
   setCompactToolContinuation?(continuation: boolean, previousSummary?: string): void;
+  setCompactToolHasFollowingContinuation?(hasFollowingContinuation: boolean): void;
+  clearQuietActiveMarquee?(): void;
   isComplete?(): boolean;
   /** Append streaming output for shell commands */
   appendStreamingOutput?(output: string): void;

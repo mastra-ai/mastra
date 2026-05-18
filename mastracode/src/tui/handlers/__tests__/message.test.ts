@@ -2,6 +2,7 @@ import { Container, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
+import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { UserMessageComponent } from '../../components/user-message.js';
@@ -56,6 +57,19 @@ describe('handleMessageUpdate system reminders', () => {
         state.chatContainer.addChild(child);
       },
     } as EventHandlerContext;
+  });
+
+  it('adds spacing as soon as assistant text starts after a user message', () => {
+    addUserMessage(state, {
+      id: 'user-1',
+      role: 'user',
+      content: [{ type: 'text', text: 'hello' }],
+    } as HarnessMessage);
+
+    handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'assistant text' }]));
+
+    const rendered = state.chatContainer.render(100);
+    expect(rendered).toContain('');
   });
 
   it('renders a streamed placeholder when reminder content is not available yet', () => {
@@ -198,6 +212,30 @@ describe('handleMessageUpdate system reminders', () => {
     expect((children[1] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 1 hour later');
     expect(children[2]).toBe(userMessage);
     expect(children[3]).toBe(streamingMessage);
+  });
+
+  it('adds boundary spacing when assistant text replaces a retained quiet marquee', () => {
+    const tool = new ToolExecutionComponentEnhanced(
+      'write_file',
+      {},
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      state.ui,
+    );
+    tool.updateArgs({ path: 'src/example.ts', content: 'first line\nsecond line' });
+    tool.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
+
+    const assistant = new AssistantMessageComponent(undefined, false);
+    state.chatContainer.addChild(tool);
+    state.chatContainer.addChild(assistant);
+    state.streamingComponent = assistant;
+    state.retainedQuietActiveMarquee = tool;
+
+    handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'assistant text' }]));
+
+    const rendered = state.chatContainer.render(100);
+    const toolLineIndex = rendered.findIndex(line => line.includes('write_file'));
+    const textLineIndex = rendered.findIndex(line => line.includes('assistant text'));
+    expect(rendered.slice(toolLineIndex + 1, textLineIndex)).toContain('');
   });
 
   it('falls back to the latest rendered user message when a streamed temporal-gap anchor id is not mapped yet', () => {

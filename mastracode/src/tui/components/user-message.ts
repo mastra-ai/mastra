@@ -118,16 +118,16 @@ export class UserMessageComponent extends Container {
 }
 
 export class PendingUserMessageComponent extends Container {
-  constructor(text: string, imageCount = 0, options: { leadingSpacer?: boolean } = {}) {
+  constructor(text: string, imageCount = 0) {
     super();
-
-    if (options.leadingSpacer) {
-      this.addChild(new Spacer(1));
-    }
 
     const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
     const displayText = `${prefix}${text.replace(/\[image\]\s*/g, '').trim()}`.trim();
     this.addChild(new Text(theme.fg('dim', `↳ ${displayText || 'Message'} pending…`), BOX_INDENT_STR.length, 0));
     this.addChild(new Spacer(1));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'user-message';
   }
 }

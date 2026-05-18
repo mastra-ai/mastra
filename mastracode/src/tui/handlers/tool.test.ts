@@ -101,6 +101,19 @@ describe('task tool rendering', () => {
     expect((second as any).render(100).join('\n')).not.toContain('╭──');
   });
 
+  it('marks quiet tool result objects with isError true as failed even when the event flag is false', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+
+    handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
+    handleToolInputDelta(ctx, 'call-1', '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}');
+    handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
+
+    const output = ctx.state.chatContainer.render(100).join('\n');
+    expect(output).toContain('\u001b[91medit');
+    expect(output).toContain('✗');
+  });
+
   it('regroups quiet tools as streamed args arrive', () => {
     const ctx = createToolHandlerContext();
     ctx.state.quietMode = true;
@@ -118,7 +131,7 @@ describe('task tool rendering', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(120).join('\n'));
     expect(output).toContain('view');
     expect(output).toContain('src/example.ts:80-169');
-    expect(output).toContain('╰────────────────:1-25');
+    expect(output).toContain('╰─────/example.ts:1-25');
   });
 
   it('streams submit_plan args into a plan box instead of rendering a generic tool', () => {

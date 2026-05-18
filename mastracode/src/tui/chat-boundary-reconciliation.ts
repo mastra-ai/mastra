@@ -1,11 +1,15 @@
 import type { Component, Container } from '@mariozechner/pi-tui';
 import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { getChatSpacingKind } from './components/chat-spacing.js';
+import type { CompactToolLabelColor } from './components/tool-execution-interface.js';
 
 interface CompactToolGroupingParticipant {
   getCompactToolGroupKey?(): string | undefined;
   getCompactToolGroupSummary?(): string | undefined;
+  getOwnCompactToolLabelColor?(): CompactToolLabelColor | undefined;
+  setCompactToolGroupLabelColor?(color: CompactToolLabelColor | undefined): void;
   setCompactToolContinuation?(continuation: boolean, previousSummary?: string): void;
+  setCompactToolHasFollowingContinuation?(hasFollowingContinuation: boolean): void;
 }
 
 export function insertChatComponentWithBoundarySpacing(
@@ -70,14 +74,34 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   const nextChildren: Component[] = [];
   let previousCompactToolGroupKey: string | undefined;
   let previousCompactToolSummary: string | undefined;
+  let currentCompactRun: CompactToolGroupingParticipant[] = [];
+
+  const flushCompactRunColor = () => {
+    const color = getCompactRunLabelColor(currentCompactRun);
+    for (const participant of currentCompactRun) {
+      participant.setCompactToolGroupLabelColor?.(color);
+    }
+    currentCompactRun = [];
+  };
 
   for (let i = 0; i < components.length; i++) {
     const component = components[i]!;
     const participant = component as CompactToolGroupingParticipant;
     const compactToolGroupKey = participant.getCompactToolGroupKey?.();
     const compactToolGroupSummary = participant.getCompactToolGroupSummary?.();
+    const next = findNextSpacingComponentInList(components, i);
+    const nextParticipant = next as CompactToolGroupingParticipant | undefined;
+    const nextCompactToolGroupKey = nextParticipant?.getCompactToolGroupKey?.();
     const isContinuation = !!compactToolGroupKey && compactToolGroupKey === previousCompactToolGroupKey;
     participant.setCompactToolContinuation?.(isContinuation, isContinuation ? previousCompactToolSummary : undefined);
+    participant.setCompactToolHasFollowingContinuation?.(!!compactToolGroupKey && compactToolGroupKey === nextCompactToolGroupKey);
+    if (compactToolGroupKey) {
+      if (!isContinuation) flushCompactRunColor();
+      currentCompactRun.push(participant);
+    } else {
+      flushCompactRunColor();
+      participant.setCompactToolGroupLabelColor?.(undefined);
+    }
     if (getChatSpacingKind(component)) {
       previousCompactToolGroupKey = compactToolGroupKey;
       previousCompactToolSummary = compactToolGroupSummary;
@@ -87,7 +111,6 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
 
     if (getChatSpacingKind(component)) {
       const previous = findPreviousSpacingComponentInList(components, i);
-      const next = findNextSpacingComponentInList(components, i);
       const nextIndex = next ? components.indexOf(next) : -1;
       const nextNext = nextIndex >= 0 ? findNextSpacingComponentInList(components, nextIndex) : undefined;
       if (next) {
@@ -96,6 +119,13 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
     }
   }
 
+  flushCompactRunColor();
   chatContainer.children = nextChildren as never[];
   chatContainer.invalidate();
+}
+
+function getCompactRunLabelColor(participants: CompactToolGroupingParticipant[]): CompactToolLabelColor | undefined {
+  if (participants.length <= 1) return undefined;
+  if (participants.some(participant => participant.getOwnCompactToolLabelColor?.() === 'error')) return 'error';
+  return 'toolTitle';
 }

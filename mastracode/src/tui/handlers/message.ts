@@ -168,6 +168,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMes
         ...message,
         content: trailingParts,
       });
+      reconcileChatBoundarySpacers(state.chatContainer);
     }
     state.ui.requestRender();
   }
@@ -176,6 +177,13 @@ export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMes
 export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMessage): void {
   const { state } = ctx;
   if (message.role !== 'assistant') return;
+
+  const clearRetainedQuietActiveMarquee = () => {
+    const retained = state.retainedQuietActiveMarquee;
+    retained?.clearQuietActiveMarquee?.();
+    state.retainedQuietActiveMarquee = undefined;
+    return retained !== undefined;
+  };
 
   const systemReminderParts = message.content
     .map(toStreamedSystemReminderPart)
@@ -243,6 +251,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         );
         component.setExpanded(state.toolOutputExpanded);
         if (state.quietMode) {
+          clearRetainedQuietActiveMarquee();
           component.setQuietModeDisplay('quiet');
         }
         ctx.addChildBeforeFollowUps(component);
@@ -265,10 +274,12 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   // Avoid replacing visible assistant text with an empty trailing segment
   // (commonly happens immediately after tool_result-only updates).
   if (trailingParts.length > 0) {
+    clearRetainedQuietActiveMarquee();
     state.streamingComponent.updateContent({
       ...message,
       content: trailingParts,
     });
+    reconcileChatBoundarySpacers(state.chatContainer);
   }
 
   state.ui.requestRender();
@@ -288,6 +299,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         ...message,
         content: trailingParts,
       });
+      reconcileChatBoundarySpacers(state.chatContainer);
       }
 
     if (message.stopReason === 'aborted' || message.stopReason === 'error') {

@@ -27,15 +27,6 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
-function isLastRenderedChildTool(state: TUIState): boolean {
-  for (let i = state.chatContainer.children.length - 1; i >= 0; i--) {
-    const child = state.chatContainer.children[i];
-    if (state.followUpComponents.includes(child as never)) continue;
-    return !!child && state.allToolComponents.includes(child as never);
-  }
-  return false;
-}
-
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
@@ -202,9 +193,7 @@ export function addPendingUserMessage(
     reconcileChatBoundarySpacers(state.chatContainer);
   }
 
-  const component = new PendingUserMessageComponent(text, images?.length ?? 0, {
-    leadingSpacer: state.quietMode && isLastRenderedChildTool(state),
-  });
+  const component = new PendingUserMessageComponent(text, images?.length ?? 0);
   state.pendingSignalMessageComponentsById.set(messageId, { component, text });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);

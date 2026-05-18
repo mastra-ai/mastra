@@ -28,9 +28,15 @@ export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
 }
 
+function clearRetainedQuietActiveMarquee(ctx: EventHandlerContext): void {
+  ctx.state.retainedQuietActiveMarquee?.clearQuietActiveMarquee?.();
+  ctx.state.retainedQuietActiveMarquee = undefined;
+}
+
 function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
   if (!ctx.state.quietMode) return;
 
+  clearRetainedQuietActiveMarquee(ctx);
   component.setQuietModeDisplay('quiet');
 }
 
@@ -77,6 +83,10 @@ function ensureSubmitPlanComponent(
  * Handles objects, strings, and other types.
  * Extracts content from common tool return structures like { content: "...", isError: false }
  */
+function isToolResultError(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
+}
+
 export function formatToolResult(result: unknown): string {
   if (result === null || result === undefined) {
     return '';
@@ -457,16 +467,20 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   const component = state.pendingTools.get(toolCallId);
   if (component) {
     const isPendingTaskTool = state.pendingTaskToolIds?.has(toolCallId) ?? false;
-    if (isPendingTaskTool && isError) {
+    const effectiveIsError = isError || isToolResultError(result);
+    if (isPendingTaskTool && effectiveIsError) {
       insertTaskToolErrorComponent(ctx, component);
       state.allToolComponents.push(component);
     }
 
     const toolResult: ToolResult = {
       content: [{ type: 'text', text: formatToolResult(result) }],
-      isError,
+      isError: effectiveIsError,
     };
     component.updateResult(toolResult, false);
+    if (state.quietMode && !isPendingTaskTool) {
+      state.retainedQuietActiveMarquee = component;
+    }
     reconcileToolBoundaries(ctx);
 
     state.pendingTools.delete(toolCallId);
