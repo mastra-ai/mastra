@@ -1,6 +1,6 @@
 # API Smoke Test Coverage
 
-> 218 tests across 38 test files — last updated 2026-03-20
+> 285 tests across 56 test files — last updated 2026-05-18
 
 **Test runner:** Vitest
 **Test dir:** `e2e-tests/smoke/tests/`
@@ -11,21 +11,49 @@
 
 ## Summary
 
-| Section        | Progress                          | Tests | Status |
-|----------------|-----------------------------------|-------|--------|
-| Workflows      | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅ | 73    | Complete |
-| Agents         | ✅✅✅✅✅✅✅✅                    | 26    | Complete |
-| Datasets       | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅ | 19    | Complete |
-| Workspace      | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅ | 22    | Complete |
-| MCP            | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅      | 17    | Complete |
-| Processors     | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅      | 17    | Complete |
-| Tools          | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅          | 15    | Complete |
-| Memory         | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅            | 14    | Complete |
-| Scores         | ✅✅✅✅✅✅✅✅✅✅✅                | 11    | Complete |
-| Observability  | ✅✅✅✅✅✅✅                      | 7     | Partial |
-| Vector Store   | ⬜⬜⬜⬜⬜⬜⬜⬜                  | 0/8   | 🔒 Needs embedder + vector config |
-| Logs           | ⬜⬜⬜                            | 0/3   | 🔒 Needs logger transports |
-| **Total**      |                                   | **218** |      |
+| Section          | Tests | Status |
+|------------------|-------|--------|
+| Workflows        | 73    | Complete |
+| Agents           | 30    | Complete (+4 extras: instructions enhance, model set/reset, models reorder, clone gating) |
+| Datasets         | 19    | Complete |
+| Workspace        | 25    | Complete (+3 skills-sh registry: search/popular/preview) |
+| MCP              | 17    | Complete |
+| Processors       | 17    | Complete |
+| Tools            | 15    | Complete |
+| Memory           | 18    | Complete (+4 extras: thread clone, search, observational-memory gating, buffer-status gating) |
+| Scores           | 11    | Complete |
+| Observability    | 11    | Complete (+4 extras: branches, traces/light gating, trajectory, span scores) |
+| Stored entities  | 38    | NEW — full CRUD for agents/skills/scorers/mcp-clients/prompt-blocks/workspaces + agent versions lifecycle (activate, restore, version count) |
+| Schedules        | 2     | NEW — list + empty-shape sanity |
+| Background tasks | 2     | NEW — list shape |
+| System           | 2     | NEW — `/system/api-schema` + `/system/packages` |
+| Auth             | 2     | NEW — `/auth/capabilities` + `/auth/me` gated shape |
+| Providers        | 4     | NEW — tool-providers/processor-providers gated, channels/platforms empty |
+| Vector Store     | 0/8   | 🔒 Needs embedder + vector config |
+| Logs             | 0/3   | 🔒 Needs logger transports |
+| **Total**        | **280** |      |
+
+### Coverage by `/api/*` route group (cross-reference)
+
+| Route prefix | Test files |
+|---|---|
+| `/api/workflows/*` | `tests/workflows/*` |
+| `/api/agents/*` | `tests/agents/*`, `tests/agents/agent-management.test.ts` (extras) |
+| `/api/memory/*` | `tests/memory/*`, `tests/memory/extras.test.ts` |
+| `/api/observability/*` | `tests/observability/*`, `tests/observability/extras.test.ts` |
+| `/api/datasets/*` | `tests/datasets/*` |
+| `/api/workspaces/*` | `tests/workspaces/*`, `tests/workspaces/skills-registry.test.ts` |
+| `/api/stored/*` | `tests/stored/*` (7 files) |
+| `/api/schedules/*` | `tests/schedules/schedules.test.ts` |
+| `/api/background-tasks/*` | `tests/background-tasks/background-tasks.test.ts` |
+| `/api/system/*` | `tests/system/system.test.ts` |
+| `/api/auth/*` | `tests/auth/capabilities.test.ts` |
+| `/api/tool-providers/*`, `/api/processor-providers/*` | `tests/providers/*` |
+| `/api/channels/*` | `tests/providers/channels.test.ts` |
+| `/api/scores/*` | `tests/scores/*` |
+| `/api/mcp/*` | `tests/mcp/*` |
+| `/api/processors/*` | `tests/processors/*` |
+| `/api/tools/*` | `tests/tools/*` |
 
 ---
 

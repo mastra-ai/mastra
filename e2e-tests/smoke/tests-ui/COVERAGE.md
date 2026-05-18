@@ -12,22 +12,32 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 ## Summary
 
-| Section         | Progress                    | Done | Todo | Blocked |
-|-----------------|-----------------------------|------|------|---------|
-| Agents          | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅ | 20   | 0    | 0       |
-| Tools           | ✅✅✅✅✅✅✅🚫              | 7    | 0    | 1       |
-| Workflows       | ✅✅✅✅✅✅✅✅✅✅✅✅         | 12   | 0    | 0       |
-| MCP Servers     | ✅✅✅                        | 3    | 0    | 0       |
-| Observability   | ✅✅✅✅✅✅                  | 6    | 0    | 0       |
-| Memory          | ✅✅✅✅                      | 4    | 0    | 0       |
-| Datasets        | ✅✅✅✅✅✅✅✅✅✅✅          | 11   | 0    | 0       |
-| Scorers         | ✅✅                          | 2    | 0    | 0       |
-| Processors      | ✅✅✅                        | 3    | 0    | 0       |
-| Workspaces      | ✅✅✅✅✅                    | 5    | 2    | 0       |
-| CMS             | ⬜⬜⬜⬜                      | 0    | 4    | 0       |
-| Settings        | ✅✅                          | 2    | 0    | 0       |
-| Request Context | ✅✅                          | 2    | 0    | 0       |
-| **Total**       |                               | **77** | **6** | **1** |
+| Section                | Done | Todo | Blocked | Notes |
+|------------------------|------|------|---------|-------|
+| Agents                 | 20   | 0    | 0       |       |
+| Agent layout tabs      | 4    | 0    | 0       | NEW — Editor disabled, Evaluate/Review/Traces tabs assert `aria-selected=true` on their route |
+| Tools                  | 7    | 0    | 1       |       |
+| Workflows              | 12   | 0    | 0       |       |
+| MCP Servers            | 3    | 0    | 0       |       |
+| Observability          | 6    | 0    | 0       |       |
+| Observability Overview | 1    | 0    | 0       | NEW — `/observability-overview` hub: heading + Metrics/Traces link cards |
+| Evaluation Dashboard   | 1    | 0    | 0       | NEW — `/evaluation` heading + Experiments/Review-Pipeline section |
+| Memory                 | 4    | 0    | 0       |       |
+| Datasets               | 11   | 0    | 0       |       |
+| Scorers                | 2    | 0    | 0       |       |
+| Processors             | 3    | 0    | 0       |       |
+| Workspaces             | 5    | 2    | 0       |       |
+| CMS — Prompts          | 2    | 0    | 0       | NEW — `/prompts` list empty-state + `/cms/prompts/create` wizard form fields |
+| CMS — Agents           | 1    | 0    | 0       | NEW — `/cms/agents/create` Identity step + disabled "Create agent" submit |
+| CMS — Scorers          | 1    | 0    | 0       | NEW — `/cms/scorers/create` Configuration + Score Range + Instructions |
+| Schedules              | 1    | 0    | 0       | NEW — `/workflows/schedules` heading |
+| Logs                   | 1    | 0    | 0       | NEW — `/logs` heading + "Last 24 hours" + "Add Filter" controls |
+| Login                  | 1    | 0    | 0       | NEW — `/login` mounts (auth disabled in smoke fixture) |
+| Settings               | 2    | 0    | 0       |       |
+| Request Context        | 2    | 0    | 0       |       |
+| **Total**              | **90** | **2** | **1** |       |
+
+> Run count from `pnpm test:ui`: 90 tests. See route map in App.tsx for the full Studio surface.
 
 ---
 
