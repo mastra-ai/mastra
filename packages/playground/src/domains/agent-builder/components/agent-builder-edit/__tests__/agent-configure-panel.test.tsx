@@ -34,17 +34,24 @@ vi.mock('@/domains/builder', () => ({
 }));
 
 vi.mock('@/domains/llm', () => ({
-  LLMProviders: ({ value, disabled }: { value: string; disabled?: boolean }) => (
-    <div data-testid="llm-providers" data-disabled={disabled ? 'true' : 'false'}>
-      {value || 'no-provider'}
-    </div>
-  ),
-  LLMModels: ({ value, disabled }: { value: string; disabled?: boolean }) => (
-    <div data-testid="llm-models" data-disabled={disabled ? 'true' : 'false'}>
-      {value || 'no-model'}
-    </div>
+  ProviderLogo: ({ providerId }: { providerId: string }) => (
+    <span data-testid="provider-logo" data-provider={providerId} />
   ),
   cleanProviderId: (id: string) => id,
+}));
+
+vi.mock('../model-card-picker', () => ({
+  ModelCardPicker: ({
+    value,
+    disabled,
+  }: {
+    value: { provider: string; name: string } | undefined;
+    disabled?: boolean;
+  }) => (
+    <div data-testid="model-card-picker" data-disabled={disabled ? 'true' : 'false'}>
+      {value ? `${value.provider}/${value.name}` : 'no-model'}
+    </div>
+  ),
 }));
 
 const capturedInstructionsProps: Array<{ onChange: (next: string) => void; prompt: string; editable: boolean }> = [];
@@ -488,8 +495,7 @@ describe('AgentConfigurePanel inline model section', () => {
 
     expect(screen.getByTestId('model-detail-picker')).toBeTruthy();
     expect(screen.queryByTestId('model-detail-locked-chip')).toBeNull();
-    expect(screen.getByTestId('llm-providers').dataset.disabled).toBe('false');
-    expect(screen.getByTestId('llm-models').dataset.disabled).toBe('false');
+    expect(screen.getByTestId('model-card-picker').dataset.disabled).toBe('false');
   });
 
   it('renders the locked chip when policy is locked', () => {
@@ -540,8 +546,7 @@ describe('AgentConfigurePanel inline model section', () => {
     );
 
     expect(screen.getByTestId('model-detail-picker')).toBeTruthy();
-    expect(screen.getByTestId('llm-providers').dataset.disabled).toBe('true');
-    expect(screen.getByTestId('llm-models').dataset.disabled).toBe('true');
+    expect(screen.getByTestId('model-card-picker').dataset.disabled).toBe('true');
   });
 });
 

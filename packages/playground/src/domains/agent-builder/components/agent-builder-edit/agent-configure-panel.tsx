@@ -22,9 +22,10 @@ import { downscaleImageToDataUrl } from '../../utils/downscale-avatar';
 import { InstructionsDetail } from './details/instructions-detail';
 import { SkillsDetail } from './details/skills-detail';
 import { ToolsDetail } from './details/tools-detail';
+import { ModelCardPicker } from './model-card-picker';
 import { useStreamRunning } from './stream-chat-context';
 import { useBuilderModelPolicy } from '@/domains/builder';
-import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
+import { ProviderLogo, cleanProviderId } from '@/domains/llm';
 
 export interface AgentConfig {
   id: string;
@@ -245,41 +246,18 @@ function ModelSection({ editable }: ModelSectionProps) {
     policy.allowed !== undefined &&
     !isModelAllowed(policy.allowed, { provider: cleanProviderId(provider), modelId });
 
-  const handleProviderSelect = (next: string) => {
-    const cleaned = cleanProviderId(next);
-    setValue('model', { provider: cleaned, name: '' }, { shouldDirty: true });
-  };
-
-  const handleModelSelect = (next: string) => {
-    setValue('model', { provider: cleanProviderId(provider), name: next }, { shouldDirty: true });
-  };
-
   return (
     <div className="flex flex-col gap-2">
       {locked ? (
         <LockedModelChip provider={policy.default?.provider ?? provider} modelId={policy.default?.modelId ?? modelId} />
       ) : (
-        <div className="grid gap-2 text-neutral4 min-w-0" data-testid="model-detail-picker">
-          <label className="text-ui-smd text-neutral3 flex justify-between items-center">Model</label>
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex-1 basis-0 min-w-0">
-              <LLMProviders
-                value={provider}
-                onValueChange={handleProviderSelect}
-                disabled={!editable}
-                className="w-full !min-w-0"
-              />
-            </div>
-            <div className="flex-1 basis-0 min-w-0">
-              <LLMModels
-                llmId={provider}
-                value={modelId}
-                onValueChange={handleModelSelect}
-                disabled={!editable}
-                className="w-full !min-w-0"
-              />
-            </div>
-          </div>
+        <div className="flex flex-col gap-2 text-neutral4 min-w-0" data-testid="model-detail-picker">
+          <label className="text-ui-smd text-neutral3">Model</label>
+          <ModelCardPicker
+            value={provider && modelId ? { provider, name: modelId } : undefined}
+            onChange={next => setValue('model', next, { shouldDirty: true })}
+            disabled={!editable}
+          />
         </div>
       )}
 
@@ -384,7 +362,7 @@ function ConfigSections({
           <ConfigAccordion
             icon={<Cpu className="h-4 w-4" />}
             label="Model"
-            value={<ModelSummaryValue />}
+            value={<ModelSummary />}
             testId="agent-preview-model-button"
           >
             <ModelSection editable={editable} />
@@ -435,14 +413,21 @@ function ConfigSections({
   );
 }
 
-function ModelSummaryValue() {
+function ModelSummary() {
   const policy = useBuilderModelPolicy();
   const model = useWatch<AgentBuilderEditFormValues, 'model'>({ name: 'model' });
   const locked = policy.active && policy.pickerVisible === false;
   const provider = locked ? (policy.default?.provider ?? model?.provider ?? '') : (model?.provider ?? '');
   const modelId = locked ? (policy.default?.modelId ?? model?.name ?? '') : (model?.name ?? '');
-  if (provider && modelId) return `${provider}/${modelId}`;
-  return 'Select a model';
+  if (!provider || !modelId) return <>Select a model</>;
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 align-middle">
+      <ProviderLogo providerId={provider} size={14} />
+      <span className="truncate">
+        {provider}/{modelId}
+      </span>
+    </span>
+  );
 }
 
 interface ConfigAccordionProps {
