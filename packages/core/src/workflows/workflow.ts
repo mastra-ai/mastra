@@ -3248,6 +3248,11 @@ export class Run<
       perStep?: boolean;
     } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
+    // Extract userId from authenticated user for trace correlation
+    const authenticatedUser = (requestContext as RequestContext | undefined)?.get('user') as
+      | { id?: string }
+      | undefined;
+    const userId = authenticatedUser?.id;
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -3259,6 +3264,7 @@ export class Run<
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
+        userId,
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
@@ -4025,6 +4031,10 @@ export class Run<
         : params.tracingOptions?.parentSpanId,
     };
 
+    // Extract userId from authenticated user for trace correlation
+    const resumeAuthenticatedUser = (requestContextToUse as RequestContext)?.get('user') as { id?: string } | undefined;
+    const resumeUserId = resumeAuthenticatedUser?.id;
+
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -4036,6 +4046,7 @@ export class Run<
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
+        userId: resumeUserId,
         resumed: true,
         resumedFromSpanId: persistedTracingContext?.spanId,
       },
@@ -4129,6 +4140,13 @@ export class Run<
         (requestContextToUse as RequestContext).set(key, value);
       }
     }
+
+    // Extract userId from authenticated user for trace correlation
+    const restartAuthenticatedUser = (requestContextToUse as RequestContext)?.get('user') as
+      | { id?: string }
+      | undefined;
+    const restartUserId = restartAuthenticatedUser?.id;
+
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
@@ -4138,6 +4156,7 @@ export class Run<
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
+        userId: restartUserId,
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
@@ -4263,6 +4282,12 @@ export class Run<
       }
     }
 
+    // Extract userId from authenticated user for trace correlation
+    const timeTravelAuthenticatedUser = (requestContextToUse as RequestContext)?.get('user') as
+      | { id?: string }
+      | undefined;
+    const timeTravelUserId = timeTravelAuthenticatedUser?.id;
+
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
@@ -4273,6 +4298,7 @@ export class Run<
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
+        userId: timeTravelUserId,
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,

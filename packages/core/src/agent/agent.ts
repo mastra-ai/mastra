@@ -5277,6 +5277,9 @@ export class Agent<
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
+    // Extract userId from authenticated user for trace correlation
+    const authenticatedUser = requestContext.get('user') as { id?: string } | undefined;
+    const userId = authenticatedUser?.id;
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
@@ -5297,6 +5300,7 @@ export class Agent<
         runId,
         resourceId,
         threadId: threadFromArgs?.id,
+        userId,
         ...(this.toRawConfig()?.resolvedVersionId
           ? { entityVersionId: this.toRawConfig()!.resolvedVersionId as string }
           : {}),

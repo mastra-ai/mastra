@@ -261,6 +261,11 @@ export class AgentLegacyHandler {
     inputProcessors?: InputProcessorOrWorkflow[];
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
+
+    // Extract userId from authenticated user for trace correlation
+    const authenticatedUser = requestContext?.get('user') as { id?: string } | undefined;
+    const userId = authenticatedUser?.id;
+
     return {
       before: async () => {
         const agentSpan = getOrCreateSpan({
@@ -284,6 +289,7 @@ export class AgentLegacyHandler {
             runId,
             resourceId,
             threadId: thread ? thread.id : undefined,
+            userId,
           },
           tracingPolicy: this.capabilities.tracingPolicy,
           tracingOptions,
