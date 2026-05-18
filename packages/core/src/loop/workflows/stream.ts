@@ -194,7 +194,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       });
 
       if (rest.mastra) {
-        agenticLoopWorkflow.__registerMastra(rest.mastra);
+        // Register as internal so the evented engine's event processor can
+        // resolve `agentic-loop` by id via __hasInternalWorkflow/getWorkflowById.
+        // __registerInternalWorkflow also calls __registerMastra under the hood.
+        rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow as any);
       }
 
       const initialData = {

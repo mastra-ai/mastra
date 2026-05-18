@@ -4,9 +4,10 @@ import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import { createStep } from '../../../workflows/workflow';
+import { createStep } from '../../../workflows/evented';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
+import type { PrepareStreamRunScope } from './run-scope';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
@@ -21,6 +22,7 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   methodType: AgentMethodType;
   memory?: MastraMemory;
   backgroundTaskEnabled?: boolean;
+  runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
 export function createPrepareToolsStep<OUTPUT = undefined>({
@@ -34,6 +36,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
   methodType,
   memory: _memory,
   backgroundTaskEnabled,
+  runScope,
 }: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
@@ -69,9 +72,10 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         });
       }
 
-      return {
-        convertedTools,
-      };
+      // Tool records contain `execute` functions and are not JSON-serializable.
+      // Park them on the factory closure's runScope; map-results-step reads them.
+      runScope.convertedTools = convertedTools;
+      return {};
     },
   });
 }

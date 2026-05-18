@@ -1,9 +1,12 @@
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 
+import { Mastra } from '../../..';
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage } from '../../../agent/message-list/state/types';
+import { EventEmitterPubSub } from '../../../events';
 import { RequestContext } from '../../../request-context';
+import { InMemoryStore } from '../../../storage';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
 import { testUsage } from '../../test-utils/utils';
 import type { OuterLLMRun } from '../../types';
@@ -98,6 +101,16 @@ describe('createAgenticExecutionWorkflow response message handling', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: new EventEmitterPubSub(),
+      workflows: {
+        executionWorkflow: workflow,
+      },
+    });
+    await mastra.startWorkers();
+
     const run = await workflow.createRun({ runId: 'test-run' });
     const result = await run.start({
       inputData: {
@@ -124,6 +137,9 @@ describe('createAgenticExecutionWorkflow response message handling', () => {
     } as any);
 
     expect(result.status).toBe('success');
+
     expect(countOpenAIItemIds(messageList.get.all.db()).get('msg_duplicate')).toBe(1);
+
+    mastra.stopWorkers();
   });
 });

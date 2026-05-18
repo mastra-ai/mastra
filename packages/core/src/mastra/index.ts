@@ -39,6 +39,7 @@ import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
+import { InMemoryStore } from '../storage';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
@@ -1016,11 +1017,13 @@ export class Mastra<
 
     this.#idGenerator = config?.idGenerator;
 
-    let storage = config?.storage;
-
-    if (storage) {
-      storage = augmentWithInit(storage);
-    }
+    // Default to an in-memory store when none is configured. The evented
+    // workflow engine uses storage as the source of truth for cross-branch
+    // coordination in parallel/foreach steps, so a missing store would cause
+    // parallel branches to silently fail to aggregate. In-memory is the safe
+    // default for `new Mastra({})` / tests; production callers always override.
+    let storage = config?.storage ?? new InMemoryStore();
+    storage = augmentWithInit(storage);
 
     // Validate and assign observability instance
     if (config?.observability) {

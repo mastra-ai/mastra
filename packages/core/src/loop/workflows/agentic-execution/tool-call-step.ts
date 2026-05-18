@@ -20,8 +20,8 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
+import { createStep } from '../../../workflows/evented';
 import type { SuspendOptions } from '../../../workflows/step';
-import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';

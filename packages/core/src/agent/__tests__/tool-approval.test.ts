@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
 import { InMemoryStore } from '../../storage';
@@ -126,7 +127,10 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           agents: { userAgent },
           logger: false,
           storage: mockStorage,
+          pubsub: new EventEmitterPubSub(),
         });
+
+        mastra.startWorkers();
 
         const agentOne = mastra.getAgent('userAgent');
         const memory = {
@@ -158,6 +162,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           expect(name).toBe('Dero Israel');
           expect(toolName).toBe('findUserTool');
         }
+        mastra.stopWorkers();
       }, 500000);
     });
   });

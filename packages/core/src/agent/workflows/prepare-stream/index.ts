@@ -9,7 +9,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { ToolPayloadTransformPolicy } from '../../../tools';
-import { createWorkflow } from '../../../workflows/workflow';
+import { createWorkflow } from '../../../workflows/evented';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -18,6 +18,7 @@ import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
+import type { PrepareStreamRunScope } from './run-scope';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
@@ -84,6 +85,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   skipBgTaskWait,
   drainPendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
+  // Per-run scope shared between steps. Class instances (MessageList, Tools),
+  // Maps, and closures live here instead of step outputs — see ./run-scope.ts.
+  const runScope: PrepareStreamRunScope<OUTPUT> = {};
+
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
@@ -95,6 +100,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     methodType,
     memory,
     backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
+    runScope,
   });
 
   const prepareMemoryStep = createPrepareMemoryStep({
@@ -109,6 +115,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memoryConfig,
     memory,
     isResume: !!resumeContext,
+    runScope,
   });
 
   const streamStep = createStreamStep({
@@ -133,6 +140,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
+    runScope,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -148,6 +156,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentId,
     methodType,
     saveQueueManager,
+    runScope,
   });
 
   return createWorkflow({

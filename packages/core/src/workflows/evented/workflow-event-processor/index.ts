@@ -1793,10 +1793,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
       });
 
-      if (!newStepResults) {
-        return;
-      }
-
       // Persist (and thread forward) any state changes made inside the foreach body.
       // Each iteration is a separate event in the evented engine, so unless we write
       // the updated state back here, the next iteration / the step after the foreach
@@ -1813,7 +1809,16 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       }
 
-      stepResults = { ...newStepResults, __state: currentState };
+      // Same fallback as the regular step path: when no run record was
+      // persisted (shouldPersistSnapshot opted out of running) the store
+      // returns `{}`, and when there's no storage at all newStepResults is
+      // undefined. In both cases preserve the inline stepResults instead of
+      // discarding everything but the foreach step's result.
+      const mergedForeachStepResults =
+        !newStepResults || Object.keys(newStepResults).length === 0
+          ? { ...(stepResults ?? {}), [step.step.id]: newResult }
+          : newStepResults;
+      stepResults = { ...mergedForeachStepResults, __state: currentState };
 
       // For foreach iterations, check if all iterations are complete before emitting events
       // This prevents emitting workflow.suspend when only some concurrent iterations have finished
@@ -2047,11 +2052,17 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
       });
 
-      if (!newStepResults) {
-        return;
+      // When the Mastra has no storage configured, workflowsStore is undefined
+      // and updateWorkflowResults returns undefined. When it has storage but no
+      // run record yet (shouldPersistSnapshot skipped the initial running
+      // snapshot), it returns `{}`. In both cases the event payload is the
+      // source of truth — merge prevResult into the inline stepResults instead
+      // of treating it as a hard early-return.
+      if (!newStepResults || Object.keys(newStepResults).length === 0) {
+        stepResults = { ...(stepResults ?? {}), [step.step.id]: prevResult };
+      } else {
+        stepResults = newStepResults;
       }
-
-      stepResults = newStepResults;
     }
 
     // Update stepResults with current state
