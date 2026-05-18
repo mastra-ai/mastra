@@ -158,14 +158,16 @@ const cache = new ConvexServerCache({
   {
     name: 'requestTimeoutMs',
     type: 'number',
-    description: 'Timeout for Convex cache mutation requests in milliseconds. Set to 0 to disable the client-side timeout.',
+    description:
+      'Timeout for Convex cache mutation requests in milliseconds. Set to 0 to disable the client-side timeout.',
     isOptional: true,
     defaultValue: 30000,
   },
   {
     name: 'keyPrefix',
     type: 'string',
-    description: 'Prefix applied to ConvexServerCache keys. clear() removes rows whose stored prefix exactly matches this value.',
+    description:
+      'Prefix applied to ConvexServerCache keys. clear() removes rows whose stored prefix exactly matches this value.',
     isOptional: true,
     defaultValue: 'mastra:cache:',
   },
