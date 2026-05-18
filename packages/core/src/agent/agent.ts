@@ -5480,10 +5480,18 @@ export class Agent<
    */
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId,
-    });
+    let workflowRun: { resourceId?: unknown; snapshot?: unknown } | null | undefined;
+    if (typeof workflowsStore?.getWorkflowRunById === 'function') {
+      workflowRun = await workflowsStore.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
+    }
+    const workflowRunSnapshot =
+      workflowRun?.snapshot && typeof workflowRun.snapshot === 'object' ? workflowRun.snapshot : undefined;
+    const existingSnapshot =
+      workflowRunSnapshot ??
+      (await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId,
+      }));
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -5505,7 +5513,84 @@ export class Agent<
       });
     }
 
-    return existingSnapshot;
+    return {
+      resourceId: typeof workflowRun?.resourceId === 'string' ? workflowRun.resourceId : undefined,
+      snapshot: existingSnapshot,
+    };
+  }
+
+  #getResumeCallerResourceId(
+    requestContext: RequestContext | undefined,
+    options: AgentExecutionOptionsBase<any> | undefined,
+    { trustMemoryResource = true }: { trustMemoryResource?: boolean } = {},
+  ): string | undefined {
+    const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+    if (typeof contextResourceId === 'string' && contextResourceId.length > 0) {
+      return contextResourceId;
+    }
+    if (!trustMemoryResource) {
+      return undefined;
+    }
+    const memoryResourceId = options?.memory?.resource;
+    return typeof memoryResourceId === 'string' && memoryResourceId.length > 0 ? memoryResourceId : undefined;
+  }
+
+  #assertAgenticLoopResumeOwnership({
+    method,
+    runId,
+    runResourceId,
+    requestContext,
+    options,
+  }: {
+    method: string;
+    runId: string;
+    runResourceId?: string;
+    requestContext?: RequestContext;
+    options?: AgentExecutionOptionsBase<any>;
+  }): void {
+    const hasFga = Boolean(this.#mastra?.getServer()?.fga);
+    const callerResourceId = this.#getResumeCallerResourceId(requestContext, options, {
+      trustMemoryResource: !hasFga,
+    });
+
+    if (runResourceId && callerResourceId && runResourceId !== callerResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_OWNER_MISMATCH',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot resume runId "${runId}" from a different resource.`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    if (hasFga && runResourceId && !callerResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_OWNER_UNVERIFIED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() requires a matching resource id to resume runId "${runId}".`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    if (hasFga && !runResourceId) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_PERSISTED_RUN_NO_OWNER',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot verify ownership for runId "${runId}" because the persisted run has no resource id.`,
+        details: {
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
   }
 
   #getAgenticLoopSnapshotMemoryInfo(existingSnapshot: any): { threadId?: string; resourceId?: string } | undefined {
@@ -7097,7 +7182,35 @@ export class Agent<
         await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, { requireFgaUser: true });
       }
     }
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const { resourceId: runResourceId, snapshot: existingSnapshot } = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeStream',
+    });
+    defaultOptions ??= (await this.getDefaultOptions({
+      requestContext: requestContextToUse,
+    })) as AgentExecutionOptions<TOutput>;
+    const ownershipOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (streamOptionsWithPubSub ?? {}) as Record<string, unknown>,
+    ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    if (requestContextToUse) {
+      ownershipOptions.requestContext = requestContextToUse;
+    }
+    if (
+      streamOptionsWithPubSub?.[SKIP_AGENT_EXECUTION_PREFLIGHT] &&
+      !requestContextToUse &&
+      !preflightedDefaultOptions &&
+      (this.#requestContextSchema || this.#mastra?.getServer()?.fga)
+    ) {
+      await this.#assertAgentExecutionPreflight(ownershipOptions.requestContext, { requireFgaUser: true });
+    }
+    this.#assertAgenticLoopResumeOwnership({
+      method: 'resumeStream',
+      runId,
+      runResourceId,
+      requestContext: ownershipOptions.requestContext,
+      options: ownershipOptions,
+    });
     const streamOptionsWithSnapshotTarget = this.#withSnapshotThreadTarget(
       streamOptionsWithPubSub,
       this.#getAgenticLoopSnapshotMemoryInfo(existingSnapshot),
@@ -7127,17 +7240,6 @@ export class Agent<
     let preparedOptionsWithPubSub: (AgentExecutionOptionsBase<any> & { runId?: string; _pubsub: PubSub }) | undefined;
 
     try {
-      defaultOptions ??= (await this.getDefaultOptions({
-        requestContext: requestContextToUse,
-      })) as AgentExecutionOptions<TOutput>;
-      if (
-        streamOptionsWithPubSub?.[SKIP_AGENT_EXECUTION_PREFLIGHT] &&
-        !requestContextToUse &&
-        !preflightedDefaultOptions &&
-        (this.#requestContextSchema || this.#mastra?.getServer()?.fga)
-      ) {
-        await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, { requireFgaUser: true });
-      }
       let mergedStreamOptions = deepMerge(
         defaultOptions as Record<string, unknown>,
         (streamOptionsWithSnapshotTarget ?? {}) as Record<string, unknown>,
@@ -7438,7 +7540,10 @@ export class Agent<
     }
 
     const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    const { resourceId: runResourceId, snapshot: existingSnapshot } = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeGenerate',
+    });
 
     defaultOptions ??= (await this.getDefaultOptions({
       requestContext: requestContextToUse,
@@ -7451,6 +7556,13 @@ export class Agent<
     if (requestContextToUse) {
       mergedOptions.requestContext = requestContextToUse;
     }
+    this.#assertAgenticLoopResumeOwnership({
+      method: 'resumeGenerate',
+      runId,
+      runResourceId,
+      requestContext: mergedOptions.requestContext,
+      options: mergedOptions,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,

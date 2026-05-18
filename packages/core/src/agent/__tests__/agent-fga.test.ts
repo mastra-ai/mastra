@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
-import { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
@@ -50,6 +50,40 @@ function createMockModel() {
       content: [{ type: 'text', text: 'ok' }],
     }),
   });
+}
+
+function createWorkflowRunStorage({
+  resourceId,
+  snapshot = { context: {} },
+  loadedSnapshot = snapshot,
+}: {
+  resourceId?: string;
+  snapshot?: unknown;
+  loadedSnapshot?: unknown;
+}) {
+  const workflowsStore = {
+    getWorkflowRunById: vi.fn().mockResolvedValue({
+      workflowName: 'agentic-loop',
+      runId: 'suspended-run-id',
+      resourceId,
+      snapshot,
+    }),
+    loadWorkflowSnapshot: vi.fn().mockResolvedValue(loadedSnapshot),
+  };
+  const storage = {
+    getStore: vi.fn().mockReturnValue(workflowsStore),
+  };
+  return {
+    getStorage: vi.fn(() => storage),
+    storage,
+    workflowsStore,
+  };
+}
+
+function expectNoResumeOwnerError(error: unknown) {
+  if (error && typeof error === 'object' && 'id' in error) {
+    expect((error as { id?: string }).id?.startsWith('AGENT_RESUME_OWNER_')).toBe(false);
+  }
 }
 
 describe('Agent FGA checks', () => {
@@ -308,6 +342,107 @@ describe('Agent FGA checks', () => {
         { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
       );
     });
+
+    it('should reject callers whose resource does not own the suspended run', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await expect(
+        agent.resumeStream({ approved: true }, { runId: 'suspended-run-id', requestContext: requestContext as any }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_OWNER_MISMATCH' });
+    });
+
+    it('should fail closed when FGA is configured and caller resource is missing for an owned run', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        agent.resumeStream({ approved: true }, { runId: 'suspended-run-id', requestContext: requestContext as any }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_OWNER_UNVERIFIED' });
+    });
+
+    it('should not trust caller-supplied memory resource as owner proof when FGA is configured', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        agent.resumeStream(
+          { approved: true },
+          {
+            runId: 'suspended-run-id',
+            requestContext: requestContext as any,
+            memory: { resource: 'resource-b' },
+          },
+        ),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_OWNER_UNVERIFIED' });
+    });
+
+    it('should allow non-FGA local resume callers to prove ownership with memory resource', async () => {
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(undefined, getStorage);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel() as any,
+      });
+      (agent as any).__registerMastra(mastra);
+
+      let resumeError: unknown;
+      try {
+        await agent.resumeGenerate(
+          { approved: true },
+          {
+            runId: 'suspended-run-id',
+            memory: { resource: 'resource-b' },
+          },
+        );
+      } catch (error) {
+        resumeError = error;
+      }
+
+      expectNoResumeOwnerError(resumeError);
+    });
+
+    it('should fail closed when FGA is configured and the persisted run has no owner resource', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({});
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await expect(
+        agent.resumeStream({ approved: true }, { runId: 'suspended-run-id', requestContext: requestContext as any }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_PERSISTED_RUN_NO_OWNER' });
+    });
   });
 
   describe('resumeStreamUntilIdle()', () => {
@@ -407,6 +542,26 @@ describe('Agent FGA checks', () => {
         { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
       );
     });
+
+    it('should enforce run owner checks through resumeStreamUntilIdle', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await expect(
+        agent.resumeStreamUntilIdle(
+          { approved: true },
+          { runId: 'suspended-run-id', requestContext: requestContext as any },
+        ),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_OWNER_MISMATCH' });
+    });
   });
 
   describe('resumeGenerate()', () => {
@@ -493,6 +648,91 @@ describe('Agent FGA checks', () => {
         { id: 'default-user', organizationMembershipId: 'default-om' },
         { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
       );
+    });
+
+    it('should reject callers whose resource does not own the suspended generate run', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-b' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      await expect(
+        agent.resumeGenerate({ approved: true }, { runId: 'suspended-run-id', requestContext: requestContext as any }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_OWNER_MISMATCH' });
+    });
+
+    it('should allow a caller whose resource owns the suspended generate run', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage } = createWorkflowRunStorage({ resourceId: 'resource-a' });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel() as any,
+      });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      let resumeError: unknown;
+      try {
+        await agent.resumeGenerate(
+          { approved: true },
+          { runId: 'suspended-run-id', requestContext: requestContext as any },
+        );
+      } catch (error) {
+        resumeError = error;
+      }
+
+      expectNoResumeOwnerError(resumeError);
+    });
+
+    it('should fall back to loadWorkflowSnapshot when getWorkflowRunById returns a serialized snapshot', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const { getStorage, workflowsStore } = createWorkflowRunStorage({
+        resourceId: 'resource-a',
+        snapshot: '{"context":{}}',
+        loadedSnapshot: { context: {} },
+      });
+      const mastra = createMockMastra(fgaProvider, getStorage);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel() as any,
+      });
+      (agent as any).__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-a');
+
+      let resumeError: unknown;
+      try {
+        await agent.resumeGenerate(
+          { approved: true },
+          { runId: 'suspended-run-id', requestContext: requestContext as any },
+        );
+      } catch (error) {
+        resumeError = error;
+      }
+
+      expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledWith({
+        workflowName: 'agentic-loop',
+        runId: 'suspended-run-id',
+      });
+      expectNoResumeOwnerError(resumeError);
     });
   });
 });
