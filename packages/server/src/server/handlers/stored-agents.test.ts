@@ -16,11 +16,19 @@ import {
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
-vi.mock('./agent-versions', () => ({
-  handleAutoVersioning: vi.fn().mockImplementation(async (_store: any, _id: any, _existing: any, updatedAgent: any) => {
-    return { agent: updatedAgent, versionCreated: false };
-  }),
-}));
+import type * as VersionHelpers from './version-helpers';
+
+vi.mock('./version-helpers', async importOriginal => {
+  const actual = await importOriginal<typeof VersionHelpers>();
+  return {
+    ...actual,
+    handleAutoVersioning: vi
+      .fn()
+      .mockImplementation(async (_store: any, _id: any, _existing: any, updatedAgent: any) => {
+        return { agent: updatedAgent, versionCreated: false };
+      }),
+  };
+});
 
 // =============================================================================
 // Mock Factories
@@ -46,6 +54,7 @@ interface MockStoredAgent {
   memory?: unknown;
   scorers?: unknown[];
   authorId?: string;
+  visibility?: 'public' | 'private';
   metadata?: Record<string, unknown>;
   activeVersionId?: string;
 }
@@ -853,6 +862,14 @@ describe('Stored Agents Handlers', () => {
         model: { name: 'gpt-4', provider: 'openai' },
         activeVersionId: 'v-autopub-1',
       });
+
+      // Override the global mock for this test to simulate a new version being created.
+      // The auto-publish branch only runs when versionCreated is true.
+      const { handleAutoVersioning } = await import('./version-helpers');
+      vi.mocked(handleAutoVersioning).mockImplementationOnce(async (_store, _id, _existing, updatedAgent) => ({
+        agent: updatedAgent as any,
+        versionCreated: true,
+      }));
 
       // listVersions is called multiple times: once by enforceRetentionLimit
       // inside handleAutoVersioning, then again by the auto-publish code.
