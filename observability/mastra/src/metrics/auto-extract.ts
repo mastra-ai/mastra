@@ -3,7 +3,13 @@
  */
 
 import { SpanType } from '@mastra/core/observability';
-import type { AnySpan, CostContext, MetricsContext, ModelGenerationAttributes } from '@mastra/core/observability';
+import type {
+  AnySpan,
+  CostContext,
+  MetricsContext,
+  ModelGenerationAttributes,
+  UsageStats,
+} from '@mastra/core/observability';
 import { estimateCosts } from './estimator';
 import type { TokenMetrics } from './types';
 import { getTokenMetricSamples } from './usage-metrics';
@@ -33,6 +39,24 @@ export function emitTokenMetrics(span: AnySpan, metrics: MetricsContext): void {
   }
 
   emitUsageMetrics(attrs, attrs.usage, metrics);
+}
+
+/**
+ * Emit token usage metrics from an explicit usage payload, using the supplied
+ * metrics context (which carries entity / parent / root labels) and the
+ * supplied provider+model for cost lookup.
+ *
+ * Used when an internal MODEL_GENERATION's usage is rolled up to a visible
+ * ancestor span: the metric labels come from the ancestor's context, the
+ * cost calculation still uses the original model that incurred the tokens.
+ */
+export function emitTokenMetricsForUsage(
+  usage: UsageStats,
+  provider: string | undefined,
+  model: string | undefined,
+  metrics: MetricsContext,
+): void {
+  emitUsageMetrics({ provider, model } as ModelGenerationAttributes, usage, metrics);
 }
 
 /** Emit all auto-extracted metrics for a live span end. */

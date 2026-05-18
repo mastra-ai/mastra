@@ -1555,8 +1555,16 @@ export class Agent extends BaseResource {
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing.
-                // Forward `route` so stream-until-idle (and future non-default routes)
-                // stay on the same endpoint across client-tool continuations.
+                // Resume routes are one-shot (they consume server-side resumeData),
+                // so client-tool continuations must fall back to the corresponding
+                // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
+                // are idempotent continuations and stay on the same endpoint.
+                const recursionRoute =
+                  route === 'resume-stream'
+                    ? 'stream'
+                    : route === 'resume-stream-until-idle'
+                      ? 'stream-until-idle'
+                      : route;
                 try {
                   await this.processStreamResponse(
                     {
@@ -1564,7 +1572,7 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
-                    route,
+                    recursionRoute,
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);
