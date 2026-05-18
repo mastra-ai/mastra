@@ -47,17 +47,19 @@ const EXECUTE_PATTERNS = [
   '/clone',
 ];
 
-/**
- * Path suffixes that indicate a "publish" action for POST requests.
- * These are version-activation / rollback / publish operations on stored resources.
- */
 const PUBLISH_PATTERNS = ['/publish', '/activate', '/restore'];
 
 /**
- * Stored resource families that map `/stored/<family>` to `stored-<family>`.
- * Order matters: longest/most specific matches first via segment equality.
+ * Maps `/stored/<family>` URL segments to canonical permission resource slugs.
  */
-const STORED_RESOURCE_FAMILIES = ['agents', 'skills', 'prompt-blocks', 'mcp-clients', 'scorers', 'workspaces'] as const;
+const STORED_RESOURCE_SEGMENTS: Record<string, string> = {
+  agents: 'stored-agents',
+  'mcp-clients': 'stored-mcp-clients',
+  'prompt-blocks': 'stored-prompt-blocks',
+  scorers: 'stored-scorers',
+  skills: 'stored-skills',
+  workspaces: 'stored-workspaces',
+};
 
 /**
  * Extracts the primary resource name from a route path.
@@ -87,14 +89,11 @@ export function extractResource(path: string): string | null {
 
   const firstSegment = segments[0];
 
-  // Handle special case: /stored/<family> → 'stored-<family>'
+  // Handle special case: /stored/<family> → 'stored-<family>' (or mapped slug).
   // Uses exact segment match (not startsWith) so paths like /stored/skills-archive
   // don't incorrectly collapse into a stored family.
-  if (firstSegment === 'stored' && segments.length > 1) {
-    const family = segments[1];
-    if (family && (STORED_RESOURCE_FAMILIES as readonly string[]).includes(family)) {
-      return `stored-${family}`;
-    }
+  if (firstSegment === 'stored' && segments[1]) {
+    return STORED_RESOURCE_SEGMENTS[segments[1]] ?? null;
   }
 
   // Handle .well-known paths (A2A protocol)
@@ -121,6 +120,9 @@ export function deriveAction(method: string, path: string): string {
   // matching to /stored/* paths so unrelated routes that happen to end with
   // /activate or /restore aren't accidentally classified as publish.
   if (upperMethod === 'POST') {
+    // Restrict publish-suffix matching to /stored/* paths so unrelated routes
+    // that happen to end with /activate or /restore aren't accidentally
+    // classified as publish.
     if (path.startsWith('/stored/')) {
       const isPublishOperation = PUBLISH_PATTERNS.some(pattern => path.endsWith(pattern));
       if (isPublishOperation) {

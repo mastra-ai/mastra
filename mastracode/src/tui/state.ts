@@ -194,6 +194,7 @@ export interface TUIState {
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  skillCommands: SkillMetadata[];
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
@@ -292,6 +293,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Input
     customSlashCommands: [],
+    skillCommands: [],
     goalSkillCommands: [],
     pendingImages: [],
 

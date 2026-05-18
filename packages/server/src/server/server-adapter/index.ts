@@ -19,8 +19,9 @@ import {
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
-import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import type { ServerRoute } from './routes';
+import { SERVER_ROUTES, getEffectivePermission } from './routes';
+import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
@@ -125,101 +126,6 @@ function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
   return [getEffectivePermission(route), route.fga?.permission]
     .flatMap(value => (Array.isArray(value) ? value : [value]))
     .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
-}
-
-function getToolRoutePermission(path: string): MastraFGAPermissionInput {
-  return path.includes('/execute') ? 'tools:execute' : 'tools:read';
-}
-
-function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
-  if (!isProtectedFGARoute(route) || !route.path || !route.method) {
-    return null;
-  }
-
-  const permission = getEffectivePermission(route);
-  if (!permission) {
-    return null;
-  }
-
-  const path = route.path;
-  if (path.startsWith('/agents/:agentId/tools/:toolId')) {
-    return {
-      resourceType: 'tool',
-      resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
-      permission: getToolRoutePermission(path),
-    };
-  }
-
-  if (path.startsWith('/agents/:agentId')) {
-    return { resourceType: 'agent', resourceIdParam: 'agentId', permission };
-  }
-
-  if (path.startsWith('/workflows/:workflowId')) {
-    return { resourceType: 'workflow', resourceIdParam: 'workflowId', permission };
-  }
-
-  if (path.startsWith('/tools/:toolId')) {
-    return { resourceType: 'tool', resourceIdParam: 'toolId', permission };
-  }
-
-  if (path.startsWith('/mcp/:serverId/tools/:toolId')) {
-    return {
-      resourceType: 'tool',
-      resourceId: ({ serverId, toolId }) => JSON.stringify([String(serverId), String(toolId)]),
-      permission: getToolRoutePermission(path),
-    };
-  }
-
-  if (path.startsWith('/mcp/:serverId')) {
-    return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
-  }
-
-  if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
-    return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
-  }
-
-  if (path === '/memory/threads' || path === '/memory/network/threads') {
-    return {
-      resourceType: 'thread',
-      resourceId: ({ threadId, resourceId }) => {
-        if (typeof threadId === 'string') return threadId;
-        return typeof resourceId === 'string' ? resourceId : undefined;
-      },
-      permission,
-    };
-  }
-
-  if (path === '/memory/save-messages' || path === '/memory/network/save-messages') {
-    return {
-      resourceType: 'thread',
-      resourceId: ({ messages }) => {
-        if (!Array.isArray(messages)) return undefined;
-        const threadId = messages.find(
-          message => message && typeof message === 'object' && 'threadId' in message,
-        )?.threadId;
-        return typeof threadId === 'string' ? threadId : undefined;
-      },
-      permission,
-    };
-  }
-
-  if (path === '/v1/responses') {
-    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
-  }
-
-  if (path.startsWith('/v1/responses/:responseId')) {
-    return { resourceType: 'response', resourceIdParam: 'responseId', permission };
-  }
-
-  if (path === '/v1/conversations') {
-    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
-  }
-
-  if (path.startsWith('/v1/conversations/:conversationId')) {
-    return { resourceType: 'conversation', resourceIdParam: 'conversationId', permission };
-  }
-
-  return null;
 }
 
 async function resolveRouteFGAConfig(

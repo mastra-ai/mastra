@@ -124,7 +124,7 @@ function getFGAProvider(mastra: any): IFGAProvider<EEUser> | undefined {
  * Type guard to check if auth provider implements an interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
-  return auth !== null && typeof auth === 'object' && method in auth;
+  return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
 // ============================================================================

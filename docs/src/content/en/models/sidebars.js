@@ -348,6 +348,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
