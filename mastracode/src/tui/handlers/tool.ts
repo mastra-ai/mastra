@@ -366,8 +366,9 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
       // Update inline tool component if it exists
       const component = state.pendingTools.get(toolCallId);
       if (component) {
-        component.updateArgs(partialArgs);
+        component.updateArgs(partialArgs, false);
         reconcileToolBoundaries(ctx);
+        component.refresh?.();
       }
 
       // For ask_user, stream partial args into the question component

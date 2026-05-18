@@ -18,7 +18,8 @@ export interface ToolResult {
 }
 
 export interface IToolExecutionComponent {
-  updateArgs(args: unknown): void;
+  updateArgs(args: unknown, rebuild?: boolean): void;
+  refresh?(): void;
   updateResult(result: ToolResult, isPartial?: boolean): void;
   setExpanded(expanded: boolean): void;
   setQuietModeDisplay?(mode: QuietToolDisplayMode): void;

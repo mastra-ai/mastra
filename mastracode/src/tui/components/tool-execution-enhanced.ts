@@ -144,8 +144,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.rebuild();
   }
 
-  updateArgs(args: unknown): void {
+  updateArgs(args: unknown, rebuild = true): void {
     this.args = args;
+    if (rebuild) this.rebuild();
+  }
+
+  refresh(): void {
     this.rebuild();
   }
 
@@ -531,7 +535,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private getCompactContinuationSummary(): string {
     const summary = this.getCompactToolSummary();
     const previousSummary = this.compactToolPreviousSummary;
-    if (!previousSummary) return summary;
+    if (!previousSummary) return this.isComplete() ? summary : '';
 
     const sharedPrefixLength = this.getSharedPrefixLength(previousSummary, summary);
     if (sharedPrefixLength === 0) return summary;
@@ -553,33 +557,23 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       i++;
     }
 
-    const visiblePathStart = this.getImmediateDirnamePathStart(b);
-    if (visiblePathStart === undefined) return i;
-    if (this.isStreamingPartialPath(b)) return i;
+    const pathEnd = b.indexOf(':');
+    const path = pathEnd >= 0 ? b.slice(0, pathEnd) : b;
+    const sharedPathLength = Math.min(i, path.length);
+    if (sharedPathLength === 0) return 0;
 
-    // While the next path is still streaming, dedupe every matching char.
-    // Once enough path context exists, keep exactly /dirname/file visible.
-    return Math.min(i, visiblePathStart);
-  }
+    const matchingSegmentBoundary = path.lastIndexOf('/', sharedPathLength - 1);
+    const currentSegmentStart = path.lastIndexOf('/', Math.max(0, sharedPathLength - 1));
 
-  private getImmediateDirnamePathStart(summary: string): number | undefined {
-    const pathEnd = summary.indexOf(':');
-    const path = pathEnd >= 0 ? summary.slice(0, pathEnd) : summary;
-    const fileSlashIndex = path.lastIndexOf('/');
-    if (fileSlashIndex < 0) return undefined;
+    if (i === b.length || i === a.length) {
+      return b.length;
+    }
 
-    const dirnameSlashIndex = path.lastIndexOf('/', fileSlashIndex - 1);
-    return dirnameSlashIndex >= 0 ? dirnameSlashIndex : fileSlashIndex;
-  }
+    if (i < b.length && i < a.length) {
+      return currentSegmentStart >= 0 ? currentSegmentStart : 0;
+    }
 
-  private isStreamingPartialPath(summary: string): boolean {
-    const pathEnd = summary.indexOf(':');
-    const path = pathEnd >= 0 ? summary.slice(0, pathEnd) : summary;
-    const fileSlashIndex = path.lastIndexOf('/');
-    if (fileSlashIndex < 0) return false;
-
-    const filename = path.slice(fileSlashIndex + 1);
-    return !filename.includes('.');
+    return matchingSegmentBoundary >= 0 ? matchingSegmentBoundary + 1 : 0;
   }
 
   private getCompactToolSummary(): string {
@@ -628,8 +622,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private formatPathWithRange(): string {
-    const path = this.getFirstStringArg('path');
-    if (!path) return '';
+    const rawPath = this.getFirstStringArg('path');
+    if (!rawPath) return '';
 
     const argsObj = this.args as Record<string, unknown> | undefined;
     const viewRange = argsObj?.view_range as [number, number] | undefined;
@@ -638,6 +632,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const line = typeof argsObj?.line === 'number' ? argsObj.line : undefined;
     const start = viewRange?.[0] ?? offset ?? line;
     const end = viewRange?.[1] ?? (offset !== undefined && limit !== undefined ? offset + limit - 1 : line);
+    const path = rawPath;
 
     if (start === undefined) return path;
     return end !== undefined && end !== start ? `${path}:${start}-${end}` : `${path}:${start}`;

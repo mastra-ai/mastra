@@ -7,7 +7,9 @@
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { theme } from '../theme.js';
+import stripAnsi from 'strip-ansi';
+import { getTermWidth, theme } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 
 export class TaskProgressComponent extends Container {
   private tasks: TaskItemInput[] = [];
@@ -53,7 +55,9 @@ export class TaskProgressComponent extends Container {
     this.addChild(new Spacer(1));
 
     if (this.quietMode) {
-      this.addChild(new Text(this.formatQuietTaskLine(completed, total), 0, 0));
+      for (const line of this.formatQuietTaskLines(completed, total)) {
+        this.addChild(new Text(line, 0, 0));
+      }
       return;
     }
 
@@ -69,34 +73,49 @@ export class TaskProgressComponent extends Container {
     }
   }
 
-  private formatQuietTaskLine(completed: number, total: number): string {
+  private formatQuietTaskLines(completed: number, total: number): string[] {
     const prefix = '  ' + theme.fg('dim', `${completed}/${total}`);
-    const parts = [prefix];
+    const continuationPrefix = ' '.repeat(stripAnsi(prefix).length);
+    const maxWidth = Math.max(20, getTermWidth());
+    const itemSeparator = '  ';
+    const lines: string[] = [prefix];
 
     for (const task of this.tasks) {
-      switch (task.status) {
-        case 'completed': {
-          const icon = theme.fg('success', '✓');
-          const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
-          parts.push(`${icon} ${text}`);
-          break;
-        }
-        case 'in_progress': {
-          const icon = theme.fg('warning', '▶');
-          const text = theme.bold(theme.fg('warning', task.activeForm));
-          parts.push(`${icon} ${text}`);
-          break;
-        }
-        case 'pending': {
-          const icon = theme.fg('dim', '○');
-          const text = theme.fg('dim', task.content);
-          parts.push(`${icon} ${text}`);
-          break;
-        }
+      const item = this.formatQuietTaskItem(task);
+      const currentLine = lines[lines.length - 1]!;
+      const separator = stripAnsi(currentLine).trim().length === 0 ? '' : itemSeparator;
+      const candidate = `${currentLine}${separator}${item}`;
+
+      if (stripAnsi(candidate).length <= maxWidth) {
+        lines[lines.length - 1] = candidate;
+        continue;
       }
+
+      const itemLineWidth = maxWidth - continuationPrefix.length - itemSeparator.length;
+      lines.push(`${continuationPrefix}${itemSeparator}${truncateAnsi(item, itemLineWidth)}`);
     }
 
-    return parts.join('  ');
+    return lines;
+  }
+
+  private formatQuietTaskItem(task: TaskItemInput): string {
+    switch (task.status) {
+      case 'completed': {
+        const icon = theme.fg('success', '✓');
+        const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
+        return `${icon} ${text}`;
+      }
+      case 'in_progress': {
+        const icon = theme.fg('warning', '▶');
+        const text = theme.bold(theme.fg('warning', task.activeForm));
+        return `${icon} ${text}`;
+      }
+      case 'pending': {
+        const icon = theme.fg('dim', '○');
+        const text = theme.fg('dim', task.content);
+        return `${icon} ${text}`;
+      }
+    }
   }
 
   private formatTaskLine(task: TaskItemInput): string {

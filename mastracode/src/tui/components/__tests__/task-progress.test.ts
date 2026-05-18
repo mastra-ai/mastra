@@ -15,6 +15,7 @@ vi.mock('chalk', () => {
 });
 
 vi.mock('../../theme.js', () => ({
+  getTermWidth: () => 80,
   theme: {
     bold: (value: string) => value,
     fg: (_tone: string, value: string) => value,
@@ -47,7 +48,7 @@ describe('TaskProgressComponent', () => {
     expect(lines[3]).toContain('Do the next thing');
   });
 
-  it('renders a single-line summary when quiet mode is active', () => {
+  it('renders an item-aware summary when quiet mode is active', () => {
     const component = new TaskProgressComponent();
     component.setQuietMode(true);
 
@@ -69,6 +70,29 @@ describe('TaskProgressComponent', () => {
     expect(lines[1]).toContain('✓ Inspect task progress');
     expect(lines[1].indexOf('Inspect task progress')).toBeLessThan(lines[1].indexOf('Implementing quiet tasks'));
     expect(lines[1].indexOf('Implementing quiet tasks')).toBeLessThan(lines[1].indexOf('Verify quiet tasks'));
+  });
+
+  it('wraps quiet summaries between tasks without wrapping individual task items', () => {
+    const component = new TaskProgressComponent();
+    component.setQuietMode(true);
+
+    component.updateTasks([
+      { id: 'one', content: 'Inspect task progress', activeForm: 'Inspecting task progress', status: 'completed' },
+      {
+        id: 'two',
+        content: 'Implement item aware quiet task summary wrapping',
+        activeForm: 'Implementing item aware quiet task summary wrapping',
+        status: 'in_progress',
+      },
+      { id: 'three', content: 'Verify quiet task wrapping', activeForm: 'Verifying quiet task wrapping', status: 'pending' },
+    ]);
+
+    const lines = component.render(80).map(line => stripAnsi(line).trimEnd());
+
+    expect(lines).toHaveLength(4);
+    expect(lines[1]).toContain('1/3  ✓ Inspect task progress');
+    expect(lines[2]).toBe('       ▶ Implementing item aware quiet task summary wrapping');
+    expect(lines[3]).toBe('       ○ Verify quiet task wrapping');
   });
 
   it('updates between expanded and quiet task rendering', () => {

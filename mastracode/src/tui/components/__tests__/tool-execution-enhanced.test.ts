@@ -46,7 +46,22 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).not.toContain('/tui/rendering/beta-widget.ts:1-3');
   });
 
-  it('dedupes continuation path prefixes while the next path streams', () => {
+  it('does not show raw streamed continuation paths before previous context is available', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'mastracode/src/' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true);
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).not.toContain('mastracode');
+    expect(output).not.toContain('src');
+  });
+
+  it('holds partial continuation path segments until a slash streams in', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/s' },
@@ -57,8 +72,84 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.setCompactToolContinuation(true, 'mastracode/src/tui/components/tool-execution-enhanced.ts:1-2');
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('─────────────');
+    expect(output).toContain('────────────');
     expect(output).not.toContain('mastracode/s');
+  });
+
+  it('holds continuation path segments when previous segment is still incomplete', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'mastracode/src' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, 'mastracode/s');
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('────────────');
+    expect(output).not.toContain('src');
+  });
+
+  it('streams divergent path segments immediately', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'mastracode/src' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, 'mastracode/lib/tool-execution-enhanced.ts:1-2');
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('/src');
+    expect(output).not.toContain('mastracode/src');
+  });
+
+  it('streams from the divergent path segment after matching prefixes', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'mastracode/src/tui/comments' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, 'mastracode/src/tui/components/tool-execution-enhanced.ts:1-2');
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('/comments');
+    expect(output).not.toContain('mastracode/src/tui/com');
+  });
+
+  it('renders matching completed continuation segments as connector chunks', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'mastracode/lib/' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, 'mastracode/lib/tool-execution-enhanced.ts:1-2');
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('────────────────');
+    expect(output).not.toContain('mastracode/lib');
+    expect(output).not.toContain('/lib/');
+  });
+
+  it('only hides complete shared path segments in continuations', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: '/tmp/commands/settings.ts', offset: 1, limit: 2 },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, '/tmp/components/task-progress.ts:1-2');
+
+    const output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('/commands/settings.ts:1-2');
+    expect(output).not.toContain('───mands/settings.ts');
   });
 
   it('does not render a quiet view preview line that duplicates the summary', () => {
