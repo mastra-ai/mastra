@@ -335,6 +335,35 @@ describe('makeCoreTool', () => {
     expect(() => schema['~standard'].validate({ extra: 'field' })).not.toThrow();
   });
 
+  it('accepts optional input fields under Google models when autoResumeSuspendedTools is enabled', () => {
+    const tool = createTool({
+      id: 'example-tool',
+      description: 'Example tool with optional input',
+      inputSchema: z.object({
+        query: z.string().min(1),
+        limit: z.number().int().min(1).max(25).optional(),
+      }),
+      execute: async () => ({ ok: true }),
+    });
+
+    expect(() =>
+      makeCoreTool(
+        tool,
+        {
+          ...mockOptions,
+          model: {
+            modelId: 'gemini-pro',
+            provider: 'google',
+            supportsStructuredOutputs: false,
+          } as any,
+        },
+        undefined,
+        true,
+        false,
+      ),
+    ).not.toThrow();
+  });
+
   it('should propagate requireApproval from options to the built CoreTool', () => {
     const tool = createTool({
       id: 'dangerous-tool',
