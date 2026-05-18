@@ -5,8 +5,10 @@
 import type { MastraAuthProvider } from '../../server';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
 import type { IACLProvider } from './interfaces/acl';
-import type { IFGAProvider } from './interfaces/fga';
-import type { IRBACProvider } from './interfaces/rbac';
+import type { IFGAProvider, FGACapabilities } from './interfaces/fga';
+import { DEFAULT_FGA_CAPABILITIES } from './interfaces/fga';
+import type { IRBACProvider, RBACCapabilities } from './interfaces/rbac';
+import { DEFAULT_RBAC_CAPABILITIES } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
 import { isLicenseValid, isDevEnvironment } from './license';
 
@@ -67,10 +69,14 @@ export interface CapabilityFlags {
   sso: boolean;
   /** IRBACProvider is implemented and licensed */
   rbac: boolean;
+  /** Detailed RBAC capabilities (null if RBAC not available) */
+  rbacCapabilities: RBACCapabilities | null;
   /** IACLProvider is implemented and licensed */
   acl: boolean;
   /** IFGAProvider is implemented and licensed */
   fga: boolean;
+  /** Detailed FGA capabilities (null if FGA not available) */
+  fgaCapabilities: FGACapabilities | null;
 }
 
 /**
@@ -263,9 +269,32 @@ export async function buildCapabilities(
   // Get RBAC provider from options (if configured)
   const rbacProvider = options?.rbac;
   const hasRBAC = !!rbacProvider && isLicensedOrCloud;
+  const fgaProvider = options?.fga;
+  const hasFGA = !!fgaProvider && isLicensedOrCloud;
 
-  // Get FGA provider from options (if configured)
-  const hasFGA = !!options?.fga && isLicensedOrCloud;
+  // Get detailed RBAC capabilities (if available)
+  let rbacCapabilities: RBACCapabilities | null = null;
+  if (hasRBAC && rbacProvider && 'getCapabilities' in rbacProvider) {
+    try {
+      rbacCapabilities = (rbacProvider as any).getCapabilities();
+    } catch {
+      rbacCapabilities = DEFAULT_RBAC_CAPABILITIES;
+    }
+  } else if (hasRBAC) {
+    rbacCapabilities = DEFAULT_RBAC_CAPABILITIES;
+  }
+
+  // Get detailed FGA capabilities (if available)
+  let fgaCapabilities: FGACapabilities | null = null;
+  if (hasFGA && fgaProvider && 'getCapabilities' in fgaProvider) {
+    try {
+      fgaCapabilities = (fgaProvider as any).getCapabilities();
+    } catch {
+      fgaCapabilities = DEFAULT_FGA_CAPABILITIES;
+    }
+  } else if (hasFGA) {
+    fgaCapabilities = DEFAULT_FGA_CAPABILITIES;
+  }
 
   // Build capability flags
   const capabilities: CapabilityFlags = {
@@ -273,8 +302,10 @@ export async function buildCapabilities(
     session: implementsInterface<ISessionProvider>(auth, 'createSession') && isLicensedOrCloud,
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
+    rbacCapabilities,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
     fga: hasFGA,
+    fgaCapabilities,
   };
 
   // Get roles/permissions from RBAC provider (if available)

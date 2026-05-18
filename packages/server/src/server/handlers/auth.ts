@@ -1102,7 +1102,13 @@ export const GET_ROLES_ROUTE = createRoute({
       const studioConfig = mastra.getStudio?.();
       const rbac = studioConfig?.rbac;
 
-      // If RBAC provider has listRoles method, use it
+      // If RBAC provider has listRoleDefinitions method (new interface), use it
+      if (rbac && 'listRoleDefinitions' in rbac) {
+        const roles = await (rbac as any).listRoleDefinitions();
+        return { roles };
+      }
+
+      // Legacy: If RBAC provider has listRoles method, use it
       if (rbac && 'listRoles' in rbac) {
         const roles = await (rbac as any).listRoles();
         return { roles };
