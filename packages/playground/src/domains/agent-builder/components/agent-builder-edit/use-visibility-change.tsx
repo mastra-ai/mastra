@@ -76,7 +76,7 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
             </DialogBody>
             <DialogFooter>
               <Button
-                variant="light"
+                variant="ghost"
                 onClick={handleCancel}
                 disabled={updateStoredAgent.isPending}
                 data-testid="agent-builder-visibility-confirm-cancel"

@@ -18,7 +18,7 @@ export const ToolsDetail = ({ editable = true, availableAgentTools = [] }: Tools
   };
 
   return (
-    <div className="max-h-[20rem] overflow-y-auto py-2">
+    <div className="h-full min-h-0 overflow-y-auto py-2">
       {availableAgentTools.length === 0 ? (
         <Txt variant="ui-sm" className="px-6 py-4 text-neutral3">
           No tools available in this project.

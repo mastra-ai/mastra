@@ -365,18 +365,17 @@ describe('AgentConfigurePanel disabled propagation', () => {
     const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
     const avatarBtn = screen.getByTestId('agent-configure-avatar-trigger') as HTMLButtonElement;
     const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
-    const instructionsDetails = instructionsRow.closest('details') as HTMLDetailsElement;
 
     expect(nameInput.disabled).toBe(true);
     expect(descInput.disabled).toBe(true);
     expect(avatarBtn.disabled).toBe(true);
 
-    expect(instructionsDetails.open).toBe(false);
+    expect(instructionsRow.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(instructionsRow);
     expect(screen.getByTestId('instructions-detail-textarea')).toBeTruthy();
   });
 
-  it('collapses other sections when opening a new one (mutual exclusivity via shared name)', () => {
+  it('collapses other sections when opening a new one (single-open accordion)', () => {
     render(
       <FormWrapper>
         <AgentConfigurePanel availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]} />
@@ -385,11 +384,39 @@ describe('AgentConfigurePanel disabled propagation', () => {
 
     const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
     const toolsRow = screen.getByTestId('agent-preview-tools-button');
-    const instructionsDetails = instructionsRow.closest('details') as HTMLDetailsElement;
-    const toolsDetails = toolsRow.closest('details') as HTMLDetailsElement;
 
-    expect(instructionsDetails.getAttribute('name')).toBe(toolsDetails.getAttribute('name'));
-    expect(instructionsDetails.getAttribute('name')).toBeTruthy();
+    expect(instructionsRow.getAttribute('aria-expanded')).toBe('false');
+    expect(toolsRow.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(instructionsRow);
+    expect(instructionsRow.getAttribute('aria-expanded')).toBe('true');
+    expect(toolsRow.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(toolsRow);
+    expect(instructionsRow.getAttribute('aria-expanded')).toBe('false');
+    expect(toolsRow.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('applies fill sizing only to the active accordion section', () => {
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]} />
+      </FormWrapper>,
+    );
+
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
+    const toolsRow = screen.getByTestId('agent-preview-tools-button');
+
+    const instructionsItem = instructionsRow.closest('[data-orientation]')?.parentElement as HTMLElement;
+    const toolsItem = toolsRow.closest('[data-orientation]')?.parentElement as HTMLElement;
+
+    expect(instructionsItem.hasAttribute('data-closed')).toBe(true);
+    expect(toolsItem.hasAttribute('data-closed')).toBe(true);
+
+    fireEvent.click(instructionsRow);
+
+    expect(instructionsItem.hasAttribute('data-open')).toBe(true);
+    expect(toolsItem.hasAttribute('data-closed')).toBe(true);
   });
 
   it('renders enabled controls by default', () => {
@@ -493,6 +520,8 @@ describe('AgentConfigurePanel inline model section', () => {
 
     renderPanel();
 
+    fireEvent.click(screen.getByTestId('agent-preview-model-button'));
+
     expect(screen.getByTestId('model-detail-picker')).toBeTruthy();
     expect(screen.queryByTestId('model-detail-locked-chip')).toBeNull();
     expect(screen.getByTestId('model-card-picker').dataset.disabled).toBe('false');
@@ -515,6 +544,8 @@ describe('AgentConfigurePanel inline model section', () => {
     });
 
     renderPanel();
+
+    fireEvent.click(screen.getByTestId('agent-preview-model-button'));
 
     const chip = screen.getByTestId('model-detail-locked-chip');
     expect(chip.textContent).toContain('openai/gpt-4o');
@@ -544,6 +575,8 @@ describe('AgentConfigurePanel inline model section', () => {
         />
       </FormWrapper>,
     );
+
+    fireEvent.click(screen.getByTestId('agent-preview-model-button'));
 
     expect(screen.getByTestId('model-detail-picker')).toBeTruthy();
     expect(screen.getByTestId('model-card-picker').dataset.disabled).toBe('true');

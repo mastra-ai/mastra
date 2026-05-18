@@ -1,3 +1,4 @@
+import type { Provider } from '@mastra/client-js';
 import { Searchbar, Skeleton, Txt, cn } from '@mastra/playground-ui';
 import { Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -16,10 +17,21 @@ interface CardEntry {
   modelId: string;
 }
 
+function isProvider(provider: unknown): provider is Provider {
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    'id' in provider &&
+    'name' in provider &&
+    'models' in provider &&
+    Array.isArray(provider.models)
+  );
+}
+
 export const ModelCardPicker = ({ value, onChange, disabled = false }: ModelCardPickerProps) => {
   const { data, isLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
-  const allProviders = data?.providers || [];
+  const allProviders = (data?.providers || []).filter(isProvider);
   const filteredProviders = useBuilderFilteredProviders(allProviders, policy);
   const allModels = useAllModels(filteredProviders);
   const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
@@ -59,8 +71,8 @@ export const ModelCardPicker = ({ value, onChange, disabled = false }: ModelCard
   }
 
   return (
-    <div className="flex flex-col gap-2" data-testid="model-card-picker">
-      <div data-testid="model-card-picker-search">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2" data-testid="model-card-picker">
+      <div data-testid="model-card-picker-search" className="shrink-0">
         <Searchbar
           onSearch={setSearch}
           label="Search models"
@@ -71,13 +83,13 @@ export const ModelCardPicker = ({ value, onChange, disabled = false }: ModelCard
       </div>
 
       {visibleEntries.length === 0 ? (
-        <div className="flex items-center justify-center px-3 py-6">
+        <div className="flex min-h-0 items-center justify-center px-3 py-6">
           <Txt variant="ui-sm" className="text-neutral3">
             {search.trim() ? `No models match "${search.trim()}"` : 'No models available'}
           </Txt>
         </div>
       ) : (
-        <div className="grid max-h-[24rem] grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-h-0 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
           {visibleEntries.map(entry => {
             const cleanedProvider = cleanProviderId(entry.providerId);
             const isSelected = cleanedProvider === selectedProvider && entry.modelId === selectedModel;

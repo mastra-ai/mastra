@@ -8,7 +8,7 @@ interface InstructionsDetailProps {
 
 export const InstructionsDetail = ({ prompt, onChange, editable = true }: InstructionsDetailProps) => {
   return (
-    <div className="flex flex-col px-6 py-4 h-[20rem] max-h-[50vh] overflow-hidden">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] px-2 py-2">
       <CodeEditor
         data-testid="system-prompt-dialog-input"
         value={prompt}
@@ -17,7 +17,7 @@ export const InstructionsDetail = ({ prompt, onChange, editable = true }: Instru
         editable={editable}
         placeholder="You are a helpful assistant that…"
         showCopyButton={false}
-        className="h-full w-full border-0 bg-transparent p-0 rounded-none overflow-auto"
+        className="min-h-0 w-full border-0 bg-transparent p-0 rounded-none [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-y-auto"
       />
     </div>
   );

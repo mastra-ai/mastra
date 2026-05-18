@@ -18,7 +18,7 @@ export const SkillsDetail = ({ editable = true, availableSkills = [] }: SkillsDe
   };
 
   return (
-    <div className="max-h-[20rem] overflow-y-auto py-2">
+    <div className="h-full min-h-0 overflow-y-auto py-2">
       {availableSkills.length === 0 ? (
         <Txt variant="ui-sm" className="px-6 py-4 text-neutral3">
           No skills available in this project.

@@ -76,7 +76,7 @@ export function useVisibilityChange(skillId: string): UseVisibilityChange {
             </DialogBody>
             <DialogFooter>
               <Button
-                variant="light"
+                variant="ghost"
                 onClick={handleCancel}
                 disabled={updateSkill.isPending}
                 data-testid="skill-builder-visibility-confirm-cancel"

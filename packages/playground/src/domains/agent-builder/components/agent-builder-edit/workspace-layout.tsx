@@ -108,7 +108,7 @@ export const WorkspaceLayout = ({
             )}
             data-testid="agent-builder-panel-configure"
           >
-            <div className="h-full w-full overflow-y-auto">{configure}</div>
+            <div className="h-full min-h-0 w-full min-w-0 overflow-hidden">{configure}</div>
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@ import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import {
   Accordion,
   AccordionContent,
+  AccordionItem,
   AccordionSummary,
   Avatar,
   cn,
@@ -37,8 +38,6 @@ export interface AgentConfig {
   authorId?: string | null;
   browserEnabled?: boolean;
 }
-
-const ACCORDION_GROUP_NAME = 'agent-configure-section';
 
 interface BaseProps {
   availableAgentTools?: AgentTool[];
@@ -138,93 +137,80 @@ function ConfigurePanelContent({
     }
   };
 
-  const instructionsDescription = formatInstructionsPreview(panelInstructions);
   const modelSectionVisible = features.model || policy.active;
 
   return (
-    <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden">
-      <div className="flex h-full min-w-0 flex-col">
-        <div className="flex-1 flex flex-col py-6 overflow-y-auto">
-          <div className="flex flex-col gap-2 px-6 pb-6">
-            <div className="flex items-center justify-center">
-              {features.avatarUpload ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={disabled}
-                    className="group relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
-                    aria-label="Upload avatar"
-                    data-testid="agent-configure-avatar-trigger"
-                  >
-                    <Avatar src={panelAvatarUrl} name={panelName || 'A'} size="lg" interactive />
-                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Plus className="h-5 w-5 text-neutral5" />
-                    </span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarFile}
-                    className="hidden"
-                    data-testid="agent-configure-avatar-input"
-                  />
-                </>
-              ) : (
-                <div data-testid="agent-configure-avatar-display">
-                  <Avatar src={panelAvatarUrl} name={panelName || 'A'} size="lg" />
-                </div>
-              )}
+    <div className="grid grid-rows-[auto_1fr] gap-4 border border-border1 bg-surface2 rounded-3xl p-6 h-full min-h-0">
+      <div className="space-y-2">
+        <div className="flex items-center justify-center">
+          {features.avatarUpload ? (
+            <>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled}
+                className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Upload avatar"
+                data-testid="agent-configure-avatar-trigger"
+              >
+                <Avatar src={panelAvatarUrl} name={panelName || 'A'} size="lg" interactive />
+                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity">
+                  <Plus className="h-5 w-5 text-neutral5" />
+                </span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarFile}
+                className="hidden"
+                data-testid="agent-configure-avatar-input"
+              />
+            </>
+          ) : (
+            <div data-testid="agent-configure-avatar-display">
+              <Avatar src={panelAvatarUrl} name={panelName || 'A'} size="lg" />
             </div>
-
-            <TextFieldBlock
-              name="agent-name"
-              label="Name"
-              value={panelName}
-              placeholder="Untitled agent"
-              onChange={e => setDraftName(e.target.value)}
-              disabled={disabled}
-              testId="agent-configure-name"
-            />
-
-            <TextFieldBlock
-              name="agent-description"
-              label="Description"
-              value={panelDescription}
-              placeholder="What is this agent for?"
-              onChange={e => setDraftDescription(e.target.value)}
-              disabled={disabled}
-              testId="agent-configure-description"
-            />
-          </div>
-
-          <ConfigSections
-            features={features}
-            instructionsDescription={instructionsDescription}
-            activeToolsCount={activeToolsCount}
-            totalToolsCount={totalToolsCount}
-            activeSkillsCount={activeSkillsCount}
-            totalSkillsCount={totalSkillsCount}
-            modelSectionVisible={modelSectionVisible}
-            editable={!disabled}
-            panelInstructions={panelInstructions}
-            onInstructionsChange={setDraftInstructions}
-            availableAgentTools={availableAgentTools}
-            availableSkills={availableSkills}
-            disabled={disabled}
-          />
+          )}
         </div>
+
+        <TextFieldBlock
+          name="agent-name"
+          label="Name"
+          value={panelName}
+          placeholder="Untitled agent"
+          onChange={e => setDraftName(e.target.value)}
+          disabled={disabled}
+          testId="agent-configure-name"
+        />
+
+        <TextFieldBlock
+          name="agent-description"
+          label="Description"
+          value={panelDescription}
+          placeholder="What is this agent for?"
+          onChange={e => setDraftDescription(e.target.value)}
+          disabled={disabled}
+          testId="agent-configure-description"
+        />
       </div>
+
+      <ConfigSections
+        features={features}
+        activeToolsCount={activeToolsCount}
+        totalToolsCount={totalToolsCount}
+        activeSkillsCount={activeSkillsCount}
+        totalSkillsCount={totalSkillsCount}
+        modelSectionVisible={modelSectionVisible}
+        editable={!disabled}
+        panelInstructions={panelInstructions}
+        onInstructionsChange={setDraftInstructions}
+        availableAgentTools={availableAgentTools}
+        availableSkills={availableSkills}
+        disabled={disabled}
+      />
     </div>
   );
-}
-
-function formatInstructionsPreview(instructions: string): string {
-  const trimmed = instructions.trim();
-  if (trimmed.length === 0) return 'Set how your agent thinks and responds';
-  if (trimmed.length > 80) return `${trimmed.slice(0, 80).trimEnd()}…`;
-  return trimmed;
 }
 
 interface ModelSectionProps {
@@ -247,12 +233,12 @@ function ModelSection({ editable }: ModelSectionProps) {
     !isModelAllowed(policy.allowed, { provider: cleanProviderId(provider), modelId });
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="grid h-full grid-rows-[1fr_auto] gap-2">
       {locked ? (
         <LockedModelChip provider={policy.default?.provider ?? provider} modelId={policy.default?.modelId ?? modelId} />
       ) : (
-        <div className="flex flex-col gap-2 text-neutral4 min-w-0" data-testid="model-detail-picker">
-          <label className="text-ui-smd text-neutral3">Model</label>
+        <div className="grid grid-rows-1 gap-2 text-neutral4 min-w-0" data-testid="model-detail-picker">
+          <label className="sr-only">Model</label>
           <ModelCardPicker
             value={provider && modelId ? { provider, name: modelId } : undefined}
             onChange={next => setValue('model', next, { shouldDirty: true })}
@@ -302,7 +288,6 @@ const LockedModelChip = ({ provider, modelId }: ModelChipProps) => (
 
 interface ConfigSectionsProps {
   features: ReturnType<typeof useBuilderAgentFeatures>;
-  instructionsDescription: string;
   activeToolsCount: number;
   totalToolsCount: number;
   activeSkillsCount: number;
@@ -342,7 +327,6 @@ function BrowserSummaryValue() {
 
 function ConfigSections({
   features,
-  instructionsDescription,
   activeToolsCount,
   totalToolsCount,
   activeSkillsCount,
@@ -356,60 +340,62 @@ function ConfigSections({
   modelSectionVisible,
 }: ConfigSectionsProps) {
   return (
-    <div className="flex flex-col gap-2 px-6 py-4">
-      <div className="flex flex-col rounded-xl border border-border1 bg-surface3 overflow-hidden">
-        {modelSectionVisible && (
-          <ConfigAccordion
-            icon={<Cpu className="h-4 w-4" />}
-            label="Model"
-            value={<ModelSummary />}
-            testId="agent-preview-model-button"
-          >
-            <ModelSection editable={editable} />
-          </ConfigAccordion>
-        )}
-        <ConfigAccordion
-          icon={<FileText className="h-4 w-4" />}
-          label="Instructions"
-          value={instructionsDescription}
-          testId="agent-preview-edit-system-prompt"
+    <Accordion className="rounded-xl border border-border1 bg-surface3 overflow-hidden h-full min-h-0">
+      {modelSectionVisible && (
+        <ConfigSection
+          value="model"
+          icon={<Cpu className="h-4 w-4" />}
+          label="Model"
+          summaryValue={<ModelSummary />}
+          testId="agent-preview-model-button"
         >
-          <InstructionsDetail prompt={panelInstructions} onChange={onInstructionsChange} editable={editable} />
-        </ConfigAccordion>
-        {features.tools && totalToolsCount > 0 && (
-          <ConfigAccordion
-            icon={<Wrench className="h-4 w-4" />}
-            label="Tools"
-            count={activeToolsCount}
-            total={totalToolsCount}
-            testId="agent-preview-tools-button"
-          >
-            <ToolsDetail editable={editable} availableAgentTools={availableAgentTools} />
-          </ConfigAccordion>
-        )}
-        {features.skills && totalSkillsCount > 0 && (
-          <ConfigAccordion
-            icon={<Sparkles className="h-4 w-4" />}
-            label="Skills"
-            count={activeSkillsCount}
-            total={totalSkillsCount}
-            testId="agent-preview-skills-button"
-          >
-            <SkillsDetail editable={editable} availableSkills={availableSkills} />
-          </ConfigAccordion>
-        )}
-        {features.browser && (
-          <ConfigAccordion
-            icon={<Globe className="h-4 w-4" />}
-            label="Browser"
-            value={<BrowserSummaryValue />}
-            testId="agent-preview-browser-button"
-          >
-            <BrowserSection disabled={disabled} />
-          </ConfigAccordion>
-        )}
-      </div>
-    </div>
+          <ModelSection editable={editable} />
+        </ConfigSection>
+      )}
+      <ConfigSection
+        value="instructions"
+        icon={<FileText className="h-4 w-4" />}
+        label="Instructions"
+        testId="agent-preview-edit-system-prompt"
+      >
+        <InstructionsDetail prompt={panelInstructions} onChange={onInstructionsChange} editable={editable} />
+      </ConfigSection>
+      {features.tools && totalToolsCount > 0 && (
+        <ConfigSection
+          value="tools"
+          icon={<Wrench className="h-4 w-4" />}
+          label="Tools"
+          count={activeToolsCount}
+          total={totalToolsCount}
+          testId="agent-preview-tools-button"
+        >
+          <ToolsDetail editable={editable} availableAgentTools={availableAgentTools} />
+        </ConfigSection>
+      )}
+      {features.skills && totalSkillsCount > 0 && (
+        <ConfigSection
+          value="skills"
+          icon={<Sparkles className="h-4 w-4" />}
+          label="Skills"
+          count={activeSkillsCount}
+          total={totalSkillsCount}
+          testId="agent-preview-skills-button"
+        >
+          <SkillsDetail editable={editable} availableSkills={availableSkills} />
+        </ConfigSection>
+      )}
+      {features.browser && (
+        <ConfigSection
+          value="browser"
+          icon={<Globe className="h-4 w-4" />}
+          label="Browser"
+          summaryValue={<BrowserSummaryValue />}
+          testId="agent-preview-browser-button"
+        >
+          <BrowserSection disabled={disabled} />
+        </ConfigSection>
+      )}
+    </Accordion>
   );
 }
 
@@ -430,36 +416,47 @@ function ModelSummary() {
   );
 }
 
-interface ConfigAccordionProps {
+interface ConfigSectionProps {
+  value: string;
   icon: React.ReactNode;
   label: string;
-  value?: React.ReactNode;
+  summaryValue?: React.ReactNode;
   count?: number;
   total?: number;
   testId: string;
   children: React.ReactNode;
 }
 
-const ConfigAccordion = ({ icon, label, value, count, total, testId, children }: ConfigAccordionProps) => (
-  <Accordion name={ACCORDION_GROUP_NAME} className="-mx-px border-0 border-none">
-    <AccordionSummary data-testid={testId} className="px-4 py-3">
-      <span className="shrink-0 text-neutral3 transition-colors group-open:text-neutral5">{icon}</span>
-      <Txt variant="ui-sm" className="shrink-0 font-medium text-neutral6">
-        {label}
-      </Txt>
-      {value !== undefined && (
+const ConfigSection = ({ value, icon, label, summaryValue, count, total, testId, children }: ConfigSectionProps) => (
+  <AccordionItem
+    value={value}
+    className="grid grid-rows-[auto_minmax(0,1fr)] min-h-0 data-[open]:flex-1 data-[closed]:shrink-0"
+  >
+    <AccordionSummary data-testid={testId} className="px-4 shrink-0">
+      <div className="flex items-center gap-2">
+        <span className="text-neutral3">{icon}</span>
+        <Txt variant="ui-sm" className="font-medium text-neutral6">
+          {label}
+        </Txt>
+      </div>
+
+      {summaryValue !== undefined && (
         <Txt variant="ui-sm" className="ml-auto min-w-0 truncate text-neutral3">
-          {value}
+          {summaryValue}
         </Txt>
       )}
       {count !== undefined && total !== undefined && (
-        <Txt variant="ui-sm" className={cn('shrink-0 tabular-nums text-neutral3', value === undefined && 'ml-auto')}>
+        <Txt
+          variant="ui-sm"
+          className={cn('shrink-0 tabular-nums text-neutral3', summaryValue === undefined && 'ml-auto')}
+        >
           {count} / {total}
         </Txt>
       )}
     </AccordionSummary>
-    <AccordionContent>{children}</AccordionContent>
-  </Accordion>
+
+    <AccordionContent className="min-h-0 overflow-y-auto transition-none">{children}</AccordionContent>
+  </AccordionItem>
 );
 
 const AgentConfigurePanelSkeleton = () => (
