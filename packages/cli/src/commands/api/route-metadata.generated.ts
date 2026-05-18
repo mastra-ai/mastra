@@ -425,6 +425,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /auth/roles/:roleId/permissions": {
+    "method": "GET",
+    "path": "/auth/roles/:roleId/permissions",
+    "pathParams": [
+      "roleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "permissions"
+    }
+  },
   "GET /workflows": {
     "method": "GET",
     "path": "/workflows",

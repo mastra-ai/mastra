@@ -11,7 +11,7 @@ export interface CheckFGAOptions {
   fgaProvider: IFGAProvider | undefined;
   user: any;
   resource: { type: string; id: string };
-  permission: MastraFGAPermissionInput;
+  permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   context?: FGACheckContext;
 }
 
@@ -104,20 +104,21 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
 export class FGADeniedError extends Error {
   public readonly user: any;
   public readonly resource: { type: string; id: string };
-  public readonly permission: MastraFGAPermissionInput;
+  public readonly permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   public readonly status: number;
 
   constructor(
     user: any,
     resource: { type: string; id: string },
-    permission: MastraFGAPermissionInput,
+    permission: MastraFGAPermissionInput | MastraFGAPermissionInput[],
     reason?: string,
   ) {
     const userId = user?.id || user?.workosId || 'unknown';
+    const permissionLabel = Array.isArray(permission) ? `any of [${permission.join(', ')}]` : permission;
     super(
       reason
         ? `FGA authorization denied: ${reason}`
-        : `FGA authorization denied: user ${userId} cannot ${permission} on ${resource.type}:${resource.id}`,
+        : `FGA authorization denied: user ${userId} cannot ${permissionLabel} on ${resource.type}:${resource.id}`,
     );
     this.name = 'FGADeniedError';
     this.user = user;
