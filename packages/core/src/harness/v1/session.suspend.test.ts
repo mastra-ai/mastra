@@ -17,7 +17,7 @@ import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import type { MastraModelOutput } from '../../stream/base/output';
 import { buildFakeOutput } from './__test-utils__/fake-output';
 
-import { HarnessInboxResponseConflictError, HarnessValidationError } from './errors';
+import { HarnessInboxResponseConflictError, HarnessSessionDeletedError, HarnessValidationError } from './errors';
 import { Harness } from './harness';
 
 // ---------------------------------------------------------------------------
@@ -138,6 +138,16 @@ function setup(modes?: any) {
     sessions: { storage },
   });
   return { harness, agent, storage };
+}
+
+async function waitFor(predicate: () => boolean, label: string, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${label}`);
+    }
+    await new Promise(resolve => setImmediate(resolve));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -492,6 +502,44 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     await session.respondToQuestion({ answer: 'red' });
 
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ answer: 'red' });
+  });
+
+  it('rejects an active question resume when the live session is marked deleted', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-Q',
+      suspendPayload: {
+        toolCallId: 'tc-Q',
+        toolName: 'ask_user',
+        args: { question: 'pick' },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.message({ content: 'go' });
+
+    let releaseFullOutput!: () => void;
+    const fullOutput = new Promise<unknown>(resolve => {
+      releaseFullOutput = () => resolve({});
+    });
+    agent.resumeStream = async (resumeData: any, options?: any) => {
+      agent.resumeCalls.push({ resumeData, options });
+      return { getFullOutput: () => fullOutput };
+    };
+    const response = session.respondToQuestion({ itemId: 'question:tc-Q', responseId: 'answer-1', answer: 'red' });
+    await waitFor(() => session.isRunning(), 'active resume turn start');
+    const idle = session.waitForIdle();
+
+    (session as any)._markDeleted();
+
+    expect(session.isRunning()).toBe(false);
+    try {
+      await expect(response).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+      await expect(idle).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+      await expect(session.setState({ afterDelete: true })).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+    } finally {
+      releaseFullOutput();
+    }
   });
 
   it('respondToQuestion returns duplicate receipt without resuming twice', async () => {

@@ -377,7 +377,12 @@ export class InMemoryHarness extends HarnessStorage {
     }
 
     for (const { namespace, sessionId, record } of existingSessions.values()) {
-      await this.cleanupDeletedSession({ namespace, sessionId, resourceId: record.resourceId });
+      await this.cleanupDeletedSession({
+        namespace,
+        sessionId,
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+      });
     }
   }
 
@@ -385,15 +390,18 @@ export class InMemoryHarness extends HarnessStorage {
     namespace,
     sessionId,
     resourceId,
+    threadId,
   }: {
     namespace: string;
     sessionId: string;
     resourceId: string;
+    threadId: string;
   }): Promise<void> {
     await this.deleteOperationAdmissionTombstonesForSession({
       harnessName: namespace,
       sessionId,
       resourceId,
+      threadId,
     });
     const refPrefix = `${namespace}\u0000${sessionId}\u0000`;
     for (const key of this.db.harnessAttachmentReferences.keys()) {
@@ -724,6 +732,7 @@ export class InMemoryHarness extends HarnessStorage {
     harnessName,
     sessionId,
     resourceId,
+    threadId,
     kind,
     admissionId,
     attemptedAdmissionHash,
@@ -731,6 +740,7 @@ export class InMemoryHarness extends HarnessStorage {
     harnessName?: string;
     sessionId: string;
     resourceId: string;
+    threadId?: string;
     kind: 'message' | 'queue';
     admissionId: string;
     attemptedAdmissionHash: string;
@@ -746,6 +756,7 @@ export class InMemoryHarness extends HarnessStorage {
           evidence.harnessName !== namespace ||
           evidence.sessionId !== sessionId ||
           evidence.resourceId !== resourceId ||
+          (threadId !== undefined && evidence.threadId !== threadId) ||
           evidence.admissionId !== admissionId
         ) {
           continue;
@@ -758,7 +769,9 @@ export class InMemoryHarness extends HarnessStorage {
     }
     if (kind === 'queue') {
       const session = this.db.harnessSessions.get(sessionKey(namespace, sessionId));
-      if (session && session.resourceId !== resourceId) return { status: 'none' };
+      if (session && (session.resourceId !== resourceId || (threadId !== undefined && session.threadId !== threadId))) {
+        return { status: 'none' };
+      }
       for (const receipt of Object.values(session?.queueAdmissionReceipts ?? {})) {
         if (receipt.admissionId !== admissionId) continue;
         if (receipt.admissionHash !== attemptedAdmissionHash) {
@@ -773,6 +786,7 @@ export class InMemoryHarness extends HarnessStorage {
         t.harnessName === namespace &&
         t.sessionId === sessionId &&
         t.resourceId === resourceId &&
+        (threadId === undefined || t.threadId === threadId) &&
         t.kind === kind &&
         t.admissionId === admissionId,
     );
@@ -878,17 +892,23 @@ export class InMemoryHarness extends HarnessStorage {
     harnessName,
     sessionId,
     resourceId,
+    threadId,
+    signalId,
   }: {
     harnessName?: string;
     sessionId: string;
     resourceId: string;
+    threadId?: string;
+    signalId?: string;
   }): Promise<void> {
     const namespace = resolveHarnessName(harnessName, this.harnessName);
     for (const [key, evidence] of this.db.harnessMessageResultEvidence) {
       if (
         evidence.harnessName === namespace &&
         evidence.sessionId === sessionId &&
-        evidence.resourceId === resourceId
+        evidence.resourceId === resourceId &&
+        (threadId === undefined || evidence.threadId === threadId) &&
+        (signalId === undefined || evidence.signalId === signalId)
       ) {
         this.db.harnessMessageResultEvidence.delete(key);
       }
@@ -897,7 +917,9 @@ export class InMemoryHarness extends HarnessStorage {
       if (
         tombstone.harnessName === namespace &&
         tombstone.sessionId === sessionId &&
-        tombstone.resourceId === resourceId
+        tombstone.resourceId === resourceId &&
+        (threadId === undefined || tombstone.threadId === threadId) &&
+        (signalId === undefined || tombstone.signalId === signalId)
       ) {
         this.db.harnessOperationTombstones.delete(key);
       }

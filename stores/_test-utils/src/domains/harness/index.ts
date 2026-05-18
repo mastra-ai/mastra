@@ -1271,6 +1271,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           harness.resolveOperationAdmissionEvidence({
             sessionId: 'session-1',
             resourceId: 'resource-1',
+            threadId: 'thread-1',
             kind: 'queue',
             admissionId: 'admission-1',
             attemptedAdmissionHash: 'hash-1',
@@ -1280,6 +1281,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           harness.resolveOperationAdmissionEvidence({
             sessionId: 'session-1',
             resourceId: 'resource-1',
+            threadId: 'thread-1',
             kind: 'queue',
             admissionId: 'admission-1',
             attemptedAdmissionHash: 'different-hash',
@@ -1289,6 +1291,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           harness.resolveOperationAdmissionEvidence({
             sessionId: 'session-1',
             resourceId: 'other-resource',
+            threadId: 'thread-1',
             kind: 'queue',
             admissionId: 'admission-1',
             attemptedAdmissionHash: 'hash-1',
@@ -1328,6 +1331,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           harness.resolveOperationAdmissionEvidence({
             sessionId: 'session-1',
             resourceId: 'resource-1',
+            threadId: 'thread-1',
             kind: 'message',
             admissionId: 'admission-1',
             attemptedAdmissionHash: 'hash-1',
@@ -1380,6 +1384,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           harness.resolveOperationAdmissionEvidence({
             sessionId: 'session-1',
             resourceId: 'resource-1',
+            threadId: 'thread-1',
             kind: 'message',
             admissionId: 'admission-1',
             attemptedAdmissionHash: 'hash-1',
@@ -1389,6 +1394,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           harness.resolveOperationAdmissionEvidence({
             sessionId: 'session-1',
             resourceId: 'resource-1',
+            threadId: 'thread-1',
             kind: 'message',
             admissionId: 'admission-1',
             attemptedAdmissionHash: 'different-hash',
@@ -1437,6 +1443,65 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
             signalId: 'signal-1',
           }),
         ).resolves.toEqual(compacted);
+      });
+
+      it('scopes operation evidence deletion by thread and signal when provided', async () => {
+        if (!harness) return;
+        const base = {
+          harnessName: 'default',
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          status: 'pending' as const,
+          createdAt: 1000,
+          updatedAt: 1000,
+        };
+        await harness.writeMessageResultEvidence({
+          ...base,
+          threadId: 'thread-1',
+          signalId: 'signal-1',
+        });
+        await harness.writeMessageResultEvidence({
+          ...base,
+          threadId: 'thread-1',
+          signalId: 'signal-2',
+        });
+        await harness.writeMessageResultEvidence({
+          ...base,
+          threadId: 'thread-2',
+          signalId: 'signal-3',
+        });
+
+        await harness.deleteOperationAdmissionTombstonesForSession({
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          signalId: 'signal-1',
+        });
+
+        await expect(
+          harness.loadMessageResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            signalId: 'signal-1',
+          }),
+        ).resolves.toBeNull();
+        await expect(
+          harness.loadMessageResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            signalId: 'signal-2',
+          }),
+        ).resolves.toMatchObject({ status: 'pending' });
+        await expect(
+          harness.loadMessageResultEvidence({
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            threadId: 'thread-2',
+            signalId: 'signal-3',
+          }),
+        ).resolves.toMatchObject({ status: 'pending' });
       });
 
       it('compacts terminal queue receipts into tombstones', async () => {

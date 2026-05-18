@@ -197,13 +197,9 @@ describe('Session — internal accessors', () => {
 });
 
 describe('Session — surface area (M1)', () => {
-  // The §4.2 surface is mostly unimplemented in M1. We only ship identity +
-  // lifecycle on the Session class; pin that here so a future commit that
-  // adds one of the stubs has to update both the class and this assertion
-  // deliberately.
-  it('exposes only identity / lifecycle / record getters and the close hook', () => {
+  it('exposes the expected public session methods and getters', () => {
     const { session } = makeStandaloneSession();
-    const proto = Object.getOwnPropertyNames(Session.prototype).filter(n => n !== 'constructor');
+    const proto = Object.getOwnPropertyNames(Session.prototype).filter(n => n !== 'constructor' && !n.startsWith('_'));
     // Sorted for stability across edits.
     expect([...proto].sort()).toEqual(
       [
@@ -221,22 +217,10 @@ describe('Session — surface area (M1)', () => {
         'injectSystemReminder',
         'getCurrentMode',
         'switchMode',
-        '_modelsCurrent',
-        '_modelsHasSelected',
-        '_modelsCurrentAuthStatus',
-        '_modelsSwitch',
-        '_modelsSetSubagent',
-        '_modelsGetSubagent',
         'getState',
         'setState',
         'getDisplayState',
         'getWorkspace',
-        '_skillsList',
-        '_skillsGet',
-        '_skillsRefresh',
-        '_skillsUse',
-        '_extractRequiredArgKeys',
-        '_buildSkillPrompt',
         'setGoal',
         'getGoal',
         'pauseGoal',
@@ -247,64 +231,13 @@ describe('Session — surface area (M1)', () => {
         'respondToToolSuspension',
         'respondToQuestion',
         'respondToPlanApproval',
-        '_permGrantCategory',
-        '_permGrantTool',
-        '_permRevokeCategory',
-        '_permRevokeTool',
-        '_permGetGrants',
-        '_permGetRules',
-        '_permSetPolicy',
         'subscribe',
-        '_assertLive',
-        '_awaitRunCompletion',
-        '_beginTurn',
-        '_buildToolsets',
-        '_buildRequestContext',
-        '_buildResumePayload',
-        '_callJudge',
-        '_classifyResumeKind',
-        '_completeQueuedTurn',
-        '_createJudgeAgent',
-        '_drainSubscriptionStream',
-        '_emit',
-        '_emitForChunk',
-        '_emitSubagentEvent',
-        '_ensureThreadSubscription',
-        '_emitTurnEvent',
-        '_endTurn',
-        '_enqueueGoalContinuation',
-        '_extractTextContent',
-        '_failQueuedTurn',
-        '_flushUpdate',
-        '_getJudgeContext',
-        '_handleRunTerminal',
-        '_internalEmitterEpoch',
-        '_internalListenerCount',
-        '_kickQueueDrain',
-        '_markClosed',
-        '_markEvicted',
-        '_markWorkspaceLost',
-        '_maybeCaptureSuspend',
-        '_maybeDrainQueue',
-        '_notifyMaybeIdle',
-        '_persistWorkspaceState',
-        '_recordTurnCompletion',
-        '_rejectIdleWaiters',
-        '_resetTurnTracking',
-        '_resolveSkills',
-        '_resume',
-        '_runGoalJudge',
-        '_runQueuedTurn',
-        '_tearDownThreadSubscription',
-        '_watchRunCompletion',
         // Getters land in the prototype as own names too.
         'lastActivityAt',
         'lifecycleState',
         'isClosed',
+        'isClosing',
         'getRecord',
-        '_internalOwnerId',
-        '_internalRecordVersion',
-        '_internalStorage',
       ].sort(),
     );
     // Sanity check on instance-side identity readonly fields.

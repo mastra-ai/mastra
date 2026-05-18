@@ -772,7 +772,10 @@ export class HarnessLibSQL extends HarnessStorage {
   async deleteSessions({ sessions }: { sessions: DeleteSessionOptions[] }): Promise<void> {
     await this.#ensureMessageResultsTable();
     const tx = await this.#client.transaction('write');
-    const deleteCandidates = new Map<string, { namespace: string; sessionId: string; resourceId: string }>();
+    const deleteCandidates = new Map<
+      string,
+      { namespace: string; sessionId: string; resourceId: string; threadId: string }
+    >();
     try {
       for (const opts of sessions) {
         const { sessionId } = opts;
@@ -797,10 +800,15 @@ export class HarnessLibSQL extends HarnessStorage {
             record.version,
           );
         }
-        deleteCandidates.set(`${namespace}\u0000${sessionId}`, { namespace, sessionId, resourceId: record.resourceId });
+        deleteCandidates.set(`${namespace}\u0000${sessionId}`, {
+          namespace,
+          sessionId,
+          resourceId: record.resourceId,
+          threadId: record.threadId,
+        });
       }
 
-      for (const { namespace, sessionId, resourceId } of deleteCandidates.values()) {
+      for (const { namespace, sessionId, resourceId, threadId } of deleteCandidates.values()) {
         const result = await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_SESSIONS}
                 WHERE harness_name = ? AND id = ?`,
@@ -811,13 +819,13 @@ export class HarnessLibSQL extends HarnessStorage {
         }
         await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
-                WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
-          args: [namespace, sessionId, resourceId],
+                WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?`,
+          args: [namespace, sessionId, resourceId, threadId],
         });
         await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}
-                WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
-          args: [namespace, sessionId, resourceId],
+                WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?`,
+          args: [namespace, sessionId, resourceId, threadId],
         });
         await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
@@ -1328,6 +1336,7 @@ export class HarnessLibSQL extends HarnessStorage {
     harnessName,
     sessionId,
     resourceId,
+    threadId,
     kind,
     admissionId,
     attemptedAdmissionHash,
@@ -1335,6 +1344,7 @@ export class HarnessLibSQL extends HarnessStorage {
     harnessName?: string;
     sessionId: string;
     resourceId: string;
+    threadId?: string;
     kind: 'message' | 'queue';
     admissionId: string;
     attemptedAdmissionHash: string;
@@ -1346,12 +1356,17 @@ export class HarnessLibSQL extends HarnessStorage {
     const namespace = this.#resolveHarnessName(harnessName);
     if (kind === 'message') await this.#ensureMessageResultsTable();
     if (kind === 'message') {
+      const filters = ['harness_name = ?', 'session_id = ?', 'resource_id = ?', 'admission_id = ?'];
+      const args = [namespace, sessionId, resourceId, admissionId];
+      if (threadId !== undefined) {
+        filters.splice(3, 0, 'thread_id = ?');
+        args.splice(3, 0, threadId);
+      }
       const retained = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
-              WHERE harness_name = ? AND session_id = ? AND resource_id = ?
-                AND admission_id = ?
+              WHERE ${filters.join(' AND ')}
               LIMIT 1`,
-        args: [namespace, sessionId, resourceId, admissionId],
+        args,
       });
       const row = retained.rows[0];
       if (row) {
@@ -1365,7 +1380,9 @@ export class HarnessLibSQL extends HarnessStorage {
     }
     if (kind === 'queue') {
       const session = await this.loadSession({ harnessName: namespace, sessionId });
-      if (session && session.resourceId !== resourceId) return { status: 'none' };
+      if (session && (session.resourceId !== resourceId || (threadId !== undefined && session.threadId !== threadId))) {
+        return { status: 'none' };
+      }
       const receipts = Object.values(session?.queueAdmissionReceipts ?? {}) as QueueAdmissionReceipt[];
       for (const receipt of receipts) {
         if (receipt.admissionId !== admissionId) continue;
@@ -1377,12 +1394,17 @@ export class HarnessLibSQL extends HarnessStorage {
       }
     }
 
+    const tombstoneFilters = ['harness_name = ?', 'session_id = ?', 'resource_id = ?', 'kind = ?', 'admission_id = ?'];
+    const tombstoneArgs = [namespace, sessionId, resourceId, kind, admissionId];
+    if (threadId !== undefined) {
+      tombstoneFilters.splice(3, 0, 'thread_id = ?');
+      tombstoneArgs.splice(3, 0, threadId);
+    }
     const result = await this.#client.execute({
       sql: `SELECT * FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}
-            WHERE harness_name = ? AND session_id = ? AND resource_id = ?
-              AND kind = ? AND admission_id = ?
+            WHERE ${tombstoneFilters.join(' AND ')}
             LIMIT 1`,
-      args: [namespace, sessionId, resourceId, kind, admissionId],
+      args: tombstoneArgs,
     });
     const row = result.rows[0];
     if (!row) return { status: 'none' };
@@ -1560,21 +1582,37 @@ export class HarnessLibSQL extends HarnessStorage {
     harnessName,
     sessionId,
     resourceId,
+    threadId,
+    signalId,
   }: {
     harnessName?: string;
     sessionId: string;
     resourceId: string;
+    threadId?: string;
+    signalId?: string;
   }): Promise<void> {
+    const namespace = this.#resolveHarnessName(harnessName);
+    const filters = ['harness_name = ?', 'session_id = ?', 'resource_id = ?'];
+    const args: string[] = [namespace, sessionId, resourceId];
+    if (threadId !== undefined) {
+      filters.push('thread_id = ?');
+      args.push(threadId);
+    }
+    if (signalId !== undefined) {
+      filters.push('signal_id = ?');
+      args.push(signalId);
+    }
+    const where = filters.join(' AND ');
     await this.#ensureMessageResultsTable();
     await this.#client.execute({
       sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
-            WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
-      args: [this.#resolveHarnessName(harnessName), sessionId, resourceId],
+            WHERE ${where}`,
+      args,
     });
     await this.#client.execute({
       sql: `DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}
-            WHERE harness_name = ? AND session_id = ? AND resource_id = ?`,
-      args: [this.#resolveHarnessName(harnessName), sessionId, resourceId],
+            WHERE ${where}`,
+      args,
     });
   }
 

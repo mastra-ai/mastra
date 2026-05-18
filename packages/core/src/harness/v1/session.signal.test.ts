@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MockAgent } from './__test-utils__/mock-agent';
 import { setupHarness } from './__test-utils__/setup';
-import { HarnessOverrideConflictError, HarnessSessionClosedError } from './errors';
+import { HarnessOverrideConflictError, HarnessSessionClosedError, HarnessSessionDeletedError } from './errors';
 import type { HarnessEvent } from './events';
 
 /**
@@ -159,6 +159,52 @@ describe('Session.signal()', () => {
     const types = events.map(e => e.type);
     expect(types).toContain('agent_start');
     expect(types).toContain('agent_end');
+  });
+
+  it('rejects an owned idle-wake result when the live session is marked deleted', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    const hold = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ holdUntil: hold });
+
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const handle = await session.signal({ content: 'hi' });
+    await waitForStreamCalls(agent, 1);
+    expect(session.isRunning()).toBe(true);
+
+    (session as any)._markDeleted();
+
+    expect(session.isRunning()).toBe(false);
+    try {
+      await expect(handle.result).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+    } finally {
+      release();
+    }
+  });
+
+  it('rejects when the live session is marked deleted while opening the thread subscription', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let started!: () => void;
+    const subscribeStarted = new Promise<void>(resolve => {
+      started = resolve;
+    });
+    agent.subscribeToThread = async () => {
+      started();
+      return new Promise(() => {}) as any;
+    };
+
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const signal = session.signal({ content: 'hi' });
+    await subscribeStarted;
+
+    (session as any)._markDeleted();
+
+    await expect(signal).rejects.toBeInstanceOf(HarnessSessionDeletedError);
   });
 
   it('does not emit agent_start for active-delivery (the live run owns the lifecycle)', async () => {

@@ -1679,22 +1679,44 @@ export class Harness {
             continue;
           }
           if (stillExists) continue;
-          this._markDeletedSession(node, deletedLiveSessions);
+          const live = this._markDeletedSession(node, deletedLiveSessions);
+          // Preserve the original guarded-delete error; the caller already sees
+          // this delete attempt as failed, and retry/reconciliation can clean up
+          // any remaining operation evidence from this live session's active turn.
+          await this._cleanupDeletedOperationEvidence(storage, node.record, live).catch(() => {});
         }
         throw err;
       }
       for (const node of bottomUp) {
-        this._markDeletedSession(node, deletedLiveSessions);
+        const live = this._markDeletedSession(node, deletedLiveSessions);
+        await this._cleanupDeletedOperationEvidence(storage, node.record, live).catch(() => {});
       }
       return;
     }
     for (let index = 0; index < bottomUp.length; index++) {
       await storage.deleteSession(sessions[index]!);
-      this._markDeletedSession(bottomUp[index]!, deletedLiveSessions);
+      const live = this._markDeletedSession(bottomUp[index]!, deletedLiveSessions);
+      await this._cleanupDeletedOperationEvidence(storage, bottomUp[index]!.record, live).catch(() => {});
     }
   }
 
-  private _markDeletedSession(node: CloseTreeNode, deletedLiveSessions: Map<string, Session>): void {
+  private async _cleanupDeletedOperationEvidence(
+    storage: HarnessStorage,
+    record: SessionRecord,
+    live: Session | undefined,
+  ): Promise<void> {
+    for (const signalId of live?._deletedOperationEvidenceSignalIds() ?? []) {
+      await storage.deleteOperationAdmissionTombstonesForSession({
+        harnessName: record.harnessName,
+        sessionId: record.id,
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+        signalId,
+      });
+    }
+  }
+
+  private _markDeletedSession(node: CloseTreeNode, deletedLiveSessions: Map<string, Session>): Session | undefined {
     const live = this._liveSessions.get(node.record.id) ?? deletedLiveSessions.get(node.record.id);
     live?._markDeleted();
     const bridge = this._sessionEventBridges.get(node.record.id);
@@ -1703,6 +1725,7 @@ export class Harness {
       this._sessionEventBridges.delete(node.record.id);
     }
     this._liveSessions.delete(node.record.id);
+    return live;
   }
 
   /**

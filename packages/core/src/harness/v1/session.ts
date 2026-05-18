@@ -335,6 +335,12 @@ interface IdleWaiter {
   cleanup: () => void;
 }
 
+interface ActiveTurnWaiter {
+  promise: Promise<never>;
+  reject: (err: unknown) => void;
+  cleanup: () => void;
+}
+
 /**
  * Point-in-time snapshot returned by `getDisplayState()` (§4.2). Reads off
  * the in-memory `SessionRecord` plus a few transient run-only fields.
@@ -449,6 +455,8 @@ export class Session {
   private _currentRunId?: string;
   private _currentMessageId?: string;
   private _currentTraceId?: string;
+  private readonly _activeTurnWaiters = new Set<ActiveTurnWaiter>();
+  private readonly _operationEvidenceSignalIds = new Set<string>();
   private readonly _activeTools = new Map<string, ActiveToolState>();
   private readonly _toolInputBuffers = new Map<string, { toolName: string; text: string }>();
   private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
@@ -691,6 +699,52 @@ export class Session {
     this._notifyMaybeIdle();
   }
 
+  private _createActiveTurnWaiter(): ActiveTurnWaiter {
+    let reject!: (err: unknown) => void;
+    const waiter: ActiveTurnWaiter = {
+      promise: new Promise<never>((_, rej) => {
+        reject = rej;
+      }),
+      reject: err => reject(err),
+      cleanup: () => {
+        this._activeTurnWaiters.delete(waiter);
+      },
+    };
+    this._activeTurnWaiters.add(waiter);
+    if (this._state === 'deleted') {
+      this._activeTurnWaiters.delete(waiter);
+      waiter.reject(new HarnessSessionDeletedError(this.id));
+    }
+    return waiter;
+  }
+
+  private _rejectActiveTurnWaiters(reason: unknown): void {
+    if (this._activeTurnWaiters.size === 0) return;
+    const waiters = Array.from(this._activeTurnWaiters);
+    this._activeTurnWaiters.clear();
+    for (const waiter of waiters) {
+      waiter.reject(reason);
+    }
+  }
+
+  private _raceActiveTurnWaiter<T>(promise: Promise<T>, activeTurnWaiter?: Promise<never>): Promise<T> {
+    return activeTurnWaiter ? Promise.race([promise, activeTurnWaiter]) : promise;
+  }
+
+  private _shouldWriteTurnFailureEvidence(err: unknown): boolean {
+    return this._state !== 'deleted' && !(err instanceof HarnessSessionDeletedError);
+  }
+
+  private async _withActiveDeletedWaiter<T>(fn: (activeTurnWaiter: Promise<never>) => Promise<T>): Promise<T> {
+    const activeTurnWaiter = this._createActiveTurnWaiter();
+    void activeTurnWaiter.promise.catch(() => {});
+    try {
+      return await fn(activeTurnWaiter.promise);
+    } finally {
+      activeTurnWaiter.cleanup();
+    }
+  }
+
   /**
    * Fold the `FullOutput` from a completed (or suspended) agent run into the
    * session's transient display state: capture `runId` if not yet set and
@@ -777,8 +831,9 @@ export class Session {
    *
    * Rejects with `HarnessValidationError` if `timeoutMs` is provided and
    * elapses before the session becomes idle. Rejects with
-   * `HarnessSessionClosingError` if close starts while waiting, or
-   * `HarnessSessionClosedError` if the session reaches a terminal state first.
+   * `HarnessSessionClosingError` if close starts while waiting,
+   * `HarnessSessionClosedError` if the session closes first, or
+   * `HarnessSessionDeletedError` if hard-delete removes the session first.
    *
    * Useful in tests and TUI flows that want to await a clean boundary
    * before tearing down or asserting final state.
@@ -1576,6 +1631,12 @@ export class Session {
    */
   private async _ensureThreadSubscription(agent: Agent): Promise<AgentThreadSubscription<unknown>> {
     if (this._threadSubscriptionClosed) {
+      if (this._state === 'deleted') {
+        throw new HarnessSessionDeletedError(this.id);
+      }
+      if (this._state === 'closed' || this._state === 'evicted') {
+        throw new HarnessSessionClosedError(this.id);
+      }
       throw new HarnessValidationError(
         '_ensureThreadSubscription()',
         'Session is closed; cannot re-open thread subscription.',
@@ -1596,6 +1657,23 @@ export class Session {
       this._threadSubscriptionDrain = undefined;
     }
     const sub = await agent.subscribeToThread({ resourceId: this.resourceId, threadId: this.threadId });
+    if (this._threadSubscriptionClosed) {
+      try {
+        sub.unsubscribe();
+      } catch {
+        // Best-effort — hard-delete or close won while subscribeToThread was pending.
+      }
+      if (this._state === 'deleted') {
+        throw new HarnessSessionDeletedError(this.id);
+      }
+      if (this._state === 'closed' || this._state === 'evicted') {
+        throw new HarnessSessionClosedError(this.id);
+      }
+      throw new HarnessValidationError(
+        '_ensureThreadSubscription()',
+        'Session is closed; cannot install thread subscription.',
+      );
+    }
     this._threadSubscription = sub;
     this._threadSubscriptionAgent = agent;
     this._threadSubscriptionDrain = this._drainSubscriptionStream(sub);
@@ -1603,6 +1681,16 @@ export class Session {
     // swallows them in its `finally` block.
     void this._threadSubscriptionDrain.catch(() => {});
     return sub;
+  }
+
+  private async _ensureThreadSubscriptionOrDeleted(agent: Agent): Promise<AgentThreadSubscription<unknown>> {
+    const activeTurnWaiter = this._createActiveTurnWaiter();
+    void activeTurnWaiter.promise.catch(() => {});
+    try {
+      return await this._raceActiveTurnWaiter(this._ensureThreadSubscription(agent), activeTurnWaiter.promise);
+    } finally {
+      activeTurnWaiter.cleanup();
+    }
   }
 
   /**
@@ -1965,6 +2053,7 @@ export class Session {
           })
         : undefined;
     if (duplicate) {
+      this._assertOpenForTurn('message()');
       return this._returnDuplicateMessageResult(duplicate, opts);
     }
     const admissionIdentity =
@@ -2017,21 +2106,38 @@ export class Session {
     // both paths converge on a single signal handed to the agent.
     const turnAbortController = this._beginTurn(opts.abortSignal);
     const turnAbortSignal = turnAbortController.signal;
-    const failOwnedMessageTurnBeforeDispatch = (err: unknown) => {
+    const activeTurnWaiter = this._createActiveTurnWaiter();
+    void activeTurnWaiter.promise.catch(() => {});
+    const finishOwnedMessageTurn = () => {
+      activeTurnWaiter.cleanup();
       this._endTurn(turnAbortController);
+    };
+    const failOwnedMessageTurnBeforeDispatch = (err: unknown) => {
+      finishOwnedMessageTurn();
       admissionStart?.reject(err);
       if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
     };
+    const assertOwnedMessageTurnNotDeleted = () => {
+      if (this._state === 'deleted') {
+        const err = new HarnessSessionDeletedError(this.id);
+        failOwnedMessageTurnBeforeDispatch(err);
+        throw err;
+      }
+    };
     let requestContext;
     try {
-      requestContext = await this._buildRequestContext({
-        modeId: effectiveModeId,
-        abortSignal: turnAbortSignal,
-      });
+      requestContext = await Promise.race([
+        this._buildRequestContext({
+          modeId: effectiveModeId,
+          abortSignal: turnAbortSignal,
+        }),
+        activeTurnWaiter.promise,
+      ]);
     } catch (err) {
       failOwnedMessageTurnBeforeDispatch(err);
       throw err;
     }
+    assertOwnedMessageTurnNotDeleted();
 
     const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
       memory: { thread: this.threadId, resource: this.resourceId },
@@ -2049,22 +2155,25 @@ export class Session {
     // Structured + sync path: agent.generate with structuredOutput.
     if (opts.output !== undefined && opts.sync === true) {
       try {
-        const result = await agent.generate(opts.content, {
-          ...baseExecOptions,
-          structuredOutput: { schema: opts.output as never },
-        });
+        const result = await Promise.race([
+          agent.generate(opts.content, {
+            ...baseExecOptions,
+            structuredOutput: { schema: opts.output as never },
+          }),
+          activeTurnWaiter.promise,
+        ]);
         const full = result as FullOutput<unknown>;
         this._recordTurnCompletion(full);
-        await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
+        await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
         this._emitTurnEvent({
           type: 'agent_end',
           reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
           runId: full.runId,
         });
-        await this._runGoalJudge(full, false);
+        await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
         return full.object;
       } finally {
-        this._endTurn(turnAbortController);
+        finishOwnedMessageTurn();
       }
     }
 
@@ -2079,24 +2188,28 @@ export class Session {
     // the signal drains mid-flight into the running execution loop. Both
     // paths surface chunks through the same subscription stream.
     try {
-      await this._ensureThreadSubscription(agent);
+      await Promise.race([this._ensureThreadSubscription(agent), activeTurnWaiter.promise]);
     } catch (err) {
       failOwnedMessageTurnBeforeDispatch(err);
       throw err;
     }
+    assertOwnedMessageTurnNotDeleted();
 
     if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
       try {
-        const reservation = await this._writeMessageResultEvidence(
-          {
-            status: 'pending',
-            signalId: admissionIdentity.signalId,
-            runId: admissionIdentity.runId,
-            admissionId: opts.admissionId!,
-            admissionHash,
-          },
-          { compatibleAdmissionHashes },
-        );
+        const reservation = await Promise.race([
+          this._writeMessageResultEvidence(
+            {
+              status: 'pending',
+              signalId: admissionIdentity.signalId,
+              runId: admissionIdentity.runId,
+              admissionId: opts.admissionId!,
+              admissionHash,
+            },
+            { compatibleAdmissionHashes },
+          ),
+          activeTurnWaiter.promise,
+        ]);
         if (!reservation.created) {
           this._messageAdmissionStarts.delete(opts.admissionId!);
           admissionStart.resolve(admissionIdentity.runId);
@@ -2109,7 +2222,7 @@ export class Session {
             try {
               return await this._returnDuplicateMessageResult(existing, opts);
             } finally {
-              this._endTurn(turnAbortController);
+              finishOwnedMessageTurn();
             }
           }
         }
@@ -2117,6 +2230,7 @@ export class Session {
         failOwnedMessageTurnBeforeDispatch(err);
         throw err;
       }
+      assertOwnedMessageTurnNotDeleted();
     }
 
     let signal;
@@ -2135,27 +2249,36 @@ export class Session {
         },
       );
     } catch (err) {
+      let thrown = err;
       if (admissionIdentity !== undefined && admissionHash !== undefined) {
-        await this._writeMessageResultEvidence(
-          {
-            status: 'failed',
-            signalId: admissionIdentity.signalId,
-            runId: admissionIdentity.runId,
-            admissionId: opts.admissionId!,
-            admissionHash,
-            error: projectHarnessPublicError(err),
-          },
-          { compatibleAdmissionHashes },
-        ).catch(() => {});
+        try {
+          await Promise.race([
+            this._writeMessageResultEvidence(
+              {
+                status: 'failed',
+                signalId: admissionIdentity.signalId,
+                runId: admissionIdentity.runId,
+                admissionId: opts.admissionId!,
+                admissionHash,
+                error: projectHarnessPublicError(err),
+              },
+              { compatibleAdmissionHashes },
+            ).catch(() => {}),
+            activeTurnWaiter.promise,
+          ]);
+        } catch (evidenceErr) {
+          if (evidenceErr instanceof HarnessSessionDeletedError) thrown = evidenceErr;
+        }
       }
-      failOwnedMessageTurnBeforeDispatch(err);
-      throw err;
+      failOwnedMessageTurnBeforeDispatch(thrown);
+      throw thrown;
     }
 
     // Register the completion waiter BEFORE the drain has a chance to see
     // a terminal chunk for this runId (the run can start synchronously on
     // the wake path).
     const completion = this._awaitRunCompletion(signal.runId);
+    void completion.catch(() => {});
     admissionStart?.resolve(signal.runId);
 
     const pendingEvidenceWrite =
@@ -2178,12 +2301,13 @@ export class Session {
     if (opts.stream === true) {
       let out = agent.getRunOutput(signal.runId) as MastraModelOutput<unknown> | undefined;
       if (!out && (signal.output || admissionIdentity !== undefined)) {
-        await pendingEvidenceWrite.catch(() => {});
+        await Promise.race([pendingEvidenceWrite.catch(() => {}), activeTurnWaiter.promise]);
         try {
           out = signal.output
-            ? ((await signal.output) as MastraModelOutput<unknown>)
+            ? ((await Promise.race([signal.output, activeTurnWaiter.promise])) as MastraModelOutput<unknown>)
             : ((await Promise.race([
                 agent.waitForRunOutput(signal.runId) as Promise<MastraModelOutput<unknown>>,
+                activeTurnWaiter.promise,
                 completion.then(
                   () => undefined,
                   () => undefined,
@@ -2191,13 +2315,13 @@ export class Session {
                 delay(MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS).then(() => undefined),
               ])) as MastraModelOutput<unknown> | undefined);
         } catch (err) {
-          this._endTurn(turnAbortController);
+          finishOwnedMessageTurn();
           void completion.catch(() => {});
           const waiter = this._runCompletionPromises.get(signal.runId);
           this._runCompletionPromises.delete(signal.runId);
           this._rememberCompletedRun(signal.runId, { ok: false, err });
           waiter?.reject(err);
-          if (admissionIdentity !== undefined) {
+          if (admissionIdentity !== undefined && this._shouldWriteTurnFailureEvidence(err)) {
             await this._writeMessageResultEvidenceBestEffort(
               {
                 status: 'failed',
@@ -2216,7 +2340,7 @@ export class Session {
         }
       }
       if (!out) {
-        this._endTurn(turnAbortController);
+        finishOwnedMessageTurn();
         void pendingEvidenceWrite.catch(() => {});
         const err = new HarnessConfigError('message()', 'agent did not register a run for the dispatched signal');
         // Drop the completion waiter so duplicate retries do not treat an
@@ -2241,41 +2365,46 @@ export class Session {
         }
         throw err;
       }
-      await pendingEvidenceWrite.catch(() => {});
+      await Promise.race([pendingEvidenceWrite.catch(() => {}), activeTurnWaiter.promise]);
       let streamCompletedEvidenceWriteFailed = false;
-      void completion
-        .then(full => {
+      void Promise.race([completion, activeTurnWaiter.promise])
+        .then(async full => {
           this._recordTurnCompletion(full);
           if (admissionIdentity === undefined) return full;
-          return this._writeMessageResultEvidence(
-            {
-              status: 'completed',
-              signalId: signal.signal.id,
-              runId: signal.runId,
-              result: full,
-              admissionId: opts.admissionId!,
-              admissionHash: admissionHash!,
-            },
-            { compatibleAdmissionHashes },
-          )
-            .catch(err => {
+          await Promise.race([
+            this._writeMessageResultEvidence(
+              {
+                status: 'completed',
+                signalId: signal.signal.id,
+                runId: signal.runId,
+                result: full,
+                admissionId: opts.admissionId!,
+                admissionHash: admissionHash!,
+              },
+              { compatibleAdmissionHashes },
+            ).catch(err => {
               streamCompletedEvidenceWriteFailed = true;
               throw err;
-            })
-            .then(() => full);
+            }),
+            activeTurnWaiter.promise,
+          ]);
+          return full;
         })
-        .then(full => {
-          return this._maybeCaptureSuspend(full, undefined, effectiveModeId).then(() => {
-            this._emitTurnEvent({
-              type: 'agent_end',
-              reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
-              runId: full.runId,
-            });
-            return this._runGoalJudge(full, false);
+        .then(async full => {
+          await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
+          this._emitTurnEvent({
+            type: 'agent_end',
+            reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+            runId: full.runId,
           });
+          await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
         })
         .catch(err => {
-          if (admissionIdentity !== undefined && !streamCompletedEvidenceWriteFailed) {
+          if (
+            admissionIdentity !== undefined &&
+            !streamCompletedEvidenceWriteFailed &&
+            this._shouldWriteTurnFailureEvidence(err)
+          ) {
             void this._writeMessageResultEvidence(
               {
                 status: 'failed',
@@ -2292,7 +2421,7 @@ export class Session {
         })
         .finally(() => {
           if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
-          this._endTurn(turnAbortController);
+          finishOwnedMessageTurn();
           void this._maybeDrainQueue();
         });
       return out;
@@ -2303,38 +2432,41 @@ export class Session {
     let streamStarted = signal.output === undefined;
     let completedEvidenceWriteFailed = false;
     try {
-      await pendingEvidenceWrite.catch(() => {});
+      await Promise.race([pendingEvidenceWrite.catch(() => {}), activeTurnWaiter.promise]);
       if (signal.output) {
-        await signal.output;
+        await Promise.race([signal.output, activeTurnWaiter.promise]);
         streamStarted = true;
       }
-      const full = await completion;
+      const full = await Promise.race([completion, activeTurnWaiter.promise]);
       this._recordTurnCompletion(full);
       if (admissionIdentity !== undefined) {
         try {
-          await this._writeMessageResultEvidenceBestEffort(
-            {
-              status: 'completed',
-              signalId: signal.signal.id,
-              runId: signal.runId,
-              result: full,
-              admissionId: opts.admissionId!,
-              admissionHash: admissionHash!,
-            },
-            { compatibleAdmissionHashes },
-          );
+          await Promise.race([
+            this._writeMessageResultEvidenceBestEffort(
+              {
+                status: 'completed',
+                signalId: signal.signal.id,
+                runId: signal.runId,
+                result: full,
+                admissionId: opts.admissionId!,
+                admissionHash: admissionHash!,
+              },
+              { compatibleAdmissionHashes },
+            ),
+            activeTurnWaiter.promise,
+          ]);
         } catch (err) {
           completedEvidenceWriteFailed = true;
           throw err;
         }
       }
-      await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
+      await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
       this._emitTurnEvent({
         type: 'agent_end',
         reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
         runId: full.runId,
       });
-      await this._runGoalJudge(full, false);
+      await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
       return full;
     } catch (err) {
       if (!streamStarted) {
@@ -2344,23 +2476,30 @@ export class Session {
         this._rememberCompletedRun(signal.runId, { ok: false, err });
         waiter?.reject(err);
       }
-      if (admissionIdentity !== undefined && !completedEvidenceWriteFailed) {
-        await this._writeMessageResultEvidence(
-          {
-            status: 'failed',
-            signalId: signal.signal.id,
-            runId: signal.runId,
-            error: projectHarnessPublicError(err),
-            admissionId: opts.admissionId!,
-            admissionHash: admissionHash!,
-          },
-          { compatibleAdmissionHashes },
-        ).catch(() => {});
+      if (
+        admissionIdentity !== undefined &&
+        !completedEvidenceWriteFailed &&
+        this._shouldWriteTurnFailureEvidence(err)
+      ) {
+        await Promise.race([
+          this._writeMessageResultEvidence(
+            {
+              status: 'failed',
+              signalId: signal.signal.id,
+              runId: signal.runId,
+              error: projectHarnessPublicError(err),
+              admissionId: opts.admissionId!,
+              admissionHash: admissionHash!,
+            },
+            { compatibleAdmissionHashes },
+          ).catch(() => {}),
+          activeTurnWaiter.promise,
+        ]);
       }
       throw err;
     } finally {
       if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
-      this._endTurn(turnAbortController);
+      finishOwnedMessageTurn();
       // Now that the manual turn has cleared the in-flight guard, kick
       // the queue drain so any item that was admitted mid-turn can run.
       void this._maybeDrainQueue();
@@ -2380,6 +2519,7 @@ export class Session {
       harnessName: this._record.harnessName,
       sessionId: this.id,
       resourceId: this.resourceId,
+      threadId: this.threadId,
       kind: 'message',
       admissionId,
       attemptedAdmissionHash: admissionHash,
@@ -2401,15 +2541,77 @@ export class Session {
     evidence: AgentSignalResultEvidence | OperationAdmissionTombstone,
     opts: MessageOptions,
   ): Promise<AgentResult | AgentStream | unknown> {
-    if ('status' in evidence) {
-      if (opts.stream === true) {
-        if (evidence.status === 'pending') {
+    return this._withActiveDeletedWaiter(async activeDeleted => {
+      if ('status' in evidence) {
+        if (opts.stream === true) {
+          if (evidence.status === 'pending') {
+            const agent = this._harness.getAgentForMode(this._messageDuplicateModeId(evidence, opts));
+            await this._raceActiveTurnWaiter(this._ensureThreadSubscription(agent), activeDeleted);
+            const runId = await this._pendingMessageRunId(evidence);
+            if (runId && this._completedRuns.has(runId)) {
+              const cached = this._completedRuns.get(runId);
+              if (cached?.ok && evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
+                await this._writeMessageResultEvidenceBestEffort({
+                  status: 'completed',
+                  signalId: evidence.signalId,
+                  runId,
+                  result: cached.full,
+                  admissionId: evidence.admissionId,
+                  admissionHash: evidence.admissionHash,
+                });
+              }
+              throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
+            }
+            let output = runId ? (agent.getRunOutput(runId) as AgentStream | undefined) : undefined;
+            let retainedCompletedOutput = false;
+            if (
+              output &&
+              (output as { status?: string }).status !== undefined &&
+              (output as { status?: string }).status !== 'running'
+            ) {
+              retainedCompletedOutput = true;
+              output = undefined;
+            }
+            if (runId && !output && !retainedCompletedOutput) {
+              const waitAbortController = new AbortController();
+              const completion = this._runCompletionPromises.get(runId)?.promise.then(
+                () => undefined,
+                () => undefined,
+              );
+              try {
+                output = (await Promise.race([
+                  this._raceActiveTurnWaiter(
+                    (
+                      agent.waitForRunOutput(runId, { abortSignal: waitAbortController.signal }) as Promise<AgentStream>
+                    ).catch(() => undefined),
+                    activeDeleted,
+                  ),
+                  ...(completion ? [completion] : []),
+                  delay(MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS, waitAbortController.signal).then(
+                    () => undefined,
+                    () => undefined,
+                  ),
+                ])) as AgentStream | undefined;
+              } finally {
+                waitAbortController.abort(
+                  new HarnessValidationError('message().admissionId', 'duplicate stream wait ended'),
+                );
+              }
+            }
+            if (output) return output;
+          }
+          throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
+        }
+        if (evidence.status === 'completed') return evidence.result as AgentResult;
+        if (evidence.status === 'failed') throw publicErrorProjectionToError(evidence.error);
+        const runId = await this._pendingMessageRunId(evidence);
+        if (runId) {
           const agent = this._harness.getAgentForMode(this._messageDuplicateModeId(evidence, opts));
-          await this._ensureThreadSubscription(agent);
-          const runId = await this._pendingMessageRunId(evidence);
-          if (runId && this._completedRuns.has(runId)) {
-            const cached = this._completedRuns.get(runId);
-            if (cached?.ok && evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
+          await this._raceActiveTurnWaiter(this._ensureThreadSubscription(agent), activeDeleted);
+          const cached = this._completedRuns.get(runId);
+          if (cached) {
+            if (!cached.ok) throw cached.err;
+            if (evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
               await this._writeMessageResultEvidenceBestEffort({
                 status: 'completed',
                 signalId: evidence.signalId,
@@ -2419,73 +2621,16 @@ export class Session {
                 admissionHash: evidence.admissionHash,
               });
             }
-            throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
+            return cached.full;
           }
-          let output = runId ? (agent.getRunOutput(runId) as AgentStream | undefined) : undefined;
-          let retainedCompletedOutput = false;
-          if (
-            output &&
-            (output as { status?: string }).status !== undefined &&
-            (output as { status?: string }).status !== 'running'
-          ) {
-            retainedCompletedOutput = true;
-            output = undefined;
+          if (!this._hasLiveMessageRun(agent, runId)) {
+            return this._raceActiveTurnWaiter(this._awaitDurableMessageResult(evidence, opts), activeDeleted);
           }
-          if (runId && !output && !retainedCompletedOutput) {
-            const waitAbortController = new AbortController();
-            const completion = this._runCompletionPromises.get(runId)?.promise.then(
-              () => undefined,
-              () => undefined,
-            );
-            try {
-              output = (await Promise.race([
-                (
-                  agent.waitForRunOutput(runId, { abortSignal: waitAbortController.signal }) as Promise<AgentStream>
-                ).catch(() => undefined),
-                ...(completion ? [completion] : []),
-                delay(MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS, waitAbortController.signal).then(
-                  () => undefined,
-                  () => undefined,
-                ),
-              ])) as AgentStream | undefined;
-            } finally {
-              waitAbortController.abort(
-                new HarnessValidationError('message().admissionId', 'duplicate stream wait ended'),
-              );
-            }
-          }
-          if (output) return output;
+          return this._raceActiveTurnWaiter(this._awaitRunCompletion(runId), activeDeleted);
         }
-        throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
       }
-      if (evidence.status === 'completed') return evidence.result as AgentResult;
-      if (evidence.status === 'failed') throw publicErrorProjectionToError(evidence.error);
-      const runId = await this._pendingMessageRunId(evidence);
-      if (runId) {
-        const agent = this._harness.getAgentForMode(this._messageDuplicateModeId(evidence, opts));
-        await this._ensureThreadSubscription(agent);
-        const cached = this._completedRuns.get(runId);
-        if (cached) {
-          if (!cached.ok) throw cached.err;
-          if (evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
-            await this._writeMessageResultEvidenceBestEffort({
-              status: 'completed',
-              signalId: evidence.signalId,
-              runId,
-              result: cached.full,
-              admissionId: evidence.admissionId,
-              admissionHash: evidence.admissionHash,
-            });
-          }
-          return cached.full;
-        }
-        if (!this._hasLiveMessageRun(agent, runId)) {
-          return this._awaitDurableMessageResult(evidence, opts);
-        }
-        return this._awaitRunCompletion(runId);
-      }
-    }
-    throw new HarnessValidationError('message().admissionId', 'duplicate message result evidence has expired');
+      throw new HarnessValidationError('message().admissionId', 'duplicate message result evidence has expired');
+    });
   }
 
   private async _pendingMessageRunId(evidence: AgentSignalResultEvidence): Promise<string | undefined> {
@@ -2560,8 +2705,9 @@ export class Session {
     options?: { compatibleAdmissionHashes?: readonly string[] },
   ): Promise<{ created: boolean }> {
     const now = Date.now();
+    this._operationEvidenceSignalIds.add(status.signalId);
     try {
-      return await this._storage.writeMessageResultEvidence({
+      const result = await this._storage.writeMessageResultEvidence({
         ...status,
         harnessName: this._record.harnessName,
         sessionId: this.id,
@@ -2570,6 +2716,8 @@ export class Session {
         createdAt: now,
         updatedAt: now,
       });
+      await this._cleanupOperationEvidenceIfDeleted(status);
+      return result;
     } catch (err) {
       if (err instanceof HarnessStorageAdmissionConflictError && status.admissionId && status.admissionHash) {
         const duplicate = await this._resolveMessageAdmissionDuplicate({
@@ -2582,6 +2730,19 @@ export class Session {
       }
       throw err;
     }
+  }
+
+  private async _cleanupOperationEvidenceIfDeleted(status: { signalId: string }): Promise<void> {
+    if (this._state !== 'deleted') return;
+    await this._storage
+      .deleteOperationAdmissionTombstonesForSession({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        resourceId: this.resourceId,
+        threadId: this.threadId,
+        signalId: status.signalId,
+      })
+      .catch(() => {});
   }
 
   private async _writeMessageResultEvidenceBestEffort(
@@ -2673,7 +2834,14 @@ export class Session {
 
     // Open the thread subscription before reading `activeRunId()` so the
     // routing decision sees the live runtime state.
-    const sub = await this._ensureThreadSubscription(agent);
+    const subscriptionWaiter = this._createActiveTurnWaiter();
+    void subscriptionWaiter.promise.catch(() => {});
+    const subscription = this._ensureThreadSubscription(agent);
+    void subscription.catch(() => {});
+    const sub = await Promise.race([subscription, subscriptionWaiter.promise]).finally(() => {
+      subscriptionWaiter.cleanup();
+    });
+    this._assertLive('signal()');
 
     const activeRunId = sub.activeRunId();
     const willInterleave = activeRunId !== null;
@@ -2700,13 +2868,27 @@ export class Session {
       // Owned-turn path: same bookkeeping as the message() default path.
       const turnAbortController = this._beginTurn(opts.abortSignal);
       const turnAbortSignal = turnAbortController.signal;
+      const activeTurnWaiter = this._createActiveTurnWaiter();
+      void activeTurnWaiter.promise.catch(() => {});
+      const finishOwnedSignalTurn = () => {
+        activeTurnWaiter.cleanup();
+        this._endTurn(turnAbortController);
+      };
+      const assertOwnedSignalTurnNotDeleted = () => {
+        if (this._state === 'deleted') {
+          throw new HarnessSessionDeletedError(this.id);
+        }
+      };
       let dispatched;
       try {
         const toolsets = this._buildToolsets(mode, opts.additionalTools);
-        const requestContext = await this._buildRequestContext({
-          modeId: effectiveModeId,
-          abortSignal: turnAbortSignal,
-        });
+        const requestContext = await Promise.race([
+          this._buildRequestContext({
+            modeId: effectiveModeId,
+            abortSignal: turnAbortSignal,
+          }),
+          activeTurnWaiter.promise,
+        ]);
         const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
           memory: { thread: this.threadId, resource: this.resourceId },
           abortSignal: turnAbortSignal,
@@ -2714,6 +2896,7 @@ export class Session {
           ...(toolsets ? { toolsets } : {}),
           ...(mode.instructions ? { instructions: mode.instructions } : {}),
         };
+        assertOwnedSignalTurnNotDeleted();
         this._emitTurnEvent({ type: 'agent_start' });
 
         dispatched = agent.sendSignal(
@@ -2725,29 +2908,30 @@ export class Session {
           },
         );
       } catch (err) {
-        this._endTurn(turnAbortController);
+        finishOwnedSignalTurn();
         throw err;
       }
 
       // Register the completion waiter before any terminal chunks land.
       const completion = this._awaitRunCompletion(dispatched.runId);
+      const completionOrDelete = Promise.race([completion, activeTurnWaiter.promise]);
 
       // Background continuation runs the post-turn bookkeeping so the
       // caller's `result` promise resolves with the final AgentResult.
-      const result: Promise<AgentResult> = completion
+      const result: Promise<AgentResult> = completionOrDelete
         .then(async full => {
           this._recordTurnCompletion(full);
-          await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
+          await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
             runId: full.runId,
           });
-          await this._runGoalJudge(full, false);
+          await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
           return full as AgentResult;
         })
         .finally(() => {
-          this._endTurn(turnAbortController);
+          finishOwnedSignalTurn();
           void this._maybeDrainQueue();
         });
 
@@ -2817,7 +3001,14 @@ export class Session {
     const mode = this._harness._getMode(effectiveModeId);
     const agent = this._harness.getAgentForMode(effectiveModeId);
 
-    const sub = await this._ensureThreadSubscription(agent);
+    const subscriptionWaiter = this._createActiveTurnWaiter();
+    void subscriptionWaiter.promise.catch(() => {});
+    const subscription = this._ensureThreadSubscription(agent);
+    void subscription.catch(() => {});
+    const sub = await Promise.race([subscription, subscriptionWaiter.promise]).finally(() => {
+      subscriptionWaiter.cleanup();
+    });
+    this._assertLive('injectSystemReminder()');
     const activeRunId = sub.activeRunId();
     const willInterleave = activeRunId !== null;
 
@@ -2826,13 +3017,27 @@ export class Session {
       // continuation. Caller doesn't get a result handle.
       const turnAbortController = this._beginTurn(undefined);
       const turnAbortSignal = turnAbortController.signal;
+      const activeTurnWaiter = this._createActiveTurnWaiter();
+      void activeTurnWaiter.promise.catch(() => {});
+      const finishOwnedReminderTurn = () => {
+        activeTurnWaiter.cleanup();
+        this._endTurn(turnAbortController);
+      };
+      const assertOwnedReminderTurnNotDeleted = () => {
+        if (this._state === 'deleted') {
+          throw new HarnessSessionDeletedError(this.id);
+        }
+      };
       let dispatched;
       try {
         const toolsets = this._buildToolsets(mode, undefined);
-        const requestContext = await this._buildRequestContext({
-          modeId: effectiveModeId,
-          abortSignal: turnAbortSignal,
-        });
+        const requestContext = await Promise.race([
+          this._buildRequestContext({
+            modeId: effectiveModeId,
+            abortSignal: turnAbortSignal,
+          }),
+          activeTurnWaiter.promise,
+        ]);
         const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
           memory: { thread: this.threadId, resource: this.resourceId },
           abortSignal: turnAbortSignal,
@@ -2840,6 +3045,7 @@ export class Session {
           ...(toolsets ? { toolsets } : {}),
           ...(mode.instructions ? { instructions: mode.instructions } : {}),
         };
+        assertOwnedReminderTurnNotDeleted();
         this._emitTurnEvent({ type: 'agent_start' });
 
         dispatched = agent.sendSignal(
@@ -2856,24 +3062,25 @@ export class Session {
           },
         );
       } catch (err) {
-        this._endTurn(turnAbortController);
+        finishOwnedReminderTurn();
         throw err;
       }
 
       const completion = this._awaitRunCompletion(dispatched.runId);
-      const result = completion
+      const completionOrDelete = Promise.race([completion, activeTurnWaiter.promise]);
+      const result = completionOrDelete
         .then(async full => {
           this._recordTurnCompletion(full);
-          await this._maybeCaptureSuspend(full, undefined, effectiveModeId);
+          await Promise.race([this._maybeCaptureSuspend(full, undefined, effectiveModeId), activeTurnWaiter.promise]);
           this._emitTurnEvent({
             type: 'agent_end',
             reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
             runId: full.runId,
           });
-          await this._runGoalJudge(full, false);
+          await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
         })
         .finally(() => {
-          this._endTurn(turnAbortController);
+          finishOwnedReminderTurn();
           void this._maybeDrainQueue();
         });
       void result.catch(() => {});
@@ -4281,25 +4488,49 @@ export class Session {
     // `session.abort()` can cancel an in-flight resume (e.g. ESC after the
     // user approved a tool that's now grinding through a long workflow).
     const turnAbortController = this._beginTurn(undefined);
+    const activeTurnWaiter = this._createActiveTurnWaiter();
+    void activeTurnWaiter.promise.catch(() => {});
+    const finishResumedTurn = () => {
+      activeTurnWaiter.cleanup();
+      this._endTurn(turnAbortController);
+    };
+    const assertResumedTurnNotDeleted = () => {
+      if (this._state === 'deleted') {
+        throw new HarnessSessionDeletedError(this.id);
+      }
+    };
     const agent = this._harness.getAgentForMode(resumeModeId);
     let full: FullOutput<unknown>;
     try {
-      const out = await agent.resumeStream(resumeData, {
+      assertResumedTurnNotDeleted();
+      const resumeStream = agent.resumeStream(resumeData, {
         runId: pending.runId,
         toolCallId: pending.toolCallId,
         abortSignal: turnAbortController.signal,
       });
-      full = (await out.getFullOutput()) as FullOutput<unknown>;
+      void resumeStream.catch(() => {});
+      const out = await Promise.race([resumeStream, activeTurnWaiter.promise]);
+      const fullOutput = out.getFullOutput() as Promise<FullOutput<unknown>>;
+      void fullOutput.catch(() => {});
+      full = await Promise.race([fullOutput, activeTurnWaiter.promise]);
       const resumedQueuedItemId = this._queuedItemIdForPendingResume(pending);
       if (full.finishReason !== 'suspended' && resumedQueuedItemId !== undefined) {
-        await this._markQueuedTurnCompleted(resumedQueuedItemId, full, { modeId: modeFlipTarget });
+        await Promise.race([
+          this._markQueuedTurnCompleted(resumedQueuedItemId, full, { modeId: modeFlipTarget }),
+          activeTurnWaiter.promise,
+        ]);
       }
     } catch (err) {
-      this._endTurn(turnAbortController);
+      let thrown = err;
       if (responseId !== undefined) {
-        await this._markInboxResponseFailed(responseId, err);
+        try {
+          await Promise.race([this._markInboxResponseFailed(responseId, err), activeTurnWaiter.promise]);
+        } catch (responseErr) {
+          thrown = responseErr;
+        }
       }
-      throw err;
+      finishResumedTurn();
+      throw thrown;
     }
 
     // Clear pending + apply any remaining mode flip in a single CAS write. A
@@ -4310,13 +4541,17 @@ export class Session {
     try {
       if (completingQueuedItemId !== undefined) {
         if (modeFlipTarget && modeFlipTarget !== previousModeId) {
-          await this._flushUpdate(prev => ({ ...prev, modeId: modeFlipTarget }));
+          await Promise.race([
+            this._flushUpdate(prev => ({ ...prev, modeId: modeFlipTarget })),
+            activeTurnWaiter.promise,
+          ]);
         }
         const queuedItem = this._record.pendingQueue.find(item => item.id === completingQueuedItemId);
         if (queuedItem) {
           try {
-            await this._markQueuedPostRunFinalized(completingQueuedItemId);
+            await Promise.race([this._markQueuedPostRunFinalized(completingQueuedItemId), activeTurnWaiter.promise]);
           } catch (err) {
+            if (err instanceof HarnessSessionDeletedError) throw err;
             throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
           }
         }
@@ -4326,42 +4561,45 @@ export class Session {
       }
       const queueCompletedAt = Date.now();
       const responseAppliedAt = queueCompletedAt;
-      await this._flushUpdate(prev => {
-        const next: SessionRecord = { ...prev };
-        delete next.pendingResume;
-        const receipt =
-          responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
-        if (receipt) {
-          next.inboxResponseReceipts = {
-            ...(prev.inboxResponseReceipts ?? {}),
-            [receipt.responseId]: {
-              ...receipt,
-              status: 'applied',
-              result: full,
-              appliedAt: receipt.appliedAt ?? responseAppliedAt,
-              updatedAt: responseAppliedAt,
-            },
-          };
-        }
-        if (modeFlipTarget) next.modeId = modeFlipTarget;
-        if (completingQueuedItemId !== undefined) {
-          next.pendingQueue = (prev.pendingQueue ?? []).filter(x => x.id !== completingQueuedItemId);
-          const receipt = prev.queueAdmissionReceipts?.[completingQueuedItemId];
+      await Promise.race([
+        this._flushUpdate(prev => {
+          const next: SessionRecord = { ...prev };
+          delete next.pendingResume;
+          const receipt =
+            responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
           if (receipt) {
-            next.queueAdmissionReceipts = {
-              ...(prev.queueAdmissionReceipts ?? {}),
-              [completingQueuedItemId]: {
+            next.inboxResponseReceipts = {
+              ...(prev.inboxResponseReceipts ?? {}),
+              [receipt.responseId]: {
                 ...receipt,
-                status: 'completed',
+                status: 'applied',
                 result: full,
-                completedAt: receipt.completedAt ?? queueCompletedAt,
-                updatedAt: queueCompletedAt,
+                appliedAt: receipt.appliedAt ?? responseAppliedAt,
+                updatedAt: responseAppliedAt,
               },
             };
           }
-        }
-        return next;
-      });
+          if (modeFlipTarget) next.modeId = modeFlipTarget;
+          if (completingQueuedItemId !== undefined) {
+            next.pendingQueue = (prev.pendingQueue ?? []).filter(x => x.id !== completingQueuedItemId);
+            const receipt = prev.queueAdmissionReceipts?.[completingQueuedItemId];
+            if (receipt) {
+              next.queueAdmissionReceipts = {
+                ...(prev.queueAdmissionReceipts ?? {}),
+                [completingQueuedItemId]: {
+                  ...receipt,
+                  status: 'completed',
+                  result: full,
+                  completedAt: receipt.completedAt ?? queueCompletedAt,
+                  updatedAt: queueCompletedAt,
+                },
+              };
+            }
+          }
+          return next;
+        }),
+        activeTurnWaiter.promise,
+      ]);
 
       // Pending resolved — emit before the (optional) re-suspension capture
       // so subscribers see ordering: resolved → (mode_changed?) → required?.
@@ -4382,7 +4620,10 @@ export class Session {
       // The resumed run can itself suspend again (multi-step approval chains).
       // Mirror message()'s post-run hook so the next respond* call sees the
       // new pending record.
-      await this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId);
+      await Promise.race([
+        this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId),
+        activeTurnWaiter.promise,
+      ]);
 
       // If the resumed run did NOT suspend again, the turn is complete from
       // the harness's perspective. Surface that to subscribers via agent_end.
@@ -4397,7 +4638,7 @@ export class Session {
         // resolver, remove the head item, clear current, then kick the drain
         // for the next item.
         const wasGoalDriven = (this._currentQueuedItemSource ?? 'user') === 'goal';
-        await this._runGoalJudge(full, wasGoalDriven);
+        await Promise.race([this._runGoalJudge(full, wasGoalDriven), activeTurnWaiter.promise]);
         if (completingQueuedItemId !== undefined) {
           this._currentQueuedItemId = undefined;
           this._currentQueuedItemSource = undefined;
@@ -4416,7 +4657,7 @@ export class Session {
       }
       throw err;
     } finally {
-      this._endTurn(turnAbortController);
+      finishResumedTurn();
     }
     if (responseMode === 'inbox-receipt') {
       const receipt =
@@ -4810,7 +5051,12 @@ export class Session {
     const duplicate = opts.admissionId
       ? await this._resolveQueueAdmissionDuplicate({ admissionId, admissionHash })
       : undefined;
-    if (duplicate) return this._returnDuplicateQueueResult(duplicate);
+    if (duplicate) {
+      this._assertOpenForTurn('queue()');
+      return this._withActiveDeletedWaiter(activeDeleted =>
+        this._raceActiveTurnWaiter(this._returnDuplicateQueueResult(duplicate, activeDeleted), activeDeleted),
+      );
+    }
 
     const cap = this._harness._internalMaxQueueDepth;
     if ((this._record.pendingQueue?.length ?? 0) >= cap) {
@@ -4889,7 +5135,12 @@ export class Session {
       throw err;
     }
 
-    if (admittedReceipt) return this._returnDuplicateQueueResult(admittedReceipt);
+    if (admittedReceipt) {
+      this._assertOpenForTurn('queue()');
+      return this._withActiveDeletedWaiter(activeDeleted =>
+        this._raceActiveTurnWaiter(this._returnDuplicateQueueResult(admittedReceipt!, activeDeleted), activeDeleted),
+      );
+    }
 
     const queued = createDeferred<AgentResult>();
     const promise = queued.promise;
@@ -4912,6 +5163,7 @@ export class Session {
       harnessName: this._record.harnessName,
       sessionId: this.id,
       resourceId: this.resourceId,
+      threadId: this.threadId,
       kind: 'queue',
       admissionId,
       attemptedAdmissionHash: admissionHash,
@@ -4925,6 +5177,7 @@ export class Session {
 
   private async _returnDuplicateQueueResult(
     evidence: QueueAdmissionReceipt | OperationAdmissionTombstone,
+    activeDeleted?: Promise<never>,
   ): Promise<AgentResult> {
     if ('kind' in evidence) {
       throw new HarnessValidationError('queue().admissionId', 'duplicate queue result evidence has expired');
@@ -4943,20 +5196,28 @@ export class Session {
       );
     }
     const resolver = this._queueResolvers.get(evidence.queuedItemId);
-    if (resolver) return resolver.promise;
+    if (resolver) return this._raceActiveTurnWaiter(resolver.promise, activeDeleted);
     void this._maybeDrainQueue();
-    return this._awaitDurableQueueResult(evidence);
+    return this._awaitDurableQueueResult(evidence, activeDeleted);
   }
 
-  private async _awaitDurableQueueResult(receipt: QueueAdmissionReceipt): Promise<AgentResult> {
+  private async _awaitDurableQueueResult(
+    receipt: QueueAdmissionReceipt,
+    activeDeleted?: Promise<never>,
+  ): Promise<AgentResult> {
     const deadline = Date.now() + MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS;
     while (true) {
-      const latest = await this._storage.loadQueueResultEvidence({
-        harnessName: this._record.harnessName,
-        sessionId: this.id,
-        resourceId: this.resourceId,
-        queuedItemId: receipt.queuedItemId,
-      });
+      this._assertNotDeleted();
+      const latest = await this._raceActiveTurnWaiter(
+        this._storage.loadQueueResultEvidence({
+          harnessName: this._record.harnessName,
+          sessionId: this.id,
+          resourceId: this.resourceId,
+          queuedItemId: receipt.queuedItemId,
+        }),
+        activeDeleted,
+      );
+      this._assertNotDeleted();
       if (!latest) {
         throw new HarnessValidationError('queue().admissionId', 'duplicate queue result evidence has expired');
       }
@@ -4978,7 +5239,7 @@ export class Session {
       if (waitMs === 0) {
         throw new HarnessValidationError('queue().admissionId', 'duplicate queue result evidence has expired');
       }
-      await delay(waitMs);
+      await this._raceActiveTurnWaiter(delay(waitMs), activeDeleted);
     }
   }
 
@@ -5233,27 +5494,48 @@ export class Session {
     // Queued turns run under a session-owned AbortController so
     // `session.abort()` can cancel an in-flight queued run too.
     const turnAbortController = this._beginTurn(undefined);
-    const requestContext = await this._buildRequestContext({
-      modeId: effectiveModeId,
-      abortSignal: turnAbortController.signal,
-    });
-    const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
-      memory: { thread: this.threadId, resource: this.resourceId },
-      abortSignal: turnAbortController.signal,
-      requestContext,
-      ...(toolsets ? { toolsets } : {}),
-      ...(mode.instructions ? { instructions: mode.instructions } : {}),
+    const activeTurnWaiter = this._createActiveTurnWaiter();
+    void activeTurnWaiter.promise.catch(() => {});
+    const finishQueuedTurn = () => {
+      activeTurnWaiter.cleanup();
+      this._endTurn(turnAbortController);
+    };
+    const assertQueuedTurnNotDeleted = () => {
+      if (this._state === 'deleted') {
+        throw new HarnessSessionDeletedError(this.id);
+      }
     };
 
-    this._emitTurnEvent({ type: 'agent_start' });
-
     try {
-      await this._ensureThreadSubscription(agent);
-      await this._writeQueueSignalResultEvidence({
-        status: 'pending',
-        signalId: identity.signalId,
-        runId: identity.runId,
-      });
+      const requestContext = await Promise.race([
+        this._buildRequestContext({
+          modeId: effectiveModeId,
+          abortSignal: turnAbortController.signal,
+        }),
+        activeTurnWaiter.promise,
+      ]);
+      assertQueuedTurnNotDeleted();
+      const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
+        memory: { thread: this.threadId, resource: this.resourceId },
+        abortSignal: turnAbortController.signal,
+        requestContext,
+        ...(toolsets ? { toolsets } : {}),
+        ...(mode.instructions ? { instructions: mode.instructions } : {}),
+      };
+
+      this._emitTurnEvent({ type: 'agent_start' });
+
+      await Promise.race([this._ensureThreadSubscription(agent), activeTurnWaiter.promise]);
+      assertQueuedTurnNotDeleted();
+      await Promise.race([
+        this._writeQueueSignalResultEvidence({
+          status: 'pending',
+          signalId: identity.signalId,
+          runId: identity.runId,
+        }),
+        activeTurnWaiter.promise,
+      ]);
+      assertQueuedTurnNotDeleted();
       const signal = agent.sendSignal(
         { id: identity.signalId, type: 'user-message', contents: item.content as never },
         {
@@ -5272,26 +5554,34 @@ export class Session {
         signalIdentity.runId,
         signalIdentity.signalId,
         effectiveModeId,
+        activeTurnWaiter.promise,
       );
+      void completion.catch(() => {});
       if (signalIdentity !== identity) {
-        await this._writeQueueSignalResultEvidence({
-          status: 'pending',
-          signalId: signalIdentity.signalId,
-          runId: signalIdentity.runId,
-        });
+        await Promise.race([
+          this._writeQueueSignalResultEvidence({
+            status: 'pending',
+            signalId: signalIdentity.signalId,
+            runId: signalIdentity.runId,
+          }),
+          activeTurnWaiter.promise,
+        ]);
       }
-      await this._updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
-        ...receipt,
-        status: 'accepted',
-        runId: signalIdentity.runId,
-        signalId: signalIdentity.signalId,
-        modeId: receipt.modeId ?? effectiveModeId,
-        acceptedAt: receipt.acceptedAt ?? now,
-        updatedAt: now,
-      })).catch(() => {});
-      return await completion;
+      await Promise.race([
+        this._updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
+          ...receipt,
+          status: 'accepted',
+          runId: signalIdentity.runId,
+          signalId: signalIdentity.signalId,
+          modeId: receipt.modeId ?? effectiveModeId,
+          acceptedAt: receipt.acceptedAt ?? now,
+          updatedAt: now,
+        })).catch(() => {}),
+        activeTurnWaiter.promise,
+      ]);
+      return await Promise.race([completion, activeTurnWaiter.promise]);
     } finally {
-      this._endTurn(turnAbortController);
+      finishQueuedTurn();
     }
   }
 
@@ -5303,35 +5593,37 @@ export class Session {
   ): Promise<FullOutput<unknown> | undefined> {
     if (!receipt.runId || !receipt.signalId) return undefined;
 
-    await this._ensureThreadSubscription(agent);
-    if (this._hasLiveMessageRun(agent, receipt.runId)) {
-      return this._awaitQueuedRunCompletion(item, receipt.runId, receipt.signalId, modeId);
-    }
-
-    const evidence = await this._loadQueueSignalResultEvidence(receipt);
-    if (evidence.status === 'completed') {
-      const full = evidence.result as FullOutput<unknown>;
-      await this._markQueuedTurnCompleted(item.id, full);
-      if (receipt.postRunFinalizedAt === undefined) {
-        await this._finalizeCompletedQueuedTurn(item, full, modeId);
+    return this._withActiveDeletedWaiter(async activeDeleted => {
+      await this._raceActiveTurnWaiter(this._ensureThreadSubscription(agent), activeDeleted);
+      if (this._hasLiveMessageRun(agent, receipt.runId!)) {
+        return this._awaitQueuedRunCompletion(item, receipt.runId!, receipt.signalId!, modeId, activeDeleted);
       }
-      return full;
-    }
-    if (evidence.status === 'failed') {
-      throw publicErrorProjectionToError(
-        evidence.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
-      );
-    }
 
-    const recovery = await this._inspectQueueReceiptMemory(receipt);
-    if (recovery.status === 'pending') {
-      const dispatchAt = receipt.acceptedAt ?? receipt.admittingAt ?? receipt.updatedAt;
-      const retryAt = dispatchAt + QUEUE_ACCEPTED_RECOVERY_STALE_MS;
-      if (Date.now() >= retryAt) throw new QueueRecoveryStaleError();
-      throw new QueueRecoveryPendingError(retryAt);
-    }
+      const evidence = await this._raceActiveTurnWaiter(this._loadQueueSignalResultEvidence(receipt), activeDeleted);
+      if (evidence.status === 'completed') {
+        const full = evidence.result as FullOutput<unknown>;
+        await this._raceActiveTurnWaiter(this._markQueuedTurnCompleted(item.id, full), activeDeleted);
+        if (receipt.postRunFinalizedAt === undefined) {
+          await this._finalizeCompletedQueuedTurn(item, full, modeId, activeDeleted);
+        }
+        return full;
+      }
+      if (evidence.status === 'failed') {
+        throw publicErrorProjectionToError(
+          evidence.error ?? { code: 'harness.queue_failed', message: 'queued turn failed' },
+        );
+      }
 
-    return undefined;
+      const recovery = await this._raceActiveTurnWaiter(this._inspectQueueReceiptMemory(receipt), activeDeleted);
+      if (recovery.status === 'pending') {
+        const dispatchAt = receipt.acceptedAt ?? receipt.admittingAt ?? receipt.updatedAt;
+        const retryAt = dispatchAt + QUEUE_ACCEPTED_RECOVERY_STALE_MS;
+        if (Date.now() >= retryAt) throw new QueueRecoveryStaleError();
+        throw new QueueRecoveryPendingError(retryAt);
+      }
+
+      return undefined;
+    });
   }
 
   private _queueReceiptTerminalFailureError(queuedItemId: string): Error | undefined {
@@ -5358,17 +5650,23 @@ export class Session {
     runId: string,
     signalId: string,
     modeId: string,
+    activeTurnWaiter?: Promise<never>,
   ): Promise<FullOutput<unknown>> {
     let full: FullOutput<unknown>;
     try {
-      full = await this._awaitRunCompletion(runId);
+      full = await this._raceActiveTurnWaiter(this._awaitRunCompletion(runId), activeTurnWaiter);
     } catch (err) {
-      await this._writeQueueSignalResultEvidence({
-        status: 'failed',
-        signalId,
-        runId,
-        error: projectHarnessPublicError(err),
-      }).catch(() => {});
+      if (this._shouldWriteTurnFailureEvidence(err)) {
+        await this._raceActiveTurnWaiter(
+          this._writeQueueSignalResultEvidence({
+            status: 'failed',
+            signalId,
+            runId,
+            error: projectHarnessPublicError(err),
+          }).catch(() => {}),
+          activeTurnWaiter,
+        );
+      }
       throw err;
     }
 
@@ -5376,16 +5674,19 @@ export class Session {
     if (terminalFailure) throw terminalFailure;
 
     if (full.finishReason !== 'suspended') {
-      await this._markQueuedTurnCompleted(item.id, full);
-      await this._finalizeCompletedQueuedTurn(item, full, modeId);
-      await this._writeQueueSignalResultEvidence({
-        status: 'completed',
-        signalId,
-        runId,
-        result: full,
-      }).catch(() => {});
+      await this._raceActiveTurnWaiter(this._markQueuedTurnCompleted(item.id, full), activeTurnWaiter);
+      await this._finalizeCompletedQueuedTurn(item, full, modeId, activeTurnWaiter);
+      await this._raceActiveTurnWaiter(
+        this._writeQueueSignalResultEvidence({
+          status: 'completed',
+          signalId,
+          runId,
+          result: full,
+        }).catch(() => {}),
+        activeTurnWaiter,
+      );
     } else {
-      await this._finalizeQueuedRunCompletion(item, full, modeId);
+      await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter);
     }
     return full;
   }
@@ -5394,18 +5695,20 @@ export class Session {
     item: QueuedItem,
     full: FullOutput<unknown>,
     modeId: string,
+    activeTurnWaiter?: Promise<never>,
   ): Promise<void> {
     if (this._record.queueAdmissionReceipts?.[item.id]?.postRunFinalizedAt === undefined) {
       // Mark before running non-idempotent post-run side effects. Recovery may
       // retry a failed marker write, but must not replay goal continuations,
       // token accounting, or terminal turn events after the marker persists.
       try {
-        await this._markQueuedPostRunFinalized(item.id);
+        await this._raceActiveTurnWaiter(this._markQueuedPostRunFinalized(item.id), activeTurnWaiter);
       } catch (err) {
+        if (err instanceof HarnessSessionDeletedError) throw err;
         throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
       }
     }
-    await this._finalizeQueuedRunCompletion(item, full, modeId);
+    await this._finalizeQueuedRunCompletion(item, full, modeId, activeTurnWaiter);
   }
 
   private async _markQueuedTurnCompleted(
@@ -5449,15 +5752,19 @@ export class Session {
     item: QueuedItem,
     full: FullOutput<unknown>,
     modeId?: string,
+    activeTurnWaiter?: Promise<never>,
   ): Promise<FullOutput<unknown>> {
     this._recordTurnCompletion(full);
-    await this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId);
+    await this._raceActiveTurnWaiter(
+      this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId),
+      activeTurnWaiter,
+    );
     this._emitTurnEvent({
       type: 'agent_end',
       reason: full.finishReason === 'suspended' ? 'suspended' : full.finishReason === 'error' ? 'error' : 'complete',
       runId: full.runId,
     });
-    await this._runGoalJudge(full, (item.source ?? 'user') === 'goal');
+    await this._raceActiveTurnWaiter(this._runGoalJudge(full, (item.source ?? 'user') === 'goal'), activeTurnWaiter);
     return full;
   }
 
@@ -5490,6 +5797,7 @@ export class Session {
 
   private async _writeQueueSignalResultEvidence(status: AgentSignalResultStatus): Promise<void> {
     const now = Date.now();
+    this._operationEvidenceSignalIds.add(status.signalId);
     await this._storage.writeMessageResultEvidence({
       ...status,
       harnessName: this._record.harnessName,
@@ -5499,6 +5807,7 @@ export class Session {
       createdAt: now,
       updatedAt: now,
     });
+    await this._cleanupOperationEvidenceIfDeleted(status);
   }
 
   private async _inspectQueueReceiptMemory(
@@ -5887,6 +6196,12 @@ export class Session {
     }
   }
 
+  private _assertNotDeleted(): void {
+    if (this._state === 'deleted') {
+      throw new HarnessSessionDeletedError(this.id);
+    }
+  }
+
   private _assertOpenForTurn(_method: string): void {
     if (this._state === 'deleted') {
       throw new HarnessSessionDeletedError(this.id);
@@ -6138,6 +6453,13 @@ export class Session {
   _markDeleted(): void {
     const err = new HarnessSessionDeletedError(this.id);
     this._state = 'deleted';
+    this._rejectIdleWaiters(err);
+    this._rejectActiveTurnWaiters(err);
+    const activeTurn = this._currentTurnAbortController;
+    if (activeTurn) {
+      activeTurn.abort('session_deleted');
+      this._endTurn(activeTurn);
+    }
     if (this._queuedResumeRecoveryTimer !== undefined) {
       clearTimeout(this._queuedResumeRecoveryTimer);
       this._queuedResumeRecoveryTimer = undefined;
@@ -6149,8 +6471,11 @@ export class Session {
       resolver.reject(err);
     }
     this._tearDownThreadSubscription(err);
-    this._rejectIdleWaiters(err);
-    this._notifyMaybeIdle();
+  }
+
+  /** @internal — signal identities that may have written operation evidence for this live session. */
+  _deletedOperationEvidenceSignalIds(): string[] {
+    return Array.from(this._operationEvidenceSignalIds);
   }
 
   /** @internal — harness bridge subscription that remains valid while closing. */
@@ -6186,8 +6511,8 @@ export class Session {
   }
 
   /**
-   * Synchronous teardown for the thread subscription on close/evict. Unsubscribes,
-   * marks the subscription closed, and rejects every outstanding entry in
+   * Synchronous teardown for the thread subscription on close/evict/delete.
+   * Unsubscribes, marks the subscription closed, and rejects every outstanding entry in
    * `_runCompletionPromises` so awaiters don't hang on a dead subscription.
    * The drain loop's `for-await` exits naturally once `unsubscribe()` wakes it.
    */

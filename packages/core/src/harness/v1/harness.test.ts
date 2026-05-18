@@ -10,6 +10,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
@@ -70,6 +71,13 @@ async function waitFor(predicate: () => boolean, label: string, timeoutMs = 500)
 class AbortIgnoringMockAgent extends MockAgent {
   override async stream(messages: any, options?: any): Promise<any> {
     return super.stream(messages, { ...options, abortSignal: undefined });
+  }
+}
+
+class BlockingGenerateMockAgent extends MockAgent {
+  override async generate(messages: any, options?: any): Promise<any> {
+    this.streamCalls.push({ type: 'generate', messages, options });
+    return new Promise(() => {});
   }
 }
 
@@ -1430,6 +1438,257 @@ describe('Harness v1 — delete lifecycle', () => {
     expect(harness._internalLiveSessionCount()).toBe(0);
   });
 
+  it('aborts an active turn when hard-delete marks a live session deleted', async () => {
+    class GatedEvidenceStorage extends InMemoryHarness {
+      gatedSignalId?: string;
+      private gated = false;
+      private releasedDuringDeleteCleanup = false;
+      private release!: () => void;
+      private start!: () => void;
+      private finish!: () => void;
+      readonly started = new Promise<void>(resolve => {
+        this.start = resolve;
+      });
+      readonly finished = new Promise<void>(resolve => {
+        this.finish = resolve;
+      });
+      private readonly gate = new Promise<void>(resolve => {
+        this.release = resolve;
+      });
+
+      override async writeMessageResultEvidence(
+        record: Parameters<InMemoryHarness['writeMessageResultEvidence']>[0],
+      ): Promise<{ created: boolean }> {
+        if (!this.gated && record.status === 'pending') {
+          this.gated = true;
+          this.gatedSignalId = record.signalId;
+          this.start();
+          await this.gate;
+        }
+        try {
+          return await super.writeMessageResultEvidence(record);
+        } finally {
+          if (record.signalId === this.gatedSignalId) this.finish();
+        }
+      }
+
+      override async deleteOperationAdmissionTombstonesForSession(
+        opts: Parameters<InMemoryHarness['deleteOperationAdmissionTombstonesForSession']>[0],
+      ): Promise<void> {
+        await super.deleteOperationAdmissionTombstonesForSession(opts);
+        if (!this.releasedDuringDeleteCleanup && this.gatedSignalId !== undefined) {
+          this.releasedDuringDeleteCleanup = true;
+          this.release();
+          await this.finished;
+        }
+      }
+    }
+    const storage = new GatedEvidenceStorage({ db: new InMemoryDB() });
+    const agent = new MockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({
+      holdUntil: hold.promise,
+    });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
+    const message = session.message({ content: 'slow', admissionId: 'delete-active-turn' });
+    const messageSettled = message.then(
+      value => ({ ok: true as const, value }),
+      err => ({ ok: false as const, err }),
+    );
+    await waitFor(() => session.isRunning(), 'active turn start');
+    await storage.started;
+    const idleSettled = session.waitForIdle().then(
+      () => ({ ok: true as const }),
+      err => ({ ok: false as const, err }),
+    );
+
+    const stored = (await storage.loadSession({ sessionId: session.id, harnessName: 'default' }))!;
+    // Simulate an out-of-band close marker so this live instance reaches hard-delete while still running.
+    await storage.saveSession(
+      {
+        ...stored,
+        closedAt: Date.now(),
+      },
+      { harnessName: 'default', ownerId: harness.ownerId, ifVersion: stored.version },
+    );
+
+    await harness.deleteSession({ sessionId: session.id, resourceId: 'r1' });
+
+    expect(session.isRunning()).toBe(false);
+    await expect(idleSettled).resolves.toMatchObject({ ok: false, err: expect.any(HarnessSessionDeletedError) });
+    await expect(messageSettled).resolves.toMatchObject({ ok: false, err: expect.any(HarnessSessionDeletedError) });
+    await storage.finished;
+    await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.toBeNull();
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        threadId: session.threadId,
+        signalId: storage.gatedSignalId!,
+      }),
+    ).resolves.toBeNull();
+    await expect(session.setState({ afterDelete: true })).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+  });
+
+  it('rejects an active structured sync turn when hard-delete marks a live session deleted', async () => {
+    const storage = makeStorage();
+    const agent = new BlockingGenerateMockAgent({ id: 'default' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
+    const messageRejected = expect(
+      session.message({ content: 'slow', output: z.object({ ok: z.boolean() }), sync: true }),
+    ).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+    await waitFor(() => session.isRunning(), 'structured turn start');
+    const idleRejected = expect(session.waitForIdle()).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+
+    const stored = (await storage.loadSession({ sessionId: session.id, harnessName: 'default' }))!;
+    await storage.saveSession(
+      {
+        ...stored,
+        closedAt: Date.now(),
+      },
+      { harnessName: 'default', ownerId: harness.ownerId, ifVersion: stored.version },
+    );
+
+    await harness.deleteSession({ sessionId: session.id, resourceId: 'r1' });
+
+    expect(session.isRunning()).toBe(false);
+    await messageRejected;
+    await idleRejected;
+  });
+
+  it('aborts an active streamed turn when hard-delete marks a live session deleted', async () => {
+    const storage = makeStorage();
+    const writeMessageResultEvidence = storage.writeMessageResultEvidence.bind(storage);
+    let signalId: string | undefined;
+    storage.writeMessageResultEvidence = async record => {
+      if (record.admissionId === 'delete-active-stream') {
+        signalId = record.signalId;
+      }
+      return writeMessageResultEvidence(record);
+    };
+    const agent = new MockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise, text: 'streamed after delete' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
+
+    await session.message({ content: 'slow', admissionId: 'delete-active-stream', stream: true });
+    await waitFor(() => session.isRunning() && signalId !== undefined, 'stream turn start');
+    const idleSettled = session.waitForIdle().then(
+      () => ({ ok: true as const }),
+      err => ({ ok: false as const, err }),
+    );
+
+    const stored = (await storage.loadSession({ sessionId: session.id, harnessName: 'default' }))!;
+    await storage.saveSession(
+      {
+        ...stored,
+        closedAt: Date.now(),
+      },
+      { harnessName: 'default', ownerId: harness.ownerId, ifVersion: stored.version },
+    );
+
+    await harness.deleteSession({ sessionId: session.id, resourceId: 'r1' });
+
+    expect(session.isRunning()).toBe(false);
+    await expect(idleSettled).resolves.toMatchObject({ ok: false, err: expect.any(HarnessSessionDeletedError) });
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        threadId: session.threadId,
+        signalId: signalId!,
+      }),
+    ).resolves.toBeNull();
+    hold.resolve();
+    await new Promise(resolve => setImmediate(resolve));
+  });
+
+  it('scopes late deleted-session evidence cleanup to the deleted turn identity', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const oldSession = await harness.session({ threadId: 'old-thread', resourceId: 'r1', sessionId: 'sess-reused' });
+    const now = Date.now();
+    await storage.writeMessageResultEvidence({
+      harnessName: 'default',
+      sessionId: oldSession.id,
+      resourceId: oldSession.resourceId,
+      threadId: oldSession.threadId,
+      signalId: 'old-signal',
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await storage.writeMessageResultEvidence({
+      harnessName: 'default',
+      sessionId: oldSession.id,
+      resourceId: oldSession.resourceId,
+      threadId: oldSession.threadId,
+      signalId: 'same-thread-new-signal',
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await storage.writeMessageResultEvidence({
+      harnessName: 'default',
+      sessionId: oldSession.id,
+      resourceId: oldSession.resourceId,
+      threadId: 'new-thread',
+      signalId: 'new-signal',
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    (oldSession as any)._markDeleted();
+    await (oldSession as any)._cleanupOperationEvidenceIfDeleted({ signalId: 'old-signal' });
+
+    await expect(
+      storage.loadMessageResultEvidence({
+        harnessName: 'default',
+        sessionId: oldSession.id,
+        resourceId: oldSession.resourceId,
+        threadId: oldSession.threadId,
+        signalId: 'old-signal',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.loadMessageResultEvidence({
+        harnessName: 'default',
+        sessionId: oldSession.id,
+        resourceId: oldSession.resourceId,
+        threadId: oldSession.threadId,
+        signalId: 'same-thread-new-signal',
+      }),
+    ).resolves.toMatchObject({ status: 'pending' });
+    await expect(
+      storage.loadMessageResultEvidence({
+        harnessName: 'default',
+        sessionId: oldSession.id,
+        resourceId: oldSession.resourceId,
+        threadId: 'new-thread',
+        signalId: 'new-signal',
+      }),
+    ).resolves.toMatchObject({ status: 'pending' });
+  });
+
   it('marks live descendants created during force-delete discovery as deleted', async () => {
     const storage = makeStorage();
     const harness = makeHarness({ sessions: { storage } });
@@ -1476,10 +1735,43 @@ describe('Harness v1 — delete lifecycle', () => {
     await waitFor(() => agent.streamCalls.length === 1, 'queued run start');
 
     await harness.deleteSession({ sessionId: session.id, resourceId: 'r1', force: true });
+    expect(session.isRunning()).toBe(false);
     await expect(storage.loadSession({ sessionId: session.id, harnessName: 'default' })).resolves.toBeNull();
 
     hold.resolve();
     await expect(queued).rejects.toBeInstanceOf(HarnessSessionClosingError);
+    await new Promise(resolve => setImmediate(resolve));
+  });
+
+  it('rejects an active queued turn when hard-delete marks the live session deleted', async () => {
+    const storage = makeStorage();
+    const agent = new AbortIgnoringMockAgent({ id: 'default' });
+    const hold = deferred();
+    agent.enqueueRun({ holdUntil: hold.promise, text: 'queued after delete' });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ threadId: { fresh: true }, resourceId: 'r1' });
+    const queued = session.queue({ content: 'queued' });
+    const queuedSettled = queued.then(
+      value => ({ ok: true as const, value }),
+      err => ({ ok: false as const, err }),
+    );
+    await waitFor(() => agent.streamCalls.length === 1 && session.isRunning(), 'queued run start');
+    const idleSettled = session.waitForIdle().then(
+      () => ({ ok: true as const }),
+      err => ({ ok: false as const, err }),
+    );
+
+    (session as any)._markDeleted();
+    expect(session.isRunning()).toBe(false);
+
+    hold.resolve();
+    await expect(queuedSettled).resolves.toMatchObject({ ok: false, err: expect.any(HarnessSessionDeletedError) });
+    await expect(idleSettled).resolves.toMatchObject({ ok: false, err: expect.any(HarnessSessionDeletedError) });
     await new Promise(resolve => setImmediate(resolve));
   });
 

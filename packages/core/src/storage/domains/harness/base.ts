@@ -485,6 +485,7 @@ export abstract class HarnessStorage extends StorageDomain {
     harnessName?: string;
     sessionId: string;
     resourceId: string;
+    threadId?: string;
     kind: 'message' | 'queue';
     admissionId: string;
     attemptedAdmissionHash: string;
@@ -510,6 +511,8 @@ export abstract class HarnessStorage extends StorageDomain {
     harnessName?: string;
     sessionId: string;
     resourceId: string;
+    threadId?: string;
+    signalId?: string;
   }): Promise<void>;
 
   // -------------------------------------------------------------------------

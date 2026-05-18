@@ -533,6 +533,7 @@ describe('InMemoryHarness admission storage contract', () => {
       storage.resolveOperationAdmissionEvidence({
         sessionId: 'session-1',
         resourceId: 'resource-1',
+        threadId: 'thread-1',
         kind: 'queue',
         admissionId: 'admission-1',
         attemptedAdmissionHash: 'hash-1',
@@ -542,6 +543,7 @@ describe('InMemoryHarness admission storage contract', () => {
       storage.resolveOperationAdmissionEvidence({
         sessionId: 'session-1',
         resourceId: 'resource-1',
+        threadId: 'thread-1',
         kind: 'queue',
         admissionId: 'admission-1',
         attemptedAdmissionHash: 'different-hash',
@@ -554,6 +556,82 @@ describe('InMemoryHarness admission storage contract', () => {
         queuedItemId: 'queued-1',
       }),
     ).resolves.toMatchObject({ admissionId: 'admission-1', status: 'queued' });
+  });
+
+  it('scopes admission resolution and hard-delete evidence cleanup by thread', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ closedAt: 2000, lastActivityAt: 2000 }), {
+      ownerId: 'h',
+      ifVersion: 0,
+    });
+    await storage.writeMessageResultEvidence({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      signalId: 'signal-1',
+      runId: 'run-1',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-1',
+      status: 'completed',
+      result: { text: 'old' },
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    await storage.writeMessageResultEvidence({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-2',
+      signalId: 'signal-2',
+      runId: 'run-2',
+      admissionId: 'admission-1',
+      admissionHash: 'hash-2',
+      status: 'completed',
+      result: { text: 'new' },
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+
+    await expect(
+      storage.resolveOperationAdmissionEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-2',
+        kind: 'message',
+        admissionId: 'admission-1',
+        attemptedAdmissionHash: 'hash-2',
+      }),
+    ).resolves.toMatchObject({ status: 'duplicate', storedAdmissionHash: 'hash-2' });
+
+    const stored = await storage.loadSession({ sessionId: 'session-1' });
+    if (!stored) throw new Error('expected session');
+    await storage.deleteSession({
+      sessionId: 'session-1',
+      ifVersion: stored.version,
+      expectedResourceId: stored.resourceId,
+      expectedThreadId: stored.threadId,
+      expectedParentSessionId: stored.parentSessionId ?? null,
+      expectedCreatedAt: stored.createdAt,
+      requireClosed: true,
+    });
+
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        signalId: 'signal-1',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.loadMessageResultEvidence({
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-2',
+        signalId: 'signal-2',
+      }),
+    ).resolves.toMatchObject({ status: 'completed', result: { text: 'new' } });
   });
 });
 

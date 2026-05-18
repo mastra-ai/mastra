@@ -10,8 +10,14 @@ import { describe, expect, it } from 'vitest';
 
 import { MockAgent } from './__test-utils__/mock-agent';
 import { setupHarness } from './__test-utils__/setup';
-import { HarnessSessionClosedError, HarnessValidationError } from './errors';
+import { HarnessSessionClosedError, HarnessSessionDeletedError, HarnessValidationError } from './errors';
 import type { HarnessEvent } from './events';
+
+async function waitForRunning(session: { isRunning: () => boolean }): Promise<void> {
+  for (let i = 0; i < 100 && !session.isRunning(); i++) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+}
 
 describe('Session.injectSystemReminder()', () => {
   it('dispatches a system-reminder signal on an idle thread (willInterleave: false)', async () => {
@@ -78,6 +84,53 @@ describe('Session.injectSystemReminder()', () => {
     await new Promise<void>(resolve => setImmediate(resolve));
     await new Promise<void>(resolve => setImmediate(resolve));
     expect(agent.streamCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('settles the owned idle-wake turn when the live session is marked deleted', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    const hold = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    agent.enqueueRun({ holdUntil: hold });
+
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.injectSystemReminder('hi');
+    await waitForRunning(session);
+    expect(session.isRunning()).toBe(true);
+    const idle = session.waitForIdle();
+
+    (session as any)._markDeleted();
+
+    expect(session.isRunning()).toBe(false);
+    try {
+      await expect(idle).rejects.toBeInstanceOf(HarnessSessionDeletedError);
+    } finally {
+      release();
+    }
+  });
+
+  it('rejects when the live session is marked deleted while opening the thread subscription', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let started!: () => void;
+    const subscribeStarted = new Promise<void>(resolve => {
+      started = resolve;
+    });
+    agent.subscribeToThread = async () => {
+      started();
+      return new Promise(() => {}) as any;
+    };
+
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const reminder = session.injectSystemReminder('hi');
+    await subscribeStarted;
+
+    (session as any)._markDeleted();
+
+    await expect(reminder).rejects.toBeInstanceOf(HarnessSessionDeletedError);
   });
 
   it('rejects empty content', async () => {

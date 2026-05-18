@@ -25,7 +25,12 @@ import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
 
 import { extractSignalContents, MockAgent, setupHarness } from './__test-utils__';
-import { HarnessAdmissionConflictError, HarnessQueueFullError, HarnessValidationError } from './errors';
+import {
+  HarnessAdmissionConflictError,
+  HarnessQueueFullError,
+  HarnessSessionDeletedError,
+  HarnessValidationError,
+} from './errors';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
 
@@ -127,6 +132,62 @@ describe('Session.queue() — admission', () => {
       runId: expect.any(String),
     });
     await session.close();
+  });
+
+  it('keeps durable duplicate queue waiters deletion-aware after close starts', async () => {
+    const { harness, storage, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const now = Date.now();
+    const evidence = {
+      admissionId: 'queue-delete-duplicate',
+      admissionHash: 'stored-hash',
+      queuedItemId: 'q-durable-duplicate-without-local-resolver',
+      modeId: 'default',
+      status: 'queued',
+      attempts: 0,
+      enqueuedAt: now,
+      updatedAt: now,
+    };
+    let releaseEvidenceLoad!: () => void;
+    const evidenceLoadGate = new Promise<void>(resolve => {
+      releaseEvidenceLoad = resolve;
+    });
+    const evidenceLoadStarted = new Promise<void>(resolve => {
+      const loadQueueResultEvidence = storage.loadQueueResultEvidence.bind(storage);
+      storage.loadQueueResultEvidence = (async (...args: Parameters<typeof storage.loadQueueResultEvidence>) => {
+        const [opts] = args;
+        if (opts.queuedItemId === evidence.queuedItemId) {
+          resolve();
+          await evidenceLoadGate;
+        }
+        return loadQueueResultEvidence(...args);
+      }) as typeof storage.loadQueueResultEvidence;
+    });
+    (session as any)._resolveQueueAdmissionDuplicate = async () => {
+      const record = session.getRecord();
+      (session as any)._record = {
+        ...record,
+        closingAt: record.closingAt ?? Date.now(),
+        closeDeadlineAt: record.closeDeadlineAt ?? Date.now() + 1000,
+      };
+      return evidence;
+    };
+
+    const duplicate = session.queue({ content: 'do work', admissionId: 'queue-delete-duplicate' });
+    const duplicateSettled = duplicate.then(
+      value => ({ ok: true as const, value }),
+      err => ({ ok: false as const, err }),
+    );
+    await evidenceLoadStarted;
+
+    (session as any)._markDeleted();
+
+    try {
+      await expect(duplicateSettled).resolves.toMatchObject({ ok: false, err: expect.any(HarnessSessionDeletedError) });
+    } finally {
+      releaseEvidenceLoad();
+    }
+    expect(agent.streamCalls).toHaveLength(0);
   });
 
   it('keeps a completed admission receipt if completed signal evidence cannot be written', async () => {

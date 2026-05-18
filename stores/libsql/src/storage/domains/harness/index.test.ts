@@ -660,6 +660,7 @@ describe('HarnessLibSQL message result evidence', () => {
       storage.resolveOperationAdmissionEvidence({
         sessionId: 'session-1',
         resourceId: 'resource-1',
+        threadId: 'thread-1',
         kind: 'message',
         admissionId: 'admission-1',
         attemptedAdmissionHash: 'hash-1',
@@ -669,6 +670,7 @@ describe('HarnessLibSQL message result evidence', () => {
       storage.resolveOperationAdmissionEvidence({
         sessionId: 'session-1',
         resourceId: 'resource-1',
+        threadId: 'thread-1',
         kind: 'message',
         admissionId: 'admission-1',
         attemptedAdmissionHash: 'different-hash',
@@ -801,6 +803,7 @@ describe('HarnessLibSQL queue admission evidence', () => {
       storage.resolveOperationAdmissionEvidence({
         sessionId: 'session-1',
         resourceId: 'resource-1',
+        threadId: 'thread-1',
         kind: 'queue',
         admissionId: 'admission-1',
         attemptedAdmissionHash: 'hash-1',
@@ -810,6 +813,7 @@ describe('HarnessLibSQL queue admission evidence', () => {
       storage.resolveOperationAdmissionEvidence({
         sessionId: 'session-1',
         resourceId: 'resource-1',
+        threadId: 'thread-1',
         kind: 'queue',
         admissionId: 'admission-1',
         attemptedAdmissionHash: 'different-hash',
