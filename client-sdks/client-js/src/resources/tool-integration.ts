@@ -2,6 +2,9 @@ import type {
   AuthorizeToolIntegrationParams,
   AuthorizeToolIntegrationResponse,
   ClientOptions,
+  DisconnectToolIntegrationConnectionParams,
+  DisconnectToolIntegrationConnectionResponse,
+  GetToolIntegrationConnectionUsageResponse,
   ListToolIntegrationConnectionFieldsParams,
   ListToolIntegrationConnectionFieldsResponse,
   ListToolIntegrationConnectionsParams,
@@ -9,6 +12,8 @@ import type {
   ListToolIntegrationToolsParams,
   ListToolIntegrationToolsResponse,
   ListToolServicesResponse,
+  RenameToolIntegrationConnectionParams,
+  RenameToolIntegrationConnectionResponse,
   ToolIntegrationAuthStatusResponse,
   ToolIntegrationConnectionStatusParams,
   ToolIntegrationConnectionStatusResponse,
@@ -122,6 +127,61 @@ export class ToolIntegration extends BaseResource {
     searchParams.set('toolService', params.toolService);
     return this.request(
       `/tool-integrations/${encodeURIComponent(this.integrationId)}/connection-fields?${searchParams.toString()}`,
+    );
+  }
+
+  /**
+   * Renames a persisted connection (updates its label).
+   *
+   * Affects every agent that pins this connection. Pass `label: null` or
+   * `''` to clear the label entirely.
+   */
+  renameConnection(
+    connectionId: string,
+    params: RenameToolIntegrationConnectionParams,
+  ): Promise<RenameToolIntegrationConnectionResponse> {
+    return this.request(
+      `/tool-integrations/${encodeURIComponent(this.integrationId)}/connections/${encodeURIComponent(connectionId)}`,
+      {
+        method: 'PATCH',
+        body: params,
+      },
+    );
+  }
+
+  /**
+   * Disconnects (revokes + deletes) a persisted connection.
+   *
+   * Without `force: true` the server refuses if any agent still pins the
+   * connection. With `force: true` the provider-side revoke is best-effort
+   * (errors are tolerated) and the local row is always removed.
+   */
+  disconnectConnection(
+    connectionId: string,
+    params?: DisconnectToolIntegrationConnectionParams,
+  ): Promise<DisconnectToolIntegrationConnectionResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.force) {
+      searchParams.set('force', 'true');
+    }
+    const queryString = searchParams.toString();
+    return this.request(
+      `/tool-integrations/${encodeURIComponent(this.integrationId)}/connections/${encodeURIComponent(connectionId)}${
+        queryString ? `?${queryString}` : ''
+      }`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Lists the agents that currently pin a given connection. Used by the
+   * picker to warn the user before disconnecting a shared account.
+   */
+  getConnectionUsage(connectionId: string): Promise<GetToolIntegrationConnectionUsageResponse> {
+    return this.request(
+      `/tool-integrations/${encodeURIComponent(this.integrationId)}/connections/${encodeURIComponent(connectionId)}/usage`,
     );
   }
 

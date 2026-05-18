@@ -77756,6 +77756,135 @@ export interface GetToolIntegrationsIntegrationIdConnectionFields_RouteContract 
 }
 
 // ============================================================================
+// Route: PATCH /tool-integrations/:integrationId/connections/:connectionId
+// ============================================================================
+export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+  /** Adapter-native connection id (e.g. Composio ca_...) */
+  connectionId: string;
+};
+
+export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body = {
+  /** New display label for the persisted tool_connections row. Pass null to clear. */
+  label: string | null;
+};
+
+export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Response = {
+  connectionId: string;
+  toolService: string;
+  label: string | null;
+};
+
+export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Request = Simplify<
+  (PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams extends never
+    ? {}
+    : { params: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body extends never
+      ? {}
+      : {} extends PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body
+        ? { body?: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body }
+        : { body: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body })
+>;
+
+export interface PatchToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract {
+  pathParams: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams;
+  queryParams: never;
+  body: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body;
+  request: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Request;
+  response: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /tool-integrations/:integrationId/connections/:connectionId
+// ============================================================================
+export type DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+  /** Adapter-native connection id (e.g. Composio ca_...) */
+  connectionId: string;
+};
+
+export type DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_QueryParams = {
+  /** When true, revoke at the provider and drop the row even if pinned by agents */
+  force?: (boolean | ('true' | 'false')) | undefined;
+  /** Tool service slug for the connection (used when the row was upserted with one) */
+  toolService?: string | undefined;
+};
+
+export type DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_Response = {
+  ok: true;
+  /** Whether the provider-side connection was revoked */
+  revoked: boolean;
+};
+
+export type DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_Request = Simplify<
+  (DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams extends never
+    ? {}
+    : { params: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams }) &
+    (DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_QueryParams extends never
+      ? {}
+      : {} extends DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_QueryParams
+        ? { query?: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_QueryParams }
+        : { query: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract {
+  pathParams: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams;
+  queryParams: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_QueryParams;
+  body: never;
+  request: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_Request;
+  response: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /tool-integrations/:integrationId/connections/:connectionId/usage
+// ============================================================================
+export type GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_PathParams = {
+  /** Unique identifier for the tool integration */
+  integrationId: string;
+  /** Adapter-native connection id (e.g. Composio ca_...) */
+  connectionId: string;
+};
+
+export type GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_QueryParams = {
+  /** Optional tool service slug to scope the usage scan */
+  toolService?: string | undefined;
+};
+
+export type GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_Response = {
+  agents: {
+    id: string;
+    name: string;
+  }[];
+};
+
+export type GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_Request = Simplify<
+  (GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_PathParams extends never
+    ? {}
+    : { params: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_PathParams }) &
+    (GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_QueryParams extends never
+      ? {}
+      : {} extends GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_QueryParams
+        ? { query?: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_QueryParams }
+        : { query: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_RouteContract {
+  pathParams: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_PathParams;
+  queryParams: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_QueryParams;
+  body: never;
+  request: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_Request;
+  response: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /tool-integrations/:integrationId/health
 // ============================================================================
 export type GetToolIntegrationsIntegrationIdHealth_PathParams = {
@@ -81799,6 +81928,9 @@ export interface RouteTypes {
   'POST /tool-integrations/:integrationId/connection-status': PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;
   'GET /tool-integrations/:integrationId/connections': GetToolIntegrationsIntegrationIdConnections_RouteContract;
   'GET /tool-integrations/:integrationId/connection-fields': GetToolIntegrationsIntegrationIdConnectionFields_RouteContract;
+  'PATCH /tool-integrations/:integrationId/connections/:connectionId': PatchToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
+  'DELETE /tool-integrations/:integrationId/connections/:connectionId': DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
+  'GET /tool-integrations/:integrationId/connections/:connectionId/usage': GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_RouteContract;
   'GET /tool-integrations/:integrationId/health': GetToolIntegrationsIntegrationIdHealth_RouteContract;
   'GET /tool-providers': GetToolProviders_RouteContract;
   'GET /tool-providers/:providerId/toolkits': GetToolProvidersProviderIdToolkits_RouteContract;
@@ -82537,6 +82669,13 @@ export interface Client {
   };
   '/tool-integrations/:integrationId/connections': {
     GET: GetToolIntegrationsIntegrationIdConnections_RouteContract;
+  };
+  '/tool-integrations/:integrationId/connections/:connectionId': {
+    DELETE: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
+    PATCH: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
+  };
+  '/tool-integrations/:integrationId/connections/:connectionId/usage': {
+    GET: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_RouteContract;
   };
   '/tool-integrations/:integrationId/health': {
     GET: GetToolIntegrationsIntegrationIdHealth_RouteContract;
