@@ -7,6 +7,8 @@ export type { AuthorizeArgs, AuthorizeResult, UseAuthorizeOptions } from './use-
 export { useConnectionStatus } from './use-connection-status';
 export type { ConnectionStatusItem } from './use-connection-status';
 export { useExistingConnections } from './use-existing-connections';
+export { useInfiniteConnections } from './use-infinite-connections';
+export type { UseInfiniteConnectionsOpts } from './use-infinite-connections';
 export { useAgentHealth } from './use-agent-health';
 export type { AgentHealthResult, IntegrationHealth, ToolServiceHealth } from './use-agent-health';
 export { useAllIntegrationTools } from './use-all-integration-tools';

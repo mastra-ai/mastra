@@ -1,4 +1,4 @@
-import { AlertDialog, Button, DropdownMenu, Input, Txt, cn } from '@mastra/playground-ui';
+import { AlertDialog, Badge, Button, DropdownMenu, Input, Txt, cn } from '@mastra/playground-ui';
 import { AlertCircle, Link2, MoreVertical, Plus, RefreshCw, Trash2, Unlink2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -6,7 +6,9 @@ import { useAuthorize } from '../hooks/use-authorize';
 import { useConnectionFields } from '../hooks/use-connection-fields';
 import { useConnectionUsage } from '../hooks/use-connection-usage';
 import { useDisconnectConnection } from '../hooks/use-disconnect-connection';
-import { useExistingConnections } from '../hooks/use-existing-connections';
+import { useInfiniteConnections } from '../hooks/use-infinite-connections';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 type ConnectionField = {
   name: string;
@@ -104,7 +106,32 @@ export const ConnectionPicker = ({
 }: ConnectionPickerProps) => {
   const authorize = useAuthorize();
   const disconnect = useDisconnectConnection();
-  const existing = useExistingConnections(integrationId, toolService);
+
+  // Admin callers can flip between "Mine" (the default, server resolves
+  // their own authorId from the auth context) and "All authors" (broader
+  // listing seeded from `tool_connections`). Non-admin callers never see
+  // the dropdown — the server silently ignores any authorId they pass.
+  const { hasPermission, rbacEnabled, isLoading: permissionsLoading } = usePermissions();
+  // Only surface the admin filter when RBAC is actually enabled and the
+  // caller carries the bypass permission. In OSS (no RBAC) the picker
+  // looks the same as it did before #6.
+  const isAdmin = rbacEnabled && !permissionsLoading && hasPermission('tool-integrations:admin');
+  const { data: currentUser } = useCurrentUser();
+  const callerId = currentUser?.id;
+  const [authorFilter, setAuthorFilter] = useState<'mine' | 'all'>('mine');
+  // Distinguish "no value, server resolve me" from "explicitly undefined to mean all".
+  const existing = useInfiniteConnections(integrationId, toolService, {
+    // Only forward authorId when admin is filtering to themselves. Non-admin
+    // callers leave this unset so the server resolves the owner.
+    ...(isAdmin && authorFilter === 'mine' && callerId ? { authorId: callerId } : {}),
+    // `authorId: undefined` is meaningful for admin "All authors"; the hook
+    // already omits the param when not provided, which is exactly what we
+    // want for non-admin (defer to server).
+  });
+  const existingItems = useMemo(
+    () => (existing.data?.pages ?? []).flatMap(page => page.items ?? []),
+    [existing.data?.pages],
+  );
   const fieldsQuery = useConnectionFields(integrationId, toolService);
   const fields = useMemo<ConnectionField[]>(
     () => (fieldsQuery.data?.fields ?? []) as ConnectionField[],
@@ -152,10 +179,10 @@ export const ConnectionPicker = ({
   // for this toolService. Driven by the picker UI's "Use existing connection"
   // affordance — pinning one reuses the persisted account label by default
   // but the user can override it for this agent.
-  const unpinnedExisting = useMemo(() => {
-    const items = existing.data?.items ?? [];
-    return items.filter(item => !pinnedIds.has(item.connectionId));
-  }, [existing.data?.items, pinnedIds]);
+  const unpinnedExisting = useMemo(
+    () => existingItems.filter(item => !pinnedIds.has(item.connectionId)),
+    [existingItems, pinnedIds],
+  );
 
   const errorsByIndex = useMemo(() => {
     const map = new Map<number, string>();
@@ -174,7 +201,7 @@ export const ConnectionPicker = ({
     // account label from `tool_connections`. The picker only allows pinning
     // when this label doesn't collide with an already-pinned row (see the
     // disabled-state check on the Pin button).
-    const label = (existing.data?.items ?? []).find(c => c.connectionId === connectionId)?.label ?? undefined;
+    const label = existingItems.find(c => c.connectionId === connectionId)?.label ?? undefined;
     if (!label && labelWouldBeRequired) return;
     if (label) {
       const key = label.trim().toLowerCase();
@@ -263,6 +290,15 @@ export const ConnectionPicker = ({
     // connection. No subtraction needed.
     return usageQuery.data?.agents?.length ?? 0;
   }, [usageQuery.data?.agents, disconnectTargetId]);
+  // When disconnecting a connection owned by another author, surface the
+  // owner id in the confirm dialog so admin actions aren't silent.
+  const disconnectTargetOwnerId = useMemo(() => {
+    if (!disconnectTargetId) return undefined;
+    const owner = existingItems.find(item => item.connectionId === disconnectTargetId)?.authorId;
+    if (!owner) return undefined;
+    if (callerId && owner === callerId) return undefined;
+    return owner;
+  }, [disconnectTargetId, existingItems, callerId]);
 
   const confirmDisconnect = async () => {
     if (!disconnectTargetId) return;
@@ -276,18 +312,45 @@ export const ConnectionPicker = ({
 
   const renderExistingSection = () => {
     if (!multipleAllowed && connections.length > 0) return null;
-    if (unpinnedExisting.length === 0) return null;
+    // Render the section whenever the admin filter is visible (so the
+    // dropdown stays available) OR there are unpinned rows to show.
+    if (unpinnedExisting.length === 0 && !isAdmin) return null;
 
     return (
       <div
         className="flex flex-col gap-2 rounded-md border border-border-default/60 bg-surface-2/30 px-3 py-2"
         data-testid={`connection-picker-${toolService}-existing`}
       >
-        <div className="flex items-center gap-2">
-          <Link2 className="size-3 text-icon-muted" />
-          <Txt as="span" variant="ui-xs" className="text-text-muted">
-            Pin an existing connection to this agent.
-          </Txt>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Link2 className="size-3 text-icon-muted" />
+            <Txt as="span" variant="ui-xs" className="text-text-muted">
+              Pin an existing connection to this agent.
+            </Txt>
+          </div>
+          {isAdmin && (
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button size="sm" variant="ghost" data-testid={`connection-author-filter-${toolService}`}>
+                  {authorFilter === 'mine' ? 'Mine' : 'All authors'}
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end">
+                <DropdownMenu.Item
+                  onSelect={() => setAuthorFilter('mine')}
+                  data-testid={`connection-author-filter-${toolService}-mine`}
+                >
+                  Mine
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  onSelect={() => setAuthorFilter('all')}
+                  data-testid={`connection-author-filter-${toolService}-all`}
+                >
+                  All authors
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          )}
         </div>
         {unpinnedExisting.map(item => {
           const persistedLabel = item.label ?? undefined;
@@ -304,6 +367,10 @@ export const ConnectionPicker = ({
               : undefined;
           const inactive = item.status !== 'active';
           const displayName = persistedLabel ?? `${item.connectionId.slice(0, 12)}…`;
+          // Show an owner badge only on rows whose authorId differs from
+          // the caller (typically only possible when the admin filter is
+          // set to "All authors").
+          const isCrossAuthor = Boolean(item.authorId && callerId && item.authorId !== callerId);
           return (
             <div
               key={item.connectionId}
@@ -311,14 +378,24 @@ export const ConnectionPicker = ({
               data-testid={`connection-existing-${toolService}-${item.connectionId}`}
             >
               <div className="flex-1">
-                <Txt
-                  as="span"
-                  variant="ui-sm"
-                  className="text-text-default"
-                  data-testid={`connection-existing-label-${toolService}-${item.connectionId}`}
-                >
-                  {displayName}
-                </Txt>
+                <div className="flex items-center gap-2">
+                  <Txt
+                    as="span"
+                    variant="ui-sm"
+                    className="text-text-default"
+                    data-testid={`connection-existing-label-${toolService}-${item.connectionId}`}
+                  >
+                    {displayName}
+                  </Txt>
+                  {isCrossAuthor && item.authorId && (
+                    <Badge
+                      variant="default"
+                      data-testid={`connection-existing-owner-${toolService}-${item.connectionId}`}
+                    >
+                      {item.authorId}
+                    </Badge>
+                  )}
+                </div>
                 {error && <p className="text-error text-ui-xs mt-1 block">{error}</p>}
                 {inactive && (
                   <p className="text-text-muted text-ui-xs mt-1 block">
@@ -338,6 +415,17 @@ export const ConnectionPicker = ({
             </div>
           );
         })}
+        {existing.hasNextPage && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => existing.fetchNextPage()}
+            disabled={existing.isFetchingNextPage}
+            data-testid={`connection-existing-load-more-${toolService}`}
+          >
+            {existing.isFetchingNextPage ? 'Loading…' : 'Load more'}
+          </Button>
+        )}
       </div>
     );
   };
@@ -524,6 +612,14 @@ export const ConnectionPicker = ({
               This revokes the connection at the provider and removes the saved row. The connection is currently pinned
               by <strong data-testid={`connection-disconnect-usage-${toolService}`}>{otherAgentCount}</strong> other
               agent{otherAgentCount === 1 ? '' : 's'}. Those agents will lose access to this account&apos;s tools.
+              {disconnectTargetOwnerId && (
+                <>
+                  {' '}
+                  <span data-testid={`connection-disconnect-owner-${toolService}`}>
+                    Owned by <strong>{disconnectTargetOwnerId}</strong>.
+                  </span>
+                </>
+              )}
             </AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Footer>

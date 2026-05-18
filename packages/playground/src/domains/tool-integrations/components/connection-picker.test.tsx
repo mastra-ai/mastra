@@ -88,6 +88,19 @@ describe('ConnectionPicker', () => {
       http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connection-fields`, () =>
         HttpResponse.json({ fields: [] }),
       ),
+      // Default: non-admin caller. Individual tests override these to grant
+      // `tool-integrations:admin` and to set the caller id.
+      http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+        HttpResponse.json({
+          enabled: true,
+          capabilities: { rbac: true },
+          user: { id: 'caller-1', email: 'a@example.com', name: 'A' },
+          access: { roles: [], permissions: [] },
+        }),
+      ),
+      http.get(`${BASE_URL}/api/auth/me`, () =>
+        HttpResponse.json({ id: 'caller-1', email: 'a@example.com', name: 'A' }),
+      ),
     );
   });
 
@@ -532,5 +545,171 @@ describe('ConnectionPicker', () => {
 
     const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
     expect(lastCall).toEqual([]);
+  });
+
+  it('hides the author filter dropdown for non-admin callers', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [{ connectionId: 'c1', toolService: TOOL_SERVICE, status: 'active', label: 'Work' }],
+        }),
+      ),
+    );
+    renderPicker({ initial: [] });
+    await screen.findByTestId(`connection-picker-${TOOL_SERVICE}-existing`);
+    expect(screen.queryByTestId(`connection-author-filter-${TOOL_SERVICE}`)).toBeNull();
+  });
+
+  it('renders the author filter for admin callers and forwards authorId when set to Mine', async () => {
+    const listRequests: Array<URL> = [];
+    server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+        HttpResponse.json({
+          enabled: true,
+          capabilities: { rbac: true },
+          user: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+          access: { roles: ['admin'], permissions: ['tool-integrations:admin'] },
+        }),
+      ),
+      http.get(`${BASE_URL}/api/auth/me`, () =>
+        HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', name: 'Admin' }),
+      ),
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, ({ request }) => {
+        listRequests.push(new URL(request.url));
+        return HttpResponse.json({
+          items: [
+            { connectionId: 'c1', toolService: TOOL_SERVICE, status: 'active', label: 'Work', authorId: 'admin-1' },
+          ],
+        });
+      }),
+    );
+    renderPicker({ initial: [] });
+    const trigger = await screen.findByTestId(`connection-author-filter-${TOOL_SERVICE}`);
+    expect(trigger.textContent).toContain('Mine');
+    await waitFor(() => {
+      expect(listRequests.some(u => u.searchParams.get('authorId') === 'admin-1')).toBe(true);
+    });
+  });
+
+  it('switches admin filter to All authors and refetches without authorId', async () => {
+    const listRequests: Array<URL> = [];
+    server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+        HttpResponse.json({
+          enabled: true,
+          capabilities: { rbac: true },
+          user: { id: 'admin-1', email: 'a@a', name: 'A' },
+          access: { roles: ['admin'], permissions: ['tool-integrations:admin'] },
+        }),
+      ),
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'admin-1', email: 'a@a', name: 'A' })),
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, ({ request }) => {
+        const url = new URL(request.url);
+        listRequests.push(url);
+        const authorId = url.searchParams.get('authorId');
+        if (!authorId) {
+          return HttpResponse.json({
+            items: [
+              { connectionId: 'c1', toolService: TOOL_SERVICE, status: 'active', label: 'Work', authorId: 'admin-1' },
+              { connectionId: 'c2', toolService: TOOL_SERVICE, status: 'active', label: 'Bob', authorId: 'user-bob' },
+            ],
+          });
+        }
+        return HttpResponse.json({
+          items: [
+            { connectionId: 'c1', toolService: TOOL_SERVICE, status: 'active', label: 'Work', authorId: 'admin-1' },
+          ],
+        });
+      }),
+    );
+    renderPicker({ initial: [] });
+    const trigger = await screen.findByTestId(`connection-author-filter-${TOOL_SERVICE}`);
+    trigger.focus();
+    await act(async () => {
+      fireEvent.keyDown(trigger, { key: 'Enter' });
+    });
+    const allItem = await screen.findByTestId(`connection-author-filter-${TOOL_SERVICE}-all`);
+    await act(async () => {
+      fireEvent.click(allItem);
+    });
+    await waitFor(() => {
+      const last = listRequests.at(-1)!;
+      expect(last.searchParams.get('authorId')).toBeNull();
+    });
+    // Cross-author row renders an owner badge.
+    await screen.findByTestId(`connection-existing-owner-${TOOL_SERVICE}-c2`);
+    // Caller's own row does NOT render an owner badge.
+    expect(screen.queryByTestId(`connection-existing-owner-${TOOL_SERVICE}-c1`)).toBeNull();
+  });
+
+  it('renders a Load more button when nextCursor is returned and appends fetched rows', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, ({ request }) => {
+        const url = new URL(request.url);
+        const cursor = url.searchParams.get('cursor');
+        calls += 1;
+        if (!cursor) {
+          return HttpResponse.json({
+            items: [{ connectionId: 'c1', toolService: TOOL_SERVICE, status: 'active', label: 'Work' }],
+            nextCursor: 'page-2',
+          });
+        }
+        return HttpResponse.json({
+          items: [{ connectionId: 'c2', toolService: TOOL_SERVICE, status: 'active', label: 'Personal' }],
+        });
+      }),
+    );
+    renderPicker({ initial: [] });
+    const loadMore = await screen.findByTestId(`connection-existing-load-more-${TOOL_SERVICE}`);
+    await act(async () => {
+      fireEvent.click(loadMore);
+    });
+    await screen.findByTestId(`connection-existing-${TOOL_SERVICE}-c2`);
+    expect(calls).toBeGreaterThanOrEqual(2);
+    // Load more button disappears once the server stops returning a cursor.
+    await waitFor(() => {
+      expect(screen.queryByTestId(`connection-existing-load-more-${TOOL_SERVICE}`)).toBeNull();
+    });
+  });
+
+  it('surfaces the owner in the disconnect confirm dialog when the target is cross-author', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+        HttpResponse.json({
+          enabled: true,
+          capabilities: { rbac: true },
+          user: { id: 'admin-1', email: 'a@a', name: 'A' },
+          access: { roles: ['admin'], permissions: ['tool-integrations:admin'] },
+        }),
+      ),
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'admin-1', email: 'a@a', name: 'A' })),
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [
+            { connectionId: 'c1', toolService: TOOL_SERVICE, status: 'active', label: 'Work', authorId: 'user-bob' },
+          ],
+        }),
+      ),
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId/usage`, () =>
+        HttpResponse.json({ agents: [] }),
+      ),
+    );
+    renderPicker({
+      initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Work' }],
+      supportsRevoke: true,
+    });
+
+    const trigger = screen.getByTestId(`connection-actions-${TOOL_SERVICE}-0`);
+    trigger.focus();
+    await act(async () => {
+      fireEvent.keyDown(trigger, { key: 'Enter' });
+    });
+    const disconnectItem = await screen.findByTestId(`connection-disconnect-${TOOL_SERVICE}-0`);
+    await act(async () => {
+      fireEvent.click(disconnectItem);
+    });
+    const owner = await screen.findByTestId(`connection-disconnect-owner-${TOOL_SERVICE}`);
+    expect(owner.textContent).toContain('user-bob');
   });
 });
