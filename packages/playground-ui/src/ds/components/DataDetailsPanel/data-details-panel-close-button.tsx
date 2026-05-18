@@ -13,13 +13,7 @@ export function DataDetailsPanelCloseButton({
   className,
 }: DataDetailsPanelCloseButtonProps) {
   return (
-    <Button
-      size="md"
-      onClick={onClick}
-      aria-label="Close Panel"
-      tooltip={tooltip}
-      className={className}
-    >
+    <Button size="md" onClick={onClick} aria-label="Close Panel" tooltip={tooltip} className={className}>
       <XIcon />
     </Button>
   );

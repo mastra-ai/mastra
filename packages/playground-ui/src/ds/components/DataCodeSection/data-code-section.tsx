@@ -280,12 +280,7 @@ export function DataCodeSection({
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
               </Button>
             )}
-            <Button
-              size="sm"
-              aria-label="Expand"
-              tooltip="Expand"
-              onClick={() => setExpandedOpen(true)}
-            >
+            <Button size="sm" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
             </Button>
           </ButtonsGroup>
