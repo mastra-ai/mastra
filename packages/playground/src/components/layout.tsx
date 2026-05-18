@@ -45,9 +45,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const { crumbs: handleCrumbs } = useRouteHeader();
   const overrideCrumbs = useRouteHeaderCrumbsOverride();
   const pageHeading = getRouteHeaderHeading(overrideCrumbs ?? handleCrumbs);
+  // Optimistic: render chrome by default so cold loads don't jump.
+  // Only hide once auth has resolved AND confirms the user is unauthed with auth enabled
+  // (matches the original UX of hiding chrome around the inline login form).
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
-  const shouldShowSidebar = isFetched && !shouldHideSidebar;
-  const shouldReserveRouteHeader = shouldShowSidebar;
+  const shouldShowSidebar = !shouldHideSidebar;
 
   return (
     <>
@@ -56,7 +58,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         {shouldShowSidebar && <AppSidebar />}
         <div className="flex flex-col h-full min-h-0">
           {shouldShowSidebar && <MobileNavbar />}
-          {shouldReserveRouteHeader && (
+          {shouldShowSidebar && (
             <div className="mx-1.5 mt-1 shrink-0 lg:mx-2 lg:mt-1.5">
               <RouteHeader />
             </div>
@@ -65,11 +67,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             <div
               className={cn(
                 'ml-0 mx-1.5 mb-1.5 flex-1 min-h-0 overflow-y-auto [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:mb-2 lg:ml-0',
-                {
-                  'mt-0': shouldReserveRouteHeader,
-                  'mt-1.5 lg:mt-2': !shouldReserveRouteHeader,
-                  'h-[calc(100%-1.5rem)]': !shouldShowSidebar && shouldHideSidebar,
-                },
+                shouldShowSidebar ? 'mt-0' : 'mt-1.5 lg:mt-2 h-[calc(100%-1.5rem)]',
               )}
             >
               <AuthRequired>
