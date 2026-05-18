@@ -6447,6 +6447,8 @@ export class Agent<
     const shouldSnapshotIdleWake =
       Boolean(idleThreadId) && target.ifIdle?.behavior !== 'persist' && target.ifIdle?.behavior !== 'discard';
     const shouldTrackIdleWake = shouldSnapshotIdleWake && (Boolean(target.ifIdle) || !target.runId);
+    const idleWakeCanRejectBeforeRegistration =
+      shouldTrackIdleWake && (Boolean(this.#requestContextSchema) || Boolean(this.#mastra?.getServer()?.fga));
     let acceptedIdleRunId: string | undefined;
     const forgetAcceptedIdleRunPubSub = () => {
       if (!acceptedIdleRunId) return;
@@ -6474,6 +6476,7 @@ export class Agent<
             ...(target.ifIdle ?? {}),
             _attachToReservedRun: !target.ifIdle,
             _onThreadStreamRunRejected: forgetAcceptedIdleRunPubSub,
+            _skipThreadRunReservationBeforePreflight: idleWakeCanRejectBeforeRegistration,
             streamOptions: {
               ...(target.ifIdle?.streamOptions ?? {}),
               _pubsub: requestedIdlePubSub ?? pubsub,
@@ -6532,19 +6535,28 @@ export class Agent<
     const initialThreadTarget = this.#getThreadTarget(streamOptionsBase);
     const canReserveBeforeDefaults = this.#hasExplicitThreadMemory(streamOptionsBase);
     const callerProvidedRunId = Boolean(streamOptionsBase.runId);
+    const requestContextToUse = streamOptionsBase.requestContext;
+    const hasExecutionPreflight = Boolean(this.#requestContextSchema) || Boolean(this.#mastra?.getServer()?.fga);
+    const needsDefaultRequestContextPreflight = !requestContextToUse && hasExecutionPreflight;
+    const staticDefaultOptions =
+      needsDefaultRequestContextPreflight && typeof this.#defaultOptions !== 'function'
+        ? (this.#defaultOptions as unknown as AgentExecutionOptions<OUTPUT>)
+        : undefined;
     const streamOptionsWithRunId = {
       ...streamOptionsBase,
       runId:
         streamOptionsBase.runId ??
         (canReserveBeforeDefaults ? this.#generateStreamRunId(initialThreadTarget) : undefined),
     };
-    let releaseReservedRun = canReserveBeforeDefaults
+    const ownsExternalReservation = Boolean((streamOptionsWithRunId as any)._threadRunReservationOwner);
+    const canReserveBeforePreflight = canReserveBeforeDefaults && !hasExecutionPreflight;
+    let releaseReservedRun = canReserveBeforePreflight
       ? agentThreadStreamRuntime.reserveRun(streamOptionsWithRunId as AgentExecutionOptions<OUTPUT>, pubsub, this.id)
       : undefined;
     let reservedThreadTarget = releaseReservedRun ? initialThreadTarget : undefined;
-    let ownsReservation =
-      Boolean(releaseReservedRun) || Boolean((streamOptionsWithRunId as any)._threadRunReservationOwner);
+    let ownsReservation = Boolean(releaseReservedRun) || ownsExternalReservation;
     let trackedThreadStreamPubSubTarget: { runId?: string; resourceId?: string; threadId?: string } | undefined;
+    let attemptedRunId = streamOptionsWithRunId.runId;
     if (ownsReservation) {
       this.#rememberThreadStreamPubSub(streamOptionsWithRunId, pubsub);
       trackedThreadStreamPubSubTarget = {
@@ -6552,25 +6564,52 @@ export class Agent<
         resourceId: initialThreadTarget.resourceId,
         threadId: initialThreadTarget.threadId,
       };
+    } else if (hasExecutionPreflight && streamOptionsWithRunId.runId) {
+      this.#threadStreamPubSubsByRunId.set(streamOptionsWithRunId.runId, pubsub);
+      trackedThreadStreamPubSubTarget = { runId: streamOptionsWithRunId.runId };
     }
     let preparedOptionsWithPubSub: (AgentExecutionOptionsBase<any> & { runId?: string; _pubsub: PubSub }) | undefined;
+    let preflightedRequestContext: RequestContext | undefined;
+    const reserveAdmittedRun = () => {
+      if (ownsReservation || !canReserveBeforeDefaults) return;
+      releaseReservedRun = agentThreadStreamRuntime.reserveRun(
+        streamOptionsWithRunId as AgentExecutionOptions<OUTPUT>,
+        pubsub,
+        this.id,
+      );
+      ownsReservation = Boolean(releaseReservedRun);
+      if (!ownsReservation) return;
+      reservedThreadTarget = initialThreadTarget;
+      this.#rememberThreadStreamPubSub(streamOptionsWithRunId, pubsub);
+      trackedThreadStreamPubSubTarget = {
+        runId: streamOptionsWithRunId.runId,
+        resourceId: initialThreadTarget.resourceId,
+        threadId: initialThreadTarget.threadId,
+      };
+    };
 
     try {
-      const requestContextToUse = streamOptionsWithRunId.requestContext;
       if (requestContextToUse) {
         await this.#assertAgentExecutionPreflight(requestContextToUse);
+        preflightedRequestContext = requestContextToUse;
+        reserveAdmittedRun();
+      } else if (staticDefaultOptions) {
+        await this.#assertAgentExecutionPreflight(staticDefaultOptions.requestContext);
+        preflightedRequestContext = staticDefaultOptions.requestContext;
+        reserveAdmittedRun();
       }
-
-      const defaultOptions = await this.getDefaultOptions({
-        requestContext: requestContextToUse,
-      });
+      const defaultOptions =
+        staticDefaultOptions ??
+        (await this.getDefaultOptions({
+          requestContext: requestContextToUse,
+        }));
       const mergedOptions = deepMerge(
         defaultOptions as Record<string, unknown>,
         streamOptionsWithRunId as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
       if (requestContextToUse) {
         mergedOptions.requestContext = requestContextToUse;
-      } else {
+      } else if (mergedOptions.requestContext !== preflightedRequestContext) {
         await this.#assertAgentExecutionPreflight(mergedOptions.requestContext);
       }
 
@@ -6578,6 +6617,7 @@ export class Agent<
       if (!mergedOptions.runId) {
         mergedOptions.runId = this.#generateStreamRunId(mergedThreadTarget);
       }
+      attemptedRunId = mergedOptions.runId;
       if (ownsReservation && reservedThreadTarget) {
         if (!this.#sameThreadTarget(reservedThreadTarget, mergedThreadTarget)) {
           const retargetedReservation = agentThreadStreamRuntime.retargetReservedRun(
@@ -6805,7 +6845,11 @@ export class Agent<
       } else {
         this.#forgetThreadStreamPubSub(streamOptionsWithRunId);
       }
-      releaseReservedRun?.();
+      if (releaseReservedRun) {
+        releaseReservedRun();
+      } else {
+        agentThreadStreamRuntime.rejectUnregisteredRun(attemptedRunId, pubsub);
+      }
       throw error;
     }
   }

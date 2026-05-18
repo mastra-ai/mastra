@@ -75,6 +75,7 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
   onRunRejected?: () => void;
+  reserveBeforePreflight?: boolean;
 };
 
 type AgentThreadRuntimeState = {
@@ -84,6 +85,8 @@ type AgentThreadRuntimeState = {
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
   pendingIdleThreadKeysByRunId: Map<string, string>;
+  inflightIdleThreadKeysByRunId: Map<string, string>;
+  inflightIdleAgentIdsByRunId: Map<string, string>;
   watchedThreadRunIds: Set<string>;
   preparedRunsById: Map<string, PreparedThreadRun>;
   reservedAgentIdsByRunId: Map<string, string>;
@@ -123,6 +126,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     pendingIdleThreadKeysByRunId: new Map(),
+    inflightIdleThreadKeysByRunId: new Map(),
+    inflightIdleAgentIdsByRunId: new Map(),
     watchedThreadRunIds: new Set(),
     preparedRunsById: new Map(),
     reservedAgentIdsByRunId: new Map(),
@@ -331,8 +336,28 @@ export class AgentThreadStreamRuntime {
         });
       };
     }
+    const inflightIdleKey = state.inflightIdleThreadKeysByRunId.get(runId);
+    let ownsInflightIdle = false;
+    if (inflightIdleKey) {
+      ownsInflightIdle =
+        inflightIdleKey === key &&
+        Boolean(agentId) &&
+        state.inflightIdleAgentIdsByRunId.get(runId) === agentId &&
+        Boolean((options as { _threadRunInflightIdleOwner?: unknown })._threadRunInflightIdleOwner);
+      if (!ownsInflightIdle) {
+        throw new Error(
+          inflightIdleKey === key
+            ? `Agent thread run id "${runId}" is already reserved`
+            : `Agent thread run id "${runId}" is already reserved for another thread`,
+        );
+      }
+    }
     if (state.activeThreadRunIds.has(key)) return;
 
+    if (ownsInflightIdle) {
+      state.inflightIdleThreadKeysByRunId.delete(runId);
+      state.inflightIdleAgentIdsByRunId.delete(runId);
+    }
     this.#forgetRejectedRunError(state, runId);
     state.activeThreadRunIds.set(key, runId);
     state.threadKeysByRunId.set(runId, key);
@@ -405,6 +430,23 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  rejectUnregisteredRun(runId: string | undefined, pubsub?: PubSub) {
+    if (!runId) return;
+
+    const state = this.#getState(pubsub);
+    if (
+      state.threadRunsById.has(runId) ||
+      state.threadKeysByRunId.has(runId) ||
+      state.pendingIdleThreadKeysByRunId.has(runId) ||
+      state.inflightIdleThreadKeysByRunId.has(runId) ||
+      state.preparedRunsById.has(runId)
+    ) {
+      return;
+    }
+    this.#forgetCallerSignalsForRun(state, runId);
+    this.#rejectPendingOutputWaiters(state, runId, new Error(`Agent thread run id "${runId}" was rejected`));
+  }
+
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
@@ -420,6 +462,16 @@ export class AgentThreadStreamRuntime {
         this.#rememberAbortedRun(state, runId);
         this.#removePendingIdleRun(state, pendingIdleKey, runId, true);
         this.#publish(pubsub, pendingIdleKey, { type: 'run-aborted', runId });
+        return true;
+      }
+      const inflightIdleKey = state.inflightIdleThreadKeysByRunId.get(runId);
+      if (inflightIdleKey) {
+        this.#rememberAbortedRun(state, runId);
+        state.inflightIdleThreadKeysByRunId.delete(runId);
+        state.inflightIdleAgentIdsByRunId.delete(runId);
+        this.#forgetCallerSignalsForRun(state, runId);
+        this.#rejectPendingOutputWaiters(state, runId, new Error(`Agent thread run id "${runId}" has been aborted`));
+        this.#publish(pubsub, inflightIdleKey, { type: 'run-aborted', runId });
         return true;
       }
       return false;
@@ -477,6 +529,8 @@ export class AgentThreadStreamRuntime {
     state.pendingSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.pendingIdleThreadKeysByRunId.clear();
+    state.inflightIdleThreadKeysByRunId.clear();
+    state.inflightIdleAgentIdsByRunId.clear();
     state.watchedThreadRunIds.clear();
     state.preparedRunsById.clear();
     state.reservedAgentIdsByRunId.clear();
@@ -671,7 +725,9 @@ export class AgentThreadStreamRuntime {
 
     const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
-    const existingKey = state.threadKeysByRunId.get(output.runId) ?? state.pendingIdleThreadKeysByRunId.get(output.runId);
+    const existingKey =
+      state.threadKeysByRunId.get(output.runId) ?? state.pendingIdleThreadKeysByRunId.get(output.runId);
+    const inflightIdleKey = state.inflightIdleThreadKeysByRunId.get(output.runId);
     const activeRunId = state.activeThreadRunIds.get(key);
     const reservedAgentId = state.reservedAgentIdsByRunId.get(output.runId);
     const rejectedRunError = state.rejectedRunErrorsByRunId.get(output.runId);
@@ -684,6 +740,19 @@ export class AgentThreadStreamRuntime {
     if (state.threadRunsById.has(output.runId)) {
       throw new Error(`Agent thread run id "${output.runId}" is already registered`);
     }
+    if (inflightIdleKey) {
+      const ownsInflightIdle =
+        inflightIdleKey === key &&
+        state.inflightIdleAgentIdsByRunId.get(output.runId) === agent.id &&
+        Boolean((streamOptions as { _threadRunInflightIdleOwner?: unknown })._threadRunInflightIdleOwner);
+      if (!ownsInflightIdle) {
+        throw new Error(
+          inflightIdleKey === key
+            ? `Agent thread run id "${output.runId}" is already reserved`
+            : `Agent thread run id "${output.runId}" is already reserved for another thread`,
+        );
+      }
+    }
     if (activeRunId && activeRunId !== output.runId) {
       throw new Error(`Agent thread run id "${activeRunId}" is already active for this thread`);
     }
@@ -692,6 +761,10 @@ export class AgentThreadStreamRuntime {
     }
     if (reservedAgentId && reservedAgentId !== agent.id) {
       throw new Error(`Agent thread run id "${output.runId}" is reserved by another agent`);
+    }
+    if (inflightIdleKey) {
+      state.inflightIdleThreadKeysByRunId.delete(output.runId);
+      state.inflightIdleAgentIdsByRunId.delete(output.runId);
     }
     const broadcastSource = this.#prepareBroadcastSource(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
@@ -899,16 +972,24 @@ export class AgentThreadStreamRuntime {
       });
       return;
     }
-    state.activeThreadRunIds.set(key, pendingIdle.runId);
-    state.threadKeysByRunId.set(pendingIdle.runId, key);
-    state.reservedAgentIdsByRunId.set(pendingIdle.runId, pendingIdle.agent.id);
+    const reserveBeforePreflight = pendingIdle.reserveBeforePreflight ?? true;
+    if (reserveBeforePreflight) {
+      state.activeThreadRunIds.set(key, pendingIdle.runId);
+      state.threadKeysByRunId.set(pendingIdle.runId, key);
+      state.reservedAgentIdsByRunId.set(pendingIdle.runId, pendingIdle.agent.id);
+    } else {
+      state.inflightIdleThreadKeysByRunId.set(pendingIdle.runId, key);
+      state.inflightIdleAgentIdsByRunId.set(pendingIdle.runId, pendingIdle.agent.id);
+    }
     try {
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
-        _threadRunReservationOwner: true,
+        ...(reserveBeforePreflight ? { _threadRunReservationOwner: true } : { _threadRunInflightIdleOwner: true }),
         runId: pendingIdle.runId,
         memory: withThreadMemory(pendingIdle.streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
       });
+      state.inflightIdleThreadKeysByRunId.delete(pendingIdle.runId);
+      state.inflightIdleAgentIdsByRunId.delete(pendingIdle.runId);
 
       if ((idleQueue?.length ?? 0) > 0) {
         const nextRecord = state.threadRunsById.get(output.runId);
@@ -918,11 +999,18 @@ export class AgentThreadStreamRuntime {
       }
     } catch {
       pendingIdle.onRunRejected?.();
-      this.#releaseReservedRun(state, pubsub, key, pendingIdle.runId, {
-        cleanupPrepared: true,
-        clearAbort: true,
-        rejectOutputWaiters: true,
-      });
+      if (reserveBeforePreflight) {
+        this.#releaseReservedRun(state, pubsub, key, pendingIdle.runId, {
+          cleanupPrepared: true,
+          clearAbort: true,
+          rejectOutputWaiters: true,
+        });
+      } else {
+        state.inflightIdleThreadKeysByRunId.delete(pendingIdle.runId);
+        state.inflightIdleAgentIdsByRunId.delete(pendingIdle.runId);
+        this.rejectUnregisteredRun(pendingIdle.runId, pubsub);
+        await this.#drainPendingIdleSignals(state, pubsub, key);
+      }
     }
   }
 
@@ -967,7 +1055,10 @@ export class AgentThreadStreamRuntime {
       if (!activeRunId) return;
       if (activeRecord) {
         await activeRecord.output._waitUntilFinished().catch(() => {});
-        if (state.activeThreadRunIds.get(key) === activeRunId && state.threadRunsById.get(activeRunId) === activeRecord) {
+        if (
+          state.activeThreadRunIds.get(key) === activeRunId &&
+          state.threadRunsById.get(activeRunId) === activeRecord
+        ) {
           await new Promise<void>(resolve => {
             const waiters = state.reservationWaitersByRunId.get(activeRunId) ?? [];
             waiters.push(resolve);
@@ -1353,7 +1444,14 @@ export class AgentThreadStreamRuntime {
 
     key ??= this.#threadKey(resourceId, threadId);
     const onRunRejected = getIdleRunRejectedHandler(target.ifIdle);
-    const existingRunKey = state.threadKeysByRunId.get(runId) ?? state.pendingIdleThreadKeysByRunId.get(runId);
+    const reserveBeforeIdleWake = !Boolean(
+      (target.ifIdle as { _skipThreadRunReservationBeforePreflight?: unknown } | undefined)
+        ?._skipThreadRunReservationBeforePreflight,
+    );
+    const existingRunKey =
+      state.threadKeysByRunId.get(runId) ??
+      state.pendingIdleThreadKeysByRunId.get(runId) ??
+      state.inflightIdleThreadKeysByRunId.get(runId);
     if (existingRunKey) {
       throw new Error(
         existingRunKey === key
@@ -1373,6 +1471,7 @@ export class AgentThreadStreamRuntime {
         threadId,
         streamOptions: target.ifIdle?.streamOptions,
         onRunRejected,
+        reserveBeforePreflight: reserveBeforeIdleWake,
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       state.pendingIdleThreadKeysByRunId.set(runId, key);
@@ -1382,25 +1481,41 @@ export class AgentThreadStreamRuntime {
       return acceptSignal({ accepted: true, runId, signal });
     }
 
-    // No active same-agent run accepted the signal. Reserve the thread before starting
-    // the idle stream so concurrent callers do not launch duplicate runs.
-    state.activeThreadRunIds.set(key, runId);
-    state.threadKeysByRunId.set(runId, key);
-    state.reservedAgentIdsByRunId.set(runId, agent.id);
+    // No active same-agent run accepted the signal. Reserve early when the runtime owns
+    // admission; deferred starts let Agent.stream() claim the run under its own preflight rules.
+    if (reserveBeforeIdleWake) {
+      state.activeThreadRunIds.set(key, runId);
+      state.threadKeysByRunId.set(runId, key);
+      state.reservedAgentIdsByRunId.set(runId, agent.id);
+    } else {
+      state.inflightIdleThreadKeysByRunId.set(runId, key);
+      state.inflightIdleAgentIdsByRunId.set(runId, agent.id);
+    }
     const output = agent
       .stream(signal, {
         ...(target.ifIdle?.streamOptions as any),
-        _threadRunReservationOwner: true,
+        ...(reserveBeforeIdleWake ? { _threadRunReservationOwner: true } : { _threadRunInflightIdleOwner: true }),
         runId,
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
+      .then(output => {
+        state.inflightIdleThreadKeysByRunId.delete(runId);
+        state.inflightIdleAgentIdsByRunId.delete(runId);
+        return output;
+      })
       .catch(err => {
         onRunRejected?.();
-        this.#releaseReservedRun(state, pubsub, key, runId, {
-          cleanupPrepared: true,
-          clearAbort: true,
-          rejectOutputWaiters: true,
-        });
+        if (reserveBeforeIdleWake) {
+          this.#releaseReservedRun(state, pubsub, key, runId, {
+            cleanupPrepared: true,
+            clearAbort: true,
+            rejectOutputWaiters: true,
+          });
+        } else {
+          state.inflightIdleThreadKeysByRunId.delete(runId);
+          state.inflightIdleAgentIdsByRunId.delete(runId);
+          this.rejectUnregisteredRun(runId, pubsub);
+        }
         throw err;
       }) as Promise<MastraModelOutput<unknown>>;
     void output.catch(() => {});

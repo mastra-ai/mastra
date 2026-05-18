@@ -1,6 +1,7 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
@@ -864,16 +865,13 @@ describe('Agent signals', () => {
       model: createTextStreamModel('stream options idle wake response'),
     });
 
-    const signalResult = runner.sendSignal(
-      { type: 'user-message', contents: 'Wake from streamOptions target' },
-      {
-        ifIdle: {
-          streamOptions: {
-            memory: { resource: 'stream-options-idle-wake-user', thread: 'stream-options-idle-wake-thread' },
-          },
+    const signalResult = runner.sendSignal({ type: 'user-message', contents: 'Wake from streamOptions target' }, {
+      ifIdle: {
+        streamOptions: {
+          memory: { resource: 'stream-options-idle-wake-user', thread: 'stream-options-idle-wake-thread' },
         },
-      } as any,
-    );
+      },
+    } as any);
     expect(signalResult.output).toBeDefined();
     await defaultOptionsStarted;
     runner.__setPubSub(swappedPubSub);
@@ -1174,6 +1172,490 @@ describe('Agent signals', () => {
 
     const stream = await streamPromise;
     expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+  });
+
+  it('does not expose explicit thread streams when request context preflight fails', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', false);
+
+    const runner = new Agent({
+      id: 'preflight-denied-reservation-agent',
+      name: 'Preflight Denied Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      model: createTextStreamModel('unused denied response'),
+    });
+
+    await expect(
+      runner.stream('Hello', {
+        runId: 'preflight-denied-run',
+        memory: { resource: 'preflight-denied-user', thread: 'preflight-denied-thread' },
+        requestContext,
+      }),
+    ).rejects.toThrow('Request context validation failed');
+
+    const signalResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach to denied setup run' },
+      {
+        resourceId: 'preflight-denied-user',
+        threadId: 'preflight-denied-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+
+    expect(signalResult.runId).not.toBe('preflight-denied-run');
+  });
+
+  it('does not attach idle signals to explicit-context streams before preflight passes', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', false);
+
+    const runner = new Agent({
+      id: 'explicit-preflight-denied-reservation-agent',
+      name: 'Explicit Preflight Denied Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      model: createTextStreamModel('unused denied explicit idle response'),
+    });
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start denied explicit-context idle stream' },
+      {
+        resourceId: 'explicit-preflight-denied-user',
+        threadId: 'explicit-preflight-denied-thread',
+        ifIdle: { behavior: 'wake', streamOptions: { requestContext } },
+      },
+    );
+    void wake.output?.catch(() => {});
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before explicit preflight passes' },
+      {
+        resourceId: 'explicit-preflight-denied-user',
+        threadId: 'explicit-preflight-denied-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+
+    expect(followUp.runId).not.toBe(wake.runId);
+    await expect(wake.output).rejects.toThrow('Request context validation failed');
+  });
+
+  it('does not reserve explicit-context streams before preflight passes', async () => {
+    let markPreflightStarted!: () => void;
+    let releasePreflight!: () => void;
+    const preflightStarted = new Promise<void>(resolve => {
+      markPreflightStarted = resolve;
+    });
+    const preflightReleased = new Promise<void>(resolve => {
+      releasePreflight = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'explicit-preflight-allowed-reservation-agent',
+      name: 'Explicit Preflight Allowed Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }).superRefine(async () => {
+        markPreflightStarted();
+        await preflightReleased;
+      }),
+      model: createTextStreamModel('allowed explicit preflight response'),
+    });
+
+    const streamPromise = runner.stream('Hello', {
+      memory: { resource: 'explicit-preflight-allowed-user', thread: 'explicit-preflight-allowed-thread' },
+      requestContext,
+    });
+    await preflightStarted;
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before explicit preflight passes' },
+      {
+        resourceId: 'explicit-preflight-allowed-user',
+        threadId: 'explicit-preflight-allowed-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    expect(() =>
+      runner.sendSignal(
+        { type: 'user-message', contents: 'Thread-only signal should not see a pending reservation' },
+        {
+          threadId: 'explicit-preflight-allowed-thread',
+        },
+      ),
+    ).toThrow('No active agent run found for signal target');
+    const explicitActivePolicyFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Explicit active-deliver signal should not attach before preflight passes' },
+      {
+        resourceId: 'explicit-preflight-allowed-user',
+        threadId: 'explicit-preflight-allowed-thread',
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    releasePreflight();
+
+    const stream = await streamPromise;
+    expect(followUp.runId).not.toBe(stream.runId);
+    expect(explicitActivePolicyFollowUp.runId).not.toBe(stream.runId);
+    await expect(stream.text).resolves.toBe('allowed explicit preflight response');
+  });
+
+  it('reserves explicit-context streams after preflight passes before defaults finish', async () => {
+    let markPreflightStarted!: () => void;
+    let releasePreflight!: () => void;
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const preflightStarted = new Promise<void>(resolve => {
+      markPreflightStarted = resolve;
+    });
+    const preflightReleased = new Promise<void>(resolve => {
+      releasePreflight = resolve;
+    });
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'explicit-preflight-defaults-pending-agent',
+      name: 'Explicit Preflight Defaults Pending Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }).superRefine(async () => {
+        markPreflightStarted();
+        await preflightReleased;
+      }),
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('allowed explicit preflight defaults response'),
+    });
+
+    const streamPromise = runner.stream('Hello', {
+      runId: 'explicit-preflight-defaults-run',
+      memory: { resource: 'explicit-preflight-defaults-user', thread: 'explicit-preflight-defaults-thread' },
+      requestContext,
+    });
+    await preflightStarted;
+
+    const beforePreflightFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before preflight passes' },
+      {
+        resourceId: 'explicit-preflight-defaults-user',
+        threadId: 'explicit-preflight-defaults-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    expect(beforePreflightFollowUp.runId).not.toBe('explicit-preflight-defaults-run');
+
+    releasePreflight();
+    await defaultOptionsStarted;
+
+    const afterPreflightFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should attach after preflight passes while defaults are pending' },
+      {
+        resourceId: 'explicit-preflight-defaults-user',
+        threadId: 'explicit-preflight-defaults-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    releaseDefaultOptions();
+
+    expect(afterPreflightFollowUp.runId).toBe('explicit-preflight-defaults-run');
+    const stream = await streamPromise;
+    expect(stream.runId).toBe('explicit-preflight-defaults-run');
+    await expect(stream.text).resolves.toBe('allowed explicit preflight defaults response');
+  });
+
+  it('keeps direct preflight stream output waiters on the captured PubSub', async () => {
+    const initialPubSub = new EventEmitterPubSub();
+    const swappedPubSub = new EventEmitterPubSub();
+    let markPreflightStarted!: () => void;
+    let releasePreflight!: () => void;
+    const preflightStarted = new Promise<void>(resolve => {
+      markPreflightStarted = resolve;
+    });
+    const preflightReleased = new Promise<void>(resolve => {
+      releasePreflight = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'direct-preflight-pubsub-agent',
+      name: 'Direct Preflight PubSub Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }).superRefine(async () => {
+        markPreflightStarted();
+        await preflightReleased;
+      }),
+      model: createTextStreamModel('direct preflight pubsub response'),
+    });
+    runner.__setPubSub(initialPubSub);
+
+    const streamPromise = runner.stream('Hello', {
+      runId: 'direct-preflight-pubsub-run',
+      memory: { resource: 'direct-preflight-pubsub-user', thread: 'direct-preflight-pubsub-thread' },
+      requestContext,
+    });
+    await preflightStarted;
+
+    runner.__setPubSub(swappedPubSub);
+    const outputPromise = runner.waitForRunOutput('direct-preflight-pubsub-run');
+    releasePreflight();
+
+    const output = await Promise.race([
+      outputPromise,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(output).not.toBe('timeout');
+    if (output === 'timeout') return;
+    expect(output.runId).toBe('direct-preflight-pubsub-run');
+    await expect(output.text).resolves.toBe('direct preflight pubsub response');
+    await expect(streamPromise).resolves.toBe(output);
+  });
+
+  it('does not tombstone an admitted stream when a duplicate explicit run id is rejected', async () => {
+    let markModelStarted!: () => void;
+    let releaseModel!: () => void;
+    const modelStarted = new Promise<void>(resolve => {
+      markModelStarted = resolve;
+    });
+    const modelReleased = new Promise<void>(resolve => {
+      releaseModel = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'duplicate-preflight-run-id-agent',
+      name: 'Duplicate Preflight Run Id Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          markModelStarted();
+          await modelReleased;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'duplicate-preflight',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'first admitted response' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      }),
+    });
+
+    const firstStreamPromise = runner.stream('First', {
+      runId: 'duplicate-preflight-run',
+      memory: { resource: 'duplicate-preflight-user', thread: 'duplicate-preflight-thread' },
+      requestContext,
+    });
+    await modelStarted;
+
+    await expect(
+      runner.stream('Duplicate', {
+        runId: 'duplicate-preflight-run',
+        memory: { resource: 'duplicate-preflight-user', thread: 'duplicate-preflight-thread' },
+        requestContext,
+      }),
+    ).rejects.toThrow('already reserved');
+
+    releaseModel();
+    const firstStream = await firstStreamPromise;
+    expect(firstStream.runId).toBe('duplicate-preflight-run');
+    await expect(firstStream.text).resolves.toBe('first admitted response');
+  });
+
+  it('keeps explicit-context idle reservations when no preflight boundary is configured', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+
+    const runner = new Agent({
+      id: 'explicit-context-no-preflight-agent',
+      name: 'Explicit Context No Preflight Agent',
+      instructions: 'Test',
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return {};
+      },
+      model: createTextStreamModel('explicit context no preflight response'),
+    });
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start explicit-context idle stream' },
+      {
+        resourceId: 'explicit-context-no-preflight-user',
+        threadId: 'explicit-context-no-preflight-thread',
+        ifIdle: { behavior: 'wake', streamOptions: { requestContext } },
+      },
+    );
+    await defaultOptionsStarted;
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should attach when preflight cannot reject' },
+      {
+        resourceId: 'explicit-context-no-preflight-user',
+        threadId: 'explicit-context-no-preflight-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    releaseDefaultOptions();
+
+    expect(followUp.runId).toBe(wake.runId);
+    await expect(wake.output).resolves.toMatchObject({ runId: wake.runId });
+  });
+
+  it('does not attach idle signals to default-context streams before preflight passes', async () => {
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', false);
+
+    const runner = new Agent({
+      id: 'default-preflight-denied-reservation-agent',
+      name: 'Default Preflight Denied Reservation Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { requestContext };
+      },
+      model: createTextStreamModel('unused denied idle response'),
+    });
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start denied idle stream' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+      },
+    );
+    await defaultOptionsStarted;
+    const outputPromise = runner.waitForRunOutput(wake.runId);
+    void wake.output?.catch(() => {});
+
+    const followUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not attach before preflight passes' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    const activePolicyResult = runner.sendSignal(
+      { type: 'user-message', contents: 'Should not treat preflight-pending run as active' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+        ifActive: { behavior: 'discard' },
+        ifIdle: { behavior: 'discard' },
+      },
+    );
+    const plainFollowUp = runner.sendSignal(
+      { type: 'user-message', contents: 'Plain signal should not attach before preflight passes' },
+      {
+        resourceId: 'default-preflight-denied-user',
+        threadId: 'default-preflight-denied-thread',
+      },
+    );
+    void plainFollowUp.output?.catch(() => {});
+    releaseDefaultOptions();
+
+    expect(followUp.runId).not.toBe(wake.runId);
+    expect(activePolicyResult.runId).not.toBe(wake.runId);
+    expect(plainFollowUp.runId).not.toBe(wake.runId);
+    await expect(outputPromise).rejects.toThrow(`Agent thread run id "${wake.runId}" was rejected`);
+    await expect(wake.output).rejects.toThrow('Request context validation failed');
+  });
+
+  it('keeps idle wake output waiters pending while default-context preflight is pending', async () => {
+    const initialPubSub = new EventEmitterPubSub();
+    const swappedPubSub = new EventEmitterPubSub();
+    let markDefaultOptionsStarted!: () => void;
+    let releaseDefaultOptions!: () => void;
+    const defaultOptionsStarted = new Promise<void>(resolve => {
+      markDefaultOptionsStarted = resolve;
+    });
+    const defaultOptionsReleased = new Promise<void>(resolve => {
+      releaseDefaultOptions = resolve;
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('allowed', true);
+
+    const runner = new Agent({
+      id: 'default-preflight-valid-waiter-agent',
+      name: 'Default Preflight Valid Waiter Agent',
+      instructions: 'Test',
+      requestContextSchema: z.object({ allowed: z.literal(true) }),
+      defaultOptions: async () => {
+        markDefaultOptionsStarted();
+        await defaultOptionsReleased;
+        return { requestContext };
+      },
+      model: createTextStreamModel('valid default preflight response'),
+    });
+    runner.__setPubSub(initialPubSub);
+
+    const wake = runner.sendSignal(
+      { type: 'user-message', contents: 'Start valid idle stream' },
+      {
+        resourceId: 'default-preflight-valid-user',
+        threadId: 'default-preflight-valid-thread',
+      },
+    );
+    await defaultOptionsStarted;
+
+    runner.__setPubSub(swappedPubSub);
+    const outputPromise = runner.waitForRunOutput(wake.runId);
+    releaseDefaultOptions();
+
+    const output = await Promise.race([
+      outputPromise,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    expect(output).not.toBe('timeout');
+    if (output === 'timeout') return;
+    expect(output.runId).toBe(wake.runId);
+    await expect(output.text).resolves.toBe('valid default preflight response');
   });
 
   it('reserves thread-only streams while default options are pending', async () => {
@@ -2058,7 +2540,160 @@ describe('Agent signals', () => {
     expect(waiterResolved).toBe(true);
   });
 
-  it('wakes reservation waiters when an immediate idle stream fails', async () => {
+  it('does not reserve queued idle streams before preflight when reservation is deferred', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let rejectFirstStream!: (error: Error) => void;
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' },
+      } as any,
+    );
+    const stream = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirstStream = reject;
+          }),
+      )
+      .mockResolvedValueOnce({ runId: 'queued-deferred-second-run' })
+      .mockResolvedValueOnce({ runId: 'queued-deferred-retry-run' });
+
+    const firstResult = runtime.sendSignal(
+      { id: 'queued-deferred-agent', stream } as any,
+      { id: 'queued-deferred-signal', type: 'user-message', contents: 'queued deferred wake' },
+      {
+        resourceId: 'queued-deferred-user',
+        threadId: 'queued-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' } },
+        } as any,
+      },
+    );
+    runtime.sendSignal(
+      { id: 'queued-deferred-agent', stream } as any,
+      { type: 'user-message', contents: 'queued second deferred wake' },
+      {
+        resourceId: 'queued-deferred-user',
+        threadId: 'queued-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' } },
+        } as any,
+      },
+    );
+
+    finishActive();
+    await nextTick();
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued deferred wake' }),
+      expect.not.objectContaining({ _threadRunReservationOwner: true }),
+    );
+
+    let waiterResolved = false;
+    await runtime
+      .waitForCrossAgentThreadRun(
+        { id: 'other-agent' } as any,
+        {
+          runId: 'other-run',
+          memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' },
+        } as any,
+      )
+      .then(() => {
+        waiterResolved = true;
+      });
+    expect(waiterResolved).toBe(true);
+
+    rejectFirstStream(new Error('queued deferred idle stream failed'));
+    await completion;
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued second deferred wake' }),
+      expect.not.objectContaining({ _threadRunReservationOwner: true }),
+    );
+    expect(stream).toHaveBeenCalledTimes(2);
+
+    const retryResult = runtime.sendSignal(
+      { id: 'queued-deferred-agent', stream } as any,
+      { id: 'queued-deferred-signal', type: 'user-message', contents: 'queued deferred wake' },
+      {
+        resourceId: 'queued-deferred-user',
+        threadId: 'queued-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-user', thread: 'queued-deferred-thread' } },
+        } as any,
+      },
+    );
+    expect(retryResult.runId).not.toBe(firstResult.runId);
+    expect(stream).toHaveBeenCalledTimes(3);
+  });
+
+  it('aborts queued deferred idle streams after they start preflight without reservation', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let finishActive!: () => void;
+    const activeFinished = new Promise<void>(resolve => {
+      finishActive = resolve;
+    });
+    let rejectStream!: (error: Error) => void;
+
+    const completion = runtime.registerRun(
+      { id: 'active-agent' } as any,
+      {
+        runId: 'active-run',
+        status: 'running',
+        _waitUntilFinished: () => activeFinished,
+      } as any,
+      {
+        runId: 'active-run',
+        memory: { resource: 'queued-deferred-abort-user', thread: 'queued-deferred-abort-thread' },
+      } as any,
+    );
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    const result = runtime.sendSignal(
+      { id: 'queued-deferred-abort-agent', stream } as any,
+      { type: 'user-message', contents: 'queued deferred abort wake' },
+      {
+        resourceId: 'queued-deferred-abort-user',
+        threadId: 'queued-deferred-abort-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'queued-deferred-abort-user', thread: 'queued-deferred-abort-thread' } },
+        } as any,
+      },
+    );
+
+    finishActive();
+    await nextTick();
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    const waiter = runtime.waitForRunOutput(result.runId);
+    expect(runtime.abortRun(result.runId)).toBe(true);
+    await expect(waiter).rejects.toThrow('has been aborted');
+
+    rejectStream(new Error('queued deferred abort stream stopped'));
+    await completion;
+  });
+
+  it('aborts immediate deferred idle streams while preflight is pending', async () => {
     const runtime = new AgentThreadStreamRuntime();
     let rejectStream!: (error: Error) => void;
     const stream = vi.fn(
@@ -2069,8 +2704,162 @@ describe('Agent signals', () => {
     );
 
     const result = runtime.sendSignal(
+      { id: 'immediate-deferred-abort-agent', stream } as any,
+      { type: 'user-message', contents: 'immediate deferred abort wake' },
+      {
+        resourceId: 'immediate-deferred-abort-user',
+        threadId: 'immediate-deferred-abort-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: {
+            memory: { resource: 'immediate-deferred-abort-user', thread: 'immediate-deferred-abort-thread' },
+          },
+        } as any,
+      },
+    );
+    void result.output?.catch(() => {});
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    const waiter = runtime.waitForRunOutput(result.runId);
+    expect(runtime.abortRun(result.runId)).toBe(true);
+    await expect(waiter).rejects.toThrow('has been aborted');
+
+    rejectStream(new Error('immediate deferred abort stream stopped'));
+    await expect(result.output).rejects.toThrow('immediate deferred abort stream stopped');
+  });
+
+  it('blocks direct reservations while a deferred idle run id is inflight', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStream = reject;
+        }),
+    );
+
+    const result = runtime.sendSignal(
+      { id: 'inflight-deferred-owner-agent', stream } as any,
+      { type: 'user-message', contents: 'inflight deferred wake' },
+      {
+        runId: 'inflight-deferred-run',
+        resourceId: 'inflight-deferred-user',
+        threadId: 'inflight-deferred-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: { memory: { resource: 'inflight-deferred-user', thread: 'inflight-deferred-thread' } },
+        } as any,
+      },
+      pubsub,
+    );
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'inflight-deferred-run',
+          memory: { resource: 'inflight-deferred-user', thread: 'inflight-deferred-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+
+    const duplicateOutput = buildFakeOutput({
+      runId: 'inflight-deferred-run',
+      fullOutput: { text: 'duplicate response', finishReason: 'stop', usage: {} },
+      chunks: [{ runId: 'inflight-deferred-run', type: 'finish', payload: {} }],
+    });
+    expect(() =>
+      runtime.registerRun(
+        { id: 'duplicate-inflight-agent' } as any,
+        duplicateOutput,
+        {
+          runId: 'inflight-deferred-run',
+          memory: { resource: 'inflight-deferred-user', thread: 'inflight-deferred-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+
+    rejectStream(new Error('inflight deferred stream stopped'));
+    await expect(result.output).rejects.toThrow('inflight deferred stream stopped');
+  });
+
+  it('keeps deferred idle run ids inflight when owner reservation waits for an active thread', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi.fn((_signal, options) => {
+      runtime.registerRun(
+        { id: 'inflight-owner-blocking-agent' } as any,
+        {
+          runId: 'inflight-owner-blocking-active-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        {
+          runId: 'inflight-owner-blocking-active-run',
+          memory: { resource: 'inflight-owner-blocked-user', thread: 'inflight-owner-blocked-thread' },
+        } as any,
+        pubsub,
+      );
+      expect(runtime.reserveRun(options as any, pubsub, 'inflight-owner-blocked-agent')).toBeUndefined();
+      return new Promise((_resolve, reject) => {
+        rejectStream = reject;
+      });
+    });
+
+    const result = runtime.sendSignal(
+      { id: 'inflight-owner-blocked-agent', stream } as any,
+      { type: 'user-message', contents: 'inflight owner blocked wake' },
+      {
+        runId: 'inflight-owner-blocked-run',
+        resourceId: 'inflight-owner-blocked-user',
+        threadId: 'inflight-owner-blocked-thread',
+        ifIdle: {
+          _skipThreadRunReservationBeforePreflight: true,
+          streamOptions: {
+            memory: { resource: 'inflight-owner-blocked-user', thread: 'inflight-owner-blocked-thread' },
+          },
+        } as any,
+      },
+      pubsub,
+    );
+    expect(stream).toHaveBeenCalledTimes(1);
+
+    expect(() =>
+      runtime.reserveRun(
+        {
+          runId: 'inflight-owner-blocked-run',
+          memory: { resource: 'inflight-owner-blocked-user', thread: 'inflight-owner-blocked-thread' },
+        } as any,
+        pubsub,
+      ),
+    ).toThrow('already reserved');
+    expect(runtime.abortRun(result.runId, pubsub)).toBe(true);
+
+    rejectStream(new Error('inflight owner blocked stream stopped'));
+    await expect(result.output).rejects.toThrow('inflight owner blocked stream stopped');
+  });
+
+  it('wakes reservation waiters when an immediate idle stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    let rejectStream!: (error: Error) => void;
+    const stream = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectStream = reject;
+          }),
+      )
+      .mockResolvedValueOnce({ runId: 'immediate-retry-run' });
+
+    const result = runtime.sendSignal(
       { id: 'immediate-idle-agent', stream } as any,
-      { type: 'user-message', contents: 'immediate wake' },
+      { id: 'immediate-wake-signal', type: 'user-message', contents: 'immediate wake' },
       {
         resourceId: 'immediate-waiter-user',
         threadId: 'immediate-waiter-thread',
@@ -2101,6 +2890,20 @@ describe('Agent signals', () => {
     await expect(runtime.waitForRunOutput(result.runId)).rejects.toThrow('was rejected');
     await waiter;
     expect(waiterResolved).toBe(true);
+
+    const retryResult = runtime.sendSignal(
+      { id: 'immediate-idle-agent', stream } as any,
+      { id: 'immediate-wake-signal', type: 'user-message', contents: 'immediate wake' },
+      {
+        resourceId: 'immediate-waiter-user',
+        threadId: 'immediate-waiter-thread',
+        ifIdle: {
+          streamOptions: { memory: { resource: 'immediate-waiter-user', thread: 'immediate-waiter-thread' } },
+        } as any,
+      },
+    );
+    expect(retryResult.runId).not.toBe(result.runId);
+    expect(stream).toHaveBeenCalledTimes(2);
   });
 
   it('wakes waiters and drops queued signals when a reserved setup run is released', async () => {
@@ -2197,10 +3000,12 @@ describe('Agent signals', () => {
         pubsub,
       ),
     ).toThrow('already reserved for another thread');
-    expect(runtime.abortThread({ resourceId: 'second-reservation-user', threadId: 'second-reservation-thread' }, pubsub))
-      .toBe(false);
-    expect(runtime.abortThread({ resourceId: 'first-reservation-user', threadId: 'first-reservation-thread' }, pubsub))
-      .toBe(true);
+    expect(
+      runtime.abortThread({ resourceId: 'second-reservation-user', threadId: 'second-reservation-thread' }, pubsub),
+    ).toBe(false);
+    expect(
+      runtime.abortThread({ resourceId: 'first-reservation-user', threadId: 'first-reservation-thread' }, pubsub),
+    ).toBe(true);
   });
 
   it('rejects duplicate queued idle run ids before either idle wake starts', () => {
