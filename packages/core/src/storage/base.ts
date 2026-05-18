@@ -9,6 +9,7 @@ import type {
   WorkspacesStorage,
   SkillsStorage,
   FavoritesStorage,
+  ToolConnectionsStorage,
   ScoresStorage,
   WorkflowsStorage,
   MemoryStorage,
@@ -38,6 +39,7 @@ export type StorageDomains = {
   workspaces?: WorkspacesStorage;
   skills?: SkillsStorage;
   favorites?: FavoritesStorage;
+  toolConnections?: ToolConnectionsStorage;
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
@@ -57,6 +59,7 @@ export const EDITOR_DOMAINS = [
   'workspaces',
   'skills',
   'favorites',
+  'toolConnections',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**
@@ -294,6 +297,7 @@ export class MastraCompositeStore extends MastraBase {
         workspaces: resolve('workspaces'),
         skills: resolve('skills'),
         favorites: resolve('favorites'),
+        toolConnections: resolve('toolConnections'),
         blobs: resolve('blobs'),
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),

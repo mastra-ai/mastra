@@ -2689,3 +2689,53 @@ export type StorageDeleteFavoritesForEntityInput = {
   entityType: StorageFavoriteEntityType;
   entityId: string;
 };
+
+/**
+ * A persisted, author-scoped tool integration connection. Lets the UI show a
+ * stable, user-supplied label (e.g. "Work Gmail") for a Composio-style
+ * `connectionId` across agents. Unique on `(authorId, providerId, connectionId)`.
+ */
+export interface StorageToolConnection {
+  /** Author/owner the connection belongs to. `'default'` when auth is disabled. */
+  authorId: string;
+  /** Tool integration provider id, e.g. `'composio'`. */
+  providerId: string;
+  /** Tool service / toolkit slug, e.g. `'gmail'`. */
+  toolService: string;
+  /** Adapter-native connection identifier (e.g. Composio `ca_...`). */
+  connectionId: string;
+  /** User-supplied display label. `null` when the user hasn't named it yet. */
+  label: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input to upsert a tool connection row. Idempotent on `(authorId, providerId, connectionId)`. */
+export type StorageUpsertToolConnectionInput = {
+  authorId: string;
+  providerId: string;
+  toolService: string;
+  connectionId: string;
+  label: string | null;
+};
+
+/** Lookup key for a single tool connection row. */
+export type StorageToolConnectionKey = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
+};
+
+/** Input for listing tool connections, optionally scoped by provider/service. */
+export type StorageListToolConnectionsInput = {
+  authorId: string;
+  providerId?: string;
+  toolService?: string;
+};
+
+/** Input for deleting a single tool connection row. */
+export type StorageDeleteToolConnectionInput = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
+};
