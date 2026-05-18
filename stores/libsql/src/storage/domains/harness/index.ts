@@ -12,6 +12,7 @@ import {
   HarnessStorageSessionNotFoundError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
+  type WriteMessageResultEvidenceResult,
   TABLE_CONFIGS,
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_ATTACHMENTS,
@@ -1213,7 +1214,7 @@ export class HarnessLibSQL extends HarnessStorage {
     return row ? rowToTombstone(row as Record<string, unknown>) : null;
   }
 
-  async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<{ created: boolean }> {
+  async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<WriteMessageResultEvidenceResult> {
     await this.#ensureMessageResultsTable();
     const namespacedRecord = { ...record, harnessName: this.#resolveHarnessName(record.harnessName) };
     if (namespacedRecord.status === 'completed') completedMessageEvidenceRunId(namespacedRecord);
@@ -1226,7 +1227,7 @@ export class HarnessLibSQL extends HarnessStorage {
         threadId: namespacedRecord.threadId,
         signalId: namespacedRecord.signalId,
       });
-      return current && 'status' in current ? current : null;
+      return current && 'status' in current ? (current as AgentSignalResultEvidence) : null;
     };
     const tx = await this.#client.transaction('write');
     let created = false;
@@ -1246,8 +1247,12 @@ export class HarnessLibSQL extends HarnessStorage {
         }
         if (isTerminalMessageEvidence(current)) {
           await tx.commit();
-          return { created: false };
+          return { created: false, evidence: current };
         }
+        const updated = {
+          ...namespacedRecord,
+          createdAt: current.createdAt,
+        };
         await tx.execute({
           sql: `UPDATE ${TABLE_HARNESS_MESSAGE_RESULTS}
                 SET run_id = ?, status = ?, result = ?, error = ?, updated_at = ?
@@ -1261,6 +1266,8 @@ export class HarnessLibSQL extends HarnessStorage {
             id,
           ],
         });
+        await tx.commit();
+        return { created: false, evidence: updated };
       } else {
         created = true;
         await tx.execute({
@@ -1293,7 +1300,7 @@ export class HarnessLibSQL extends HarnessStorage {
       if (isUniqueConstraintError(err)) {
         const current = await loadCurrent();
         if (current && sameMessageEvidenceIdentity(current as AgentSignalResultEvidence, namespacedRecord)) {
-          return { created: false };
+          return { created: false, evidence: current };
         }
         throw new HarnessStorageAdmissionConflictError(
           namespacedRecord.sessionId,

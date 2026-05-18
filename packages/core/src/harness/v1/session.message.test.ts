@@ -393,6 +393,36 @@ describe('Session.message() — default path', () => {
     expect(otherAgent.calls).toHaveLength(0);
   });
 
+  it('replays exact duplicate admissions that race with the reservation write', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const writeMessageResultEvidence = storage.writeMessageResultEvidence.bind(storage);
+    const resolveOperationAdmissionEvidence = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let raced = false;
+    storage.writeMessageResultEvidence = async record => {
+      if (!raced && record.status === 'pending' && record.admissionId === 'exact-race') {
+        raced = true;
+        await writeMessageResultEvidence({
+          ...record,
+          status: 'completed',
+          result: agent.fullOutput,
+        });
+      }
+      return writeMessageResultEvidence(record);
+    };
+    storage.resolveOperationAdmissionEvidence = async opts => {
+      if (raced && opts.kind === 'message' && opts.admissionId === 'exact-race') {
+        return { status: 'none' };
+      }
+      return resolveOperationAdmissionEvidence(opts);
+    };
+
+    const duplicate = await session.message({ content: 'hi', admissionId: 'exact-race' });
+
+    expect(duplicate.text).toBe('hello back');
+    expect(agent.calls).toHaveLength(0);
+  });
+
   it('replays legacy duplicate admissions that race with the reservation write', async () => {
     const { harness, defaultAgent, otherAgent, storage } = setupTwoModes();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

@@ -135,7 +135,7 @@ type Deferred<T> = {
 type MessageAdmissionStart = {
   admissionHash: string;
   modeId: string;
-  promise: Promise<string>;
+  promise: Promise<AgentSignalResultEvidence | OperationAdmissionTombstone>;
 };
 
 type MessageAdmissionHashes = {
@@ -2062,7 +2062,10 @@ export class Session {
     // Per-turn additionalTools merge with the mode's surface, never replace.
     const toolsets = this._buildToolsets(mode, opts.additionalTools);
 
-    const admissionStart = opts.admissionId !== undefined ? createDeferred<string>() : undefined;
+    const admissionStart =
+      opts.admissionId !== undefined
+        ? createDeferred<AgentSignalResultEvidence | OperationAdmissionTombstone>()
+        : undefined;
     if (admissionStart) void admissionStart.promise.catch(() => {});
     if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
       const existingStart = this._messageAdmissionStarts.get(opts.admissionId!);
@@ -2075,23 +2078,8 @@ export class Session {
             admissionHash,
           );
         }
-        const runId = await existingStart.promise;
-        return this._returnDuplicateMessageResult(
-          {
-            status: 'pending',
-            harnessName: this._record.harnessName,
-            sessionId: this.id,
-            resourceId: this.resourceId,
-            threadId: this.threadId,
-            signalId: admissionIdentity.signalId,
-            runId,
-            admissionId: opts.admissionId!,
-            admissionHash,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-          opts,
-        );
+        const evidence = await existingStart.promise;
+        return this._returnDuplicateMessageResult(evidence, opts);
       }
       this._messageAdmissionStarts.set(opts.admissionId!, {
         admissionHash,
@@ -2212,19 +2200,24 @@ export class Session {
         ]);
         if (!reservation.created) {
           this._messageAdmissionStarts.delete(opts.admissionId!);
-          admissionStart.resolve(admissionIdentity.runId);
-          const existing = await this._resolveMessageAdmissionDuplicate({
-            admissionId: opts.admissionId!,
-            admissionHash,
-            compatibleAdmissionHashes,
-          });
+          const existing =
+            reservation.evidence ??
+            (await this._resolveMessageAdmissionDuplicate({
+              admissionId: opts.admissionId!,
+              admissionHash,
+              compatibleAdmissionHashes,
+            }));
           if (existing) {
+            admissionStart.resolve(existing);
             try {
               return await this._returnDuplicateMessageResult(existing, opts);
             } finally {
               finishOwnedMessageTurn();
             }
           }
+          const conflict = new HarnessAdmissionConflictError(this.id, opts.admissionId!, '', admissionHash);
+          admissionStart.reject(conflict);
+          throw conflict;
         }
       } catch (err) {
         failOwnedMessageTurnBeforeDispatch(err);
@@ -2279,7 +2272,22 @@ export class Session {
     // the wake path).
     const completion = this._awaitRunCompletion(signal.runId);
     void completion.catch(() => {});
-    admissionStart?.resolve(signal.runId);
+    if (admissionStart && admissionIdentity !== undefined && admissionHash !== undefined) {
+      const now = Date.now();
+      admissionStart.resolve({
+        status: 'pending',
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        resourceId: this.resourceId,
+        threadId: this.threadId,
+        signalId: signal.signal.id,
+        runId: signal.runId,
+        admissionId: opts.admissionId!,
+        admissionHash,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
     const pendingEvidenceWrite =
       admissionIdentity !== undefined
@@ -2638,7 +2646,8 @@ export class Session {
     const starting = evidence.admissionId ? this._messageAdmissionStarts.get(evidence.admissionId) : undefined;
     if (!starting) return evidence.runId;
     try {
-      return await starting.promise;
+      const startingEvidence = await starting.promise;
+      return startingEvidence.runId ?? evidence.runId;
     } catch {
       return evidence.runId;
     }
@@ -2703,7 +2712,7 @@ export class Session {
   private async _writeMessageResultEvidence(
     status: AgentSignalResultStatus & { admissionId?: string; admissionHash?: string },
     options?: { compatibleAdmissionHashes?: readonly string[] },
-  ): Promise<{ created: boolean }> {
+  ): Promise<{ created: boolean; evidence?: AgentSignalResultEvidence | OperationAdmissionTombstone }> {
     const now = Date.now();
     this._operationEvidenceSignalIds.add(status.signalId);
     try {
@@ -2725,7 +2734,7 @@ export class Session {
           admissionHash: status.admissionHash,
           compatibleAdmissionHashes: options?.compatibleAdmissionHashes,
         });
-        if (duplicate) return { created: false };
+        if (duplicate) return { created: false, evidence: duplicate };
         throw new HarnessAdmissionConflictError(this.id, status.admissionId, '', status.admissionHash);
       }
       throw err;

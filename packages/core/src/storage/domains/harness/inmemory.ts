@@ -13,6 +13,7 @@ import {
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
 } from './base';
+import type { WriteMessageResultEvidenceResult } from './base';
 import type {
   AcquireSessionLeaseInput,
   AgentSignalResultEvidence,
@@ -674,7 +675,7 @@ export class InMemoryHarness extends HarnessStorage {
     return tombstone ? cloneJson(tombstone) : null;
   }
 
-  async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<{ created: boolean }> {
+  async writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<WriteMessageResultEvidenceResult> {
     const namespacedRecord = {
       ...record,
       harnessName: resolveHarnessName(record.harnessName, this.harnessName),
@@ -689,16 +690,17 @@ export class InMemoryHarness extends HarnessStorage {
       );
     }
     if (existing && isTerminalMessageEvidence(existing)) {
-      return { created: false };
+      return { created: false, evidence: cloneJson(existing) };
     }
+    const stored = {
+      ...namespacedRecord,
+      createdAt: existing?.createdAt ?? namespacedRecord.createdAt,
+    };
     this.db.harnessMessageResultEvidence.set(
       key,
-      cloneJson({
-        ...namespacedRecord,
-        createdAt: existing?.createdAt ?? namespacedRecord.createdAt,
-      }),
+      cloneJson(stored),
     );
-    return { created: existing === undefined };
+    return existing === undefined ? { created: true } : { created: false, evidence: cloneJson(stored) };
   }
 
   async loadQueueResultEvidence({

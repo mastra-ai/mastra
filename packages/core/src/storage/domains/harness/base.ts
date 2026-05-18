@@ -29,6 +29,11 @@ import type {
   WithThreadDeleteFenceInput,
 } from './types';
 
+export interface WriteMessageResultEvidenceResult {
+  created: boolean;
+  evidence?: AgentSignalResultEvidence;
+}
+
 /**
  * Thrown by `saveSession` when `ifVersion` does not match the record's
  * current `version`. The caller should rehydrate and retry once
@@ -472,7 +477,7 @@ export abstract class HarnessStorage extends StorageDomain {
     signalId: string;
   }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null>;
 
-  abstract writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<{ created: boolean }>;
+  abstract writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<WriteMessageResultEvidenceResult>;
 
   abstract loadQueueResultEvidence(opts: {
     harnessName?: string;
