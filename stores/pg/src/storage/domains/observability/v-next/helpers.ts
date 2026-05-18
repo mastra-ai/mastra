@@ -137,6 +137,105 @@ function parsedJson(value: unknown): unknown {
 }
 
 // ---------------------------------------------------------------------------
+// Common context — the ~23 identity / hierarchy / execution-context columns
+// every signal carries. Extracted so each per-signal converter stays focused
+// on its signal-specific fields.
+//
+// `traceId` / `spanId` are intentionally excluded: spans treat them as
+// non-null required, while scores / feedback have a legacy `string`-not-
+// nullable type even though the column is actually nullable. Both cases need
+// per-signal handling.
+//
+// Spans use `source` in the record but `executionSource` in the row. The
+// write helper accepts either; the read helper returns `executionSource` and
+// callers that need `source` (i.e. spans) destructure-and-rename.
+// ---------------------------------------------------------------------------
+
+function rowToCommonContext(row: Record<string, any>) {
+  return {
+    experimentId: nullableString(row.experimentId),
+    entityType: nullableEntityType(row.entityType),
+    entityId: nullableString(row.entityId),
+    entityName: nullableString(row.entityName),
+    entityVersionId: nullableString(row.entityVersionId),
+    parentEntityType: nullableEntityType(row.parentEntityType),
+    parentEntityId: nullableString(row.parentEntityId),
+    parentEntityName: nullableString(row.parentEntityName),
+    parentEntityVersionId: nullableString(row.parentEntityVersionId),
+    rootEntityType: nullableEntityType(row.rootEntityType),
+    rootEntityId: nullableString(row.rootEntityId),
+    rootEntityName: nullableString(row.rootEntityName),
+    rootEntityVersionId: nullableString(row.rootEntityVersionId),
+    userId: nullableString(row.userId),
+    organizationId: nullableString(row.organizationId),
+    resourceId: nullableString(row.resourceId),
+    runId: nullableString(row.runId),
+    sessionId: nullableString(row.sessionId),
+    threadId: nullableString(row.threadId),
+    requestId: nullableString(row.requestId),
+    environment: nullableString(row.environment),
+    executionSource: nullableString(row.executionSource),
+    serviceName: nullableString(row.serviceName),
+  };
+}
+
+interface CommonContextWritable {
+  experimentId?: string | null;
+  entityType?: EntityType | null;
+  entityId?: string | null;
+  entityName?: string | null;
+  entityVersionId?: string | null;
+  parentEntityType?: EntityType | null;
+  parentEntityId?: string | null;
+  parentEntityName?: string | null;
+  parentEntityVersionId?: string | null;
+  rootEntityType?: EntityType | null;
+  rootEntityId?: string | null;
+  rootEntityName?: string | null;
+  rootEntityVersionId?: string | null;
+  userId?: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
+  runId?: string | null;
+  sessionId?: string | null;
+  threadId?: string | null;
+  requestId?: string | null;
+  environment?: string | null;
+  /** Preferred field; the legacy `source` is accepted as a fallback (used by spans). */
+  executionSource?: string | null;
+  source?: string | null;
+  serviceName?: string | null;
+}
+
+function commonContextToRow(record: CommonContextWritable): Record<string, unknown> {
+  return {
+    experimentId: record.experimentId ?? null,
+    entityType: record.entityType ?? null,
+    entityId: record.entityId ?? null,
+    entityName: record.entityName ?? null,
+    entityVersionId: record.entityVersionId ?? null,
+    parentEntityType: record.parentEntityType ?? null,
+    parentEntityId: record.parentEntityId ?? null,
+    parentEntityName: record.parentEntityName ?? null,
+    parentEntityVersionId: record.parentEntityVersionId ?? null,
+    rootEntityType: record.rootEntityType ?? null,
+    rootEntityId: record.rootEntityId ?? null,
+    rootEntityName: record.rootEntityName ?? null,
+    rootEntityVersionId: record.rootEntityVersionId ?? null,
+    userId: record.userId ?? null,
+    organizationId: record.organizationId ?? null,
+    resourceId: record.resourceId ?? null,
+    runId: record.runId ?? null,
+    sessionId: record.sessionId ?? null,
+    threadId: record.threadId ?? null,
+    requestId: record.requestId ?? null,
+    environment: record.environment ?? null,
+    executionSource: record.executionSource ?? record.source ?? null,
+    serviceName: record.serviceName ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Span ↔ row
 // ---------------------------------------------------------------------------
 
@@ -144,32 +243,10 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
   return {
+    ...commonContextToRow(span),
     traceId: span.traceId,
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? null,
-    experimentId: span.experimentId ?? null,
-    entityType: span.entityType ?? null,
-    entityId: span.entityId ?? null,
-    entityName: span.entityName ?? null,
-    entityVersionId: span.entityVersionId ?? null,
-    parentEntityType: span.parentEntityType ?? null,
-    parentEntityId: span.parentEntityId ?? null,
-    parentEntityName: span.parentEntityName ?? null,
-    parentEntityVersionId: span.parentEntityVersionId ?? null,
-    rootEntityType: span.rootEntityType ?? null,
-    rootEntityId: span.rootEntityId ?? null,
-    rootEntityName: span.rootEntityName ?? null,
-    rootEntityVersionId: span.rootEntityVersionId ?? null,
-    userId: span.userId ?? null,
-    organizationId: span.organizationId ?? null,
-    resourceId: span.resourceId ?? null,
-    runId: span.runId ?? null,
-    sessionId: span.sessionId ?? null,
-    threadId: span.threadId ?? null,
-    requestId: span.requestId ?? null,
-    environment: span.environment ?? null,
-    executionSource: span.source ?? null,
-    serviceName: span.serviceName ?? null,
     name: span.name,
     spanType: span.spanType,
     isEvent: Boolean(span.isEvent),
@@ -192,7 +269,11 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
   const error = parsedJson(row.error);
+  // Spans expose the row's `executionSource` column as `source` on the record.
+  const { executionSource, ...ctx } = rowToCommonContext(row);
   return {
+    ...ctx,
+    source: executionSource,
     traceId: row.traceId,
     spanId: row.spanId,
     parentSpanId: nullableString(row.parentSpanId),
@@ -201,29 +282,6 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     isEvent: Boolean(row.isEvent),
     startedAt,
     endedAt,
-    entityType: nullableEntityType(row.entityType),
-    entityId: nullableString(row.entityId),
-    entityName: nullableString(row.entityName),
-    entityVersionId: nullableString(row.entityVersionId),
-    parentEntityType: nullableEntityType(row.parentEntityType),
-    parentEntityId: nullableString(row.parentEntityId),
-    parentEntityName: nullableString(row.parentEntityName),
-    parentEntityVersionId: nullableString(row.parentEntityVersionId),
-    rootEntityType: nullableEntityType(row.rootEntityType),
-    rootEntityId: nullableString(row.rootEntityId),
-    rootEntityName: nullableString(row.rootEntityName),
-    rootEntityVersionId: nullableString(row.rootEntityVersionId),
-    userId: nullableString(row.userId),
-    organizationId: nullableString(row.organizationId),
-    resourceId: nullableString(row.resourceId),
-    runId: nullableString(row.runId),
-    sessionId: nullableString(row.sessionId),
-    threadId: nullableString(row.threadId),
-    requestId: nullableString(row.requestId),
-    environment: nullableString(row.environment),
-    source: nullableString(row.executionSource),
-    serviceName: nullableString(row.serviceName),
-    experimentId: nullableString(row.experimentId),
     tags: normalizeTags(row.tags),
     metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
@@ -244,6 +302,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
 
 export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
   return {
+    ...commonContextToRow(log),
     logId: log.logId,
     timestamp: toIsoOrDate(log.timestamp),
     level: log.level,
@@ -251,29 +310,6 @@ export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
     data: jsonField(log.data),
     traceId: log.traceId ?? null,
     spanId: log.spanId ?? null,
-    experimentId: log.experimentId ?? null,
-    entityType: log.entityType ?? null,
-    entityId: log.entityId ?? null,
-    entityName: log.entityName ?? null,
-    entityVersionId: log.entityVersionId ?? null,
-    parentEntityType: log.parentEntityType ?? null,
-    parentEntityId: log.parentEntityId ?? null,
-    parentEntityName: log.parentEntityName ?? null,
-    parentEntityVersionId: log.parentEntityVersionId ?? null,
-    rootEntityType: log.rootEntityType ?? null,
-    rootEntityId: log.rootEntityId ?? null,
-    rootEntityName: log.rootEntityName ?? null,
-    rootEntityVersionId: log.rootEntityVersionId ?? null,
-    userId: log.userId ?? null,
-    organizationId: log.organizationId ?? null,
-    resourceId: log.resourceId ?? null,
-    runId: log.runId ?? null,
-    sessionId: log.sessionId ?? null,
-    threadId: log.threadId ?? null,
-    requestId: log.requestId ?? null,
-    environment: log.environment ?? null,
-    executionSource: log.executionSource ?? log.source ?? null,
-    serviceName: log.serviceName ?? null,
     tags: normalizeTags(log.tags),
     metadata: jsonField(log.metadata),
     scope: jsonField(log.scope),
@@ -282,6 +318,7 @@ export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
 
 export function rowToLogRecord(row: Record<string, any>): LogRecord {
   return {
+    ...rowToCommonContext(row),
     logId: row.logId,
     timestamp: toDate(row.timestamp),
     level: row.level,
@@ -289,32 +326,9 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
     data: (parsedJson(row.data) as Record<string, unknown> | null) ?? undefined,
     traceId: nullableString(row.traceId),
     spanId: nullableString(row.spanId),
-    experimentId: nullableString(row.experimentId),
-    entityType: nullableEntityType(row.entityType),
-    entityId: nullableString(row.entityId),
-    entityName: nullableString(row.entityName),
-    entityVersionId: nullableString(row.entityVersionId),
-    parentEntityType: nullableEntityType(row.parentEntityType),
-    parentEntityId: nullableString(row.parentEntityId),
-    parentEntityName: nullableString(row.parentEntityName),
-    parentEntityVersionId: nullableString(row.parentEntityVersionId),
-    rootEntityType: nullableEntityType(row.rootEntityType),
-    rootEntityId: nullableString(row.rootEntityId),
-    rootEntityName: nullableString(row.rootEntityName),
-    rootEntityVersionId: nullableString(row.rootEntityVersionId),
-    userId: nullableString(row.userId),
-    organizationId: nullableString(row.organizationId),
-    resourceId: nullableString(row.resourceId),
-    runId: nullableString(row.runId),
-    sessionId: nullableString(row.sessionId),
-    threadId: nullableString(row.threadId),
-    requestId: nullableString(row.requestId),
-    environment: nullableString(row.environment),
-    executionSource: nullableString(row.executionSource),
-    serviceName: nullableString(row.serviceName),
-    scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
     tags: normalizeTags(row.tags),
     metadata: (parsedJson(row.metadata) as Record<string, unknown> | null) ?? undefined,
+    scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
   };
 }
 
@@ -324,35 +338,13 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
 
 export function metricRecordToRow(metric: CreateMetricRecord): Record<string, unknown> {
   return {
+    ...commonContextToRow(metric),
     metricId: metric.metricId,
     timestamp: toIsoOrDate(metric.timestamp),
     name: metric.name,
     value: metric.value,
     traceId: metric.traceId ?? null,
     spanId: metric.spanId ?? null,
-    experimentId: metric.experimentId ?? null,
-    entityType: metric.entityType ?? null,
-    entityId: metric.entityId ?? null,
-    entityName: metric.entityName ?? null,
-    entityVersionId: metric.entityVersionId ?? null,
-    parentEntityType: metric.parentEntityType ?? null,
-    parentEntityId: metric.parentEntityId ?? null,
-    parentEntityName: metric.parentEntityName ?? null,
-    parentEntityVersionId: metric.parentEntityVersionId ?? null,
-    rootEntityType: metric.rootEntityType ?? null,
-    rootEntityId: metric.rootEntityId ?? null,
-    rootEntityName: metric.rootEntityName ?? null,
-    rootEntityVersionId: metric.rootEntityVersionId ?? null,
-    userId: metric.userId ?? null,
-    organizationId: metric.organizationId ?? null,
-    resourceId: metric.resourceId ?? null,
-    runId: metric.runId ?? null,
-    sessionId: metric.sessionId ?? null,
-    threadId: metric.threadId ?? null,
-    requestId: metric.requestId ?? null,
-    environment: metric.environment ?? null,
-    executionSource: metric.executionSource ?? metric.source ?? null,
-    serviceName: metric.serviceName ?? null,
     provider: metric.provider ?? null,
     model: metric.model ?? null,
     estimatedCost: metric.estimatedCost ?? null,
@@ -367,36 +359,13 @@ export function metricRecordToRow(metric: CreateMetricRecord): Record<string, un
 
 export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
   return {
+    ...rowToCommonContext(row),
     metricId: row.metricId,
     timestamp: toDate(row.timestamp),
     name: row.name,
     value: Number(row.value),
     traceId: nullableString(row.traceId),
     spanId: nullableString(row.spanId),
-    experimentId: nullableString(row.experimentId),
-    entityType: nullableEntityType(row.entityType),
-    entityId: nullableString(row.entityId),
-    entityName: nullableString(row.entityName),
-    entityVersionId: nullableString(row.entityVersionId),
-    parentEntityType: nullableEntityType(row.parentEntityType),
-    parentEntityId: nullableString(row.parentEntityId),
-    parentEntityName: nullableString(row.parentEntityName),
-    parentEntityVersionId: nullableString(row.parentEntityVersionId),
-    rootEntityType: nullableEntityType(row.rootEntityType),
-    rootEntityId: nullableString(row.rootEntityId),
-    rootEntityName: nullableString(row.rootEntityName),
-    rootEntityVersionId: nullableString(row.rootEntityVersionId),
-    userId: nullableString(row.userId),
-    organizationId: nullableString(row.organizationId),
-    resourceId: nullableString(row.resourceId),
-    runId: nullableString(row.runId),
-    sessionId: nullableString(row.sessionId),
-    threadId: nullableString(row.threadId),
-    requestId: nullableString(row.requestId),
-    environment: nullableString(row.environment),
-    executionSource: nullableString(row.executionSource),
-    serviceName: nullableString(row.serviceName),
-    scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
     provider: nullableString(row.provider),
     model: nullableString(row.model),
     estimatedCost: row.estimatedCost == null ? undefined : Number(row.estimatedCost),
@@ -405,6 +374,7 @@ export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
     tags: normalizeTags(row.tags),
     labels: normalizeLabels(row.labels as Record<string, unknown> | null | undefined),
     metadata: (parsedJson(row.metadata) as Record<string, unknown> | null) ?? undefined,
+    scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
   };
 }
 
@@ -416,34 +386,12 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   const metadata = score.metadata ?? null;
   const scoreSource = score.scoreSource ?? score.source ?? null;
   return {
+    ...commonContextToRow(score),
     scoreId: score.scoreId,
     timestamp: toIsoOrDate(score.timestamp),
     traceId: score.traceId ?? null,
     spanId: score.spanId ?? null,
-    experimentId: score.experimentId ?? null,
     scoreTraceId: score.scoreTraceId ?? null,
-    entityType: score.entityType ?? null,
-    entityId: score.entityId ?? null,
-    entityName: score.entityName ?? null,
-    entityVersionId: score.entityVersionId ?? null,
-    parentEntityType: score.parentEntityType ?? null,
-    parentEntityId: score.parentEntityId ?? null,
-    parentEntityName: score.parentEntityName ?? null,
-    parentEntityVersionId: score.parentEntityVersionId ?? null,
-    rootEntityType: score.rootEntityType ?? null,
-    rootEntityId: score.rootEntityId ?? null,
-    rootEntityName: score.rootEntityName ?? null,
-    rootEntityVersionId: score.rootEntityVersionId ?? null,
-    userId: score.userId ?? null,
-    organizationId: score.organizationId ?? null,
-    resourceId: score.resourceId ?? null,
-    runId: score.runId ?? null,
-    sessionId: score.sessionId ?? null,
-    threadId: score.threadId ?? null,
-    requestId: score.requestId ?? null,
-    environment: score.environment ?? null,
-    executionSource: score.executionSource ?? null,
-    serviceName: score.serviceName ?? null,
     scorerId: score.scorerId,
     scorerVersion: score.scorerVersion ?? null,
     scoreSource,
@@ -457,34 +405,13 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
 
 export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
   return {
+    ...rowToCommonContext(row),
     scoreId: row.scoreId,
     timestamp: toDate(row.timestamp),
+    // Legacy schema types traceId as required string even though the column is nullable.
     traceId: nullableString(row.traceId) as ScoreRecord['traceId'],
     spanId: nullableString(row.spanId),
-    experimentId: nullableString(row.experimentId),
     scoreTraceId: nullableString(row.scoreTraceId),
-    entityType: nullableEntityType(row.entityType),
-    entityId: nullableString(row.entityId),
-    entityName: nullableString(row.entityName),
-    entityVersionId: nullableString(row.entityVersionId),
-    parentEntityType: nullableEntityType(row.parentEntityType),
-    parentEntityId: nullableString(row.parentEntityId),
-    parentEntityName: nullableString(row.parentEntityName),
-    parentEntityVersionId: nullableString(row.parentEntityVersionId),
-    rootEntityType: nullableEntityType(row.rootEntityType),
-    rootEntityId: nullableString(row.rootEntityId),
-    rootEntityName: nullableString(row.rootEntityName),
-    rootEntityVersionId: nullableString(row.rootEntityVersionId),
-    userId: nullableString(row.userId),
-    organizationId: nullableString(row.organizationId),
-    resourceId: nullableString(row.resourceId),
-    runId: nullableString(row.runId),
-    sessionId: nullableString(row.sessionId),
-    threadId: nullableString(row.threadId),
-    requestId: nullableString(row.requestId),
-    environment: nullableString(row.environment),
-    executionSource: nullableString(row.executionSource),
-    serviceName: nullableString(row.serviceName),
     scorerId: row.scorerId,
     scorerVersion: nullableString(row.scorerVersion),
     scoreSource: nullableString(row.scoreSource),
@@ -505,33 +432,15 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
   const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';
   const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
   return {
+    ...commonContextToRow(feedback),
+    // Legacy: the `userId` column also stores the feedback actor when
+    // `feedbackUserId` is the canonical input. Override commonContextToRow's
+    // userId so the row uses the resolved actor.
+    userId: feedbackUserId,
     feedbackId: feedback.feedbackId,
     timestamp: toIsoOrDate(feedback.timestamp),
     traceId: feedback.traceId ?? null,
     spanId: feedback.spanId ?? null,
-    experimentId: feedback.experimentId ?? null,
-    entityType: feedback.entityType ?? null,
-    entityId: feedback.entityId ?? null,
-    entityName: feedback.entityName ?? null,
-    entityVersionId: feedback.entityVersionId ?? null,
-    parentEntityType: feedback.parentEntityType ?? null,
-    parentEntityId: feedback.parentEntityId ?? null,
-    parentEntityName: feedback.parentEntityName ?? null,
-    parentEntityVersionId: feedback.parentEntityVersionId ?? null,
-    rootEntityType: feedback.rootEntityType ?? null,
-    rootEntityId: feedback.rootEntityId ?? null,
-    rootEntityName: feedback.rootEntityName ?? null,
-    rootEntityVersionId: feedback.rootEntityVersionId ?? null,
-    userId: feedbackUserId,
-    organizationId: feedback.organizationId ?? null,
-    resourceId: feedback.resourceId ?? null,
-    runId: feedback.runId ?? null,
-    sessionId: feedback.sessionId ?? null,
-    threadId: feedback.threadId ?? null,
-    requestId: feedback.requestId ?? null,
-    environment: feedback.environment ?? null,
-    executionSource: feedback.executionSource ?? null,
-    serviceName: feedback.serviceName ?? null,
     feedbackUserId,
     sourceId: feedback.sourceId ?? null,
     feedbackSource,
@@ -550,33 +459,12 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const feedbackSource = nullableString(row.feedbackSource);
   const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
+    ...rowToCommonContext(row),
     feedbackId: row.feedbackId,
     timestamp: toDate(row.timestamp),
+    // Legacy schema types traceId as required string even though the column is nullable.
     traceId: nullableString(row.traceId) as FeedbackRecord['traceId'],
     spanId: nullableString(row.spanId),
-    experimentId: nullableString(row.experimentId),
-    entityType: nullableEntityType(row.entityType),
-    entityId: nullableString(row.entityId),
-    entityName: nullableString(row.entityName),
-    entityVersionId: nullableString(row.entityVersionId),
-    parentEntityType: nullableEntityType(row.parentEntityType),
-    parentEntityId: nullableString(row.parentEntityId),
-    parentEntityName: nullableString(row.parentEntityName),
-    parentEntityVersionId: nullableString(row.parentEntityVersionId),
-    rootEntityType: nullableEntityType(row.rootEntityType),
-    rootEntityId: nullableString(row.rootEntityId),
-    rootEntityName: nullableString(row.rootEntityName),
-    rootEntityVersionId: nullableString(row.rootEntityVersionId),
-    userId: nullableString(row.userId),
-    organizationId: nullableString(row.organizationId),
-    resourceId: nullableString(row.resourceId),
-    runId: nullableString(row.runId),
-    sessionId: nullableString(row.sessionId),
-    threadId: nullableString(row.threadId),
-    requestId: nullableString(row.requestId),
-    environment: nullableString(row.environment),
-    executionSource: nullableString(row.executionSource),
-    serviceName: nullableString(row.serviceName),
     feedbackUserId,
     sourceId: nullableString(row.sourceId),
     feedbackSource,
