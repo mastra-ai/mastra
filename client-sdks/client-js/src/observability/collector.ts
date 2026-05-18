@@ -15,7 +15,6 @@
  * proxy in `@mastra/observability` actually reads are populated.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ClientObservabilityCarrier, ClientObservabilityPayload } from '@mastra/core/observability';
 
 import type { ObservabilityCollector, ObservabilityCollectorFactory } from './types';
@@ -46,14 +45,7 @@ interface BufferedLog {
   data?: Record<string, unknown>;
 }
 
-interface CollectorContext {
-  collector: ObservabilityCollectorImpl;
-  spanStack: string[];
-  executionStartMs: number;
-  executionEndMs?: number;
-}
-
-const collectorContext = new AsyncLocalStorage<CollectorContext>();
+const activeCollectorStack: ObservabilityCollectorImpl[] = [];
 
 const LEVEL_TO_SEVERITY_NUMBER: Record<BufferedLog['level'], number> = {
   debug: 5,
@@ -133,7 +125,6 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
   readonly #rootSpanId: string;
   readonly #spans: BufferedSpan[] = [];
   readonly #logs: BufferedLog[] = [];
-  /** Fallback stack used when span/log are called outside withContext. */
   readonly #spanStack: string[] = [];
   /** Wall-clock execution timing, captured by withContext. */
   #executionStartMs: number | undefined;
@@ -160,31 +151,26 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
     // Three responsibilities:
     //  1. Push the carrier root onto the span stack so nested span()
     //     calls parent under it.
-    //  2. Make this collector visible via
-    //     `getCurrentObservabilityCollector()` so user
-    //     execute functions can find it without needing the SDK to
-    //     wire it through their tool's options object.
+    //  2. Make this collector visible to synchronous helper code via
+    //     `getCurrentObservabilityCollector()`. User code should prefer
+    //     the per-invocation `observe` object passed to execute().
     //  3. Measure wall-clock execution time around the user-supplied
-    //     function. The server has no way to recover this otherwise
-    //     because the CLIENT_TOOL_CALL event span has no endTime; the
-    //     measured value is shipped back via flush() and emitted as
-    //     mastra_tool_duration_ms with toolType: "client" by the proxy.
+    //     function. The server cannot infer this from the tool-call
+    //     marker span because the actual work happens in the client.
     const executionStartMs = this.#executionStartMs ?? Date.now();
     this.#executionStartMs = executionStartMs;
-    const context: CollectorContext = {
-      collector: this,
-      spanStack: [this.#rootSpanId],
-      executionStartMs,
-    };
-
-    return collectorContext.run(context, async () => {
-      try {
-        return await fn();
-      } finally {
-        context.executionEndMs = Date.now();
-        this.#executionEndMs = context.executionEndMs;
+    this.#spanStack.push(this.#rootSpanId);
+    activeCollectorStack.push(this);
+    try {
+      return await fn();
+    } finally {
+      const index = activeCollectorStack.lastIndexOf(this);
+      if (index !== -1) {
+        activeCollectorStack.splice(index, 1);
       }
-    });
+      this.#spanStack.pop();
+      this.#executionEndMs = Date.now();
+    }
   }
 
   async span<T>(name: string, fn: () => Promise<T> | T, attributes?: Record<string, unknown>): Promise<T> {
@@ -231,8 +217,7 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
   }
 
   #getSpanStack(): string[] {
-    const context = collectorContext.getStore();
-    return context?.collector === this ? context.spanStack : this.#spanStack;
+    return this.#spanStack;
   }
 
   flush(): ClientObservabilityPayload {
@@ -321,7 +306,10 @@ export const createObservabilityCollector: ObservabilityCollectorFactory = paren
  * scope (e.g. when running outside a client tool, or when the user has
  * not opted into the `@mastra/client-js/observability` subpath).
  *
- * Mirrors the `trace.getActiveSpan()` pattern from `@opentelemetry/api`.
+ * This accessor is browser-safe and best-effort. Prefer the `observe`
+ * object passed to `clientTool.execute(args, { observe })`; it is
+ * scoped to the current tool invocation and does not rely on ambient
+ * async context.
  *
  * ```ts
  * import { getCurrentObservabilityCollector } from '@mastra/client-js/observability';
@@ -334,5 +322,5 @@ export const createObservabilityCollector: ObservabilityCollectorFactory = paren
  * ```
  */
 export function getCurrentObservabilityCollector(): ObservabilityCollector | undefined {
-  return collectorContext.getStore()?.collector;
+  return activeCollectorStack[activeCollectorStack.length - 1];
 }

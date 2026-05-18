@@ -16,7 +16,7 @@ import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
-import type { ModelInferenceContext, TracingContext } from '../../../observability';
+import type { AnySpan, ModelInferenceContext, TracingContext } from '../../../observability';
 import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
 import type { CachedLLMStepResponse, InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
@@ -330,7 +330,45 @@ async function processOutputStream<OUTPUT = undefined>({
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
-  const clientToolObservabilityByToolCallId = new Map<string, unknown>();
+  const clientToolArgsTextByToolCallId = new Map<string, string[]>();
+  const clientToolObservabilityByToolCallId = new Map<
+    string,
+    {
+      carrier: unknown;
+      span: AnySpan;
+      ended: boolean;
+    }
+  >();
+
+  const endClientToolObservabilitySpan = (toolCallId: string, args?: unknown): void => {
+    const entry = clientToolObservabilityByToolCallId.get(toolCallId);
+    if (!entry || entry.ended) {
+      clientToolArgsTextByToolCallId.delete(toolCallId);
+      return;
+    }
+
+    entry.span.end(args !== undefined ? { metadata: { args } } : undefined);
+    entry.ended = true;
+    clientToolArgsTextByToolCallId.delete(toolCallId);
+  };
+
+  const parseClientToolArgsFromDeltas = (toolCallId: string): unknown | undefined => {
+    const deltas = clientToolArgsTextByToolCallId.get(toolCallId);
+    if (!deltas?.length) {
+      return undefined;
+    }
+
+    const input = deltas.join('');
+    if (!input) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(input);
+    } catch {
+      return undefined;
+    }
+  };
 
   const injectClientToolObservability = ({
     toolCallId,
@@ -355,7 +393,10 @@ async function processOutputStream<OUTPUT = undefined>({
 
     const existingCarrier = clientToolObservabilityByToolCallId.get(toolCallId);
     if (existingCarrier) {
-      payload.observability = existingCarrier;
+      payload.observability = existingCarrier.carrier;
+      if (args !== undefined) {
+        endClientToolObservabilitySpan(toolCallId, args);
+      }
       return { toolDef, inferredProviderExecuted };
     }
 
@@ -369,7 +410,7 @@ async function processOutputStream<OUTPUT = undefined>({
         tracingContext.currentSpan.type === SpanType.AGENT_RUN
           ? tracingContext.currentSpan
           : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
-      const clientToolSpan = parentSpan.createEventSpan({
+      const clientToolSpan = parentSpan.createChildSpan({
         type: SpanType.CLIENT_TOOL_CALL,
         name: `client_tool: '${toolName}'`,
         entityType: EntityType.TOOL,
@@ -379,15 +420,19 @@ async function processOutputStream<OUTPUT = undefined>({
           toolDescription: (toolDef as { description?: string } | undefined)?.description,
           toolType: 'client-tool',
         },
-        ...(args !== undefined ? { metadata: { args } } : {}),
+        ...(args !== undefined ? { input: args } : {}),
       });
       if (clientToolSpan) {
         const carrier = proxy.inject(clientToolSpan);
-        clientToolObservabilityByToolCallId.set(toolCallId, carrier);
+        const entry = { carrier, span: clientToolSpan, ended: false };
+        clientToolObservabilityByToolCallId.set(toolCallId, entry);
         payload.observability = carrier;
+        if (args !== undefined) {
+          endClientToolObservabilitySpan(toolCallId, args);
+        }
       }
     } catch (err) {
-      logger?.warn?.('[ClientObservabilityProxy] failed to create CLIENT_TOOL_CALL event span', {
+      logger?.warn?.('[ClientObservabilityProxy] failed to create CLIENT_TOOL_CALL span', {
         error: err instanceof Error ? err.message : String(err),
         toolName,
       });
@@ -436,6 +481,18 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       }));
+    } else if (chunk.type === 'tool-call-delta') {
+      const toolCallId = chunk.payload.toolCallId;
+      if (toolCallId && chunk.payload.argsTextDelta) {
+        const deltas = clientToolArgsTextByToolCallId.get(toolCallId) ?? [];
+        deltas.push(chunk.payload.argsTextDelta);
+        clientToolArgsTextByToolCallId.set(toolCallId, deltas);
+      }
+    } else if (chunk.type === 'tool-call-input-streaming-end') {
+      const parsedArgs = parseClientToolArgsFromDeltas(chunk.payload.toolCallId);
+      if (parsedArgs !== undefined) {
+        endClientToolObservabilitySpan(chunk.payload.toolCallId, parsedArgs);
+      }
     } else if (chunk.type === 'tool-call') {
       injectClientToolObservability({
         toolCallId: chunk.payload.toolCallId,
@@ -609,6 +666,15 @@ async function processOutputStream<OUTPUT = undefined>({
       break;
     }
   }
+
+  for (const [toolCallId, entry] of clientToolObservabilityByToolCallId.entries()) {
+    if (!entry.ended) {
+      const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
+      entry.span.end(parsedArgs !== undefined ? { metadata: { args: parsedArgs } } : undefined);
+      entry.ended = true;
+    }
+  }
+  clientToolArgsTextByToolCallId.clear();
 
   return { collectedChunks };
 }

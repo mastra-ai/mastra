@@ -791,11 +791,12 @@ export class Agent<
    *
    * **Request 1 (server → client):**
    * The agent loop emits a tool-call chunk for a client tool. If
-   * `@mastra/observability` is configured, a CLIENT_TOOL_CALL event
+   * `@mastra/observability` is configured, a CLIENT_TOOL_CALL
    * span is created and a W3C trace context carrier is injected into
    * the chunk's `observability` field. This happens in
    * `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts`
-   * inside the `'tool-call'` case of `processOutputStream`.
+   * while processing streamed or final tool-call chunks in
+   * `processOutputStream`.
    *
    * **Client execution:**
    * The `@mastra/client-js` SDK sees the carrier on the tool-call

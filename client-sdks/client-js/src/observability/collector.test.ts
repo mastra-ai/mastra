@@ -190,35 +190,37 @@ describe('ObservabilityCollector', () => {
       expect(getCurrentObservabilityCollector()).toBeUndefined();
     });
 
-    it('isolates overlapping async withContext calls', async () => {
+    it('isolates overlapping async spans through explicit collector instances', async () => {
       const first = createObservabilityCollector(makeCarrier());
       const second = createObservabilityCollector(makeCarrier());
       let releaseFirst!: () => void;
       let releaseSecond!: () => void;
 
       const firstRun = first.withContext(async () => {
-        expect(getCurrentObservabilityCollector()).toBe(first);
-        await new Promise<void>(resolve => {
-          releaseFirst = resolve;
+        await first.span('first span', async () => {
+          await new Promise<void>(resolve => {
+            releaseFirst = resolve;
+          });
         });
-        expect(getCurrentObservabilityCollector()).toBe(first);
       });
 
       const secondRun = second.withContext(async () => {
-        expect(getCurrentObservabilityCollector()).toBe(second);
-        await new Promise<void>(resolve => {
-          releaseSecond = resolve;
+        await second.span('second span', async () => {
+          await new Promise<void>(resolve => {
+            releaseSecond = resolve;
+          });
         });
-        expect(getCurrentObservabilityCollector()).toBe(second);
       });
 
       releaseFirst();
       await firstRun;
-      expect(getCurrentObservabilityCollector()).toBeUndefined();
 
       releaseSecond();
       await secondRun;
       expect(getCurrentObservabilityCollector()).toBeUndefined();
+
+      expect(flushSpans(first.flush()).map(span => span.name)).toEqual(['first span']);
+      expect(flushSpans(second.flush()).map(span => span.name)).toEqual(['second span']);
     });
   });
 

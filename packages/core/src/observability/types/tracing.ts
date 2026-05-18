@@ -55,13 +55,13 @@ export enum SpanType {
   /** Function/tool execution with inputs, outputs, errors */
   TOOL_CALL = 'tool_call',
   /**
-   * Client-side tool execution. Recorded as an event span on the
-   * server (occurs at a point in time, no endTime) since the actual
-   * execution happens in the client SDK. Child spans/logs from inside
-   * the client tool's execute function flow back as OTLP/JSON via the
-   * ClientObservabilityProxy interface in @mastra/observability
-   * and parent themselves under this event span via parentSpanId
-   * reference.
+   * Client-side tool execution marker. The server creates this span
+   * when the model emits a client tool call, injects its W3C carrier
+   * into the outgoing tool-call chunk, then ends the span once tool
+   * args are available. Child spans/logs from inside the client tool's
+   * execute function flow back as OTLP/JSON via the ClientObservabilityProxy
+   * interface in @mastra/observability and parent themselves under this
+   * span via parentSpanId reference.
    */
   CLIENT_TOOL_CALL = 'client_tool_call',
   /** Workflow run - root span for workflow processes */
@@ -355,13 +355,13 @@ export interface ToolCallAttributes extends AIBaseAttributes {
 /**
  * Client Tool Call attributes.
  *
- * CLIENT_TOOL_CALL is an event span: it occurs at a point in time
- * (when the agent emits a tool call that will be executed in the
- * client SDK) and has no endTime. The actual execution happens on the
- * client; richer telemetry from inside the client tool's execute
+ * CLIENT_TOOL_CALL is a server-side marker span for a tool call that
+ * will execute in the client SDK. It is created early so its W3C
+ * carrier can be sent to the client, then ended once tool args are
+ * available. Richer telemetry from inside the client tool's execute
  * function (child spans, logs) is forwarded back via the
  * ClientObservabilityProxy interface in @mastra/observability and
- * parented under this event span via parentSpanId reference.
+ * parented under this span via parentSpanId reference.
  */
 export interface ClientToolCallAttributes extends AIBaseAttributes {
   /** Tool category, e.g. 'tool', 'function' */

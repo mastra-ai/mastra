@@ -109,14 +109,10 @@ function getDurationMetricName(span: AnySpan): string | null {
     case SpanType.MCP_TOOL_CALL:
       return 'mastra_tool_duration_ms';
     case SpanType.CLIENT_TOOL_CALL:
-      // CLIENT_TOOL_CALL is an event span (no endTime) so the
-      // duration cannot be derived from the live span here.
-      // The actual mastra_tool_duration_ms metric for client tools is
-      // emitted by the client observability proxy in
-      // observability/mastra/src/client/proxy.ts using the
-      // wall-clock duration the collector measured on the client.
-      // It uses the same metric name with a `toolType: 'client'`
-      // label to distinguish it from server-side tool durations.
+      // The CLIENT_TOOL_CALL server span measures only carrier emission
+      // and args capture. The actual client execution duration is
+      // emitted by the client observability proxy using the wall-clock
+      // duration measured in @mastra/client-js.
       return null;
     case SpanType.WORKFLOW_RUN:
       return 'mastra_workflow_duration_ms';
