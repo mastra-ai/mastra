@@ -15,7 +15,7 @@ import {
   publishStoredSkillResponseSchema,
 } from '../schemas/stored-skills';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { handleError } from './error';
 
@@ -36,7 +36,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
   description: 'Returns a paginated list of all skill configurations stored in the database',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -49,12 +49,13 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Skills storage domain is not available' });
       }
 
+      const scope = await getStoredResourceScope(mastra, requestContext);
       const result = await skillStore.listResolved({
         page,
         perPage,
         orderBy,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
       return result;
@@ -77,7 +78,7 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
   description: 'Returns a specific skill from storage by its unique identifier (resolved with active version config)',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, storedSkillId }) => {
+  handler: async ({ mastra, storedSkillId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -95,6 +96,7 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       if (!skill) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+      assertStoredResourceScope(skill, await getStoredResourceScope(mastra, requestContext));
 
       return skill;
     } catch (error) {
@@ -130,6 +132,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
     scripts,
     assets,
     metadata,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -171,7 +174,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
           references,
           scripts,
           assets,
-          metadata,
+          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
         },
       });
 
@@ -218,6 +221,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
     scripts,
     assets,
     metadata,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -231,11 +235,17 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Skills storage domain is not available' });
       }
 
-      // Check if skill exists
-      const existing = await skillStore.getById(storedSkillId);
+      // Check if skill exists. Skill metadata lives on the resolved snapshot.
+      const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the skill with both entity-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
@@ -251,7 +261,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         references,
         scripts,
         assets,
-        metadata,
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
       });
 
       // Return the resolved skill with the updated config
@@ -280,7 +290,7 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
   description: 'Deletes a skill from storage by its unique identifier',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, storedSkillId }) => {
+  handler: async ({ mastra, storedSkillId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -293,11 +303,12 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Skills storage domain is not available' });
       }
 
-      // Check if skill exists
-      const existing = await skillStore.getById(storedSkillId);
+      // Check if skill exists. Skill metadata lives on the resolved snapshot.
+      const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       await skillStore.delete(storedSkillId);
 
@@ -328,7 +339,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
     'Snapshots the skill directory from the filesystem into content-addressable blob storage, creates a new version with a tree manifest, and marks the skill as published',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, storedSkillId, skillPath }) => {
+  handler: async ({ mastra, storedSkillId, skillPath, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -346,11 +357,12 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Blob storage domain is not available' });
       }
 
-      // Verify skill exists
-      const existing = await skillStore.getById(storedSkillId);
+      // Verify skill exists. Skill metadata lives on the resolved snapshot.
+      const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       // Validate skillPath to prevent path traversal
       const path = await import('node:path');

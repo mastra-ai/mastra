@@ -40,6 +40,9 @@ export function generateContextualValue(fieldName?: string): string {
 
   const field = fieldName.toLowerCase();
 
+  // Timestamp fields used in body validation need a valid ISO string.
+  if (field === 'createdat' || field === 'updatedat') return new Date().toISOString();
+
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
@@ -169,6 +172,13 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         if (zod4Def.check === 'safeint') {
           requiresSafeInt = true;
           requiresInt = true;
+        }
+        // Zod 4 emits `int()` as `number_format` with `format: 'int' | 'safeint'`.
+        if (zod4Def.check === 'number_format') {
+          if (zod4Def.format === 'int' || zod4Def.format === 'safeint') {
+            requiresInt = true;
+            if (zod4Def.format === 'safeint') requiresSafeInt = true;
+          }
         }
       }
     }
@@ -375,6 +385,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
   if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
+  if (route.path.includes(':roleId')) params.roleId = 'test-role';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context

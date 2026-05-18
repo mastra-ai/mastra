@@ -17,8 +17,8 @@ vi.mock('../clone.js', () => ({
   resetUIAfterClone: vi.fn(),
 }));
 
-vi.mock('../../components/ask-question-inline.js', () => ({
-  AskQuestionInlineComponent: class {},
+vi.mock('../../modal-question.js', () => ({
+  askModalQuestion: vi.fn(),
 }));
 
 vi.mock('../../components/thread-selector.js', () => ({

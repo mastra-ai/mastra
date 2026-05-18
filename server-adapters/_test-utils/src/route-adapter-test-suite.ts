@@ -91,6 +91,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/auth/credentials/sign-in',
       '/auth/credentials/sign-up',
       '/auth/refresh',
+      // Requires an authenticated admin caller (MASTRA_USER_PERMISSIONS_KEY is a reserved
+      // request-context key set only by the auth middleware) and an RBAC provider with
+      // getPermissionsForRole. Per-status behavior is covered in
+      // packages/server/src/server/handlers/auth.test.ts.
+      '/auth/roles/:roleId/permissions',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [

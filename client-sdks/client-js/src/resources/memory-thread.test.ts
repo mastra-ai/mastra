@@ -343,108 +343,119 @@ describe('MemoryThread', () => {
       expect(result).toEqual(mockMessages);
     });
 
-    it('should update thread without agentId in URL', async () => {
-      const updateParams = {
-        title: 'Updated Title',
-        metadata: { updated: true },
-        resourceId: 'resource-1',
-      };
+    // The server requires agentId for write operations (`update`, `delete`, `deleteMessages`,
+    // `clone`). The SDK enforces this client-side so callers get a clear error rather than a
+    // failed HTTP request. These methods accept agentId either via the constructor (preferred)
+    // or as a per-call argument; without one they throw.
 
+    it('should throw when calling update without agentId', () => {
+      expect(() => threadWithoutAgent.update({ title: 't', metadata: {}, resourceId: 'r' })).toThrow(
+        /MemoryThread\.update\(\) requires an agentId/,
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should accept a per-call agentId for update', async () => {
       const mockUpdatedThread = {
         id: threadId,
-        title: updateParams.title,
-        metadata: updateParams.metadata,
-        resourceId: updateParams.resourceId,
+        title: 'Updated',
+        metadata: {},
+        resourceId: 'r',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-
       mockFetchResponse(mockUpdatedThread);
 
-      const result = await threadWithoutAgent.update(updateParams);
+      const result = await threadWithoutAgent.update({
+        title: 'Updated',
+        metadata: {},
+        resourceId: 'r',
+        agentId: 'per-call-agent',
+      });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://localhost:4111/api/memory/threads/${threadId}`,
+        `http://localhost:4111/api/memory/threads/${threadId}?agentId=per-call-agent`,
         expect.objectContaining({
           method: 'PATCH',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-key',
-          }),
-          body: JSON.stringify(updateParams),
+          body: JSON.stringify({ title: 'Updated', metadata: {}, resourceId: 'r' }),
         }),
       );
       expect(result).toEqual(mockUpdatedThread);
     });
 
-    it('should delete thread without agentId in URL', async () => {
-      const mockResponse = { result: 'Thread deleted' };
+    it('should throw when calling delete without agentId', () => {
+      expect(() => threadWithoutAgent.delete()).toThrow(/MemoryThread\.delete\(\) requires an agentId/);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
 
+    it('should accept a per-call agentId for delete', async () => {
+      const mockResponse = { result: 'Thread deleted' };
       mockFetchResponse(mockResponse);
 
-      const result = await threadWithoutAgent.delete();
+      const result = await threadWithoutAgent.delete({ agentId: 'per-call-agent' });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://localhost:4111/api/memory/threads/${threadId}`,
-        expect.objectContaining({
-          method: 'DELETE',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-key',
-          }),
-        }),
+        `http://localhost:4111/api/memory/threads/${threadId}?agentId=per-call-agent`,
+        expect.objectContaining({ method: 'DELETE' }),
       );
       expect(result).toEqual(mockResponse);
     });
 
-    it('should clone thread without agentId in URL', async () => {
-      const cloneParams = {
-        newThreadId: 'cloned-thread-id',
-        newTitle: 'Cloned Thread',
-        newMetadata: { cloned: true },
-      };
+    it('should throw when calling clone without agentId', () => {
+      expect(() => threadWithoutAgent.clone({ newThreadId: 'x' })).toThrow(
+        /MemoryThread\.clone\(\) requires an agentId/,
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
 
+    it('should accept a per-call agentId for clone', async () => {
       const mockCloneResponse = {
         thread: {
-          id: cloneParams.newThreadId,
-          title: cloneParams.newTitle,
-          metadata: cloneParams.newMetadata,
+          id: 'cloned-thread-id',
+          title: 'Cloned',
+          metadata: {},
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-        messages: [{ id: 'cloned-msg-1', content: 'Hello', role: 'user' }],
+        messages: [],
       };
-
       mockFetchResponse(mockCloneResponse);
 
-      const result = await threadWithoutAgent.clone(cloneParams);
+      const result = await threadWithoutAgent.clone({
+        newThreadId: 'cloned-thread-id',
+        agentId: 'per-call-agent',
+      });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://localhost:4111/api/memory/threads/${threadId}/clone`,
+        `http://localhost:4111/api/memory/threads/${threadId}/clone?agentId=per-call-agent`,
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-key',
-          }),
-          body: JSON.stringify(cloneParams),
+          body: JSON.stringify({ newThreadId: 'cloned-thread-id' }),
         }),
       );
       expect(result).toEqual(mockCloneResponse);
     });
 
-    it('should delete messages without agentId in URL', async () => {
-      const messageIds = ['msg-1', 'msg-2'];
-      const mockResponse = { success: true, message: '2 messages deleted successfully' };
+    it('should throw when calling deleteMessages without agentId', () => {
+      expect(() => threadWithoutAgent.deleteMessages(['m'])).toThrow(
+        /MemoryThread\.deleteMessages\(\) requires an agentId/,
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
 
+    it('should accept a per-call agentId for deleteMessages', async () => {
+      const messageIds = ['msg-1'];
+      const mockResponse = { success: true, message: '1 message deleted successfully' };
       mockFetchResponse(mockResponse);
 
-      const result = await threadWithoutAgent.deleteMessages(messageIds);
+      const result = await threadWithoutAgent.deleteMessages(messageIds, {
+        agentId: 'per-call-agent',
+      });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://localhost:4111/api/memory/messages/delete`,
+        `http://localhost:4111/api/memory/messages/delete?agentId=per-call-agent`,
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-key',
-          }),
           body: JSON.stringify({ messageIds }),
         }),
       );

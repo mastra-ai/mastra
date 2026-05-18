@@ -3,13 +3,18 @@ import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/sto
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
 
-type StoredTask = Omit<BackgroundTask, 'createdAt' | 'startedAt' | 'completedAt' | 'args' | 'result' | 'error'> & {
+type StoredTask = Omit<
+  BackgroundTask,
+  'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt' | 'args' | 'result' | 'error' | 'suspendPayload'
+> & {
   createdAt: string;
   startedAt?: string;
+  suspendedAt?: string;
   completedAt?: string;
   args: string;
   result?: string;
   error?: string;
+  suspendPayload?: string;
 };
 
 function serializeJson(v: unknown): any {
@@ -23,8 +28,10 @@ function toStored(task: BackgroundTask): StoredTask {
     args: serializeJson(task.args),
     result: serializeJson(task.result),
     error: serializeJson(task.error),
+    suspendPayload: serializeJson(task.suspendPayload),
     createdAt: task.createdAt.toISOString(),
     startedAt: task.startedAt?.toISOString(),
+    suspendedAt: task.suspendedAt?.toISOString(),
     completedAt: task.completedAt?.toISOString(),
   };
 }
@@ -50,11 +57,13 @@ function fromStored(stored: StoredTask): BackgroundTask {
     runId: stored.runId,
     result: parseJson(stored.result),
     error: parseJson(stored.error),
+    suspendPayload: parseJson(stored.suspendPayload),
     retryCount: stored.retryCount,
     maxRetries: stored.maxRetries,
     timeoutMs: stored.timeoutMs,
     createdAt: new Date(stored.createdAt),
     startedAt: stored.startedAt ? new Date(stored.startedAt) : undefined,
+    suspendedAt: stored.suspendedAt ? new Date(stored.suspendedAt) : undefined,
     completedAt: stored.completedAt ? new Date(stored.completedAt) : undefined,
   };
 }
@@ -81,12 +90,15 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     if (!existing) return;
     const merged = { ...existing };
     if ('status' in update) merged.status = update.status!;
-    // Keep `result`/`error` raw here — `toStored(merged)` below serializes them
-    // exactly once. Serializing twice would double-encode (e.g. `"\"value\""`).
+    // Keep `result`/`error`/`suspendPayload` raw here — `toStored(merged)` below
+    // serializes them exactly once. Serializing twice would double-encode
+    // (e.g. `"\"value\""`).
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
+    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
+    if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
     // Convex has no update — delete and re-insert
     await this.#db.deleteMany(TABLE_BACKGROUND_TASKS, [taskId]);
@@ -109,6 +121,7 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     if (filter.agentId) tasks = tasks.filter(t => t.agentId === filter.agentId);
     if (filter.threadId) tasks = tasks.filter(t => t.threadId === filter.threadId);
     if (filter.toolName) tasks = tasks.filter(t => t.toolName === filter.toolName);
+    if (filter.toolCallId) tasks = tasks.filter(t => t.toolCallId === filter.toolCallId);
     if (filter.runId) tasks = tasks.filter(t => t.runId === filter.runId);
     // Date range filtering
     const dateCol = filter.dateFilterBy ?? 'createdAt';

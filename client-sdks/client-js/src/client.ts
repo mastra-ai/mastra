@@ -260,8 +260,14 @@ export class MastraClient extends BaseResource {
     if (params.agentId) queryParams.set('agentId', params.agentId);
     if (params.page !== undefined) queryParams.set('page', params.page.toString());
     if (params.perPage !== undefined) queryParams.set('perPage', params.perPage.toString());
-    if (params.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
@@ -349,15 +355,22 @@ export class MastraClient extends BaseResource {
 
   public deleteThread(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts:
+      | { agentId: string; networkId?: never; requestContext?: RequestContext | Record<string, any> }
+      | { networkId: string; agentId?: never; requestContext?: RequestContext | Record<string, any> },
   ): Promise<{ success: boolean; message: string }> {
-    let url = '';
-
-    if (opts.agentId) {
-      url = `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+    if (!opts || !!opts.agentId === !!opts.networkId) {
+      throw new Error(
+        'MastraClient.deleteThread() requires exactly one of agentId or networkId. ' +
+          'The server cannot resolve which memory store owns the thread without one, ' +
+          'and passing both is ambiguous.',
+      );
     }
+
+    const url = opts.agentId
+      ? `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`
+      : `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+
     return this.request(url, { method: 'DELETE' });
   }
 
@@ -534,7 +547,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of action IDs to action details
    */
   public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
-    return this.request('/agent-builder/');
+    return this.request('/agent-builder');
   }
 
   /**
@@ -1922,6 +1935,8 @@ export class MastraClient extends BaseResource {
     if (params.runId) searchParams.set('runId', params.runId);
     if (params.threadId) searchParams.set('threadId', params.threadId);
     if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.toolName) searchParams.set('toolName', params.toolName);
+    if (params.toolCallId) searchParams.set('toolCallId', params.toolCallId);
     if (params.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
     if (params.toDate) searchParams.set('toDate', params.toDate.toISOString());
     if (params.dateFilterBy) searchParams.set('dateFilterBy', params.dateFilterBy);

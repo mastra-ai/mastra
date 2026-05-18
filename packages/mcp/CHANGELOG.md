@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 1.7.1-alpha.0
+
+### Patch Changes
+
+- Close previous SSE transport before accepting a new connection in `MCPServer.connectSSE()`. Previously, sequential SSE connections to the same server would fail with "Already connected to a transport" because the underlying protocol was never closed when the previous client disconnected. ([#16695](https://github.com/mastra-ai/mastra/pull/16695))
+
 ## 1.7.0
 
 ### Minor Changes

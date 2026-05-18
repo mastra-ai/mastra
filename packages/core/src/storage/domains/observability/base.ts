@@ -81,6 +81,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   UpdateSpanArgs,
 } from './tracing';
@@ -105,7 +106,7 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Provides hints for tracing strategy selection by the DefaultExporter.
+   * Provides hints for tracing strategy selection by the MastraStorageExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
    */
   public get observabilityStrategy(): {
@@ -119,7 +120,7 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Provides hints for tracing strategy selection by the DefaultExporter.
+   * Provides hints for tracing strategy selection by the MastraStorageExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
    * @deprecated Use {@link observabilityStrategy} instead.
    * @see {@link observabilityStrategy} for the replacement property.
@@ -312,6 +313,18 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing traces',
+    });
+  }
+
+  /**
+   * Retrieves a lightweight list of traces with optional filtering.
+   */
+  async listTracesLight(_args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_TRACES_LIGHT_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing lightweight traces',
     });
   }
 

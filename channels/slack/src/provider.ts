@@ -643,6 +643,7 @@ export class SlackProvider implements ChannelProvider {
     const displayName = installation.name || agent?.name || installation.agentId;
 
     const adapter = createSlackAdapter({
+      ...this.#forwardedAdapterOptions(),
       botToken: installation.botToken,
       botUserId: installation.botUserId,
       signingSecret: installation.signingSecret,
@@ -725,12 +726,34 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
+   * Extract the SlackAdapter fields the provider forwards to every
+   * `createSlackAdapter()` call. Installation-managed credentials/identity are
+   * applied separately.
+   */
+  #forwardedAdapterOptions() {
+    const { logger } = this.#channelConfig;
+    return { logger };
+  }
+
+  /**
+   * Extract the AgentChannels fields the provider forwards. `adapters` and
+   * `userName` are applied separately by `#createAgentChannels`.
+   */
+  #forwardedChannelOptions() {
+    const { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions } = this.#channelConfig;
+    return { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions };
+  }
+
+  /**
    * Create AgentChannels for an agent with the Slack adapter.
    * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
+    const { adapterConfig } = this.#channelConfig;
+    const slackEntry = adapterConfig ? { adapter, ...adapterConfig } : adapter;
     const agentChannels = new AgentChannels({
-      adapters: { slack: adapter },
+      ...this.#forwardedChannelOptions(),
+      adapters: { slack: slackEntry },
       userName: agent.name,
     });
     agent.setChannels(agentChannels);
@@ -1211,6 +1234,7 @@ export class SlackProvider implements ChannelProvider {
       const agent = this.#mastra?.getAgentById(pending.agentId);
       const displayName = installation.name || agent?.name || pending.agentId;
       const adapter = createSlackAdapter({
+        ...this.#forwardedAdapterOptions(),
         botToken: installation.botToken,
         botUserId: installation.botUserId,
         signingSecret: installation.signingSecret,
@@ -1312,6 +1336,7 @@ export class SlackProvider implements ChannelProvider {
     const currentAdapter =
       this.#adapters.get(installation.id) ??
       createSlackAdapter({
+        ...this.#forwardedAdapterOptions(),
         botToken: installation.botToken,
         botUserId: installation.botUserId,
         signingSecret: installation.signingSecret,

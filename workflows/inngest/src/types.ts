@@ -1,9 +1,8 @@
 import type { Step, WorkflowConfig } from '@mastra/core/workflows';
-import type { Inngest, InngestFunction } from 'inngest';
+import type { Inngest } from 'inngest';
 
-// Extract Inngest's native flow control configuration types
+// Extract Inngest's native flow control configuration types from createFunction first argument
 export type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
-export type InngestCreateFunctionEventConfig = InngestFunction.Trigger<string>;
 
 // Extract specific flow control properties (excluding batching)
 export type InngestFlowControlConfig = Pick<
@@ -11,7 +10,9 @@ export type InngestFlowControlConfig = Pick<
   'concurrency' | 'rateLimit' | 'throttle' | 'debounce' | 'priority'
 >;
 
-export type InngestFlowCronConfig<TInputData, TInitialState> = Pick<InngestCreateFunctionEventConfig, 'cron'> & {
+// Cron config for scheduled workflows
+export type InngestFlowCronConfig<TInputData, TInitialState> = {
+  cron?: string;
   inputData?: TInputData;
   initialState?: TInitialState;
 };

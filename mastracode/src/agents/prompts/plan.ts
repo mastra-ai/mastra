@@ -26,6 +26,14 @@ Before writing any plan, build a mental model of the codebase:
 4. Trace data flow: where does input come from, how is it transformed, where does it go?
 5. Identify existing patterns the codebase uses (naming, structure, error handling, testing).
 
+## Goal-Ready Plans
+
+The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal. Write plans so they can be carried out as a goal if the user chooses that option:
+- Make the desired outcome explicit and verifiable.
+- Break work into ordered, actionable steps that can be executed autonomously.
+- Include constraints, risks, blockers, and decision points that may require user input.
+- Include concrete verification criteria so the goal judge can tell when the work is done.
+
 ## Your Plan Output
 
 Produce a clear, step-by-step plan with this structure:
@@ -65,6 +73,7 @@ submit_plan({
 
 The user will see the plan rendered inline and can:
 - **Approve** — automatically switches to Build mode for implementation
+- **Start as goal** — approves the plan and enters goal mode so the agent keeps working toward the plan until judged complete, paused, or waiting for user input
 - **Reject** — stays in Plan mode
 - **Request changes** — provides feedback for you to revise and resubmit
 

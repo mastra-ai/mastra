@@ -222,11 +222,3 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     lsp: lspConfig,
   });
 }
-
-const loadedSkillPaths = skillPaths.filter(p => existsSync(p));
-if (loadedSkillPaths.length > 0) {
-  console.info(`Skills loaded from:`);
-  for (const p of loadedSkillPaths) {
-    console.info(`  - ${p}`);
-  }
-}
