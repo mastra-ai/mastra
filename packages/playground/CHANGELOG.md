@@ -1,5 +1,24 @@
 # @internal/playground
 
+## 1.9.4-alpha.1
+
+### Patch Changes
+
+- Added `align` and `stack` variants to `PageLayout.Row`. Use `stack="responsive"` for top bars that should collapse to a vertical stack on narrow viewports, and `align="center"` to vertically center children. Applied the new variants to the Prompts and Workflows top bars so the search field and primary action share a single row on desktop and stack on mobile. ([#16714](https://github.com/mastra-ai/mastra/pull/16714))
+
+  ```tsx
+  <PageLayout.Row align="center" stack="responsive">
+    <ListSearch ... />
+    <Button ...>Create</Button>
+  </PageLayout.Row>
+  ```
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`9692d60`](https://github.com/mastra-ai/mastra/commit/9692d60298e8f629d10de54867642a38955fb708), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`b2ea6b5`](https://github.com/mastra-ai/mastra/commit/b2ea6b57cf21997e2271f5a2dba5ac987f53a181), [`32d0d87`](https://github.com/mastra-ai/mastra/commit/32d0d871b4cfa0328d7c8c044f5c3a85b68c6530), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`a45e18f`](https://github.com/mastra-ai/mastra/commit/a45e18fa35803bd69110bc4bad806befba078ffe), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25), [`b3ff840`](https://github.com/mastra-ai/mastra/commit/b3ff8400173007f318b8308c9013f5a41500b14d)]:
+  - @mastra/core@1.36.0-alpha.1
+  - @mastra/client-js@1.20.0-alpha.1
+  - @mastra/playground-ui@29.0.0-alpha.1
+  - @mastra/react@0.4.0-alpha.1
+
 ## 1.9.4-alpha.0
 
 ### Patch Changes
