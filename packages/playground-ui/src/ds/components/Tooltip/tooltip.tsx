@@ -5,14 +5,25 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay'> & {
+type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay' | 'timeout'> & {
   delay?: number;
+  timeout?: number;
   /** Radix API compatibility alias for `delay`. */
   delayDuration?: number;
+  /** Radix API compatibility alias for `timeout`. */
+  skipDelayDuration?: number;
 };
 
-function TooltipProvider({ delay, delayDuration, ...props }: TooltipProviderProps) {
-  return <TooltipPrimitive.Provider delay={delay ?? delayDuration ?? 0} {...props} />;
+function TooltipProvider({ delay, delayDuration, timeout, skipDelayDuration, ...props }: TooltipProviderProps) {
+  const resolvedDelay = delay ?? delayDuration;
+  const resolvedTimeout = timeout ?? skipDelayDuration;
+  return (
+    <TooltipPrimitive.Provider
+      {...(resolvedDelay !== undefined ? { delay: resolvedDelay } : {})}
+      {...(resolvedTimeout !== undefined ? { timeout: resolvedTimeout } : {})}
+      {...props}
+    />
+  );
 }
 
 const Tooltip = TooltipPrimitive.Root;
@@ -24,9 +35,7 @@ type TooltipTriggerProps = Omit<TooltipPrimitive.Trigger.Props, 'render'> & {
 const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipTriggerProps>(
   ({ asChild, children, ...props }, ref) => {
     if (asChild && React.isValidElement(children)) {
-      return (
-        <TooltipPrimitive.Trigger ref={ref} render={children as React.ReactElement} {...props} />
-      );
+      return <TooltipPrimitive.Trigger ref={ref} render={children} {...props} />;
     }
     return (
       <TooltipPrimitive.Trigger ref={ref} {...props}>
@@ -41,18 +50,7 @@ type TooltipContentProps = TooltipPrimitive.Popup.Props &
   Pick<TooltipPrimitive.Positioner.Props, 'side' | 'sideOffset' | 'align' | 'alignOffset'>;
 
 const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
-  (
-    {
-      className,
-      side = 'top',
-      sideOffset = 8,
-      align = 'center',
-      alignOffset = 0,
-      children,
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, side = 'top', sideOffset = 8, align = 'center', alignOffset = 0, children, ...props }, ref) => (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
         side={side}
