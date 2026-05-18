@@ -1,8 +1,11 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function toImportSpecifier(fromDir: string, target: string): string {
   const relative = path.relative(fromDir, target).replaceAll(path.sep, '/');
