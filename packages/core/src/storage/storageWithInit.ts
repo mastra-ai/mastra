@@ -16,8 +16,8 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
   // would cache the rejection forever and every subsequent storage call
   // would surface the same error with no way to recover short of process
   // restart.
-  const cacheInit = (initPromise: Promise<void>): Promise<void> => {
-    const wrapped = initPromise.then(undefined, err => {
+  const cacheInit = (initResult: Promise<void> | void): Promise<void> => {
+    const wrapped = Promise.resolve(initResult).then(undefined, err => {
       if (hasInitialized === wrapped) {
         hasInitialized = null;
       }

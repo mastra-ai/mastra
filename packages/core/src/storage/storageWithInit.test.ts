@@ -161,6 +161,38 @@ describe('augmentWithInit', () => {
     }
   });
 
+  it('supports sync init implementations when auto-init runs before sync methods', async () => {
+    const init = vi.fn();
+    const setLogger = vi.fn();
+    const mockStorage = {
+      init,
+      __setLogger: setLogger,
+      disableInit: false,
+    } as unknown as MastraStorage;
+
+    const augmentedStorage = augmentWithInit(mockStorage);
+
+    await augmentedStorage.__setLogger({ child: vi.fn() } as any);
+
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(setLogger).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports explicit init() calls when init is synchronous', async () => {
+    const init = vi.fn();
+    const mockStorage = {
+      init,
+      disableInit: false,
+    } as unknown as MastraStorage;
+
+    const augmentedStorage = augmentWithInit(mockStorage);
+
+    await augmentedStorage.init();
+    await augmentedStorage.init();
+
+    expect(init).toHaveBeenCalledTimes(1);
+  });
+
   // Regression coverage: previously a single rejected init promise was cached
   // forever, causing every subsequent storage call to surface the same error
   // with no recovery short of a process restart. Now a rejection clears the
