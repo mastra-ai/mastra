@@ -14,11 +14,26 @@ import {
 } from './migrate-paths';
 import { MigrateBundler } from './MigrateBundler';
 
+interface StorageResult {
+  skipped: boolean;
+  success?: boolean;
+  alreadyMigrated?: boolean;
+  duplicatesRemoved?: number;
+  message?: string;
+}
+
+interface AuthSyncResult {
+  skipped: boolean;
+  success?: boolean;
+  message?: string;
+  permissions?: { created: string[]; updated: string[]; unchanged: string[]; errors: string[] } | null;
+  roles?: { created: string[]; updated: string[]; unchanged: string[]; errors: string[] } | null;
+}
+
 interface MigrationResult {
   success: boolean;
-  alreadyMigrated: boolean;
-  duplicatesRemoved: number;
-  message: string;
+  storage: StorageResult;
+  auth: AuthSyncResult;
 }
 
 function quoteShellArg(value: string): string {
@@ -126,6 +141,7 @@ export async function migrate({
     const migrationProcess = execa(process.execPath, [join(dotMastraPath, 'output', 'index.mjs')], {
       cwd: rootDir,
       env: {
+        ...process.env, // Inherit current environment (PATH, etc.)
         NODE_ENV: 'production',
         MASTRA_DISABLE_STORAGE_INIT: 'true', // Prevent MIGRATION_REQUIRED error during import
         ...Object.fromEntries(loadedEnv),
@@ -149,34 +165,77 @@ export async function migrate({
       }
     });
 
+    if (debug) {
+      logger.debug('Waiting for migration process to complete...');
+    }
+
     const processResult = await migrationProcess;
+
+    if (debug) {
+      logger.debug(`Migration process exited with code ${processResult.exitCode}`);
+      logger.debug(`stdout: ${stdoutData.slice(0, 500)}`);
+      logger.debug(`stderr: ${stderrData.slice(0, 500)}`);
+    }
 
     // Try to parse the JSON result from stdout
     let result: MigrationResult | undefined;
     try {
-      // Find the last JSON object in the output (in case there's other output)
-      const jsonMatch = stdoutData.match(/\{[^{}]*"success"[^{}]*\}/g);
-      if (jsonMatch && jsonMatch.length > 0) {
-        result = JSON.parse(jsonMatch[jsonMatch.length - 1]!);
+      // Find the JSON object starting with {"success" - the migration output starts with this pattern
+      // We parse from the first { that's followed by "success" to handle any prefix logs
+      const jsonStartIndex = stdoutData.indexOf('{"success"');
+      if (jsonStartIndex !== -1) {
+        result = JSON.parse(stdoutData.slice(jsonStartIndex));
       }
     } catch {
       // If we can't parse JSON, the migration likely failed
+      if (debug) {
+        logger.debug(`Failed to parse migration result JSON: ${stdoutData.slice(0, 200)}`);
+      }
     }
 
     if (result) {
-      if (result.success) {
-        if (result.alreadyMigrated) {
-          logger.info(pc.green('✓ Migration already complete.'));
-        } else {
-          logger.info(pc.green('✓ Migration completed successfully!'));
-          if (result.duplicatesRemoved > 0) {
-            logger.info('Removed duplicate entries', { count: result.duplicatesRemoved });
+      // Report storage migration results
+      if (result.storage) {
+        if (result.storage.skipped) {
+          logger.info(pc.dim(`Storage: ${result.storage.message || 'Skipped'}`));
+        } else if (result.storage.success) {
+          if (result.storage.alreadyMigrated) {
+            logger.info(pc.green('✓ Storage: Already migrated'));
+          } else {
+            logger.info(pc.green('✓ Storage: Migration completed'));
+            if (result.storage.duplicatesRemoved && result.storage.duplicatesRemoved > 0) {
+              logger.info(`  Removed ${result.storage.duplicatesRemoved} duplicate entries`);
+            }
           }
+        } else {
+          logger.error(pc.red(`✗ Storage: ${result.storage.message || 'Failed'}`));
         }
-        logger.info(result.message);
-      } else {
-        logger.error(pc.red('✗ Migration failed.'));
-        logger.error(result.message);
+      }
+
+      // Report auth sync results
+      if (result.auth) {
+        if (result.auth.skipped) {
+          logger.info(pc.dim(`Auth: ${result.auth.message || 'Skipped'}`));
+        } else if (result.auth.success) {
+          logger.info(pc.green('✓ Auth: Sync completed'));
+          if (result.auth.permissions) {
+            const p = result.auth.permissions;
+            logger.info(
+              `  Permissions: ${p.created.length} created, ${p.updated.length} updated, ${p.unchanged.length} unchanged`,
+            );
+          }
+          if (result.auth.roles) {
+            const r = result.auth.roles;
+            logger.info(
+              `  Roles: ${r.created.length} created, ${r.updated.length} updated, ${r.unchanged.length} unchanged`,
+            );
+          }
+        } else {
+          logger.error(pc.red(`✗ Auth: ${result.auth.message || 'Failed'}`));
+        }
+      }
+
+      if (!result.success) {
         process.exit(1);
       }
     } else {

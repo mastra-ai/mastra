@@ -13,6 +13,8 @@ import {
   Input,
   Textarea,
   Checkbox,
+  AlertDialog,
+  toast,
 } from '@mastra/playground-ui';
 import { PlusIcon, PencilIcon, TrashIcon, XIcon } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
@@ -462,18 +464,23 @@ function Roles() {
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteConfirmRole, setDeleteConfirmRole] = useState<Role | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleEdit = (role: Role) => {
     setEditingRole(role);
   };
 
-  const handleDelete = async (role: Role) => {
-    if (!confirm(`Are you sure you want to delete the "${role.name}" role? This action cannot be undone.`)) {
-      return;
-    }
+  const handleDeleteClick = (role: Role) => {
+    setDeleteConfirmRole(role);
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmRole) return;
+
+    setIsDeleting(true);
     try {
-      const response = await fetch(`${baseUrl}${apiPrefix}/auth/roles/${role.id}`, {
+      const response = await fetch(`${baseUrl}${apiPrefix}/auth/roles/${deleteConfirmRole.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -484,13 +491,17 @@ function Roles() {
 
       if (!response.ok) {
         const data = await response.json();
-        alert(data.message || 'Failed to delete role');
+        toast.error(data.error || data.message || 'Failed to delete role');
         return;
       }
 
+      toast.success(`Role "${deleteConfirmRole.name}" deleted`);
       void refetch();
     } catch {
-      alert('Failed to delete role');
+      toast.error('Failed to delete role');
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirmRole(null);
     }
   };
 
@@ -519,15 +530,16 @@ function Roles() {
 
         if (!response.ok) {
           const data = await response.json();
-          alert(data.message || `Failed to ${isEditing ? 'update' : 'create'} role`);
+          toast.error(data.error || data.message || `Failed to ${isEditing ? 'update' : 'create'} role`);
           return;
         }
 
+        toast.success(`Role ${isEditing ? 'updated' : 'created'} successfully`);
         void refetch();
         setShowCreateModal(false);
         setEditingRole(null);
       } catch {
-        alert('Failed to save role');
+        toast.error('Failed to save role');
       } finally {
         setIsSaving(false);
       }
@@ -582,7 +594,7 @@ function Roles() {
         roles={rolesList}
         isLoading={isLoading}
         onEdit={handleEdit}
-        onDelete={handleDelete}
+        onDelete={handleDeleteClick}
         canManage={canManage ?? false}
       />
 
@@ -609,6 +621,24 @@ function Roles() {
           isSaving={isSaving}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmRole} onOpenChange={open => !open && setDeleteConfirmRole(null)}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete Role</AlertDialog.Title>
+            <AlertDialog.Description>
+              Are you sure you want to delete the "{deleteConfirmRole?.name}" role? This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Action onClick={handleDeleteConfirm} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </PageLayout>
   );
 }

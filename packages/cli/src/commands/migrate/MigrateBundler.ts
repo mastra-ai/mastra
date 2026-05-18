@@ -46,64 +46,109 @@ export class MigrateBundler extends BuildBundler {
     return `
     import { mastra } from '#mastra';
 
-    async function runMigration() {
+    async function runStorageMigration() {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        console.log(JSON.stringify({
-          success: false,
-          alreadyMigrated: false,
-          duplicatesRemoved: 0,
-          message: 'Storage not configured. Please configure storage in your Mastra instance.',
-        }));
-        process.exit(1);
+        return { skipped: true, message: 'Storage not configured' };
       }
 
       // Access the observability store directly from storage.stores
       const observabilityStore = storage.stores?.observability;
 
       if (!observabilityStore) {
-        console.log(JSON.stringify({
-          success: false,
-          alreadyMigrated: false,
-          duplicatesRemoved: 0,
-          message: 'Observability storage not configured. Migration not required.',
-        }));
-        process.exit(0);
+        return { skipped: true, message: 'Observability storage not configured' };
       }
 
       // Check if the store has a migrateSpans method
       if (typeof observabilityStore.migrateSpans !== 'function') {
-        console.log(JSON.stringify({
-          success: false,
-          alreadyMigrated: false,
-          duplicatesRemoved: 0,
-          message: 'Migration not supported for this storage backend.',
-        }));
-        process.exit(1);
+        return { skipped: true, message: 'Migration not supported for this storage backend' };
       }
 
       try {
-        // Run the migration - migrateSpans handles everything internally
         const result = await observabilityStore.migrateSpans();
-
-        console.log(JSON.stringify({
+        return {
+          skipped: false,
           success: result.success,
           alreadyMigrated: result.alreadyMigrated,
           duplicatesRemoved: result.duplicatesRemoved,
           message: result.message,
-        }));
-
-        process.exit(result.success ? 0 : 1);
+        };
       } catch (error) {
-        console.log(JSON.stringify({
+        return {
+          skipped: false,
           success: false,
-          alreadyMigrated: false,
-          duplicatesRemoved: 0,
-          message: error instanceof Error ? error.message : 'Unknown error during migration',
-        }));
-        process.exit(1);
+          message: error instanceof Error ? error.message : 'Unknown error during storage migration',
+        };
       }
+    }
+
+    async function runAuthSync() {
+      // Check if studio auth is configured with RBAC
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac) {
+        return { skipped: true, message: 'Studio RBAC not configured' };
+      }
+
+      // Check if the RBAC provider has sync methods
+      const hasSyncPermissions = typeof rbac.syncPermissionsToWorkOS === 'function';
+      const hasSyncRoles = typeof rbac.syncRolesToWorkOS === 'function';
+
+      if (!hasSyncPermissions && !hasSyncRoles) {
+        return { skipped: true, message: 'RBAC provider does not support sync' };
+      }
+
+      const results = { permissions: null, roles: null };
+
+      try {
+        if (hasSyncPermissions) {
+          results.permissions = await rbac.syncPermissionsToWorkOS();
+        }
+        if (hasSyncRoles) {
+          results.roles = await rbac.syncRolesToWorkOS();
+        }
+
+        return {
+          skipped: false,
+          success: true,
+          permissions: results.permissions,
+          roles: results.roles,
+        };
+      } catch (error) {
+        return {
+          skipped: false,
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error during auth sync',
+        };
+      }
+    }
+
+    async function runMigration() {
+      const results = {
+        storage: null,
+        auth: null,
+      };
+
+      // Run storage migration
+      results.storage = await runStorageMigration();
+
+      // Run auth sync
+      results.auth = await runAuthSync();
+
+      // Determine overall success
+      const storageOk = results.storage.skipped || results.storage.success;
+      const authOk = results.auth.skipped || results.auth.success;
+      const overallSuccess = storageOk && authOk;
+
+      console.log(JSON.stringify({
+        success: overallSuccess,
+        storage: results.storage,
+        auth: results.auth,
+      }));
+
+      process.exit(overallSuccess ? 0 : 1);
     }
 
     runMigration();

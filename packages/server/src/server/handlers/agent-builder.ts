@@ -37,7 +37,8 @@ async function registerAgentBuilderWorkflows(
   mastra: Parameters<typeof WorkflowRegistry.registerTemporaryWorkflows>[1],
 ) {
   const agentBuilderWorkflows = await loadAgentBuilderWorkflows();
-  WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
+  // Type cast needed due to workflow step type variance
+  WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows as any, mastra);
   return agentBuilderWorkflows;
 }
 

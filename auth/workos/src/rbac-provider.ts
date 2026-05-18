@@ -103,10 +103,9 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     this.options = options;
 
     // Determine permission source:
-    // - useWorkOSRoles explicitly set → use that value
-    // - No roleMapping → use provider permissions directly from WorkOS
-    // - roleMapping without useWorkOSRoles → use static roleMapping
-    this.useProviderPermissions = options.useWorkOSRoles ?? !options.roleMapping;
+    // - roleMapping provided → use static roleMapping (run `mastra migrate` to sync to WorkOS)
+    // - No roleMapping → use WorkOS as source of truth
+    this.useProviderPermissions = !options.roleMapping;
 
     // Initialize LRU cache for user roles (the expensive WorkOS API call)
     this.rolesCache = new LRUCache<string, Promise<string[]>>({
@@ -119,35 +118,6 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       max: 1, // Single org's role definitions
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
-
-    // Validate sync options
-    if (options.syncRoles && !options.syncPermissions) {
-      throw new Error(
-        '[MastraRBACWorkos] syncRoles requires syncPermissions to be enabled. ' +
-          'Permissions must exist in WorkOS before roles can reference them.',
-      );
-    }
-    if (options.syncRoles && !options.roleMapping) {
-      throw new Error(
-        '[MastraRBACWorkos] syncRoles requires roleMapping to be defined. ' +
-          'Provide a roleMapping to specify which roles and permissions to sync.',
-      );
-    }
-
-    // If syncPermissions is enabled, schedule permission sync (and role sync if enabled)
-    if (options.syncPermissions) {
-      // Sync asynchronously in the background to avoid blocking initialization
-      this.syncPermissionsToWorkOS()
-        .then(async () => {
-          // If syncRoles is enabled, sync roles after permissions
-          if (options.syncRoles) {
-            await this.syncRolesToWorkOS();
-          }
-        })
-        .catch(error => {
-          console.warn('[MastraRBACWorkos] Failed to sync to WorkOS:', error.message);
-        });
-    }
   }
 
   /**
@@ -291,14 +261,24 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
         try {
           if (existing) {
-            // Role exists - update permissions
-            await this.workos.authorization.setEnvironmentRolePermissions(roleSlug, {
-              permissions: permissions as string[],
-            });
-            result.updated.push(roleSlug);
-            console.info(
-              `[MastraRBACWorkos] Updated environment role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
-            );
+            // Role exists - check if permissions need updating
+            const existingPerms = new Set(existing.permissions ?? []);
+            const desiredPerms = new Set(permissions as string[]);
+            const permsMatch =
+              existingPerms.size === desiredPerms.size && [...desiredPerms].every(p => existingPerms.has(p));
+
+            if (permsMatch) {
+              result.unchanged.push(roleSlug);
+            } else {
+              // Update permissions only if they changed
+              await this.workos.authorization.setEnvironmentRolePermissions(roleSlug, {
+                permissions: permissions as string[],
+              });
+              result.updated.push(roleSlug);
+              console.info(
+                `[MastraRBACWorkos] Updated environment role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
+              );
+            }
           } else {
             // Create new environment role
             await this.workos.authorization.createEnvironmentRole({
@@ -323,7 +303,7 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       }
 
       console.info(
-        `[MastraRBACWorkos] Role sync complete: ${result.created.length} created, ${result.updated.length} updated, ${result.errors.length} errors`,
+        `[MastraRBACWorkos] Role sync complete: ${result.created.length} created, ${result.updated.length} updated, ${result.unchanged.length} unchanged, ${result.errors.length} errors`,
       );
     } catch (error) {
       console.error('[MastraRBACWorkos] Role sync failed:', error);
@@ -408,14 +388,16 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       ...DEFAULT_RBAC_CAPABILITIES,
       // Multi-role support depends on WorkOS environment configuration
       multiRole: this.options.multiRole ?? false,
+      // Roles can be created/updated via WorkOS API (delete not supported for environment roles)
+      dynamicRoles: true,
       // Roles are managed in WorkOS dashboard (or via API)
       providerManagedRoles: true,
       // Roles come from the provider (WorkOS)
       roleSource: 'provider',
       // Permissions come from provider when useProviderPermissions is true
       permissionSource: this.useProviderPermissions ? 'provider' : 'roleMapping',
-      // Permissions are derived from static roleMapping config (or from provider if useProviderPermissions)
-      permissionEditing: false,
+      // Permissions can be edited on roles via WorkOS API
+      permissionEditing: true,
       // Role assignment is supported via WorkOS API
       roleAssignment: true,
     };
@@ -930,5 +912,78 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
     // Invalidate cache for this user
     this.rolesCache.delete(userId);
+  }
+
+  /**
+   * Create a new environment role in WorkOS.
+   */
+  async createRole(role: Omit<RoleDefinition, 'id'> & { id?: string }): Promise<RoleDefinition> {
+    const slug = role.id || role.name.toLowerCase().replace(/\s+/g, '-');
+
+    // Create the environment role
+    const created = await this.workos.authorization.createEnvironmentRole({
+      slug,
+      name: role.name,
+      description: role.description,
+    });
+
+    // Set permissions on the role
+    const permissions = role.permissions as string[];
+    if (permissions.length > 0) {
+      await this.workos.authorization.setEnvironmentRolePermissions(slug, {
+        permissions,
+      });
+    }
+
+    return {
+      id: created.slug,
+      name: created.name,
+      description: created.description ?? undefined,
+      permissions: permissions as RoleDefinition['permissions'],
+    };
+  }
+
+  /**
+   * Update an existing environment role in WorkOS.
+   */
+  async updateRole(roleId: string, updates: Partial<Omit<RoleDefinition, 'id'>>): Promise<RoleDefinition> {
+    // Update role metadata if name or description changed
+    if (updates.name !== undefined || updates.description !== undefined) {
+      await this.workos.authorization.updateEnvironmentRole(roleId, {
+        name: updates.name,
+        description: updates.description,
+      });
+    }
+
+    // Update permissions if provided
+    const permissions = updates.permissions as string[] | undefined;
+    if (permissions !== undefined) {
+      await this.workos.authorization.setEnvironmentRolePermissions(roleId, {
+        permissions,
+      });
+    }
+
+    // Fetch the updated role to return
+    const updated = await this.workos.authorization.getEnvironmentRole(roleId);
+    return {
+      id: updated.slug,
+      name: updated.name,
+      description: updated.description ?? undefined,
+      permissions: (updated.permissions ?? []) as RoleDefinition['permissions'],
+    };
+  }
+
+  /**
+   * Delete an environment role from WorkOS.
+   *
+   * NOTE: WorkOS SDK does not support deleting environment roles.
+   * Environment roles can only be deleted from the WorkOS Dashboard.
+   * This method throws an error indicating the limitation.
+   */
+  async deleteRole(_roleId: string): Promise<void> {
+    throw new Error(
+      'WorkOS does not support deleting environment roles via API. ' +
+        'Please delete the role from the WorkOS Dashboard instead.',
+    );
   }
 }

@@ -29,6 +29,8 @@ export interface NavItem {
   requiredPermission?: string;
   requiredAnyPermission?: string[];
   activePaths?: string[];
+  /** Hide this item unless the specified capability is enabled (e.g., 'fga' for FGA-only pages) */
+  requiredCapability?: 'fga' | 'rbac';
 }
 
 export interface NavSection {
@@ -179,21 +181,21 @@ export const mainNav: NavSection[] = [
   {
     key: 'auth',
     title: 'Auth',
-    href: '/team',
+    href: '/users',
     items: [
-      {
-        name: 'Team',
-        url: '/team',
-        Icon: UsersIcon,
-        isOnMastraPlatform: true,
-        requiredPermission: 'team:read',
-      },
       {
         name: 'Users',
         url: '/users',
         Icon: UserIcon,
         isOnMastraPlatform: true,
         requiredPermission: 'users:read',
+      },
+      {
+        name: 'Team',
+        url: '/team',
+        Icon: UsersIcon,
+        isOnMastraPlatform: true,
+        requiredPermission: 'team:read',
       },
       {
         name: 'Roles',
@@ -208,6 +210,7 @@ export const mainNav: NavSection[] = [
         Icon: FolderIcon,
         isOnMastraPlatform: true,
         requiredPermission: 'team:read',
+        requiredCapability: 'fga',
       },
     ],
   },

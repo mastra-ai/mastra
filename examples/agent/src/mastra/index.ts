@@ -154,6 +154,7 @@ export const mastra = new Mastra({
   },
   bundler: {
     sourcemap: true,
+    externals: ['@duckdb/node-bindings', '@mastra/duckdb'],
   },
   editor: new MastraEditor({
     toolProviders: {
@@ -183,20 +184,16 @@ export const mastra = new Mastra({
       organizationId: process.env.WORKOS_ORGANIZATION_ID, // Filter to this org
     }),
     rbac: new MastraRBACWorkos({
-      organizationId: process.env.WORKOS_ORGANIZATION_ID, // Only get roles from this org
-      syncPermissions: true, // Sync Mastra permissions to WorkOS on startup
-      syncRoles: true, // Sync roles and their permissions to WorkOS
-      useWorkOSRoles: true, // Use WorkOS as source of truth at runtime
+      organizationId: process.env.WORKOS_ORGANIZATION_ID,
+      // roleMapping defines permissions for each role
+      // Run `mastra migrate` to sync these to WorkOS
+      // If roleMapping is omitted, WorkOS is the source of truth
       roleMapping: {
         owner: ['*'], // Full access
         admin: ['*:read', '*:write', '*:execute', '*:delete'], // All actions
         member: ['*:read', '*:execute'], // Read and execute
         viewer: ['*:read'], // Read only
       },
-      // With syncRoles + useWorkOSRoles:
-      // - roleMapping is synced to WorkOS on startup
-      // - At runtime, permissions come from WorkOS (edits in dashboard take effect)
-      // To stop syncing after initial setup, set syncRoles: false but keep useWorkOSRoles: true
     }),
   },
   backgroundTasks: {

@@ -52,12 +52,17 @@ export function AppSidebar() {
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
 
+  const capabilities = authCapabilities && 'capabilities' in authCapabilities ? authCapabilities.capabilities : null;
+
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) return true;
     if (item.requiredPermission && !hasPermission(item.requiredPermission)) return false;
     if (item.requiredAnyPermission && !hasAnyPermission(item.requiredAnyPermission)) return false;
+    // Hide items that require a capability that isn't enabled
+    if (item.requiredCapability === 'fga' && !capabilities?.fga) return false;
+    if (item.requiredCapability === 'rbac' && !capabilities?.rbac) return false;
     return true;
   };
 

@@ -1403,7 +1403,7 @@ export const POST_CREATE_ROLE_ROUTE = createRoute({
   description: 'Creates a new role definition. Requires team:write permission.',
   tags: ['Auth'],
   handler: async ctx => {
-    const { mastra, rawRequest } = ctx as any;
+    const { mastra, request } = ctx as any;
 
     try {
       const studioConfig = mastra.getStudio?.();
@@ -1413,25 +1413,34 @@ export const POST_CREATE_ROLE_ROUTE = createRoute({
         throw new HTTPException(501, { message: 'Role creation not supported by this RBAC provider' });
       }
 
-      const body = (await rawRequest.json?.()) || {};
+      const body = await request.json();
 
-      if (!body.id || !body.name || !body.permissions) {
-        throw new HTTPException(400, { message: 'Role id, name, and permissions are required' });
+      if (!body.name || !body.permissions) {
+        throw new HTTPException(400, { message: 'Role name and permissions are required' });
       }
 
-      await (rbac as any).createRole({
-        id: body.id,
+      // Generate slug from name if id not provided
+      const roleId =
+        body.id ||
+        body.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+
+      const role = await (rbac as any).createRole({
+        id: roleId,
         name: body.name,
         description: body.description,
         permissions: body.permissions,
         inherits: body.inherits,
       });
 
-      return { success: true, role: body };
+      return { success: true, role: role || { id: roleId, ...body } };
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      mastra?.getLogger?.()?.error('Failed to create role', { error });
-      throw new HTTPException(500, { message: 'Failed to create role' });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      mastra?.getLogger?.()?.error('Failed to create role', { error: errorMessage });
+      throw new HTTPException(500, { message: `Failed to create role: ${errorMessage}` });
     }
   },
 });
@@ -1448,8 +1457,8 @@ export const PUT_UPDATE_ROLE_ROUTE = createRoute({
   description: 'Updates an existing role definition. Requires team:write permission.',
   tags: ['Auth'],
   handler: async ctx => {
-    const { mastra, rawRequest } = ctx as any;
-    const roleId = (ctx as any).roleId || rawRequest.param?.('roleId');
+    const { mastra, request } = ctx as any;
+    const roleId = (ctx as any).roleId || request.param?.('roleId');
 
     try {
       const studioConfig = mastra.getStudio?.();
@@ -1459,7 +1468,7 @@ export const PUT_UPDATE_ROLE_ROUTE = createRoute({
         throw new HTTPException(501, { message: 'Role updates not supported by this RBAC provider' });
       }
 
-      const body = (await rawRequest.json?.()) || {};
+      const body = await request.json();
 
       await (rbac as any).updateRole(roleId, {
         name: body.name,
@@ -1471,8 +1480,9 @@ export const PUT_UPDATE_ROLE_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      mastra?.getLogger?.()?.error('Failed to update role', { error, roleId });
-      throw new HTTPException(500, { message: 'Failed to update role' });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      mastra?.getLogger?.()?.error('Failed to update role', { error: errorMessage, roleId });
+      throw new HTTPException(500, { message: `Failed to update role: ${errorMessage}` });
     }
   },
 });
@@ -1489,8 +1499,8 @@ export const DELETE_ROLE_ROUTE = createRoute({
   description: 'Deletes a role definition. Requires team:write permission.',
   tags: ['Auth'],
   handler: async ctx => {
-    const { mastra, rawRequest } = ctx as any;
-    const roleId = (ctx as any).roleId || rawRequest.param?.('roleId');
+    const { mastra, request } = ctx as any;
+    const roleId = (ctx as any).roleId || request.param?.('roleId');
 
     try {
       const studioConfig = mastra.getStudio?.();
@@ -1504,8 +1514,9 @@ export const DELETE_ROLE_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      mastra?.getLogger?.()?.error('Failed to delete role', { error, roleId });
-      throw new HTTPException(500, { message: 'Failed to delete role' });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      mastra?.getLogger?.()?.error('Failed to delete role', { error: errorMessage, roleId });
+      throw new HTTPException(500, { message: errorMessage });
     }
   },
 });
@@ -1566,7 +1577,7 @@ export const POST_FGA_RESOURCE_ROUTE = createRoute({
   description: 'Creates a new fine-grained authorization resource. Requires team:write permission.',
   tags: ['Auth', 'FGA'],
   handler: async ctx => {
-    const { mastra, request, rawRequest } = ctx as any;
+    const { mastra, request } = ctx as any;
 
     try {
       const isStudio = isStudioRequest(request);
@@ -1576,7 +1587,7 @@ export const POST_FGA_RESOURCE_ROUTE = createRoute({
         throw new HTTPException(501, { message: 'Resource creation not supported by this FGA provider' });
       }
 
-      const body = (await rawRequest.json?.()) || {};
+      const body = await request.json();
 
       if (!body.resourceTypeSlug || !body.name) {
         throw new HTTPException(400, { message: 'resourceTypeSlug and name are required' });
@@ -1717,7 +1728,7 @@ export const POST_FGA_RESOURCE_ASSIGNMENT_ROUTE = createRoute({
   description: 'Assigns a role to a user on a specific resource. Requires team:write permission.',
   tags: ['Auth', 'FGA'],
   handler: async ctx => {
-    const { mastra, request, rawRequest, params } = ctx as any;
+    const { mastra, request, params } = ctx as any;
     const resourceId = params?.resourceId;
 
     if (!resourceId) {
@@ -1732,7 +1743,7 @@ export const POST_FGA_RESOURCE_ASSIGNMENT_ROUTE = createRoute({
         throw new HTTPException(501, { message: 'Role assignment not supported by this FGA provider' });
       }
 
-      const body = (await rawRequest.json?.()) || {};
+      const body = await request.json();
 
       if (!body.organizationMembershipId || !body.roleSlug) {
         throw new HTTPException(400, { message: 'organizationMembershipId and roleSlug are required' });
