@@ -331,14 +331,26 @@ export class ComposioToolIntegration extends BaseToolIntegration {
   }
 
   /**
-   * Revoke a Composio connected account. Treats a 404 (account already
-   * deleted or never existed) as success so the caller can drop its local
-   * pin without an error path.
+   * Revoke a Composio connected account via
+   * `DELETE /api/v3/connected_accounts/:nanoid`. Composio performs a soft
+   * delete and responds with `{ success: boolean }`.
+   *
+   * Treats a 404 (account already deleted or never existed) as success so
+   * the caller can drop its local pin without an error path. A `success:
+   * false` response means the provider refused the delete and is surfaced
+   * as an error so the caller does not delete its local row.
    */
   async revokeConnection(connectionId: string): Promise<void> {
     const composio = this.getRawClient();
     try {
-      await composio.connectedAccounts.delete(connectionId);
+      const res = (await composio.connectedAccounts.delete(connectionId)) as
+        | { success?: boolean }
+        | undefined;
+      if (res && res.success === false) {
+        throw new Error(
+          `Composio refused to delete connected account ${connectionId} (success=false)`,
+        );
+      }
     } catch (err) {
       if (isNotFoundError(err)) return;
       throw err;

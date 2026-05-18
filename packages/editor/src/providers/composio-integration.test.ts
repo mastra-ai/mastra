@@ -564,9 +564,17 @@ describe('ComposioToolIntegration — revokeConnection', () => {
     const integration = new ComposioToolIntegration({ apiKey: 'k' });
     await integration.getHealth().catch(() => undefined);
     const raw = getRawInstance();
-    raw.connectedAccounts.delete.mockResolvedValue(undefined);
+    raw.connectedAccounts.delete.mockResolvedValue({ success: true });
     await integration.revokeConnection('ca_xyz');
     expect(raw.connectedAccounts.delete).toHaveBeenCalledWith('ca_xyz');
+  });
+
+  it('throws when Composio responds with success=false', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.getHealth().catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.delete.mockResolvedValue({ success: false });
+    await expect(integration.revokeConnection('ca_xyz')).rejects.toThrow(/success=false/);
   });
 
   it('treats a 404 statusCode error as success', async () => {
