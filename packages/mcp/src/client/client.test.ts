@@ -3022,3 +3022,115 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
     tokenWaiters.forEach(cancel => cancel());
   }, 20000);
 });
+
+/**
+ * Issue #16693: SSE transport leak on implicit close.
+ *
+ * When the MCP server triggers a connection close (server restart, network
+ * blip, idle timeout — anything that fires client.onclose), the previous
+ * client.onclose handler only cleared isConnected. It did NOT call
+ * this.transport.close() or clear this.transport. The orphaned transport's
+ * resources (EventSource for SSE, fetch reader for Streamable HTTP) then
+ * kept running, with SSE in particular spinning its built-in retry loop
+ * forever — a leak we saw blow a server-side session map to 30k+ entries.
+ *
+ * The fix mirrors the cleanup in forceReconnect(): in onclose, snapshot the
+ * transport, null it on `this`, then call close() (so re-entry through
+ * transport.onclose → client.onclose is a no-op).
+ */
+describe('InternalMastraMCPClient - onclose transport cleanup (issue #16693)', () => {
+  it('closes and clears the previous transport when the server triggers onclose', async () => {
+    // Stand up an MCP server we can shut down to provoke an implicit close.
+    const httpServer: HttpServer = createServer();
+    const mcpServer = new McpServer(
+      { name: 'onclose-cleanup-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+    mcpServer.tool('noop', 'no-op', {}, async (): Promise<CallToolResult> => ({
+      content: [{ type: 'text', text: 'ok' }],
+    }));
+    const serverTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+    await mcpServer.connect(serverTransport);
+    httpServer.on('request', async (req, res) => {
+      await serverTransport.handleRequest(req, res);
+    });
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    const client = new InternalMastraMCPClient({
+      name: 'onclose-cleanup-test',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+
+    // Snapshot the active transport + spy on its close().
+    const transportBeforeClose = (client as unknown as { transport: { close: () => Promise<void> } }).transport;
+    expect(transportBeforeClose).toBeDefined();
+    const closeSpy = vi.spyOn(transportBeforeClose, 'close');
+
+    // Trigger an implicit close from the server side. This fires the client's
+    // onclose handler — the path the original bug leaks under.
+    await serverTransport.close();
+    await mcpServer.close();
+
+    // onclose runs synchronously off the transport event, but the close()
+    // promise we kick inside it resolves on a microtask; give it a tick.
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Contract: previous transport had .close() invoked, and this.transport
+    // was cleared so the next connect() can't accidentally overwrite a still-
+    // running EventSource (the SSE leak vector).
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect((client as unknown as { transport: unknown }).transport).toBeUndefined();
+
+    httpServer.close();
+  }, 15000);
+
+  it('does not re-enter onclose when transport.close() bubbles back through it', async () => {
+    // Re-entry guard: if transport.close() synchronously fires its own
+    // onclose -> client.onclose, the snapshot-and-clear ordering should
+    // mean the second pass sees this.transport === undefined and skips the
+    // recursive close() call (so close() is only invoked once, not N times).
+    const httpServer: HttpServer = createServer();
+    const mcpServer = new McpServer(
+      { name: 'onclose-reentry-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+    mcpServer.tool('noop', 'no-op', {}, async (): Promise<CallToolResult> => ({
+      content: [{ type: 'text', text: 'ok' }],
+    }));
+    const serverTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+    await mcpServer.connect(serverTransport);
+    httpServer.on('request', async (req, res) => {
+      await serverTransport.handleRequest(req, res);
+    });
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    const client = new InternalMastraMCPClient({
+      name: 'onclose-reentry-test',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+
+    const transportBeforeClose = (client as unknown as { transport: { close: () => Promise<void> } }).transport;
+    const closeSpy = vi.spyOn(transportBeforeClose, 'close');
+
+    await serverTransport.close();
+    await mcpServer.close();
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // close() called exactly once even if the SDK re-fires onclose.
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    httpServer.close();
+  }, 15000);
+});

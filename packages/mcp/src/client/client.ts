@@ -500,6 +500,23 @@ export class InternalMastraMCPClient extends MastraBase {
         this.client.onclose = () => {
           this.log('debug', `MCP server connection closed`);
           this.isConnected = null;
+          // Tear down the underlying transport's resources (EventSource for
+          // SSE, fetch reader for Streamable HTTP). Without this the SSE
+          // EventSource's built-in retry loop reopens connections forever
+          // and the next connect() overwrites this.transport without
+          // closing the previous one. See #16693.
+          //
+          // Snapshot + clear before calling close() to prevent re-entry
+          // through transport.onclose -> client.onclose.
+          if (this.transport) {
+            const previousTransport = this.transport;
+            this.transport = undefined;
+            void previousTransport.close().catch(error => {
+              this.log('debug', 'Error closing transport in onclose handler (ignored)', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
+          }
           if (typeof originalOnClose === 'function') {
             originalOnClose();
           }
