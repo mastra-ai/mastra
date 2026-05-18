@@ -15,7 +15,7 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@mastra/playground-ui';
-import { BookIcon, UsersIcon, UserIcon, ShieldIcon } from 'lucide-react';
+import { BookIcon, UsersIcon, UserIcon, ShieldIcon, FolderIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -197,6 +197,12 @@ export const mainNav: NavSection[] = [
         name: 'Roles',
         url: '/roles',
         Icon: ShieldIcon,
+        requiredPermission: 'team:read',
+      },
+      {
+        name: 'Resources',
+        url: '/fga-resources',
+        Icon: FolderIcon,
         requiredPermission: 'team:read',
       },
     ],

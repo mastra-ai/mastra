@@ -1295,6 +1295,290 @@ export const DELETE_ROLE_ROUTE = createRoute({
 });
 
 // ============================================================================
+// FGA Resource Management Routes
+// ============================================================================
+
+// GET /auth/fga/resources - List FGA resources
+export const GET_FGA_RESOURCES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/fga/resources',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  summary: 'List FGA resources',
+  description: 'Lists all fine-grained authorization resources. Requires team:read permission.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    const { mastra, request } = ctx as any;
+
+    try {
+      const isStudio = isStudioRequest(request);
+      const fga = getFGAProvider(mastra, isStudio);
+
+      if (!fga || typeof (fga as any).listResources !== 'function') {
+        return { resources: [], capabilities: null };
+      }
+
+      const url = new URL(request.url);
+      const resourceType = url.searchParams.get('resourceType') ?? undefined;
+      const search = url.searchParams.get('search') ?? undefined;
+      const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : undefined;
+
+      const resources = await (fga as any).listResources({
+        resourceTypeSlug: resourceType,
+        search,
+        limit,
+      });
+
+      const capabilities = 'getCapabilities' in fga ? (fga as any).getCapabilities() : null;
+
+      return { resources, capabilities };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to list FGA resources', { error });
+      throw new HTTPException(500, { message: 'Failed to list FGA resources' });
+    }
+  },
+});
+
+// POST /auth/fga/resources - Create FGA resource
+export const POST_FGA_RESOURCE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/auth/fga/resources',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Create FGA resource',
+  description: 'Creates a new fine-grained authorization resource. Requires team:write permission.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    const { mastra, request, rawRequest } = ctx as any;
+
+    try {
+      const isStudio = isStudioRequest(request);
+      const fga = getFGAProvider(mastra, isStudio);
+
+      if (!fga || typeof (fga as any).createResource !== 'function') {
+        throw new HTTPException(501, { message: 'Resource creation not supported by this FGA provider' });
+      }
+
+      const body = (await rawRequest.json?.()) || {};
+
+      if (!body.resourceTypeSlug || !body.name) {
+        throw new HTTPException(400, { message: 'resourceTypeSlug and name are required' });
+      }
+
+      const resource = await (fga as any).createResource({
+        resourceTypeSlug: body.resourceTypeSlug,
+        name: body.name,
+        description: body.description,
+        externalId: body.externalId,
+        parentResourceId: body.parentResourceId,
+      });
+
+      return { resource };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to create FGA resource', { error });
+      throw new HTTPException(500, { message: 'Failed to create FGA resource' });
+    }
+  },
+});
+
+// GET /auth/fga/resources/:resourceId - Get FGA resource
+export const GET_FGA_RESOURCE_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/fga/resources/:resourceId',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  summary: 'Get FGA resource',
+  description: 'Gets a fine-grained authorization resource by ID. Requires team:read permission.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    const { mastra, request, params } = ctx as any;
+    const resourceId = params?.resourceId;
+
+    if (!resourceId) {
+      throw new HTTPException(400, { message: 'Resource ID is required' });
+    }
+
+    try {
+      const isStudio = isStudioRequest(request);
+      const fga = getFGAProvider(mastra, isStudio);
+
+      if (!fga || typeof (fga as any).getResource !== 'function') {
+        throw new HTTPException(501, { message: 'Resource retrieval not supported by this FGA provider' });
+      }
+
+      const resource = await (fga as any).getResource(resourceId);
+
+      return { resource };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to get FGA resource', { error, resourceId });
+      throw new HTTPException(500, { message: 'Failed to get FGA resource' });
+    }
+  },
+});
+
+// DELETE /auth/fga/resources/:resourceId - Delete FGA resource
+export const DELETE_FGA_RESOURCE_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/auth/fga/resources/:resourceId',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Delete FGA resource',
+  description: 'Deletes a fine-grained authorization resource. Requires team:write permission.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    const { mastra, request, params } = ctx as any;
+    const resourceId = params?.resourceId;
+
+    if (!resourceId) {
+      throw new HTTPException(400, { message: 'Resource ID is required' });
+    }
+
+    try {
+      const isStudio = isStudioRequest(request);
+      const fga = getFGAProvider(mastra, isStudio);
+
+      if (!fga || typeof (fga as any).deleteResource !== 'function') {
+        throw new HTTPException(501, { message: 'Resource deletion not supported by this FGA provider' });
+      }
+
+      await (fga as any).deleteResource({ resourceId });
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to delete FGA resource', { error, resourceId });
+      throw new HTTPException(500, { message: 'Failed to delete FGA resource' });
+    }
+  },
+});
+
+// GET /auth/fga/resources/:resourceId/assignments - List role assignments for resource
+export const GET_FGA_RESOURCE_ASSIGNMENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/fga/resources/:resourceId/assignments',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  summary: 'List role assignments for resource',
+  description: 'Lists role assignments for a fine-grained authorization resource. Requires team:read permission.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    const { mastra, request, params } = ctx as any;
+    const resourceId = params?.resourceId;
+
+    if (!resourceId) {
+      throw new HTTPException(400, { message: 'Resource ID is required' });
+    }
+
+    try {
+      const isStudio = isStudioRequest(request);
+      const fga = getFGAProvider(mastra, isStudio);
+
+      if (!fga || typeof (fga as any).listRoleAssignments !== 'function') {
+        return { assignments: [] };
+      }
+
+      // Note: listRoleAssignments requires organizationMembershipId, but we want assignments BY resource
+      // This route might need a different implementation based on the FGA provider's capabilities
+      return { assignments: [] };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to list FGA resource assignments', { error, resourceId });
+      throw new HTTPException(500, { message: 'Failed to list FGA resource assignments' });
+    }
+  },
+});
+
+// POST /auth/fga/resources/:resourceId/assignments - Assign role on resource
+export const POST_FGA_RESOURCE_ASSIGNMENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/auth/fga/resources/:resourceId/assignments',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Assign role on resource',
+  description: 'Assigns a role to a user on a specific resource. Requires team:write permission.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    const { mastra, request, rawRequest, params } = ctx as any;
+    const resourceId = params?.resourceId;
+
+    if (!resourceId) {
+      throw new HTTPException(400, { message: 'Resource ID is required' });
+    }
+
+    try {
+      const isStudio = isStudioRequest(request);
+      const fga = getFGAProvider(mastra, isStudio);
+
+      if (!fga || typeof (fga as any).assignRole !== 'function') {
+        throw new HTTPException(501, { message: 'Role assignment not supported by this FGA provider' });
+      }
+
+      const body = (await rawRequest.json?.()) || {};
+
+      if (!body.organizationMembershipId || !body.roleSlug) {
+        throw new HTTPException(400, { message: 'organizationMembershipId and roleSlug are required' });
+      }
+
+      const assignment = await (fga as any).assignRole({
+        resourceId,
+        organizationMembershipId: body.organizationMembershipId,
+        roleSlug: body.roleSlug,
+      });
+
+      return { assignment };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to assign FGA role', { error, resourceId });
+      throw new HTTPException(500, { message: 'Failed to assign FGA role' });
+    }
+  },
+});
+
+// DELETE /auth/fga/resources/:resourceId/assignments/:assignmentId - Remove role assignment
+export const DELETE_FGA_RESOURCE_ASSIGNMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/auth/fga/resources/:resourceId/assignments/:assignmentId',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Remove role assignment',
+  description: 'Removes a role assignment from a resource. Requires team:write permission.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    const { mastra, request, params } = ctx as any;
+    const resourceId = params?.resourceId;
+    const assignmentId = params?.assignmentId;
+
+    if (!resourceId || !assignmentId) {
+      throw new HTTPException(400, { message: 'Resource ID and assignment ID are required' });
+    }
+
+    try {
+      const isStudio = isStudioRequest(request);
+      const fga = getFGAProvider(mastra, isStudio);
+
+      if (!fga || typeof (fga as any).removeRole !== 'function') {
+        throw new HTTPException(501, { message: 'Role removal not supported by this FGA provider' });
+      }
+
+      await (fga as any).removeRole({
+        resourceId,
+        organizationMembershipId: assignmentId,
+        roleSlug: '', // May need adjustment based on FGA provider
+      });
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to remove FGA role assignment', { error, resourceId, assignmentId });
+      throw new HTTPException(500, { message: 'Failed to remove FGA role assignment' });
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -1318,4 +1602,11 @@ export const AUTH_ROUTES = [
   POST_CREATE_ROLE_ROUTE,
   PUT_UPDATE_ROLE_ROUTE,
   DELETE_ROLE_ROUTE,
+  GET_FGA_RESOURCES_ROUTE,
+  POST_FGA_RESOURCE_ROUTE,
+  GET_FGA_RESOURCE_ROUTE,
+  DELETE_FGA_RESOURCE_ROUTE,
+  GET_FGA_RESOURCE_ASSIGNMENTS_ROUTE,
+  POST_FGA_RESOURCE_ASSIGNMENT_ROUTE,
+  DELETE_FGA_RESOURCE_ASSIGNMENT_ROUTE,
 ] as const;

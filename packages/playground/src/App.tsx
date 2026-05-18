@@ -42,6 +42,7 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import FGAResources from './pages/fga-resources';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -251,6 +252,7 @@ export const routes: RouteObject[] = [
             { path: '/users', element: <Users />, handle: navHandle('/users') },
             { path: '/users/:id', element: <UserDetail />, handle: navHandle('/users') },
             { path: '/roles', element: <Roles />, handle: navHandle('/roles') },
+            { path: '/fga-resources', element: <FGAResources />, handle: navHandle('/fga-resources') },
             {
               path: '/templates',
               element: <Templates />,
