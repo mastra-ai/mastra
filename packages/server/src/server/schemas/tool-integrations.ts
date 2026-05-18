@@ -145,6 +145,12 @@ export const connectionStatusToolIntegrationBodySchema = z.object({
 
 export const listConnectionsQuerySchema = z.object({
   toolService: z.string().describe('Tool service slug whose connections to list'),
+  authorId: z
+    .string()
+    .optional()
+    .describe('Admin-only: restrict the listing to a specific author. Silently ignored for non-admin callers.'),
+  cursor: z.string().optional().describe('Opaque pagination cursor returned by a previous call'),
+  limit: z.coerce.number().int().positive().max(200).optional().describe('Max items per page (default 50, max 200)'),
 });
 
 export const disconnectConnectionQuerySchema = z.object({
@@ -228,8 +234,10 @@ export const listConnectionsResponseSchema = z.object({
       status: z.enum(['active', 'pending', 'failed', 'inactive']),
       createdAt: z.string().optional(),
       label: z.string().nullish().describe('Persisted display label from tool_connections, if any'),
+      authorId: z.string().optional().describe('Owner of the connection (when known)'),
     }),
   ),
+  nextCursor: z.string().optional().describe('Opaque cursor for the next page, when more results exist'),
 });
 
 export const listConnectionFieldsResponseSchema = z.object({

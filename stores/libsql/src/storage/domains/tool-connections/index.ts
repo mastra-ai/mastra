@@ -141,8 +141,12 @@ export class ToolConnectionsLibSQL extends ToolConnectionsStorage {
 
   async list({ authorId, providerId, toolService }: StorageListToolConnectionsInput): Promise<StorageToolConnection[]> {
     try {
-      const clauses: string[] = ['"authorId" = ?'];
-      const args: (string | number | null)[] = [authorId];
+      const clauses: string[] = [];
+      const args: (string | number | null)[] = [];
+      if (authorId !== undefined) {
+        clauses.push('"authorId" = ?');
+        args.push(authorId);
+      }
       if (providerId) {
         clauses.push('"providerId" = ?');
         args.push(providerId);
@@ -151,8 +155,9 @@ export class ToolConnectionsLibSQL extends ToolConnectionsStorage {
         clauses.push('"toolService" = ?');
         args.push(toolService);
       }
+      const whereClause = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
       const result = await this.#client.execute({
-        sql: `SELECT * FROM "${TABLE_TOOL_CONNECTIONS}" WHERE ${clauses.join(' AND ')}`,
+        sql: `SELECT * FROM "${TABLE_TOOL_CONNECTIONS}"${whereClause}`,
         args,
       });
       return (result.rows ?? []).map(row => rowToToolConnection(row as unknown as Record<string, unknown>));

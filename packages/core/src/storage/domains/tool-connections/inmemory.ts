@@ -59,7 +59,7 @@ export class InMemoryToolConnectionsStorage extends ToolConnectionsStorage {
   async list({ authorId, providerId, toolService }: StorageListToolConnectionsInput): Promise<StorageToolConnection[]> {
     const rows: StorageToolConnection[] = [];
     for (const row of this.db.toolConnections.values()) {
-      if (row.authorId !== authorId) continue;
+      if (authorId !== undefined && row.authorId !== authorId) continue;
       if (providerId && row.providerId !== providerId) continue;
       if (toolService && row.toolService !== toolService) continue;
       rows.push(row);

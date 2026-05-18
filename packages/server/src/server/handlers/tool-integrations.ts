@@ -30,7 +30,10 @@ import {
 } from '../schemas/tool-integrations';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { hasAdminBypass } from './authorship';
 import { handleError } from './error';
+
+const TOOL_INTEGRATIONS_RESOURCE = 'tool-integrations' as const;
 
 // ============================================================================
 // Helpers
@@ -295,42 +298,78 @@ export const LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE = createRoute({
     'Returns existing provider connections for the caller on a given tool service, so the picker can offer them for pinning without re-running OAuth',
   tags: ['Tool Integrations'],
   requiresAuth: true,
-  handler: async ({ mastra, integrationId, toolService, requestContext }) => {
+  handler: async ({ mastra, integrationId, toolService, authorId: queryAuthorId, cursor, limit, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
       const integration = resolveIntegration(editor, integrationId);
-      const authorId = resolveOwnerId(requestContext);
-      const adapterResult = await integration.listConnections({ toolService, userId: authorId });
+      const callerAuthorId = resolveOwnerId(requestContext);
+      const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_INTEGRATIONS_RESOURCE) : false;
 
-      // Join with persisted tool_connections labels so the picker can surface
-      // a stable display name across agents. Missing rows -> no label
-      // (returned as undefined, never errors out the listing).
-      let labelMap = new Map<string, string | null>();
-      try {
-        const storage = mastra.getStorage();
-        const toolConnections = await storage?.getStore('toolConnections');
+      // Non-admin callers cannot scope to other authors — silently fall back.
+      const requestedAuthorId =
+        isAdmin && typeof queryAuthorId === 'string' && queryAuthorId.length > 0 ? queryAuthorId : undefined;
+      const effectiveAuthorId = isAdmin ? requestedAuthorId : callerAuthorId;
+
+      const storage = mastra.getStorage();
+      const toolConnections = await storage?.getStore('toolConnections');
+
+      // Strategy B seeding: derive userIds[] from tool_connections rows so the
+      // adapter only lists buckets that have been pinned somewhere in this
+      // Mastra. Admin + no authorId => every distinct author for this
+      // provider/service. Non-admin => always the caller's bucket.
+      let userIds: string[];
+      let labelRows: Array<{ authorId: string; connectionId: string; label: string | null }> = [];
+      if (isAdmin && effectiveAuthorId === undefined) {
         if (toolConnections) {
           const rows = await toolConnections.list({
-            authorId,
             providerId: integration.id,
             toolService,
           });
-          labelMap = new Map(rows.map(row => [row.connectionId, row.label]));
+          labelRows = rows.map(r => ({ authorId: r.authorId, connectionId: r.connectionId, label: r.label }));
+          userIds = Array.from(new Set(rows.map(r => r.authorId)));
+        } else {
+          userIds = [];
         }
-      } catch (joinError) {
-        mastra.getLogger?.()?.warn?.('[tool-integrations] failed to join tool_connections labels', {
-          error: joinError instanceof Error ? joinError.message : String(joinError),
-          integrationId,
-          toolService,
-        });
+        // Empty tool_connections => skip the adapter call, return empty.
+        if (userIds.length === 0) {
+          return { items: [] };
+        }
+      } else {
+        const ownerId = effectiveAuthorId ?? callerAuthorId;
+        userIds = [ownerId];
+        if (toolConnections) {
+          try {
+            const rows = await toolConnections.list({
+              authorId: ownerId,
+              providerId: integration.id,
+              toolService,
+            });
+            labelRows = rows.map(r => ({ authorId: r.authorId, connectionId: r.connectionId, label: r.label }));
+          } catch (joinError) {
+            mastra.getLogger?.()?.warn?.('[tool-integrations] failed to join tool_connections labels', {
+              error: joinError instanceof Error ? joinError.message : String(joinError),
+              integrationId,
+              toolService,
+            });
+          }
+        }
       }
 
+      const adapterResult = await integration.listConnections({
+        toolService,
+        userIds,
+        ...(typeof cursor === 'string' && cursor.length > 0 ? { cursor } : {}),
+        ...(typeof limit === 'number' ? { limit } : {}),
+      });
+
+      const labelMap = new Map(labelRows.map(r => [r.connectionId, r.label]));
+
       return {
-        ...adapterResult,
         items: adapterResult.items.map(item => ({
           ...item,
           label: labelMap.get(item.connectionId) ?? null,
         })),
+        ...(adapterResult.nextCursor ? { nextCursor: adapterResult.nextCursor } : {}),
       };
     } catch (error) {
       return handleError(error, 'Error listing tool integration connections');
@@ -388,11 +427,30 @@ export const DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE = createRoute({
     try {
       const editor = requireEditor(mastra.getEditor());
       const integration = resolveIntegration(editor, integrationId);
-      const authorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext);
+      const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_INTEGRATIONS_RESOURCE) : false;
       const isForce = force === true || force === 'true';
 
       const storage = mastra.getStorage();
       const toolConnections = await storage?.getStore('toolConnections');
+
+      // Resolve the row owner so we can both auth-check the caller and clean
+      // up the correct (authorId, providerId, connectionId) tuple at the end.
+      // Strategy B: cross-author lookup via providerId+connectionId.
+      let ownerAuthorId: string | undefined;
+      if (toolConnections) {
+        const rows = await toolConnections.list({ providerId: integration.id });
+        ownerAuthorId = rows.find(r => r.connectionId === connectionId)?.authorId;
+      }
+
+      // Auth check: caller must own the row OR have admin bypass. If the row
+      // does not exist (no persisted label), default to caller-owns.
+      const effectiveOwner = ownerAuthorId ?? callerAuthorId;
+      if (effectiveOwner !== callerAuthorId && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to disconnect this connection',
+        });
+      }
 
       // Soft delete: refuse if any agent still pins this connectionId.
       if (!isForce) {
@@ -416,7 +474,7 @@ export const DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE = createRoute({
 
       if (toolConnections) {
         await toolConnections.delete({
-          authorId,
+          authorId: effectiveOwner,
           providerId: integration.id,
           connectionId,
         });
@@ -445,10 +503,28 @@ export const GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE = createRoute({
   description: 'Returns the agents that pin this connection in their toolIntegrations config',
   tags: ['Tool Integrations'],
   requiresAuth: true,
-  handler: async ({ mastra, integrationId, connectionId, toolService }) => {
+  handler: async ({ mastra, integrationId, connectionId, toolService, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      resolveIntegration(editor, integrationId);
+      const integration = resolveIntegration(editor, integrationId);
+      const callerAuthorId = resolveOwnerId(requestContext);
+      const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_INTEGRATIONS_RESOURCE) : false;
+
+      // Mirror DELETE auth: caller must own the connection OR have admin
+      // bypass. If no persisted row, fall back to caller-owns.
+      const storage = mastra.getStorage();
+      const toolConnections = await storage?.getStore('toolConnections');
+      let ownerAuthorId: string | undefined;
+      if (toolConnections) {
+        const rows = await toolConnections.list({ providerId: integration.id });
+        ownerAuthorId = rows.find(r => r.connectionId === connectionId)?.authorId;
+      }
+      const effectiveOwner = ownerAuthorId ?? callerAuthorId;
+      if (effectiveOwner !== callerAuthorId && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to view usage for this connection',
+        });
+      }
 
       const agents = await scanConnectionUsage(mastra, { integrationId, connectionId, toolService });
       return { agents };

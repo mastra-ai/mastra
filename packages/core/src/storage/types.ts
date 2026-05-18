@@ -2726,9 +2726,10 @@ export type StorageToolConnectionKey = {
   connectionId: string;
 };
 
-/** Input for listing tool connections, optionally scoped by provider/service. */
+/** Input for listing tool connections, optionally scoped by author/provider/service. */
 export type StorageListToolConnectionsInput = {
-  authorId: string;
+  /** Omit to list across all authors (admin cross-author listing). */
+  authorId?: string;
   providerId?: string;
   toolService?: string;
 };
