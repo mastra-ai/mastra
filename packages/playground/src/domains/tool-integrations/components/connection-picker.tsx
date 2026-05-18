@@ -157,10 +157,6 @@ export const ConnectionPicker = ({
     return items.filter(item => !pinnedIds.has(item.connectionId));
   }, [existing.data?.items, pinnedIds]);
 
-  // Per-row label drafts for the unpinned existing list. Kept in local state
-  // so typing doesn't churn parent form state until the user clicks "Pin".
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-
   const errorsByIndex = useMemo(() => {
     const map = new Map<number, string>();
     for (const err of validateLabels(connections)) {
@@ -173,45 +169,18 @@ export const ConnectionPicker = ({
   // for this `toolService` (i.e. pinning would result in ≥2 connections).
   const labelWouldBeRequired = connections.length >= 1;
 
-  const validateDraft = (label: string): string | undefined => {
-    const trimmed = label.trim();
-    if (trimmed.length === 0) {
-      return labelWouldBeRequired ? 'Label is required when you have multiple connections' : undefined;
-    }
-    if (trimmed.length > MAX_LABEL) return `Label must be ≤${MAX_LABEL} characters`;
-    if (!LABEL_RE.test(trimmed)) return 'Use letters, numbers, spaces, _ or -';
-    const key = trimmed.toLowerCase();
-    if (connections.some(c => (c.label ?? '').trim().toLowerCase() === key)) {
-      return 'Duplicate label';
-    }
-    return undefined;
-  };
-
   const handlePinExisting = (connectionId: string) => {
-    const override = (drafts[connectionId] ?? '').trim();
-    // Inherit the persisted account label from `tool_connections` when the
-    // user did not type a per-agent override. Without this, the second agent
-    // pinning the same account would lose the name we stored under #1, and
-    // the user would be forced to retype the existing label to satisfy the
-    // multi-connection label requirement.
-    const persisted = (existing.data?.items ?? []).find(c => c.connectionId === connectionId)?.label ?? undefined;
-    const label = override || persisted || undefined;
-    // Validate the effective label (override if typed, otherwise inherited).
-    // Empty + no persisted label is only OK when label isn't required.
-    if (override) {
-      if (validateDraft(override)) return;
-    } else if (label) {
+    // Per-agent label override has been removed. Always inherit the persisted
+    // account label from `tool_connections`. The picker only allows pinning
+    // when this label doesn't collide with an already-pinned row (see the
+    // disabled-state check on the Pin button).
+    const label = (existing.data?.items ?? []).find(c => c.connectionId === connectionId)?.label ?? undefined;
+    if (!label && labelWouldBeRequired) return;
+    if (label) {
       const key = label.trim().toLowerCase();
       if (connections.some(c => (c.label ?? '').trim().toLowerCase() === key)) return;
-    } else if (labelWouldBeRequired) {
-      return;
     }
     onChange([...connections, { connectionId, toolService, ...(label ? { label } : {}) }]);
-    setDrafts(prev => {
-      const next = { ...prev };
-      delete next[connectionId];
-      return next;
-    });
   };
 
   const newDraftError = useMemo(() => {
@@ -317,35 +286,24 @@ export const ConnectionPicker = ({
         <div className="flex items-center gap-2">
           <Link2 className="size-3 text-icon-muted" />
           <Txt as="span" variant="ui-xs" className="text-text-muted">
-            {labelWouldBeRequired
-              ? 'Use an existing connection — give it a label for this agent.'
-              : 'Use an existing connection — optionally label it for this agent.'}
+            Pin an existing connection to this agent.
           </Txt>
         </div>
         {unpinnedExisting.map(item => {
-          const draft = drafts[item.connectionId] ?? '';
           const persistedLabel = item.label ?? undefined;
-          // The effective label is the override the user typed, otherwise the
-          // persisted account label from `tool_connections`. Validation runs
-          // against this so the user can pin without retyping anything when a
-          // persisted label already exists.
-          const effectiveLabel = draft.trim() || persistedLabel || '';
-          const error = (() => {
-            if (draft.length > 0) return validateDraft(draft);
-            if (persistedLabel) {
-              // Inheriting — only flag duplicates against *other* pinned rows.
-              const key = persistedLabel.trim().toLowerCase();
-              if (connections.some(c => (c.label ?? '').trim().toLowerCase() === key)) {
-                return 'Duplicate label';
-              }
-              return undefined;
-            }
-            return labelWouldBeRequired ? 'Label is required when you have multiple connections' : undefined;
-          })();
+          // No per-agent override: we always inherit the persisted account
+          // label. The only blocker is a label collision with an already
+          // pinned row, which the user can resolve by unpinning the other row.
+          const duplicate =
+            persistedLabel !== undefined &&
+            connections.some(c => (c.label ?? '').trim().toLowerCase() === persistedLabel.trim().toLowerCase());
+          const error = duplicate
+            ? 'Already pinned under this label'
+            : !persistedLabel && labelWouldBeRequired
+              ? 'Label is required when you have multiple connections'
+              : undefined;
           const inactive = item.status !== 'active';
-          const placeholder = persistedLabel
-            ? `${persistedLabel} (inherits account name)`
-            : `Label for ${item.connectionId.slice(0, 12)}…`;
+          const displayName = persistedLabel ?? `${item.connectionId.slice(0, 12)}…`;
           return (
             <div
               key={item.connectionId}
@@ -353,16 +311,14 @@ export const ConnectionPicker = ({
               data-testid={`connection-existing-${toolService}-${item.connectionId}`}
             >
               <div className="flex-1">
-                <Input
-                  size="sm"
-                  value={draft}
-                  placeholder={placeholder}
-                  onChange={e => setDrafts(prev => ({ ...prev, [item.connectionId]: e.target.value }))}
-                  disabled={disabled || inactive}
-                  error={Boolean(error)}
-                  aria-invalid={Boolean(error)}
+                <Txt
+                  as="span"
+                  variant="ui-sm"
+                  className="text-text-default"
                   data-testid={`connection-existing-label-${toolService}-${item.connectionId}`}
-                />
+                >
+                  {displayName}
+                </Txt>
                 {error && <p className="text-error text-ui-xs mt-1 block">{error}</p>}
                 {inactive && (
                   <p className="text-text-muted text-ui-xs mt-1 block">
@@ -374,9 +330,7 @@ export const ConnectionPicker = ({
                 size="sm"
                 variant="outline"
                 onClick={() => handlePinExisting(item.connectionId)}
-                disabled={
-                  disabled || inactive || Boolean(error) || (labelWouldBeRequired && effectiveLabel.length === 0)
-                }
+                disabled={disabled || inactive || Boolean(error)}
                 data-testid={`connection-existing-pin-${toolService}-${item.connectionId}`}
               >
                 Pin

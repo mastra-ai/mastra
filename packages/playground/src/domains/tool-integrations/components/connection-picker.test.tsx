@@ -211,13 +211,13 @@ describe('ConnectionPicker', () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it('lists unpinned existing connections and pins one with a fresh label', async () => {
+  it('lists unpinned existing connections and pins one inheriting its persisted label', async () => {
     server.use(
       http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
         HttpResponse.json({
           items: [
-            { connectionId: 'ca_existing_1', toolService: TOOL_SERVICE, status: 'active' },
-            { connectionId: 'ca_pinned', toolService: TOOL_SERVICE, status: 'active' },
+            { connectionId: 'ca_existing_1', toolService: TOOL_SERVICE, status: 'active', label: 'Personal' },
+            { connectionId: 'ca_pinned', toolService: TOOL_SERVICE, status: 'active', label: 'Already' },
           ],
         }),
       ),
@@ -234,11 +234,6 @@ describe('ConnectionPicker', () => {
     });
     // Already-pinned connection should NOT appear in the existing list.
     expect(screen.queryByTestId(`connection-existing-${TOOL_SERVICE}-ca_pinned`)).toBeNull();
-
-    const labelInput = screen.getByTestId(
-      `connection-existing-label-${TOOL_SERVICE}-ca_existing_1`,
-    ) as HTMLInputElement;
-    fireEvent.change(labelInput, { target: { value: 'Personal' } });
 
     fireEvent.click(screen.getByTestId(`connection-existing-pin-${TOOL_SERVICE}-ca_existing_1`));
 
@@ -401,7 +396,7 @@ describe('ConnectionPicker', () => {
     });
   });
 
-  it('surfaces persisted labels from listConnections as the placeholder on the existing-connections row', async () => {
+  it('surfaces persisted labels from listConnections as static read-only text on the existing-connections row', async () => {
     server.use(
       http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
         HttpResponse.json({
@@ -412,11 +407,10 @@ describe('ConnectionPicker', () => {
 
     renderPicker({ initial: [] });
 
-    const labelInput = (await screen.findByTestId(
-      `connection-existing-label-${TOOL_SERVICE}-ca_existing_1`,
-    )) as HTMLInputElement;
+    const labelNode = await screen.findByTestId(`connection-existing-label-${TOOL_SERVICE}-ca_existing_1`);
 
-    expect(labelInput.placeholder).toContain('Saved label');
+    expect(labelNode.tagName).not.toBe('INPUT');
+    expect(labelNode.textContent).toContain('Saved label');
   });
 
   it('inherits the persisted label when pinning a second existing connection with no override', async () => {
