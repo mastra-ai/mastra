@@ -1,6 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
+import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -294,6 +295,215 @@ describe('Provider-defined Tool Handling', () => {
         autoResumeSuspendedTools: true,
       });
     }).not.toThrow();
+  });
+});
+
+describe('Auto-resume tool schema injection', () => {
+  const model = {
+    modelId: 'gemini-3-flash-preview',
+    provider: 'google',
+    specificationVersion: 'v2',
+    supportsStructuredOutputs: false,
+  } as any;
+
+  const options = {
+    name: 'test-tool',
+    logger: {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    } as any,
+    description: 'Test tool',
+    requestContext: new RequestContext(),
+    tracingContext: {},
+    model,
+    runId: 'run-id',
+  };
+
+  it('adds resume fields to the model schema without mixing Zod versions', async () => {
+    const tool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z3.object({
+        query: z3.string(),
+        limit: z3.number().optional(),
+      }),
+      execute: async input => ({ input }),
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options,
+      autoResumeSuspendedTools: true,
+    }).build();
+
+    const properties = (builtTool.parameters as any).jsonSchema.properties;
+    expect(properties.query).toBeDefined();
+    expect(properties.limit).toBeDefined();
+    expect(properties.suspendedToolRunId).toBeDefined();
+    expect(properties.resumeData).toBeDefined();
+
+    const result = await builtTool.execute?.(
+      { query: 'hello', suspendedToolRunId: 'suspended-run', resumeData: { approved: true } },
+      { toolCallId: 'tool-call-id', messages: [], resumeData: { approved: true } },
+    );
+
+    expect(result).toEqual({ input: { query: 'hello' } });
+  });
+
+  it('preserves original Zod validation at execution time', async () => {
+    const execute = vi.fn(async input => ({ input }));
+    const tool = createTool({
+      id: 'guarded-tool',
+      description: 'Guarded tool',
+      inputSchema: z
+        .object({
+          token: z.string().refine(value => value === 'allowed', 'token must be allowed'),
+        })
+        .strict(),
+      execute,
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { ...options, name: 'guarded-tool', description: 'Guarded tool' },
+      autoResumeSuspendedTools: true,
+    }).build();
+
+    const invalidResult = await builtTool.execute?.(
+      { token: 'denied', suspendedToolRunId: 'suspended-run', resumeData: { approved: true } },
+      { toolCallId: 'tool-call-id', messages: [], resumeData: { approved: true } },
+    );
+
+    expect(invalidResult).toMatchObject({ error: true });
+    expect(execute).not.toHaveBeenCalled();
+
+    const validResult = await builtTool.execute?.(
+      { token: 'allowed', suspendedToolRunId: 'suspended-run', resumeData: { approved: true } },
+      { toolCallId: 'tool-call-id', messages: [], resumeData: { approved: true } },
+    );
+
+    expect(validResult).toEqual({ input: { token: 'allowed' } });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith({ token: 'allowed' }, expect.any(Object));
+  });
+
+  it('does not ignore missing suspendedToolRunId when resumeData was provided', async () => {
+    const execute = vi.fn(async input => ({ input }));
+    const tool = createTool({
+      id: 'workflow-required-run-id',
+      description: 'Workflow wrapper requiring a suspended run id',
+      inputSchema: z.object({
+        query: z.string(),
+        suspendedToolRunId: z.string(),
+      }),
+      execute,
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { ...options, name: 'workflow-required-run-id', description: 'Workflow wrapper requiring a run id' },
+      autoResumeSuspendedTools: true,
+    }).build();
+
+    const result = await builtTool.execute?.(
+      { query: 'hello', resumeData: { approved: true } },
+      { toolCallId: 'tool-call-id', messages: [], resumeData: { approved: true } },
+    );
+
+    expect(result).toMatchObject({ error: true });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('preserves model-only control fields after model schema validation', async () => {
+    const tool = createTool({
+      id: 'transforming-tool',
+      description: 'Transforming tool',
+      inputSchema: z
+        .object({
+          query: z.string().transform(value => value.trim()),
+        })
+        .strict(),
+      execute: async input => ({ input }),
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { ...options, name: 'transforming-tool', description: 'Transforming tool' },
+      autoResumeSuspendedTools: true,
+      backgroundTaskEnabled: true,
+    }).build();
+
+    const validation = await (builtTool.parameters as any).validate({
+      query: '  hello  ',
+      _background: { enabled: true },
+      suspendedToolRunId: 'suspended-run',
+      resumeData: { approved: true },
+    });
+
+    expect(validation).toEqual({
+      success: true,
+      value: {
+        query: 'hello',
+        _background: { enabled: true },
+        suspendedToolRunId: 'suspended-run',
+        resumeData: { approved: true },
+      },
+    });
+  });
+
+  it('preserves model-only control fields for non-standard model schema validation', async () => {
+    const inputSchema = {
+      jsonSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+      validate: (value: unknown) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          return { success: false as const, error: new Error('Expected object') };
+        }
+
+        const query = (value as Record<string, unknown>).query;
+        if (typeof query !== 'string') {
+          return { success: false as const, error: new Error('Expected query') };
+        }
+
+        return { success: true as const, value: { query: query.trim() } };
+      },
+    };
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: {
+        id: 'json-schema-tool',
+        description: 'JSON schema tool',
+        inputSchema,
+      } as any,
+      options: { ...options, name: 'json-schema-tool', description: 'JSON schema tool' },
+      autoResumeSuspendedTools: true,
+      backgroundTaskEnabled: true,
+    }).build();
+
+    const validation = await (builtTool.parameters as any).validate({
+      query: '  hello  ',
+      _background: { enabled: true },
+      suspendedToolRunId: 'suspended-run',
+      resumeData: { approved: true },
+    });
+
+    expect(validation).toEqual({
+      success: true,
+      value: {
+        query: '  hello  ',
+        _background: { enabled: true },
+        suspendedToolRunId: 'suspended-run',
+        resumeData: { approved: true },
+      },
+    });
   });
 });
 
