@@ -10,7 +10,7 @@ test.describe('CMS — scorers', () => {
       test.skip(true, 'CMS scorer create page not available');
     }
     await expect(page).toHaveURL(/\/cms\/scorers\/create/);
-    await expect(page.getByRole('heading', { name: /create scorer/i, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /create a? ?scorer/i, level: 1 })).toBeVisible();
 
     // Configuration step + required form fields.
     await expect(page.getByRole('heading', { name: /^configuration$/i, level: 2 })).toBeVisible();

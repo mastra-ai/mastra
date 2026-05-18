@@ -125,24 +125,25 @@ test.describe('Agent Features', () => {
   test('agents list shows all agents with correct attached entities', async ({ page }) => {
     await page.goto('/agents');
 
-    // All five agents should appear as links
-    await expect(page.getByRole('link', { name: 'Test Agent' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Helper Agent' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Network Agent' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Approval Agent' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Workflow Agent' })).toBeVisible();
+    // All six fixture agents should appear as links
+    await expect(page.getByRole('link', { name: /^Test Agent\b/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Helper Agent\b/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Network Agent\b/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Approval Agent\b/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Workflow Agent\b/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Observational Agent\b/ })).toBeVisible();
 
     // Grid columns: Name(1), Instructions(2), Model(3), Workflows(4), Agents(5), Tools(6)
     // Network Agent has 1 agent (helperAgent)
-    const networkLink = page.getByRole('link', { name: 'Network Agent' });
+    const networkLink = page.getByRole('link', { name: /^Network Agent\b/ });
     await expect(networkLink.locator(':scope > span:nth-child(5)')).toHaveText('1');
 
     // Helper Agent has 1 tool
-    const helperLink = page.getByRole('link', { name: 'Helper Agent' });
+    const helperLink = page.getByRole('link', { name: /^Helper Agent\b/ });
     await expect(helperLink.locator(':scope > span:nth-child(6)')).toHaveText('1');
 
     // Workflow Agent has 1 workflow
-    const workflowLink = page.getByRole('link', { name: 'Workflow Agent' });
+    const workflowLink = page.getByRole('link', { name: /^Workflow Agent\b/ });
     await expect(workflowLink.locator(':scope > span:nth-child(4)')).toHaveText('1');
   });
 

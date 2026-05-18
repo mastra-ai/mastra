@@ -27,7 +27,7 @@ test.describe('Prompt Blocks', () => {
     if (response && response.status() >= 500) {
       test.skip(true, 'CMS prompt create page not available');
     }
-    await expect(page.getByRole('heading', { name: /create prompt block/i, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /create a? ?prompt block/i, level: 1 })).toBeVisible();
     await expect(page.getByRole('heading', { name: /^configuration$/i, level: 2 })).toBeVisible();
     const nameInput = page.getByRole('textbox', { name: /^name/i }).first();
     await expect(nameInput).toBeVisible();

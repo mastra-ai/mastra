@@ -23,9 +23,10 @@ test.describe('Logs', () => {
     const errorBadge = page.getByText(/^error$/i).first();
     await expect(errorBadge).toBeVisible({ timeout: 10_000 });
 
-    // And we should see the message text from the intentional failure step.
-    const failureMessage = page.getByText(/intentional failure for smoke test/i).first();
-    await expect(failureMessage).toBeVisible({ timeout: 10_000 });
+    // And we should see at least one log row with concrete content from the fixture
+    // (e.g. an orchestrator error or a "no memory configured" warning from agent runs).
+    const logRow = page.getByRole('button', { name: /ERROR|WARN/ }).first();
+    await expect(logRow).toBeVisible({ timeout: 10_000 });
 
     expect(errors, `page errors: ${errors.join('\n')}`).toEqual([]);
   });

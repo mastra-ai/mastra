@@ -2,13 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { fetchApi, fetchJson } from '../utils.js';
 
 describe('channels — list', () => {
-  it('GET /channels/platforms returns an array (empty in smoke fixture)', async () => {
+  it('GET /channels/platforms returns the registered smoke-stub platform', async () => {
     const { status, data } = await fetchJson<any>('/api/channels/platforms');
     expect(status).toBe(200);
     const platforms: any[] = Array.isArray(data) ? data : data.platforms;
     expect(Array.isArray(platforms)).toBe(true);
-    // No channel platforms registered in the smoke fixture.
-    expect(platforms).toHaveLength(0);
+
+    const stub = platforms.find((p: any) => p.id === 'smoke-stub');
+    expect(stub).toBeDefined();
+    expect(stub.name).toBe('Smoke Stub');
+    expect(stub.isConfigured).toBe(true);
+  });
+
+  it('GET /channels/:platform/installations returns the seeded installation for smoke-stub', async () => {
+    const { status, data } = await fetchJson<any>('/api/channels/smoke-stub/installations');
+    expect(status).toBe(200);
+    const installs: any[] = Array.isArray(data) ? data : data.installations;
+    expect(Array.isArray(installs)).toBe(true);
+    expect(installs.length).toBe(1);
+    expect(installs[0].id).toBe('smoke-stub-install-1');
+    expect(installs[0].platform).toBe('smoke-stub');
+    expect(installs[0].agentId).toBe('test-agent');
+    expect(installs[0].status).toBe('active');
   });
 
   it('GET /channels/:platform/installations errors when the platform is unregistered', async () => {

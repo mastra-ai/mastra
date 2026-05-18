@@ -41,7 +41,11 @@ describe('stored skills — CRUD', () => {
   it('updates the stored skill', async () => {
     const { status, data } = await fetchJson<any>(`/api/stored/skills/${TEST_ID}`, {
       method: 'PATCH',
-      body: JSON.stringify({ description: 'updated by smoke' }),
+      body: JSON.stringify({
+        name: 'smoke-skill',
+        description: 'updated by smoke',
+        instructions: '# Smoke\nDo smoke things.',
+      }),
     });
     expect(status).toBe(200);
     expect(data.description).toBe('updated by smoke');

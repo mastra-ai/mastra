@@ -16,6 +16,7 @@
     "@mastra/core": "alpha",
     "@mastra/duckdb": "alpha",
     "@mastra/libsql": "alpha",
+    "@mastra/loggers": "alpha",
     "@mastra/mcp": "alpha",
     "@mastra/memory": "alpha",
     "@mastra/observability": "alpha"
