@@ -1192,7 +1192,11 @@ export class Workspace<
    * Get workspace information.
    * @param options.includeFileCount - Whether to count total files (can be slow for large workspaces)
    */
-  async getInfo(options?: { includeFileCount?: boolean; requestContext?: RequestContext }): Promise<WorkspaceInfo> {
+  async getInfo(options?: {
+    includeFileCount?: boolean;
+    requestContext?: RequestContext;
+    resolveDynamicProviders?: boolean;
+  }): Promise<WorkspaceInfo> {
     const info: WorkspaceInfo = {
       id: this.id,
       name: this.name,
@@ -1201,9 +1205,10 @@ export class Workspace<
       lastAccessedAt: this.lastAccessedAt,
     };
 
+    const shouldResolveDynamicProviders = options?.resolveDynamicProviders ?? true;
     const filesystem =
       this._fs ??
-      (this._filesystemResolver
+      (this._filesystemResolver && shouldResolveDynamicProviders
         ? await this.resolveFilesystem({ requestContext: options?.requestContext ?? new RequestContext() })
         : undefined);
 
@@ -1228,6 +1233,13 @@ export class Workspace<
           // Ignore errors - filesystem may not support listing
         }
       }
+    } else if (this._filesystemResolver) {
+      info.filesystem = {
+        id: `${this.id}-dynamic-filesystem`,
+        name: 'DynamicFilesystem',
+        provider: 'dynamic',
+        status: 'pending',
+      };
     }
 
     if (this._sandbox) {
