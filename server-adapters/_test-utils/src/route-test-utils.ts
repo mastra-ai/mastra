@@ -424,6 +424,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';
 
+  // Builder registry route params
+  if (route.path.includes(':registryId')) params.registryId = 'skills-sh';
+
   return params;
 }
 
@@ -433,6 +436,10 @@ export function getDefaultInvalidPathParams(route: ServerRoute): Array<Record<st
 
   if (route.path.includes(':agentId')) {
     invalid.push({ agentId: 123 });
+  }
+
+  if (route.path.includes(':registryId')) {
+    invalid.push({ registryId: 123 });
   }
 
   return invalid;
