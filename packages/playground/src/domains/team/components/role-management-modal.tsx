@@ -52,18 +52,18 @@ export function RoleManagementModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-surface0 border border-border1 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] overflow-hidden">
+      <div className="relative rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog w-full max-w-lg max-h-[80vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border1">
           <div>
-            <h2 className="text-lg font-semibold text-text1">Change Role</h2>
-            <p className="text-sm text-text2 mt-0.5">{userName}</p>
+            <h2 className="text-lg font-semibold text-neutral6">Change Role</h2>
+            <p className="text-sm text-neutral4 mt-0.5">{userName}</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-surface1 rounded transition-colors" aria-label="Close">
-            <XIcon className="h-5 w-5 text-text2" />
+          <button onClick={onClose} className="p-1 hover:bg-surface3 rounded transition-colors" aria-label="Close">
+            <XIcon className="h-5 w-5 text-neutral4" />
           </button>
         </div>
 
@@ -71,14 +71,14 @@ export function RoleManagementModal({
         <div className="p-4 overflow-y-auto max-h-[60vh]">
           {/* Current Role */}
           {currentRoleObj && (
-            <div className="mb-4 p-3 bg-surface1 rounded-lg border border-border1">
+            <div className="mb-4 p-3 bg-surface3 rounded-lg border border-border1">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-medium text-text2 uppercase tracking-wide">Current Role</span>
+                <span className="text-xs font-medium text-neutral4 uppercase tracking-wide">Current Role</span>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="default">{currentRoleObj.name}</Badge>
                 {currentRoleObj.description && (
-                  <span className="text-sm text-text2">— {currentRoleObj.description}</span>
+                  <span className="text-sm text-neutral4">— {currentRoleObj.description}</span>
                 )}
               </div>
             </div>
@@ -86,7 +86,7 @@ export function RoleManagementModal({
 
           {/* Role Options */}
           <div className="space-y-2">
-            <span className="text-xs font-medium text-text2 uppercase tracking-wide">Select Role</span>
+            <span className="text-xs font-medium text-neutral4 uppercase tracking-wide">Select Role</span>
             {availableRoles.map(role => {
               const isSelected = selectedRole === role.id;
               const isCurrent = currentRole === role.id;
@@ -99,7 +99,7 @@ export function RoleManagementModal({
                   }`}
                 >
                   <button
-                    className="w-full flex items-center justify-between p-3 text-left hover:bg-surface1 transition-colors disabled:opacity-50"
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-surface3 transition-colors disabled:opacity-50"
                     onClick={() => !isCurrent && handleChangeRole(role.id)}
                     disabled={isPending || isCurrent}
                   >
@@ -112,18 +112,18 @@ export function RoleManagementModal({
                         {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
                       </div>
                       <div>
-                        <span className="font-medium text-text1">{role.name}</span>
-                        {role.description && <p className="text-sm text-text2 mt-0.5">{role.description}</p>}
+                        <span className="font-medium text-neutral6">{role.name}</span>
+                        {role.description && <p className="text-sm text-neutral4 mt-0.5">{role.description}</p>}
                       </div>
                     </div>
-                    {isCurrent && <span className="text-xs text-text2 bg-surface2 px-2 py-1 rounded">Current</span>}
+                    {isCurrent && <span className="text-xs text-neutral4 bg-surface4 px-2 py-1 rounded">Current</span>}
                   </button>
 
                   {/* Permissions preview */}
                   {role.permissions && role.permissions.length > 0 && (
                     <>
                       <button
-                        className="w-full text-left px-3 py-2 text-xs text-text2 hover:bg-surface1 transition-colors border-t border-border1"
+                        className="w-full text-left px-3 py-2 text-xs text-neutral4 hover:bg-surface3 transition-colors border-t border-border1"
                         onClick={e => {
                           e.stopPropagation();
                           setExpandedRole(expandedRole === role.id ? null : role.id);
@@ -135,7 +135,7 @@ export function RoleManagementModal({
                         <div className="px-3 pb-3">
                           <div className="flex flex-wrap gap-1">
                             {role.permissions.map(perm => (
-                              <code key={perm} className="px-1.5 py-0.5 bg-surface2 rounded text-xs text-text2">
+                              <code key={perm} className="px-1.5 py-0.5 bg-surface4 rounded text-xs text-neutral4">
                                 {perm}
                               </code>
                             ))}
