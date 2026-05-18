@@ -24,11 +24,11 @@ export function useTokenUsageByAgentMetrics() {
         orderDirection: 'DESC' as const,
         filters,
       };
-      const [inputRes, outputRes, cacheReadRes, cacheWriteRes] = await Promise.all([
+      // total_input / total_output already roll up cache read/write costs server-side,
+      // so summing those two is enough — no need to fetch the cache breakdowns.
+      const [inputRes, outputRes] = await Promise.all([
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_input_tokens'] }),
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_output_tokens'] }),
-        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_read_tokens'] }),
-        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_write_tokens'] }),
       ]);
 
       type AgentEntry = { input: number; output: number; cost: number | null; costUnit: string | null };
@@ -59,16 +59,6 @@ export function useTokenUsageByAgentMetrics() {
         const name = group.dimensions.entityName ?? 'unknown';
         const entry = ensure(name);
         entry.output = group.value;
-        addCost(entry, group);
-      }
-      for (const group of cacheReadRes.groups) {
-        const name = group.dimensions.entityName ?? 'unknown';
-        const entry = ensure(name);
-        addCost(entry, group);
-      }
-      for (const group of cacheWriteRes.groups) {
-        const name = group.dimensions.entityName ?? 'unknown';
-        const entry = ensure(name);
         addCost(entry, group);
       }
 
