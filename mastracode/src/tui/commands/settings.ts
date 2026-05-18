@@ -59,6 +59,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         current.preferences.quietMode = enabled;
         saveSettings(current);
         ctx.state.quietMode = enabled;
+        ctx.state.taskProgress?.setQuietMode(enabled);
         applyQuietModeToRenderedTools(ctx, enabled);
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {

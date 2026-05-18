@@ -47,8 +47,51 @@ describe('TaskProgressComponent', () => {
     expect(lines[3]).toContain('Do the next thing');
   });
 
+  it('renders a single-line summary when quiet mode is active', () => {
+    const component = new TaskProgressComponent();
+    component.setQuietMode(true);
+
+    component.updateTasks([
+      { id: 'one', content: 'Inspect task progress', activeForm: 'Inspecting task progress', status: 'completed' },
+      { id: 'two', content: 'Implement quiet tasks', activeForm: 'Implementing quiet tasks', status: 'in_progress' },
+      { id: 'three', content: 'Verify quiet tasks', activeForm: 'Verifying quiet tasks', status: 'pending' },
+    ]);
+
+    const lines = component.render(120).map(line => stripAnsi(line));
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('');
+    expect(lines[1]).toContain('1/3');
+    expect(lines[1]).not.toContain('Tasks');
+    expect(lines[1]).not.toContain('[1/3]');
+    expect(lines[1]).toContain('▶ Implementing quiet tasks');
+    expect(lines[1]).toContain('○ Verify quiet tasks');
+    expect(lines[1]).toContain('✓ Inspect task progress');
+    expect(lines[1].indexOf('Inspect task progress')).toBeLessThan(lines[1].indexOf('Implementing quiet tasks'));
+    expect(lines[1].indexOf('Implementing quiet tasks')).toBeLessThan(lines[1].indexOf('Verify quiet tasks'));
+  });
+
+  it('updates between expanded and quiet task rendering', () => {
+    const component = new TaskProgressComponent();
+
+    component.updateTasks([
+      { id: 'one', content: 'Do the thing', activeForm: 'Doing the thing', status: 'in_progress' },
+      { id: 'two', content: 'Do the next thing', activeForm: 'Doing the next thing', status: 'pending' },
+    ]);
+
+    expect(component.render(120).map(line => stripAnsi(line))).toHaveLength(4);
+
+    component.setQuietMode(true);
+    const quietLines = component.render(120).map(line => stripAnsi(line));
+
+    expect(quietLines).toHaveLength(2);
+    expect(quietLines[1]).toContain('Doing the thing');
+    expect(quietLines[1]).toContain('Do the next thing');
+  });
+
   it('reserves one blank line again after all tasks complete', () => {
     const component = new TaskProgressComponent();
+    component.setQuietMode(true);
 
     component.updateTasks([{ id: 'one', content: 'Done', activeForm: 'Doing', status: 'completed' }]);
 
