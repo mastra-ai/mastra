@@ -6,6 +6,7 @@ import {
   AccordionItem,
   AccordionSummary,
   Avatar,
+  Badge,
   cn,
   FieldBlock,
   Skeleton,
@@ -15,7 +16,7 @@ import {
   toast,
   Txt,
 } from '@mastra/playground-ui';
-import { Cpu, FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
+import { Check, Cpu, FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
@@ -336,6 +337,15 @@ function BrowserSummaryValue() {
   return browserEnabled ? 'On' : 'Off';
 }
 
+function useModelFilled(): boolean {
+  const policy = useBuilderModelPolicy();
+  const model = useWatch<AgentBuilderEditFormValues, 'model'>({ name: 'model' });
+  const locked = policy.active && policy.pickerVisible === false;
+  const provider = locked ? (policy.default?.provider ?? model?.provider ?? '') : (model?.provider ?? '');
+  const modelId = locked ? (policy.default?.modelId ?? model?.name ?? '') : (model?.name ?? '');
+  return Boolean(provider && modelId);
+}
+
 function ConfigSections({
   features,
   activeToolsCount,
@@ -350,6 +360,10 @@ function ConfigSections({
   disabled = false,
   modelSectionVisible,
 }: ConfigSectionsProps) {
+  const modelFilled = useModelFilled();
+  const browserEnabled = useWatch<AgentBuilderEditFormValues, 'browserEnabled'>({ name: 'browserEnabled' });
+  const instructionsFilled = panelInstructions.trim().length > 0;
+
   return (
     <Accordion className="overflow-hidden bg-surface3 h-full min-h-0 rounded-xl border border-border1">
       {modelSectionVisible && (
@@ -358,6 +372,7 @@ function ConfigSections({
           icon={<Cpu className="h-4 w-4" />}
           label="Model"
           summaryValue={<ModelSummary />}
+          filled={modelFilled}
           testId="agent-preview-model-button"
         >
           <ModelSection editable={editable} />
@@ -367,6 +382,7 @@ function ConfigSections({
         value="instructions"
         icon={<FileText className="h-4 w-4" />}
         label="Instructions"
+        filled={instructionsFilled}
         testId="agent-preview-edit-system-prompt"
       >
         <InstructionsDetail prompt={panelInstructions} onChange={onInstructionsChange} editable={editable} />
@@ -378,6 +394,7 @@ function ConfigSections({
           label="Tools"
           count={activeToolsCount}
           total={totalToolsCount}
+          filled={activeToolsCount > 0}
           testId="agent-preview-tools-button"
         >
           <ToolsDetail editable={editable} availableAgentTools={availableAgentTools} />
@@ -390,6 +407,7 @@ function ConfigSections({
           label="Skills"
           count={activeSkillsCount}
           total={totalSkillsCount}
+          filled={activeSkillsCount > 0}
           testId="agent-preview-skills-button"
         >
           <SkillsDetail editable={editable} availableSkills={availableSkills} />
@@ -401,6 +419,7 @@ function ConfigSections({
           icon={<Globe className="h-4 w-4" />}
           label="Browser"
           summaryValue={<BrowserSummaryValue />}
+          filled={Boolean(browserEnabled)}
           testId="agent-preview-browser-button"
         >
           <BrowserSection disabled={disabled} />
@@ -434,11 +453,22 @@ interface ConfigSectionProps {
   summaryValue?: React.ReactNode;
   count?: number;
   total?: number;
+  filled?: boolean;
   testId: string;
   children: React.ReactNode;
 }
 
-const ConfigSection = ({ value, icon, label, summaryValue, count, total, testId, children }: ConfigSectionProps) => (
+const ConfigSection = ({
+  value,
+  icon,
+  label,
+  summaryValue,
+  count,
+  total,
+  filled,
+  testId,
+  children,
+}: ConfigSectionProps) => (
   <AccordionItem
     value={value}
     className={cn(
@@ -467,6 +497,16 @@ const ConfigSection = ({ value, icon, label, summaryValue, count, total, testId,
         >
           {count} / {total}
         </Txt>
+      )}
+      {filled && (
+        <Badge
+          variant="success"
+          size="sm"
+          icon={<Check />}
+          className={cn(summaryValue === undefined && count === undefined && 'ml-auto')}
+        >
+          <span data-testid={`${testId}-filled-badge`}>Set</span>
+        </Badge>
       )}
     </AccordionSummary>
 

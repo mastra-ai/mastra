@@ -720,3 +720,256 @@ describe('AgentConfigurePanel header card', () => {
     expect(inner).not.toBeNull();
   });
 });
+
+describe('AgentConfigurePanel filled-section badges', () => {
+  const ParamFormWrapper = ({
+    children,
+    defaultValues,
+  }: {
+    children: React.ReactNode;
+    defaultValues?: Partial<AgentBuilderEditFormValues>;
+  }) => {
+    const methods = useForm<AgentBuilderEditFormValues>({
+      defaultValues: {
+        name: 'Draft name',
+        instructions: '',
+        tools: {},
+        ...defaultValues,
+      },
+    });
+    formMethodsRef = methods;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return (
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <FormProvider {...methods}>{children}</FormProvider>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MastraReactProvider>
+    );
+  };
+
+  beforeEach(() => {
+    mockUseBuilderAgentFeatures.mockReset();
+    mockUseBuilderModelPolicy.mockReset();
+    mockUseBuilderModelPolicy.mockReturnValue({ active: false });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows the Instructions filled badge when instructions are non-empty', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    render(
+      <ParamFormWrapper defaultValues={{ instructions: 'You are a helpful agent.' }}>
+        <AgentConfigurePanel />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-preview-edit-system-prompt-filled-badge')).toBeTruthy();
+  });
+
+  it('does not show the Instructions filled badge when instructions are whitespace-only', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    render(
+      <ParamFormWrapper defaultValues={{ instructions: '   ' }}>
+        <AgentConfigurePanel />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-preview-edit-system-prompt-filled-badge')).toBeNull();
+  });
+
+  it('shows the Tools filled badge when at least one tool is checked', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: true,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    render(
+      <ParamFormWrapper>
+        <AgentConfigurePanel
+          availableAgentTools={[
+            { id: 'tool-a', name: 'tool-a', isChecked: true, type: 'tool' },
+            { id: 'tool-b', name: 'tool-b', isChecked: false, type: 'tool' },
+          ]}
+        />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-preview-tools-button-filled-badge')).toBeTruthy();
+  });
+
+  it('does not show the Tools filled badge when no tools are checked', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: true,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    render(
+      <ParamFormWrapper>
+        <AgentConfigurePanel availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]} />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-preview-tools-button-filled-badge')).toBeNull();
+  });
+
+  it('shows the Skills filled badge when at least one skill is selected', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: true,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    render(
+      <ParamFormWrapper defaultValues={{ skills: { 'skill-a': true } }}>
+        <AgentConfigurePanel
+          availableSkills={[
+            {
+              id: 'skill-a',
+              name: 'skill-a',
+              status: 'ready',
+              instructions: '',
+              createdAt: new Date(0).toISOString(),
+              updatedAt: new Date(0).toISOString(),
+            },
+          ]}
+        />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-preview-skills-button-filled-badge')).toBeTruthy();
+  });
+
+  it('does not show the Skills filled badge when no skills are selected', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: true,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    render(
+      <ParamFormWrapper defaultValues={{ skills: {} }}>
+        <AgentConfigurePanel
+          availableSkills={[
+            {
+              id: 'skill-a',
+              name: 'skill-a',
+              status: 'ready',
+              instructions: '',
+              createdAt: new Date(0).toISOString(),
+              updatedAt: new Date(0).toISOString(),
+            },
+          ]}
+        />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-preview-skills-button-filled-badge')).toBeNull();
+  });
+
+  it('shows the Browser filled badge when browserEnabled is true', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      browser: true,
+    });
+
+    render(
+      <ParamFormWrapper defaultValues={{ browserEnabled: true }}>
+        <AgentConfigurePanel />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-preview-browser-button-filled-badge')).toBeTruthy();
+  });
+
+  it('does not show the Browser filled badge when browserEnabled is false', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      browser: true,
+    });
+
+    render(
+      <ParamFormWrapper defaultValues={{ browserEnabled: false }}>
+        <AgentConfigurePanel />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-preview-browser-button-filled-badge')).toBeNull();
+  });
+
+  it('shows the Model filled badge when both provider and name are set', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      model: true,
+    });
+
+    render(
+      <ParamFormWrapper defaultValues={{ model: { provider: 'openai', name: 'gpt-4o' } }}>
+        <AgentConfigurePanel />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-preview-model-button-filled-badge')).toBeTruthy();
+  });
+
+  it('does not show the Model filled badge when the model is unset', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      model: true,
+    });
+
+    render(
+      <ParamFormWrapper>
+        <AgentConfigurePanel />
+      </ParamFormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-preview-model-button-filled-badge')).toBeNull();
+  });
+});
