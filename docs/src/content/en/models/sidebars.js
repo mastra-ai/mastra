@@ -533,6 +533,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/routing-run',
+          label: 'routing.run',
+        },
+        {
+          type: 'doc',
           id: 'providers/sarvam',
           label: 'Sarvam AI',
         },

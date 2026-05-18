@@ -385,6 +385,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
   if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
+  if (route.path.includes(':roleId')) params.roleId = 'test-role';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context
