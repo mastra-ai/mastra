@@ -1,3 +1,4 @@
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
@@ -2698,3 +2699,9 @@ export interface ExperimentReviewCounts {
   reviewed: number;
   complete: number;
 }
+
+export type PartProviderMetadata = Record<string, Record<string, unknown>>;
+
+export type MaybeProviderMetadata = { providerMetadata?: PartProviderMetadata };
+
+export type ToolInvocationUIPartWithMeta = ToolInvocationUIPart & MaybeProviderMetadata;
