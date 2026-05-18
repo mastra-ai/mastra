@@ -79,6 +79,22 @@ const TEST_CONFIG: CloudflareWorkersConfig = {
   keyPrefix: 'mastra-test',
 };
 
+const requiredBindingTables = [
+  TABLE_THREADS,
+  TABLE_MESSAGES,
+  TABLE_RESOURCES,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCORERS,
+  TABLE_BACKGROUND_TASKS,
+] as const;
+
+const bindingsWithout = (missingTable: (typeof requiredBindingTables)[number]) =>
+  Object.fromEntries(
+    requiredBindingTables
+      .filter(table => table !== missingTable)
+      .map(table => [table, kvBindings[table]]),
+  );
+
 createTestSuite(new CloudflareStore(TEST_CONFIG));
 
 // Pre-configured client acceptance tests (using bindings)
@@ -136,11 +152,11 @@ createConfigValidationTests({
     { description: 'disableInit with bindings', config: { id: 'test-store', bindings: kvBindings, disableInit: true } },
   ],
   invalidConfigs: [
-    {
-      description: 'bindings missing required tables',
-      config: { id: 'test-store', bindings: { [TABLE_THREADS]: kvBindings[TABLE_THREADS] } },
-      expectedError: /Missing KV binding/,
-    },
+    ...requiredBindingTables.map(table => ({
+      description: `bindings missing required ${table} table`,
+      config: { id: 'test-store', bindings: bindingsWithout(table) },
+      expectedError: new RegExp(`Missing KV binding for table: ${table}`),
+    })),
     {
       description: 'empty accountId in REST API config',
       config: { id: 'test-store', accountId: '', apiToken: 'test-token' },

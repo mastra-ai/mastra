@@ -1,6 +1,6 @@
 # @mastra/cloudflare
 
-Cloudflare KV store for Mastra, providing scalable and serverless storage for threads, messages, workflow snapshots, and evaluations. Supports both Cloudflare Workers KV Bindings and the REST API for flexible deployment in serverless and Node.js environments.
+Cloudflare KV store for Mastra, providing scalable and serverless storage for memory resources, threads, messages, workflow snapshots, scoring rows, and background tasks. Supports both Cloudflare Workers KV Bindings and the REST API for flexible deployment in serverless and Node.js environments.
 
 ## Installation
 
@@ -17,44 +17,59 @@ npm install @mastra/cloudflare
 ## Usage
 
 ```typescript
-import { CloudflareStore } from '@mastra/cloudflare';
+import { CloudflareKVStorage } from '@mastra/cloudflare';
 
 // Using Workers Binding API
-const store = new CloudflareStore({
+const store = new CloudflareKVStorage({
+  id: 'cloudflare-workers-storage',
   bindings: {
-    threads: THREADS_KV_NAMESPACE,
-    messages: MESSAGES_KV_NAMESPACE,
-    workflow_snapshot: WORKFLOW_KV_NAMESPACE,
-    traces: TRACES_KV_NAMESPACE,
+    mastra_threads: THREADS_KV_NAMESPACE,
+    mastra_messages: MESSAGES_KV_NAMESPACE,
+    mastra_resources: RESOURCES_KV_NAMESPACE,
+    mastra_workflow_snapshot: WORKFLOW_KV_NAMESPACE,
+    mastra_scorers: SCORERS_KV_NAMESPACE,
+    mastra_background_tasks: BACKGROUND_TASKS_KV_NAMESPACE,
   },
   keyPrefix: 'myapp_', // Optional
 });
 
 // Or using REST API
-const store = new CloudflareStore({
+const store = new CloudflareKVStorage({
+  id: 'cloudflare-rest-storage',
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
   apiToken: process.env.CLOUDFLARE_API_TOKEN!,
   namespacePrefix: 'myapp_', // Optional
 });
 
+const memory = await store.getStore('memory');
+if (!memory) {
+  throw new Error('Cloudflare memory storage is not configured');
+}
+
 // Save a thread
-await store.saveThread({
+await memory.saveThread({
   thread: {
     id: 'thread-123',
     resourceId: 'resource-456',
     title: 'My Thread',
     metadata: { key: 'value' },
     createdAt: new Date(),
+    updatedAt: new Date(),
   },
 });
 
 // Add messages
-await store.saveMessages({
+await memory.saveMessages({
   messages: [
     {
       id: 'msg-1',
       threadId: 'thread-123',
-      content: 'Hello Cloudflare!',
+      resourceId: 'resource-456',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Hello Cloudflare!' }],
+        content: 'Hello Cloudflare!',
+      },
       role: 'user',
       createdAt: new Date(),
     },
@@ -62,7 +77,7 @@ await store.saveMessages({
 });
 
 // Query messages
-const messages = await store.listMessages({ threadId: 'thread-123' });
+const messages = await memory.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -70,6 +85,7 @@ const messages = await store.listMessages({ threadId: 'thread-123' });
 - **Workers API**: Use the `bindings` option to pass KV namespaces directly (for Cloudflare Workers).
 - **REST API**: Use `accountId`, `apiToken`, and (optionally) `namespacePrefix` for server-side usage.
 - `keyPrefix`/`namespacePrefix`: Useful for isolating environments (e.g., dev/test/prod).
+- `CloudflareStore` remains available as a deprecated alias for `CloudflareKVStorage`.
 
 ## Features
 
@@ -79,7 +95,7 @@ const messages = await store.listMessages({ threadId: 'thread-123' });
 - Rich metadata support (JSON-encoded)
 - Timestamp tracking for all records
 - Workflow snapshot persistence
-- Trace and evaluation storage
+- Scoring storage
 - Sorted message order using simulated sorted sets
 - Supports both Cloudflare Workers KV Bindings and REST API
 - Automatic JSON serialization/deserialization for metadata and custom fields
@@ -161,12 +177,21 @@ All records are stored as JSON in KV, with automatic serialization/deserializati
 Example:
 
 ```typescript
-const store = new CloudflareStore({
-  bindings: { ... }, // for Workers
+const store = new CloudflareKVStorage({
+  id: 'cloudflare-workers-storage',
+  bindings: {
+    mastra_threads: THREADS_KV_NAMESPACE,
+    mastra_messages: MESSAGES_KV_NAMESPACE,
+    mastra_resources: RESOURCES_KV_NAMESPACE,
+    mastra_workflow_snapshot: WORKFLOW_KV_NAMESPACE,
+    mastra_scorers: SCORERS_KV_NAMESPACE,
+    mastra_background_tasks: BACKGROUND_TASKS_KV_NAMESPACE,
+  },
   keyPrefix: 'dev_',
 });
 // or
-const store = new CloudflareStore({
+const store = new CloudflareKVStorage({
+  id: 'cloudflare-rest-storage',
   accountId: '...',
   apiToken: '...',
   namespacePrefix: 'prod_',
@@ -175,7 +200,11 @@ const store = new CloudflareStore({
 
 ## Table/Namespace Mapping
 
-Each logical Mastra table (threads, messages, workflow_snapshot, evals, traces) maps to a separate KV namespace. Keys are structured as `${prefix}${tableName}:${primaryKey}` or `${prefix}${tableName}:${threadId}:${messageId}` for messages. The prefix is set by `keyPrefix`/`namespacePrefix`.
+Workers Binding API deployments must provide KV namespaces for the required runtime tables: `mastra_threads`, `mastra_messages`, `mastra_resources`, `mastra_workflow_snapshot`, `mastra_scorers`, and `mastra_background_tasks`. These bindings support the current Cloudflare KV memory, workflow, scoring, and background task domains.
+
+`CloudflareKVStorage` does not currently implement the Harness attachment storage domain or R2 byte storage. Harness attachment primitives/elements are separate from the memory `mastra_resources` namespace; a Harness attachment storage implementation should keep metadata in its attachment table family and use Cloudflare R2-compatible object storage for attachment bytes when object-backed attachments are enabled.
+
+Each logical Mastra table maps to a separate KV namespace. Keys are structured as `${prefix}${tableName}:${primaryKey}` or `${prefix}${tableName}:${threadId}:${messageId}` for messages. The prefix is set by `keyPrefix`/`namespacePrefix`.
 
 ## Limitations
 
@@ -190,7 +219,7 @@ Each logical Mastra table (threads, messages, workflow_snapshot, evals, traces) 
 - **Workers Binding API** is recommended for production Workers deployments (low-latency, no API token required at runtime).
 - **REST API** is ideal for server-side Node.js or test environments.
 - Ensure your KV namespaces are provisioned and accessible by your Worker or API token.
-- Namespaces and keys are automatically created as needed.
+- REST namespaces and keys are automatically created as needed; Workers deployments must bind the required KV namespaces before startup.
 
 ## Cleanup/Disconnect
 

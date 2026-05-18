@@ -37,9 +37,12 @@ import { CloudflareKVStorage } from '@mastra/cloudflare/kv'
 const storageWorkers = new CloudflareKVStorage({
   id: 'cloudflare-workers-storage',
   bindings: {
-    threads: THREADS_KV, // KVNamespace binding for threads table
-    messages: MESSAGES_KV, // KVNamespace binding for messages table
-    // Add other tables as needed
+    mastra_threads: THREADS_KV,
+    mastra_messages: MESSAGES_KV,
+    mastra_resources: RESOURCES_KV,
+    mastra_workflow_snapshot: WORKFLOW_KV,
+    mastra_scorers: SCORERS_KV,
+    mastra_background_tasks: BACKGROUND_TASKS_KV,
   },
   keyPrefix: 'dev_', // Optional: isolate keys per environment
 })
@@ -66,7 +69,8 @@ const storageRest = new CloudflareKVStorage({
   {
     name: 'bindings',
     type: 'Record<string, KVNamespace>',
-    description: 'Cloudflare Workers KV bindings (for Workers runtime)',
+    description:
+      'Cloudflare Workers KV bindings. Workers deployments must provide mastra_threads, mastra_messages, mastra_resources, mastra_workflow_snapshot, mastra_scorers, and mastra_background_tasks.',
     isOptional: true,
   },
   {
@@ -100,11 +104,16 @@ const storageRest = new CloudflareKVStorage({
 
 ### Schema Management
 
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
+Workers deployments must bind KV namespaces for the following runtime tables:
 
-- `threads`: Stores conversation threads
-- `messages`: Stores individual messages
-- `metadata`: Stores additional metadata for threads and messages
+- `mastra_threads`: Stores conversation threads
+- `mastra_messages`: Stores individual messages
+- `mastra_resources`: Stores resource records and working memory
+- `mastra_workflow_snapshot`: Stores workflow run state
+- `mastra_scorers`: Stores scorer/evaluation rows
+- `mastra_background_tasks`: Stores background task rows
+
+These bindings support the current Cloudflare KV memory, workflow, scoring, and background task domains. `CloudflareKVStorage` does not currently implement the Harness attachment storage domain or R2 byte storage. Harness attachment primitives/elements are separate from the memory `mastra_resources` namespace; a Harness attachment storage implementation should keep metadata in its attachment table family and use an R2-compatible object store for attachment bytes when object-backed attachments are enabled.
 
 ### Consistency & Propagation
 
@@ -112,7 +121,7 @@ Cloudflare KV is an eventually consistent store, meaning that data may not be im
 
 ### Key Structure & Namespacing
 
-Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (e.g., `threads:threadId`).
+Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (for example, `mastra_threads:threadId`).
 For Workers deployments, `keyPrefix` is used to isolate data within a namespace; for REST API deployments, `namespacePrefix` is used to isolate entire namespaces between environments or applications.
 
 ## Cloudflare Durable Objects Storage
@@ -181,11 +190,14 @@ Durable Objects storage uses SQLite under the hood, enabling efficient queries, 
 
 ## Schema Management
 
-Both storage implementations handle schema creation and updates automatically. They create the following tables:
+Both storage implementations handle schema creation and updates automatically. KV Workers deployments require these bindings:
 
-- `threads`: Stores conversation threads
-- `messages`: Stores individual messages
-- `workflow_snapshot`: Stores workflow run state
+- `mastra_threads`: Stores conversation threads
+- `mastra_messages`: Stores individual messages
+- `mastra_resources`: Stores resource records and working memory
+- `mastra_workflow_snapshot`: Stores workflow run state
+- `mastra_scorers`: Stores scorer/evaluation rows
+- `mastra_background_tasks`: Stores background task rows
 
 ## Deprecated Aliases
 

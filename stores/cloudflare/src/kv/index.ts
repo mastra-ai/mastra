@@ -9,7 +9,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { BackgroundTasksStorageCloudflare } from './storage/domains/background-tasks';
 import { MemoryStorageCloudflare } from './storage/domains/memory';
