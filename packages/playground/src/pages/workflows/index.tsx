@@ -55,7 +55,7 @@ function Workflows() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
           </div>
