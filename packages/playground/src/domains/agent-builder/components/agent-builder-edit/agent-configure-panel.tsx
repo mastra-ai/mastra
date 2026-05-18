@@ -159,16 +159,12 @@ function ConfigurePanelContent({
   const modelSectionVisible = features.model || policy.active;
 
   return (
-    <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden lg:rounded-none lg:border-0 lg:border-l lg:border-l-border1">
+    <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden">
       <div
         className={cn(
-          'agent-builder-detail-pane absolute inset-0 z-10 overflow-hidden bg-surface2',
-          'transition-transform duration-300 ease-out will-change-transform',
-          'lg:inset-y-0 lg:left-0 lg:right-[320px] lg:z-0 lg:bg-transparent',
-          'lg:transition-[width,opacity] lg:duration-300',
-          activeDetail
-            ? 'translate-y-0 lg:translate-y-0 lg:w-[calc(100%-320px)] lg:opacity-100'
-            : 'translate-y-full pointer-events-none lg:translate-y-0 lg:w-0 lg:opacity-0',
+          'absolute inset-0 z-10 overflow-hidden bg-surface2',
+          'transition-opacity duration-200 ease-out',
+          activeDetail ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
         aria-hidden={!activeDetail}
       >
@@ -184,13 +180,7 @@ function ConfigurePanelContent({
         />
       </div>
 
-      <div
-        className={cn(
-          'ml-auto flex h-full min-w-0 flex-col w-full lg:w-[320px]',
-          'lg:border-l',
-          activeDetail ? 'border-l-border1' : 'border-l-transparent',
-        )}
-      >
+      <div className="flex h-full min-w-0 flex-col">
         <div className="flex-1 flex flex-col py-6 overflow-y-auto">
           <div className="flex flex-col gap-2 px-6 pb-6 border-b border-border1">
             <div className="flex items-center justify-center">

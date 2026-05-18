@@ -102,24 +102,6 @@ th:has(header) {
     object-position: top left;
   }
 
-  .agent-builder-detail-pane {
-    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  @media (min-width: 1024px) {
-    .agent-builder-detail-pane {
-      transition:
-        width 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .agent-builder-detail-pane {
-      transition: none;
-    }
-  }
-
   /*
    * Agent builder starter page — editorial serif minimal motion.
    * A slow aurora-like gradient drifts behind the content, and the
