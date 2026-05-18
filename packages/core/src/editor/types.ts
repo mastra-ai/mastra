@@ -52,6 +52,8 @@ import type {
   StorageResolvedSkillType,
   StorageListSkillsResolvedOutput,
 } from '../storage/types';
+import type { ToolIntegration } from '../tool-integration';
+
 import type { ToolProvider } from '../tool-provider';
 import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 import type { WorkspaceSandbox } from '../workspace/sandbox/sandbox';
@@ -143,8 +145,17 @@ export interface BrowserProvider<TConfig = Record<string, unknown>> {
 
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
-  /** Tool providers for integration tools (e.g., Composio) */
+  /**
+   * Tool providers for integration tools (e.g., Composio).
+   *
+   * @deprecated Use `toolIntegrations` instead.
+   */
   toolProviders?: Record<string, ToolProvider>;
+  /**
+   * Registered Agent Builder tool integrations. Adapters extend
+   * `BaseToolIntegration` from `@mastra/core/tool-integration`.
+   */
+  toolIntegrations?: readonly ToolIntegration[];
   /** Processor providers for configurable processors (e.g., moderation, token limiter) */
   processorProviders?: Record<string, ProcessorProvider>;
   /**
@@ -408,10 +419,26 @@ export interface IMastraEditor {
    */
   readonly favorites?: IEditorFavoritesNamespace;
 
-  /** Registered tool providers */
+  /**
+   * Registered tool providers.
+   * @deprecated Use `getToolIntegration` instead.
+   */
   getToolProvider(id: string): ToolProvider | undefined;
-  /** List all registered tool providers */
+  /**
+   * List all registered tool providers.
+   * @deprecated Use `getToolIntegrations` instead.
+   */
   getToolProviders(): Record<string, ToolProvider>;
+
+  /** Look up a registered tool integration by id, or `undefined` if unknown. */
+  getToolIntegration(id: string): ToolIntegration | undefined;
+  /**
+   * Look up a registered tool integration by id, or throw
+   * `UnknownIntegrationError` if no match is registered.
+   */
+  getToolIntegrationOrThrow(id: string): ToolIntegration;
+  /** List all registered tool integrations in insertion order. */
+  getToolIntegrations(): readonly ToolIntegration[];
 
   /** Get a processor provider by ID */
   getProcessorProvider(id: string): ProcessorProvider | undefined;

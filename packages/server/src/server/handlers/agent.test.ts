@@ -9,7 +9,7 @@ import type { MastraStorage } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
-import { MASTRA_IS_STUDIO_KEY } from '../constants';
+import { MASTRA_IS_STUDIO_KEY, MASTRA_RESOURCE_ID_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { checkRouteFGA } from '../server-adapter';
 import {
@@ -505,6 +505,80 @@ describe('Agent Handlers', () => {
       expect(result['agent-b']).toBeDefined();
       expect(result['agent-b'].provider).toBe('openai.chat');
       expect(result['agent-b'].modelId).toBe('gpt-4o');
+    });
+
+    describe('stored-agent visibility', () => {
+      const makeStoredAgentRecord = (id: string, authorId: string | null, visibility: 'private' | 'public') => ({
+        id,
+        name: id,
+        authorId,
+        visibility,
+      });
+
+      const buildMastraWithStoredAgents = (
+        storedAgents: Array<{ id: string; authorId: string | null; visibility: 'private' | 'public' }>,
+      ) => {
+        const mastra = makeMastraMock({ agents: {} });
+        const fakeEditor = {
+          agent: {
+            list: vi.fn().mockResolvedValue({ agents: storedAgents }),
+            getById: vi.fn().mockImplementation(async (id: string) => {
+              const found = storedAgents.find(a => a.id === id);
+              if (!found) return null;
+              const agent = makeMockAgent({ name: found.id, description: `stored ${found.id}` });
+              return agent;
+            }),
+          },
+        };
+        vi.spyOn(mastra, 'getEditor').mockReturnValue(fakeEditor as any);
+        return mastra;
+      };
+
+      it("hides another author's private stored agent from a signed-in caller", async () => {
+        const mastra = buildMastraWithStoredAgents([
+          makeStoredAgentRecord('mine', 'caller-a', 'private'),
+          makeStoredAgentRecord('theirs-private', 'caller-b', 'private'),
+        ]);
+
+        const ctx = createTestServerContext({ mastra });
+        ctx.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'caller-a');
+
+        const result = await LIST_AGENTS_ROUTE.handler(ctx);
+
+        expect(result['mine']).toBeDefined();
+        expect(result['theirs-private']).toBeUndefined();
+      });
+
+      it("exposes another author's public stored agent", async () => {
+        const mastra = buildMastraWithStoredAgents([
+          makeStoredAgentRecord('mine', 'caller-a', 'private'),
+          makeStoredAgentRecord('theirs-public', 'caller-b', 'public'),
+        ]);
+
+        const ctx = createTestServerContext({ mastra });
+        ctx.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'caller-a');
+
+        const result = await LIST_AGENTS_ROUTE.handler(ctx);
+
+        expect(result['mine']).toBeDefined();
+        expect(result['theirs-public']).toBeDefined();
+      });
+
+      it('allows admin bypass to see every stored agent', async () => {
+        const mastra = buildMastraWithStoredAgents([
+          makeStoredAgentRecord('a', 'caller-a', 'private'),
+          makeStoredAgentRecord('b', 'caller-b', 'private'),
+        ]);
+
+        const ctx = createTestServerContext({ mastra });
+        ctx.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'admin');
+        ctx.requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['stored-agents:admin']);
+
+        const result = await LIST_AGENTS_ROUTE.handler(ctx);
+
+        expect(result['a']).toBeDefined();
+        expect(result['b']).toBeDefined();
+      });
     });
   });
 

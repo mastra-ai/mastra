@@ -5,7 +5,7 @@ import { builderAgent } from '@mastra/editor/ee';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { initWorkOS } from './auth';
 import { StagehandBrowser } from '@mastra/stagehand';
-import { ComposioToolProvider } from '@mastra/editor/composio';
+import { ComposioToolIntegration } from '@mastra/editor/composio';
 import { weatherInfo } from './tools';
 import { weatherAgent } from './agents';
 import { greetWorkflow } from './workflows';
@@ -17,10 +17,11 @@ const storage = new LibSQLStore({
 });
 
 const slack = new SlackProvider({
-  token: process.env.SLACK_APP_CONFIG_TOKEN,
   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
   baseUrl: process.env.SLACK_BASE_URL,
 });
+
+const workos = await initWorkOS();
 
 export const mastra = new Mastra({
   storage,
@@ -39,7 +40,8 @@ export const mastra = new Mastra({
     sourcemap: true,
   },
   server: {
-    auth: (await initWorkOS()).mastraAuth,
+    auth: workos.mastraAuth,
+    rbac: workos.rbacProvider,
     build: {
       swaggerUI: true,
     },
@@ -59,9 +61,13 @@ export const mastra = new Mastra({
     },
   }),
   editor: new MastraEditor({
-    toolProviders: {
-      composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '' }),
-    },
+    toolIntegrations: [
+      new ComposioToolIntegration({
+        apiKey: process.env.COMPOSIO_API_KEY!,
+        allowedToolServices: [
+          'gmail',
+        ],
+      })],
     browsers: {
       stagehand: {
         id: 'stagehand',
@@ -77,32 +83,14 @@ export const mastra = new Mastra({
     },
     builder: {
       enabled: true,
-      features: {
-        agent: {
-          tools: true,
-          agents: true,
-          workflows: true,
-          stars: true,
-          model: true,
-          browser: true,
-          avatarUpload: true,
-        },
-      },
       configuration: {
         agent: {
           models: {
-            allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
-            default: {
-              provider: 'openai',
-              modelId: 'gpt-5.4',
-            },
+            allowed: [{ provider: 'openai', modelId: 'gpt-5.4-mini' }],
           },
           memory: {
             observationalMemory: true,
           },
-          tools: { allowed: ['weather-info'] },
-          agents: { allowed: ['weather-agent'] },
-          workflows: { allowed: ['greet-workflow'] },
           browser: {
             type: 'inline',
             config: {

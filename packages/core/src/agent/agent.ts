@@ -2396,6 +2396,35 @@ export class Agent<
   }
 
   /**
+   * Get the raw, unresolved tools value (static record or dynamic function).
+   * Used by the editor to snapshot the original tools before wrapping them in
+   * a dynamic merge function — calling listTools() inside the wrapper would
+   * re-enter the wrapper and recurse.
+   * @internal
+   */
+  __getRawTools(): DynamicArgument<TTools, TRequestContext> {
+    return this.#tools;
+  }
+
+  /**
+   * Resolve a raw tools value (as returned by __getRawTools) against a
+   * request context. Mirrors the resolution that listTools() does, but lets
+   * the caller pass an arbitrary tools value so that a wrapper can resolve
+   * the pre-wrap tools without recursing.
+   * @internal
+   */
+  async __resolveRawTools(
+    raw: DynamicArgument<TTools, TRequestContext>,
+    requestContext: RequestContext<TRequestContext>,
+  ): Promise<TTools> {
+    if (typeof raw !== 'function') {
+      return ensureToolProperties(raw) as TTools;
+    }
+    const result = await raw({ requestContext, mastra: this.#mastra });
+    return ensureToolProperties(result) as TTools;
+  }
+
+  /**
    * Create a lightweight clone of this agent that can be independently mutated
    * without affecting the original instance. Used by the editor to apply
    * version overrides without mutating the singleton agent.

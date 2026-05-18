@@ -1,5 +1,8 @@
 import type { AvailableAgentsRecord, AvailableToolsRecord, AvailableWorkflowsRecord } from '../types/agent-tool';
 
+// Built-in agents that should never appear in the Agent Builder picker.
+const HIDDEN_AGENT_IDS = new Set(['builder-agent']);
+
 interface BuildAvailableToolRecordsResult {
   tools: AvailableToolsRecord;
   agents: AvailableAgentsRecord;
@@ -21,7 +24,7 @@ export function buildAvailableToolRecords(
 
   const agents: AvailableAgentsRecord = Object.fromEntries(
     Object.entries(agentsData)
-      .filter(([agentId]) => agentId !== excludeAgentId)
+      .filter(([agentId]) => agentId !== excludeAgentId && !HIDDEN_AGENT_IDS.has(agentId))
       .map(([agentId, agent]) => [
         agentId,
         {

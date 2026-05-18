@@ -4,6 +4,7 @@ import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
 import type { ProcessorPhase } from '../processor-provider';
+import type { ToolIntegrationConfig } from '../tool-integration';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -413,6 +414,13 @@ export interface StorageAgentSnapshotType {
    * Static or conditional on request context.
    */
   integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
+  /**
+   * Agent Builder tool integrations (provider-agnostic).
+   *
+   * Keyed by integration id (e.g. `'composio'`). Coexists with the legacy
+   * `integrationTools` field above; the legacy field is deprecated.
+   */
+  toolIntegrations?: StorageConditionalField<Record<string, ToolIntegrationConfig>>;
   /** Processor graph for input processing — static or conditional on request context */
   inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Processor graph for output processing — static or conditional on request context */
@@ -2680,4 +2688,55 @@ export type StorageListFavoritesInput = {
 export type StorageDeleteFavoritesForEntityInput = {
   entityType: StorageFavoriteEntityType;
   entityId: string;
+};
+
+/**
+ * A persisted, author-scoped tool integration connection. Lets the UI show a
+ * stable, user-supplied label (e.g. "Work Gmail") for a Composio-style
+ * `connectionId` across agents. Unique on `(authorId, providerId, connectionId)`.
+ */
+export interface StorageToolConnection {
+  /** Author/owner the connection belongs to. `'default'` when auth is disabled. */
+  authorId: string;
+  /** Tool integration provider id, e.g. `'composio'`. */
+  providerId: string;
+  /** Tool service / toolkit slug, e.g. `'gmail'`. */
+  toolService: string;
+  /** Adapter-native connection identifier (e.g. Composio `ca_...`). */
+  connectionId: string;
+  /** User-supplied display label. `null` when the user hasn't named it yet. */
+  label: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input to upsert a tool connection row. Idempotent on `(authorId, providerId, connectionId)`. */
+export type StorageUpsertToolConnectionInput = {
+  authorId: string;
+  providerId: string;
+  toolService: string;
+  connectionId: string;
+  label: string | null;
+};
+
+/** Lookup key for a single tool connection row. */
+export type StorageToolConnectionKey = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
+};
+
+/** Input for listing tool connections, optionally scoped by author/provider/service. */
+export type StorageListToolConnectionsInput = {
+  /** Omit to list across all authors (admin cross-author listing). */
+  authorId?: string;
+  providerId?: string;
+  toolService?: string;
+};
+
+/** Input for deleting a single tool connection row. */
+export type StorageDeleteToolConnectionInput = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
 };

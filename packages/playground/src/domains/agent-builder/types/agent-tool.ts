@@ -1,4 +1,4 @@
-export type AgentToolType = 'tool' | 'agent' | 'workflow';
+export type AgentToolType = 'tool' | 'agent' | 'workflow' | 'integration';
 
 export interface AgentTool {
   id: string;
@@ -6,6 +6,10 @@ export interface AgentTool {
   description?: string;
   isChecked: boolean;
   type: AgentToolType;
+  /** Populated only when type === 'integration'. */
+  providerId?: string;
+  /** Populated only when type === 'integration'. */
+  toolService?: string;
 }
 
 export interface AvailableToolsRecord {
@@ -26,14 +30,35 @@ export interface SelectedMaps {
   workflows?: Record<string, boolean | undefined>;
 }
 
+export interface SelectedIntegrationTool {
+  providerId: string;
+  toolService: string;
+  slug: string;
+  description?: string;
+}
+
 export interface BuildAgentToolsArgs {
   tools: AvailableToolsRecord;
   agents: AvailableAgentsRecord;
   workflows?: AvailableWorkflowsRecord;
   selected?: SelectedMaps;
+  /**
+   * Catalog of integration tools to render. Each entry becomes a checkbox
+   * row; `selectedIntegrationIds` controls the checked state.
+   */
+  integrationTools?: SelectedIntegrationTool[];
+  /** Set of `${providerId}:${slug}` keys that are currently active on the agent. */
+  selectedIntegrationIds?: Set<string>;
 }
 
-export const buildAgentTools = ({ tools, agents, workflows = {}, selected }: BuildAgentToolsArgs): AgentTool[] => {
+export const buildAgentTools = ({
+  tools,
+  agents,
+  workflows = {},
+  selected,
+  integrationTools = [],
+  selectedIntegrationIds,
+}: BuildAgentToolsArgs): AgentTool[] => {
   const selectedTools = selected?.tools ?? {};
   const selectedAgents = selected?.agents ?? {};
   const selectedWorkflows = selected?.workflows ?? {};
@@ -86,7 +111,41 @@ export const buildAgentTools = ({ tools, agents, workflows = {}, selected }: Bui
     });
   }
 
+  for (const entry of integrationTools) {
+    const id = buildIntegrationToolId(entry.providerId, entry.slug);
+    if (seen.has(id)) {
+      console.warn(
+        `[buildAgentTools] id collision for "${id}": integration tool overlaps with another id; existing entry takes precedence.`,
+      );
+      continue;
+    }
+    seen.add(id);
+    const key = `${entry.providerId}:${entry.slug}`;
+    result.push({
+      id,
+      name: entry.slug,
+      description: entry.description,
+      isChecked: selectedIntegrationIds?.has(key) ?? false,
+      type: 'integration',
+      providerId: entry.providerId,
+      toolService: entry.toolService,
+    });
+  }
+
   return result;
+};
+
+export const INTEGRATION_TOOL_ID_PREFIX = 'integration:';
+
+export const buildIntegrationToolId = (providerId: string, slug: string): string =>
+  `${INTEGRATION_TOOL_ID_PREFIX}${providerId}:${slug}`;
+
+export const parseIntegrationToolId = (id: string): { providerId: string; slug: string } | undefined => {
+  if (!id.startsWith(INTEGRATION_TOOL_ID_PREFIX)) return undefined;
+  const rest = id.slice(INTEGRATION_TOOL_ID_PREFIX.length);
+  const sep = rest.indexOf(':');
+  if (sep === -1) return undefined;
+  return { providerId: rest.slice(0, sep), slug: rest.slice(sep + 1) };
 };
 
 export interface SplitAgentToolsResult {
@@ -105,6 +164,9 @@ export const splitAgentTools = (items: AgentTool[]): SplitAgentToolsResult => {
       agents[item.id] = true;
     } else if (item.type === 'workflow') {
       workflows[item.id] = true;
+    } else if (item.type === 'integration') {
+      // Integration tools are persisted via toolIntegrations, not the legacy tools record.
+      continue;
     } else {
       tools[item.id] = true;
     }

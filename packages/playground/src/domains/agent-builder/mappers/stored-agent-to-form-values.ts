@@ -1,3 +1,4 @@
+import type { StoredIntegrationConnection, StoredToolIntegrationConfig } from '@mastra/client-js';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import { extractWorkspaceId } from './extract-workspace-id';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
@@ -41,6 +42,68 @@ export function isConditionalStoredModel(model: StoredAgent['model'] | undefined
   return Array.isArray(model);
 }
 
+/**
+ * `true` when the stored agent's `toolIntegrations` is a conditional variant
+ * array. v1 has no UI for conditional integration configs — the field is
+ * surfaced as `undefined` and `useSaveAgent` preserves the original on save.
+ */
+export function isConditionalStoredToolIntegrations(value: StoredAgent['toolIntegrations'] | undefined): boolean {
+  return Array.isArray(value);
+}
+
+/**
+ * Read `storedAgent.toolIntegrations` into the form shape:
+ * - Static record → mirrored object with `toolService` denormalized onto each
+ *   `tools[slug]` entry by inferring it from the `connections` map. Tools
+ *   whose toolService can't be inferred are dropped.
+ * - Conditional variant (array) or anything unrecognized → `undefined`. The
+ *   save hook preserves the original stored shape so we never silently
+ *   overwrite code-authored config.
+ */
+export function extractFormToolIntegrations(
+  value: StoredAgent['toolIntegrations'] | undefined,
+): AgentBuilderEditFormValues['toolIntegrations'] {
+  if (!value || Array.isArray(value)) return undefined;
+  const staticValue = value as Record<string, StoredToolIntegrationConfig>;
+  const result: NonNullable<AgentBuilderEditFormValues['toolIntegrations']> = {};
+
+  for (const [providerId, config] of Object.entries(staticValue)) {
+    const connectionsByService: Record<string, StoredIntegrationConnection[]> = config.connections ?? {};
+    // Build slug → toolService map by scanning connections (cheap; usually 1-3 services).
+    const services = Object.keys(connectionsByService);
+    const findServiceForSlug = (slug: string): string | undefined => {
+      // Composio convention: tool slugs are `SERVICE_ACTION`. Match by prefix
+      // against any known service (case-insensitive). When that fails, fall
+      // back to the lone service if there's only one.
+      const lowered = slug.toLowerCase();
+      const byPrefix = services.find(
+        svc => lowered.startsWith(`${svc.toLowerCase()}_`) || lowered === svc.toLowerCase(),
+      );
+      if (byPrefix) return byPrefix;
+      if (services.length === 1) return services[0];
+      return undefined;
+    };
+
+    const tools: NonNullable<AgentBuilderEditFormValues['toolIntegrations']>[string]['tools'] = {};
+    for (const [slug, meta] of Object.entries(config.tools ?? {})) {
+      // Prefer the stored `toolService` (canonical) and fall back to
+      // inferring from slug/connection shape for pre-fix stored data.
+      const toolService = meta?.toolService ?? findServiceForSlug(slug);
+      if (!toolService) continue;
+      tools[slug] = { toolService, ...(meta?.description ? { description: meta.description } : {}) };
+    }
+
+    result[providerId] = {
+      tools,
+      connections: connectionsByService as NonNullable<
+        AgentBuilderEditFormValues['toolIntegrations']
+      >[string]['connections'],
+    };
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefined): AgentBuilderEditFormValues {
   const avatarUrl =
     storedAgent?.metadata && typeof storedAgent.metadata === 'object' && 'avatarUrl' in storedAgent.metadata
@@ -60,5 +123,6 @@ export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefi
     visibility: storedAgent?.visibility,
     avatarUrl,
     model: extractStaticModel(storedAgent?.model),
+    toolIntegrations: extractFormToolIntegrations(storedAgent?.toolIntegrations),
   };
 }

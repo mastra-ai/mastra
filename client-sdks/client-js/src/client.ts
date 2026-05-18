@@ -84,6 +84,7 @@ import {
   StoredMCPClient,
   StoredScorer,
   StoredSkill,
+  ToolIntegration,
   ToolProvider,
   ProcessorProvider,
   Workspace,
@@ -184,6 +185,7 @@ import type {
   CompareExperimentsResponse,
   DatasetItemVersionResponse,
   DatasetVersionResponse,
+  ListToolIntegrationsResponse,
   ListToolProvidersResponse,
   GetProcessorProvidersResponse,
   ListBackgroundTasksParams,
@@ -1522,6 +1524,29 @@ export class MastraClient extends BaseResource {
    */
   public getToolProvider(providerId: string): ToolProvider {
     return new ToolProvider(this.options, providerId);
+  }
+
+  // ============================================================================
+  // Tool Integrations
+  // ============================================================================
+
+  /**
+   * Lists all registered tool integrations (id, displayName, capabilities).
+   */
+  public listToolIntegrations(): Promise<ListToolIntegrationsResponse> {
+    return this.request('/tool-integrations');
+  }
+
+  /**
+   * Gets a ToolIntegration resource for a specific integration id. The
+   * returned instance exposes the catalog (`listToolServices`, `listTools`),
+   * the OAuth surface (`authorize`, `getAuthStatus`, `getConnectionStatus`)
+   * and `getHealth`.
+   *
+   * @param integrationId - Unique identifier for the tool integration
+   */
+  public getToolIntegration(integrationId: string): ToolIntegration {
+    return new ToolIntegration(this.options, integrationId);
   }
 
   // ============================================================================

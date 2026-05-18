@@ -26,6 +26,7 @@ export const TABLE_SKILLS = 'mastra_skills';
 export const TABLE_SKILL_VERSIONS = 'mastra_skill_versions';
 export const TABLE_SKILL_BLOBS = 'mastra_skill_blobs';
 export const TABLE_FAVORITES = 'mastra_favorites';
+export const TABLE_TOOL_CONNECTIONS = 'mastra_tool_connections';
 
 // Dataset tables
 export const TABLE_DATASETS = 'mastra_datasets';
@@ -76,6 +77,7 @@ export type TABLE_NAMES =
   | typeof TABLE_EXPERIMENT_RESULTS
   | typeof TABLE_BACKGROUND_TASKS
   | typeof TABLE_FAVORITES
+  | typeof TABLE_TOOL_CONNECTIONS
   | typeof TABLE_SCHEDULES
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
@@ -172,6 +174,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   workflows: { type: 'jsonb', nullable: true },
   agents: { type: 'jsonb', nullable: true },
   integrationTools: { type: 'jsonb', nullable: true },
+  toolIntegrations: { type: 'jsonb', nullable: true },
   inputProcessors: { type: 'jsonb', nullable: true },
   outputProcessors: { type: 'jsonb', nullable: true },
   memory: { type: 'jsonb', nullable: true },
@@ -336,6 +339,16 @@ export const FAVORITES_SCHEMA: Record<string, StorageColumn> = {
   entityType: { type: 'text', nullable: false }, // 'agent' | 'skill'
   entityId: { type: 'text', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const TOOL_CONNECTIONS_SCHEMA: Record<string, StorageColumn> = {
+  authorId: { type: 'text', nullable: false },
+  providerId: { type: 'text', nullable: false },
+  connectionId: { type: 'text', nullable: false },
+  toolService: { type: 'text', nullable: false },
+  label: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
@@ -571,6 +584,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
   [TABLE_FAVORITES]: FAVORITES_SCHEMA,
+  [TABLE_TOOL_CONNECTIONS]: TOOL_CONNECTIONS_SCHEMA,
   [TABLE_BACKGROUND_TASKS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     tool_call_id: { type: 'text', nullable: false },
@@ -645,6 +659,10 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
   [TABLE_FAVORITES]: { columns: FAVORITES_SCHEMA, compositePrimaryKey: ['userId', 'entityType', 'entityId'] },
+  [TABLE_TOOL_CONNECTIONS]: {
+    columns: TOOL_CONNECTIONS_SCHEMA,
+    compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
+  },
 };
 
 /**

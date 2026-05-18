@@ -74,4 +74,55 @@ describe('routeToolInputToFormKeys', () => {
     expect(result.agents).toEqual({});
     expect(result.workflows).toEqual({});
   });
+
+  it('routes integration ids into integrationTools with providerId/toolService/slug/description', () => {
+    const available: AgentTool[] = [
+      {
+        id: 'integration:composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        description: 'Fetch emails',
+        isChecked: true,
+        type: 'integration',
+        providerId: 'composio',
+        toolService: 'gmail',
+      },
+    ];
+
+    const result = routeToolInputToFormKeys(available, [
+      { id: 'integration:composio:GMAIL_FETCH_EMAILS', name: 'Fetch Emails' },
+    ]);
+
+    expect(result.tools).toEqual({});
+    expect(result.agents).toEqual({});
+    expect(result.workflows).toEqual({});
+    expect(result.integrationTools).toEqual([
+      {
+        providerId: 'composio',
+        toolService: 'gmail',
+        slug: 'GMAIL_FETCH_EMAILS',
+        description: 'Fetch emails',
+      },
+    ]);
+  });
+
+  it('skips integration entries missing providerId or toolService (defensive)', () => {
+    const available: AgentTool[] = [
+      {
+        id: 'integration:composio:BROKEN',
+        name: 'BROKEN',
+        isChecked: true,
+        type: 'integration',
+        // providerId missing
+        toolService: 'gmail',
+      },
+    ];
+
+    const result = routeToolInputToFormKeys(available, [{ id: 'integration:composio:BROKEN', name: 'Broken' }]);
+    expect(result.integrationTools).toEqual([]);
+  });
+
+  it('returns an empty integrationTools array by default', () => {
+    const result = routeToolInputToFormKeys([], []);
+    expect(result.integrationTools).toEqual([]);
+  });
 });

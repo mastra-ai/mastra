@@ -12,6 +12,9 @@ import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import type { BlobStore, StorageWorkspaceSnapshotType } from '@mastra/core/storage';
+import type { ToolIntegration } from '@mastra/core/tool-integration';
+import { DuplicateIntegrationError, UnknownIntegrationError } from '@mastra/core/tool-integration';
+// eslint-disable-next-line @typescript-eslint/no-deprecated
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
@@ -47,13 +50,18 @@ export type { StorageAdapter } from './namespaces';
 export { localFilesystemProvider, localSandboxProvider } from './providers';
 export type { BrowserProvider } from '@mastra/core/editor';
 
-export class MastraEditor implements IMastraEditor {
+export class MastraEditor<TIntegrations extends readonly ToolIntegration[] = readonly ToolIntegration[]>
+  implements IMastraEditor
+{
   /** @internal — exposed for namespace classes, not part of public API */
   __mastra?: Mastra;
   /** @internal — exposed for namespace classes, not part of public API */
   __logger?: Logger;
 
+  // legacy tool-provider registry kept for backwards compat.
   private __toolProviders: Record<string, ToolProvider>;
+  private __toolIntegrations: readonly ToolIntegration[];
+  private __toolIntegrationById: Map<string, ToolIntegration>;
   private __processorProviders: Record<string, ProcessorProvider>;
   private readonly __builderConfig?: AgentBuilderOptions;
   private __builderInstance?: IAgentBuilder;
@@ -97,9 +105,26 @@ export class MastraEditor implements IMastraEditor {
   public readonly skill: EditorSkillNamespace;
   public readonly favorites: EditorFavoritesNamespace;
 
-  constructor(config?: MastraEditorConfig) {
+  constructor(config?: MastraEditorConfig & { toolIntegrations?: TIntegrations }) {
     this.__logger = config?.logger;
+    // legacy tool-provider registry.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     this.__toolProviders = config?.toolProviders ?? {};
+
+    this.__toolIntegrations = config?.toolIntegrations ?? [];
+    this.__toolIntegrationById = new Map();
+    const duplicateIds: string[] = [];
+    for (const integration of this.__toolIntegrations) {
+      if (this.__toolIntegrationById.has(integration.id)) {
+        duplicateIds.push(integration.id);
+        continue;
+      }
+      this.__toolIntegrationById.set(integration.id, integration);
+    }
+    if (duplicateIds.length > 0) {
+      throw new DuplicateIntegrationError(duplicateIds);
+    }
+
     this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
 
     // Built-in providers are always registered first, then merged with user-provided ones
@@ -313,14 +338,49 @@ export class MastraEditor implements IMastraEditor {
     return this.__builderInstance;
   }
 
-  /** Registered tool providers */
+  /**
+   * Registered tool providers.
+   * @deprecated Use `getToolIntegration` instead.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   getToolProvider(id: string): ToolProvider | undefined {
     return this.__toolProviders[id];
   }
 
-  /** List all registered tool providers */
+  /**
+   * List all registered tool providers.
+   * @deprecated Use `getToolIntegrations` instead.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   getToolProviders(): Record<string, ToolProvider> {
     return this.__toolProviders;
+  }
+
+  /** Look up a registered tool integration by id, or `undefined` if unknown. */
+  getToolIntegration(id: string): ToolIntegration | undefined {
+    return this.__toolIntegrationById.get(id);
+  }
+
+  /**
+   * Typed-narrowing accessor. When the editor is constructed with
+   * `as const` tuple of integrations, the return type is the concrete
+   * subclass; otherwise it widens to `ToolIntegration`.
+   */
+  getToolIntegrationOrThrow<TId extends TIntegrations[number]['id']>(
+    id: TId,
+  ): Extract<TIntegrations[number], { id: TId }>;
+  getToolIntegrationOrThrow(id: string): ToolIntegration;
+  getToolIntegrationOrThrow(id: string): ToolIntegration {
+    const integration = this.__toolIntegrationById.get(id);
+    if (!integration) {
+      throw new UnknownIntegrationError(id, Array.from(this.__toolIntegrationById.keys()));
+    }
+    return integration;
+  }
+
+  /** List all registered tool integrations in insertion order. */
+  getToolIntegrations(): readonly ToolIntegration[] {
+    return this.__toolIntegrations;
   }
 
   /** Get a processor provider by ID */

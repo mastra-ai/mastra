@@ -170,4 +170,138 @@ describe('formValuesToSaveParams', () => {
 
     expect(result.skills).toEqual({ 'skill-a': {} });
   });
+
+  describe('toolIntegrations', () => {
+    it('omits toolIntegrations when the form value is empty', () => {
+      const result = formValuesToSaveParams(baseValues, [], []);
+      expect(result.toolIntegrations).toBeUndefined();
+    });
+
+    it('hardcodes kind=author on every emitted connection', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [
+                  // Force a non-author kind through .passthrough — mapper must rewrite.
+                  { kind: 'invoker', toolService: 'gmail', connectionId: 'c1', label: 'a' } as never,
+                ],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      expect(result.toolIntegrations?.composio.connections.gmail).toEqual([
+        { kind: 'author', toolService: 'gmail', connectionId: 'c1', label: 'a' },
+      ]);
+    });
+
+    it('persists toolService on each tools[slug] entry so runtime fan-out can group by service', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: {
+                GMAIL_FETCH: { toolService: 'gmail', description: 'fetch' },
+                GMAIL_SEND: { toolService: 'gmail' },
+              },
+              connections: {
+                gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: 'a' }],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      expect(result.toolIntegrations?.composio.tools).toEqual({
+        GMAIL_FETCH: { toolService: 'gmail', description: 'fetch' },
+        GMAIL_SEND: { toolService: 'gmail' },
+      });
+    });
+
+    it('preserves unknown passthrough fields on connections through the mapper', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [
+                  {
+                    kind: 'author',
+                    toolService: 'gmail',
+                    connectionId: 'c1',
+                    label: 'a',
+                    metadata: { foo: 'bar' },
+                  } as never,
+                ],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      const conn = result.toolIntegrations?.composio.connections.gmail?.[0] as unknown as Record<string, unknown>;
+      expect(conn?.metadata).toEqual({ foo: 'bar' });
+    });
+
+    it('omits label from storage when it is absent or empty/whitespace', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: '   ' }],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      const conn = result.toolIntegrations?.composio.connections.gmail?.[0];
+      expect(conn).toEqual({ kind: 'author', toolService: 'gmail', connectionId: 'c1' });
+      expect(conn).not.toHaveProperty('label');
+    });
+
+    it('trims a labeled connection before persisting', () => {
+      const result = formValuesToSaveParams(
+        {
+          ...baseValues,
+          toolIntegrations: {
+            composio: {
+              tools: { GMAIL_FETCH: { toolService: 'gmail' } },
+              connections: {
+                gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'c1', label: '  Work  ' }],
+              },
+            },
+          },
+        },
+        [],
+        [],
+      );
+
+      expect(result.toolIntegrations?.composio.connections.gmail?.[0]).toEqual({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'c1',
+        label: 'Work',
+      });
+    });
+  });
 });

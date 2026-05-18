@@ -1,7 +1,10 @@
 import type {
   StoredAgentSkillConfig,
   StoredAgentToolConfig,
+  StoredIntegrationConnection,
+  StoredIntegrationToolMeta,
   StoredSkillResponse,
+  StoredToolIntegrationConfig,
   StoredWorkspaceRef,
 } from '@mastra/client-js';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
@@ -26,6 +29,51 @@ export interface SaveParams {
    */
   model: AgentBuilderModel | undefined;
   metadata: Record<string, unknown> | undefined;
+  /**
+   * Selected tool-integration tools and connections. Emitted only when the
+   * form value is non-empty. `kind` is hardcoded to `'author'` for v1.
+   * Conditional stored variants are not represented in the form and are
+   * preserved separately by `useSaveAgent`.
+   */
+  toolIntegrations: Record<string, StoredToolIntegrationConfig> | undefined;
+}
+
+function buildToolIntegrations(
+  value: AgentBuilderEditFormValues['toolIntegrations'],
+): Record<string, StoredToolIntegrationConfig> | undefined {
+  if (!value) return undefined;
+  const result: Record<string, StoredToolIntegrationConfig> = {};
+
+  for (const [providerId, config] of Object.entries(value)) {
+    const tools: Record<string, StoredIntegrationToolMeta> = {};
+    for (const [slug, meta] of Object.entries(config.tools ?? {})) {
+      // Persist `toolService` on every tool entry. The runtime fan-out
+      // groups selected slugs by this field — it cannot assume a
+      // `<service>.<tool>` slug convention because providers like
+      // Composio return flat slugs (e.g. GMAIL_FETCH_EMAILS).
+      tools[slug] = meta;
+    }
+
+    const connections: Record<string, StoredIntegrationConnection[]> = {};
+    for (const [toolService, list] of Object.entries(config.connections ?? {})) {
+      connections[toolService] = list.map(connection => {
+        const trimmed = connection.label?.trim();
+        // Drop empty/whitespace-only labels so storage only carries meaningful values.
+        // The form / server enforce label *requirement* via superRefine; here we just
+        // normalize the payload.
+        const { label: _label, ...rest } = connection;
+        return {
+          ...rest,
+          kind: 'author' as const,
+          ...(trimmed ? { label: trimmed } : {}),
+        };
+      });
+    }
+
+    result[providerId] = { tools, connections };
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function buildEnabledRecord(
@@ -94,5 +142,6 @@ export function formValuesToSaveParams(
     visibility: values.visibility,
     model: values.model,
     metadata,
+    toolIntegrations: buildToolIntegrations(values.toolIntegrations),
   };
 }

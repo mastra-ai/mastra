@@ -1,0 +1,619 @@
+import type { IMastraEditor } from '@mastra/core/editor';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
+import { UnknownIntegrationError } from '@mastra/core/tool-integration';
+import type { ToolIntegration } from '@mastra/core/tool-integration';
+import { MASTRA_USER_KEY } from '../constants';
+import { HTTPException } from '../http-exception';
+import {
+  authorizeToolIntegrationBodySchema,
+  authorizeToolIntegrationResponseSchema,
+  authStatusToolIntegrationResponseSchema,
+  connectionStatusToolIntegrationBodySchema,
+  connectionStatusToolIntegrationResponseSchema,
+  connectionUsageQuerySchema,
+  connectionUsageResponseSchema,
+  disconnectConnectionQuerySchema,
+  disconnectConnectionResponseSchema,
+  listConnectionFieldsQuerySchema,
+  listConnectionFieldsResponseSchema,
+  listConnectionsQuerySchema,
+  listConnectionsResponseSchema,
+  listToolIntegrationsResponseSchema,
+  listToolIntegrationToolsQuerySchema,
+  listToolIntegrationToolsResponseSchema,
+  listToolServicesResponseSchema,
+  toolIntegrationAuthStatusPathParams,
+  toolIntegrationConnectionPathParams,
+  toolIntegrationHealthResponseSchema,
+  toolIntegrationIdPathParams,
+} from '../schemas/tool-integrations';
+import { createRoute } from '../server-adapter/routes/route-builder';
+
+import { hasAdminBypass } from './authorship';
+import { handleError } from './error';
+
+const TOOL_INTEGRATIONS_RESOURCE = 'tool-integrations' as const;
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function requireEditor(editor: IMastraEditor | undefined): IMastraEditor {
+  if (!editor) {
+    throw new HTTPException(500, { message: 'Editor is not configured' });
+  }
+  return editor;
+}
+
+function resolveIntegration(editor: IMastraEditor, integrationId: string): ToolIntegration {
+  try {
+    return editor.getToolIntegrationOrThrow(integrationId);
+  } catch (error) {
+    if (error instanceof UnknownIntegrationError) {
+      throw new HTTPException(404, { message: error.message });
+    }
+    throw error;
+  }
+}
+
+/**
+ * Resolve the connection owner (Composio `userId` bucket) from the caller's
+ * `RequestContext`. Mirrors the runtime fan-out fallback to `'default'` when
+ * no auth context is present so OSS deployments still work.
+ */
+function resolveOwnerId(requestContext: RequestContext | undefined): string {
+  const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+  if (typeof resourceId === 'string' && resourceId.length > 0) {
+    return resourceId;
+  }
+
+  const user = requestContext?.get(MASTRA_USER_KEY);
+  if (user && typeof user === 'object' && 'id' in user) {
+    const id = (user as { id: unknown }).id;
+    if (typeof id === 'string' && id.length > 0) {
+      return id;
+    }
+  }
+
+  return 'default';
+}
+
+// ============================================================================
+// Route Definitions
+// ============================================================================
+
+/**
+ * GET /tool-integrations - List all registered tool integrations
+ */
+export const LIST_TOOL_INTEGRATIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations',
+  responseType: 'json',
+  responseSchema: listToolIntegrationsResponseSchema,
+  summary: 'List tool integrations',
+  description: 'Returns all registered tool integrations with their capabilities',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integrations = editor.getToolIntegrations();
+      return {
+        integrations: integrations.map(integration => ({
+          id: integration.id,
+          displayName: integration.displayName,
+          capabilities: integration.capabilities,
+        })),
+      };
+    } catch (error) {
+      return handleError(error, 'Error listing tool integrations');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/tool-services - List tool services for an integration
+ */
+export const LIST_TOOL_SERVICES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/tool-services',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  responseSchema: listToolServicesResponseSchema,
+  summary: 'List tool services',
+  description: 'Returns the tool services exposed by a specific integration',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      return await integration.listToolServices();
+    } catch (error) {
+      return handleError(error, 'Error listing tool services');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/tools - List tools for an integration
+ */
+export const LIST_TOOL_INTEGRATION_TOOLS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/tools',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  queryParamSchema: listToolIntegrationToolsQuerySchema,
+  responseSchema: listToolIntegrationToolsResponseSchema,
+  summary: 'List tools for an integration',
+  description: 'Returns the tools available from an integration, with optional filtering and pagination',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, toolService, search, page, perPage }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const opts: { toolService?: string; search?: string; page?: number; perPage?: number } = {};
+      if (toolService !== undefined) opts.toolService = toolService;
+      if (search !== undefined) opts.search = search;
+      if (page !== undefined) opts.page = page;
+      if (perPage !== undefined) opts.perPage = perPage;
+      return await integration.listTools(Object.keys(opts).length > 0 ? opts : undefined);
+    } catch (error) {
+      return handleError(error, 'Error listing tool integration tools');
+    }
+  },
+});
+
+/**
+ * POST /tool-integrations/:integrationId/authorize - Start an OAuth flow
+ */
+export const AUTHORIZE_TOOL_INTEGRATION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/tool-integrations/:integrationId/authorize',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  bodySchema: authorizeToolIntegrationBodySchema,
+  responseSchema: authorizeToolIntegrationResponseSchema,
+  summary: 'Authorize tool integration',
+  description: 'Starts an OAuth flow and returns a redirect URL + opaque auth handle',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, toolService, connectionId, toolName, config, label, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      // Fresh connect (no `connectionId`) resolves the caller's owner id from
+      // auth context so the new connected account lands in the same bucket the
+      // runtime will use at execution time. Re-auth (caller passed an existing
+      // `connectionId`) is left untouched so the adapter refreshes in place.
+      const authorId = resolveOwnerId(requestContext);
+      const bucket = connectionId && connectionId.length > 0 ? connectionId : authorId;
+      const result = await integration.authorize({ toolService, connectionId: bucket, toolName, config });
+
+      // Persist label on the author-scoped tool_connections row. We upsert
+      // even when `label` is null/undefined so the row exists for later
+      // PATCH/list-join in the picker. The adapter's returned `authId` (or
+      // existing bucket) is the canonical connection id we key off of.
+      const persistedConnectionId = connectionId && connectionId.length > 0 ? connectionId : result.authId;
+      try {
+        const storage = mastra.getStorage();
+        const toolConnections = await storage?.getStore('toolConnections');
+        if (toolConnections && persistedConnectionId) {
+          await toolConnections.upsert({
+            authorId,
+            providerId: integration.id,
+            toolService,
+            connectionId: persistedConnectionId,
+            label: typeof label === 'string' && label.length > 0 ? label : null,
+          });
+        }
+      } catch (upsertError) {
+        // Don't fail the OAuth round-trip if label persistence fails — log
+        // and continue; the picker will still work with an empty label.
+        mastra.getLogger?.()?.warn?.('[tool-integrations] failed to upsert tool_connections label', {
+          error: upsertError instanceof Error ? upsertError.message : String(upsertError),
+          integrationId,
+          toolService,
+          connectionId: persistedConnectionId,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error authorizing tool integration');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/auth-status/:authId - Poll OAuth flow status
+ */
+export const GET_TOOL_INTEGRATION_AUTH_STATUS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/auth-status/:authId',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationAuthStatusPathParams,
+  responseSchema: authStatusToolIntegrationResponseSchema,
+  summary: 'Get tool integration auth status',
+  description: 'Polls the OAuth flow status for an outstanding authorize call',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, authId }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const status = await integration.getAuthStatus(authId);
+      return { status };
+    } catch (error) {
+      return handleError(error, 'Error getting tool integration auth status');
+    }
+  },
+});
+
+/**
+ * POST /tool-integrations/:integrationId/connection-status - Batch-check connection liveness
+ */
+export const TOOL_INTEGRATION_CONNECTION_STATUS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/tool-integrations/:integrationId/connection-status',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  bodySchema: connectionStatusToolIntegrationBodySchema,
+  responseSchema: connectionStatusToolIntegrationResponseSchema,
+  summary: 'Get connection status for an integration',
+  description: 'Batch-checks whether a set of (connectionId, toolService) tuples are still connected',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, items }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const result = await integration.getConnectionStatus({ items });
+      return { items: result };
+    } catch (error) {
+      return handleError(error, 'Error getting connection status');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/connections - List existing provider connections
+ * for the caller, scoped to a tool service.
+ *
+ * The connection owner is resolved server-side from `RequestContext`
+ * (`MASTRA_RESOURCE_ID_KEY`) and falls back to `'default'` when no auth
+ * context is present. Clients cannot pass a userId.
+ */
+export const LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/connections',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  queryParamSchema: listConnectionsQuerySchema,
+  responseSchema: listConnectionsResponseSchema,
+  summary: 'List existing connections',
+  description:
+    'Returns existing provider connections for the caller on a given tool service, so the picker can offer them for pinning without re-running OAuth',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, toolService, authorId: queryAuthorId, cursor, limit, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const callerAuthorId = resolveOwnerId(requestContext);
+      const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_INTEGRATIONS_RESOURCE) : false;
+
+      // Non-admin callers cannot scope to other authors — silently fall back.
+      const requestedAuthorId =
+        isAdmin && typeof queryAuthorId === 'string' && queryAuthorId.length > 0 ? queryAuthorId : undefined;
+      const effectiveAuthorId = isAdmin ? requestedAuthorId : callerAuthorId;
+
+      const storage = mastra.getStorage();
+      const toolConnections = await storage?.getStore('toolConnections');
+
+      // Strategy B seeding: derive userIds[] from tool_connections rows so the
+      // adapter only lists buckets that have been pinned somewhere in this
+      // Mastra. Admin + no authorId => every distinct author for this
+      // provider/service. Non-admin => always the caller's bucket.
+      let userIds: string[];
+      let labelRows: Array<{ authorId: string; connectionId: string; label: string | null }> = [];
+      if (isAdmin && effectiveAuthorId === undefined) {
+        if (toolConnections) {
+          const rows = await toolConnections.list({
+            providerId: integration.id,
+            toolService,
+          });
+          labelRows = rows.map(r => ({ authorId: r.authorId, connectionId: r.connectionId, label: r.label }));
+          userIds = Array.from(new Set(rows.map(r => r.authorId)));
+        } else {
+          userIds = [];
+        }
+        // Empty tool_connections => skip the adapter call, return empty.
+        if (userIds.length === 0) {
+          return { items: [] };
+        }
+      } else {
+        const ownerId = effectiveAuthorId ?? callerAuthorId;
+        userIds = [ownerId];
+        if (toolConnections) {
+          try {
+            const rows = await toolConnections.list({
+              authorId: ownerId,
+              providerId: integration.id,
+              toolService,
+            });
+            labelRows = rows.map(r => ({ authorId: r.authorId, connectionId: r.connectionId, label: r.label }));
+          } catch (joinError) {
+            mastra.getLogger?.()?.warn?.('[tool-integrations] failed to join tool_connections labels', {
+              error: joinError instanceof Error ? joinError.message : String(joinError),
+              integrationId,
+              toolService,
+            });
+          }
+        }
+      }
+
+      const adapterResult = await integration.listConnections({
+        toolService,
+        userIds,
+        ...(typeof cursor === 'string' && cursor.length > 0 ? { cursor } : {}),
+        ...(typeof limit === 'number' ? { limit } : {}),
+      });
+
+      const labelMap = new Map(labelRows.map(r => [r.connectionId, r.label]));
+
+      return {
+        items: adapterResult.items.map(item => ({
+          ...item,
+          label: labelMap.get(item.connectionId) ?? null,
+        })),
+        ...(adapterResult.nextCursor ? { nextCursor: adapterResult.nextCursor } : {}),
+      };
+    } catch (error) {
+      return handleError(error, 'Error listing tool integration connections');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/connection-fields - List provider-specific
+ * fields the picker should collect before initiating a new connection (e.g.
+ * Confluence subdomain). Most tool services return an empty array.
+ */
+export const LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/connection-fields',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  queryParamSchema: listConnectionFieldsQuerySchema,
+  responseSchema: listConnectionFieldsResponseSchema,
+  summary: 'List connection field schema',
+  description: 'Returns a list of provider-specific fields the UI should collect before initiating an authorize call',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, toolService }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const fields = await integration.listConnectionFields({ toolService });
+      return { fields };
+    } catch (error) {
+      return handleError(error, 'Error listing tool integration connection fields');
+    }
+  },
+});
+
+/**
+ * DELETE /tool-integrations/:integrationId/connections/:connectionId - Disconnect.
+ * Without `?force=true` this rejects when the connection is still pinned by
+ * any agent. With `?force=true` it revokes at the provider (best-effort) and
+ * drops the persisted row.
+ */
+export const DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/tool-integrations/:integrationId/connections/:connectionId',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationConnectionPathParams,
+  queryParamSchema: disconnectConnectionQuerySchema,
+  responseSchema: disconnectConnectionResponseSchema,
+  summary: 'Disconnect a connection',
+  description:
+    'Revokes the provider-side connection (if supported) and removes the persisted tool_connections row. Use `?force=true` to bypass usage checks.',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, connectionId, force, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const callerAuthorId = resolveOwnerId(requestContext);
+      const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_INTEGRATIONS_RESOURCE) : false;
+      const isForce = force === true || force === 'true';
+
+      const storage = mastra.getStorage();
+      const toolConnections = await storage?.getStore('toolConnections');
+
+      // Resolve the row owner so we can both auth-check the caller and clean
+      // up the correct (authorId, providerId, connectionId) tuple at the end.
+      // Strategy B: cross-author lookup via providerId+connectionId.
+      let ownerAuthorId: string | undefined;
+      if (toolConnections) {
+        const rows = await toolConnections.list({ providerId: integration.id });
+        ownerAuthorId = rows.find(r => r.connectionId === connectionId)?.authorId;
+      }
+
+      // Auth check: caller must own the row OR have admin bypass. If the row
+      // does not exist (no persisted label), default to caller-owns.
+      const effectiveOwner = ownerAuthorId ?? callerAuthorId;
+      if (effectiveOwner !== callerAuthorId && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to disconnect this connection',
+        });
+      }
+
+      // Soft delete: refuse if any agent still pins this connectionId.
+      if (!isForce) {
+        const usage = await countConnectionUsage(mastra, connectionId);
+        if (usage > 0) {
+          throw new HTTPException(409, {
+            message: `Connection ${connectionId} is still pinned by ${usage} agent(s). Pass ?force=true to disconnect anyway.`,
+          });
+        }
+      }
+
+      // Provider revoke. The adapter already tolerates 404 (already deleted)
+      // as success. Any other error means the provider-side row is still live,
+      // so we surface it and skip the local delete — otherwise we'd orphan
+      // the connection in Composio with no way for the user to find it again.
+      let revoked = false;
+      if (integration.capabilities.supportsRevoke && typeof integration.revokeConnection === 'function') {
+        await integration.revokeConnection(connectionId);
+        revoked = true;
+      }
+
+      if (toolConnections) {
+        await toolConnections.delete({
+          authorId: effectiveOwner,
+          providerId: integration.id,
+          connectionId,
+        });
+      }
+
+      return { ok: true as const, revoked };
+    } catch (error) {
+      return handleError(error, 'Error disconnecting tool integration connection');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/connections/:connectionId/usage - Lists
+ * agents that currently pin the given connection in their `toolIntegrations`
+ * config. Used by the Disconnect confirm dialog.
+ */
+export const GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/connections/:connectionId/usage',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationConnectionPathParams,
+  queryParamSchema: connectionUsageQuerySchema,
+  responseSchema: connectionUsageResponseSchema,
+  summary: 'List agents using a connection',
+  description: 'Returns the agents that pin this connection in their toolIntegrations config',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, connectionId, toolService, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const callerAuthorId = resolveOwnerId(requestContext);
+      const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_INTEGRATIONS_RESOURCE) : false;
+
+      // Mirror DELETE auth: caller must own the connection OR have admin
+      // bypass. If no persisted row, fall back to caller-owns.
+      const storage = mastra.getStorage();
+      const toolConnections = await storage?.getStore('toolConnections');
+      let ownerAuthorId: string | undefined;
+      if (toolConnections) {
+        const rows = await toolConnections.list({ providerId: integration.id });
+        ownerAuthorId = rows.find(r => r.connectionId === connectionId)?.authorId;
+      }
+      const effectiveOwner = ownerAuthorId ?? callerAuthorId;
+      if (effectiveOwner !== callerAuthorId && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to view usage for this connection',
+        });
+      }
+
+      const agents = await scanConnectionUsage(mastra, { integrationId, connectionId, toolService });
+      return { agents };
+    } catch (error) {
+      return handleError(error, 'Error listing tool integration connection usage');
+    }
+  },
+});
+
+// ============================================================================
+// Usage scan helpers
+// ============================================================================
+
+/**
+ * Walk every stored agent's resolved `toolIntegrations` config and collect the
+ * agents that pin the given `connectionId`. Optionally narrow by `toolService`.
+ *
+ * This is a full scan today; agent registries are small enough that it's
+ * cheaper than maintaining a reverse index. Wire up an index if this gets hot.
+ */
+async function scanConnectionUsage(
+  mastra: any,
+  args: { integrationId: string; connectionId: string; toolService?: string },
+): Promise<Array<{ id: string; name: string }>> {
+  const storage = mastra.getStorage();
+  const agentsStore = await storage?.getStore('agents');
+  if (!agentsStore) return [];
+
+  const { agents } = await agentsStore.listResolved({ perPage: false });
+  const out: Array<{ id: string; name: string }> = [];
+  for (const agent of agents) {
+    const config = agent?.toolIntegrations?.[args.integrationId];
+    if (!config?.connections) continue;
+    for (const [service, connections] of Object.entries(config.connections)) {
+      if (args.toolService && service !== args.toolService) continue;
+      const match = (connections as Array<{ connectionId: string }>).some(c => c.connectionId === args.connectionId);
+      if (match) {
+        out.push({ id: agent.id, name: agent.name ?? agent.id });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+async function countConnectionUsage(mastra: any, connectionId: string): Promise<number> {
+  const storage = mastra.getStorage();
+  const agentsStore = await storage?.getStore('agents');
+  if (!agentsStore) return 0;
+  const { agents } = await agentsStore.listResolved({ perPage: false });
+  let count = 0;
+  for (const agent of agents) {
+    const ti = agent?.toolIntegrations;
+    if (!ti) continue;
+    for (const config of Object.values(ti) as Array<{
+      connections?: Record<string, Array<{ connectionId: string }>>;
+    }>) {
+      const pinned = Object.values(config?.connections ?? {}).some(arr =>
+        arr.some(c => c.connectionId === connectionId),
+      );
+      if (pinned) {
+        count += 1;
+        break;
+      }
+    }
+  }
+  return count;
+}
+
+/**
+ * GET /tool-integrations/:integrationId/health - Integration-level health check
+ */
+export const GET_TOOL_INTEGRATION_HEALTH_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/health',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationIdPathParams,
+  responseSchema: toolIntegrationHealthResponseSchema,
+  summary: 'Get tool integration health',
+  description: 'Returns integration-level health (config, reachability, etc.)',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      return await integration.getHealth();
+    } catch (error) {
+      return handleError(error, 'Error getting tool integration health');
+    }
+  },
+});

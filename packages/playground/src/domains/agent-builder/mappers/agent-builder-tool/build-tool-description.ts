@@ -53,8 +53,13 @@ export function buildAgentBuilderToolDescription(
         .join('\n')}`
     : '';
 
+  const hasIntegrationTools = features.tools && availableAgentTools.some(t => t.type === 'integration');
   const toolsGuidance = features.tools
-    ? ' When enabling tools, each entry in `tools` MUST include both `id` (from the available tools list) and `name` (a concise Title Case display label, e.g. "Web Search"). The `name` is shown to the user in chat.'
+    ? ` When enabling tools, each entry in \`tools\` MUST include both \`id\` (from the available tools list) and \`name\` (a concise Title Case display label, e.g. "Web Search"). The \`name\` is shown to the user in chat.${
+        hasIntegrationTools
+          ? ' Tools with ids prefixed `integration:` come from connected external services. You can add or remove them from the agent, but you cannot create connections, labels, or credentials — the user manages those in the Tools panel.'
+          : ''
+      }`
     : '';
 
   const skillsGuidance = skillsAvailable

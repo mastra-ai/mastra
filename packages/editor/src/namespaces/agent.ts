@@ -18,6 +18,8 @@ import type {
   StorageMCPClientToolsConfig,
   StorageSkillConfig,
 } from '@mastra/core/storage';
+import { resolveStoredToolIntegrations } from '@mastra/core/tool-integration';
+import type { ToolIntegrations } from '@mastra/core/tool-integration';
 import { convertSchemaToZod } from '@mastra/schema-compat';
 
 import type {
@@ -384,21 +386,32 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasStoredTools = storedConfig.tools != null;
     const hasStoredMCPClients = storedConfig.mcpClients != null;
     const hasStoredIntegrationTools = storedConfig.integrationTools != null;
+    const hasStoredToolIntegrations = storedConfig.toolIntegrations != null;
 
-    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools) {
+    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools || hasStoredToolIntegrations) {
       const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
       const hasConditionalMCPClients =
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
       const hasConditionalIntegrationTools =
         storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
+      const hasConditionalToolIntegrations =
+        storedConfig.toolIntegrations != null && this.isConditionalVariants(storedConfig.toolIntegrations);
       const isDynamicTools =
-        hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasStoredIntegrationTools;
+        hasConditionalTools ||
+        hasConditionalMCPClients ||
+        hasConditionalIntegrationTools ||
+        hasStoredIntegrationTools ||
+        hasConditionalToolIntegrations ||
+        hasStoredToolIntegrations;
 
       if (isDynamicTools) {
-        // Wrap in a dynamic function that merges at request time
-        const originalTools = agent.listTools.bind(agent);
+        // Wrap in a dynamic function that merges at request time.
+        // Snapshot the raw tools value BEFORE __setTools replaces it —
+        // otherwise calling listTools() inside toolsFn would re-enter
+        // toolsFn and recurse infinitely.
+        const rawCodeTools = fork.__getRawTools();
         const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
-          const codeTools = await originalTools({ requestContext });
+          const codeTools = (await fork.__resolveRawTools(rawCodeTools, requestContext)) as ToolsInput;
           const ctx = requestContext.toJSON();
 
           const resolvedToolsConfig = hasConditionalTools
@@ -430,7 +443,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             requestContext,
           );
 
-          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
+          const resolvedToolIntegrationsConfig = hasConditionalToolIntegrations
+            ? this.accumulateObjectVariants(
+                storedConfig!.toolIntegrations as StorageConditionalVariant<ToolIntegrations>[],
+                ctx,
+              )
+            : (storedConfig!.toolIntegrations as ToolIntegrations | undefined);
+          const newIntegrationTools = await this.resolveStoredToolIntegrations(
+            resolvedToolIntegrationsConfig,
+            requestContext,
+            storedConfig!.authorId,
+          );
+
+          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools };
         };
         fork.__setTools(toolsFn);
       } else {
@@ -446,7 +471,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         const integrationTools = await this.resolveStoredIntegrationTools(
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
         );
-        fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
+        const newIntegrationTools = await this.resolveStoredToolIntegrations(
+          storedConfig.toolIntegrations as ToolIntegrations | undefined,
+          undefined,
+          storedConfig.authorId,
+        );
+        fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools });
       }
     }
 
@@ -529,6 +559,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       storedAgent.mcpClients != null && this.isConditionalVariants(storedAgent.mcpClients);
     const hasConditionalIntegrationTools =
       storedAgent.integrationTools != null && this.isConditionalVariants(storedAgent.integrationTools);
+    const hasConditionalToolIntegrations =
+      storedAgent.toolIntegrations != null && this.isConditionalVariants(storedAgent.toolIntegrations);
     const hasConditionalWorkflows = storedAgent.workflows != null && this.isConditionalVariants(storedAgent.workflows);
     const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
     const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
@@ -548,8 +580,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // Tools: registry tools, MCP client tools, and integration tools can each be conditional.
     // If any is conditional, the combined result must be a dynamic function.
     const hasIntegrationTools = storedAgent.integrationTools != null;
+    const hasToolIntegrations = storedAgent.toolIntegrations != null;
     const isDynamicTools =
-      hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasIntegrationTools;
+      hasConditionalTools ||
+      hasConditionalMCPClients ||
+      hasConditionalIntegrationTools ||
+      hasIntegrationTools ||
+      hasConditionalToolIntegrations ||
+      hasToolIntegrations;
 
     let tools:
       | Record<string, ToolAction<any, any, any, any, any, any>>
@@ -594,7 +632,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           requestContext,
         );
 
-        return { ...registryTools, ...mcpTools, ...integrationTools };
+        const resolvedToolIntegrationsConfig = hasConditionalToolIntegrations
+          ? this.accumulateObjectVariants(
+              storedAgent.toolIntegrations as StorageConditionalVariant<ToolIntegrations>[],
+              ctx,
+            )
+          : (storedAgent.toolIntegrations as ToolIntegrations | undefined);
+        const newIntegrationTools = await this.resolveStoredToolIntegrations(
+          resolvedToolIntegrationsConfig,
+          requestContext,
+          storedAgent.authorId,
+        );
+
+        return { ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools };
       };
     } else {
       // All are static — resolve once at agent creation time (no requestContext available)
@@ -605,7 +655,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const integrationTools = await this.resolveStoredIntegrationTools(
         storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
       );
-      tools = { ...registryTools, ...mcpTools, ...integrationTools };
+      const newIntegrationTools = await this.resolveStoredToolIntegrations(
+        storedAgent.toolIntegrations as ToolIntegrations | undefined,
+        undefined,
+        storedAgent.authorId,
+      );
+      tools = { ...registryTools, ...mcpTools, ...integrationTools, ...newIntegrationTools };
     }
 
     // Workflows: variant values may be string[] or Record<string, StorageToolConfig>
@@ -1115,6 +1170,26 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     return allTools;
+  }
+
+  /**
+   * Resolve provider-agnostic tool integrations stored under
+   * `storedAgent.toolIntegrations` via the new `ToolIntegration` interface.
+   *
+   * Thin wrapper around the core runtime fan-out. Coexists with the legacy
+   * `resolveStoredIntegrationTools` path during the v1 compatibility window.
+   */
+  private async resolveStoredToolIntegrations(
+    toolIntegrations?: ToolIntegrations,
+    requestContext?: RequestContext,
+    authorId?: string,
+  ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
+    if (!toolIntegrations || Object.keys(toolIntegrations).length === 0) return {};
+    return resolveStoredToolIntegrations(toolIntegrations, id => this.editor.getToolIntegrationOrThrow(id), {
+      requestContext: requestContext?.toJSON(),
+      authorId,
+      logger: this.logger,
+    }) as Promise<Record<string, ToolAction<any, any, any, any, any, any>>>;
   }
 
   private resolveStoredWorkflows(

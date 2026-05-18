@@ -183,4 +183,120 @@ describe('useAgentBuilderTool execute routing', () => {
 
     expect(form().getValues('model')).toEqual({ provider: 'gateway/openai', name: 'gpt-4o' });
   });
+
+  it('merges integration tools into form.toolIntegrations, preserving existing connections', async () => {
+    const availableAgentTools: AgentTool[] = [
+      {
+        id: 'integration:composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        description: 'Fetch emails',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolService: 'gmail',
+      },
+    ];
+
+    const { tool, form } = renderBuilderTool(availableAgentTools);
+    // Seed the form with an existing connection that must survive the merge.
+    form().setValue('toolIntegrations', {
+      composio: {
+        tools: {},
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'conn-1', label: 'WORK' }],
+        },
+      },
+    });
+
+    await tool.execute!({
+      name: 'With integration',
+      instructions: 'do things',
+      tools: [{ id: 'integration:composio:GMAIL_FETCH_EMAILS', name: 'Fetch Emails' }],
+    } as any);
+
+    const next = form().getValues('toolIntegrations');
+    expect(next).toEqual({
+      composio: {
+        tools: {
+          GMAIL_FETCH_EMAILS: { toolService: 'gmail', description: 'Fetch emails' },
+        },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'conn-1', label: 'WORK' }],
+        },
+      },
+    });
+    // Legacy tools record must not pick up integration ids.
+    expect(form().getValues('tools')).toEqual({});
+  });
+
+  it('removes an integration tool when omitted from the next tools array but keeps connections', async () => {
+    const availableAgentTools: AgentTool[] = [
+      {
+        id: 'integration:composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        isChecked: true,
+        type: 'integration',
+        providerId: 'composio',
+        toolService: 'gmail',
+      },
+    ];
+
+    const { tool, form } = renderBuilderTool(availableAgentTools);
+    form().setValue('toolIntegrations', {
+      composio: {
+        tools: { GMAIL_FETCH_EMAILS: { toolService: 'gmail' } },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'conn-1', label: 'WORK' }],
+        },
+      },
+    });
+
+    await tool.execute!({
+      name: 'No integration tools',
+      instructions: 'do things',
+      tools: [],
+    } as any);
+
+    expect(form().getValues('toolIntegrations')).toEqual({
+      composio: {
+        tools: {},
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'conn-1', label: 'WORK' }],
+        },
+      },
+    });
+  });
+
+  it('never writes credentials, labels, or connection ids from LLM input', async () => {
+    const availableAgentTools: AgentTool[] = [
+      {
+        id: 'integration:composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolService: 'gmail',
+      },
+    ];
+
+    const { tool, form } = renderBuilderTool(availableAgentTools);
+
+    await tool.execute!({
+      name: 'Hostile input',
+      instructions: 'do things',
+      tools: [{ id: 'integration:composio:GMAIL_FETCH_EMAILS', name: 'Fetch Emails' }],
+      // Pretend the LLM tried to inject credentials/labels — must be ignored.
+      toolIntegrations: {
+        composio: {
+          connections: {
+            gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'attacker', label: 'PWNED' }],
+          },
+        },
+      },
+    } as any);
+
+    const next = form().getValues('toolIntegrations');
+    // Connections stay empty (no pre-seed), so no attacker connectionId/label leaks in.
+    expect(next?.composio?.connections).toEqual({});
+  });
 });

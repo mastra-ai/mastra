@@ -1,0 +1,267 @@
+import { describe, expect, it } from 'vitest';
+import {
+  authorizeToolIntegrationBodySchema,
+  connectionSchema,
+  listConnectionFieldsQuerySchema,
+  listConnectionFieldsResponseSchema,
+  toolIntegrationConfigSchema,
+  toolIntegrationsSchema,
+} from './tool-integrations';
+
+describe('tool-integrations schemas (v1 Agent Builder tool integrations)', () => {
+  describe('connectionSchema', () => {
+    it('accepts a minimal author connection', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'ca_123',
+        label: 'Work',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts invoker and platform kinds (forward-compat)', () => {
+      for (const kind of ['invoker', 'platform'] as const) {
+        const result = connectionSchema.safeParse({
+          kind,
+          toolService: 'gmail',
+          connectionId: '',
+          label: 'X',
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it('rejects an unknown kind', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'other',
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+        label: 'X',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an empty string label (empty != absent)', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+        label: '',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a connection with no label (absent)', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a label longer than 32 chars', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+        label: 'a'.repeat(33),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a label with disallowed characters', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'author',
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+        label: 'Work!',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an empty toolService', () => {
+      const result = connectionSchema.safeParse({
+        kind: 'author',
+        toolService: '',
+        connectionId: 'ca_1',
+        label: 'Work',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('toolIntegrationConfigSchema', () => {
+    it('accepts an empty config', () => {
+      const result = toolIntegrationConfigSchema.safeParse({ tools: {}, connections: {} });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a single connection per tool service', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: { 'gmail.fetch_emails': {} },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' }],
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a single connection per tool service without a label', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: { 'gmail.fetch_emails': {} },
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1' }],
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects two connections on the same tool service when labels are absent', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: {},
+        connections: {
+          gmail: [
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_1' },
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_2' },
+          ],
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some(i => i.path.includes('label'))).toBe(true);
+      }
+    });
+
+    it('rejects duplicate labels within one tool service (case-insensitive)', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: {},
+        connections: {
+          gmail: [
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' },
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_2', label: 'work' },
+          ],
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some(i => i.path.includes('label'))).toBe(true);
+      }
+    });
+
+    it('allows identical labels across different tool services', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: {},
+        connections: {
+          gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' }],
+          slack: [{ kind: 'author', toolService: 'slack', connectionId: 'ca_2', label: 'Work' }],
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a per-tool description override', () => {
+      const result = toolIntegrationConfigSchema.safeParse({
+        tools: { 'gmail.fetch_emails': { description: 'Use this for work mail' } },
+        connections: {},
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('toolIntegrationsSchema', () => {
+    it('accepts a single-integration payload', () => {
+      const result = toolIntegrationsSchema.safeParse({
+        composio: {
+          tools: {},
+          connections: {
+            gmail: [{ kind: 'author', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' }],
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('surfaces nested label-uniqueness errors', () => {
+      const result = toolIntegrationsSchema.safeParse({
+        composio: {
+          tools: {},
+          connections: {
+            gmail: [
+              { kind: 'author', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' },
+              { kind: 'author', toolService: 'gmail', connectionId: 'ca_2', label: 'Work' },
+            ],
+          },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('authorizeToolIntegrationBodySchema', () => {
+    it('accepts payloads without config (back-compat)', () => {
+      const result = authorizeToolIntegrationBodySchema.safeParse({
+        toolService: 'gmail',
+        connectionId: 'ca_1',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts payloads with arbitrary user-supplied config values', () => {
+      const result = authorizeToolIntegrationBodySchema.safeParse({
+        toolService: 'confluence',
+        connectionId: '',
+        config: { subdomain: 'acme', port: 443, tls: true },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects config that is not an object record', () => {
+      const result = authorizeToolIntegrationBodySchema.safeParse({
+        toolService: 'gmail',
+        connectionId: '',
+        config: 'not-an-object',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('listConnectionFieldsQuerySchema', () => {
+    it('requires toolService', () => {
+      expect(listConnectionFieldsQuerySchema.safeParse({}).success).toBe(false);
+      expect(listConnectionFieldsQuerySchema.safeParse({ toolService: 'gmail' }).success).toBe(true);
+    });
+  });
+
+  describe('listConnectionFieldsResponseSchema', () => {
+    it('accepts an empty fields array', () => {
+      const result = listConnectionFieldsResponseSchema.safeParse({ fields: [] });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts fields with required type/required and optional displayName/description/default', () => {
+      const result = listConnectionFieldsResponseSchema.safeParse({
+        fields: [
+          {
+            name: 'subdomain',
+            displayName: 'Subdomain',
+            description: 'Tenant subdomain',
+            type: 'string',
+            required: true,
+            default: 'example',
+          },
+          { name: 'port', type: 'number', required: false },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects unknown field types', () => {
+      const result = listConnectionFieldsResponseSchema.safeParse({
+        fields: [{ name: 'x', type: 'date', required: true }],
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+});

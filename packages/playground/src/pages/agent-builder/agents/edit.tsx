@@ -184,6 +184,7 @@ const AgentBuilderAgentEditReady = ({
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
+  const toolIntegrations = useWatch({ control: formMethods.control, name: 'toolIntegrations' });
 
   // Gate publishing on the *saved* visibility — unsaved form edits should not unlock publishing.
   const isPublishable = storedAgent.visibility === 'public';
@@ -195,6 +196,7 @@ const AgentBuilderAgentEditReady = ({
     selectedTools,
     selectedAgents,
     selectedWorkflows,
+    toolIntegrations,
     excludeAgentId: id,
   });
 

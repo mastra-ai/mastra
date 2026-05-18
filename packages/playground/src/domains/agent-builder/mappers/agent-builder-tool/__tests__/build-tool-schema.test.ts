@@ -97,6 +97,42 @@ describe('buildAgentBuilderToolSchema', () => {
     expect(schema.safeParse({ name: 'N', instructions: 'I' }).success).toBe(true);
   });
 
+  it('accepts integration tool ids in the tools enum and never exposes a toolIntegrations field', () => {
+    const available: AgentTool[] = [
+      { id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' },
+      {
+        id: 'integration:composio:GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        isChecked: false,
+        type: 'integration',
+        providerId: 'composio',
+        toolService: 'gmail',
+      },
+    ];
+    const schema = buildAgentBuilderToolSchema(allOn, available, []);
+
+    expect(
+      schema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        tools: [{ id: 'integration:composio:GMAIL_FETCH_EMAILS', name: 'Fetch Emails' }],
+      }).success,
+    ).toBe(true);
+
+    // Unknown integration ids must fail (not silently allow).
+    expect(
+      schema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        tools: [{ id: 'integration:composio:UNKNOWN', name: 'X' }],
+      }).success,
+    ).toBe(false);
+
+    // The LLM-facing schema must never expose credential surface.
+    expect(schema.shape.toolIntegrations).toBeUndefined();
+    expect(schema.shape.composio).toBeUndefined();
+  });
+
   it('exposes model only when available models exist and constrains exact provider/model pairs', () => {
     const emptySchema = buildAgentBuilderToolSchema(allOff, [], []);
     expect(emptySchema.shape.model).toBeUndefined();

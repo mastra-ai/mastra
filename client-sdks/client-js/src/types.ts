@@ -1104,6 +1104,54 @@ export interface StoredMCPClientToolsConfig {
 }
 
 /**
+ * One OAuth bucket bound to one tool service on one agent.
+ *
+ * Part of the Agent Builder integrations shape
+ * (`StoredAgentSnapshot.toolIntegrations`).
+ */
+export interface StoredIntegrationConnection {
+  /**
+   * Identity binding kind.
+   *
+   * - `'author'` — uses the agent author's connection (v1 default).
+   * - `'invoker'` — uses the end-user's connection (v1.5, reserved).
+   * - `'platform'` — uses a shared platform account (v2, reserved).
+   */
+  kind: 'author' | 'invoker' | 'platform';
+  /** Parent tool service slug. Denormalized for callsite clarity. */
+  toolService: string;
+  /**
+   * Provider-opaque identifier for the OAuth bucket.
+   *
+   * Required for `'author'` and `'platform'`; reserved (empty) for `'invoker'`.
+   */
+  connectionId: string;
+  /**
+   * Display label and LLM disambiguator. Optional when this is the only
+   * connection on a `toolService`; required (non-empty, ≤ 32 chars,
+   * `[A-Za-z0-9 _-]+`, case-insensitively unique) once ≥ 2 connections share
+   * the same `toolService`.
+   */
+  label?: string;
+}
+
+/** Per-tool override stored alongside the selected tool slug. */
+export interface StoredIntegrationToolMeta {
+  /**
+   * Tool service this slug belongs to. The runtime groups selected slugs
+   * by this field when fanning out across connections.
+   */
+  toolService?: string;
+  description?: string;
+}
+
+/** Stored shape for one tool integration's configuration on one agent. */
+export interface StoredToolIntegrationConfig {
+  tools: Record<string, StoredIntegrationToolMeta>;
+  connections: Record<string, StoredIntegrationConnection[]>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -1186,6 +1234,7 @@ export interface StoredAgentResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1286,6 +1335,7 @@ export interface CreateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1319,6 +1369,7 @@ export interface UpdateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1584,6 +1635,7 @@ export interface AgentVersionResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolIntegrations?: ConditionalField<Record<string, StoredToolIntegrationConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -2300,6 +2352,69 @@ export type ListToolProviderToolsResponse = GeneratedResponse<'GET /tool-provide
 
 export type GetToolProviderToolSchemaResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
+
+// ============================================================================
+// Tool Integration Types
+// ============================================================================
+
+export type ToolIntegrationInfo = GeneratedResponse<'GET /tool-integrations'>['integrations'][number];
+
+export type ToolIntegrationCapabilities = ToolIntegrationInfo['capabilities'];
+
+export type ToolIntegrationService =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/tool-services'>['data'][number];
+
+export type ToolIntegrationToolInfo = GeneratedResponse<'GET /tool-integrations/:integrationId/tools'>['data'][number];
+
+export type ListToolIntegrationsResponse = GeneratedResponse<'GET /tool-integrations'>;
+
+export type ListToolServicesResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/tool-services'>;
+
+export type ListToolIntegrationToolsParams = GeneratedRequest<
+  QueryParams<'GET /tool-integrations/:integrationId/tools'>
+>;
+
+export type ListToolIntegrationToolsResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/tools'>;
+
+export type AuthorizeToolIntegrationParams = GeneratedRequest<Body<'POST /tool-integrations/:integrationId/authorize'>>;
+
+export type AuthorizeToolIntegrationResponse = GeneratedResponse<'POST /tool-integrations/:integrationId/authorize'>;
+
+export type ToolIntegrationAuthStatusResponse =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/auth-status/:authId'>;
+
+export type ToolIntegrationConnectionStatusParams = GeneratedRequest<
+  Body<'POST /tool-integrations/:integrationId/connection-status'>
+>;
+
+export type ToolIntegrationConnectionStatusResponse =
+  GeneratedResponse<'POST /tool-integrations/:integrationId/connection-status'>;
+
+export type ListToolIntegrationConnectionsParams = GeneratedRequest<
+  QueryParams<'GET /tool-integrations/:integrationId/connections'>
+>;
+
+export type ListToolIntegrationConnectionsResponse =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/connections'>;
+
+export type ListToolIntegrationConnectionFieldsParams = GeneratedRequest<
+  QueryParams<'GET /tool-integrations/:integrationId/connection-fields'>
+>;
+
+export type ListToolIntegrationConnectionFieldsResponse =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/connection-fields'>;
+
+export type ToolIntegrationHealthResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/health'>;
+
+export type DisconnectToolIntegrationConnectionParams = GeneratedRequest<
+  QueryParams<'DELETE /tool-integrations/:integrationId/connections/:connectionId'>
+>;
+
+export type DisconnectToolIntegrationConnectionResponse =
+  GeneratedResponse<'DELETE /tool-integrations/:integrationId/connections/:connectionId'>;
+
+export type GetToolIntegrationConnectionUsageResponse =
+  GeneratedResponse<'GET /tool-integrations/:integrationId/connections/:connectionId/usage'>;
 
 // ============================================================================
 // Processor Provider Types

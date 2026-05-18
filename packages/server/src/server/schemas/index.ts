@@ -41,6 +41,7 @@ export * from './stored-scorers';
 export * from './stored-skills';
 export * from './stored-workspaces';
 export * from './system';
+export * from './tool-integrations';
 export * from './tool-providers';
 export * from './vectors';
 export * from './version-common';

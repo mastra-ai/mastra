@@ -3,6 +3,8 @@ import type { ToolAction } from '../tools/types';
 
 /**
  * Metadata about a tool provider.
+ *
+ * @deprecated Use `ToolIntegration` from `@mastra/core/tool-integration`.
  */
 export interface ToolProviderInfo {
   /** Unique identifier for this provider (e.g., 'composio') */
@@ -15,6 +17,8 @@ export interface ToolProviderInfo {
 
 /**
  * A toolkit (group of related tools) from a tool provider.
+ *
+ * @deprecated Use `ToolService` from `@mastra/core/tool-integration`.
  */
 export interface ToolProviderToolkit {
   /** Unique slug for this toolkit (e.g., 'GITHUB', 'SLACK') */
@@ -30,6 +34,8 @@ export interface ToolProviderToolkit {
 /**
  * A tool listing entry from a tool provider.
  * Used for UI discovery — does not include the full executable tool.
+ *
+ * @deprecated Use `ToolDescriptor` from `@mastra/core/tool-integration`.
  */
 export interface ToolProviderToolInfo {
   /** Unique slug for this tool (e.g., 'GITHUB_CREATE_ISSUE') */
@@ -44,6 +50,8 @@ export interface ToolProviderToolInfo {
 
 /**
  * Options for listing tools from a provider.
+ *
+ * @deprecated superseded by the `ToolIntegration` catalog API.
  */
 export interface ListToolProviderToolsOptions {
   /** Filter by toolkit slug */
@@ -58,6 +66,8 @@ export interface ListToolProviderToolsOptions {
 
 /**
  * Paginated result from tool provider list operations.
+ *
+ * @deprecated superseded by the `ToolIntegration` catalog API.
  */
 export interface ToolProviderListResult<T> {
   data: T[];
@@ -71,6 +81,8 @@ export interface ToolProviderListResult<T> {
 
 /**
  * Options for resolving executable tools at agent runtime.
+ *
+ * @deprecated Use `ResolveToolsOpts` from `@mastra/core/tool-integration`.
  */
 export interface ResolveToolProviderToolsOptions {
   /** User ID for user-scoped tool execution (e.g., Composio) */
@@ -87,6 +99,8 @@ export interface ResolveToolProviderToolsOptions {
  * Tool providers serve two purposes:
  * 1. **Discovery** — UI uses `listToolkits()`, `listTools()`, `getToolSchema()` to browse available tools
  * 2. **Runtime** — Agent hydration uses `resolveTools()` to get executable tools for selected tool slugs
+ *
+ * @deprecated Use `ToolIntegration` from `@mastra/core/tool-integration`.
  */
 export interface ToolProvider {
   /** Provider metadata */

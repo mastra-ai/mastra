@@ -10,6 +10,7 @@ import type {
   StorageResourceType,
   StorageScorerDefinitionType,
   StorageFavoriteType,
+  StorageToolConnection,
   StorageWorkspaceType,
   StorageSkillType,
   StorageWorkflowRun,
@@ -73,6 +74,12 @@ export class InMemoryDB {
    * within the same synchronous block.
    */
   readonly favorites = new Map<string, StorageFavoriteType>();
+  /**
+   * Persisted tool integration connections, keyed by
+   * `${authorId}\u0000${providerId}\u0000${connectionId}`. Lets the UI surface a
+   * stable, user-supplied label across agents.
+   */
+  readonly toolConnections = new Map<string, StorageToolConnection>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -122,6 +129,7 @@ export class InMemoryDB {
     this.skills.clear();
     this.skillVersions.clear();
     this.favorites.clear();
+    this.toolConnections.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();

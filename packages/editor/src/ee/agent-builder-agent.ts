@@ -143,7 +143,6 @@ Rules:
 - Always pin a concrete, versioned model id. Never use floating aliases such as \`latest\`, \`stable\`, or a bare provider name.
 - When several versions of the same family are available, prefer the newest numbered variant (highest version / date) from the chosen provider, including newer \`mini\`, \`nano\`, or numbered releases. Do not pin an older version unless the user explicitly asks for one.
 - Only choose models that are actually available in the current environment. If the ideal model is not available, fall back to the newest available model from the same provider, then to the newest available model overall.
-- Output the choice as \`provider/model-id\` (e.g. \`openai/gpt-5.5-mini\`, \`anthropic/claude-opus-4-7\`).
 
 Phase 7 — Prepare the final agent instructions
 Create an outcome-focused system prompt for the new agent.
