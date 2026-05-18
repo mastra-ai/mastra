@@ -6,10 +6,12 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
+import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
 import { MastraServer, setupBrowserStream } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { findMatchingCustomRoute } from '@mastra/server/auth';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
@@ -49,63 +51,19 @@ type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
 };
 
-type CorsOptions = Parameters<typeof cors>[0];
-type CorsPathMap = Record<string, CorsOptions>;
-
 const DEFAULT_CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 const DEFAULT_CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'];
 const DEFAULT_CORS_EXPOSE_HEADERS = ['Content-Length', 'X-Requested-With'];
 
-function isCorsPathMap(corsConfig: CorsOptions | CorsPathMap | false | undefined): corsConfig is CorsPathMap {
-  if (!corsConfig || typeof corsConfig !== 'object') return false;
-  return Object.keys(corsConfig).some(key => key === '*' || key.startsWith('/'));
-}
-
-function matchesCorsPath(pattern: string, pathname: string) {
-  if (pattern === '*') return true;
-  if (pattern.endsWith('*')) return pathname.startsWith(pattern.slice(0, -1));
-  return pattern === pathname;
-}
-
-function getCorsPathSpecificity(pattern: string) {
-  return pattern === '*' ? 0 : pattern.replace(/\*$/, '').length;
-}
-
-function resolveCorsPathConfig(corsMap: CorsPathMap, pathname: string) {
-  let matchedConfig: CorsOptions | undefined;
-  let matchedSpecificity = -1;
-
-  for (const [pattern, config] of Object.entries(corsMap)) {
-    if (!matchesCorsPath(pattern, pathname)) continue;
-
-    const specificity = getCorsPathSpecificity(pattern);
-    if (specificity > matchedSpecificity) {
-      matchedConfig = config;
-      matchedSpecificity = specificity;
-    }
-  }
-
-  return matchedConfig;
-}
-
-function getCorsConfig(serverCors: CorsOptions | CorsPathMap | false | undefined, hasAuth: boolean, pathname?: string) {
-  const isPathMap = isCorsPathMap(serverCors);
-  const routeCors = isPathMap ? resolveCorsPathConfig(serverCors, pathname ?? '') : serverCors;
-  const userCors = routeCors && typeof routeCors === 'object' ? routeCors : undefined;
+function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsDefault: boolean) {
+  const userCors = serverCors && typeof serverCors === 'object' ? serverCors : undefined;
   const origin =
     userCors && 'origin' in userCors && userCors.origin
       ? userCors.origin
-      : hasAuth
+      : credentialsDefault
         ? (requestOrigin: string) => requestOrigin || undefined
         : '*';
-  const credentials =
-    userCors && 'credentials' in userCors
-      ? userCors.credentials
-      : isPathMap && userCors
-        ? false
-        : hasAuth
-          ? true
-          : false;
+  const credentials = userCors && 'credentials' in userCors ? userCors.credentials : credentialsDefault;
 
   return {
     origin,
@@ -116,6 +74,11 @@ function getCorsConfig(serverCors: CorsOptions | CorsPathMap | false | undefined
     allowHeaders: [...DEFAULT_CORS_ALLOW_HEADERS, ...(userCors?.allowHeaders ?? [])],
     exposeHeaders: [...DEFAULT_CORS_EXPOSE_HEADERS, ...(userCors?.exposeHeaders ?? [])],
   };
+}
+
+function getRouteCorsConfig(apiRoutes: ApiRoute[] | undefined, pathname: string, method: string) {
+  const route = findMatchingCustomRoute(pathname, method, apiRoutes)?.route;
+  return route?.cors;
 }
 
 export function getToolExports(tools: Record<string, Function>[]) {
@@ -249,9 +212,14 @@ export async function createHonoServer(
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
     const hasAuth = !!server?.auth;
-    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), async (c, next) =>
-      cors(getCorsConfig(server?.cors, hasAuth, new URL(c.req.url).pathname))(c, next),
-    );
+    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), async (c, next) => {
+      const pathname = new URL(c.req.url).pathname;
+      const method =
+        c.req.method === 'OPTIONS' ? (c.req.header('Access-Control-Request-Method') ?? c.req.method) : c.req.method;
+      const routeCors = getRouteCorsConfig(processedRoutes, pathname, method);
+
+      return cors(routeCors ? getCorsConfig(routeCors, false) : getCorsConfig(server?.cors, hasAuth))(c, next);
+    });
   }
 
   // Health check endpoint (before auth middleware so it's publicly accessible)

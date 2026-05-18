@@ -820,9 +820,9 @@ export const mastra = new Mastra({
 
 ### server.cors
 
-**Type:** `CorsOptions | Record<string, CorsOptions> | false`
+**Type:** `CorsOptions | false`
 
-CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false` to disable CORS entirely. Use a single object for one policy across all routes, or use a path map to apply different policies to different routes. In a path map, `*` is the fallback policy and paths ending in `*` match by prefix. When multiple paths match, Mastra uses the most specific path.
+CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false` to disable CORS entirely. Use this for one policy across all routes. For a custom route-specific policy, use the `cors` option in [`registerApiRoute()`](/reference/server/register-api-route).
 
 | Property | Type | Default | Description |
 | - | - | - | - |
@@ -843,24 +843,6 @@ export const mastra = new Mastra({
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
       credentials: false,
-    },
-  },
-})
-```
-
-The following example uses a global fallback policy and a credentialed policy for one channel webhook path:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-
-export const mastra = new Mastra({
-  server: {
-    cors: {
-      '*': { origin: '*' },
-      '/api/agents/support-agent/channels/web/*': {
-        origin: ['https://customer-saas.example'],
-        credentials: true,
-      },
     },
   },
 })

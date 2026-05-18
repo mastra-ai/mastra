@@ -87,17 +87,25 @@ describe('CompositeAuth TUser variance', () => {
   });
 });
 
-describe('Server CORS type tests', () => {
-  it('accepts path-specific CORS config', () => {
+describe('CORS type tests', () => {
+  it('accepts global CORS config', () => {
     new Mastra({
       server: {
         cors: {
-          '*': { origin: '*' },
-          '/api/agents/support-agent/channels/web/*': {
-            origin: ['https://customer-saas.example'],
-            credentials: true,
-          },
+          origin: ['https://app.example'],
+          credentials: true,
         },
+      },
+    });
+  });
+
+  it('accepts route-specific CORS config', () => {
+    registerApiRoute('/webhook', {
+      method: 'POST',
+      handler: async c => c.json({ ok: true }),
+      cors: {
+        origin: ['https://customer-saas.example'],
+        credentials: true,
       },
     });
   });
