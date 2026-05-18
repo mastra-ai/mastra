@@ -38,7 +38,7 @@ import {
 } from './workflows/nested-advanced.js';
 import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
 import { scoredWorkflow } from './workflows/scored.js';
-import { scheduledHeartbeatWorkflow } from './workflows/scheduled.js';
+import { scheduledHeartbeatWorkflow, scheduledTickWorkflow } from './workflows/scheduled.js';
 import { testMcpServer } from './mcp/index.js';
 import { uppercaseProcessor, suffixProcessor, tripwireProcessor } from './processors/index.js';
 import { completenessScorer, lengthScorer } from './scorers/index.js';
@@ -112,10 +112,11 @@ export const mastra = new Mastra({
     'foreach-retry-workflow': foreachRetryWorkflow,
     'scored-workflow': scoredWorkflow,
     'scheduled-heartbeat': scheduledHeartbeatWorkflow,
+    'scheduled-tick': scheduledTickWorkflow,
   },
   scheduler: {
     enabled: true,
-    tickIntervalMs: 60_000,
+    tickIntervalMs: 1_000,
   },
   backgroundTasks: {
     enabled: true,
