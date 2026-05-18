@@ -119,6 +119,30 @@ describe('findBestIndex', () => {
     });
   });
 
+  describe('mastra_background_tasks', () => {
+    it('should prefer agent/status composite index when both filters are present', () => {
+      const result = findBestIndex('mastra_background_tasks', [
+        { field: 'agent_id', value: 'agent-1' },
+        { field: 'status', value: 'running' },
+      ]);
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_agent_status');
+      expect(result!.indexedFilters).toHaveLength(2);
+    });
+
+    it('should use status index for status-only filters', () => {
+      const result = findBestIndex('mastra_background_tasks', [{ field: 'status', value: 'running' }]);
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_status_created');
+    });
+
+    it('should use resource index for resource filters', () => {
+      const result = findBestIndex('mastra_background_tasks', [{ field: 'resource_id', value: 'resource-1' }]);
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_resource');
+    });
+  });
+
   describe('edge cases', () => {
     it('should return null for empty filters', () => {
       const result = findBestIndex('mastra_messages', []);
@@ -160,6 +184,7 @@ describe('findBestIndex', () => {
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_resources');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_workflow_snapshots');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_scorers');
+      expect(TABLE_INDEX_MAP).toHaveProperty('mastra_background_tasks');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_vector_indexes');
     });
 
@@ -180,6 +205,9 @@ describe('findBestIndex', () => {
 
       const entity = TABLE_INDEX_MAP['mastra_scorers']!.find(i => i.name === 'by_entity');
       expect(entity!.fields).toEqual(['entityId', 'entityType']);
+
+      const backgroundAgentStatus = TABLE_INDEX_MAP['mastra_background_tasks']!.find(i => i.name === 'by_agent_status');
+      expect(backgroundAgentStatus!.fields).toEqual(['agent_id', 'status']);
     });
   });
 });

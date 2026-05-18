@@ -2,7 +2,7 @@
 
 Convex adapters for Mastra:
 
-- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources).
+- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, background tasks).
 - `ConvexVector` stores embeddings inside Convex and performs cosine similarity search.
 - `@mastra/convex/server` exposes the required Convex table definitions and storage mutation.
 
@@ -26,6 +26,7 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraBackgroundTasksTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
@@ -37,6 +38,7 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_background_tasks: mastraBackgroundTasksTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_documents: mastraDocumentsTable,
@@ -90,21 +92,24 @@ const vector = new ConvexVector({
 
 This adapter uses **typed Convex tables** for each Mastra domain:
 
-| Domain         | Convex Table                | Purpose              |
-| -------------- | --------------------------- | -------------------- |
-| Threads        | `mastra_threads`            | Conversation threads |
-| Messages       | `mastra_messages`           | Chat messages        |
-| Resources      | `mastra_resources`          | User working memory  |
-| Workflows      | `mastra_workflow_snapshots` | Workflow state       |
-| Scorers        | `mastra_scorers`            | Evaluation data      |
-| Vector Indexes | `mastra_vector_indexes`     | Index metadata       |
-| Vectors        | `mastra_vectors`            | Embeddings           |
-| Fallback       | `mastra_documents`          | Unknown tables       |
+| Domain           | Convex Table                | Purpose               |
+| ---------------- | --------------------------- | --------------------- |
+| Threads          | `mastra_threads`            | Conversation threads  |
+| Messages         | `mastra_messages`           | Chat messages         |
+| Resources        | `mastra_resources`          | User working memory   |
+| Workflows        | `mastra_workflow_snapshots` | Workflow state        |
+| Scorers          | `mastra_scorers`            | Evaluation data       |
+| Background Tasks | `mastra_background_tasks`   | Background task state |
+| Vector Indexes   | `mastra_vector_indexes`     | Index metadata        |
+| Vectors          | `mastra_vectors`            | Embeddings            |
+| Fallback         | `mastra_documents`          | Unknown tables        |
 
 All typed tables include:
 
 - An `id` field for Mastra's record ID (distinct from Convex's auto-generated `_id`)
 - A `by_record_id` index for efficient lookups by Mastra ID
+
+Background task reads and updates also tolerate older rows that were written to the fallback `mastra_documents` table.
 
 ## Testing
 

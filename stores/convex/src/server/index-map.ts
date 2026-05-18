@@ -40,6 +40,17 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_created', fields: ['createdAt'] },
     { name: 'by_record_id', fields: ['id'] },
   ],
+  mastra_background_tasks: [
+    { name: 'by_agent_status', fields: ['agent_id', 'status'] },
+    { name: 'by_status_created', fields: ['status', 'createdAt'] },
+    { name: 'by_run', fields: ['run_id'] },
+    { name: 'by_tool_call', fields: ['tool_call_id'] },
+    { name: 'by_thread', fields: ['thread_id'] },
+    { name: 'by_resource', fields: ['resource_id'] },
+    { name: 'by_tool', fields: ['tool_name'] },
+    { name: 'by_created', fields: ['createdAt'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
   mastra_vector_indexes: [
     { name: 'by_name', fields: ['indexName'] },
     { name: 'by_record_id', fields: ['id'] },

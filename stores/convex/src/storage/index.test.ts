@@ -167,6 +167,39 @@ describe('Convex Schema Sync', () => {
     const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
     expect(convexFields).toContain('id');
   });
+
+  it('mastraBackgroundTasksTable should include background task fields and indexes', async () => {
+    const { TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } = await import('@mastra/core/storage');
+    const { mastraBackgroundTasksTable } = await import('../schema');
+
+    const coreSchema = TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS];
+    const coreFields = Object.keys(coreSchema);
+
+    const convexValidator = (mastraBackgroundTasksTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    const missingFields = coreFields.filter(field => !convexFields.includes(field));
+
+    expect(missingFields).toEqual([]);
+
+    const indexes = ((mastraBackgroundTasksTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        ['by_agent_status', ['agent_id', 'status']],
+        ['by_status_created', ['status', 'createdAt']],
+        ['by_resource', ['resource_id']],
+      ]),
+    );
+  });
+
+  it('server entrypoint should re-export background task schema helpers', async () => {
+    const serverExports = await import('../server');
+
+    expect(serverExports.mastraBackgroundTasksTable).toBeDefined();
+    expect(serverExports.TABLE_BACKGROUND_TASKS).toBe('mastra_background_tasks');
+  });
 });
 
 // Configuration validation tests (run even without credentials)
