@@ -53,6 +53,7 @@ import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
+import Roles from './pages/roles';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
@@ -249,6 +250,7 @@ export const routes: RouteObject[] = [
             { path: '/team/:id', element: <TeamMemberDetail />, handle: navHandle('/team') },
             { path: '/users', element: <Users />, handle: navHandle('/users') },
             { path: '/users/:id', element: <UserDetail />, handle: navHandle('/users') },
+            { path: '/roles', element: <Roles />, handle: navHandle('/roles') },
             {
               path: '/templates',
               element: <Templates />,

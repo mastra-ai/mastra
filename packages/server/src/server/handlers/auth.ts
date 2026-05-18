@@ -1123,6 +1123,125 @@ export const GET_ROLES_ROUTE = createRoute({
   },
 });
 
+// POST /auth/roles - Create a new role
+// ============================================================================
+
+export const POST_CREATE_ROLE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/auth/roles',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Create a new role',
+  description: 'Creates a new role definition. Requires team:write permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac || typeof (rbac as any).createRole !== 'function') {
+        throw new HTTPException(501, { message: 'Role creation not supported by this RBAC provider' });
+      }
+
+      const body = (await rawRequest.json?.()) || {};
+
+      if (!body.id || !body.name || !body.permissions) {
+        throw new HTTPException(400, { message: 'Role id, name, and permissions are required' });
+      }
+
+      await (rbac as any).createRole({
+        id: body.id,
+        name: body.name,
+        description: body.description,
+        permissions: body.permissions,
+        inherits: body.inherits,
+      });
+
+      return { success: true, role: body };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to create role', { error });
+      throw new HTTPException(500, { message: 'Failed to create role' });
+    }
+  },
+});
+
+// PUT /auth/roles/:roleId - Update a role
+// ============================================================================
+
+export const PUT_UPDATE_ROLE_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/auth/roles/:roleId',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Update a role',
+  description: 'Updates an existing role definition. Requires team:write permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+    const roleId = (ctx as any).roleId || rawRequest.param?.('roleId');
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac || typeof (rbac as any).updateRole !== 'function') {
+        throw new HTTPException(501, { message: 'Role updates not supported by this RBAC provider' });
+      }
+
+      const body = (await rawRequest.json?.()) || {};
+
+      await (rbac as any).updateRole(roleId, {
+        name: body.name,
+        description: body.description,
+        permissions: body.permissions,
+        inherits: body.inherits,
+      });
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to update role', { error, roleId });
+      throw new HTTPException(500, { message: 'Failed to update role' });
+    }
+  },
+});
+
+// DELETE /auth/roles/:roleId - Delete a role
+// ============================================================================
+
+export const DELETE_ROLE_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/auth/roles/:roleId',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Delete a role',
+  description: 'Deletes a role definition. Requires team:write permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+    const roleId = (ctx as any).roleId || rawRequest.param?.('roleId');
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac || typeof (rbac as any).deleteRole !== 'function') {
+        throw new HTTPException(501, { message: 'Role deletion not supported by this RBAC provider' });
+      }
+
+      await (rbac as any).deleteRole(roleId);
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to delete role', { error, roleId });
+      throw new HTTPException(500, { message: 'Failed to delete role' });
+    }
+  },
+});
+
 // ============================================================================
 // Export all auth routes
 // ============================================================================
@@ -1144,4 +1263,7 @@ export const AUTH_ROUTES = [
   PUT_USER_ROLE_ROUTE,
   DELETE_USER_ROLE_ROUTE,
   GET_ROLES_ROUTE,
+  POST_CREATE_ROLE_ROUTE,
+  PUT_UPDATE_ROLE_ROUTE,
+  DELETE_ROLE_ROUTE,
 ] as const;
