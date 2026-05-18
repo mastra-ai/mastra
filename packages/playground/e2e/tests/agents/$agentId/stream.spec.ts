@@ -30,6 +30,7 @@ async function fillAndSend(page: Page, message: string) {
   await chatInput.pressSequentially(message, { delay: 10 });
   await expect(sendButton).toBeEnabled({ timeout: 5000 });
   await sendButton.click();
+  await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
 }
 
 test('text stream', async () => {
@@ -72,9 +73,6 @@ test('tool stream', async () => {
   await page.click('text=Stream');
 
   await fillAndSend(page, 'Give me the weather in Paris');
-
-  // Wait for navigation from /chat/new to the actual thread URL
-  await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
 
   await assertToolStream(page);
   await page.reload();
