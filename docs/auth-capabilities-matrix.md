@@ -21,36 +21,34 @@ The auth system should be fully configurable. Users can:
 
 | Capability                | WorkOS | Cloud | Okta | Studio | Static | **Desired**  |
 | ------------------------- | :----: | :---: | :--: | :----: | :----: | :----------: |
-| **Role Assignment Model** |
+| **Role Assignment Model** |        |       |      |        |        |              |
 | Single role per user      |   ✅   |  ✅   |  ❌  |   ✅   |   ✅   | Configurable |
-| Multiple roles per user   |  ✅¹   |  ❌   |  ✅  |   ❌   |   ❌   |      ✅      |
-
-¹ WorkOS supports multi-role when enabled at Environment level in WorkOS Dashboard. When enabled, membership has `roles[]` array instead of single `role`.
-| **Role Management** |
-| List roles | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Create roles dynamically | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Update roles dynamically | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Delete roles dynamically | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| **Role Assignment** |
-| Assign role to user | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Remove role from user | ❌\* | ❌ | ❌ | ❌ | ❌ | ✅ |
-| **Permission Management** |
-| List permissions | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Create custom permissions | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Edit role permissions | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| **Role Source** |
-| Provider-managed roles | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Config-defined roles | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Storage-backed roles | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| **Advanced** |
-| Role inheritance | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Permission wildcards | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Caching | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Multiple roles per user¹  |   ✅   |  ❌   |  ✅  |   ❌   |   ❌   |      ✅      |
+| **Role Management**       |        |       |      |        |        |              |
+| List roles                |   ✅   |  ❌   |  ❌  |   ❌   |   ✅   |      ✅      |
+| Create roles dynamically  |   ❌   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| Update roles dynamically  |   ❌   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| Delete roles dynamically  |   ❌   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| **Role Assignment**       |        |       |      |        |        |              |
+| Assign role to user       |   ✅   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| Remove role from user²    |   ❌   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| **Permission Management** |        |       |      |        |        |              |
+| List permissions          |   ✅   |  ✅   |  ✅  |   ✅   |   ✅   |      ✅      |
+| Create custom permissions |   ❌   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| Edit role permissions     |   ❌   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| **Role Source**           |        |       |      |        |        |              |
+| Provider-managed roles    |   ✅   |  ✅   |  ✅  |   ❌   |   ❌   |      ✅      |
+| Config-defined roles      |   ✅   |  ✅   |  ✅  |   ✅   |   ✅   |      ✅      |
+| Storage-backed roles      |   ❌   |  ❌   |  ❌  |   ❌   |   ❌   |      ✅      |
+| **Advanced**              |        |       |      |        |        |              |
+| Role inheritance          |   ❌   |  ❌   |  ❌  |   ❌   |   ✅   |      ✅      |
+| Permission wildcards      |   ✅   |  ✅   |  ✅  |   ✅   |   ✅   |      ✅      |
+| Caching                   |   ✅   |  ❌   |  ✅  |   ❌   |   ✅   |      ✅      |
 
 **Notes:**
 
-- ¹ WorkOS multi-role: Configure `multiRole: true` in MastraRBACWorkos options when enabled in WorkOS Dashboard
-- \* WorkOS single-role: removeRole throws - use assignRole to change roles instead
+- ¹ WorkOS multi-role: Configure `multiRole: true` in MastraRBACWorkos when enabled in WorkOS Dashboard. Membership will have `roles[]` array instead of single `role`.
+- ² WorkOS single-role: `removeRole` throws — use `assignRole` to change roles instead.
 
 ### FGA (Fine-Grained Authorization) Capabilities Matrix
 
