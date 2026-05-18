@@ -1,82 +1,61 @@
 import {
   Avatar,
+  Badge,
+  Button,
   ErrorState,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
+  SectionCard,
   SessionExpired,
+  Skeleton,
   is401UnauthorizedError,
   is403ForbiddenError,
-  Skeleton,
-  Badge,
-  Button,
 } from '@mastra/playground-ui';
-import { PlusIcon, XIcon } from 'lucide-react';
-import { useParams } from 'react-router';
+import { ArrowLeftIcon, SettingsIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useParams } from 'react-router';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useTeamMember, useUserRoles, useRoles, useAssignRole, useRemoveRole } from '@/domains/team/hooks';
+import { RoleManagementModal } from '@/domains/team/components';
+import { useRoles, useTeamMember } from '@/domains/team/hooks';
 
-function RoleBadge({ role, onRemove, canRemove }: { role: string; onRemove?: () => void; canRemove: boolean }) {
-  return (
-    <Badge variant="default" className="flex items-center gap-1">
-      {role}
-      {canRemove && onRemove && (
-        <button
-          onClick={onRemove}
-          className="ml-1 hover:bg-surface2 rounded p-0.5 transition-colors"
-          aria-label={`Remove ${role} role`}
-        >
-          <XIcon className="h-3 w-3" />
-        </button>
-      )}
-    </Badge>
-  );
+function formatDate(date?: string): string {
+  if (!date) return '—';
+  return new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 }
 
-function RoleSelector({
-  userId,
-  currentRoles,
-  availableRoles,
-}: {
-  userId: string;
-  currentRoles: string[];
-  availableRoles: { id: string; name: string }[];
-}) {
-  const { mutate: assignRole, isPending } = useAssignRole();
-  const unassignedRoles = availableRoles.filter(r => !currentRoles.includes(r.id));
+function formatLastActive(date?: string): string {
+  if (!date) return 'Never';
+  const d = new Date(date);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
 
-  if (unassignedRoles.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {unassignedRoles.map(role => (
-        <Button
-          key={role.id}
-          variant="outline"
-          size="sm"
-          disabled={isPending}
-          onClick={() => assignRole({ userId, roleId: role.id })}
-        >
-          <PlusIcon className="h-3 w-3 mr-1" />
-          {role.name}
-        </Button>
-      ))}
-    </div>
-  );
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return d.toLocaleDateString();
 }
 
 function TeamMemberDetail() {
   const { id: userId } = useParams<{ id: string }>();
   const { data: member, isLoading: memberLoading, error: memberError } = useTeamMember(userId || '');
-  const { data: userRoles = [], isLoading: rolesLoading } = useUserRoles(userId || '');
   const { data: allRoles = [] } = useRoles();
-  const { mutate: removeRole } = useRemoveRole();
   const { hasPermission } = usePermissions();
+  const [showRoleModal, setShowRoleModal] = useState(false);
 
   const canManageRoles = hasPermission('team:write');
-  const isLoading = memberLoading || rolesLoading;
+
+  const userRoles = member?.roles || [];
+  const userPermissions = member?.permissions || [];
+  const currentRole = userRoles[0] || null;
 
   if (memberError && is401UnauthorizedError(memberError)) {
     return (
@@ -102,80 +81,107 @@ function TeamMemberDetail() {
     );
   }
 
-  if (isLoading || !member) {
+  if (memberLoading || !member) {
     return (
-      <PageLayout>
-        <div className="space-y-6">
+      <PageLayout width="narrow">
+        <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
+          <Link to="/team" className="inline-flex items-center gap-2 text-text2 hover:text-text1 transition-colors">
+            <ArrowLeftIcon className="h-4 w-4" />
+            Back to Team
+          </Link>
           <div className="flex items-center gap-4">
-            <Skeleton className="h-20 w-20 rounded-full" />
+            <Skeleton className="h-16 w-16 rounded-full" />
             <div className="space-y-2">
               <Skeleton className="h-6 w-48" />
               <Skeleton className="h-4 w-32" />
             </div>
           </div>
-          <Skeleton className="h-32 w-full" />
-        </div>
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </PageLayout.MainArea>
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout>
-      <div className="space-y-8">
-        {/* User info */}
+    <PageLayout width="narrow">
+      <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
+        {/* Back link */}
+        <Link to="/team" className="inline-flex items-center gap-2 text-text2 hover:text-text1 transition-colors">
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back to Team
+        </Link>
+
+        {/* Profile header */}
         <div className="flex items-center gap-4">
           <Avatar src={member.avatarUrl} name={member.name || member.email || member.id} size="lg" />
           <div>
-            <h1 className="text-2xl font-semibold text-text1">{member.name || member.email || member.id}</h1>
-            {member.email && member.name && <p className="text-text2">{member.email}</p>}
+            <h1 className="text-xl font-semibold text-text1">{member.name || member.email || member.id}</h1>
+            {member.email && member.name && <p className="text-sm text-text2">{member.email}</p>}
+            <p className="text-xs text-text3 mt-1">
+              Member since {formatDate(member.createdAt)} · Last active {formatLastActive(member.lastActiveAt)}
+            </p>
           </div>
         </div>
 
-        {/* Roles section */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-medium text-text1">Roles</h2>
-
-          {/* Current roles */}
-          <div className="flex flex-wrap gap-2">
-            {userRoles.length === 0 ? (
-              <p className="text-text2">No roles assigned</p>
+        {/* Role section */}
+        <SectionCard
+          title="Role"
+          description="The role assigned to this team member."
+          action={
+            canManageRoles ? (
+              <Button variant="outline" size="sm" onClick={() => setShowRoleModal(true)}>
+                <SettingsIcon className="h-4 w-4 mr-2" />
+                Manage
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="py-2">
+            {memberLoading ? (
+              <Skeleton className="h-5 w-20" />
+            ) : currentRole ? (
+              <Badge variant="default" className="capitalize">
+                {currentRole}
+              </Badge>
             ) : (
-              userRoles.map(role => (
-                <RoleBadge
-                  key={role}
-                  role={role}
-                  canRemove={canManageRoles}
-                  onRemove={canManageRoles && userId ? () => removeRole({ userId, roleId: role }) : undefined}
-                />
-              ))
+              <span className="text-text2 text-sm">No role assigned</span>
             )}
           </div>
+        </SectionCard>
 
-          {/* Add role buttons */}
-          {canManageRoles && userId && (
-            <div className="pt-2">
-              <h3 className="text-sm font-medium text-text2 mb-2">Assign role</h3>
-              <RoleSelector userId={userId} currentRoles={userRoles} availableRoles={allRoles} />
-            </div>
-          )}
-        </div>
+        {/* Permissions section */}
+        <SectionCard title="Effective Permissions" description="Permissions granted by this member's role.">
+          <div className="py-2">
+            {memberLoading ? (
+              <Skeleton className="h-5 w-32" />
+            ) : userPermissions.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {userPermissions.map(permission => (
+                  <Badge key={permission} variant="default" className="font-mono text-xs">
+                    {permission}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <span className="text-text2 text-sm">No permissions</span>
+            )}
+          </div>
+        </SectionCard>
+      </PageLayout.MainArea>
 
-        {/* Activity section - placeholder for future */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-medium text-text1">Recent Activity</h2>
-          <p className="text-text2">
-            Activity tracking coming soon. You can view this user's activity in{' '}
-            <a href={`/traces?filterUserId=${userId}`} className="text-brand1 hover:underline">
-              Traces
-            </a>
-            .
-          </p>
-        </div>
-      </div>
+      {/* Role management modal */}
+      {showRoleModal && (
+        <RoleManagementModal
+          userId={member.id}
+          userName={member.name || member.email || member.id}
+          currentRole={currentRole ?? undefined}
+          availableRoles={allRoles}
+          onClose={() => setShowRoleModal(false)}
+        />
+      )}
     </PageLayout>
   );
 }
-
-export { TeamMemberDetail };
 
 export default TeamMemberDetail;

@@ -357,7 +357,9 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
         }
       }
       const stateId = crypto.randomUUID();
-      const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
+      // State format: uuid|isStudio|postLoginRedirect
+      // isStudio flag persists across the OAuth redirect so callback knows which auth provider to use
+      const state = `${stateId}|${isStudio ? '1' : '0'}|${encodeURIComponent(postLoginRedirect)}`;
 
       const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
 
@@ -396,21 +398,36 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, code, state, request } = ctx as any;
-    const isStudio = isStudioRequest(request);
 
     // Build base URL for redirects (Response.redirect requires absolute URL)
     const baseUrl = getPublicOrigin(request);
 
-    // Extract post-login redirect from state (format: uuid|encodedRedirect)
+    // Extract isStudio flag and post-login redirect from state
+    // State format: uuid|isStudio|encodedRedirect (isStudio is '1' or '0')
     let redirectTo = '/';
     let stateId = state || '';
+    let isStudio = false;
     if (state && state.includes('|')) {
-      const [id, encodedRedirect] = state.split('|', 2);
-      stateId = id;
-      try {
-        redirectTo = decodeURIComponent(encodedRedirect);
-      } catch {
-        redirectTo = '/';
+      const parts = state.split('|');
+      if (parts.length >= 3) {
+        // New format: uuid|isStudio|encodedRedirect
+        stateId = parts[0];
+        isStudio = parts[1] === '1';
+        try {
+          redirectTo = decodeURIComponent(parts.slice(2).join('|'));
+        } catch {
+          redirectTo = '/';
+        }
+      } else {
+        // Legacy format: uuid|encodedRedirect (fallback to header check)
+        const [id, encodedRedirect] = parts;
+        stateId = id;
+        isStudio = isStudioRequest(request);
+        try {
+          redirectTo = decodeURIComponent(encodedRedirect);
+        } catch {
+          redirectTo = '/';
+        }
       }
     }
 
@@ -750,6 +767,7 @@ export const GET_TEAM_MEMBERS_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Team member listing not available' });
       }
 
+      // List users - the provider uses its configured organizationId
       const result = await auth.listUsers({ search, limit, offset, role });
 
       return {
@@ -758,6 +776,9 @@ export const GET_TEAM_MEMBERS_ROUTE = createRoute({
           email: user.email,
           name: user.name,
           avatarUrl: user.avatarUrl,
+          role: (user.metadata as any)?.role,
+          createdAt: (user.metadata as any)?.createdAt,
+          lastActiveAt: (user.metadata as any)?.lastActiveAt,
         })),
         total: result.total,
       };
@@ -804,6 +825,8 @@ export const GET_USERS_ROUTE = createRoute({
           email: user.email,
           name: user.name,
           avatarUrl: user.avatarUrl,
+          createdAt: (user.metadata as any)?.createdAt,
+          lastActiveAt: (user.metadata as any)?.lastActiveAt,
         })),
         total: result.total,
       };
@@ -813,6 +836,289 @@ export const GET_USERS_ROUTE = createRoute({
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
       throw new HTTPException(500, { message: 'Failed to list users' });
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/team/:userId - Get team member detail
+// ============================================================================
+
+export const GET_TEAM_MEMBER_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/team/:userId',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  summary: 'Get team member detail',
+  description: 'Gets details for a specific team member. Requires team:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+    const userId = (ctx as any).userId || rawRequest.param?.('userId');
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const auth = studioConfig?.auth;
+      const rbac = studioConfig?.rbac;
+
+      if (!auth || !implementsInterface<IUserProvider<EEUser>>(auth, 'getUser')) {
+        throw new HTTPException(404, { message: 'Team member detail not available' });
+      }
+
+      const user = await auth.getUser(userId);
+      if (!user) {
+        throw new HTTPException(404, { message: 'Team member not found' });
+      }
+
+      // Get roles and permissions from RBAC provider
+      let roles: string[] = [];
+      let permissions: string[] = [];
+      if (rbac) {
+        try {
+          roles = await rbac.getRoles(user);
+          permissions = await rbac.getPermissions(user);
+        } catch {
+          // RBAC not available or failed
+        }
+      }
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        role: (user.metadata as any)?.role || roles[0],
+        roles,
+        permissions,
+        createdAt: (user.metadata as any)?.createdAt,
+        lastActiveAt: (user.metadata as any)?.lastActiveAt,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to get team member', { error, userId });
+      throw new HTTPException(500, { message: 'Failed to get team member' });
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/users/:userId - Get user detail
+// ============================================================================
+
+export const GET_USER_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/users/:userId',
+  responseType: 'json',
+  requiresPermission: 'users:read',
+  summary: 'Get user detail',
+  description: 'Gets details for a specific user/customer. Requires users:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+    const userId = (ctx as any).userId || rawRequest.param?.('userId');
+
+    try {
+      const serverConfig = mastra.getServer?.();
+      const auth = serverConfig?.auth;
+
+      if (!auth || !implementsInterface<IUserProvider<EEUser>>(auth, 'getUser')) {
+        throw new HTTPException(404, { message: 'User detail not available' });
+      }
+
+      const user = await auth.getUser(userId);
+      if (!user) {
+        throw new HTTPException(404, { message: 'User not found' });
+      }
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        createdAt: (user.metadata as any)?.createdAt,
+        lastActiveAt: (user.metadata as any)?.lastActiveAt,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to get user', { error, userId });
+      throw new HTTPException(500, { message: 'Failed to get user' });
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/team/:userId/roles - Get user's roles
+// ============================================================================
+
+export const GET_USER_ROLES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/team/:userId/roles',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  summary: 'Get user roles',
+  description: 'Gets roles assigned to a team member. Requires team:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+    const userId = (ctx as any).userId || rawRequest.param?.('userId');
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac) {
+        throw new HTTPException(404, { message: 'Role management not available' });
+      }
+
+      // Get user first to pass to RBAC
+      const auth = studioConfig?.auth;
+      let user: EEUser | null = null;
+      if (auth && implementsInterface<IUserProvider<EEUser>>(auth, 'getUser')) {
+        user = await auth.getUser(userId);
+      }
+
+      if (!user) {
+        throw new HTTPException(404, { message: 'User not found' });
+      }
+
+      const roles = await rbac.getRoles(user);
+      return { roles };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to get user roles', { error, userId });
+      throw new HTTPException(500, { message: 'Failed to get user roles' });
+    }
+  },
+});
+
+// ============================================================================
+// PUT /auth/team/:userId/roles/:roleId - Assign role to user
+// ============================================================================
+
+export const PUT_USER_ROLE_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/auth/team/:userId/roles/:roleId',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Assign role to user',
+  description: 'Assigns a role to a team member. Requires team:write permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+    const userId = (ctx as any).userId || rawRequest.param?.('userId');
+    const roleId = (ctx as any).roleId || rawRequest.param?.('roleId');
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac || !('assignRole' in rbac)) {
+        throw new HTTPException(404, { message: 'Role assignment not available' });
+      }
+
+      // Get user first
+      const auth = studioConfig?.auth;
+      let user: EEUser | null = null;
+      if (auth && implementsInterface<IUserProvider<EEUser>>(auth, 'getUser')) {
+        user = await auth.getUser(userId);
+      }
+
+      if (!user) {
+        throw new HTTPException(404, { message: 'User not found' });
+      }
+
+      await (rbac as any).assignRole(user, roleId);
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to assign role', { error, userId, roleId });
+      throw new HTTPException(500, { message: 'Failed to assign role' });
+    }
+  },
+});
+
+// ============================================================================
+// DELETE /auth/team/:userId/roles/:roleId - Remove role from user
+// ============================================================================
+
+export const DELETE_USER_ROLE_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/auth/team/:userId/roles/:roleId',
+  responseType: 'json',
+  requiresPermission: 'team:write',
+  summary: 'Remove role from user',
+  description: 'Removes a role from a team member. Requires team:write permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, rawRequest } = ctx as any;
+    const userId = (ctx as any).userId || rawRequest.param?.('userId');
+    const roleId = (ctx as any).roleId || rawRequest.param?.('roleId');
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac || !('removeRole' in rbac)) {
+        throw new HTTPException(404, { message: 'Role removal not available' });
+      }
+
+      // Get user first
+      const auth = studioConfig?.auth;
+      let user: EEUser | null = null;
+      if (auth && implementsInterface<IUserProvider<EEUser>>(auth, 'getUser')) {
+        user = await auth.getUser(userId);
+      }
+
+      if (!user) {
+        throw new HTTPException(404, { message: 'User not found' });
+      }
+
+      await (rbac as any).removeRole(user, roleId);
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to remove role', { error, userId, roleId });
+      throw new HTTPException(500, { message: 'Failed to remove role' });
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/roles - List available roles
+// ============================================================================
+
+export const GET_ROLES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/roles',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  summary: 'List available roles',
+  description: 'Lists all available roles for assignment. Requires team:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra } = ctx as any;
+
+    try {
+      const studioConfig = mastra.getStudio?.();
+      const rbac = studioConfig?.rbac;
+
+      if (!rbac || !('listRoles' in rbac)) {
+        // Return default roles if no RBAC manager
+        return {
+          roles: [
+            { id: 'admin', name: 'Admin', description: 'Full access' },
+            { id: 'member', name: 'Member', description: 'Read and execute access' },
+            { id: 'viewer', name: 'Viewer', description: 'Read-only access' },
+          ],
+        };
+      }
+
+      const roles = await (rbac as any).listRoles();
+      return { roles };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to list roles', { error });
+      throw new HTTPException(500, { message: 'Failed to list roles' });
     }
   },
 });
@@ -831,5 +1137,11 @@ export const AUTH_ROUTES = [
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
   GET_TEAM_MEMBERS_ROUTE,
+  GET_TEAM_MEMBER_ROUTE,
   GET_USERS_ROUTE,
+  GET_USER_ROUTE,
+  GET_USER_ROLES_ROUTE,
+  PUT_USER_ROLE_ROUTE,
+  DELETE_USER_ROLE_ROUTE,
+  GET_ROLES_ROUTE,
 ] as const;

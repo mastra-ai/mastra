@@ -1,5 +1,6 @@
 import {
   Avatar,
+  Button,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
@@ -10,26 +11,59 @@ import {
   is403ForbiddenError,
   Skeleton,
 } from '@mastra/playground-ui';
+import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { useUsers } from '@/domains/team/hooks';
 import type { User } from '@/domains/team/hooks';
 
+function formatLastActive(date?: string): string {
+  if (!date) return 'Never';
+  const d = new Date(date);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return d.toLocaleDateString();
+}
+
 function UserRow({ user }: { user: User }) {
   return (
-    <a
-      href={`/users/${user.id}`}
-      className="flex items-center gap-3 p-4 hover:bg-surface1 rounded-lg border border-border1 transition-colors"
+    <Link
+      to={`/users/${user.id}`}
+      className="flex items-center gap-3 p-3 border-b border-border1 last:border-b-0 hover:bg-surface1 transition-colors cursor-pointer"
     >
-      <Avatar src={user.avatarUrl} name={user.name || user.email || user.id} size="md" />
+      <Avatar src={user.avatarUrl} name={user.name || user.email || user.id} size="sm" />
+
+      {/* Name/Email column */}
       <div className="flex-1 min-w-0">
         <div className="font-medium text-text1 truncate">{user.name || user.email || user.id}</div>
         {user.email && user.name && <div className="text-sm text-text2 truncate">{user.email}</div>}
       </div>
-    </a>
+
+      {/* Last active column */}
+      <div className="w-32 text-sm text-text2 text-right">{formatLastActive(user.lastActiveAt)}</div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2" onClick={e => e.preventDefault()}>
+        <Link to={`/observability?filterUserId=${user.id}`}>
+          <Button variant="outline" size="sm">
+            <ExternalLinkIcon className="h-3 w-3 mr-1" />
+            Traces
+          </Button>
+        </Link>
+      </div>
+    </Link>
   );
 }
 
-function UsersList({ users, isLoading, search }: { users: User[]; isLoading: boolean; search: string }) {
+function UsersTable({ users, isLoading, search }: { users: User[]; isLoading: boolean; search: string }) {
   const filteredUsers = search
     ? users.filter(
         u =>
@@ -39,9 +73,24 @@ function UsersList({ users, isLoading, search }: { users: User[]; isLoading: boo
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
+      <div className="border border-border1 rounded-lg overflow-hidden">
+        {/* Header skeleton */}
+        <div className="flex items-center gap-3 p-3 border-b border-border1 bg-surface1">
+          <div className="w-8" />
+          <div className="flex-1 text-xs font-medium text-text2 uppercase tracking-wide">User</div>
+          <div className="w-32 text-xs font-medium text-text2 uppercase tracking-wide text-right">Last Active</div>
+          <div className="w-24" />
+        </div>
         {[...Array(5)].map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
+          <div key={i} className="flex items-center gap-3 p-3 border-b border-border1 last:border-b-0">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <div className="flex-1 space-y-1">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-8 w-20" />
+          </div>
         ))}
       </div>
     );
@@ -54,7 +103,14 @@ function UsersList({ users, isLoading, search }: { users: User[]; isLoading: boo
   }
 
   return (
-    <div className="space-y-3">
+    <div className="border border-border1 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 p-3 border-b border-border1 bg-surface1">
+        <div className="w-8" />
+        <div className="flex-1 text-xs font-medium text-text2 uppercase tracking-wide">User</div>
+        <div className="w-32 text-xs font-medium text-text2 uppercase tracking-wide text-right">Last Active</div>
+        <div className="w-24" />
+      </div>
       {filteredUsers.map(user => (
         <UserRow key={user.id} user={user} />
       ))}
@@ -110,7 +166,7 @@ function Users() {
         </div>
       </PageLayout.TopArea>
 
-      <UsersList users={users} isLoading={isLoading} search={search} />
+      <UsersTable users={users} isLoading={isLoading} search={search} />
     </PageLayout>
   );
 }

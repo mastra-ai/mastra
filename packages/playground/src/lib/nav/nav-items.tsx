@@ -177,12 +177,12 @@ export const mainNav: NavSection[] = [
     ],
   },
   {
-    key: 'team',
-    title: 'Team',
+    key: 'auth',
+    title: 'Auth',
     href: '/team',
     items: [
       {
-        name: 'Team Members',
+        name: 'Team',
         url: '/team',
         Icon: UsersIcon,
         requiredPermission: 'team:read',

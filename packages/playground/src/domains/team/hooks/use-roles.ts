@@ -23,7 +23,7 @@ export function useRoles() {
   return useQuery<RoleDefinition[]>({
     queryKey: ['roles'],
     queryFn: async () => {
-      const url = `${baseUrl}${apiPrefix}/roles`;
+      const url = `${baseUrl}${apiPrefix}/auth/roles`;
       const response = await fetchWithRefresh(baseUrl, url, {
         headers: {
           'Content-Type': 'application/json',
@@ -36,7 +36,8 @@ export function useRoles() {
         throw new Error(`Failed to fetch roles: ${response.statusText}`);
       }
 
-      return response.json();
+      const data = await response.json();
+      return data.roles || [];
     },
     staleTime: 5 * 60_000, // 5 minutes
   });
@@ -56,7 +57,7 @@ export function useUserRoles(userId: string) {
   return useQuery<string[]>({
     queryKey: ['user', userId, 'roles'],
     queryFn: async () => {
-      const url = `${baseUrl}${apiPrefix}/team/${userId}/roles`;
+      const url = `${baseUrl}${apiPrefix}/auth/team/${userId}/roles`;
       const response = await fetchWithRefresh(baseUrl, url, {
         headers: {
           'Content-Type': 'application/json',
@@ -69,7 +70,8 @@ export function useUserRoles(userId: string) {
         throw new Error(`Failed to fetch user roles: ${response.statusText}`);
       }
 
-      return response.json();
+      const data = await response.json();
+      return data.roles || [];
     },
     enabled: !!userId,
     staleTime: 60_000, // 1 minute
@@ -91,7 +93,7 @@ export function useAssignRole() {
 
   return useMutation({
     mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
-      const url = `${baseUrl}${apiPrefix}/team/${userId}/roles/${roleId}`;
+      const url = `${baseUrl}${apiPrefix}/auth/team/${userId}/roles/${roleId}`;
       const response = await fetchWithRefresh(baseUrl, url, {
         method: 'PUT',
         headers: {
@@ -129,7 +131,7 @@ export function useRemoveRole() {
 
   return useMutation({
     mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
-      const url = `${baseUrl}${apiPrefix}/team/${userId}/roles/${roleId}`;
+      const url = `${baseUrl}${apiPrefix}/auth/team/${userId}/roles/${roleId}`;
       const response = await fetchWithRefresh(baseUrl, url, {
         method: 'DELETE',
         headers: {

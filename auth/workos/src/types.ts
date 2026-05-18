@@ -38,6 +38,7 @@ export function mapWorkOSUserToEEUser(user: User): EEUser {
       workosId: user.id,
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,
+      lastActiveAt: user.lastSignInAt,
     },
   };
 }
@@ -111,6 +112,12 @@ export interface MastraAuthWorkosOptions {
   clientId?: string;
   /** OAuth redirect URI (defaults to WORKOS_REDIRECT_URI env var) */
   redirectUri?: string;
+  /**
+   * Organization ID for this Mastra deployment.
+   * Used to list team members and filter by organization.
+   * Defaults to WORKOS_ORGANIZATION_ID env var.
+   */
+  organizationId?: string;
   /** SSO configuration */
   sso?: WorkOSSSOConfig;
   /** Session configuration */

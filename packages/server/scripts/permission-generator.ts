@@ -51,15 +51,6 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * Additional Studio-specific resources and permissions.
- * These are not derived from API routes but are used for Studio UI RBAC.
- */
-const STUDIO_PERMISSIONS: Array<{ resource: string; actions: string[] }> = [
-  { resource: 'team', actions: ['read', 'write'] },
-  { resource: 'users', actions: ['read'] },
-];
-
-/**
  * Generates a human-readable description for a permission pattern.
  */
 function getPermissionDescription(pattern: string): string {
@@ -117,15 +108,6 @@ export function derivePermissionData(): PermissionData {
         actionSet.add(action);
         permissionSet.add(permission);
       }
-    }
-  }
-
-  // Add Studio-specific permissions (not tied to API routes)
-  for (const { resource, actions } of STUDIO_PERMISSIONS) {
-    resourceSet.add(resource);
-    for (const action of actions) {
-      actionSet.add(action);
-      permissionSet.add(`${resource}:${action}`);
     }
   }
 

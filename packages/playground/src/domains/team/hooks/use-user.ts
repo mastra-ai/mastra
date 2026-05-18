@@ -3,21 +3,27 @@ import type { User } from './use-users';
 import { fetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 
+export interface UseUserOptions {
+  enabled?: boolean;
+}
+
 /**
  * Hook to fetch a single external user (customer) by ID.
  *
  * @example
  * ```tsx
  * const { data, isLoading, error } = useUser('user_123');
+ * const { data } = useUser('user_123', { enabled: isOpen });
  * ```
  */
-export function useUser(userId: string) {
+export function useUser(userId: string, options: UseUserOptions = {}) {
   const { baseUrl, apiPrefix } = useStudioConfig();
+  const { enabled = true } = options;
 
   return useQuery<User>({
     queryKey: ['users', userId],
     queryFn: async () => {
-      const url = `${baseUrl}${apiPrefix}/users/${userId}`;
+      const url = `${baseUrl}${apiPrefix}/auth/users/${userId}`;
       const response = await fetchWithRefresh(baseUrl, url, {
         headers: {
           'Content-Type': 'application/json',
@@ -32,7 +38,7 @@ export function useUser(userId: string) {
 
       return response.json();
     },
-    enabled: !!userId,
+    enabled: !!userId && enabled,
     staleTime: 60_000, // 1 minute
   });
 }

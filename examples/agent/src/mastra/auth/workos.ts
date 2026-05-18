@@ -10,6 +10,7 @@ export async function initWorkOS(): Promise<AuthResult> {
 
   const mastraAuth = new MastraAuthWorkos({
     redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+    organizationId: process.env.WORKOS_ORGANIZATION_ID,
     fetchMemberships: true,
   });
 

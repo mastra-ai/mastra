@@ -7,6 +7,11 @@ export interface TeamMember {
   email?: string;
   name?: string;
   avatarUrl?: string;
+  role?: string;
+  roles?: string[];
+  permissions?: string[];
+  lastActiveAt?: string;
+  createdAt?: string;
 }
 
 export interface UseTeamMembersOptions {
@@ -40,7 +45,7 @@ export function useTeamMembers(options: UseTeamMembersOptions = {}) {
       if (limit) params.set('limit', limit.toString());
       if (offset) params.set('offset', offset.toString());
 
-      const url = `${baseUrl}${apiPrefix}/team${params.toString() ? `?${params}` : ''}`;
+      const url = `${baseUrl}${apiPrefix}/auth/team${params.toString() ? `?${params}` : ''}`;
       const response = await fetchWithRefresh(baseUrl, url, {
         headers: {
           'Content-Type': 'application/json',

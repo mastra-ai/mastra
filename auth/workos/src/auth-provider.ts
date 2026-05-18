@@ -65,6 +65,7 @@ export class MastraAuthWorkos
   protected workos: WorkOS;
   protected clientId: string;
   protected redirectUri: string;
+  protected organizationId?: string;
   protected ssoConfig: MastraAuthWorkosOptions['sso'];
   protected authService: AuthService<Request, Response>;
   protected config: AuthKitConfig;
@@ -106,6 +107,7 @@ export class MastraAuthWorkos
 
     this.clientId = clientId;
     this.redirectUri = redirectUri;
+    this.organizationId = options?.organizationId ?? process.env.WORKOS_ORGANIZATION_ID;
     this.ssoConfig = options?.sso;
     this.fetchMemberships = options?.fetchMemberships ?? false;
     this.trustJwtClaims = options?.trustJwtClaims ?? false;
@@ -321,18 +323,21 @@ export class MastraAuthWorkos
   /**
    * List users with optional filtering and pagination.
    *
-   * Uses WorkOS User Management API to list users. Can be filtered by search query
-   * and supports pagination via limit/offset.
+   * If `organizationId` is provided, lists members of that organization.
+   * Otherwise, lists all users in the WorkOS environment.
    *
    * @param options - Optional filtering and pagination options
    * @returns Paginated list of users with total count
    *
    * @example
    * ```typescript
-   * // List all users
+   * // List all users (for external customers)
    * const { users, total } = await auth.listUsers();
    *
-   * // Search for users by email or name
+   * // List organization members (for internal team)
+   * const { users } = await auth.listUsers({ organizationId: 'org_123' });
+   *
+   * // Search for users by email
    * const { users } = await auth.listUsers({ search: 'john@example.com' });
    *
    * // Paginate results
@@ -341,6 +346,15 @@ export class MastraAuthWorkos
    */
   async listUsers(options?: ListUsersOptions): Promise<ListUsersResult<EEUser>> {
     try {
+      // Use configured organizationId if available, or from options
+      const orgId = options?.organizationId ?? this.organizationId;
+
+      // If we have an organization ID, list organization members (includes role)
+      if (orgId) {
+        return await this.listOrganizationMembers(orgId, options);
+      }
+
+      // Otherwise, list all users (no role info available)
       const response = await this.workos.userManagement.listUsers({
         email: options?.search, // WorkOS filters by email
         limit: options?.limit ?? 20,
@@ -355,6 +369,10 @@ export class MastraAuthWorkos
         email: user.email,
         name: [user.firstName, user.lastName].filter(Boolean).join(' ') || undefined,
         avatarUrl: user.profilePictureUrl || undefined,
+        metadata: {
+          createdAt: user.createdAt,
+          lastActiveAt: user.lastSignInAt,
+        },
       }));
 
       // Note: WorkOS uses cursor-based pagination, so we don't have a total count
@@ -365,6 +383,72 @@ export class MastraAuthWorkos
       };
     } catch (error) {
       this.logger.error('Failed to list users', { error });
+      return {
+        users: [],
+        total: 0,
+      };
+    }
+  }
+
+  /**
+   * List members of a specific organization.
+   * @internal
+   */
+  private async listOrganizationMembers(
+    organizationId: string,
+    options?: ListUsersOptions,
+  ): Promise<ListUsersResult<EEUser>> {
+    try {
+      // Get organization memberships
+      const response = await this.workos.userManagement.listOrganizationMemberships({
+        organizationId,
+        limit: options?.limit ?? 20,
+      });
+
+      const memberships = response.data;
+
+      // Fetch user details for each membership (SDK doesn't include embedded user)
+      const userResults = await Promise.all(
+        memberships.map(async membership => {
+          try {
+            const user = await this.workos.userManagement.getUser(membership.userId);
+            return {
+              id: user.id,
+              email: user.email,
+              name: [user.firstName, user.lastName].filter(Boolean).join(' ') || undefined,
+              avatarUrl: user.profilePictureUrl || undefined,
+              metadata: {
+                role: membership.role?.slug,
+                membershipId: membership.id,
+                organizationId: membership.organizationId,
+                createdAt: membership.createdAt,
+                lastActiveAt: user.lastSignInAt,
+              },
+            } as EEUser;
+          } catch {
+            // User might have been deleted, skip
+            return null;
+          }
+        }),
+      );
+
+      const users = userResults.filter((u): u is EEUser => u !== null);
+
+      // Filter by search if provided
+      const filteredUsers = options?.search
+        ? users.filter(
+            u =>
+              u.email?.toLowerCase().includes(options.search!.toLowerCase()) ||
+              u.name?.toLowerCase().includes(options.search!.toLowerCase()),
+          )
+        : users;
+
+      return {
+        users: filteredUsers,
+        total: filteredUsers.length,
+      };
+    } catch (error) {
+      this.logger.error('Failed to list organization members', { error, organizationId });
       return {
         users: [],
         total: 0,

@@ -3,21 +3,27 @@ import type { TeamMember } from './use-team-members';
 import { fetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 
+export interface UseTeamMemberOptions {
+  enabled?: boolean;
+}
+
 /**
  * Hook to fetch a single team member by ID.
  *
  * @example
  * ```tsx
  * const { data, isLoading, error } = useTeamMember('user_123');
+ * const { data } = useTeamMember('user_123', { enabled: isOpen });
  * ```
  */
-export function useTeamMember(userId: string) {
+export function useTeamMember(userId: string, options: UseTeamMemberOptions = {}) {
   const { baseUrl, apiPrefix } = useStudioConfig();
+  const { enabled = true } = options;
 
   return useQuery<TeamMember>({
     queryKey: ['team', 'member', userId],
     queryFn: async () => {
-      const url = `${baseUrl}${apiPrefix}/team/${userId}`;
+      const url = `${baseUrl}${apiPrefix}/auth/team/${userId}`;
       const response = await fetchWithRefresh(baseUrl, url, {
         headers: {
           'Content-Type': 'application/json',
@@ -32,7 +38,7 @@ export function useTeamMember(userId: string) {
 
       return response.json();
     },
-    enabled: !!userId,
+    enabled: !!userId && enabled,
     staleTime: 60_000, // 1 minute
   });
 }

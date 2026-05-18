@@ -8,6 +8,7 @@ import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mast
 import { SlackProvider } from '@mastra/slack';
 
 import { mastraAuth, rbacProvider, fgaProvider } from './auth';
+import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
 
 import {
   agentThatHarassesYou,
@@ -165,9 +166,32 @@ export const mastra = new Mastra({
     }),
   },
   server: {
-    auth: mastraAuth,
+    // Server auth (external customers) - uses WorkOS to list all users (not org-filtered)
+    auth: new MastraAuthWorkos({
+      redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4222/api/auth/sso/callback',
+      fetchMemberships: false, // Don't need memberships for customer listing
+      organizationId: '', // Explicitly empty to list ALL users, not just org members
+    }),
     rbac: rbacProvider,
     fga: fgaProvider,
+  },
+  // Studio auth (internal team) - uses WorkOS for SSO with org memberships
+  studio: {
+    auth: new MastraAuthWorkos({
+      redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4222/api/auth/sso/callback',
+      fetchMemberships: true, // Fetch org memberships for team filtering
+      organizationId: process.env.WORKOS_ORGANIZATION_ID, // Filter to this org
+    }),
+    rbac: new MastraRBACWorkos({
+      organizationId: process.env.WORKOS_ORGANIZATION_ID, // Only get roles from this org
+      roleMapping: {
+        owner: ['*'],
+        admin: ['*:read', '*:write', '*:execute'],
+        member: ['*:read', '*:execute'],
+        viewer: ['*:read'],
+        _default: [],
+      },
+    }),
   },
   backgroundTasks: {
     enabled: true,

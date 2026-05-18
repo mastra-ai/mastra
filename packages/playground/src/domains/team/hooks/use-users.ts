@@ -7,6 +7,8 @@ export interface User {
   email?: string;
   name?: string;
   avatarUrl?: string;
+  lastActiveAt?: string;
+  createdAt?: string;
 }
 
 export interface UseUsersOptions {
@@ -40,7 +42,7 @@ export function useUsers(options: UseUsersOptions = {}) {
       if (limit) params.set('limit', limit.toString());
       if (offset) params.set('offset', offset.toString());
 
-      const url = `${baseUrl}${apiPrefix}/users${params.toString() ? `?${params}` : ''}`;
+      const url = `${baseUrl}${apiPrefix}/auth/users${params.toString() ? `?${params}` : ''}`;
       const response = await fetchWithRefresh(baseUrl, url, {
         headers: {
           'Content-Type': 'application/json',

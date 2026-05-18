@@ -10748,6 +10748,64 @@ export interface PostAuthCredentialsSignUp_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /auth/team
+// ============================================================================
+export type GetAuthTeam_QueryParams = {
+  search?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  role?: string | undefined;
+};
+
+export type GetAuthTeam_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetAuthTeam_QueryParams extends never
+      ? {}
+      : {} extends GetAuthTeam_QueryParams
+        ? { query?: GetAuthTeam_QueryParams }
+        : { query: GetAuthTeam_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthTeam_RouteContract {
+  pathParams: never;
+  queryParams: GetAuthTeam_QueryParams;
+  body: never;
+  request: GetAuthTeam_Request;
+  response: unknown;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /auth/users
+// ============================================================================
+export type GetAuthUsers_QueryParams = {
+  search?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  role?: string | undefined;
+};
+
+export type GetAuthUsers_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetAuthUsers_QueryParams extends never
+      ? {}
+      : {} extends GetAuthUsers_QueryParams
+        ? { query?: GetAuthUsers_QueryParams }
+        : { query: GetAuthUsers_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthUsers_RouteContract {
+  pathParams: never;
+  queryParams: GetAuthUsers_QueryParams;
+  body: never;
+  request: GetAuthUsers_Request;
+  response: unknown;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows
 // ============================================================================
 export type GetWorkflows_QueryParams = {
@@ -77746,6 +77804,8 @@ export interface RouteTypes {
   'POST /auth/refresh': PostAuthRefresh_RouteContract;
   'POST /auth/credentials/sign-in': PostAuthCredentialsSignIn_RouteContract;
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
+  'GET /auth/team': GetAuthTeam_RouteContract;
+  'GET /auth/users': GetAuthUsers_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -78167,6 +78227,12 @@ export interface Client {
   };
   '/auth/sso/login': {
     GET: GetAuthSsoLogin_RouteContract;
+  };
+  '/auth/team': {
+    GET: GetAuthTeam_RouteContract;
+  };
+  '/auth/users': {
+    GET: GetAuthUsers_RouteContract;
   };
   '/background-tasks': {
     GET: GetBackgroundTasks_RouteContract;

@@ -78,6 +78,8 @@ export interface ListUsersOptions {
   offset?: number;
   /** Filter by role */
   role?: string;
+  /** Filter by organization ID (for listing org members vs all users) */
+  organizationId?: string;
 }
 
 /**
