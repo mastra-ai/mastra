@@ -10,7 +10,7 @@ export { handleExitCommand } from './exit.js';
 export { handleHooksCommand } from './hooks.js';
 export { handleMcpCommand } from './mcp.js';
 export { handleModeCommand } from './mode.js';
-export { handleSkillsCommand } from './skills.js';
+export { handleSkillCommand, handleSkillsCommand } from './skills.js';
 export { handleNewCommand } from './new.js';
 export { handleCloneCommand } from './clone.js';
 export { handleResourceCommand } from './resource.js';

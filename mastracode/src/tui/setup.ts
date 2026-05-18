@@ -11,6 +11,7 @@ import type { HarnessEventListener } from '@mastra/core/harness';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
+import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
@@ -40,6 +41,10 @@ export function setupKeyboardShortcuts(
       process.exit(0);
     }
     state.lastCtrlCTime = now;
+
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
 
     if (state.pendingApprovalDismiss) {
       // Dismiss active approval dialog and abort
@@ -152,7 +157,8 @@ export function setupKeyboardShortcuts(
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
-  // Enter - submit immediately when idle, queue follow-up input while streaming
+  // Enter - submit immediately. The submit handler decides whether active input
+  // should be sent as a signal or queued for cases signals cannot handle.
   state.editor.onAction('followUp', () => {
     if (isGoalJudgeInputLocked(state)) {
       showGoalJudgeInputLockInfo(state);
@@ -160,22 +166,48 @@ export function setupKeyboardShortcuts(
       return true;
     }
 
-    if (!state.harness.isRunning()) {
-      state.editor.onSubmit?.(state.editor.getExpandedText());
+    state.editor.onSubmit?.(state.editor.getExpandedText());
+    return true;
+  });
+
+  // Ctrl+F - explicitly queue a follow-up while a run is active. Enter now sends
+  // normal messages as signals during active runs; this preserves manual FIFO
+  // queueing for slash commands, image messages, and messages the user wants to
+  // hold until the current run finishes.
+  state.editor.onAction('queueFollowUp', () => {
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      state.ui.requestRender();
       return true;
     }
 
-    const text = state.editor.getExpandedText().trim();
-    if (!text) {
+    const text = state.editor.getExpandedText();
+    if (!state.harness.isRunning()) {
+      state.editor.onSubmit?.(text);
+      return true;
+    }
+
+    const trimmedText = text.trim();
+    if (!trimmedText) {
       return true;
     }
 
     state.editor.addToHistory(text);
     state.editor.setText('');
     callbacks.queueFollowUpMessage(text);
-    state.ui.requestRender();
     return true;
   });
+}
+
+function abortActiveGoalJudge(state: TUIState): boolean {
+  const activeGoalJudge = state.activeGoalJudge;
+  if (!activeGoalJudge) return false;
+
+  state.userInitiatedAbort = true;
+  activeGoalJudge.abortController.abort();
+  activeGoalJudge.component.setInterrupted();
+  state.ui.requestRender();
+  return true;
 }
 
 // =============================================================================
@@ -270,6 +302,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
+    { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
@@ -308,7 +341,17 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'observability', description: 'Configure cloud observability' },
-    { name: 'goal', description: 'Set/manage persistent goal (Ralph loop)' },
+    {
+      name: 'goal',
+      description: 'Set/manage persistent goal (Ralph loop)',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'status', label: 'status', description: 'Show current goal status' },
+          { value: 'pause', label: 'pause', description: 'Pause the goal continuation loop' },
+          { value: 'resume', label: 'resume', description: 'Resume the current goal' },
+          { value: 'clear', label: 'clear', description: 'Clear the current goal' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
     { name: 'judge', description: 'Set goal judge defaults' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
@@ -333,6 +376,13 @@ export function setupAutocomplete(state: TUIState): void {
         description: customCmd.description ? `Goal: ${customCmd.description}` : `Goal: ${customCmd.name}`,
       });
     }
+  }
+
+  for (const skill of state.skillCommands) {
+    slashCommands.push({
+      name: `skill/${skill.name}`,
+      description: skill.description ? `Skill: ${skill.description}` : `Skill: ${skill.name}`,
+    });
   }
 
   for (const skill of state.goalSkillCommands) {
@@ -374,18 +424,38 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   } catch {
     state.customSlashCommands = [];
   }
+  // Skills load via `refreshSkillsAutocomplete` so this never blocks on workspace resolution.
+}
 
+/**
+ * Populate `state.skillCommands` and `state.goalSkillCommands` from the
+ * workspace. Safe to call before the workspace is resolved (returns empty
+ * lists) and again later once it is (resolves and refreshes).
+ */
+export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
-    const workspace = state.harness.getWorkspace() ?? state.workspace;
+    let workspace = state.harness.getWorkspace() ?? state.workspace;
+    if (!workspace && state.harness.hasWorkspace()) {
+      workspace = await state.harness.resolveWorkspace();
+    }
     if (!workspace?.skills) {
+      state.skillCommands = [];
       state.goalSkillCommands = [];
       return;
     }
-    const skills = await workspace.skills.list();
+    const skills = (await workspace.skills.list()).filter(isUserInvocable);
+    state.skillCommands = skills;
     state.goalSkillCommands = skills.filter(skill => skill.metadata?.goal === true);
   } catch {
+    state.skillCommands = [];
     state.goalSkillCommands = [];
   }
+}
+
+/** Reload skills and rebuild the autocomplete provider. */
+export async function refreshSkillsAutocomplete(state: TUIState): Promise<void> {
+  await loadSkillCommands(state);
+  setupAutocomplete(state);
 }
 
 // =============================================================================
@@ -407,6 +477,9 @@ export function setupKeyHandlers(
       process.exit(0);
     }
     state.lastCtrlCTime = now;
+    if (abortActiveGoalJudge(state)) {
+      return;
+    }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }

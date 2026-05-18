@@ -1,5 +1,21 @@
+import type { ChannelAdapterConfig, ChannelConfig, ChannelHandlers } from '@mastra/core/channels';
 import type { ChannelsStorage } from '@mastra/core/storage';
+import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type { SlackInstallation } from './schemas';
+
+/**
+ * Per-adapter overrides forwarded to the SlackAdapter entry inside
+ * `AgentChannels.adapters` — equivalent to passing
+ * `{ adapter, ...adapterConfig }` when wiring up `AgentChannels` manually.
+ * The `adapter` instance itself is created by the provider.
+ */
+export type SlackAdapterChannelConfig = Omit<ChannelAdapterConfig, 'adapter'>;
+
+/** AgentChannels fields that the provider forwards. `adapters` and `userName` are provider-managed. */
+type ForwardedAgentChannelsOptions = Pick<
+  ChannelConfig,
+  'inlineMedia' | 'inlineLinks' | 'state' | 'threadContext' | 'tools' | 'chatOptions'
+>;
 
 // =============================================================================
 // Global Configuration (Mastra-level)
@@ -7,8 +23,42 @@ import type { SlackInstallation } from './schemas';
 
 /**
  * Configuration for SlackProvider at the Mastra level.
+ *
+ * In addition to the provider-specific fields documented below, this accepts
+ * options that are forwarded to the underlying `AgentChannels` instances
+ * managed by the provider — for example `handlers`, `inlineMedia`, and
+ * `adapterConfig`.
  */
-export interface SlackProviderConfig {
+export interface SlackProviderConfig extends ForwardedAgentChannelsOptions {
+  /**
+   * Logger forwarded to the underlying `SlackAdapter` for internal error
+   * reporting. Defaults to the adapter's `ConsoleLogger`.
+   */
+  logger?: SlackAdapterConfig['logger'];
+
+  /**
+   * Override built-in event handlers (e.g. `onDirectMessage`, `onMention`).
+   * Forwarded to `AgentChannels` for every agent connected via this provider.
+   *
+   * @example
+   * ```ts
+   * handlers: {
+   *   onDirectMessage: async (thread, message, defaultHandler) => {
+   *     console.log('DM:', message.text);
+   *     await defaultHandler(thread, message);
+   *   },
+   * }
+   * ```
+   */
+  handlers?: ChannelHandlers;
+
+  /**
+   * Per-adapter overrides applied to the Slack adapter entry inside
+   * `AgentChannels.adapters` — for example `cards`, `formatToolCall`,
+   * `formatError`.
+   */
+  adapterConfig?: SlackAdapterChannelConfig;
+
   /**
    * Slack App Configuration access token for programmatic app creation.
    * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"

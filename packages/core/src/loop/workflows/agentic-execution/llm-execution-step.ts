@@ -30,6 +30,7 @@ import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
+  StreamChunkType,
   StreamTransport,
   StreamTransportRef,
 } from '../../../stream/types';
@@ -43,7 +44,7 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -80,15 +81,20 @@ function getRequestInputProcessors({
     : llmRequestInputProcessors;
 }
 
+type ProcessOutputStreamResult = {
+  collectedChunks: CollectedChunk[];
+};
+
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
+  runId: string;
   messageId: string;
   includeRawChunks?: boolean;
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig<OUTPUT>;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   responseFromModel: {
     warnings: any;
     request: any;
@@ -245,7 +251,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
   _internal,
 }: {
   error: TripWire;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   runId: string;
   model: MastraLanguageModel;
   messageList: MessageList;
@@ -309,7 +315,7 @@ async function processOutputStream<OUTPUT = undefined>({
   transportRef,
   transportResolver,
   toolPayloadTransform,
-}: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
+}: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
 
@@ -504,7 +510,7 @@ async function processOutputStream<OUTPUT = undefined>({
     }
   }
 
-  return collectedChunks;
+  return { collectedChunks };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -661,8 +667,26 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
+          const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
+          for (const initialSignal of initialSignalEchoes) {
+            safeEnqueue(controller, initialSignal.toDataPart());
+          }
+
+          const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
+          if (shouldDrainBeforeFirstModelRequest) {
+            const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
+            if (pendingSignals.length > 0) {
+              currentMessageId = _internal?.generateId?.() ?? generateId();
+            }
+            for (const pendingSignal of pendingSignals) {
+              const signalForTranscript = messageList.addSignal(pendingSignal);
+              safeEnqueue(controller, signalForTranscript.toDataPart());
+            }
+          }
+
           const currentStep: {
             messageId: string;
+            createdAt: Date;
             model: MastraLanguageModel;
             tools?: TOOLS | undefined;
             toolChoice?: ToolChoice<TOOLS> | undefined;
@@ -673,6 +697,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             workspace?: Workspace;
           } = {
             messageId: currentMessageId,
+            createdAt: new Date(),
             model,
             tools,
             toolChoice,
@@ -681,6 +706,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             modelSettings,
             structuredOutput,
             workspace,
+          };
+          const rotateResponseMessageId = () => {
+            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentStep.messageId = currentMessageId;
+            return currentMessageId;
           };
 
           const inputStepProcessors = [
@@ -719,11 +749,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,
-                rotateResponseMessageId: () => {
-                  currentMessageId = _internal?.generateId?.() ?? generateId();
-                  currentStep.messageId = currentMessageId;
-                  return currentMessageId;
-                },
+                rotateResponseMessageId,
                 tools,
                 toolChoice,
                 activeTools: activeTools as string[] | undefined,
@@ -1156,10 +1182,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
-            const collectedChunks = await processOutputStream({
+            const { collectedChunks } = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
+              runId,
               messageId: currentStep.messageId,
               messageList,
               runState,
@@ -1184,6 +1211,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
               tools: currentStep.tools,
+              createdAt: currentStep.createdAt,
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');

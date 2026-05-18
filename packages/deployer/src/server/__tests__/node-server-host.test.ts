@@ -89,6 +89,7 @@ describe('createNodeServer host binding', () => {
       getServerMiddleware: vi.fn(() => []),
       getLogger: vi.fn(() => logger),
       startWorkers: vi.fn(),
+      startEventEngine: vi.fn(),
       listAgents: vi.fn(() => []),
       setMastraServer: vi.fn(),
     } as unknown as Mastra;
@@ -122,5 +123,25 @@ describe('createNodeServer host binding', () => {
       hostname: '0.0.0.0',
     });
     expect(logger.info).toHaveBeenCalledWith('Mastra API running', { url: 'http://0.0.0.0:4111/api' });
+  });
+
+  it('starts workers with the current lifecycle API', async () => {
+    await createNodeServer(mockMastra, { tools: {} });
+
+    expect(mockMastra.startWorkers).toHaveBeenCalledOnce();
+    expect(mockMastra.startEventEngine).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the deprecated event engine API for older core versions', async () => {
+    const startEventEngine = vi.fn();
+    const oldCoreMastra = {
+      ...mockMastra,
+      startWorkers: undefined,
+      startEventEngine,
+    } as unknown as Mastra;
+
+    await createNodeServer(oldCoreMastra, { tools: {} });
+
+    expect(startEventEngine).toHaveBeenCalledOnce();
   });
 });

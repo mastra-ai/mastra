@@ -61,6 +61,31 @@ export const inngest = new Inngest({
 })
 ```
 
+#### Selecting dev or cloud mode with `INNGEST_DEV`
+
+The Inngest SDK runs in one of two modes: dev or cloud. From v4 onward, the SDK defaults to cloud mode and requires `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`. The examples above set the mode in code with `isDev: true`. As an alternative, set the [`INNGEST_DEV` environment variable](https://www.inngest.com/docs/sdk/environment-variables#inngest-dev) so the same client code works across environments:
+
+- `INNGEST_DEV=1`: force dev mode. The SDK talks to a local Inngest Dev Server and disables signature verification.
+- `INNGEST_DEV=0`: force cloud mode. The SDK talks to Inngest Cloud and requires event and signing keys.
+- `INNGEST_DEV=<url>`: force dev mode and point the SDK at the Dev Server at `<url>`, for example `http://localhost:8288`.
+- Unset: defaults to cloud mode.
+
+When `INNGEST_DEV` is set, you can drop `isDev` and `baseUrl` from the client:
+
+```ts title="src/mastra/inngest/index.ts"
+import { Inngest } from 'inngest'
+
+export const inngest = new Inngest({
+  id: 'mastra',
+})
+```
+
+:::warning
+Do not set `INNGEST_DEV` in production. It disables signature verification, which is required to securely receive events from Inngest Cloud.
+:::
+
+The `isDev` option on `new Inngest()` overrides `INNGEST_DEV` when both are set.
+
 ### Creating steps
 
 Define the individual steps that will compose your workflow:

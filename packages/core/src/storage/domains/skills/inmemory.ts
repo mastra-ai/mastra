@@ -51,11 +51,14 @@ export class InMemorySkillsStorage extends SkillsStorage {
     }
 
     const now = new Date();
+    const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
     const newConfig: StorageSkillType = {
       id: skill.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: skill.authorId,
+      visibility,
+      favoriteCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -63,7 +66,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     this.db.skills.set(skill.id, newConfig);
 
     // Extract config fields from the flat input (everything except record fields)
-    const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+    const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
 
     // Create version 1 from the config
     const versionId = randomUUID();
@@ -95,7 +98,16 @@ export class InMemorySkillsStorage extends SkillsStorage {
     }
 
     // Separate metadata fields from config fields
-    const { authorId, activeVersionId, status, ...configFields } = updates;
+    const { authorId, visibility, activeVersionId, status, ...rawConfigFields } = updates;
+
+    // Filter out undefined keys: callers may spread partial snapshots into
+    // update() and rely on "omit = no change" semantics. Without this, an
+    // undefined value would clobber the latest version's populated field
+    // when spread into newConfig below.
+    const configFields: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawConfigFields)) {
+      if (value !== undefined) configFields[key] = value;
+    }
 
     // Config field names from StorageSkillSnapshotType
     const configFieldNames = [
@@ -108,6 +120,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       'references',
       'scripts',
       'assets',
+      'files',
       'metadata',
       'tree',
     ];
@@ -119,6 +132,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     const updatedConfig: StorageSkillType = {
       ...existingConfig,
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(status !== undefined && { status: status as StorageSkillType['status'] }),
       updatedAt: new Date(),
@@ -191,7 +205,18 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      status,
+      visibility,
+      metadata,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -210,9 +235,35 @@ export class InMemorySkillsStorage extends SkillsStorage {
     // Get all skills and apply filters
     let configs = Array.from(this.db.skills.values());
 
+    // Restrict to a set of IDs (used by ?favoritedOnly=true).
+    // An empty array means "no candidates" -> empty result.
+    if (entityIds !== undefined) {
+      if (entityIds.length === 0) {
+        return {
+          skills: [],
+          total: 0,
+          page,
+          perPage: perPageInput === false ? false : perPage,
+          hasMore: false,
+        };
+      }
+      const idSet = new Set(entityIds);
+      configs = configs.filter(config => idSet.has(config.id));
+    }
+
     // Filter by authorId if provided
     if (authorId !== undefined) {
       configs = configs.filter(config => config.authorId === authorId);
+    }
+
+    // Filter by status if provided
+    if (status !== undefined) {
+      configs = configs.filter(config => config.status === status);
+    }
+
+    // Filter by visibility if provided
+    if (visibility !== undefined) {
+      configs = configs.filter(config => config.visibility === visibility);
     }
 
     // Filter by metadata if provided (AND logic) — skills don't have metadata on the record,
@@ -224,8 +275,18 @@ export class InMemorySkillsStorage extends SkillsStorage {
       });
     }
 
-    // Sort filtered configs
-    const sortedConfigs = this.sortConfigs(configs, field, direction);
+    // Optional favorited-first ordering / favorites-only filter.
+    const favoritedIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
+    if (favoritedOnly) {
+      if (favoritedIds) {
+        configs = configs.filter(config => favoritedIds.has(config.id));
+      } else {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        configs = [];
+      }
+    }
+
+    const sortedConfigs = this.sortConfigs(configs, field, direction, favoritedIds);
 
     // Deep clone to avoid mutation
     const clonedConfigs = sortedConfigs.map(config => this.deepCopyConfig(config));
@@ -377,13 +438,39 @@ export class InMemorySkillsStorage extends SkillsStorage {
     configs: StorageSkillType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
+    favoritedIds?: Set<string>,
   ): StorageSkillType[] {
     return configs.sort((a, b) => {
+      // Compound sort: favorited first, then existing orderBy, then id ASC for stable pagination.
+      if (favoritedIds) {
+        const aFav = favoritedIds.has(a.id) ? 1 : 0;
+        const bFav = favoritedIds.has(b.id) ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
+      }
+
       const aValue = a[field].getTime();
       const bValue = b[field].getTime();
+      if (aValue !== bValue) {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
 
-      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      // Stable tie-break for same `createdAt`/`updatedAt`.
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
+  }
+
+  /**
+   * Collect the set of skill IDs favorited by the given user. Returns an empty
+   * Set when the favorites domain is not wired or the user has no favorites.
+   */
+  private collectFavoritedIdsFor(userId: string): Set<string> {
+    const favorited = new Set<string>();
+    for (const row of this.db.favorites.values()) {
+      if (row.userId === userId && row.entityType === 'skill') {
+        favorited.add(row.entityId);
+      }
+    }
+    return favorited;
   }
 
   private sortVersions(

@@ -1,13 +1,13 @@
 import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
+import type { FGARouteConfig, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
-import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import type { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -146,14 +146,7 @@ export type ServerRoute<
    * @example
    * fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_EXECUTE }
    */
-  fga?: {
-    resourceType: string;
-    resourceIdParam?: string;
-    resourceId?:
-      | string
-      | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
-    permission?: MastraFGAPermissionInput;
-  };
+  fga?: FGARouteConfig;
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;
@@ -173,7 +166,6 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...LOGS_ROUTES,
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
-  ...AGENT_BUILDER_ROUTES,
   ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,

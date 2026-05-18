@@ -13,6 +13,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -609,7 +610,13 @@ export async function getTraceLight(db: DuckDBConnection, args: GetTraceArgs): P
  * When there are no post-aggregation filters, ordering + pagination happen
  * inside the prefilter CTE so reconstruction runs on at most `perPage` rows.
  */
-export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Promise<ListTracesResponse> {
+async function listTraceRows<TSpan>(
+  db: DuckDBConnection,
+  args: ListTracesArgs,
+  reconstructSelect: string,
+  mapRow: (row: Record<string, unknown>) => TSpan,
+  toSpans: (spans: TSpan[]) => unknown[],
+): Promise<{ pagination: ListTracesResponse['pagination']; spans: unknown[] }> {
   const filters = args.filters ?? {};
   const page = Number(args.pagination?.page ?? 0);
   const perPage = Number(args.pagination?.perPage ?? 10);
@@ -660,17 +667,17 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
         ${prefilterOrderBy}
         LIMIT ? OFFSET ?
       )
-      ${SPAN_RECONSTRUCT_SELECT}
+      ${reconstructSelect}
       WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM page_roots)
       GROUP BY traceId, spanId
       ${buildOrderByClause(orderBy)}
     `;
     const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
-    const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
+    const spans = rows.map(row => mapRow(row as Record<string, unknown>));
 
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
-      spans: toTraceSpans(spans),
+      spans: toSpans(spans),
     };
   }
 
@@ -689,7 +696,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
       ${prefilterWhere}
     ),
     root_spans AS (
-      ${SPAN_RECONSTRUCT_SELECT}
+      ${reconstructSelect}
       WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_roots)
       GROUP BY traceId, spanId
     )
@@ -710,12 +717,28 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
     SELECT * FROM root_spans ${postAggWhere} ${orderByClause} ${paginationClause}
   `;
   const rows = await db.query(dataSql, [...prefilterParams, ...postAggParams, ...paginationParams]);
-  const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
+  const spans = rows.map(row => mapRow(row as Record<string, unknown>));
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
-    spans: toTraceSpans(spans),
+    spans: toSpans(spans),
   };
+}
+
+export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Promise<ListTracesResponse> {
+  return listTraceRows(db, args, SPAN_RECONSTRUCT_SELECT, rowToSpanRecord, spans =>
+    toTraceSpans(spans),
+  ) as Promise<ListTracesResponse>;
+}
+
+export async function listTracesLight(db: DuckDBConnection, args: ListTracesArgs): Promise<ListTracesLightResponse> {
+  return listTraceRows(
+    db,
+    args,
+    SPAN_RECONSTRUCT_SELECT_LIGHT,
+    rowToLightSpanRecord,
+    spans => spans,
+  ) as Promise<ListTracesLightResponse>;
 }
 
 // ============================================================================

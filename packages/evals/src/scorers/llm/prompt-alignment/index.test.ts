@@ -1,7 +1,11 @@
 import { openai } from '@ai-sdk/openai';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { describe, it, expect, vi } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createPromptAlignmentScorerLLM } from '.';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 describe('Prompt Alignment Scorer', () => {
   const mockModel = openai('gpt-4o-mini');

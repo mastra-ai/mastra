@@ -1,7 +1,6 @@
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
-import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -22,7 +21,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import {
+  Observability,
+  MastraStorageExporter,
+  MastraPlatformExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -127,7 +131,7 @@ export interface MastraCodeConfig {
    */
   memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
-  browser?: MastraBrowser;
+  browser?: HarnessConfig['browser'];
 }
 
 export function createAuthStorage() {
@@ -139,7 +143,7 @@ export function createAuthStorage() {
 }
 
 /**
- * Resolve cloud observability credentials for the CloudExporter.
+ * Resolve cloud observability credentials for the MastraPlatformExporter.
  * Priority: per-resource settings > environment variables > disabled.
  */
 function resolveCloudObservabilityConfig(
@@ -210,13 +214,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  try {
-    await gatewayRegistry.syncGateways(true);
-  } catch (error) {
-    console.warn('Failed to sync gateways at startup', error);
-  }
+  void Promise.resolve(gatewayRegistry.syncGateways(true)).catch(() => {});
 
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  const mgApiKey = storedGatewayKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
 
   // Project detection
   const project = detectProject(cwd);
@@ -311,8 +311,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.reflectionThreshold',
         ],
         exporters: [
-          new DefaultExporter({ strategy: 'event-sourced' }),
-          new CloudExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+          new MastraStorageExporter({ strategy: 'event-sourced' }),
+          new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -329,12 +329,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
-
-  if (hookManager?.hasHooks()) {
-    const hookConfig = hookManager.getConfig();
-    const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
-    console.info(`Hooks: ${hookCount} hook(s) configured`);
-  }
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();

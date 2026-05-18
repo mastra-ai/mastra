@@ -52,6 +52,14 @@ export interface ExecutionResult {
   timedOut?: boolean;
   /** Whether execution was killed */
   killed?: boolean;
+  /** Whether stdout dropped older output due to a retention limit */
+  stdoutTruncated?: boolean;
+  /** Whether stderr dropped older output due to a retention limit */
+  stderrTruncated?: boolean;
+  /** Number of stdout bytes dropped due to a retention limit */
+  stdoutDroppedBytes?: number;
+  /** Number of stderr bytes dropped due to a retention limit */
+  stderrDroppedBytes?: number;
 }
 
 export interface CommandResult extends ExecutionResult {
@@ -82,6 +90,17 @@ export interface CommandOptions {
   onStderr?: (data: string) => void;
   /** Abort signal to cancel the command */
   abortSignal?: AbortSignal;
+  /**
+   * Maximum UTF-8 byte length retained in stdout and stderr per stream.
+   * When exceeded, the oldest output is dropped and the newest output is kept.
+   * Callbacks and reader streams still receive every chunk in full.
+   * Use 0 to disable retention, a positive integer to set a byte limit,
+   * or Infinity to retain all output.
+   *
+   * Defaults to 1048576 for spawned processes. The built-in executeCommand
+   * implementation retains all output unless this option is set.
+   */
+  maxRetainedBytes?: number;
 }
 
 /** Options for executeCommand. */
