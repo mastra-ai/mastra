@@ -6,60 +6,6 @@
     <link rel="icon" type="image/svg+xml" href="./mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Studio</title>
-    <style>
-      /* Initial loader: paints with the first HTML byte and is removed by React on mount
-         (createRoot replaces #root children). Mirrors the BrandLoader component
-         visually so the transition is seamless. */
-      .initial-loader {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: oklch(0% 0 0deg);
-        color: oklch(95% 0 0deg);
-      }
-      .light .initial-loader {
-        background: oklch(95.6% 0 0deg);
-        color: oklch(20% 0 0deg);
-      }
-      .initial-loader svg {
-        width: 48px;
-        height: auto;
-        shape-rendering: geometricprecision;
-      }
-      .initial-loader circle {
-        fill: currentColor;
-      }
-      .initial-loader line {
-        stroke: currentColor;
-        stroke-width: 2.9;
-        stroke-linecap: round;
-      }
-      .initial-loader circle,
-      .initial-loader line {
-        animation: initial-loader-pulse 1.8s ease-in-out infinite;
-      }
-      .initial-loader .b1 { animation-delay: 0s; }
-      .initial-loader .b2 { animation-delay: 0.09s; }
-      .initial-loader .ln23 { animation-delay: 0.135s; }
-      .initial-loader .b3 { animation-delay: 0.18s; }
-      .initial-loader .ln34 { animation-delay: 0.225s; }
-      .initial-loader .b4 { animation-delay: 0.27s; }
-      .initial-loader .ln45 { animation-delay: 0.315s; }
-      .initial-loader .b5 { animation-delay: 0.36s; }
-      @keyframes initial-loader-pulse {
-        0%, 100% { opacity: 1; }
-        40% { opacity: 0; }
-        70% { opacity: 1; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .initial-loader circle,
-        .initial-loader line {
-          animation: none;
-        }
-      }
-    </style>
     <script>
       window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
       window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
@@ -142,28 +88,7 @@
   </head>
 
   <body class="overflow-hidden">
-    <div id="root">
-      <div class="initial-loader" role="status" aria-label="Loading Mastra Studio">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 21" aria-hidden="true">
-          <defs>
-            <filter id="initial-loader-blur" x="-5%" y="-5%" width="110%" height="110%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="0.9" />
-              <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 11 -4.3" />
-            </filter>
-          </defs>
-          <g filter="url(#initial-loader-blur)">
-            <line class="ln23" x1="10.387" y1="4.498" x2="16.899" y2="16.192" />
-            <line class="ln34" x1="16.899" y1="16.192" x2="22.815" y2="4.56" />
-            <line class="ln45" x1="22.815" y1="4.56" x2="28.57" y2="16.192" />
-            <circle class="b1" cx="4.498" cy="16.192" r="4.498" />
-            <circle class="b2" cx="10.387" cy="4.498" r="4.498" />
-            <circle class="b3" cx="16.899" cy="16.192" r="4.498" />
-            <circle class="b4" cx="22.815" cy="4.56" r="4.498" />
-            <circle class="b5" cx="28.57" cy="16.192" r="4.498" />
-          </g>
-        </svg>
-      </div>
-    </div>
+    <div id="root"></div>
     <script type="module">
       // Use relative import to work with any base path
       // Vite transforms this during build to reference compiled output with correct paths
