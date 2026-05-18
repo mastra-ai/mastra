@@ -62,7 +62,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
         <TooltipPrimitive.Popup
           ref={ref}
           className={cn(
-            'relative z-50 origin-(--transform-origin) rounded-lg outline outline-1 outline-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition duration-150',
+            'z-50 flex flex-col origin-(--transform-origin) rounded-lg outline outline-1 outline-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition-[transform,opacity,scale] duration-150',
             'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
             'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
             'data-[instant]:transition-none',
