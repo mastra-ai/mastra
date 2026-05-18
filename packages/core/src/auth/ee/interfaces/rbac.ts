@@ -53,6 +53,13 @@ export interface RBACCapabilities {
   permissionEditing: boolean;
 
   /**
+   * Whether roles can be assigned/removed via API.
+   * - true: assignRole() and removeRole() are implemented
+   * - false: Role assignment must be done in provider dashboard
+   */
+  roleAssignment: boolean;
+
+  /**
    * Whether role inheritance is supported.
    * - true: Roles can inherit permissions from other roles
    * - false: Each role has its own standalone permissions
@@ -77,6 +84,7 @@ export const DEFAULT_RBAC_CAPABILITIES: RBACCapabilities = {
   dynamicRoles: false,
   providerManagedRoles: false,
   permissionEditing: false,
+  roleAssignment: false,
   roleInheritance: false,
   roleSource: 'config',
 };

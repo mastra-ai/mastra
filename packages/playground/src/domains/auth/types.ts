@@ -57,6 +57,8 @@ export type RBACCapabilities = {
   providerManagedRoles: boolean;
   /** Whether permissions can be edited on roles */
   permissionEditing: boolean;
+  /** Whether roles can be assigned/removed via API */
+  roleAssignment: boolean;
 };
 
 /**

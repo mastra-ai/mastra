@@ -54,12 +54,14 @@ function TeamMemberDetail() {
   const { hasPermission } = usePermissions();
   const [showRoleModal, setShowRoleModal] = useState(false);
 
-  const canManageRoles = hasPermission('team:write');
-
-  // Get RBAC capabilities to determine single vs multi-role UI
+  // Get RBAC capabilities to determine single vs multi-role UI and if role assignment is supported
   const rbacCapabilities =
     capabilities && isAuthenticated(capabilities) ? capabilities.capabilities.rbacCapabilities : null;
   const isMultiRole = rbacCapabilities?.multiRole ?? false;
+  const supportsRoleAssignment = rbacCapabilities?.roleAssignment ?? false;
+
+  // Can manage roles only if user has permission AND provider supports role assignment
+  const canManageRoles = hasPermission('team:write') && supportsRoleAssignment;
 
   const userRoles = member?.roles || [];
   const userPermissions = member?.permissions || [];

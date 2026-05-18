@@ -5,7 +5,7 @@
  * permission-based access control system.
  */
 
-import type { IRBACProvider, RoleMapping, RBACCapabilities, RoleDefinition } from '@mastra/core/auth/ee';
+import type { IRBACManager, RoleMapping, RBACCapabilities, RoleDefinition } from '@mastra/core/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission, DEFAULT_RBAC_CAPABILITIES } from '@mastra/core/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 import { LRUCache } from 'lru-cache';
@@ -53,7 +53,7 @@ const DEFAULT_CACHE_TTL_MS = 60 * 1000;
 /** Default max cache size (number of users) */
 const DEFAULT_CACHE_MAX_SIZE = 1000;
 
-export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
+export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
   private workos: WorkOS;
   private options: MastraRBACWorkosOptions;
   /**
@@ -113,6 +113,8 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
       roleSource: 'provider',
       // Permissions are derived from static roleMapping config
       permissionEditing: false,
+      // Role assignment is supported via WorkOS API
+      roleAssignment: true,
     };
   }
 
@@ -358,5 +360,55 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
       : user.memberships;
 
     return relevantMemberships.map(m => m.role.slug);
+  }
+
+  /**
+   * Assign a role to a user in the configured organization.
+   * WorkOS uses single role per org membership, so this replaces the current role.
+   *
+   * @param userId - The WorkOS user ID
+   * @param roleId - The role slug to assign
+   */
+  async assignRole(userId: string, roleId: string): Promise<void> {
+    if (!this.options.organizationId) {
+      throw new Error('organizationId is required for role assignment');
+    }
+
+    // Find the user's membership in this organization
+    const memberships = await this.workos.userManagement.listOrganizationMemberships({
+      organizationId: this.options.organizationId,
+      userId,
+    });
+
+    if (memberships.data.length === 0) {
+      throw new Error(`User ${userId} is not a member of organization ${this.options.organizationId}`);
+    }
+
+    const membership = memberships.data[0]!;
+
+    // Update the membership with the new role
+    await this.workos.userManagement.updateOrganizationMembership(membership.id, {
+      roleSlug: roleId,
+    });
+
+    // Invalidate cache for this user
+    this.rolesCache.delete(userId);
+  }
+
+  /**
+   * Remove a role from a user.
+   * For WorkOS single-role model, this is not directly supported.
+   * Removing a role would require assigning a different role or removing the membership entirely.
+   *
+   * @param userId - The WorkOS user ID
+   * @param roleId - The role slug to remove (unused for WorkOS)
+   */
+  async removeRole(_userId: string, _roleId: string): Promise<void> {
+    // WorkOS doesn't support removing a role without removing the membership
+    // For single-role providers, the UI should use assignRole to change roles
+    throw new Error(
+      'WorkOS uses single role per membership. Use assignRole to change roles, ' +
+        'or remove the membership entirely via the WorkOS dashboard.',
+    );
   }
 }

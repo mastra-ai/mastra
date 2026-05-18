@@ -19,7 +19,9 @@ import {
 import { ChevronRight, SettingsIcon, ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { isAuthenticated } from '@/domains/auth/types';
 import { RoleManagementModal } from '@/domains/team/components';
 import { useTeamMembers, useTeamMember, useRoles } from '@/domains/team/hooks';
 import type { TeamMember } from '@/domains/team/hooks';
@@ -155,7 +157,15 @@ function TeamMemberRow({ member, canManageRoles }: { member: TeamMember; canMana
 
 function TeamList({ members, isLoading }: { members: TeamMember[]; isLoading: boolean }) {
   const { hasPermission } = usePermissions();
-  const canManageRoles = hasPermission('team:write');
+  const { data: capabilities } = useAuthCapabilities();
+
+  // Get RBAC capabilities to check if role assignment is supported
+  const rbacCapabilities =
+    capabilities && isAuthenticated(capabilities) ? capabilities.capabilities.rbacCapabilities : null;
+  const supportsRoleAssignment = rbacCapabilities?.roleAssignment ?? false;
+
+  // Can manage roles only if user has permission AND provider supports role assignment
+  const canManageRoles = hasPermission('team:write') && supportsRoleAssignment;
 
   if (isLoading) {
     return (
