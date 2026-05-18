@@ -19,6 +19,7 @@ import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
+import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
@@ -30,6 +31,20 @@ export { formatToolResult };
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
+
+class TaskHistoryComponent extends Container {
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'task';
+  }
+}
+
+function insertTaskHistoryComponent(state: TUIState, component: Component, insertIndex: number): void {
+  insertChatComponentWithBoundarySpacing(
+    state.chatContainer,
+    component,
+    insertIndex >= 0 ? insertIndex : state.chatContainer.children.length,
+  );
+}
 
 /**
  * Render a completed task list inline in the chat history.
@@ -43,7 +58,7 @@ export function renderCompletedTasksInline(
   const headerText =
     theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
-  const container = new Container();
+  const container = new TaskHistoryComponent();
   container.addChild(new Text(headerText, BOX_INDENT, 0));
   const MAX_VISIBLE = 4;
   const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
@@ -66,19 +81,14 @@ export function renderCompletedTasksInline(
   }
   container.addChild(new Spacer(1));
 
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
-  }
+  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 /**
  * Render inline display when tasks are cleared.
  */
 export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItemSnapshot[], insertIndex = -1): void {
-  const container = new Container();
+  const container = new TaskHistoryComponent();
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
   container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
@@ -88,12 +98,7 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
     container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
   container.addChild(new Spacer(1));
-  if (insertIndex >= 0) {
-    state.chatContainer.children.splice(insertIndex, 0, container);
-    state.chatContainer.invalidate();
-  } else {
-    state.chatContainer.addChild(container);
-  }
+  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 function renderTaskTransitionFromHistory(

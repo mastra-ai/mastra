@@ -1,12 +1,13 @@
 import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
+import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { UserMessageComponent } from './components/user-message.js';
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
-import { addUserMessage, renderExistingMessages } from './render-messages.js';
+import { addUserMessage, renderCompletedTasksInline, renderExistingMessages } from './render-messages.js';
 import type { TUIState } from './state.js';
 
 function visibleChildren(state: TUIState) {
@@ -62,6 +63,31 @@ function createReminderMessage(
     content: [reminder],
   } as HarnessMessage;
 }
+
+describe('renderCompletedTasksInline', () => {
+  it('inserts boundary spacing immediately after a user message', () => {
+    const state = createState();
+
+    addUserMessage(state, createUserMessage('mark the rest done'));
+    renderCompletedTasksInline(
+      state,
+      [
+        { id: 'one', content: 'One', activeForm: 'Doing one', status: 'completed' },
+        { id: 'two', content: 'Two', activeForm: 'Doing two', status: 'completed' },
+      ],
+      -1,
+      true,
+    );
+
+    const rendered = state.chatContainer.render(120).map(line => stripAnsi(line).trimEnd());
+    const userLineIndex = rendered.findIndex(line => line.includes('mark the rest done'));
+    const tasksLineIndex = rendered.findIndex(line => line.includes('Tasks [2/2 completed]'));
+
+    expect(userLineIndex).toBeGreaterThanOrEqual(0);
+    expect(tasksLineIndex).toBeGreaterThan(userLineIndex);
+    expect(rendered.slice(userLineIndex + 1, tasksLineIndex)).toContain('');
+  });
+});
 
 describe('addUserMessage', () => {
   it('renders a persisted temporal-gap marker from canonical system reminder content', () => {
