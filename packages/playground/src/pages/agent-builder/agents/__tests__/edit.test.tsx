@@ -281,23 +281,15 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).not.toHaveBeenCalled();
     });
 
-    it('renders Chat and Configuration tabs in edit mode', () => {
-      const { getByTestId } = renderAt();
-      expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
-      expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
-    });
-
-    it('switching to Configuration tab in edit mode toggles active panel', () => {
-      const { getByTestId } = renderAt();
-      const chatPanel = getByTestId('agent-builder-panel-chat');
-      const configureTab = getByTestId('agent-builder-tab-configure');
-      expect(chatPanel.getAttribute('data-active-tab')).toBe('chat');
-      expect(configureTab.getAttribute('aria-selected')).toBe('false');
-
-      fireEvent.click(configureTab);
-
-      expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
-      expect(configureTab.getAttribute('aria-selected')).toBe('true');
+    it('renders the configure panel alongside the chat without a tab strip', () => {
+      const { getByTestId, queryByTestId } = renderAt();
+      // Configure panel is rendered (the name input lives inside it).
+      expect(getByTestId('agent-configure-name')).not.toBeNull();
+      expect(getByTestId('agent-builder-panel-chat')).not.toBeNull();
+      expect(getByTestId('agent-builder-panel-configure')).not.toBeNull();
+      // No Chat/Configuration tab buttons.
+      expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
+      expect(queryByTestId('agent-builder-tab-configure')).toBeNull();
     });
 
     it('renders the Delete agent button in edit mode and triggers the mutation + redirect on confirm', async () => {

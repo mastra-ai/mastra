@@ -265,8 +265,6 @@ const EditWorkspaceLayoutConnected = ({
     <WorkspaceLayout
       isLoading={false}
       mode="build"
-      detailOpen={activeDetail !== null}
-      showConfigure={isOwner}
       onModeToggle={onModeToggle}
       modeToggleDisabled={isRunning}
       rightAside={

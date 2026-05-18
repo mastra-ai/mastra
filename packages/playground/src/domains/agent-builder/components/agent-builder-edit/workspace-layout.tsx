@@ -1,13 +1,10 @@
 import { Button, cn } from '@mastra/playground-ui';
 import { ArrowLeftIcon } from 'lucide-react';
-import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { AgentBuilderTitle } from './agent-builder-title';
 
 export type WorkspaceMode = 'build' | 'test';
-
-type ActiveTab = 'chat' | 'configure';
 
 interface WorkspaceLayoutProps {
   isLoading: boolean;
@@ -27,11 +24,12 @@ interface WorkspaceLayoutProps {
   /** Optional slot rendered AFTER primaryAction (e.g. mobile-only 3-dot menu). */
   mobileExtra?: ReactNode;
   chat: ReactNode;
-  configure: ReactNode;
-  defaultExpanded?: boolean;
-  detailOpen?: boolean;
-  /** Whether the configure panel/tab should be shown. Defaults to true. */
-  showConfigure?: boolean;
+  /**
+   * Optional configure pane. When provided, it renders side-by-side with the
+   * chat in a 50/50 grid on desktop and stacks below the chat on mobile.
+   * When omitted, the chat fills the whole workspace.
+   */
+  configure?: ReactNode;
   /** Optional browser modal overlay rendered outside the layout panels */
   browserOverlay?: ReactNode;
   /** Where the back button navigates. Defaults to the agents list. */
@@ -51,46 +49,21 @@ export const WorkspaceLayout = ({
   mobileExtra,
   chat,
   configure,
-  defaultExpanded = false,
-  detailOpen = false,
-  showConfigure = true,
   browserOverlay,
   backHref = '/agent-builder/agents',
   backTooltip = 'Agents list',
 }: WorkspaceLayoutProps) => {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
-
-  // On lg+, the entire main column (header + chat) shrinks/pushes left when
-  // the configure panel is open. The configure panel is a full-height sibling
-  // column with no padding so it spans edge to edge.
-  const workspaceGridClass =
-    showConfigure && expanded
-      ? detailOpen
-        ? 'lg:grid-cols-[1fr_calc(50%-12px)]'
-        : 'lg:grid-cols-[1fr_320px]'
-      : 'lg:grid-cols-[1fr_0px]';
+  const hasConfigure = configure !== undefined && configure !== null;
 
   return (
     <div
       className={cn(
         'flex flex-1 min-w-0 flex-col h-full',
-        'lg:grid lg:grid-rows-1 agent-builder-workspace-grid',
-        workspaceGridClass,
+        hasConfigure && 'lg:grid lg:grid-rows-1 lg:grid-cols-2',
       )}
     >
-      <div
-        className={cn(
-          'flex min-w-0 flex-col lg:h-auto lg:min-h-0 lg:overflow-hidden',
-          // On mobile, when activeTab === 'configure' the chat panel is hidden;
-          // shrink this column to its intrinsic height (header + tabs only) so
-          // the configure sibling can claim the remaining space. When the chat
-          // tab is active, fill the viewport so the chat panel can scroll.
-          activeTab === 'configure' ? 'flex-none' : 'flex-1 h-full',
-          'lg:flex-1 lg:h-full',
-        )}
-      >
+      <div className="flex flex-1 min-w-0 flex-col h-full lg:min-h-0 lg:overflow-hidden">
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
           <div className="justify-self-start">
             <Button
@@ -114,88 +87,11 @@ export const WorkspaceLayout = ({
             {modeAction && <div className="shrink-0">{modeAction}</div>}
             {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
             {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
-            {showConfigure && (
-              <div className="shrink-0 hidden lg:inline-flex">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  tooltip={expanded ? 'Hide configuration' : 'Show configuration'}
-                  onClick={() => setExpanded(prev => !prev)}
-                  aria-pressed={expanded}
-                  className="shrink-0"
-                >
-                  <div
-                    className={cn(
-                      'size-4 border border-current rounded-md grid divide-x divide-current transition-all duration-200 ease-out overflow-hidden',
-                      expanded ? 'grid-cols-[1fr_40%]' : 'grid-cols-[1fr_10%]',
-                    )}
-                  >
-                    <div />
-                    <div className="bg-neutral1 h-full w-full" />
-                  </div>
-                </Button>
-              </div>
-            )}
           </div>
         </div>
-        {showConfigure && (
-          <div className="lg:hidden px-4 pt-4 pb-2 md:px-10 md:pt-5 md:pb-3">
-            <div
-              role="tablist"
-              aria-label="Workspace view"
-              className="relative mx-auto flex h-9 w-full max-w-sm items-center rounded-full border border-border1 bg-surface3 p-0.5"
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-surface4',
-                  'transition-transform duration-200 ease-out',
-                  activeTab === 'configure' && 'translate-x-full',
-                )}
-              />
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'chat'}
-                data-testid="agent-builder-tab-chat"
-                onClick={() => setActiveTab('chat')}
-                className={cn(
-                  'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
-                  'transition-colors duration-200',
-                  activeTab === 'chat' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
-                )}
-              >
-                Chat
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'configure'}
-                data-testid="agent-builder-tab-configure"
-                onClick={() => setActiveTab('configure')}
-                className={cn(
-                  'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
-                  'transition-colors duration-200',
-                  activeTab === 'configure' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
-                )}
-              >
-                Configuration
-              </button>
-            </div>
-          </div>
-        )}
-        <div
-          className={cn(
-            'flex flex-1 min-h-0 min-w-0 flex-col px-4 md:px-10',
-            // On mobile, when the configure tab is active the chat is hidden;
-            // collapse this wrapper's vertical padding so it doesn't add empty
-            // space between the tabs and the configure panel.
-            activeTab === 'configure' ? 'pt-0 pb-0 lg:pt-4 lg:pb-6' : 'pt-4 pb-6',
-          )}
-        >
+        <div className="flex flex-1 min-h-0 min-w-0 flex-col px-4 pt-4 pb-6 md:px-10">
           <div
-            className="h-full w-full min-w-0 overflow-hidden data-[active-tab=configure]:hidden lg:!block"
-            data-active-tab={activeTab}
+            className="h-full w-full min-w-0 overflow-hidden"
             data-testid="agent-builder-panel-chat"
           >
             <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full">{chat}</div>
@@ -203,44 +99,18 @@ export const WorkspaceLayout = ({
         </div>
       </div>
 
-      {/*
-       * Configure panel:
-       * - On lg+, it is a full-height sibling column of the main content.
-       *   Toggling expanded slides it in/out.
-       * - On <lg, it is a tab-switched pane that occupies the area below the
-       *   header/tabs, replacing the chat panel when activeTab === 'configure'.
-       *   We use data-active-tab and CSS to hide it when activeTab !== 'configure'.
-       */}
-      {showConfigure && (
+      {hasConfigure && (
         <div
           className={cn(
             'min-w-0 overflow-hidden',
-            // Mobile: occupy the full main area below header/tabs when active.
-            // The chat panel hides itself when activeTab === 'configure' so the
-            // outer column has free space; we fill it via flex-1 and px padding
-            // matching the main column.
-            'flex-1 px-4 pb-6 md:px-10 data-[active-tab=chat]:hidden',
-            // Desktop: full-height sibling column, no padding (edge-to-edge),
-            // always rendered (visibility/translate handled via expanded).
-            'lg:flex-none lg:h-full lg:px-0 lg:pb-0 lg:!block',
+            // Mobile: stacked below the chat with normal page padding.
+            'flex-1 px-4 pb-6 md:px-10',
+            // Desktop: full-height sibling column, no padding (edge-to-edge).
+            'lg:flex-none lg:h-full lg:px-0 lg:pb-0',
           )}
-          data-active-tab={activeTab}
           data-testid="agent-builder-panel-configure"
-          aria-hidden={!expanded}
         >
-          <div
-            className={cn(
-              'agent-builder-panel-slide h-full w-full overflow-y-auto',
-              // Mobile: always fully visible when this pane is active.
-              'translate-x-0 opacity-100',
-              // Desktop: slide in/out based on expanded.
-              'lg:transition-all',
-              expanded ? 'lg:translate-x-0 lg:opacity-100' : 'lg:translate-x-4 lg:opacity-0 lg:pointer-events-none',
-            )}
-            style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}
-          >
-            {configure}
-          </div>
+          <div className="h-full w-full overflow-y-auto">{configure}</div>
         </div>
       )}
 
