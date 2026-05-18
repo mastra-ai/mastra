@@ -168,7 +168,7 @@ export class ToolConnectionsLibSQL extends ToolConnectionsStorage {
           id: createStorageErrorId('LIBSQL', 'TOOL_CONNECTION_LIST', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { authorId, providerId: providerId ?? '', toolService: toolService ?? '' },
+          details: { authorId: authorId ?? '', providerId: providerId ?? '', toolService: toolService ?? '' },
         },
         error,
       );
