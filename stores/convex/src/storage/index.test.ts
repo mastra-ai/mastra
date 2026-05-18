@@ -187,6 +187,7 @@ describe('Convex Schema Sync', () => {
     );
     expect(indexes).toEqual(
       expect.arrayContaining([
+        ['by_record_id', ['id']],
         ['by_agent_status', ['agent_id', 'status']],
         ['by_status_created', ['status', 'createdAt']],
         ['by_resource', ['resource_id']],

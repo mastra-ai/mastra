@@ -302,6 +302,7 @@ describe('mastraStorage bulk mutations', () => {
       },
     ]);
     expect(batchCtx.inserts).toEqual([]);
+    expect(batchCtx.deletedIds).toEqual([]);
   });
 
   it('background task patch deletes stale legacy fallback rows after typed rows exist', async () => {

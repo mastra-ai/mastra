@@ -2,4 +2,4 @@
 '@mastra/convex': patch
 ---
 
-Fixed Convex background task storage by adding typed schema support, indexed filters, and patch updates.
+Improved Convex background task reliability with safer lifecycle updates, faster filtering, and smoother upgrades from older storage rows.

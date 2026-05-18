@@ -132,7 +132,7 @@ describe('BackgroundTasksConvex', () => {
 
     await storage.updateTask('task-1', {
       status: undefined,
-      result: undefined,
+      result: null,
       error: { message: 'failed once' },
       retryCount: undefined,
       completedAt: new Date('2026-01-01T00:03:00.000Z'),

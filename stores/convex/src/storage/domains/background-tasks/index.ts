@@ -28,7 +28,7 @@ type StoredTask = {
 type StoredTaskPatch = Partial<Omit<StoredTask, 'id' | 'createdAt'>>;
 
 function serializeJson(v: unknown): string | null {
-  if (v === undefined) return null;
+  if (v === undefined || v === null) return null;
   return JSON.stringify(v);
 }
 
