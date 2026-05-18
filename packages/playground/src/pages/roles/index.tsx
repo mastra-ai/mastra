@@ -90,11 +90,25 @@ function RoleFormModal({
   const [name, setName] = useState(role?.name ?? '');
   const [description, setDescription] = useState(role?.description ?? '');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(role?.permissions ?? []);
+  const [permissionFilter, setPermissionFilter] = useState('');
 
-  // Group permissions by type for better organization
+  // Filter and group permissions
   const groupedPermissions = useMemo(() => {
-    const wildcards = availablePermissions.filter(p => p.isWildcard);
-    const specific = availablePermissions.filter(p => !p.isWildcard);
+    const filterLower = permissionFilter.toLowerCase();
+
+    // Filter permissions by search term
+    const filtered = permissionFilter
+      ? availablePermissions.filter(
+          p =>
+            p.value.toLowerCase().includes(filterLower) ||
+            p.label.toLowerCase().includes(filterLower) ||
+            p.description.toLowerCase().includes(filterLower) ||
+            (p.resource?.toLowerCase().includes(filterLower) ?? false),
+        )
+      : availablePermissions;
+
+    const wildcards = filtered.filter(p => p.isWildcard);
+    const specific = filtered.filter(p => !p.isWildcard);
 
     // Group specific permissions by resource
     const byResource: Record<string, PermissionInfo[]> = {};
@@ -107,7 +121,7 @@ function RoleFormModal({
     }
 
     return { wildcards, byResource };
-  }, [availablePermissions]);
+  }, [availablePermissions, permissionFilter]);
 
   const handleTogglePermission = (permission: string) => {
     setSelectedPermissions(prev =>
@@ -161,7 +175,12 @@ function RoleFormModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-text1 mb-2">Permissions</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-text1">Permissions</label>
+              {selectedPermissions.length > 0 && (
+                <span className="text-xs text-text2">{selectedPermissions.length} selected</span>
+              )}
+            </div>
             {permissionsLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-10 w-full" />
@@ -169,39 +188,27 @@ function RoleFormModal({
                 <Skeleton className="h-10 w-full" />
               </div>
             ) : (
-              <div className="border border-border1 rounded-lg p-3 space-y-4 max-h-64 overflow-y-auto">
-                {/* Wildcard permissions at the top */}
-                {groupedPermissions.wildcards.length > 0 && (
-                  <div>
-                    <div className="text-xs font-medium text-text2 mb-2 uppercase">Global</div>
-                    <div className="space-y-1">
-                      {groupedPermissions.wildcards.map(perm => (
-                        <label
-                          key={perm.value}
-                          className="flex items-start gap-3 cursor-pointer hover:bg-surface2 p-2 rounded"
-                        >
-                          <Checkbox
-                            checked={selectedPermissions.includes(perm.value)}
-                            onCheckedChange={() => handleTogglePermission(perm.value)}
-                          />
-                          <div className="flex-1">
-                            <div className="text-sm font-medium text-text1">{perm.label}</div>
-                            <div className="text-xs text-text2">{perm.description}</div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Specific permissions grouped by resource */}
-                {Object.entries(groupedPermissions.byResource)
-                  .sort()
-                  .map(([resource, perms]) => (
-                    <div key={resource}>
-                      <div className="text-xs font-medium text-text2 mb-2 uppercase">{resource.replace(/-/g, ' ')}</div>
+              <>
+                <Input
+                  value={permissionFilter}
+                  onChange={e => setPermissionFilter(e.target.value)}
+                  placeholder="Filter permissions..."
+                  className="mb-2"
+                />
+                <div className="border border-border1 rounded-lg p-3 space-y-4 max-h-64 overflow-y-auto">
+                  {/* No results message */}
+                  {groupedPermissions.wildcards.length === 0 &&
+                    Object.keys(groupedPermissions.byResource).length === 0 && (
+                      <div className="text-sm text-text2 text-center py-4">
+                        No permissions match "{permissionFilter}"
+                      </div>
+                    )}
+                  {/* Wildcard permissions at the top */}
+                  {groupedPermissions.wildcards.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium text-text2 mb-2 uppercase">Global</div>
                       <div className="space-y-1">
-                        {perms.map(perm => (
+                        {groupedPermissions.wildcards.map(perm => (
                           <label
                             key={perm.value}
                             className="flex items-start gap-3 cursor-pointer hover:bg-surface2 p-2 rounded"
@@ -218,11 +225,37 @@ function RoleFormModal({
                         ))}
                       </div>
                     </div>
-                  ))}
-              </div>
-            )}
-            {selectedPermissions.length > 0 && (
-              <div className="mt-2 text-xs text-text2">{selectedPermissions.length} permission(s) selected</div>
+                  )}
+
+                  {/* Specific permissions grouped by resource */}
+                  {Object.entries(groupedPermissions.byResource)
+                    .sort()
+                    .map(([resource, perms]) => (
+                      <div key={resource}>
+                        <div className="text-xs font-medium text-text2 mb-2 uppercase">
+                          {resource.replace(/-/g, ' ')}
+                        </div>
+                        <div className="space-y-1">
+                          {perms.map(perm => (
+                            <label
+                              key={perm.value}
+                              className="flex items-start gap-3 cursor-pointer hover:bg-surface2 p-2 rounded"
+                            >
+                              <Checkbox
+                                checked={selectedPermissions.includes(perm.value)}
+                                onCheckedChange={() => handleTogglePermission(perm.value)}
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-text1">{perm.label}</div>
+                                <div className="text-xs text-text2">{perm.description}</div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </>
             )}
           </div>
 
