@@ -3,12 +3,14 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
-import { Agent } from '../agent';
-import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage, SubAgent } from '../agent';
+import { Agent } from '../agent/agent';
+import type { AgentExecutionOptions } from '../agent/agent.types';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
-import type { MessageInput } from '../agent/message-list';
+import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
+import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
+import type { AgentStreamOptions } from '../agent/types';
 import { MastraFGAPermissions } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
@@ -46,8 +48,8 @@ import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { Tool } from '../tools';
-import type { ToolExecutionContext } from '../tools';
+import { Tool } from '../tools/tool';
+import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
@@ -377,7 +379,7 @@ function createStepFromParams<
   // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
   // but we need it to match the inferred generic types. The public overloads ensure
   // type safety for consumers.
-  return {
+  const step = {
     id: params.id,
     description: params.description,
     inputSchema: params.inputSchema ? toStandardSchema(params.inputSchema) : params.inputSchema,
@@ -399,6 +401,29 @@ function createStepFromParams<
       DefaultEngineType
     >['execute'],
   };
+
+  const paramsWithChildren = params as StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema
+  > & {
+    steps?: Record<string, unknown> | unknown[];
+    children?: Record<string, unknown> | unknown[];
+    stepGraph?: unknown[];
+  };
+
+  if (paramsWithChildren.steps || paramsWithChildren.children || paramsWithChildren.stepGraph) {
+    Object.assign(step, {
+      steps: paramsWithChildren.steps,
+      children: paramsWithChildren.children,
+      stepGraph: paramsWithChildren.stepGraph,
+    });
+  }
+
+  return step;
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
@@ -635,6 +660,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   DefaultEngineType
 > {
+  type ProcessorLoadedToolsProvider = {
+    getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
+  };
+
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -692,7 +721,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   // but TypeScript type inference has issues with the complex discriminated union types.
   // We use type assertions here since toStandardSchema returns the schema directly
   // when it already implements StandardSchemaWithJSON.
-  return {
+  const step = {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
@@ -1424,6 +1453,14 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     DefaultEngineType
   >;
+
+  const toolProvider = processor as ProcessorLoadedToolsProvider;
+  if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+    (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+      toolProvider.getLoadedToolsForRequestContext.bind(processor);
+  }
+
+  return step;
 }
 
 export function cloneStep<TStepId extends string>(

@@ -1,5 +1,41 @@
 # create-mastra
 
+## 1.9.4-alpha.0
+
+## 1.9.3
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+## 1.9.3-alpha.3
+
+## 1.9.3-alpha.2
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+## 1.9.3-alpha.1
+
+## 1.9.3-alpha.0
+
+## 1.9.2
+
+### Patch Changes
+
+- Improve `npm create mastra` telemetry delivery so command completion events are tracked and flushed before the process exits. ([#16582](https://github.com/mastra-ai/mastra/pull/16582))
+
+## 1.9.2-alpha.3
+
+## 1.9.2-alpha.2
+
+## 1.9.2-alpha.1
+
+### Patch Changes
+
+- Improve `npm create mastra` telemetry delivery so command completion events are tracked and flushed before the process exits. ([#16582](https://github.com/mastra-ai/mastra/pull/16582))
+
 ## 1.9.2-alpha.0
 
 ## 1.9.1

@@ -7,11 +7,17 @@
 
 import type { ClickHouseClient } from '@clickhouse/client';
 import { listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
-import type { GetRootSpanArgs, GetRootSpanResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type {
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+  ListTracesArgs,
+  ListTracesLightResponse,
+  ListTracesResponse,
+} from '@mastra/core/storage';
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
-import { CH_SETTINGS, rowToSpanRecord } from './helpers';
+import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -57,7 +63,12 @@ export async function getRootSpan(
  *
  * hasChildError is handled via EXISTS subquery against span_events.
  */
-export async function listTraces(client: ClickHouseClient, args: ListTracesArgs): Promise<ListTracesResponse> {
+async function listTraceRows<TSpan>(
+  client: ClickHouseClient,
+  args: ListTracesArgs,
+  selectClause: string,
+  mapRows: (rows: Record<string, any>[]) => TSpan[],
+): Promise<{ pagination: ListTracesResponse['pagination']; spans: TSpan[] }> {
   // Parse args through schema to apply defaults
   const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
   const page = pagination?.page ?? 0;
@@ -118,8 +129,8 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
   // Data query: two-stage dedupe + pagination
   const dataResult = await client.query({
     query: `
-      SELECT * FROM (
-        SELECT *
+      SELECT ${selectClause} FROM (
+        SELECT ${selectClause}
         FROM ${TABLE_TRACE_ROOTS} r
         ${whereClause}
         ORDER BY dedupeKey
@@ -139,7 +150,6 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
   });
 
   const rows = (await dataResult.json()) as Record<string, any>[];
-  const spans = rows.map(rowToSpanRecord);
 
   return {
     pagination: {
@@ -148,6 +158,32 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
       perPage,
       hasMore: (page + 1) * perPage < total,
     },
-    spans: toTraceSpans(spans),
+    spans: mapRows(rows),
   };
+}
+
+export async function listTraces(client: ClickHouseClient, args: ListTracesArgs): Promise<ListTracesResponse> {
+  return listTraceRows(client, args, '*', rows => toTraceSpans(rows.map(rowToSpanRecord)));
+}
+
+const LIGHT_TRACE_ROOT_COLUMNS = [
+  'traceId',
+  'spanId',
+  'parentSpanId',
+  'name',
+  'spanType',
+  'isEvent',
+  'startedAt',
+  'endedAt',
+  'entityType',
+  'entityId',
+  'entityName',
+  'error',
+].join(', ');
+
+export async function listTracesLight(
+  client: ClickHouseClient,
+  args: ListTracesArgs,
+): Promise<ListTracesLightResponse> {
+  return listTraceRows(client, args, LIGHT_TRACE_ROOT_COLUMNS, rows => rows.map(rowToLightSpanRecord));
 }

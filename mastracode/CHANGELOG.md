@@ -1,5 +1,159 @@
 # mastracode
 
+## 0.20.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9430352`](https://github.com/mastra-ai/mastra/commit/94303523460cb09dcd0d8139c11926029631d6ba), [`7f6a053`](https://github.com/mastra-ai/mastra/commit/7f6a053b6a76f12b8ab0f25da1709adbd5134cd6)]:
+  - @mastra/mcp@1.7.1-alpha.0
+  - @mastra/memory@1.18.3-alpha.0
+
+## 0.20.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`6b8a53e`](https://github.com/mastra-ai/mastra/commit/6b8a53eea3b255a4fd0b29bc0237cdd1906bf55c)]:
+  - @mastra/stagehand@0.2.3-alpha.0
+
+## 0.20.0-alpha.0
+
+### Minor Changes
+
+- Added the `/skill/<name>` command to explicitly activate an installed workspace skill in the current conversation. This complements automatic skill activation. ([#16618](https://github.com/mastra-ai/mastra/pull/16618))
+
+  ```text
+  /skill/github-triage
+  /skill/release-check focus tests
+  ```
+
+  The command loads the skill's instructions (plus any `references/`, `scripts/`, and `assets/` paths the skill ships) and sends them to the agent. Use `/skills` to list available skills.
+
+  Skills can opt out of direct user invocation by setting `user-invocable: false` in their frontmatter — those skills remain available for automatic activation by the agent but do not appear in `/skill/<name>` autocomplete, the `/skills` listing, or accept direct invocation.
+
+  ```md title=".mastracode/skills/internal-helper/SKILL.md"
+  ---
+  name: internal-helper
+  description: Used by the agent internally; not for direct user invocation.
+  user-invocable: false
+  ---
+  ```
+
+  Closes #16344.
+
+### Patch Changes
+
+- Improved thread signal handling in the TUI to work with the simplified signal contents shape. ([#16622](https://github.com/mastra-ai/mastra/pull/16622))
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+
+## 0.19.1
+
+### Patch Changes
+
+- Improve goal mode UX: ([#16654](https://github.com/mastra-ai/mastra/pull/16654))
+  - Add `/goal` actions and built-in subcommand autocomplete.
+  - Add goal-aware planning guidance so submitted plans can be used as executable goals.
+  - Let the judge evaluate full assistant responses and verify work with readonly workspace tools.
+  - Stream muted judge activity into the goal box and support Ctrl+C judge aborts.
+  - Show duration-based goal status and clearer plan approval rendering with streamed plan previews.
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`1be0793`](https://github.com/mastra-ai/mastra/commit/1be079325f05cdec100cc6967572576dfc9e2e44), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3), [`3d42730`](https://github.com/mastra-ai/mastra/commit/3d42730bed209f3ea4088be10013df6fa91fe757)]:
+  - @mastra/core@1.35.0
+  - @mastra/libsql@1.11.0
+  - @mastra/pg@1.11.0
+  - @mastra/memory@1.18.2
+
+## 0.19.1-alpha.3
+
+### Patch Changes
+
+- Improve goal mode UX: ([#16654](https://github.com/mastra-ai/mastra/pull/16654))
+  - Add `/goal` actions and built-in subcommand autocomplete.
+  - Add goal-aware planning guidance so submitted plans can be used as executable goals.
+  - Let the judge evaluate full assistant responses and verify work with readonly workspace tools.
+  - Stream muted judge activity into the goal box and support Ctrl+C judge aborts.
+  - Show duration-based goal status and clearer plan approval rendering with streamed plan previews.
+
+- Updated dependencies [[`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0-alpha.3
+
+## 0.19.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`1be0793`](https://github.com/mastra-ai/mastra/commit/1be079325f05cdec100cc6967572576dfc9e2e44), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04)]:
+  - @mastra/libsql@1.11.0-alpha.0
+  - @mastra/pg@1.11.0-alpha.0
+  - @mastra/core@1.35.0-alpha.2
+  - @mastra/memory@1.18.2-alpha.1
+
+## 0.19.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`3d42730`](https://github.com/mastra-ai/mastra/commit/3d42730bed209f3ea4088be10013df6fa91fe757)]:
+  - @mastra/core@1.35.0-alpha.1
+  - @mastra/memory@1.18.2-alpha.0
+
+## 0.19.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7)]:
+  - @mastra/core@1.34.1-alpha.0
+
+## 0.19.0
+
+### Minor Changes
+
+- Improved OpenAI Codex OAuth support in Mastra Code. When you select the Codex provider in `/login` or during onboarding, Mastra Code now asks how to sign in — **Browser (local callback)** or **Device code (headless)** — so the device-code flow is discoverable without setting an env var. `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` still works as a preselect for scripted environments. ([#16548](https://github.com/mastra-ai/mastra/pull/16548))
+
+  HTTP MCP server config can now pass OAuth client metadata to `@mastra/mcp` and store per-server OAuth state without sharing tokens across projects:
+
+  ```json
+  {
+    "mcpServers": {
+      "remote-api": {
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "redirectUrl": "http://localhost:3000/oauth/callback"
+        }
+      }
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`97fe629`](https://github.com/mastra-ai/mastra/commit/97fe629d07b0a9952e6657b1e6334ca4d9aa15ce), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0
+  - @mastra/memory@1.18.1
+  - @mastra/duckdb@1.3.2
+
+## 0.19.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804)]:
+  - @mastra/core@1.34.0-alpha.3
+  - @mastra/duckdb@1.3.2-alpha.0
+
+## 0.19.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+
+## 0.19.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`97fe629`](https://github.com/mastra-ai/mastra/commit/97fe629d07b0a9952e6657b1e6334ca4d9aa15ce), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/memory@1.18.1-alpha.0
+
 ## 0.19.0-alpha.0
 
 ### Minor Changes

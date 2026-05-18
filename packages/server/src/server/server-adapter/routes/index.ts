@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
+import type { FGARouteConfig, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
@@ -146,14 +146,7 @@ export type ServerRoute<
    * @example
    * fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_EXECUTE }
    */
-  fga?: {
-    resourceType: string;
-    resourceIdParam?: string;
-    resourceId?:
-      | string
-      | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
-    permission?: MastraFGAPermissionInput;
-  };
+  fga?: FGARouteConfig;
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;

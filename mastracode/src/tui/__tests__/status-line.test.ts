@@ -90,6 +90,7 @@ function createState() {
       gitBranch: 'feat/mc-queueing-ux',
     },
     pendingQueuedActions: [],
+    goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
   } as any;
 }
@@ -104,6 +105,7 @@ describe('updateStatusLine', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     process.stdout.columns = originalColumns;
   });
 
@@ -208,31 +210,38 @@ describe('updateStatusLine', () => {
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
   });
 
-  it('shows active goal attempts as 1-indexed', () => {
+  it('shows active goal duration instead of attempt count', () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-05-15T12:00:00.000Z');
+    vi.setSystemTime(now);
     const state = createState();
     state.goalManager = {
-      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20 })),
+      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20, startedAt: '2026-05-15T10:50:00.000Z' })),
     };
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('goal attempt 1/20');
-    expect(rendered).not.toContain('goal attempt 0/20');
-    expect(rendered).not.toContain('judge 1/20');
+    expect(rendered).toContain('pursuing goal (1hr10m)');
+    expect(rendered).not.toContain('goal attempt');
+    expect(rendered).not.toContain('1/20');
+    vi.useRealTimers();
   });
 
-  it('uses a compact active goal attempt label on narrow screens', () => {
+  it('uses a compact active goal duration label on narrow screens', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
     const state = createState();
     state.goalManager = {
-      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20 })),
+      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20, startedAt: '2026-05-13T09:00:00.000Z' })),
     };
     process.stdout.columns = 35;
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('attempt 1/20');
-    expect(rendered).not.toContain('goal attempt 1/20');
+    expect(rendered).toContain('goal (2days3hr)');
+    expect(rendered).not.toContain('pursuing goal');
+    vi.useRealTimers();
   });
 });

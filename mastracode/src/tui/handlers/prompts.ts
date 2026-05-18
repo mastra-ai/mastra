@@ -249,70 +249,74 @@ export async function handlePlanApproval(
 ): Promise<void> {
   const { state } = ctx;
   return new Promise(resolve => {
-    const approvalComponent = new PlanApprovalInlineComponent(
-      {
-        planId,
-        title,
-        plan,
-        onApprove: async () => {
-          state.activeInlinePlanApproval = undefined;
-          await approvePlan(ctx, planId, title, plan);
+    const approvalOptions = {
+      planId,
+      title,
+      plan,
+      onApprove: async () => {
+        state.activeInlinePlanApproval = undefined;
+        await approvePlan(ctx, planId, title, plan);
 
-          // Fire a structured system-reminder signal to wake the freshly
-          // switched-to default-mode agent. The signal echoes back as a
-          // `system_reminder` content part and renders through the same
-          // path as any other reminder — no legacy XML regex, no companion
-          // `addUserMessage` call, so the reminder shows up exactly once.
-          //
-          // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
-          // for the aborted plan-mode run to fully idle before returning, so
-          // this signal always starts a fresh build-mode run instead of
-          // queuing onto the dying one.
-          try {
-            await state.harness.sendSignal({
-              type: 'system-reminder',
-              contents: 'The user has approved the plan, begin executing.',
-            }).accepted;
-          } catch (err) {
-            ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
-          }
+        // Fire a structured system-reminder signal to wake the freshly
+        // switched-to default-mode agent. The signal echoes back as a
+        // `system_reminder` content part and renders through the same
+        // path as any other reminder — no legacy XML regex, no companion
+        // `addUserMessage` call, so the reminder shows up exactly once.
+        //
+        // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
+        // for the aborted plan-mode run to fully idle before returning, so
+        // this signal always starts a fresh build-mode run instead of
+        // queuing onto the dying one.
+        try {
+          await state.harness.sendSignal({
+            type: 'system-reminder',
+            contents: 'The user has approved the plan, begin executing.',
+          }).accepted;
+        } catch (err) {
+          ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
+        }
 
-          resolve();
-        },
-        onGoal: async () => {
-          state.activeInlinePlanApproval = undefined;
-          await approvePlan(ctx, planId, title, plan);
-
-          // Hand off to the normal `/goal` flow. `startGoal` (default
-          // `trigger: 'send'`) sets + persists the goal, then fires the
-          // canonical structured goal-reminder via `harness.sendSignal` —
-          // identical to typing `/goal <objective>` by hand. No second
-          // reminder is sent; the goal judge in `handleAgentEnd` keeps the
-          // agent driving toward the goal after its first response.
-          //
-          // `approvePlan` already waited for the aborted plan-mode run to
-          // idle, so this signal starts a fresh build-mode run.
-          const objective = formatPlanGoalObjective(title, plan);
-          await ctx.startGoal(objective, 'Goal cancelled.');
-
-          resolve();
-        },
-        onReject: async (feedback?: string) => {
-          state.activeInlinePlanApproval = undefined;
-          await state.harness.respondToPlanApproval({
-            planId,
-            response: { action: 'rejected', feedback },
-          });
-          resolve();
-        },
+        resolve();
       },
-      state.ui,
-    );
+      onGoal: async () => {
+        state.activeInlinePlanApproval = undefined;
+        await approvePlan(ctx, planId, title, plan);
+
+        // Hand off to the normal `/goal` flow. `startGoal` (default
+        // `trigger: 'send'`) sets + persists the goal, then fires the
+        // canonical structured goal-reminder via `harness.sendSignal` —
+        // identical to typing `/goal <objective>` by hand. No second
+        // reminder is sent; the goal judge in `handleAgentEnd` keeps the
+        // agent driving toward the goal after its first response.
+        //
+        // `approvePlan` already waited for the aborted plan-mode run to
+        // idle, so this signal starts a fresh build-mode run.
+        const objective = formatPlanGoalObjective(title, plan);
+        await ctx.startGoal(objective, 'Goal cancelled.');
+
+        resolve();
+      },
+      onReject: async (feedback?: string) => {
+        state.activeInlinePlanApproval = undefined;
+        await state.harness.respondToPlanApproval({
+          planId,
+          response: { action: 'rejected', feedback },
+        });
+        resolve();
+      },
+    };
+
+    const approvalComponent =
+      state.lastSubmitPlanComponent instanceof PlanApprovalInlineComponent
+        ? state.lastSubmitPlanComponent
+        : new PlanApprovalInlineComponent(approvalOptions, state.ui);
+    approvalComponent.activate(approvalOptions);
 
     // Store as active plan approval
     state.activeInlinePlanApproval = approvalComponent;
 
-    // Insert after the submit_plan tool component (same pattern as ask_user)
+    // Insert after the submit_plan placeholder; if streaming already created the
+    // plan box, activate that component in place instead of rendering a duplicate.
     if (state.lastSubmitPlanComponent) {
       const children = [...state.chatContainer.children];
       const submitPlanIndex = children.indexOf(state.lastSubmitPlanComponent as any);
@@ -321,7 +325,9 @@ export async function handlePlanApproval(
         for (let i = 0; i <= submitPlanIndex; i++) {
           state.chatContainer.addChild(children[i]!);
         }
-        state.chatContainer.addChild(approvalComponent);
+        if (state.lastSubmitPlanComponent !== approvalComponent) {
+          state.chatContainer.addChild(approvalComponent);
+        }
         for (let i = submitPlanIndex + 1; i < children.length; i++) {
           state.chatContainer.addChild(children[i]!);
         }
