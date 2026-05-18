@@ -21,6 +21,8 @@ const slack = new SlackProvider({
   baseUrl: process.env.SLACK_BASE_URL,
 });
 
+const workos = await initWorkOS();
+
 export const mastra = new Mastra({
   storage,
   channels: { slack },
@@ -38,7 +40,8 @@ export const mastra = new Mastra({
     sourcemap: true,
   },
   server: {
-    auth: (await initWorkOS()).mastraAuth,
+    auth: workos.mastraAuth,
+    rbac: workos.rbacProvider,
     build: {
       swaggerUI: true,
     },
@@ -62,41 +65,8 @@ export const mastra = new Mastra({
       new ComposioToolIntegration({
         apiKey: process.env.COMPOSIO_API_KEY!,
         allowedToolServices: [
-          'confluence',
-          'googledrive',
-          'hubspot',
-          'github',
+          'gmail',
         ],
-        allowedTools: {
-          confluence: [
-            'CONFLUENCE_CQL_SEARCH',
-            'CONFLUENCE_GET_PAGE_BY_ID'
-          ],
-          googledrive: [
-            'GOOGLEDRIVE_FIND_FILE',
-            'GOOGLEDRIVE_GET_FILE_METADATA',
-            'GOOGLEDRIVE_EXPORT_GOOGLE_WORKSPACE_FILE',
-            'GOOGLEDRIVE_DOWNLOAD_FILE',
-            'GOOGLEDRIVE_LIST_CHANGES',
-            'GOOGLEDRIVE_GET_CHANGES_START_PAGE_TOKEN',
-            'GOOGLEDRIVE_LIST_FILES',
-            'GOOGLEDRIVE_LIST_SHARED_DRIVES',
-            'GOOGLEDRIVE_WATCH_CHANGES',
-            'GOOGLEDRIVE_GET_FILE_PROPERTY'
-          ],
-          github: [
-            'GITHUB_FIND_PULL_REQUESTS',
-            'GITHUB_GET_A_PULL_REQUEST',
-            'GITHUB_GET_A_REPOSITORY',
-            'GITHUB_GET_A_REPOSITORY_README',
-            'GITHUB_GET_A_REFERENCE',
-            'GITHUB_GET_A_RELEASE'
-          ],
-          hubspot: [
-            'HUBSPOT_SEARCH_CONTACTS_BY_CRITERIA',
-            'HUBSPOT_READ_CONTACT'
-          ]
-        }
       })],
     browsers: {
       stagehand: {

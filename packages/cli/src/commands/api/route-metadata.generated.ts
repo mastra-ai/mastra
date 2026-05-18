@@ -4328,6 +4328,9 @@ export const API_ROUTE_METADATA = {
       "integrationId"
     ],
     "queryParams": [
+      "authorId",
+      "cursor",
+      "limit",
       "toolService"
     ],
     "bodyParams": [],
