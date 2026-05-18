@@ -1,7 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { formatCompact } from '../components/metrics-utils';
-import { MODEL_COST_METRICS } from './model-cost-metrics';
+import { MODEL_USAGE_TOKEN_METRICS } from './model-cost-metrics';
 import { useMetricsFilters } from './use-metrics-filters';
 
 export interface ModelUsageRow {
@@ -22,7 +22,7 @@ export function useModelUsageCostMetrics() {
     queryKey: ['metrics', 'model-usage-cost', filterKey],
     queryFn: async (): Promise<ModelUsageRow[]> => {
       const [inputRes, outputRes, cacheReadRes, cacheWriteRes] = await Promise.all(
-        MODEL_COST_METRICS.map(name =>
+        MODEL_USAGE_TOKEN_METRICS.map(name =>
           client.getMetricBreakdown({
             name: [name],
             groupBy: ['model'],
@@ -74,13 +74,11 @@ export function useModelUsageCostMetrics() {
         const m = group.dimensions.model ?? 'unknown';
         const entry = ensureModel(m);
         entry.cacheRead = group.value;
-        addCost(entry, group);
       }
       for (const group of cacheWriteRes.groups) {
         const m = group.dimensions.model ?? 'unknown';
         const entry = ensureModel(m);
         entry.cacheWrite = group.value;
-        addCost(entry, group);
       }
 
       return Array.from(modelMap.entries())

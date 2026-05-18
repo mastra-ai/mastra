@@ -1,9 +1,9 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { MODEL_COST_METRICS } from './model-cost-metrics';
+import { MODEL_COST_TOTAL_METRICS } from './model-cost-metrics';
 import { useMetricsFilters } from './use-metrics-filters';
 
-/** Total Model Cost — sum of estimatedCost across the same token metrics shown in Model Usage & Cost */
+/** Total Model Cost — sum of estimatedCost across aggregate input and output token metrics */
 export function useModelCostKpiMetrics() {
   const client = useMastraClient();
   const { filters, filterKey } = useMetricsFilters();
@@ -12,7 +12,7 @@ export function useModelCostKpiMetrics() {
     queryKey: ['metrics', 'model-cost-kpi', filterKey],
     queryFn: async () => {
       const res = await client.getMetricAggregate({
-        name: [...MODEL_COST_METRICS],
+        name: [...MODEL_COST_TOTAL_METRICS],
         aggregation: 'sum',
         filters,
         comparePeriod: 'previous_period',

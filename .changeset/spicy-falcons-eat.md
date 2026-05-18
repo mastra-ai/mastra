@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed the Metrics dashboard total model cost so it includes cache token costs and matches the Model Usage & Cost total.
+Fixed the Metrics dashboard Model Usage & Cost total so it uses aggregate input and output costs without double-counting cache token costs.
