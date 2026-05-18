@@ -1,4 +1,4 @@
-import { CodeEditor, Txt, CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
+import { CodeEditor, Txt, CheckIcon, CrossIcon, Icon, CopyButton } from '@mastra/playground-ui';
 import {
   CirclePause,
   HourglassIcon,
@@ -22,7 +22,7 @@ export interface TripwireInfo {
 export interface WorkflowStatusProps {
   stepId: string;
   status: string;
-  result: Record<string, unknown>;
+  result: unknown;
   tripwire?: TripwireInfo;
 }
 
@@ -59,8 +59,13 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
           onToggleExpand={() => setIsTripwireExpanded(!isTripwireExpanded)}
           hasMetadata={hasTripwireMetadata}
         />
+      ) : typeof result === 'object' && result !== null ? (
+        <CodeEditor data={result as Record<string, unknown>} lineWrapping />
       ) : (
-        <CodeEditor data={result} lineWrapping />
+        <div className="relative p-3">
+          <CopyButton content={String(result)} className="absolute top-2 right-2 z-20" />
+          <pre className="text-xs font-mono text-neutral6 whitespace-pre-wrap break-words">{String(result)}</pre>
+        </div>
       )}
     </WorkflowCard>
   );
