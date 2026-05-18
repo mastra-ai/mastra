@@ -16,6 +16,7 @@ import {
 } from '@mastra/playground-ui';
 import { PlusIcon, PencilIcon, TrashIcon, XIcon } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 import { useRoles, useAvailablePermissions } from '@/domains/team/hooks';
@@ -446,8 +447,12 @@ function RolesTable({
 function Roles() {
   const { data: roles = [], isLoading, error, refetch } = useRoles();
   const { hasPermission } = usePermissions();
+  const { data: authCapabilities } = useAuthCapabilities();
   const { baseUrl, apiPrefix } = useStudioConfig();
-  const canManage = hasPermission('team:write');
+  // Can only manage roles if user has permission AND provider supports dynamic roles
+  const rbacCapabilities =
+    authCapabilities && 'capabilities' in authCapabilities ? authCapabilities.capabilities.rbacCapabilities : null;
+  const canManage = hasPermission('team:write') && rbacCapabilities?.dynamicRoles;
 
   // Fetch available permissions from API (generated from SERVER_ROUTES)
   const { permissions: availablePermissions, isLoading: permissionsLoading } = useAvailablePermissions();
@@ -578,7 +583,7 @@ function Roles() {
         isLoading={isLoading}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        canManage={canManage}
+        canManage={canManage ?? false}
       />
 
       {/* Create Role Modal */}
