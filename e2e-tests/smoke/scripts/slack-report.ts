@@ -390,6 +390,13 @@ async function main() {
   const totalSkipped = apiStats.skipped + uiStats.skipped;
   if (totalSkipped > 0) contextParts.push(`${totalSkipped} skipped`);
   if (uiStats.flaky > 0) contextParts.push(`⚠️ ${uiStats.flaky} flaky`);
+  // Coverage line — sum of tests we actually executed (passed + failed +
+  // skipped + flaky retries are excluded from totals on purpose).
+  const apiTotal = apiStats.passed + apiStats.failed + apiStats.skipped;
+  const uiTotal = uiStats.passed + uiStats.failed + uiStats.skipped;
+  if (apiTotal + uiTotal > 0) {
+    contextParts.push(`coverage: ${apiTotal} API · ${uiTotal} UI`);
+  }
 
   const blocks: Record<string, unknown>[] = [
     {

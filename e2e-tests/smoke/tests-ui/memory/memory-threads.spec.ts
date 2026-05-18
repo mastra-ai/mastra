@@ -96,10 +96,11 @@ test.describe('Memory & Threads', () => {
     await expect(page.getByRole('heading', { name: 'Working Memory', exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Send a message to the agent to enable working memory.')).toBeVisible();
 
-    // Send a message that gives the agent user information to store in working memory
+    // Send a message that gives the agent user information to store in working memory.
+    // Working-memory tool call adds an LLM round-trip — give the URL transition extra slack.
     await fillAndSend(page, 'My name is SmokeTestUser99 and I live in San Francisco.');
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
-    await waitForAssistantMessage(page);
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
+    await waitForAssistantMessage(page, 45_000);
 
     // Switch to Memory tab to see working memory
     await page.getByRole('tab', { name: 'Memory' }).click();
@@ -119,10 +120,12 @@ test.describe('Memory & Threads', () => {
     test.slow();
     await page.goto('/agents/test-agent/chat/new');
 
-    // Send a message to create a thread with working memory
+    // Send a message to create a thread with working memory.
+    // The agent triggers a working-memory tool call before the user-visible reply,
+    // which can push the URL transition past the default 20s on a slow LLM round-trip.
     await fillAndSend(page, 'My name is EditTestUser77 and I like pizza.');
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
-    await waitForAssistantMessage(page);
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
+    await waitForAssistantMessage(page, 45_000);
 
     // Switch to Memory tab
     await page.getByRole('tab', { name: 'Memory' }).click();
