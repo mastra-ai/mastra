@@ -12,9 +12,6 @@
  *    back, validates that it actually belongs to the parent trace
  *    identified by `parentContext`, and forwards each span/log into
  *    the observability bus so existing exporters pick them up.
- *
- * See `observability/mastra/plans/client-tool-tracing.md` for the full
- * design rationale.
  */
 
 import type { IMastraLogger } from '@mastra/core/logger';
