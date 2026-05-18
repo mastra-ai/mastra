@@ -2342,7 +2342,8 @@ export const API_ROUTE_METADATA = {
     "hasQuery": false,
     "hasBody": false,
     "responseShape": {
-      "kind": "single"
+      "kind": "object-property",
+      "listProperty": "endpoints"
     }
   },
   "GET /logs/transports": {

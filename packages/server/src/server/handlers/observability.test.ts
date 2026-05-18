@@ -10,6 +10,7 @@ import type {
 } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { OBSERVABILITY_ROUTES } from '../server-adapter/routes/observability';
 import * as errorHandler from './error';
 import {
   LIST_TRACES_ROUTE,
@@ -23,6 +24,7 @@ import {
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
 import { NEW_ROUTES } from './observability-new-endpoints';
+import { OBSERVABILITY_ENDPOINT_REQUIREMENTS_FOR_TESTS } from './observability-shared';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
@@ -2784,7 +2786,10 @@ describe('Observability Handlers', () => {
   });
 
   describe('GET_CAPABILITIES_ROUTE', () => {
-    it('reports features as supported when the store overrides discovery methods', async () => {
+    const matches = (endpoints: Array<{ method: string; path: string }>, method: string, path: string) =>
+      endpoints.some(e => e.method === method && e.path === path);
+
+    it('reports only the endpoints whose backing storage methods the adapter overrides', async () => {
       const { ObservabilityStorage } = await import('@mastra/core/storage');
 
       class PartialStore extends ObservabilityStorage {
@@ -2796,6 +2801,9 @@ describe('Observability Handlers', () => {
         }
         override async getServiceNames() {
           return { serviceNames: [] };
+        }
+        override async listTraces() {
+          return { traces: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } };
         }
       }
 
@@ -2811,17 +2819,19 @@ describe('Observability Handlers', () => {
       });
 
       expect(result.storeProvider).toBe('PartialStore');
-      expect(result.features.getEntityNames).toBe(true);
-      expect(result.features.getEntityTypes).toBe(true);
-      expect(result.features.getServiceNames).toBe(true);
-      // Methods the subclass did not override fall back to the base class throw,
-      // so capabilities should report them as unsupported.
-      expect(result.features.getTags).toBe(false);
-      expect(result.features.getEnvironments).toBe(false);
-      expect(result.features.getMetricAggregate).toBe(false);
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/entity-names')).toBe(true);
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/entity-types')).toBe(true);
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/service-names')).toBe(true);
+      expect(matches(result.endpoints, 'GET', '/observability/traces')).toBe(true);
+      // Endpoints backed by methods the subclass did not override should not appear.
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/tags')).toBe(false);
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/environments')).toBe(false);
+      expect(matches(result.endpoints, 'POST', '/observability/metrics/aggregate')).toBe(false);
+      // Capabilities endpoint itself is never listed.
+      expect(matches(result.endpoints, 'GET', '/observability/capabilities')).toBe(false);
     });
 
-    it('treats getStructure and getTraceLight as aliases', async () => {
+    it('treats getStructure and getTraceLight as aliases for the light-trace endpoint', async () => {
       const { ObservabilityStorage } = await import('@mastra/core/storage');
 
       class StructureOnly extends ObservabilityStorage {
@@ -2845,12 +2855,11 @@ describe('Observability Handlers', () => {
         const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
           ...createTestServerContext({ mastra }),
         });
-        expect(result.features.getStructure).toBe(true);
-        expect(result.features.getTraceLight).toBe(true);
+        expect(matches(result.endpoints, 'GET', '/observability/traces/:traceId/light')).toBe(true);
       }
     });
 
-    it('returns all features as unsupported when no observability store is configured', async () => {
+    it('returns no observability storage endpoints when no observability store is configured', async () => {
       const storage: Partial<MastraCompositeStore> = {
         getStore: vi.fn(() => Promise.resolve(undefined)) as MastraCompositeStore['getStore'],
       };
@@ -2861,10 +2870,11 @@ describe('Observability Handlers', () => {
       });
 
       expect(result.storeProvider).toBeNull();
-      expect(Object.values(result.features).every(v => v === false)).toBe(true);
+      // No observability storage + no scores storage => no endpoints supported.
+      expect(result.endpoints).toEqual([]);
     });
 
-    it('returns all features as unsupported when no storage is configured', async () => {
+    it('returns no endpoints when no storage is configured at all', async () => {
       const mastra = createMockMastra(undefined);
 
       const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
@@ -2872,7 +2882,34 @@ describe('Observability Handlers', () => {
       });
 
       expect(result.storeProvider).toBeNull();
-      expect(Object.values(result.features).every(v => v === false)).toBe(true);
+      expect(result.endpoints).toEqual([]);
+    });
+
+    it('includes the legacy scores-by-span endpoint when the scores store implements it', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class EmptyStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new EmptyStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      const mastra = createMockMastra(storage);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(matches(result.endpoints, 'GET', '/observability/traces/:traceId/:spanId/scores')).toBe(true);
+    });
+
+    it('lists every registered observability route in the requirements table', () => {
+      // The capabilities endpoint itself is intentionally excluded -- callers
+      // hit it before they know what's supported, so listing it would be
+      // redundant.
+      const expected = OBSERVABILITY_ROUTES.map(r => `${r.method} ${r.path}`).filter(
+        key => key !== 'GET /observability/capabilities',
+      );
+      const declared = OBSERVABILITY_ENDPOINT_REQUIREMENTS_FOR_TESTS.map(r => `${r.method} ${r.path}`);
+      expect(new Set(declared)).toEqual(new Set(expected));
     });
   });
 });

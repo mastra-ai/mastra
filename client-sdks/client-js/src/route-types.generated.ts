@@ -16740,12 +16740,15 @@ export interface GetObservabilityDiscoveryTags_RouteContract {
 // Route: GET /observability/capabilities
 // ============================================================================
 export type GetObservabilityCapabilities_Response = {
-  /** Constructor name of the connected observability store, or null if no observability storage is configured */
+  /** Constructor name of the connected observability storage adapter, or null when no observability storage is configured */
   storeProvider: string | null;
-  /** Map of observability method names to whether the connected storage provider supports them */
-  features: {
-    [key: string]: boolean;
-  };
+  /** Observability HTTP endpoints supported by the current server configuration. Considers installed @mastra/core features, installed @mastra/observability features, and the methods implemented by the connected observability storage adapter. */
+  endpoints: {
+    /** HTTP method for the endpoint */
+    method: string;
+    /** HTTP path for the endpoint (relative to the server base, e.g. /observability/traces) */
+    path: string;
+  }[];
 };
 
 export type GetObservabilityCapabilities_Request = Simplify<

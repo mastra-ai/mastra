@@ -4,4 +4,17 @@
 'mastra': patch
 ---
 
-Added GET /observability/capabilities endpoint that reports which observability features the connected storage provider supports. The response includes the store class name and a boolean map keyed by storage method names (such as getEntityNames, getMetricAggregate, getTags). UIs can use this to disable or hide filters and panels that the connected store does not implement, rather than discovering unsupported features through 500 errors on the /observability/discovery/\* endpoints.
+Added `GET /observability/capabilities` endpoint that returns the list of observability HTTP endpoints supported by the current server configuration. Support is determined by combining the installed `@mastra/core` feature flags, the installed `@mastra/observability` feature flags, and the methods implemented by the connected observability storage adapter. UIs can call this once on load and hide or disable filters and panels that the server cannot back, instead of waiting for 500 errors from `/observability/discovery/*` calls.
+
+```ts
+// Example response shape
+{
+  storeProvider: 'ObservabilityPG',
+  endpoints: [
+    { method: 'GET', path: '/observability/traces' },
+    { method: 'GET', path: '/observability/traces/:traceId' },
+    { method: 'GET', path: '/observability/discovery/tags' },
+    // ...only endpoints whose dependencies are satisfied
+  ]
+}
+```
