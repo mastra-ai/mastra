@@ -5,8 +5,8 @@
  * Can be used with any auth provider (Auth0, Clerk, etc.) or with MastraAuthOkta.
  */
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
+import type { IRBACProvider, RoleMapping, RBACCapabilities, RoleDefinition } from '@mastra/core/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission, DEFAULT_RBAC_CAPABILITIES } from '@mastra/core/auth/ee';
 import pkg from '@okta/okta-sdk-nodejs';
 const { Client } = pkg;
 import { LRUCache } from 'lru-cache';
@@ -116,6 +116,35 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
       max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
+  }
+
+  /**
+   * Get the capabilities of this RBAC provider.
+   * Okta uses groups as roles, supports multiple groups per user.
+   */
+  getCapabilities(): RBACCapabilities {
+    return {
+      ...DEFAULT_RBAC_CAPABILITIES,
+      // Okta supports multiple groups per user
+      multiRole: true,
+      // Groups are managed in Okta dashboard
+      providerManagedRoles: true,
+      // Roles come from the provider (Okta)
+      roleSource: 'provider',
+    };
+  }
+
+  /**
+   * List all available role definitions.
+   */
+  async listRoleDefinitions(): Promise<RoleDefinition[]> {
+    return Object.entries(this.options.roleMapping)
+      .filter(([key]) => key !== '_default')
+      .map(([roleName, permissions]) => ({
+        id: roleName,
+        name: roleName,
+        permissions: permissions as RoleDefinition['permissions'],
+      }));
   }
 
   /**

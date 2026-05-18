@@ -2,7 +2,8 @@
  * Static RBAC provider with config-based roles.
  */
 
-import type { RoleDefinition, RoleMapping, IRBACProvider } from '../../interfaces';
+import type { RoleDefinition, RoleMapping, IRBACProvider, RBACCapabilities } from '../../interfaces';
+import { DEFAULT_RBAC_CAPABILITIES } from '../../interfaces';
 import { resolvePermissions, matchesPermission, resolvePermissionsFromMapping } from '../roles';
 
 /**
@@ -88,6 +89,44 @@ export class StaticRBACProvider<TUser = unknown> implements IRBACProvider<TUser>
       this._roleMapping = options.roleMapping;
     }
     this.getUserRolesFn = options.getUserRoles;
+  }
+
+  /**
+   * Get the capabilities of this RBAC provider.
+   * StaticRBACProvider supports config-based roles with inheritance.
+   */
+  getCapabilities(): RBACCapabilities {
+    return {
+      ...DEFAULT_RBAC_CAPABILITIES,
+      // StaticRBACProvider uses config-based roles
+      roleSource: 'config',
+      // Role inheritance is supported via the inherits field
+      roleInheritance: !!this.roles,
+    };
+  }
+
+  /**
+   * List all available role definitions.
+   * For role definitions mode, returns the configured roles.
+   * For role mapping mode, derives role definitions from the mapping.
+   */
+  async listRoleDefinitions(): Promise<RoleDefinition[]> {
+    if (this.roles) {
+      return this.roles;
+    }
+
+    // For role mapping mode, convert the mapping to role definitions
+    if (this._roleMapping) {
+      return Object.entries(this._roleMapping)
+        .filter(([key]) => key !== '_default')
+        .map(([roleName, permissions]) => ({
+          id: roleName,
+          name: roleName,
+          permissions: permissions as RoleDefinition['permissions'],
+        }));
+    }
+
+    return [];
   }
 
   async getRoles(user: TUser): Promise<string[]> {

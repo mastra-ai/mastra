@@ -5,8 +5,8 @@
  * permission-based access control system.
  */
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
+import type { IRBACProvider, RoleMapping, RBACCapabilities, RoleDefinition } from '@mastra/core/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission, DEFAULT_RBAC_CAPABILITIES } from '@mastra/core/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 import { LRUCache } from 'lru-cache';
 
@@ -96,6 +96,57 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
       max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
+  }
+
+  /**
+   * Get the capabilities of this RBAC provider.
+   * WorkOS uses single role per org membership, provider-managed roles.
+   */
+  getCapabilities(): RBACCapabilities {
+    return {
+      ...DEFAULT_RBAC_CAPABILITIES,
+      // WorkOS uses single role per organization membership
+      multiRole: false,
+      // Roles are managed in WorkOS dashboard (or via API)
+      providerManagedRoles: true,
+      // Roles come from the provider (WorkOS)
+      roleSource: 'provider',
+      // Permissions are derived from static roleMapping config
+      permissionEditing: false,
+    };
+  }
+
+  /**
+   * List all available role definitions.
+   * Derives role definitions from the roleMapping configuration.
+   */
+  async listRoleDefinitions(): Promise<RoleDefinition[]> {
+    // Convert roleMapping to role definitions
+    return Object.entries(this.options.roleMapping)
+      .filter(([key]) => key !== '_default')
+      .map(([roleName, permissions]) => ({
+        id: roleName,
+        name: roleName.charAt(0).toUpperCase() + roleName.slice(1), // Capitalize
+        description: this.getRoleDescription(roleName),
+        permissions: permissions as RoleDefinition['permissions'],
+      }));
+  }
+
+  /**
+   * Get a description for a role based on its permissions.
+   */
+  private getRoleDescription(roleName: string): string {
+    const permissions = this.options.roleMapping[roleName] ?? [];
+    if (permissions.includes('*')) {
+      return 'Full access to all resources';
+    }
+    if (permissions.every(p => p.endsWith(':read'))) {
+      return 'Read-only access';
+    }
+    if (permissions.some(p => p.endsWith(':execute'))) {
+      return 'Read and execute access';
+    }
+    return `${permissions.length} permission(s)`;
   }
 
   /**

@@ -5,8 +5,8 @@
  * using configurable role-to-permission mappings.
  */
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
+import type { IRBACProvider, RoleMapping, RBACCapabilities, RoleDefinition } from '@mastra/core/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission, DEFAULT_RBAC_CAPABILITIES } from '@mastra/core/auth/ee';
 
 import type { CloudUser } from '../types';
 
@@ -72,6 +72,31 @@ export class MastraRBACCloud implements IRBACProvider<CloudUser> {
    */
   constructor(options: MastraRBACCloudOptions) {
     this.options = options;
+  }
+
+  /**
+   * Get the capabilities of this RBAC provider.
+   */
+  getCapabilities(): RBACCapabilities {
+    return {
+      ...DEFAULT_RBAC_CAPABILITIES,
+      multiRole: false,
+      providerManagedRoles: true,
+      roleSource: 'provider',
+    };
+  }
+
+  /**
+   * List all available role definitions.
+   */
+  async listRoleDefinitions(): Promise<RoleDefinition[]> {
+    return Object.entries(this.options.roleMapping)
+      .filter(([key]) => key !== '_default')
+      .map(([roleName, permissions]) => ({
+        id: roleName,
+        name: roleName.charAt(0).toUpperCase() + roleName.slice(1),
+        permissions: permissions as RoleDefinition['permissions'],
+      }));
   }
 
   /**

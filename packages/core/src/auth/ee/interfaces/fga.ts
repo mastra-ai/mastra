@@ -15,6 +15,60 @@
 import type { RequestContext } from '../../../di';
 import type { MastraFGAPermissionInput } from './permissions.generated';
 
+// ──────────────────────────────────────────────────────────────
+// FGA Capabilities
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Describes the capabilities of an FGA provider.
+ *
+ * FGA (Fine-Grained Authorization) provides resource-level access control
+ * beyond role-based permissions.
+ */
+export interface FGACapabilities {
+  /**
+   * Whether resource-level access control is enabled.
+   */
+  enabled: boolean;
+
+  /**
+   * Whether the provider supports creating authorization resources.
+   */
+  canCreateResources: boolean;
+
+  /**
+   * Whether the provider supports role assignments on resources.
+   */
+  canAssignRoles: boolean;
+
+  /**
+   * Whether the provider supports hierarchical resources.
+   */
+  hierarchicalResources: boolean;
+
+  /**
+   * Available resource types that can be managed.
+   */
+  resourceTypes: string[];
+
+  /**
+   * Available permissions that can be granted on resources.
+   */
+  availablePermissions: string[];
+}
+
+/**
+ * Default capabilities for providers that don't implement getCapabilities().
+ */
+export const DEFAULT_FGA_CAPABILITIES: FGACapabilities = {
+  enabled: false,
+  canCreateResources: false,
+  canAssignRoles: false,
+  hierarchicalResources: false,
+  resourceTypes: [],
+  availablePermissions: [],
+};
+
 /**
  * Optional context for an authorization check.
  */
@@ -212,6 +266,14 @@ export interface FGAListResourcesOptions {
  * ```
  */
 export interface IFGAProvider<TUser = unknown> {
+  /**
+   * Get the capabilities of this FGA provider.
+   * Used by the UI to adapt its behavior based on what the provider supports.
+   *
+   * @returns Provider capabilities
+   */
+  getCapabilities(): FGACapabilities;
+
   /**
    * Check if a user has a specific permission on a resource.
    *

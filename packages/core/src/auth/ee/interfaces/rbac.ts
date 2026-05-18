@@ -11,6 +11,76 @@
 
 import type { PermissionPattern } from './permissions.generated';
 
+// ──────────────────────────────────────────────────────────────
+// RBAC Capabilities
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Describes the capabilities of an RBAC provider.
+ *
+ * Different providers have different models:
+ * - WorkOS: Single role per organization membership, roles managed in WorkOS dashboard
+ * - Custom RBAC: Multiple roles per user, roles can be created dynamically
+ * - Static RBAC: Roles defined in code, permissions derived from role mapping
+ */
+export interface RBACCapabilities {
+  /**
+   * Whether the provider supports multiple roles per user.
+   * - true: IAM-style, users can have multiple roles assigned
+   * - false: Single role per user (e.g., WorkOS org membership)
+   */
+  multiRole: boolean;
+
+  /**
+   * Whether roles can be created/edited/deleted at runtime.
+   * - true: Roles can be managed via API (create, update, delete)
+   * - false: Roles are static (defined in code or provider dashboard)
+   */
+  dynamicRoles: boolean;
+
+  /**
+   * Whether roles are managed by the external provider.
+   * - true: Roles are fetched from provider API (WorkOS, Auth0, etc.)
+   * - false: Roles are managed locally or via static config
+   */
+  providerManagedRoles: boolean;
+
+  /**
+   * Whether permissions can be edited for roles.
+   * - true: Role permissions can be modified via API
+   * - false: Permissions are derived from static role mapping
+   */
+  permissionEditing: boolean;
+
+  /**
+   * Whether role inheritance is supported.
+   * - true: Roles can inherit permissions from other roles
+   * - false: Each role has its own standalone permissions
+   */
+  roleInheritance: boolean;
+
+  /**
+   * The source of role definitions.
+   * - 'provider': Roles come from external provider (WorkOS, Auth0)
+   * - 'config': Roles defined in roleMapping config
+   * - 'storage': Roles stored in Mastra storage
+   * - 'hybrid': Combination of sources
+   */
+  roleSource: 'provider' | 'config' | 'storage' | 'hybrid';
+}
+
+/**
+ * Default capabilities for providers that don't implement getCapabilities().
+ */
+export const DEFAULT_RBAC_CAPABILITIES: RBACCapabilities = {
+  multiRole: false,
+  dynamicRoles: false,
+  providerManagedRoles: false,
+  permissionEditing: false,
+  roleInheritance: false,
+  roleSource: 'config',
+};
+
 /**
  * Definition of a role with its permissions.
  * Uses type-safe permission patterns derived from SERVER_ROUTES.
@@ -104,6 +174,26 @@ export interface IRBACProvider<TUser = unknown> {
    * If provided, permissions are resolved using this mapping instead of getPermissions().
    */
   roleMapping?: RoleMapping;
+
+  /**
+   * Get the capabilities of this RBAC provider.
+   * Used by the UI to adapt its behavior based on what the provider supports.
+   *
+   * @returns Provider capabilities
+   */
+  getCapabilities(): RBACCapabilities;
+
+  /**
+   * List all available role definitions.
+   * This may come from:
+   * - Provider API (WorkOS, Auth0)
+   * - Static roleMapping config
+   * - Mastra storage (custom roles)
+   *
+   * @returns Array of role definitions with permissions
+   */
+  listRoleDefinitions(): Promise<RoleDefinition[]>;
+
   /**
    * Get all roles for a user.
    *
@@ -161,10 +251,13 @@ export interface IRBACProvider<TUser = unknown> {
  * Extended interface for managing roles (write operations).
  *
  * Implement this in addition to IRBACProvider to enable role management.
+ * Not all methods are required - check capabilities to know what's supported.
  */
 export interface IRBACManager<TUser = unknown> extends IRBACProvider<TUser> {
   /**
    * Assign a role to a user.
+   * For single-role providers (like WorkOS), this replaces the current role.
+   * For multi-role providers, this adds the role to the user's roles.
    *
    * @param userId - User to assign role to
    * @param roleId - Role to assign
@@ -173,6 +266,8 @@ export interface IRBACManager<TUser = unknown> extends IRBACProvider<TUser> {
 
   /**
    * Remove a role from a user.
+   * For single-role providers, this may not be supported (use assignRole to change).
+   * For multi-role providers, this removes one role from the user's roles.
    *
    * @param userId - User to remove role from
    * @param roleId - Role to remove
@@ -180,21 +275,27 @@ export interface IRBACManager<TUser = unknown> extends IRBACProvider<TUser> {
   removeRole(userId: string, roleId: string): Promise<void>;
 
   /**
-   * List all available roles.
-   *
-   * @returns Array of role definitions
-   */
-  listRoles(): Promise<RoleDefinition[]>;
-
-  /**
-   * Optional: Create a new role.
+   * Optional: Create a new role definition.
+   * Only available if capabilities.dynamicRoles is true.
    *
    * @param role - Role definition to create
+   * @returns The created role (may include generated ID)
    */
-  createRole?(role: RoleDefinition): Promise<void>;
+  createRole?(role: Omit<RoleDefinition, 'id'> & { id?: string }): Promise<RoleDefinition>;
 
   /**
-   * Optional: Delete a role.
+   * Optional: Update an existing role definition.
+   * Only available if capabilities.dynamicRoles is true.
+   *
+   * @param roleId - Role ID to update
+   * @param updates - Partial role definition with updates
+   * @returns The updated role
+   */
+  updateRole?(roleId: string, updates: Partial<Omit<RoleDefinition, 'id'>>): Promise<RoleDefinition>;
+
+  /**
+   * Optional: Delete a role definition.
+   * Only available if capabilities.dynamicRoles is true.
    *
    * @param roleId - Role ID to delete
    */

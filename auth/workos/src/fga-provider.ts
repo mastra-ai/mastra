@@ -9,6 +9,7 @@
 
 import type {
   IFGAManager,
+  FGACapabilities,
   FGACheckParams,
   FGAResource,
   FGACreateResourceParams,
@@ -20,7 +21,7 @@ import type {
   FGAListRoleAssignmentsOptions,
   MastraFGAPermissionInput,
 } from '@mastra/core/auth/ee';
-import { FGADeniedError } from '@mastra/core/auth/ee';
+import { FGADeniedError, DEFAULT_FGA_CAPABILITIES } from '@mastra/core/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 
 import type { MastraFGAWorkosOptions, FGAResourceMappingEntry, WorkOSUser } from './types';
@@ -122,8 +123,24 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // IFGAProvider — Read-only checks
+  // IFGAProvider — Capabilities & Read-only checks
   // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Get the capabilities of this FGA provider.
+   * WorkOS FGA supports resource management, role assignments, and hierarchical resources.
+   */
+  getCapabilities(): FGACapabilities {
+    return {
+      ...DEFAULT_FGA_CAPABILITIES,
+      enabled: true,
+      canCreateResources: true,
+      canAssignRoles: true,
+      hierarchicalResources: true,
+      resourceTypes: Object.keys(this.resourceMapping),
+      availablePermissions: Object.keys(this.permissionMapping),
+    };
+  }
 
   /**
    * Check if a user has permission on a resource.

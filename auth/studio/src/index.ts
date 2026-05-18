@@ -6,8 +6,8 @@ import type {
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@mastra/core/auth';
-import type { EEUser, IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
+import type { EEUser, IRBACProvider, RoleMapping, RBACCapabilities, RoleDefinition } from '@mastra/core/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission, DEFAULT_RBAC_CAPABILITIES } from '@mastra/core/auth/ee';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 
@@ -548,6 +548,24 @@ export class MastraRBACStudio implements IRBACProvider<StudioUser> {
 
   constructor(options: MastraRBACStudioOptions) {
     this.options = options;
+  }
+
+  getCapabilities(): RBACCapabilities {
+    return {
+      ...DEFAULT_RBAC_CAPABILITIES,
+      multiRole: false,
+      roleSource: 'config',
+    };
+  }
+
+  async listRoleDefinitions(): Promise<RoleDefinition[]> {
+    return Object.entries(this.options.roleMapping)
+      .filter(([key]) => key !== '_default')
+      .map(([roleName, permissions]) => ({
+        id: roleName,
+        name: roleName.charAt(0).toUpperCase() + roleName.slice(1),
+        permissions: permissions as RoleDefinition['permissions'],
+      }));
   }
 
   async getRoles(user: StudioUser): Promise<string[]> {

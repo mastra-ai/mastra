@@ -11,7 +11,8 @@
 export type { EEUser } from './user';
 
 // RBAC
-export type { RoleDefinition, RoleMapping, IRBACProvider, IRBACManager } from './rbac';
+export type { RoleDefinition, RoleMapping, IRBACProvider, IRBACManager, RBACCapabilities } from './rbac';
+export { DEFAULT_RBAC_CAPABILITIES } from './rbac';
 
 // Permissions (generated from SERVER_ROUTES)
 export type {
@@ -38,6 +39,7 @@ export type { ResourceIdentifier, ACLGrant, IACLProvider, IACLManager } from './
 
 // FGA
 export type {
+  FGACapabilities,
   FGACheckContext,
   FGACheckParams,
   FGAResource,
@@ -51,3 +53,4 @@ export type {
   IFGAProvider,
   IFGAManager,
 } from './fga';
+export { DEFAULT_FGA_CAPABILITIES } from './fga';
