@@ -14,6 +14,10 @@ import {
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
+// Re-export request-context key constants so custom middleware can read namespaced
+// auth state without importing internal paths.
+export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
+
 /**
  * Check if a route is a registered custom route that requires authentication.
  * Returns true only if the route is explicitly registered with requiresAuth: true.
@@ -425,6 +429,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     requestContext.set(MASTRA_USER_KEY, user);
+    // Backward-compat: also write the legacy `'user'` key so existing
+    // middleware and integrations that read `requestContext.get('user')`
+    // (including built-in FGA route enforcement, memory handlers, and the
+    // documented public surface) keep working. New code should prefer
+    // `MASTRA_USER_KEY` to avoid collisions with caller-supplied keys.
+    requestContext.set('user', user);
 
     // Store the raw auth token so downstream code (e.g., editor MCP client
     // resolution) can forward it when connecting to auth-protected MCP servers.
@@ -472,9 +482,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         } else {
           const permissions = await rbacProvider.getPermissions(user as EEUser);
           requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+          // Backward-compat alias for callers reading the legacy key.
+          requestContext.set('userPermissions', permissions);
 
           const roles = await rbacProvider.getRoles(user as EEUser);
           requestContext.set(MASTRA_USER_ROLES_KEY, roles);
+          // Backward-compat alias for callers reading the legacy key.
+          requestContext.set('userRoles', roles);
         }
       }
     } catch (rbacError) {

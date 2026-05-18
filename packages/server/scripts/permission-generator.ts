@@ -26,17 +26,15 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
   execute: 'Execute',
   publish: 'Publish, activate, or restore',
   read: 'View',
-  share: 'Change visibility/audience (e.g. private↔public)',
+  share: 'Change visibility/audience',
   write: 'Create and modify',
 };
 
 /**
- * Permissions that are not derived from any HTTP route (no `requiresPermission`,
- * no method/path mapping) but are asserted in handler code via helpers like
- * `assertShareAccess`. Seeded here so they appear in `PERMISSION_PATTERNS`
- * and `PermissionPattern`, making them grantable in role configs.
+ * Permission actions that are valid for role definitions even when no current
+ * server route derives them directly.
  */
-export const ASSERTION_ONLY_PERMISSIONS: readonly string[] = ['stored-agents:share', 'stored-skills:share'];
+const ADDITIONAL_ACTIONS = ['share'];
 
 /** Descriptions for resources (used for TSDoc comments in autocomplete) */
 const RESOURCE_DESCRIPTIONS: Record<string, string> = {
@@ -50,6 +48,7 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   observability: 'traces and spans',
   processors: 'processors',
   scores: 'evaluation scores',
+  stored: 'all stored resource families',
   'stored-agents': 'stored agents',
   'stored-mcp-clients': 'stored MCP clients',
   'stored-prompt-blocks': 'stored prompt blocks',
@@ -64,19 +63,16 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * Compound permission patterns that expand across the per-family stored resources.
- *
- * Emitted in PERMISSION_PATTERNS so role configs can grant the broad form. Runtime
- * matching in matchesPermission expands `stored:<action>` to each
- * `stored-<family>:<action>`.
+ * Compound permission patterns supported by the RBAC matcher.
  */
-const COMPOUND_PATTERNS: Record<string, string> = {
-  'stored:*':
-    'Full access to all stored-* resources (stored-agents, stored-skills, stored-prompt-blocks, stored-mcp-clients, stored-scorers, stored-workspaces)',
-  'stored:read': 'View any stored-* resource',
-  'stored:write': 'Create and modify any stored-* resource',
-  'stored:delete': 'Delete any stored-* resource',
-};
+const ADDITIONAL_PERMISSION_PATTERNS = [
+  'stored:*',
+  'stored:read',
+  'stored:write',
+  'stored:delete',
+  'stored-agents:share',
+  'stored-skills:share',
+];
 
 /**
  * Generates a human-readable description for a permission pattern.
@@ -124,32 +120,22 @@ export function derivePermissionData(): PermissionData {
   const permissionSet = new Set<string>();
 
   for (const route of SERVER_ROUTES) {
-    const effective = getEffectivePermission(route);
-    if (effective) {
-      const permissions = Array.isArray(effective) ? effective : [effective];
-      for (const permission of permissions) {
-        const [resource, action] = permission.split(':');
+    const permission = getEffectivePermission(route);
+    if (permission) {
+      const perms = Array.isArray(permission) ? permission : [permission];
+      for (const perm of perms) {
+        const [resource, action] = perm.split(':');
         if (resource && action) {
           resourceSet.add(resource);
           actionSet.add(action);
-          permissionSet.add(permission);
+          permissionSet.add(perm);
         }
       }
     }
   }
 
-  // Seed assertion-only permissions (not derivable from any route).
-  for (const permission of ASSERTION_ONLY_PERMISSIONS) {
-    const [resource, action] = permission.split(':');
-    if (resource && action) {
-      resourceSet.add(resource);
-      actionSet.add(action);
-      permissionSet.add(permission);
-    }
-  }
-
   const resources = [...resourceSet].sort();
-  const actions = [...actionSet].sort();
+  const actions = [...new Set([...actionSet, ...ADDITIONAL_ACTIONS])].sort();
   const permissions = [...permissionSet].sort();
 
   return { resources, actions, permissions };
@@ -167,6 +153,7 @@ export function generatePermissionFileContent(data: PermissionData): string {
     ...actions.map(a => `*:${a}`), // Action wildcards
     ...resources.map(r => `${r}:*`), // Resource wildcards
     ...permissions, // Specific permissions
+    ...ADDITIONAL_PERMISSION_PATTERNS, // Compound aliases
   ];
 
   // Generate the PERMISSION_PATTERNS object entries with TSDoc comments
@@ -175,13 +162,6 @@ export function generatePermissionFileContent(data: PermissionData): string {
       const desc = getPermissionDescription(pattern);
       return `  /** ${desc} */\n  '${pattern}': '${pattern}'`;
     })
-    .join(',\n');
-
-  // Compound patterns: broad shorthand entries that expand across per-family resources at match time.
-  // Skip any that collide with a current pattern (none today, but guard against regressions).
-  const compoundEntries = Object.entries(COMPOUND_PATTERNS)
-    .filter(([pattern]) => !allPatterns.includes(pattern))
-    .map(([pattern, desc]) => `  /** ${desc} */\n  '${pattern}': '${pattern}'`)
     .join(',\n');
 
   const fgaPermissionEntries = permissions
@@ -235,7 +215,7 @@ export type Action = (typeof ACTIONS)[number];
  * Use \`keyof typeof PERMISSION_PATTERNS\` or the \`PermissionPattern\` type.
  */
 export const PERMISSION_PATTERNS = {
-${patternEntries},${compoundEntries ? `\n${compoundEntries},` : ''}
+${patternEntries},
 } as const;
 
 /**

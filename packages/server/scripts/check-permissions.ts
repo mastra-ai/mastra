@@ -12,12 +12,7 @@ import * as fs from 'node:fs';
 
 import { SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 import { getEffectivePermission } from '../src/server/server-adapter/routes/permissions.js';
-import {
-  ASSERTION_ONLY_PERMISSIONS,
-  OUTPUT_PATH,
-  derivePermissionData,
-  generatePermissionFileContent,
-} from './permission-generator.js';
+import { OUTPUT_PATH, derivePermissionData, generatePermissionFileContent } from './permission-generator.js';
 
 const data = derivePermissionData();
 const generatedContent = generatePermissionFileContent(data);
@@ -30,26 +25,21 @@ const mismatches: string[] = [];
 for (const route of SERVER_ROUTES) {
   if (route.method === 'ALL') continue;
 
-  const effective = getEffectivePermission(route);
-  if (effective) {
-    const perms = Array.isArray(effective) ? effective : [effective];
-    for (const runtimePerm of perms) {
-      runtimePermissions.add(runtimePerm);
-
-      if (!generatedPermissions.has(runtimePerm)) {
-        mismatches.push(`Missing: ${runtimePerm} (from ${route.method} ${route.path})`);
+  const runtimePerm = getEffectivePermission(route);
+  if (runtimePerm) {
+    const perms = Array.isArray(runtimePerm) ? runtimePerm : [runtimePerm];
+    for (const perm of perms) {
+      runtimePermissions.add(perm);
+      if (!generatedPermissions.has(perm)) {
+        mismatches.push(`Missing: ${perm} (from ${route.method} ${route.path})`);
       }
     }
   }
 }
 
-// Check for permissions in generated that aren't from routes.
-// Assertion-only permissions (e.g. `stored-agents:share`) are intentionally
-// not derivable from any route — they're enforced in handler code via helpers
-// like `assertShareAccess` — so exclude them from the "Extra" check.
-const assertionOnly = new Set<string>(ASSERTION_ONLY_PERMISSIONS);
+// Check for permissions in generated that aren't from routes
 for (const perm of generatedPermissions) {
-  if (!runtimePermissions.has(perm) && !assertionOnly.has(perm)) {
+  if (!runtimePermissions.has(perm)) {
     mismatches.push(`Extra: ${perm} (not from any route)`);
   }
 }

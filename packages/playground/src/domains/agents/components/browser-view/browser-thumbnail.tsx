@@ -1,7 +1,7 @@
 import { Button, StatusBadge, cn } from '@mastra/playground-ui';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, PanelRight, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { useBrowserSession } from '../../context/browser-session-context';
+import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
 import { BrowserViewFrame } from './browser-view-frame';
@@ -20,7 +20,8 @@ interface BrowserThumbnailProps {
  * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
  */
 export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: BrowserThumbnailProps) {
-  const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, closeBrowser } = useBrowserSession();
+  const { hasSession, viewMode, status, currentUrl, setViewMode, closeBrowser } = useBrowserSession();
+  const { latestFrame } = useBrowserFrame();
   const { toolCalls } = useBrowserToolCalls();
   const imgRef = useRef<HTMLImageElement>(null);
   const [hasFrame, setHasFrame] = useState(false);

@@ -51,6 +51,7 @@ function createMastra(opts: {
   };
   const skillStore = {
     getById: vi.fn(async (id: string) => skills.get(id) ?? null),
+    getByIdResolved: vi.fn(async (id: string) => skills.get(id) ?? null),
     delete: vi.fn(async (id: string) => skills.delete(id)),
   };
   const storage = {

@@ -1,11 +1,13 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import { Notice, Button } from '@mastra/playground-ui';
 import { Save } from 'lucide-react';
-
+import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';
 
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { BrowserSessionProvider } from '../../context/browser-session-context';
+import { BrowserSessionProvider } from '../../context/browser-session-provider';
+import { useAgent } from '../../hooks/use-agent';
 import { AgentChat } from '../agent-chat';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
@@ -55,17 +57,20 @@ export function AgentPlaygroundTestChat({
   hasMemory,
 }: AgentPlaygroundTestChatProps) {
   // Generate a stable ephemeral thread ID for test chat sessions
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: regenerate thread ID when agent changes
+  const testThreadId = useMemo(() => uuid(), [agentId]);
   const mergedRequestContext = useMergedRequestContext();
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
+  const { data: agent } = useAgent(agentId);
 
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
-      <BrowserSessionProvider agentId={agentId} threadId={agentId}>
+      <BrowserSessionProvider agentId={agentId} threadId={testThreadId} enabled={Boolean(agent?.browserTools?.length)}>
         <DatasetSaveProvider
           enabled
-          threadId={agentId}
+          threadId={testThreadId}
           agentId={agentId}
           requestContext={hasRequestContext ? mergedRequestContext : undefined}
         >
@@ -73,12 +78,12 @@ export function AgentPlaygroundTestChat({
             {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
             <div className="flex-1 min-h-0">
               <AgentChat
-                key={agentId}
+                key={testThreadId}
                 agentId={agentId}
                 agentName={agentName}
                 modelVersion={modelVersion}
                 agentVersionId={agentVersionId}
-                threadId={agentId}
+                threadId={testThreadId}
                 memory={hasMemory}
                 refreshThreadList={async () => {}}
                 isNewThread
