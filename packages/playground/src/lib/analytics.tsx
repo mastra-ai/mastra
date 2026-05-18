@@ -1,8 +1,9 @@
 import { PostHogProvider as PHProvider } from '@posthog/react';
 import posthog from 'posthog-js';
+import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
-export function PostHogProvider({ children }: { children: React.ReactNode }) {
+export function PostHogProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if ('brave' in navigator) {
       console.info('[Analytics]: Telemetry is disabled for browser constraints.');

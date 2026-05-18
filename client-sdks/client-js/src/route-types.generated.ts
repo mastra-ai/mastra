@@ -167,6 +167,10 @@ export type GetAgentsProviders_Response = {
     name: string;
     label?: string | undefined;
     description?: string | undefined;
+    envVar: string | string[];
+    connected: boolean;
+    docUrl?: string | undefined;
+    models: string[];
   }[];
 };
 
@@ -73642,6 +73646,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     datasetVersion: number;
     input: unknown;
     groundTruth?: unknown | undefined;
+    expectedTrajectory?: unknown | undefined;
     metadata?:
       | {
           [key: string]: unknown;

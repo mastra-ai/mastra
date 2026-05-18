@@ -517,7 +517,7 @@ export default function Workspace() {
                     entries={files}
                     currentPath={currentPath}
                     isLoading={isLoadingFiles}
-                    error={filesError}
+                    error={filesError instanceof Error ? filesError : null}
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}
