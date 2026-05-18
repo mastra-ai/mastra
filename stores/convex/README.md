@@ -3,8 +3,9 @@
 Convex adapters for Mastra:
 
 - `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources).
-- `ConvexVector` stores embeddings inside Convex and performs cosine similarity search.
-- `@mastra/convex/server` exposes the required Convex table definitions and storage mutation.
+- `ConvexVector` stores embeddings inside Convex and performs development-scale cosine similarity search.
+- `ConvexNativeVector` uses Convex native vector search for production workloads.
+- `@mastra/convex/server` exposes the required Convex table definitions, storage mutation, and native vector handlers.
 
 ## Quick start
 
@@ -85,6 +86,56 @@ const vector = new ConvexVector({
   adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
 });
 ```
+
+`ConvexVector` scans stored vectors through the storage handler and computes similarity in the adapter. Use it for local development, tests, and small datasets.
+
+For native Convex vector search, define a dedicated table in `convex/schema.ts`:
+
+```ts
+import { defineSchema } from 'convex/server';
+import { defineMastraNativeVectorTable } from '@mastra/convex/schema';
+
+export default defineSchema({
+  docs_vectors: defineMastraNativeVectorTable({
+    dimensions: 1536,
+  }),
+});
+```
+
+Export the native vector handlers in `convex/mastra/nativeVector.ts`:
+
+```ts
+import {
+  mastraNativeVectorAction,
+  mastraNativeVectorMutation,
+  mastraNativeVectorQuery,
+} from '@mastra/convex/server';
+
+export const query = mastraNativeVectorAction;
+export const read = mastraNativeVectorQuery;
+export const write = mastraNativeVectorMutation;
+```
+
+Configure the native vector adapter:
+
+```ts
+import { ConvexNativeVector } from '@mastra/convex';
+
+const vector = new ConvexNativeVector({
+  id: 'convex-native-vectors',
+  deploymentUrl: process.env.CONVEX_URL!,
+  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+  indexes: {
+    docs: {
+      tableName: 'docs_vectors',
+      vectorIndexName: 'by_embedding',
+      dimension: 1536,
+    },
+  },
+});
+```
+
+Native vector search uses Convex's schema-defined vector indexes and action-only `ctx.vectorSearch` API. It supports `topK` values from 1 to 256 and equality filters on fields declared in the Convex vector index `filterFields`.
 
 ## Architecture
 
