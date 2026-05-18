@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Improved MastraPlatformExporter and CloudExporter handling of invalid credentials to avoid repeated unauthorized upload attempts.
+Paused observability uploads after invalid credentials so exporters stop repeatedly sending unauthorized requests.
