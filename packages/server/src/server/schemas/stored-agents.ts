@@ -41,7 +41,18 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
     .default('published')
     .describe('Filter agents by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter agents by author identifier'),
+  visibility: z.enum(['public']).optional().describe('Filter to only public agents'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
+  favoritedOnly: z
+    .stringbool()
+    .optional()
+    .describe('When true, return only agents favorited by the caller (requires the `favorites` EE feature)'),
+  pinFavoritedFor: z
+    .string()
+    .optional()
+    .describe(
+      'When set, treat the given subject (user/role) as the favoriting principal for `favoritedOnly` instead of the caller',
+    ),
 });
 
 // ============================================================================
@@ -125,6 +136,36 @@ const workspaceRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('id'), workspaceId: z.string() }),
   z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
 ]);
+
+/** Screencast options for streaming browser frames */
+const screencastOptionsSchema = z.object({
+  format: z.enum(['jpeg', 'png']).optional().describe('Image format (default: jpeg)'),
+  quality: z.number().min(0).max(100).optional().describe('JPEG quality 0-100 (default: 80)'),
+  maxWidth: z.number().optional().describe('Max width in pixels (default: 1280)'),
+  maxHeight: z.number().optional().describe('Max height in pixels (default: 720)'),
+  everyNthFrame: z.number().optional().describe('Capture every Nth frame (default: 1)'),
+});
+
+/** Browser config: serializable browser configuration for stored agents */
+const browserConfigSchema = z.object({
+  provider: z.string().describe('Browser provider type (e.g., stagehand, playwright)'),
+  headless: z.boolean().optional().describe('Run browser in headless mode (default: true)'),
+  viewport: z
+    .object({
+      width: z.number().describe('Viewport width in pixels'),
+      height: z.number().describe('Viewport height in pixels'),
+    })
+    .optional()
+    .describe('Browser viewport dimensions'),
+  timeout: z.number().optional().describe('Default timeout in milliseconds (default: 10000)'),
+  screencast: screencastOptionsSchema.optional().describe('Screencast options for streaming browser frames'),
+});
+
+/** Browser reference: inline browser configuration */
+const browserRefSchema = z.object({
+  type: z.literal('inline'),
+  config: browserConfigSchema,
+});
 
 /**
  * Processor phase enum matching ProcessorPhase type
@@ -247,6 +288,10 @@ const snapshotConfigSchema = z.object({
   workspace: conditionalFieldSchema(workspaceRefSchema)
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
+  browser: z
+    .union([conditionalFieldSchema(browserRefSchema), z.boolean(), z.null()])
+    .optional()
+    .describe('Browser configuration — object config, true (apply default), false/null (disable)'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -254,11 +299,28 @@ const snapshotConfigSchema = z.object({
 });
 
 /**
- * Agent metadata fields (authorId, metadata) that live on the thin agent record.
+ * Agent metadata fields (authorId, metadata, visibility) that live on the thin agent record.
  */
 const agentMetadataSchema = z.object({
   authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
+  visibility: z
+    .enum(['private', 'public'])
+    .optional()
+    .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
+});
+
+/**
+ * Snapshot config schema for create where `model` is optional. When omitted, the
+ * builder applies `defaults.model` from `/editor/builder/settings` server-side.
+ */
+const snapshotConfigCreateSchema = snapshotConfigSchema.extend({
+  model: conditionalFieldSchema(modelConfigSchema)
+    .optional()
+    .describe(
+      'Model configuration — static value or array of conditional variants. ' +
+        'When omitted, the builder default model is applied server-side.',
+    ),
 });
 
 /**
@@ -271,8 +333,12 @@ export const createStoredAgentBodySchema = z
     id: z.string().optional().describe('Unique identifier for the agent. If not provided, derived from name.'),
     authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
+    visibility: z
+      .enum(['private', 'public'])
+      .optional()
+      .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
   })
-  .merge(snapshotConfigSchema);
+  .merge(snapshotConfigCreateSchema);
 
 /**
  * Snapshot config schema for updates where nullable fields (like memory) can be set to null to clear them.
@@ -315,6 +381,9 @@ export const storedAgentSchema = z.object({
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  visibility: z.enum(['private', 'public']).optional(),
+  favoriteCount: z.number().int().nonnegative().optional().describe('Number of users who have favorited this agent'),
+  isFavorited: z.boolean().optional().describe('Whether the requesting user has favorited this agent'),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   // Version snapshot config fields (resolved from active version)
@@ -360,6 +429,10 @@ export const storedAgentSchema = z.object({
   workspace: conditionalFieldSchema(workspaceRefSchema)
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
+  browser: z
+    .union([conditionalFieldSchema(browserRefSchema), z.boolean(), z.null()])
+    .optional()
+    .describe('Browser configuration — object config, true (apply default), false/null (disable)'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -400,6 +473,7 @@ export const updateStoredAgentResponseSchema = z.union([
     activeVersionId: z.string().optional(),
     authorId: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
+    visibility: z.enum(['private', 'public']).optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   }),
