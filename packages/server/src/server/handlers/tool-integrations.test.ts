@@ -24,6 +24,71 @@ function makeMastra(editor?: Partial<IMastraEditor> | undefined) {
   } as any;
 }
 
+function makeToolConnectionsStore(
+  initialRows: Array<{
+    authorId: string;
+    providerId: string;
+    toolService: string;
+    connectionId: string;
+    label?: string | null;
+  }> = [],
+) {
+  const rows = new Map<
+    string,
+    { authorId: string; providerId: string; toolService: string; connectionId: string; label: string | null }
+  >();
+  for (const r of initialRows) {
+    const key = `${r.authorId}::${r.providerId}::${r.connectionId}`;
+    rows.set(key, { ...r, label: r.label ?? null });
+  }
+  return {
+    rows,
+    upsert: vi.fn(
+      async (row: {
+        authorId: string;
+        providerId: string;
+        toolService: string;
+        connectionId: string;
+        label: string | null;
+      }) => {
+        const key = `${row.authorId}::${row.providerId}::${row.connectionId}`;
+        rows.set(key, { ...row });
+      },
+    ),
+    list: vi.fn(
+      async ({
+        authorId,
+        providerId,
+        toolService,
+      }: {
+        authorId: string;
+        providerId?: string;
+        toolService?: string;
+      }) => {
+        return Array.from(rows.values()).filter(
+          r =>
+            r.authorId === authorId &&
+            (providerId ? r.providerId === providerId : true) &&
+            (toolService ? r.toolService === toolService : true),
+        );
+      },
+    ),
+  };
+}
+
+function makeMastraWithStorage(
+  editor: Partial<IMastraEditor> | undefined,
+  toolConnections: ReturnType<typeof makeToolConnectionsStore> | undefined,
+) {
+  return {
+    getEditor: () => editor,
+    getStorage: () => ({
+      getStore: async (name: string) => (name === 'toolConnections' ? toolConnections : undefined),
+    }),
+    getLogger: () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+  } as any;
+}
+
 function makeIntegration(overrides: Partial<ToolIntegration> = {}): ToolIntegration {
   return {
     id: 'composio',
@@ -171,6 +236,54 @@ describe('AUTHORIZE_TOOL_INTEGRATION_ROUTE', () => {
     });
   });
 
+  it('upserts a tool_connections row with the supplied label on fresh connect', async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'ca_new' });
+    const integration = makeIntegration({ authorize });
+    const editor = makeEditor(integration);
+    const store = makeToolConnectionsStore();
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user_42');
+
+    await AUTHORIZE_TOOL_INTEGRATION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, store),
+      integrationId: 'composio',
+      toolService: 'gmail',
+      connectionId: '',
+      label: 'Personal',
+      requestContext,
+    } as any);
+
+    expect(store.upsert).toHaveBeenCalledWith({
+      authorId: 'user_42',
+      providerId: 'composio',
+      toolService: 'gmail',
+      connectionId: 'ca_new',
+      label: 'Personal',
+    });
+  });
+
+  it('upserts a tool_connections row with null label when label is omitted', async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'ca_new' });
+    const integration = makeIntegration({ authorize });
+    const editor = makeEditor(integration);
+    const store = makeToolConnectionsStore();
+
+    await AUTHORIZE_TOOL_INTEGRATION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, store),
+      integrationId: 'composio',
+      toolService: 'gmail',
+      connectionId: '',
+    } as any);
+
+    expect(store.upsert).toHaveBeenCalledWith({
+      authorId: 'default',
+      providerId: 'composio',
+      toolService: 'gmail',
+      connectionId: 'ca_new',
+      label: null,
+    });
+  });
+
   it('forwards optional config to authorize when supplied', async () => {
     const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'auth-123' });
     const integration = makeIntegration({ authorize });
@@ -272,7 +385,42 @@ describe('LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE', () => {
 
     expect(listConnections).toHaveBeenCalledWith({ toolService: 'gmail', userId: 'user_42' });
     expect(result).toEqual({
-      items: [{ connectionId: 'ca_1', status: 'active' }],
+      items: [{ connectionId: 'ca_1', status: 'active', label: null }],
+    });
+  });
+
+  it('joins persisted labels from tool_connections when present', async () => {
+    const listConnections = vi.fn().mockResolvedValue({
+      items: [
+        { connectionId: 'ca_1', status: 'active' },
+        { connectionId: 'ca_2', status: 'active' },
+      ],
+    });
+    const integration = makeIntegration({ listConnections });
+    const editor = makeEditor(integration);
+    const store = makeToolConnectionsStore([
+      { authorId: 'user_42', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1', label: 'Work' },
+    ]);
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user_42');
+
+    const result = await LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, store),
+      integrationId: 'composio',
+      toolService: 'gmail',
+      requestContext,
+    } as any);
+
+    expect(store.list).toHaveBeenCalledWith({
+      authorId: 'user_42',
+      providerId: 'composio',
+      toolService: 'gmail',
+    });
+    expect(result).toEqual({
+      items: [
+        { connectionId: 'ca_1', status: 'active', label: 'Work' },
+        { connectionId: 'ca_2', status: 'active', label: null },
+      ],
     });
   });
 

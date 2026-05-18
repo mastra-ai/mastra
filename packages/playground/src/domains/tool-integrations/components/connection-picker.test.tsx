@@ -320,4 +320,90 @@ describe('ConnectionPicker', () => {
       expect(screen.queryByTestId(`connection-picker-${TOOL_SERVICE}-existing`)).toBeNull();
     });
   });
+
+  it('shows a label input in the empty state and forwards the typed label to authorize', async () => {
+    authorizeMock.mockResolvedValue({ status: 'completed', connectionId: 'ca_new' });
+
+    const onChange = vi.fn();
+    renderPicker({ initial: [], onChange });
+
+    const labelInput = screen.getByTestId(`connection-new-label-${TOOL_SERVICE}`) as HTMLInputElement;
+    fireEvent.change(labelInput, { target: { value: 'Work account' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+    });
+
+    await waitFor(() => {
+      expect(authorizeMock).toHaveBeenCalledWith({
+        integrationId: INTEGRATION_ID,
+        toolService: TOOL_SERVICE,
+        label: 'Work account',
+      });
+    });
+
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall).toHaveLength(1);
+    expect(lastCall[0]).toEqual({
+      connectionId: 'ca_new',
+      toolService: TOOL_SERVICE,
+      label: 'Work account',
+    });
+  });
+
+  it('allows connecting with no label when none is typed in the empty state', async () => {
+    authorizeMock.mockResolvedValue({ status: 'completed', connectionId: 'ca_new' });
+    renderPicker({ initial: [] });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+    });
+
+    await waitFor(() => {
+      expect(authorizeMock).toHaveBeenCalledWith({
+        integrationId: INTEGRATION_ID,
+        toolService: TOOL_SERVICE,
+      });
+    });
+  });
+
+  it('surfaces persisted labels from listConnections as the placeholder on the existing-connections row', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [{ connectionId: 'ca_existing_1', toolService: TOOL_SERVICE, status: 'active', label: 'Saved label' }],
+        }),
+      ),
+    );
+
+    renderPicker({ initial: [] });
+
+    const labelInput = (await screen.findByTestId(
+      `connection-existing-label-${TOOL_SERVICE}-ca_existing_1`,
+    )) as HTMLInputElement;
+
+    expect(labelInput.placeholder).toContain('Saved label');
+  });
+
+  it('inherits the persisted label when pinning an existing connection with no override', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [{ connectionId: 'ca_existing_1', toolService: TOOL_SERVICE, status: 'active', label: 'Saved label' }],
+        }),
+      ),
+    );
+
+    const onChange = vi.fn();
+    renderPicker({ initial: [], onChange });
+
+    await screen.findByTestId(`connection-existing-${TOOL_SERVICE}-ca_existing_1`);
+    fireEvent.click(screen.getByTestId(`connection-existing-pin-${TOOL_SERVICE}-ca_existing_1`));
+
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall).toHaveLength(1);
+    // No override typed → pin inherits persisted label so it carries across agents.
+    expect(lastCall[0].label).toBe('Saved label');
+    expect(lastCall[0].connectionId).toBe('ca_existing_1');
+  });
 });

@@ -121,6 +121,7 @@ export const authorizeToolIntegrationBodySchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('Provider-specific user-supplied connection fields (e.g. subdomain)'),
+  label: z.string().max(64).nullish().describe('Optional human label to persist on the resulting tool_connections row'),
 });
 
 export const listConnectionFieldsQuerySchema = z.object({
@@ -206,6 +207,7 @@ export const listConnectionsResponseSchema = z.object({
       connectionId: z.string(),
       status: z.enum(['active', 'pending', 'failed', 'inactive']),
       createdAt: z.string().optional(),
+      label: z.string().nullish().describe('Persisted display label from tool_connections, if any'),
     }),
   ),
 });

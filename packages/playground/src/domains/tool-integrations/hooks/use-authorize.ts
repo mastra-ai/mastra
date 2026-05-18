@@ -15,6 +15,12 @@ export interface AuthorizeArgs {
    * Confluence subdomain). Forwarded to the server's `authorize` body.
    */
   config?: Record<string, unknown>;
+  /**
+   * Optional human label to persist on the resulting `tool_connections` row.
+   * Stored once per (authorId, providerId, connectionId) and surfaced across
+   * agents in the picker so the same account doesn't need to be relabeled.
+   */
+  label?: string | null;
 }
 
 export interface AuthorizeResult {
@@ -54,12 +60,13 @@ export const useAuthorize = (options: UseAuthorizeOptions = {}) => {
   const openPopup = options.openPopup ?? ((url: string) => window.open(url, '_blank', 'popup,width=600,height=700'));
 
   return useMutation<AuthorizeResult, Error, AuthorizeArgs>({
-    mutationFn: async ({ integrationId, toolService, connectionId, config }) => {
+    mutationFn: async ({ integrationId, toolService, connectionId, config, label }) => {
       const integration = client.getToolIntegration(integrationId);
       const { url, authId } = await integration.authorize({
         toolService,
         connectionId: connectionId ?? '',
         ...(config ? { config } : {}),
+        ...(label !== undefined ? { label } : {}),
       });
 
       const popup = openPopup(url);

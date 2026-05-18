@@ -108,6 +108,10 @@ export const ConnectionPicker = ({
 
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [showFieldForm, setShowFieldForm] = useState(false);
+  // Label draft for a fresh OAuth-created connection. We collect it before
+  // launching the popup so the server can upsert `tool_connections` with the
+  // user's chosen name in the same round-trip.
+  const [newLabelDraft, setNewLabelDraft] = useState('');
 
   const fieldFormError = useMemo(() => {
     if (!requiresFields) return undefined;
@@ -140,7 +144,8 @@ export const ConnectionPicker = ({
 
   // Existing provider connections that are not yet pinned to this agent
   // for this toolService. Driven by the picker UI's "Use existing connection"
-  // affordance — pinning one writes a fresh label without re-running OAuth.
+  // affordance — pinning one reuses the persisted account label by default
+  // but the user can override it for this agent.
   const unpinnedExisting = useMemo(() => {
     const items = existing.data?.items ?? [];
     return items.filter(item => !pinnedIds.has(item.connectionId));
@@ -177,8 +182,13 @@ export const ConnectionPicker = ({
   };
 
   const handlePinExisting = (connectionId: string) => {
-    const label = (drafts[connectionId] ?? '').trim();
-    if (validateDraft(label)) return;
+    const override = (drafts[connectionId] ?? '').trim();
+    if (validateDraft(override)) return;
+    // Inherit the persisted account label from `tool_connections` when the
+    // user did not type a per-agent override. Without this, the second agent
+    // pinning the same account would lose the name we stored under #1.
+    const persisted = (existing.data?.items ?? []).find(c => c.connectionId === connectionId)?.label ?? undefined;
+    const label = override || persisted || undefined;
     onChange([...connections, { connectionId, toolService, ...(label ? { label } : {}) }]);
     setDrafts(prev => {
       const next = { ...prev };
@@ -186,6 +196,20 @@ export const ConnectionPicker = ({
       return next;
     });
   };
+
+  const newDraftError = useMemo(() => {
+    const trimmed = newLabelDraft.trim();
+    if (trimmed.length === 0) {
+      return labelWouldBeRequired ? 'Label is required when you have multiple connections' : undefined;
+    }
+    if (trimmed.length > MAX_LABEL) return `Label must be ≤${MAX_LABEL} characters`;
+    if (!LABEL_RE.test(trimmed)) return 'Use letters, numbers, spaces, _ or -';
+    const key = trimmed.toLowerCase();
+    if (connections.some(c => (c.label ?? '').trim().toLowerCase() === key)) {
+      return 'Duplicate label';
+    }
+    return undefined;
+  }, [newLabelDraft, labelWouldBeRequired, connections]);
 
   const handleAdd = async () => {
     // If the provider declares additional fields (e.g. Confluence subdomain),
@@ -195,20 +219,24 @@ export const ConnectionPicker = ({
       return;
     }
     if (fieldFormError) return;
+    if (newDraftError) return;
     const config = requiresFields ? coerceFieldValues() : undefined;
+    const label = newLabelDraft.trim();
     const result = await authorize.mutateAsync({
       integrationId,
       toolService,
       ...(config ? { config } : {}),
+      ...(label ? { label } : {}),
     });
     if (result.status !== 'completed') return;
-    // Don't pre-seed an empty label string. When we land in single-connection
-    // territory the row stays unlabeled (valid). When the user is adding a
-    // second connection the row will render empty and validateLabels will
-    // surface the now-required label error.
-    onChange([...connections, { connectionId: result.connectionId, toolService }]);
+    // Carry the label onto the pin so the LLM-facing suffix matches the
+    // persisted account name out of the gate. Empty labels are fine in
+    // single-connection territory and `validateLabels` will surface the
+    // required-label error once a second connection appears.
+    onChange([...connections, { connectionId: result.connectionId, toolService, ...(label ? { label } : {}) }]);
     setShowFieldForm(false);
     setFieldValues({});
+    setNewLabelDraft('');
   };
 
   const handleReauthorize = async (index: number) => {
@@ -261,6 +289,10 @@ export const ConnectionPicker = ({
           const draft = drafts[item.connectionId] ?? '';
           const error = draft.length === 0 ? undefined : validateDraft(draft);
           const inactive = item.status !== 'active';
+          const persistedLabel = item.label ?? undefined;
+          const placeholder = persistedLabel
+            ? `${persistedLabel} (inherits account name)`
+            : `Label for ${item.connectionId.slice(0, 12)}…`;
           return (
             <div
               key={item.connectionId}
@@ -271,7 +303,7 @@ export const ConnectionPicker = ({
                 <Input
                   size="sm"
                   value={draft}
-                  placeholder={`Label for ${item.connectionId.slice(0, 12)}…`}
+                  placeholder={placeholder}
                   onChange={e => setDrafts(prev => ({ ...prev, [item.connectionId]: e.target.value }))}
                   disabled={disabled || inactive}
                   error={Boolean(error)}
@@ -339,24 +371,42 @@ export const ConnectionPicker = ({
       {renderFieldForm()}
       {connections.length === 0 ? (
         <div
-          className="flex items-center gap-2 rounded-md border border-dashed border-warning/40 bg-warning/5 px-3 py-2"
+          className="flex flex-col gap-2 rounded-md border border-dashed border-warning/40 bg-warning/5 px-3 py-2"
           data-testid={`connection-picker-${toolService}-empty`}
         >
-          <AlertCircle className="size-4 shrink-0 text-warning" />
-          <Txt as="span" variant="ui-sm" className="text-warning">
-            No connections yet — add one to enable these tools.
-          </Txt>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0 text-warning" />
+            <Txt as="span" variant="ui-sm" className="text-warning">
+              No connections yet — name your account and connect to enable these tools.
+            </Txt>
+          </div>
           {canAddMore && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleAdd}
-              disabled={disabled || authorize.isPending}
-              className="ml-auto"
-            >
-              <Plus className="size-3" />
-              Connect
-            </Button>
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <Input
+                  size="sm"
+                  value={newLabelDraft}
+                  placeholder="Account name (e.g. Work, Personal)"
+                  onChange={e => setNewLabelDraft(e.target.value)}
+                  disabled={disabled || authorize.isPending}
+                  error={Boolean(newDraftError) && newLabelDraft.length > 0}
+                  aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
+                  data-testid={`connection-new-label-${toolService}`}
+                />
+                {newDraftError && newLabelDraft.length > 0 && (
+                  <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleAdd}
+                disabled={disabled || authorize.isPending || Boolean(newDraftError)}
+              >
+                <Plus className="size-3" />
+                Connect
+              </Button>
+            </div>
           )}
         </div>
       ) : (
@@ -433,17 +483,34 @@ export const ConnectionPicker = ({
       )}
 
       {showAddButton && connections.length > 0 && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={handleAdd}
-          disabled={disabled || authorize.isPending}
-          className={cn('self-start')}
-          data-testid={`connection-add-${toolService}`}
-        >
-          <Plus className="size-3" />
-          Add connection
-        </Button>
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
+            <Input
+              size="sm"
+              value={newLabelDraft}
+              placeholder="Account name for the new connection"
+              onChange={e => setNewLabelDraft(e.target.value)}
+              disabled={disabled || authorize.isPending}
+              error={Boolean(newDraftError) && newLabelDraft.length > 0}
+              aria-invalid={Boolean(newDraftError) && newLabelDraft.length > 0}
+              data-testid={`connection-new-label-${toolService}`}
+            />
+            {newDraftError && newLabelDraft.length > 0 && (
+              <p className="text-error text-ui-xs mt-1 block">{newDraftError}</p>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleAdd}
+            disabled={disabled || authorize.isPending || Boolean(newDraftError)}
+            className={cn('self-start')}
+            data-testid={`connection-add-${toolService}`}
+          >
+            <Plus className="size-3" />
+            Add connection
+          </Button>
+        </div>
       )}
     </div>
   );

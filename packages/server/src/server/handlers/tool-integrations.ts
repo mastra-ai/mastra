@@ -172,7 +172,7 @@ export const AUTHORIZE_TOOL_INTEGRATION_ROUTE = createRoute({
   description: 'Starts an OAuth flow and returns a redirect URL + opaque auth handle',
   tags: ['Tool Integrations'],
   requiresAuth: true,
-  handler: async ({ mastra, integrationId, toolService, connectionId, toolName, config, requestContext }) => {
+  handler: async ({ mastra, integrationId, toolService, connectionId, toolName, config, label, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
       const integration = resolveIntegration(editor, integrationId);
@@ -180,8 +180,39 @@ export const AUTHORIZE_TOOL_INTEGRATION_ROUTE = createRoute({
       // auth context so the new connected account lands in the same bucket the
       // runtime will use at execution time. Re-auth (caller passed an existing
       // `connectionId`) is left untouched so the adapter refreshes in place.
-      const bucket = connectionId && connectionId.length > 0 ? connectionId : resolveOwnerId(requestContext);
-      return await integration.authorize({ toolService, connectionId: bucket, toolName, config });
+      const authorId = resolveOwnerId(requestContext);
+      const bucket = connectionId && connectionId.length > 0 ? connectionId : authorId;
+      const result = await integration.authorize({ toolService, connectionId: bucket, toolName, config });
+
+      // Persist label on the author-scoped tool_connections row. We upsert
+      // even when `label` is null/undefined so the row exists for later
+      // PATCH/list-join in the picker. The adapter's returned `authId` (or
+      // existing bucket) is the canonical connection id we key off of.
+      const persistedConnectionId = connectionId && connectionId.length > 0 ? connectionId : result.authId;
+      try {
+        const storage = mastra.getStorage();
+        const toolConnections = await storage?.getStore('toolConnections');
+        if (toolConnections && persistedConnectionId) {
+          await toolConnections.upsert({
+            authorId,
+            providerId: integration.id,
+            toolService,
+            connectionId: persistedConnectionId,
+            label: typeof label === 'string' && label.length > 0 ? label : null,
+          });
+        }
+      } catch (upsertError) {
+        // Don't fail the OAuth round-trip if label persistence fails — log
+        // and continue; the picker will still work with an empty label.
+        mastra.getLogger?.()?.warn?.('[tool-integrations] failed to upsert tool_connections label', {
+          error: upsertError instanceof Error ? upsertError.message : String(upsertError),
+          integrationId,
+          toolService,
+          connectionId: persistedConnectionId,
+        });
+      }
+
+      return result;
     } catch (error) {
       return handleError(error, 'Error authorizing tool integration');
     }
@@ -263,8 +294,39 @@ export const LIST_TOOL_INTEGRATION_CONNECTIONS_ROUTE = createRoute({
     try {
       const editor = requireEditor(mastra.getEditor());
       const integration = resolveIntegration(editor, integrationId);
-      const userId = resolveOwnerId(requestContext);
-      return await integration.listConnections({ toolService, userId });
+      const authorId = resolveOwnerId(requestContext);
+      const adapterResult = await integration.listConnections({ toolService, userId: authorId });
+
+      // Join with persisted tool_connections labels so the picker can surface
+      // a stable display name across agents. Missing rows -> no label
+      // (returned as undefined, never errors out the listing).
+      let labelMap = new Map<string, string | null>();
+      try {
+        const storage = mastra.getStorage();
+        const toolConnections = await storage?.getStore('toolConnections');
+        if (toolConnections) {
+          const rows = await toolConnections.list({
+            authorId,
+            providerId: integration.id,
+            toolService,
+          });
+          labelMap = new Map(rows.map(row => [row.connectionId, row.label]));
+        }
+      } catch (joinError) {
+        mastra.getLogger?.()?.warn?.('[tool-integrations] failed to join tool_connections labels', {
+          error: joinError instanceof Error ? joinError.message : String(joinError),
+          integrationId,
+          toolService,
+        });
+      }
+
+      return {
+        ...adapterResult,
+        items: adapterResult.items.map(item => ({
+          ...item,
+          label: labelMap.get(item.connectionId) ?? null,
+        })),
+      };
     } catch (error) {
       return handleError(error, 'Error listing tool integration connections');
     }

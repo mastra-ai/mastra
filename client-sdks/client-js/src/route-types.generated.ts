@@ -77560,6 +77560,8 @@ export type PostToolIntegrationsIntegrationIdAuthorize_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Optional human label to persist on the resulting tool_connections row */
+  label?: (string | null) | undefined;
 };
 
 export type PostToolIntegrationsIntegrationIdAuthorize_Response = {
@@ -77682,6 +77684,8 @@ export type GetToolIntegrationsIntegrationIdConnections_Response = {
     connectionId: string;
     status: 'active' | 'pending' | 'failed' | 'inactive';
     createdAt?: string | undefined;
+    /** Persisted display label from tool_connections, if any */
+    label?: (string | null) | undefined;
   }[];
 };
 
