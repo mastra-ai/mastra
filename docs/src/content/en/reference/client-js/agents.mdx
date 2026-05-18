@@ -520,7 +520,7 @@ response.processDataStream({
 
 ### Tracing client tools
 
-When `@mastra/observability` is installed and configured on the server, a client-side tool records a `CLIENT_TOOL_CALL` event span as a child of the current `AGENT_RUN` span. Event spans occur at a point in time (no end time) and mark "this client tool was deferred to the client at this moment in the trace." Without server-side observability configured, client tool tracing is a no-op.
+When `@mastra/observability` is installed and configured on the server, a client-side tool records a `CLIENT_TOOL_CALL` span as a child of the current `AGENT_RUN` span. The server creates that span when the model emits the client tool call, injects a W3C trace carrier into the outgoing tool-call chunk, and ends the span once the tool arguments are available. Without server-side observability configured, client tool tracing is a no-op.
 
 The client SDK also measures the wall-clock duration of each client tool's `execute` function and ships it back to the server, where it's emitted as a `mastra_tool_duration_ms` metric with `toolType: "client"`.
 

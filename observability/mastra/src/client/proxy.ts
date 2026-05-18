@@ -173,9 +173,9 @@ class ClientObservabilityProxyImpl implements ClientObservabilityProxy {
       instance.__receiveExternalEvent(event);
     }
 
-    // Emit a duration metric. This is the only way the server can
-    // recover the actual wall-clock duration since the event span has
-    // no endTime and would be skipped by emitDurationMetrics.
+    // Emit the actual client-side execution duration. The server-side
+    // CLIENT_TOOL_CALL span only measures carrier emission and args
+    // capture, not the browser work performed inside execute().
     if (typeof payload.executionDurationMs === 'number') {
       const hasError = decodedSpans.some(s => s.statusCode === 2);
       const metricEvent: MetricEvent = {
