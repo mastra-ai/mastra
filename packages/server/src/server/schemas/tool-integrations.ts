@@ -102,6 +102,10 @@ export const toolIntegrationAuthStatusPathParams = toolIntegrationIdPathParams.e
   authId: z.string().describe('Opaque auth handle returned by authorize'),
 });
 
+export const toolIntegrationConnectionPathParams = toolIntegrationIdPathParams.extend({
+  connectionId: z.string().describe('Adapter-native connection id (e.g. Composio ca_...)'),
+});
+
 // Query Parameter Schemas
 
 export const listToolIntegrationToolsQuerySchema = z.object({
@@ -141,6 +145,29 @@ export const connectionStatusToolIntegrationBodySchema = z.object({
 
 export const listConnectionsQuerySchema = z.object({
   toolService: z.string().describe('Tool service slug whose connections to list'),
+});
+
+export const renameConnectionBodySchema = z.object({
+  label: z
+    .string()
+    .max(64)
+    .nullable()
+    .describe('New display label for the persisted tool_connections row. Pass null to clear.'),
+});
+
+export const disconnectConnectionQuerySchema = z.object({
+  force: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .optional()
+    .describe('When true, revoke at the provider and drop the row even if pinned by agents'),
+  toolService: z
+    .string()
+    .optional()
+    .describe('Tool service slug for the connection (used when the row was upserted with one)'),
+});
+
+export const connectionUsageQuerySchema = z.object({
+  toolService: z.string().optional().describe('Optional tool service slug to scope the usage scan'),
 });
 
 // Response Schemas
@@ -221,6 +248,26 @@ export const listConnectionFieldsResponseSchema = z.object({
       type: z.enum(['string', 'number', 'boolean']),
       required: z.boolean(),
       default: z.unknown().optional(),
+    }),
+  ),
+});
+
+export const renameConnectionResponseSchema = z.object({
+  connectionId: z.string(),
+  toolService: z.string(),
+  label: z.string().nullable(),
+});
+
+export const disconnectConnectionResponseSchema = z.object({
+  ok: z.literal(true),
+  revoked: z.boolean().describe('Whether the provider-side connection was revoked'),
+});
+
+export const connectionUsageResponseSchema = z.object({
+  agents: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
     }),
   ),
 });

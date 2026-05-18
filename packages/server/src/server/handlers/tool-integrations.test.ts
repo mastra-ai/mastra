@@ -15,6 +15,9 @@ import {
   LIST_TOOL_INTEGRATION_TOOLS_ROUTE,
   LIST_TOOL_INTEGRATIONS_ROUTE,
   LIST_TOOL_SERVICES_ROUTE,
+  RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE,
+  DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE,
+  GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE,
   TOOL_INTEGRATION_CONNECTION_STATUS_ROUTE,
 } from './tool-integrations';
 
@@ -53,6 +56,7 @@ function makeToolConnectionsStore(
       }) => {
         const key = `${row.authorId}::${row.providerId}::${row.connectionId}`;
         rows.set(key, { ...row });
+        return rows.get(key)!;
       },
     ),
     list: vi.fn(
@@ -73,7 +77,65 @@ function makeToolConnectionsStore(
         );
       },
     ),
+    get: vi.fn(
+      async ({
+        authorId,
+        providerId,
+        connectionId,
+      }: {
+        authorId: string;
+        providerId: string;
+        connectionId: string;
+      }) => {
+        const key = `${authorId}::${providerId}::${connectionId}`;
+        return rows.get(key) ?? null;
+      },
+    ),
+    delete: vi.fn(
+      async ({
+        authorId,
+        providerId,
+        connectionId,
+      }: {
+        authorId: string;
+        providerId: string;
+        connectionId: string;
+      }) => {
+        const key = `${authorId}::${providerId}::${connectionId}`;
+        rows.delete(key);
+      },
+    ),
   };
+}
+
+function makeAgentsStore(
+  agents: Array<{
+    id: string;
+    name?: string;
+    toolIntegrations?: Record<string, { connections?: Record<string, Array<{ connectionId: string }>> }>;
+  }>,
+) {
+  return {
+    listResolved: vi.fn(async () => ({ agents, total: agents.length, hasMore: false, page: 0, perPage: 100 })),
+  };
+}
+
+function makeMastraWithStorageAndAgents(
+  editor: Partial<IMastraEditor> | undefined,
+  toolConnections: ReturnType<typeof makeToolConnectionsStore> | undefined,
+  agentsStore?: ReturnType<typeof makeAgentsStore>,
+) {
+  return {
+    getEditor: () => editor,
+    getStorage: () => ({
+      getStore: async (name: string) => {
+        if (name === 'toolConnections') return toolConnections;
+        if (name === 'agents') return agentsStore;
+        return undefined;
+      },
+    }),
+    getLogger: () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+  } as any;
 }
 
 function makeMastraWithStorage(
@@ -477,6 +539,282 @@ describe('LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE', () => {
         mastra: makeMastra(editor),
         integrationId: 'missing',
         toolService: 'gmail',
+      } as any),
+    ).rejects.toThrow(HTTPException);
+  });
+});
+
+describe('RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE', () => {
+  it('updates the persisted label for an existing row', async () => {
+    const integration = makeIntegration();
+    const editor = makeEditor(integration);
+    const toolConnections = makeToolConnectionsStore([
+      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1', label: 'Old' },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, toolConnections),
+      integrationId: 'composio',
+      connectionId: 'ca_1',
+      label: 'Work Gmail',
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ connectionId: 'ca_1', toolService: 'gmail', label: 'Work Gmail' });
+    expect(toolConnections.upsert).toHaveBeenCalledWith({
+      authorId: 'user-1',
+      providerId: 'composio',
+      toolService: 'gmail',
+      connectionId: 'ca_1',
+      label: 'Work Gmail',
+    });
+  });
+
+  it('normalizes empty string and explicit null to null', async () => {
+    const integration = makeIntegration();
+    const editor = makeEditor(integration);
+    const toolConnections = makeToolConnectionsStore([
+      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1', label: 'Old' },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, toolConnections),
+      integrationId: 'composio',
+      connectionId: 'ca_1',
+      label: null,
+      requestContext: ctx,
+    } as any);
+
+    expect(result.label).toBeNull();
+  });
+
+  it('returns 404 when no persisted row exists', async () => {
+    const integration = makeIntegration();
+    const editor = makeEditor(integration);
+    const toolConnections = makeToolConnectionsStore();
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    await expect(
+      RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+        mastra: makeMastraWithStorage(editor, toolConnections),
+        integrationId: 'composio',
+        connectionId: 'missing',
+        label: 'x',
+        requestContext: ctx,
+      } as any),
+    ).rejects.toThrow(HTTPException);
+  });
+});
+
+describe('DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE', () => {
+  it('rejects without force when an agent still pins the connection', async () => {
+    const revokeConnection = vi.fn();
+    const integration = makeIntegration({
+      capabilities: {
+        multipleConnectionsPerService: true,
+        batchConnectionStatus: true,
+        reauthorizeReusesConnectionId: true,
+        supportsRevoke: true,
+      },
+      revokeConnection,
+    });
+    const editor = makeEditor(integration);
+    const toolConnections = makeToolConnectionsStore([
+      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1' },
+    ]);
+    const agents = makeAgentsStore([
+      {
+        id: 'a1',
+        name: 'Agent One',
+        toolIntegrations: {
+          composio: { connections: { gmail: [{ connectionId: 'ca_1' }] } },
+        },
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    await expect(
+      DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+        mastra: makeMastraWithStorageAndAgents(editor, toolConnections, agents),
+        integrationId: 'composio',
+        connectionId: 'ca_1',
+        requestContext: ctx,
+      } as any),
+    ).rejects.toThrow(HTTPException);
+
+    expect(revokeConnection).not.toHaveBeenCalled();
+    expect(toolConnections.rows.size).toBe(1);
+  });
+
+  it('with force=true revokes at the provider and drops the row', async () => {
+    const revokeConnection = vi.fn().mockResolvedValue(undefined);
+    const integration = makeIntegration({
+      capabilities: {
+        multipleConnectionsPerService: true,
+        batchConnectionStatus: true,
+        reauthorizeReusesConnectionId: true,
+        supportsRevoke: true,
+      },
+      revokeConnection,
+    });
+    const editor = makeEditor(integration);
+    const toolConnections = makeToolConnectionsStore([
+      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1' },
+    ]);
+    const agents = makeAgentsStore([
+      {
+        id: 'a1',
+        name: 'Agent One',
+        toolIntegrations: {
+          composio: { connections: { gmail: [{ connectionId: 'ca_1' }] } },
+        },
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorageAndAgents(editor, toolConnections, agents),
+      integrationId: 'composio',
+      connectionId: 'ca_1',
+      force: true,
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, revoked: true });
+    expect(revokeConnection).toHaveBeenCalledWith('ca_1');
+    expect(toolConnections.rows.size).toBe(0);
+  });
+
+  it('reports revoked=false when adapter does not support revoke', async () => {
+    const integration = makeIntegration({
+      capabilities: {
+        multipleConnectionsPerService: true,
+        batchConnectionStatus: true,
+        reauthorizeReusesConnectionId: true,
+      },
+    });
+    const editor = makeEditor(integration);
+    const toolConnections = makeToolConnectionsStore([
+      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1' },
+    ]);
+    const agents = makeAgentsStore([]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorageAndAgents(editor, toolConnections, agents),
+      integrationId: 'composio',
+      connectionId: 'ca_1',
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, revoked: false });
+    expect(toolConnections.rows.size).toBe(0);
+  });
+
+  it('tolerates revoke errors and still drops the row', async () => {
+    const revokeConnection = vi.fn().mockRejectedValue(new Error('upstream 500'));
+    const integration = makeIntegration({
+      capabilities: {
+        multipleConnectionsPerService: true,
+        batchConnectionStatus: true,
+        reauthorizeReusesConnectionId: true,
+        supportsRevoke: true,
+      },
+      revokeConnection,
+    });
+    const editor = makeEditor(integration);
+    const toolConnections = makeToolConnectionsStore([
+      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1' },
+    ]);
+    const agents = makeAgentsStore([]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorageAndAgents(editor, toolConnections, agents),
+      integrationId: 'composio',
+      connectionId: 'ca_1',
+      force: true,
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, revoked: false });
+    expect(toolConnections.rows.size).toBe(0);
+  });
+});
+
+describe('GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE', () => {
+  it('returns the agents that pin the connection', async () => {
+    const integration = makeIntegration();
+    const editor = makeEditor(integration);
+    const agents = makeAgentsStore([
+      {
+        id: 'a1',
+        name: 'Agent One',
+        toolIntegrations: { composio: { connections: { gmail: [{ connectionId: 'ca_1' }] } } },
+      },
+      {
+        id: 'a2',
+        name: 'Agent Two',
+        toolIntegrations: { composio: { connections: { gmail: [{ connectionId: 'ca_2' }] } } },
+      },
+      {
+        id: 'a3',
+        name: 'Agent Three',
+        toolIntegrations: { composio: { connections: { gmail: [{ connectionId: 'ca_1' }] } } },
+      },
+    ]);
+
+    const result = await GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE.handler({
+      mastra: makeMastraWithStorageAndAgents(editor, undefined, agents),
+      integrationId: 'composio',
+      connectionId: 'ca_1',
+      requestContext: undefined,
+    } as any);
+
+    expect(result.agents).toEqual([
+      { id: 'a1', name: 'Agent One' },
+      { id: 'a3', name: 'Agent Three' },
+    ]);
+  });
+
+  it('returns an empty list when no agents pin the connection', async () => {
+    const integration = makeIntegration();
+    const editor = makeEditor(integration);
+    const agents = makeAgentsStore([
+      {
+        id: 'a1',
+        name: 'Agent One',
+        toolIntegrations: { composio: { connections: { gmail: [{ connectionId: 'ca_other' }] } } },
+      },
+    ]);
+
+    const result = await GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE.handler({
+      mastra: makeMastraWithStorageAndAgents(editor, undefined, agents),
+      integrationId: 'composio',
+      connectionId: 'ca_missing',
+      requestContext: undefined,
+    } as any);
+
+    expect(result.agents).toEqual([]);
+  });
+
+  it('returns 404 for unknown integration id', async () => {
+    const editor = makeEditor();
+    await expect(
+      GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE.handler({
+        mastra: makeMastraWithStorageAndAgents(editor, undefined, makeAgentsStore([])),
+        integrationId: 'missing',
+        connectionId: 'ca_1',
+        requestContext: undefined,
       } as any),
     ).rejects.toThrow(HTTPException);
   });

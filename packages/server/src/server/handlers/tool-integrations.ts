@@ -11,6 +11,10 @@ import {
   authStatusToolIntegrationResponseSchema,
   connectionStatusToolIntegrationBodySchema,
   connectionStatusToolIntegrationResponseSchema,
+  connectionUsageQuerySchema,
+  connectionUsageResponseSchema,
+  disconnectConnectionQuerySchema,
+  disconnectConnectionResponseSchema,
   listConnectionFieldsQuerySchema,
   listConnectionFieldsResponseSchema,
   listConnectionsQuerySchema,
@@ -19,7 +23,10 @@ import {
   listToolIntegrationToolsQuerySchema,
   listToolIntegrationToolsResponseSchema,
   listToolServicesResponseSchema,
+  renameConnectionBodySchema,
+  renameConnectionResponseSchema,
   toolIntegrationAuthStatusPathParams,
+  toolIntegrationConnectionPathParams,
   toolIntegrationHealthResponseSchema,
   toolIntegrationIdPathParams,
 } from '../schemas/tool-integrations';
@@ -360,6 +367,223 @@ export const LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE = createRoute({
     }
   },
 });
+
+/**
+ * PATCH /tool-integrations/:integrationId/connections/:connectionId - Rename a
+ * persisted tool_connections row. Adapter is not contacted; only the local
+ * label is mutated. Returns the new label + connectionId.
+ */
+export const RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/tool-integrations/:integrationId/connections/:connectionId',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationConnectionPathParams,
+  bodySchema: renameConnectionBodySchema,
+  responseSchema: renameConnectionResponseSchema,
+  summary: 'Rename a connection',
+  description: 'Updates the persisted display label for a tool_connections row',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, connectionId, label, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const authorId = resolveOwnerId(requestContext);
+
+      const storage = mastra.getStorage();
+      const toolConnections = await storage?.getStore('toolConnections');
+      if (!toolConnections) {
+        throw new HTTPException(500, { message: 'Tool connections storage domain is not available' });
+      }
+
+      const existing = await toolConnections.get({
+        authorId,
+        providerId: integration.id,
+        connectionId,
+      });
+      if (!existing) {
+        throw new HTTPException(404, {
+          message: `No tool connection found for (${integration.id}, ${connectionId})`,
+        });
+      }
+
+      const normalized = typeof label === 'string' && label.length > 0 ? label : null;
+      const updated = await toolConnections.upsert({
+        authorId,
+        providerId: integration.id,
+        toolService: existing.toolService,
+        connectionId,
+        label: normalized,
+      });
+
+      return {
+        connectionId: updated.connectionId,
+        toolService: updated.toolService,
+        label: updated.label,
+      };
+    } catch (error) {
+      return handleError(error, 'Error renaming tool integration connection');
+    }
+  },
+});
+
+/**
+ * DELETE /tool-integrations/:integrationId/connections/:connectionId - Disconnect.
+ * Without `?force=true` this rejects when the connection is still pinned by
+ * any agent. With `?force=true` it revokes at the provider (best-effort) and
+ * drops the persisted row.
+ */
+export const DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/tool-integrations/:integrationId/connections/:connectionId',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationConnectionPathParams,
+  queryParamSchema: disconnectConnectionQuerySchema,
+  responseSchema: disconnectConnectionResponseSchema,
+  summary: 'Disconnect a connection',
+  description:
+    'Revokes the provider-side connection (if supported) and removes the persisted tool_connections row. Use `?force=true` to bypass usage checks.',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, connectionId, force, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const integration = resolveIntegration(editor, integrationId);
+      const authorId = resolveOwnerId(requestContext);
+      const isForce = force === true || force === 'true';
+
+      const storage = mastra.getStorage();
+      const toolConnections = await storage?.getStore('toolConnections');
+
+      // Soft delete: refuse if any agent still pins this connectionId.
+      if (!isForce) {
+        const usage = await countConnectionUsage(mastra, connectionId);
+        if (usage > 0) {
+          throw new HTTPException(409, {
+            message: `Connection ${connectionId} is still pinned by ${usage} agent(s). Pass ?force=true to disconnect anyway.`,
+          });
+        }
+      }
+
+      // Best-effort provider revoke. Tolerate adapters that don't implement it
+      // or providers that already 404'd the row.
+      let revoked = false;
+      if (integration.capabilities.supportsRevoke && typeof integration.revokeConnection === 'function') {
+        try {
+          await integration.revokeConnection(connectionId);
+          revoked = true;
+        } catch (revokeError) {
+          mastra.getLogger?.()?.warn?.('[tool-integrations] revokeConnection failed', {
+            error: revokeError instanceof Error ? revokeError.message : String(revokeError),
+            integrationId,
+            connectionId,
+          });
+        }
+      }
+
+      if (toolConnections) {
+        await toolConnections.delete({
+          authorId,
+          providerId: integration.id,
+          connectionId,
+        });
+      }
+
+      return { ok: true as const, revoked };
+    } catch (error) {
+      return handleError(error, 'Error disconnecting tool integration connection');
+    }
+  },
+});
+
+/**
+ * GET /tool-integrations/:integrationId/connections/:connectionId/usage - Lists
+ * agents that currently pin the given connection in their `toolIntegrations`
+ * config. Used by the Disconnect confirm dialog.
+ */
+export const GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE = createRoute({
+  method: 'GET',
+  path: '/tool-integrations/:integrationId/connections/:connectionId/usage',
+  responseType: 'json',
+  pathParamSchema: toolIntegrationConnectionPathParams,
+  queryParamSchema: connectionUsageQuerySchema,
+  responseSchema: connectionUsageResponseSchema,
+  summary: 'List agents using a connection',
+  description: 'Returns the agents that pin this connection in their toolIntegrations config',
+  tags: ['Tool Integrations'],
+  requiresAuth: true,
+  handler: async ({ mastra, integrationId, connectionId, toolService }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      resolveIntegration(editor, integrationId);
+
+      const agents = await scanConnectionUsage(mastra, { integrationId, connectionId, toolService });
+      return { agents };
+    } catch (error) {
+      return handleError(error, 'Error listing tool integration connection usage');
+    }
+  },
+});
+
+// ============================================================================
+// Usage scan helpers
+// ============================================================================
+
+/**
+ * Walk every stored agent's resolved `toolIntegrations` config and collect the
+ * agents that pin the given `connectionId`. Optionally narrow by `toolService`.
+ *
+ * This is a full scan today; agent registries are small enough that it's
+ * cheaper than maintaining a reverse index. Wire up an index if this gets hot.
+ */
+async function scanConnectionUsage(
+  mastra: any,
+  args: { integrationId: string; connectionId: string; toolService?: string },
+): Promise<Array<{ id: string; name: string }>> {
+  const storage = mastra.getStorage();
+  const agentsStore = await storage?.getStore('agents');
+  if (!agentsStore) return [];
+
+  const { agents } = await agentsStore.listResolved({ perPage: false });
+  const out: Array<{ id: string; name: string }> = [];
+  for (const agent of agents) {
+    const config = agent?.toolIntegrations?.[args.integrationId];
+    if (!config?.connections) continue;
+    for (const [service, connections] of Object.entries(config.connections)) {
+      if (args.toolService && service !== args.toolService) continue;
+      const match = (connections as Array<{ connectionId: string }>).some(c => c.connectionId === args.connectionId);
+      if (match) {
+        out.push({ id: agent.id, name: agent.name ?? agent.id });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+async function countConnectionUsage(mastra: any, connectionId: string): Promise<number> {
+  const storage = mastra.getStorage();
+  const agentsStore = await storage?.getStore('agents');
+  if (!agentsStore) return 0;
+  const { agents } = await agentsStore.listResolved({ perPage: false });
+  let count = 0;
+  for (const agent of agents) {
+    const ti = agent?.toolIntegrations;
+    if (!ti) continue;
+    for (const config of Object.values(ti) as Array<{
+      connections?: Record<string, Array<{ connectionId: string }>>;
+    }>) {
+      const pinned = Object.values(config?.connections ?? {}).some(arr =>
+        arr.some(c => c.connectionId === connectionId),
+      );
+      if (pinned) {
+        count += 1;
+        break;
+      }
+    }
+  }
+  return count;
+}
 
 /**
  * GET /tool-integrations/:integrationId/health - Integration-level health check
