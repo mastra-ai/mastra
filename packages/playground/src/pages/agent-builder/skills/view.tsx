@@ -3,7 +3,7 @@ import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { CopySkillDialog } from '@/domains/agents/components/agent-cms-pages/copy-skill-dialog';
-import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
+import { SkillFavoriteButton } from '@/domains/agents/components/skill-favorite-button';
 import { useCopySkill } from '@/domains/agents/hooks/use-copy-skill';
 import { useStoredSkill } from '@/domains/agents/hooks/use-stored-skill';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
@@ -75,7 +75,12 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <SkillStarButton skillId={skill.id} isStarred={skill.isStarred} starCount={skill.starCount} className="" />
+          <SkillFavoriteButton
+            skillId={skill.id}
+            isFavorited={skill.isFavorited}
+            favoriteCount={skill.favoriteCount}
+            className=""
+          />
           {canCopy && (
             <Button
               type="button"

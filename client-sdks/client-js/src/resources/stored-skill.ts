@@ -5,7 +5,7 @@ import type {
   StoredSkillResponse,
   UpdateStoredSkillParams,
   DeleteStoredSkillResponse,
-  StarToggleResponse,
+  FavoriteToggleResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -67,12 +67,12 @@ export class StoredSkill extends BaseResource {
   }
 
   /**
-   * Stars this skill for the calling user. Idempotent.
-   * Requires the `skill.stars` builder feature flag to be enabled on the server.
+   * Favorites this skill for the calling user. Idempotent.
+   * Requires the `skill.favorites` builder feature flag to be enabled on the server.
    */
-  star(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+  favorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
     return this.request(
-      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/star${requestContextQueryString(requestContext)}`,
+      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/favorite${requestContextQueryString(requestContext)}`,
       {
         method: 'PUT',
       },
@@ -80,12 +80,12 @@ export class StoredSkill extends BaseResource {
   }
 
   /**
-   * Unstars this skill for the calling user. Idempotent.
-   * Requires the `skill.stars` builder feature flag to be enabled on the server.
+   * Unfavorites this skill for the calling user. Idempotent.
+   * Requires the `skill.favorites` builder feature flag to be enabled on the server.
    */
-  unstar(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+  unfavorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
     return this.request(
-      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/star${requestContextQueryString(requestContext)}`,
+      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/favorite${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },

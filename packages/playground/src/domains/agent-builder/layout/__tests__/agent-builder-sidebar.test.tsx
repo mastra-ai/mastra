@@ -22,7 +22,7 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
     avatarUpload: false,
     skills: false,
     model: false,
-    stars: false,
+    favorites: false,
     browser: false,
   }),
 }));

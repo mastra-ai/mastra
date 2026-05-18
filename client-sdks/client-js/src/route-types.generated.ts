@@ -375,10 +375,10 @@ export type PostAgentsAgentIdClone_Response = {
       }
     | undefined;
   visibility?: ('private' | 'public') | undefined;
-  /** Number of users who have starred this agent */
-  starCount?: number | undefined;
-  /** Whether the requesting user has starred this agent */
-  isStarred?: boolean | undefined;
+  /** Number of users who have favorited this agent */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this agent */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the agent */
@@ -22643,8 +22643,8 @@ export type GetStoredAgents_QueryParams = {
         [key: string]: unknown;
       }
     | undefined;
-  /** When true, return only agents starred by the caller (requires the stars EE feature) */
-  starredOnly?: boolean | undefined;
+  /** When true, return only agents favorited by the caller (requires the `favorites` EE feature) */
+  favoritedOnly?: boolean | undefined;
 };
 
 export type GetStoredAgents_Response = {
@@ -22664,10 +22664,10 @@ export type GetStoredAgents_Response = {
         }
       | undefined;
     visibility?: ('private' | 'public') | undefined;
-    /** Number of users who have starred this agent */
-    starCount?: number | undefined;
-    /** Whether the requesting user has starred this agent */
-    isStarred?: boolean | undefined;
+    /** Number of users who have favorited this agent */
+    favoriteCount?: number | undefined;
+    /** Whether the requesting user has favorited this agent */
+    isFavorited?: boolean | undefined;
     createdAt: Date;
     updatedAt: Date;
     /** Name of the agent */
@@ -27044,10 +27044,10 @@ export type GetStoredAgentsStoredAgentId_Response = {
       }
     | undefined;
   visibility?: ('private' | 'public') | undefined;
-  /** Number of users who have starred this agent */
-  starCount?: number | undefined;
-  /** Whether the requesting user has starred this agent */
-  isStarred?: boolean | undefined;
+  /** Number of users who have favorited this agent */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this agent */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the agent */
@@ -35524,10 +35524,10 @@ export type PostStoredAgents_Response = {
       }
     | undefined;
   visibility?: ('private' | 'public') | undefined;
-  /** Number of users who have starred this agent */
-  starCount?: number | undefined;
-  /** Whether the requesting user has starred this agent */
-  isStarred?: boolean | undefined;
+  /** Number of users who have favorited this agent */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this agent */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the agent */
@@ -44054,10 +44054,10 @@ export type PatchStoredAgentsStoredAgentId_Response =
           }
         | undefined;
       visibility?: ('private' | 'public') | undefined;
-      /** Number of users who have starred this agent */
-      starCount?: number | undefined;
-      /** Whether the requesting user has starred this agent */
-      isStarred?: boolean | undefined;
+      /** Number of users who have favorited this agent */
+      favoriteCount?: number | undefined;
+      /** Whether the requesting user has favorited this agent */
+      isFavorited?: boolean | undefined;
       createdAt: Date;
       updatedAt: Date;
       /** Name of the agent */
@@ -70715,66 +70715,66 @@ export interface DeleteStoredAgentsAgentIdVersionsVersionId_RouteContract {
 }
 
 // ============================================================================
-// Route: PUT /stored/agents/:storedAgentId/star
+// Route: PUT /stored/agents/:storedAgentId/favorite
 // ============================================================================
-export type PutStoredAgentsStoredAgentIdStar_PathParams = {
+export type PutStoredAgentsStoredAgentIdFavorite_PathParams = {
   /** Unique identifier for the stored agent */
   storedAgentId: string;
 };
 
-export type PutStoredAgentsStoredAgentIdStar_Response = {
-  /** Whether the entity is currently starred by the caller */
-  starred: boolean;
-  /** Total number of users who have starred this entity */
-  starCount: number;
+export type PutStoredAgentsStoredAgentIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
 };
 
-export type PutStoredAgentsStoredAgentIdStar_Request = Simplify<
-  (PutStoredAgentsStoredAgentIdStar_PathParams extends never
+export type PutStoredAgentsStoredAgentIdFavorite_Request = Simplify<
+  (PutStoredAgentsStoredAgentIdFavorite_PathParams extends never
     ? {}
-    : { params: PutStoredAgentsStoredAgentIdStar_PathParams }) &
+    : { params: PutStoredAgentsStoredAgentIdFavorite_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface PutStoredAgentsStoredAgentIdStar_RouteContract {
-  pathParams: PutStoredAgentsStoredAgentIdStar_PathParams;
+export interface PutStoredAgentsStoredAgentIdFavorite_RouteContract {
+  pathParams: PutStoredAgentsStoredAgentIdFavorite_PathParams;
   queryParams: never;
   body: never;
-  request: PutStoredAgentsStoredAgentIdStar_Request;
-  response: PutStoredAgentsStoredAgentIdStar_Response;
+  request: PutStoredAgentsStoredAgentIdFavorite_Request;
+  response: PutStoredAgentsStoredAgentIdFavorite_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: DELETE /stored/agents/:storedAgentId/star
+// Route: DELETE /stored/agents/:storedAgentId/favorite
 // ============================================================================
-export type DeleteStoredAgentsStoredAgentIdStar_PathParams = {
+export type DeleteStoredAgentsStoredAgentIdFavorite_PathParams = {
   /** Unique identifier for the stored agent */
   storedAgentId: string;
 };
 
-export type DeleteStoredAgentsStoredAgentIdStar_Response = {
-  /** Whether the entity is currently starred by the caller */
-  starred: boolean;
-  /** Total number of users who have starred this entity */
-  starCount: number;
+export type DeleteStoredAgentsStoredAgentIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
 };
 
-export type DeleteStoredAgentsStoredAgentIdStar_Request = Simplify<
-  (DeleteStoredAgentsStoredAgentIdStar_PathParams extends never
+export type DeleteStoredAgentsStoredAgentIdFavorite_Request = Simplify<
+  (DeleteStoredAgentsStoredAgentIdFavorite_PathParams extends never
     ? {}
-    : { params: DeleteStoredAgentsStoredAgentIdStar_PathParams }) &
+    : { params: DeleteStoredAgentsStoredAgentIdFavorite_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface DeleteStoredAgentsStoredAgentIdStar_RouteContract {
-  pathParams: DeleteStoredAgentsStoredAgentIdStar_PathParams;
+export interface DeleteStoredAgentsStoredAgentIdFavorite_RouteContract {
+  pathParams: DeleteStoredAgentsStoredAgentIdFavorite_PathParams;
   queryParams: never;
   body: never;
-  request: DeleteStoredAgentsStoredAgentIdStar_Request;
-  response: DeleteStoredAgentsStoredAgentIdStar_Response;
+  request: DeleteStoredAgentsStoredAgentIdFavorite_Request;
+  response: DeleteStoredAgentsStoredAgentIdFavorite_Response;
   responseType: 'json';
 }
 
@@ -75311,8 +75311,8 @@ export type GetStoredSkills_QueryParams = {
         [key: string]: unknown;
       }
     | undefined;
-  /** When true, return only skills starred by the caller (requires the stars EE feature) */
-  starredOnly?: boolean | undefined;
+  /** When true, return only skills favorited by the caller (requires the `favorites` EE feature) */
+  favoritedOnly?: boolean | undefined;
 };
 
 type GetStoredSkills_Response_Auxiliary_5 = {
@@ -75335,10 +75335,10 @@ export type GetStoredSkills_Response = {
     activeVersionId?: string | undefined;
     authorId?: string | undefined;
     visibility?: ('private' | 'public') | undefined;
-    /** Number of users who have starred this skill */
-    starCount?: number | undefined;
-    /** Whether the requesting user has starred this skill */
-    isStarred?: boolean | undefined;
+    /** Number of users who have favorited this skill */
+    favoriteCount?: number | undefined;
+    /** Whether the requesting user has favorited this skill */
+    isFavorited?: boolean | undefined;
     createdAt: Date;
     updatedAt: Date;
     /** Name of the skill */
@@ -75430,10 +75430,10 @@ export type GetStoredSkillsStoredSkillId_Response = {
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
   visibility?: ('private' | 'public') | undefined;
-  /** Number of users who have starred this skill */
-  starCount?: number | undefined;
-  /** Whether the requesting user has starred this skill */
-  isStarred?: boolean | undefined;
+  /** Number of users who have favorited this skill */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this skill */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the skill */
@@ -75576,10 +75576,10 @@ export type PostStoredSkills_Response = {
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
   visibility?: ('private' | 'public') | undefined;
-  /** Number of users who have starred this skill */
-  starCount?: number | undefined;
-  /** Whether the requesting user has starred this skill */
-  isStarred?: boolean | undefined;
+  /** Number of users who have favorited this skill */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this skill */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the skill */
@@ -75732,10 +75732,10 @@ export type PatchStoredSkillsStoredSkillId_Response =
       activeVersionId?: string | undefined;
       authorId?: string | undefined;
       visibility?: ('private' | 'public') | undefined;
-      /** Number of users who have starred this skill */
-      starCount?: number | undefined;
-      /** Whether the requesting user has starred this skill */
-      isStarred?: boolean | undefined;
+      /** Number of users who have favorited this skill */
+      favoriteCount?: number | undefined;
+      /** Whether the requesting user has favorited this skill */
+      isFavorited?: boolean | undefined;
       createdAt: Date;
       updatedAt: Date;
       /** Name of the skill */
@@ -75863,10 +75863,10 @@ export type PostStoredSkillsStoredSkillIdPublish_Response = {
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
   visibility?: ('private' | 'public') | undefined;
-  /** Number of users who have starred this skill */
-  starCount?: number | undefined;
-  /** Whether the requesting user has starred this skill */
-  isStarred?: boolean | undefined;
+  /** Number of users who have favorited this skill */
+  favoriteCount?: number | undefined;
+  /** Whether the requesting user has favorited this skill */
+  isFavorited?: boolean | undefined;
   createdAt: Date;
   updatedAt: Date;
   /** Name of the skill */
@@ -75937,66 +75937,66 @@ export interface PostStoredSkillsStoredSkillIdPublish_RouteContract {
 }
 
 // ============================================================================
-// Route: PUT /stored/skills/:storedSkillId/star
+// Route: PUT /stored/skills/:storedSkillId/favorite
 // ============================================================================
-export type PutStoredSkillsStoredSkillIdStar_PathParams = {
+export type PutStoredSkillsStoredSkillIdFavorite_PathParams = {
   /** Unique identifier for the stored skill */
   storedSkillId: string;
 };
 
-export type PutStoredSkillsStoredSkillIdStar_Response = {
-  /** Whether the entity is currently starred by the caller */
-  starred: boolean;
-  /** Total number of users who have starred this entity */
-  starCount: number;
+export type PutStoredSkillsStoredSkillIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
 };
 
-export type PutStoredSkillsStoredSkillIdStar_Request = Simplify<
-  (PutStoredSkillsStoredSkillIdStar_PathParams extends never
+export type PutStoredSkillsStoredSkillIdFavorite_Request = Simplify<
+  (PutStoredSkillsStoredSkillIdFavorite_PathParams extends never
     ? {}
-    : { params: PutStoredSkillsStoredSkillIdStar_PathParams }) &
+    : { params: PutStoredSkillsStoredSkillIdFavorite_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface PutStoredSkillsStoredSkillIdStar_RouteContract {
-  pathParams: PutStoredSkillsStoredSkillIdStar_PathParams;
+export interface PutStoredSkillsStoredSkillIdFavorite_RouteContract {
+  pathParams: PutStoredSkillsStoredSkillIdFavorite_PathParams;
   queryParams: never;
   body: never;
-  request: PutStoredSkillsStoredSkillIdStar_Request;
-  response: PutStoredSkillsStoredSkillIdStar_Response;
+  request: PutStoredSkillsStoredSkillIdFavorite_Request;
+  response: PutStoredSkillsStoredSkillIdFavorite_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: DELETE /stored/skills/:storedSkillId/star
+// Route: DELETE /stored/skills/:storedSkillId/favorite
 // ============================================================================
-export type DeleteStoredSkillsStoredSkillIdStar_PathParams = {
+export type DeleteStoredSkillsStoredSkillIdFavorite_PathParams = {
   /** Unique identifier for the stored skill */
   storedSkillId: string;
 };
 
-export type DeleteStoredSkillsStoredSkillIdStar_Response = {
-  /** Whether the entity is currently starred by the caller */
-  starred: boolean;
-  /** Total number of users who have starred this entity */
-  starCount: number;
+export type DeleteStoredSkillsStoredSkillIdFavorite_Response = {
+  /** Whether the entity is currently favorited by the caller */
+  favorited: boolean;
+  /** Total number of users who have favorited this entity */
+  favoriteCount: number;
 };
 
-export type DeleteStoredSkillsStoredSkillIdStar_Request = Simplify<
-  (DeleteStoredSkillsStoredSkillIdStar_PathParams extends never
+export type DeleteStoredSkillsStoredSkillIdFavorite_Request = Simplify<
+  (DeleteStoredSkillsStoredSkillIdFavorite_PathParams extends never
     ? {}
-    : { params: DeleteStoredSkillsStoredSkillIdStar_PathParams }) &
+    : { params: DeleteStoredSkillsStoredSkillIdFavorite_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface DeleteStoredSkillsStoredSkillIdStar_RouteContract {
-  pathParams: DeleteStoredSkillsStoredSkillIdStar_PathParams;
+export interface DeleteStoredSkillsStoredSkillIdFavorite_RouteContract {
+  pathParams: DeleteStoredSkillsStoredSkillIdFavorite_PathParams;
   queryParams: never;
   body: never;
-  request: DeleteStoredSkillsStoredSkillIdStar_Request;
-  response: DeleteStoredSkillsStoredSkillIdStar_Response;
+  request: DeleteStoredSkillsStoredSkillIdFavorite_Request;
+  response: DeleteStoredSkillsStoredSkillIdFavorite_Response;
   responseType: 'json';
 }
 
@@ -78798,7 +78798,7 @@ export type GetEditorBuilderSettings_Response = {
               skills?: boolean | undefined;
               memory?: boolean | undefined;
               variables?: boolean | undefined;
-              stars?: boolean | undefined;
+              favorites?: boolean | undefined;
               avatarUpload?: boolean | undefined;
               browser?: boolean | undefined;
               model?: boolean | undefined;
@@ -79950,8 +79950,8 @@ export interface RouteTypes {
   'POST /stored/agents/:agentId/versions/:versionId/activate': PostStoredAgentsAgentIdVersionsVersionIdActivate_RouteContract;
   'POST /stored/agents/:agentId/versions/:versionId/restore': PostStoredAgentsAgentIdVersionsVersionIdRestore_RouteContract;
   'DELETE /stored/agents/:agentId/versions/:versionId': DeleteStoredAgentsAgentIdVersionsVersionId_RouteContract;
-  'PUT /stored/agents/:storedAgentId/star': PutStoredAgentsStoredAgentIdStar_RouteContract;
-  'DELETE /stored/agents/:storedAgentId/star': DeleteStoredAgentsStoredAgentIdStar_RouteContract;
+  'PUT /stored/agents/:storedAgentId/favorite': PutStoredAgentsStoredAgentIdFavorite_RouteContract;
+  'DELETE /stored/agents/:storedAgentId/favorite': DeleteStoredAgentsStoredAgentIdFavorite_RouteContract;
   'GET /stored/mcp-clients': GetStoredMcpClients_RouteContract;
   'GET /stored/mcp-clients/:storedMCPClientId': GetStoredMcpClientsStoredMCPClientId_RouteContract;
   'POST /stored/mcp-clients': PostStoredMcpClients_RouteContract;
@@ -79999,8 +79999,8 @@ export interface RouteTypes {
   'PATCH /stored/skills/:storedSkillId': PatchStoredSkillsStoredSkillId_RouteContract;
   'DELETE /stored/skills/:storedSkillId': DeleteStoredSkillsStoredSkillId_RouteContract;
   'POST /stored/skills/:storedSkillId/publish': PostStoredSkillsStoredSkillIdPublish_RouteContract;
-  'PUT /stored/skills/:storedSkillId/star': PutStoredSkillsStoredSkillIdStar_RouteContract;
-  'DELETE /stored/skills/:storedSkillId/star': DeleteStoredSkillsStoredSkillIdStar_RouteContract;
+  'PUT /stored/skills/:storedSkillId/favorite': PutStoredSkillsStoredSkillIdFavorite_RouteContract;
+  'DELETE /stored/skills/:storedSkillId/favorite': DeleteStoredSkillsStoredSkillIdFavorite_RouteContract;
   'GET /tool-providers': GetToolProviders_RouteContract;
   'GET /tool-providers/:providerId/toolkits': GetToolProvidersProviderIdToolkits_RouteContract;
   'GET /tool-providers/:providerId/tools': GetToolProvidersProviderIdTools_RouteContract;
@@ -80605,9 +80605,9 @@ export interface Client {
     GET: GetStoredAgentsStoredAgentId_RouteContract;
     PATCH: PatchStoredAgentsStoredAgentId_RouteContract;
   };
-  '/stored/agents/:storedAgentId/star': {
-    DELETE: DeleteStoredAgentsStoredAgentIdStar_RouteContract;
-    PUT: PutStoredAgentsStoredAgentIdStar_RouteContract;
+  '/stored/agents/:storedAgentId/favorite': {
+    DELETE: DeleteStoredAgentsStoredAgentIdFavorite_RouteContract;
+    PUT: PutStoredAgentsStoredAgentIdFavorite_RouteContract;
   };
   '/stored/agents/preview-instructions': {
     POST: PostStoredAgentsPreviewInstructions_RouteContract;
@@ -80699,12 +80699,12 @@ export interface Client {
     GET: GetStoredSkillsStoredSkillId_RouteContract;
     PATCH: PatchStoredSkillsStoredSkillId_RouteContract;
   };
+  '/stored/skills/:storedSkillId/favorite': {
+    DELETE: DeleteStoredSkillsStoredSkillIdFavorite_RouteContract;
+    PUT: PutStoredSkillsStoredSkillIdFavorite_RouteContract;
+  };
   '/stored/skills/:storedSkillId/publish': {
     POST: PostStoredSkillsStoredSkillIdPublish_RouteContract;
-  };
-  '/stored/skills/:storedSkillId/star': {
-    DELETE: DeleteStoredSkillsStoredSkillIdStar_RouteContract;
-    PUT: PutStoredSkillsStoredSkillIdStar_RouteContract;
   };
   '/stored/workspaces': {
     GET: GetStoredWorkspaces_RouteContract;

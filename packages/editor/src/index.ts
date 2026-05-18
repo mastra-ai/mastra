@@ -22,7 +22,7 @@ import {
   EditorScorerNamespace,
   EditorWorkspaceNamespace,
   EditorSkillNamespace,
-  EditorStarsNamespace,
+  EditorFavoritesNamespace,
 } from './namespaces';
 import { localFilesystemProvider, localSandboxProvider } from './providers';
 
@@ -41,7 +41,7 @@ export {
   EditorScorerNamespace,
   EditorWorkspaceNamespace,
   EditorSkillNamespace,
-  EditorStarsNamespace,
+  EditorFavoritesNamespace,
 } from './namespaces';
 export type { StorageAdapter } from './namespaces';
 export { localFilesystemProvider, localSandboxProvider } from './providers';
@@ -95,7 +95,7 @@ export class MastraEditor implements IMastraEditor {
   public readonly scorer: EditorScorerNamespace;
   public readonly workspace: EditorWorkspaceNamespace;
   public readonly skill: EditorSkillNamespace;
-  public readonly stars: EditorStarsNamespace;
+  public readonly favorites: EditorFavoritesNamespace;
 
   constructor(config?: MastraEditorConfig) {
     this.__logger = config?.logger;
@@ -135,7 +135,7 @@ export class MastraEditor implements IMastraEditor {
     this.scorer = new EditorScorerNamespace(this);
     this.workspace = new EditorWorkspaceNamespace(this);
     this.skill = new EditorSkillNamespace(this);
-    this.stars = new EditorStarsNamespace(this);
+    this.favorites = new EditorFavoritesNamespace(this);
 
     // Store builder config for EE feature
     this.__builderConfig = config?.builder;

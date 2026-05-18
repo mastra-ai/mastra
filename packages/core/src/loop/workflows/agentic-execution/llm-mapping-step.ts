@@ -12,7 +12,7 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 

@@ -2,17 +2,17 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
 import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
+import { SkillFavoriteButton } from '@/domains/agents/components/skill-favorite-button';
 import { getSkillOrigin } from '@/domains/agents/utils/skill-origin';
 
 export type SkillBuilderListProps = {
   skills: StoredSkillResponse[];
   search?: string;
   onSkillClick?: (skill: StoredSkillResponse) => void;
-  showStars?: boolean;
+  showFavorites?: boolean;
 };
 
-export function SkillBuilderList({ skills, search, onSkillClick, showStars = true }: SkillBuilderListProps) {
+export function SkillBuilderList({ skills, search, onSkillClick, showFavorites = true }: SkillBuilderListProps) {
   const filtered = useMemo(() => {
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return skills;
@@ -89,22 +89,22 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>
               </div>
-              {showStars && (
+              {showFavorites && (
                 <div className="mt-2 md:hidden">
-                  <SkillStarButton
+                  <SkillFavoriteButton
                     skillId={skill.id}
-                    isStarred={skill.isStarred}
-                    starCount={skill.starCount}
+                    isFavorited={skill.isFavorited}
+                    favoriteCount={skill.favoriteCount}
                     size="sm"
                   />
                 </div>
               )}
             </div>
-            {showStars && (
-              <SkillStarButton
+            {showFavorites && (
+              <SkillFavoriteButton
                 skillId={skill.id}
-                isStarred={skill.isStarred}
-                starCount={skill.starCount}
+                isFavorited={skill.isFavorited}
+                favoriteCount={skill.favoriteCount}
                 size="sm"
                 className="shrink-0 hidden md:inline-flex"
               />

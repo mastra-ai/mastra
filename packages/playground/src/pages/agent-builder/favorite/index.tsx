@@ -43,7 +43,7 @@ export default function AgentBuilderFavoritePage() {
 
   const agentListParams = useMemo<ListStoredAgentsParams>(
     () => ({
-      starredOnly: true,
+      favoritedOnly: true,
       orderBy: { field: 'updatedAt', direction: 'DESC' },
     }),
     [],
@@ -51,7 +51,7 @@ export default function AgentBuilderFavoritePage() {
 
   const skillListParams = useMemo<ListStoredSkillsParams>(
     () => ({
-      starredOnly: true,
+      favoritedOnly: true,
       orderBy: { field: 'updatedAt', direction: 'DESC' },
     }),
     [],

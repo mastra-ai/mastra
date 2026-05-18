@@ -1181,9 +1181,9 @@ export interface StoredAgentResponse {
   workspace?: ConditionalField<StoredWorkspaceRef>;
   browser?: ConditionalField<StoredBrowserRef>;
   requestContextSchema?: Record<string, unknown>;
-  // Stars (EE feature, present when stars feature is enabled)
-  isStarred?: boolean;
-  starCount?: number;
+  // Favorites (EE feature, present when `favorites` feature is enabled)
+  isFavorited?: boolean;
+  favoriteCount?: number;
 }
 
 /**
@@ -1200,18 +1200,18 @@ export interface ListStoredAgentsParams {
   authorId?: string;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
-  /** When true, only return agents starred by the caller (or by `pinStarredFor`). */
-  starredOnly?: boolean;
-  /** When set, sort starred-first for this user id. Required for `starredOnly`. */
-  pinStarredFor?: string;
+  /** When true, only return agents favorited by the caller (or by `pinFavoritedFor`). */
+  favoritedOnly?: boolean;
+  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
+  pinFavoritedFor?: string;
 }
 
 /**
- * Response from star / unstar mutations.
+ * Response from favorite / unfavorite mutations.
  */
-export interface StarToggleResponse {
-  starred: boolean;
-  starCount: number;
+export interface FavoriteToggleResponse {
+  favorited: boolean;
+  favoriteCount: number;
 }
 
 /**
@@ -1961,9 +1961,9 @@ export interface StoredSkillResponse {
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
-  // Stars (EE feature, present when stars feature is enabled)
-  isStarred?: boolean;
-  starCount?: number;
+  // Favorites (EE feature, present when `favorites` feature is enabled)
+  isFavorited?: boolean;
+  favoriteCount?: number;
 }
 
 /**
@@ -1979,10 +1979,10 @@ export interface ListStoredSkillsParams {
   authorId?: string;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
-  /** When true, only return skills starred by the caller (or by `pinStarredFor`). */
-  starredOnly?: boolean;
-  /** When set, sort starred-first for this user id. Required for `starredOnly`. */
-  pinStarredFor?: string;
+  /** When true, only return skills favorited by the caller (or by `pinFavoritedFor`). */
+  favoritedOnly?: boolean;
+  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
+  pinFavoritedFor?: string;
 }
 
 /**
@@ -2839,7 +2839,7 @@ export interface BuilderAgentFeatures {
   skills?: boolean;
   memory?: boolean;
   variables?: boolean;
-  stars?: boolean;
+  favorites?: boolean;
   avatarUpload?: boolean;
   browser?: boolean;
   /**

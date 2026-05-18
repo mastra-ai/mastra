@@ -10,7 +10,7 @@ const allOff = {
   agents: false,
   avatarUpload: false,
   model: false,
-  stars: false,
+  favorites: false,
 };
 
 describe('buildAgentBuilderToolDescription', () => {

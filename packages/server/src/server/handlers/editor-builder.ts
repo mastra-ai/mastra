@@ -31,7 +31,7 @@ async function resolveBuilderFeatures(mastra: Mastra): Promise<AgentFeatures | n
 /**
  * Returns whether a given agent-builder feature is enabled. Used by list /
  * get-by-id handlers to soft-gate response enrichment (omit fields, ignore
- * starred-only / pin-starred params) when the feature is off.
+ * favoritedOnly / pinFavoritedFor params) when the feature is off.
  */
 export async function isBuilderFeatureEnabled(mastra: Mastra, feature: keyof AgentFeatures): Promise<boolean> {
   const features = await resolveBuilderFeatures(mastra);

@@ -18,7 +18,7 @@ type Features = {
   avatarUpload: boolean;
   skills: boolean;
   model: boolean;
-  stars: boolean;
+  favorites: boolean;
   browser: boolean;
 };
 
@@ -165,7 +165,7 @@ const allOff: Features = {
   avatarUpload: false,
   skills: false,
   model: false,
-  stars: false,
+  favorites: false,
   browser: false,
 };
 const allOn: Features = { ...allOff, tools: true };

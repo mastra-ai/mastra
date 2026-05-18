@@ -9,7 +9,7 @@ import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { ToolPayloadTransformPolicy } from '../../../tools';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
 import type { CreatedAgentSignal } from '../../signals';

@@ -31,7 +31,7 @@ import {
 } from './authorship';
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
-import { prepareStarsEnrichment, stripStarFields } from './stars-enrichment';
+import { prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
@@ -110,7 +110,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
     authorId,
     visibility,
     metadata,
-    starredOnly,
+    favoritedOnly,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -135,20 +135,20 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       });
 
       const callerId = getCallerAuthorId(requestContext);
-      const starsEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
-      const honoredStarredOnly = starsEnabled && starredOnly === true;
+      const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'favorites');
+      const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
 
-      // `?starredOnly=true`: fetch caller's starred IDs, then refilter + recompute total.
+      // `?favoritedOnly=true`: fetch caller's favorited IDs, then refilter + recompute total.
       if (honoredStarredOnly) {
         const effectivePerPage: number = perPage ?? 100;
         if (!callerId) {
           return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
-        const starsStore = await storage.getStore('stars');
-        if (!starsStore) {
-          throw new HTTPException(500, { message: 'Stars storage domain is not available' });
+        const favoritesStore = await storage.getStore('favorites');
+        if (!favoritesStore) {
+          throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
         }
-        const starredIds = await starsStore.listStarredIds({ userId: callerId, entityType: 'agent' });
+        const starredIds = await favoritesStore.listFavoritedIds({ userId: callerId, entityType: 'agent' });
         if (starredIds.length === 0) {
           return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
@@ -165,7 +165,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         const startIdx = effectivePerPage === 0 ? 0 : page * effectivePerPage;
         const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
         const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
-        const annotated = sliced.map(record => ({ ...record, isStarred: true }));
+        const annotated = sliced.map(record => ({ ...record, isFavorited: true }));
         const hasMore = effectivePerPage > 0 && endIdx < total;
         return { agents: annotated, total, page, perPage: effectivePerPage, hasMore };
       }
@@ -188,18 +188,18 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       // filter as a view over the caller's scope — an approximation is OK.
       const visibleAgents = result.agents.filter(record => matchesAuthorFilter(record, filter));
 
-      if (!starsEnabled) {
-        return { ...result, agents: visibleAgents.map(stripStarFields) };
+      if (!favoritesEnabled) {
+        return { ...result, agents: visibleAgents.map(stripFavoriteFields) };
       }
 
-      const enrichment = await prepareStarsEnrichment(
+      const enrichment = await prepareFavoritesEnrichment(
         mastra,
         requestContext,
         'agent',
         visibleAgents.map(a => a.id),
       );
       const annotated = enrichment
-        ? visibleAgents.map(record => ({ ...record, isStarred: enrichment.starredIds.has(record.id) }))
+        ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
         : visibleAgents;
 
       return { ...result, agents: annotated };
@@ -247,11 +247,11 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: agent });
 
-      const enrichment = await prepareStarsEnrichment(mastra, requestContext, 'agent', [agent.id]);
+      const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
       if (enrichment) {
-        return { ...agent, isStarred: enrichment.starredIds.has(agent.id) };
+        return { ...agent, isFavorited: enrichment.starredIds.has(agent.id) };
       }
-      return stripStarFields(agent);
+      return stripFavoriteFields(agent);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -651,15 +651,15 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
 
       await agentsStore.delete(storedAgentId);
 
-      // Cascade: drop any star rows referencing this agent so they don't
+      // Cascade: drop any favorite rows referencing this agent so they don't
       // resurrect if the same id is reused. Failure must not abort the delete.
       try {
-        const starsStore = await storage.getStore('stars');
-        await starsStore?.deleteStarsForEntity({ entityType: 'agent', entityId: storedAgentId });
+        const favoritesStore = await storage.getStore('favorites');
+        await favoritesStore?.deleteFavoritesForEntity({ entityType: 'agent', entityId: storedAgentId });
       } catch (cascadeError) {
         mastra
           .getLogger?.()
-          ?.warn?.('Failed to cascade-delete stars for agent', { storedAgentId, error: cascadeError });
+          ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
       }
 
       // Clear the cached agent instance
