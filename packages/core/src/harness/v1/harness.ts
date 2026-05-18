@@ -303,6 +303,9 @@ export class Harness {
    */
   private _mastra?: Mastra;
   private _harnessName = 'default';
+  private _registeredHarnessName?: string;
+  private _hasAdoptedSessions = false;
+  private _guardPreboundDefaultNamespace = false;
   private readonly _storageOverride?: HarnessStorage;
   private readonly _modesById: Map<string, HarnessMode>;
   private readonly _defaultModeId?: string;
@@ -602,16 +605,45 @@ export class Harness {
     if (this._mastra && this._mastra !== mastra) {
       throw new HarnessConfigError('mastra', 'harness is already bound to a different Mastra instance');
     }
-    if (this._mastra === mastra) {
-      if (harnessName !== undefined && harnessName !== this._harnessName) {
+
+    if (harnessName !== undefined) {
+      if (this._registeredHarnessName !== undefined && harnessName !== this._registeredHarnessName) {
         throw new HarnessConfigError('mastra', 'harness is already registered under a different harness name');
+      }
+      if (this._registeredHarnessName === undefined && harnessName !== this._harnessName && this._hasAdoptedSessions) {
+        throw new HarnessConfigError(
+          'mastra',
+          'harness already has sessions under the default harness name and cannot be renamed',
+        );
+      }
+    }
+
+    if (this._mastra === mastra) {
+      if (harnessName !== undefined) {
+        if (this._registeredHarnessName === undefined && this._harnessName === 'default' && harnessName !== 'default') {
+          this._guardPreboundDefaultNamespace = true;
+        }
+        this._harnessName = harnessName;
+        this._registeredHarnessName = harnessName;
       }
       return;
     }
+
+    const previousHarnessName = this._harnessName;
+    const previousRegisteredHarnessName = this._registeredHarnessName;
+    const previousGuardPreboundDefaultNamespace = this._guardPreboundDefaultNamespace;
     if (harnessName !== undefined) {
       this._harnessName = harnessName;
+      this._registeredHarnessName = harnessName;
     }
-    this._bindMastra(mastra);
+    try {
+      this._bindMastra(mastra);
+    } catch (err) {
+      this._harnessName = previousHarnessName;
+      this._registeredHarnessName = previousRegisteredHarnessName;
+      this._guardPreboundDefaultNamespace = previousGuardPreboundDefaultNamespace;
+      throw err;
+    }
   }
 
   /**
@@ -925,6 +957,8 @@ export class Harness {
       return this._hydrate(storage, stored);
     }
 
+    await this._assertNoPreboundDefaultNamespaceShadow(storage, threadId, resourceId);
+
     // No active record — create a fresh session bound to this thread.
     return this._createFresh(storage, {
       resourceId,
@@ -1094,8 +1128,26 @@ export class Harness {
     return undefined;
   }
 
+  private async _assertNoPreboundDefaultNamespaceShadow(
+    storage: HarnessStorage,
+    threadId: string,
+    resourceId: string,
+  ): Promise<void> {
+    if (!this._guardPreboundDefaultNamespace || this._harnessName === 'default') return;
+    const existingDefault = await storage.loadSessionByThread({
+      harnessName: 'default',
+      threadId,
+      resourceId,
+    });
+    if (!existingDefault) return;
+    throw new HarnessConfigError(
+      'session().threadId',
+      'cannot create a registered harness session for a thread/resource with an active default-namespace session; close or migrate the default session first',
+    );
+  }
+
   private async _hydrate(storage: HarnessStorage, stored: SessionRecord): Promise<Session> {
-    const lease = await this._acquireLease(storage, stored.id);
+    const lease = await this._acquireLease(storage, stored.harnessName, stored.id);
     const record: SessionRecord = {
       ...stored,
       ownerId: this.ownerId,
@@ -1139,6 +1191,7 @@ export class Harness {
       leaseExpiresAt: record.leaseExpiresAt ?? Date.now() + this._leaseTtlMs,
     });
     if (workspaceLost) session._markWorkspaceLost();
+    this._hasAdoptedSessions = true;
     this._liveSessions.set(record.id, session);
 
     // Bridge the session's events onto the harness-level emitter so a single
@@ -1181,10 +1234,10 @@ export class Harness {
     return session;
   }
 
-  private async _acquireLease(storage: HarnessStorage, sessionId: string) {
+  private async _acquireLease(storage: HarnessStorage, harnessName: string, sessionId: string) {
     try {
       return await storage.acquireSessionLease({
-        harnessName: this._harnessName,
+        harnessName,
         sessionId,
         ownerId: this.ownerId,
         ttlMs: this._leaseTtlMs,
@@ -1366,7 +1419,7 @@ export class Harness {
       };
     }
 
-    const lease = await this._acquireLease(storage, record.id);
+    const lease = await this._acquireLease(storage, record.harnessName, record.id);
     const leasedRecord = {
       ...record,
       ownerId: this.ownerId,

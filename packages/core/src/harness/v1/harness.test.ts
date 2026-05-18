@@ -268,6 +268,123 @@ describe('Harness v1 — session(...) by thread', () => {
     });
   });
 
+  it('uses the first registered key for a harness pre-bound to the same Mastra', async () => {
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage,
+    });
+    const alpha = new Harness({
+      mastra,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    expect(() => alpha.__registerMastra(mastra, 'alpha')).not.toThrow();
+
+    const session = await alpha.session({ threadId: 'shared-thread', resourceId: 'r1' });
+    expect(session.getRecord().harnessName).toBe('alpha');
+
+    const harnessStore = await storage.getStore('harness');
+    expect(harnessStore).toBeDefined();
+    await expect(harnessStore!.loadSession({ harnessName: 'alpha', sessionId: session.id })).resolves.toMatchObject({
+      harnessName: 'alpha',
+    });
+    await expect(harnessStore!.loadSession({ harnessName: 'default', sessionId: session.id })).resolves.toBeNull();
+  });
+
+  it('rejects registering a pre-bound harness on a different Mastra', () => {
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+    });
+    const other = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+    });
+    const harness = new Harness({
+      mastra,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    expect(() => harness.__registerMastra(other, 'alpha')).toThrow(HarnessConfigError);
+  });
+
+  it('rejects first non-default registration after a pre-bound harness created sessions', async () => {
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage,
+    });
+    const harness = new Harness({
+      mastra,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const session = await harness.session({ threadId: 'shared-thread', resourceId: 'r1' });
+    await harness.shutdown();
+
+    expect(() => harness.__registerMastra(mastra, 'alpha')).toThrow(HarnessConfigError);
+
+    const harnessStore = await storage.getStore('harness');
+    await expect(harnessStore!.loadSession({ harnessName: 'default', sessionId: session.id })).resolves.toMatchObject({
+      harnessName: 'default',
+    });
+  });
+
+  it('fails closed instead of shadowing active default sessions after restart', async () => {
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage,
+    });
+    const defaultHarness = new Harness({
+      mastra,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const defaultSession = await defaultHarness.session({ threadId: 'shared-thread', resourceId: 'r1' });
+    await defaultHarness.shutdown();
+
+    const alpha = new Harness({
+      mastra,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    expect(() => alpha.__registerMastra(mastra, 'alpha')).not.toThrow();
+
+    await expect(alpha.session({ threadId: 'shared-thread', resourceId: 'r1' })).rejects.toThrow(HarnessConfigError);
+
+    const harnessStore = await storage.getStore('harness');
+    await expect(
+      harnessStore!.loadSession({ harnessName: 'default', sessionId: defaultSession.id }),
+    ).resolves.toMatchObject({
+      harnessName: 'default',
+    });
+
+    const alphaSession = await alpha.session({ threadId: 'alpha-thread', resourceId: 'r1' });
+    expect(alphaSession.getRecord().harnessName).toBe('alpha');
+  });
+
+  it('rolls back the first registered key if Mastra binding validation fails', () => {
+    const invalid = new Mastra({
+      agents: { other: makeAgent() },
+      storage: new InMemoryStore(),
+    });
+    const valid = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+    });
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    expect(() => harness.__registerMastra(invalid, 'bad')).toThrow(HarnessConfigError);
+    expect(() => harness.__registerMastra(valid, 'alpha')).not.toThrow();
+  });
+
   it('rejects re-registering the same Mastra under a different harness key', async () => {
     const storage = new InMemoryStore();
     const alpha = new Harness({

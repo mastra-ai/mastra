@@ -275,10 +275,10 @@ export type HarnessConfig = HarnessConfigCommon &
          * Pre-built Mastra instance to drive this harness. Mutually
          * exclusive with top-level `agents` / `storage`.
          *
-         * If you want to register the harness on a Mastra (so it lives in
-         * `mastra.harnesses.*`), omit this field and pass the harness to
-         * `new Mastra({ harnesses })` instead — the parent will install
-         * itself onto the harness automatically.
+         * Prefer omitting this field when you want the parent `Mastra` to own
+         * registration (`new Mastra({ harnesses })`). A harness that is already
+         * bound to the same `Mastra` may still be registered there under a
+         * configured harness name.
          */
         mastra: Mastra;
         agents?: never;
