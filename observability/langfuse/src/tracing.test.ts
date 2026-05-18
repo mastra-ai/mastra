@@ -31,6 +31,13 @@ const mockScoreCreate = vi.fn();
 const mockClientFlush = vi.fn().mockResolvedValue(undefined);
 const mockClientShutdown = vi.fn().mockResolvedValue(undefined);
 const clientConstructorArgs: any[] = [];
+const originalLangfuseEnv = {
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+  environment: process.env.LANGFUSE_TRACING_ENVIRONMENT,
+  release: process.env.LANGFUSE_RELEASE,
+};
 
 vi.mock('@langfuse/client', () => {
   class MockLangfuseClient {
@@ -112,6 +119,11 @@ describe('LangfuseExporter', () => {
     mockShutdown.mockClear();
     mockClientFlush.mockClear();
     mockClientShutdown.mockClear();
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    delete process.env.LANGFUSE_RELEASE;
   });
 
   afterEach(async () => {
@@ -119,6 +131,17 @@ describe('LangfuseExporter', () => {
       await exporter.shutdown();
       exporter = undefined;
     }
+
+    if (originalLangfuseEnv.publicKey === undefined) delete process.env.LANGFUSE_PUBLIC_KEY;
+    else process.env.LANGFUSE_PUBLIC_KEY = originalLangfuseEnv.publicKey;
+    if (originalLangfuseEnv.secretKey === undefined) delete process.env.LANGFUSE_SECRET_KEY;
+    else process.env.LANGFUSE_SECRET_KEY = originalLangfuseEnv.secretKey;
+    if (originalLangfuseEnv.baseUrl === undefined) delete process.env.LANGFUSE_BASE_URL;
+    else process.env.LANGFUSE_BASE_URL = originalLangfuseEnv.baseUrl;
+    if (originalLangfuseEnv.environment === undefined) delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    else process.env.LANGFUSE_TRACING_ENVIRONMENT = originalLangfuseEnv.environment;
+    if (originalLangfuseEnv.release === undefined) delete process.env.LANGFUSE_RELEASE;
+    else process.env.LANGFUSE_RELEASE = originalLangfuseEnv.release;
   });
 
   describe('configuration', () => {
@@ -396,6 +419,97 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.observation.metadata.operationName']).toBeUndefined();
     });
 
+    it('scopes trace name and metadata to the agent on root AGENT_RUN spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('Weather Agent');
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentName']).toBe('Weather Agent');
+    });
+
+    it('falls back to entityId for trace name when entityName is missing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          entityName: undefined,
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentName']).toBeUndefined();
+    });
+
+    it('preserves user-provided traceName over the agent default', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+          metadata: { traceName: 'custom-trace-name' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('custom-trace-name');
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentName']).toBe('Weather Agent');
+    });
+
+    it('does not set trace identity on non-root agent spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: false,
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.agentId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.agentName']).toBeUndefined();
+    });
+
+    it('scopes trace name and metadata to the workflow on root WORKFLOW_RUN spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.WORKFLOW_RUN,
+          isRootSpan: true,
+          entityId: 'order-workflow',
+          entityName: 'Order Workflow',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('Order Workflow');
+      expect(attrs['langfuse.trace.metadata.workflowId']).toBe('order-workflow');
+      expect(attrs['langfuse.trace.metadata.workflowName']).toBe('Order Workflow');
+    });
+
     it('sets langfuse.environment and langfuse.release on spans', async () => {
       exporter = new LangfuseExporter({
         publicKey: 'pk-test',
@@ -425,7 +539,7 @@ describe('LangfuseExporter', () => {
     });
   });
 
-  describe('addScoreToTrace', () => {
+  describe('addScoreToTrace (deprecated)', () => {
     it('calls LangfuseClient score.create with correct payload', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
 
@@ -478,6 +592,62 @@ describe('LangfuseExporter', () => {
           scorerName: 'test',
         }),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('onScoreEvent', () => {
+    const baseScore = {
+      scoreId: 'score-xyz',
+      timestamp: new Date('2026-01-01T00:00:00Z'),
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      scorerId: 'accuracy',
+      scorerName: 'Accuracy Scorer',
+      scoreSource: 'live',
+      score: 0.95,
+      reason: 'Good response',
+      metadata: { sessionId: 'session-1' },
+    };
+
+    it('forwards a ScoreEvent to LangfuseClient.score.create', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({ type: 'score', score: { ...baseScore } } as any);
+
+      expect(mockScoreCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'score-xyz',
+          traceId: 'trace-1',
+          observationId: 'span-1',
+          name: 'Accuracy Scorer',
+          value: 0.95,
+          comment: 'Good response',
+          metadata: { sessionId: 'session-1' },
+          dataType: 'NUMERIC',
+        }),
+      );
+    });
+
+    it('falls back to scorerId when scorerName is missing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { ...baseScore, scorerName: undefined },
+      } as any);
+
+      expect(mockScoreCreate).toHaveBeenCalledWith(expect.objectContaining({ name: 'accuracy' }));
+    });
+
+    it('omits the call when traceId is missing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { ...baseScore, traceId: undefined },
+      } as any);
+
+      expect(mockScoreCreate).not.toHaveBeenCalled();
     });
   });
 

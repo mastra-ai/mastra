@@ -1,7 +1,10 @@
 function replaceField(stringifiedBody: string, field: string, replacement: string) {
   let str = stringifiedBody;
-  str = str.replaceAll(new RegExp(`"${field}":"[^"]+"`, 'g'), `"${field}":"${replacement}"`);
-  str = str.replaceAll(new RegExp(`\\\\"${field}\\\\":\\\\"[^"]+\\\\"`, 'g'), `\\"${field}\\":\\"${replacement}\\"`);
+  str = str.replaceAll(new RegExp(`"${field}":("[^"]+"|-?\\d+(?:\\.\\d+)?)`, 'g'), `"${field}":"${replacement}"`);
+  str = str.replaceAll(
+    new RegExp(`\\\\"${field}\\\\":(\\\\"[^"]+\\\\"|-?\\d+(?:\\.\\d+)?)`, 'g'),
+    `\\"${field}\\":\\"${replacement}\\"`,
+  );
 
   return str;
 }

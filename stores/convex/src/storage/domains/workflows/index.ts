@@ -87,7 +87,11 @@ export class WorkflowsConvex extends WorkflowsStorage {
         workflow_name: workflowName,
         run_id: runId,
         resourceId,
-        snapshot,
+        // Convex rejects any field whose name starts with `$` (reserved prefix).
+        // Workflow snapshots embed tool outputs whose serialized Zod->JSON Schemas
+        // contain $schema/$ref/$defs/$id keys, so we serialize the snapshot here.
+        // loadWorkflowSnapshot / ensureSnapshot already handle the string case.
+        snapshot: JSON.stringify(snapshot),
         createdAt: existing?.createdAt ?? (createdAt ? new Date(createdAt).toISOString() : now.toISOString()),
         updatedAt: updatedAt ? new Date(updatedAt).toISOString() : now.toISOString(),
       },

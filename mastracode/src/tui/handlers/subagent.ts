@@ -12,10 +12,12 @@ export function handleSubagentStart(
   agentType: string,
   task: string,
   modelId?: string,
+  forked?: boolean,
 ): void {
   const { state } = ctx;
   const component = new SubagentExecutionComponent(agentType, task, state.ui, modelId, {
     collapseOnComplete: state.quietMode,
+    forked,
   });
   state.pendingSubagents.set(toolCallId, component);
   state.allToolComponents.push(component as any);

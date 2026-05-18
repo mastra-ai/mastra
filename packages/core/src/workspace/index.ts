@@ -2,7 +2,7 @@
 export * from './workspace';
 
 // LSP
-export type { LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
+export type { CustomLSPServer, LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
@@ -128,7 +128,7 @@ export type {
 } from './skills';
 
 // Skill Tools
-export { createSkillTools } from './skills';
+export { createSkillTools, formatSkillActivation } from './skills';
 
 // Skill Publishing
 export type { SkillPublishResult } from './skills';

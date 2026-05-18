@@ -105,3 +105,19 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+:::note[Keep bindings inline inside `new Mastra({...})`]
+Mastra's Babel plugin defers `new Mastra(...)` so that `env` is available when it runs. Code outside that call evaluates at module load before `env` is populated.
+
+```typescript
+// ✅ Works — binding is inside new Mastra(), so it's deferred
+export const mastra = new Mastra({
+  storage: new D1Store({ binding: env.DB }),
+})
+
+// ❌ Breaks — env.DB is undefined at module load
+const storage = new D1Store({ binding: env.DB })
+export const mastra = new Mastra({ storage })
+```
+
+:::

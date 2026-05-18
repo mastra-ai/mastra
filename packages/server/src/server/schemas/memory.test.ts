@@ -14,6 +14,21 @@ import { listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
  */
 describe('Memory Schema Query Parsing', () => {
   describe('listMessagesQuerySchema', () => {
+    it('should allow omitted optional query params', () => {
+      const result = listMessagesQuerySchema.safeParse({
+        page: 0,
+        perPage: 20,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderBy).toBeUndefined();
+        expect(result.data.include).toBeUndefined();
+        expect(result.data.filter).toBeUndefined();
+        expect(result.data.includeSystemReminders).toBeUndefined();
+      }
+    });
+
     describe('orderBy parameter parsing', () => {
       it('should parse orderBy when passed as an object', () => {
         const result = listMessagesQuerySchema.safeParse({
@@ -251,6 +266,19 @@ describe('Memory Schema Query Parsing', () => {
   });
 
   describe('listThreadsQuerySchema', () => {
+    it('should allow omitted optional query params', () => {
+      const result = listThreadsQuerySchema.safeParse({
+        page: 0,
+        perPage: 100,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.metadata).toBeUndefined();
+        expect(result.data.orderBy).toBeUndefined();
+      }
+    });
+
     describe('orderBy parameter parsing', () => {
       it('should parse orderBy when passed as an object', () => {
         const result = listThreadsQuerySchema.safeParse({

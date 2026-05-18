@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
-import { TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   TracingEvent,
   AnyExportedSpan,
@@ -13,6 +13,11 @@ import { fetchWithRetry } from '@mastra/core/utils';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 
+/**
+ * @deprecated Use `MastraPlatformExporterConfig` from `@mastra/observability`
+ * instead. This type is kept for backward compatibility and will be removed in
+ * a future major version.
+ */
 export interface CloudExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
@@ -38,6 +43,8 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   scores: '/scores/publish',
   feedback: '/feedback/publish',
 };
+
+const DEFAULT_CLOUD_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   traces: 'spans',
@@ -216,6 +223,13 @@ type ResolvedCloudConfig = {
   feedbackEndpoint: string;
 };
 
+/**
+ * @deprecated Use `MastraPlatformExporter` from `@mastra/observability` instead.
+ * This class is preserved unchanged so existing integrations (including code
+ * that matches on the `CLOUD_EXPORTER_*` error IDs or the
+ * `mastra-cloud-observability-exporter` exporter name) keep working. It will
+ * be removed in a future major version.
+ */
 export class CloudExporter extends BaseExporter {
   name = 'mastra-cloud-observability-exporter';
 
@@ -235,7 +249,7 @@ export class CloudExporter extends BaseExporter {
     const rawProjectId = config.projectId ?? process.env.MASTRA_PROJECT_ID;
     const projectId = rawProjectId && VALID_PROJECT_ID.test(rawProjectId) ? rawProjectId : undefined;
     if (!accessToken) {
-      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
+      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
     const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;
@@ -291,6 +305,10 @@ export class CloudExporter extends BaseExporter {
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     // Cloud Observability only process SPAN_ENDED events
     if (event.type !== TracingEventType.SPAN_ENDED) {
+      return;
+    }
+
+    if (!DEFAULT_CLOUD_SPAN_FILTER(event.exportedSpan)) {
       return;
     }
 

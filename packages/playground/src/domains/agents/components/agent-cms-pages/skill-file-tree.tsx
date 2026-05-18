@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { IconButton, TooltipProvider, Tree } from '@mastra/playground-ui';
+import { Button, TooltipProvider, Tree } from '@mastra/playground-ui';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -153,9 +153,9 @@ export function updateNodeContent(nodes: InMemoryFileNode[], nodeId: string, con
 function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () => void }) {
   return (
     <span className="opacity-0 group-hover:opacity-100">
-      <IconButton size="sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
+      <Button size="icon-sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
         <Plus />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -163,12 +163,12 @@ function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () =>
 function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAddFolder: () => void }) {
   return (
     <span className="flex opacity-0 group-hover:opacity-100">
-      <IconButton size="sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
+      <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
         <Plus />
-      </IconButton>
-      <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
+      </Button>
+      <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
         <FolderPlus />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -176,8 +176,8 @@ function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAd
 function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id: string) => void }) {
   return (
     <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-      <IconButton
-        size="sm"
+      <Button
+        size="icon-sm"
         variant="ghost"
         tooltip="Delete file"
         onClick={e => {
@@ -186,7 +186,7 @@ function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id:
         }}
       >
         <Trash2 />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -225,14 +225,14 @@ function UserNodeList({
               actions={
                 !readOnly && (
                   <span className="flex opacity-0 group-hover:opacity-100">
-                    <IconButton size="sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
+                    <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
                       <Plus />
-                    </IconButton>
-                    <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
+                    </Button>
+                    <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
                       <FolderPlus />
-                    </IconButton>
-                    <IconButton
-                      size="sm"
+                    </Button>
+                    <Button
+                      size="icon-sm"
                       variant="ghost"
                       tooltip="Delete folder"
                       onClick={e => {
@@ -241,7 +241,7 @@ function UserNodeList({
                       }}
                     >
                       <Trash2 />
-                    </IconButton>
+                    </Button>
                   </span>
                 )
               }

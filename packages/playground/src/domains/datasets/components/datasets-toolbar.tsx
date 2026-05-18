@@ -1,5 +1,5 @@
-import { Button, ButtonsGroup, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
-import { XIcon } from 'lucide-react';
+import { Button, ButtonsGroup, ButtonWithTooltip, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
+import { Plus, XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS, DATASET_TARGET_OPTIONS } from './datasets-list/helpers';
 
 export interface DatasetsToolbarTagOption {
@@ -19,6 +19,8 @@ export interface DatasetsToolbarProps {
   tagOptions: DatasetsToolbarTagOption[];
   onReset?: () => void;
   hasActiveFilters?: boolean;
+  onCreateClick?: () => void;
+  createTooltip?: string;
 }
 
 export function DatasetsToolbar({
@@ -33,6 +35,8 @@ export function DatasetsToolbar({
   tagOptions,
   onReset,
   hasActiveFilters,
+  onCreateClick,
+  createTooltip = 'Create a dataset',
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -73,11 +77,16 @@ export function DatasetsToolbar({
           />
         )}
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="light">
+          <Button onClick={onReset} size="sm" variant="default">
             <XIcon className="size-3" /> Reset
           </Button>
         )}
       </ButtonsGroup>
+      {onCreateClick && (
+        <ButtonWithTooltip onClick={onCreateClick} tooltipContent={createTooltip} className="ml-auto">
+          <Plus />
+        </ButtonWithTooltip>
+      )}
     </div>
   );
 }

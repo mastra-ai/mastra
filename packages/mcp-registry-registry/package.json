@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,6 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "uuid": "^13.0.0",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -46,7 +45,7 @@
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",

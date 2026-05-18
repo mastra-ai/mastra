@@ -46,7 +46,6 @@ const meta: Meta<typeof MetricsDataTable<ModelRow>> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

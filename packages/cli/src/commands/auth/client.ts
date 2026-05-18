@@ -45,6 +45,15 @@ export function throwApiError(message: string, status: number, detail?: string):
   throw new Error(`${message}: ${status}`);
 }
 
+/** Best-effort message from platform JSON error bodies (RFC 7807 `detail`, etc.). */
+export function extractApiErrorDetail(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const o = error as Record<string, unknown>;
+  if (typeof o.detail === 'string' && o.detail.trim()) return o.detail;
+  if (typeof o.message === 'string' && o.message.trim()) return o.message;
+  return undefined;
+}
+
 // Shared mutable token state — updated by refreshes so all callers see the latest.
 let _currentToken: string | null = null;
 let _currentOrgId: string | null = null;

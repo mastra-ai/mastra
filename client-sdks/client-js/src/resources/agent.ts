@@ -38,6 +38,8 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -50,6 +52,13 @@ import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
+
+type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
+  messages?: MessageListInput;
+  runId: string;
+  toolCallId?: string;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+};
 
 type ToolCallRespondFn<OUTPUT> = (
   messages: MessageListInput,
@@ -268,6 +277,59 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    return this.request(`/agents/${this.agentId}/signals`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    })) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    if (!streamResponse.body) {
+      throw new Error('No response body');
+    }
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+        signal: this.options.abortSignal,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * Clones this agent to a new stored agent in the database
    * @param params - Clone parameters including optional newId, newName, metadata, authorId, and requestContext
    * @returns Promise containing the created stored agent
@@ -296,8 +358,14 @@ export class Agent extends BaseResource {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
     if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
-    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);
@@ -1288,7 +1356,7 @@ export class Agent extends BaseResource {
             step += 1;
 
             // reset the current text and reasoning parts
-            currentTextPart = chunk.payload.stepResult.isContinued ? currentTextPart : undefined;
+            currentTextPart = chunk.payload?.stepResult?.isContinued ? currentTextPart : undefined;
             currentReasoningPart = undefined;
             currentReasoningTextDetail = undefined;
 
@@ -1297,8 +1365,8 @@ export class Agent extends BaseResource {
           }
 
           case 'finish': {
-            finishReason = chunk.payload.stepResult.reason;
-            if (chunk.payload.usage != null) {
+            finishReason = chunk.payload?.stepResult?.reason ?? finishReason;
+            if (chunk.payload?.usage != null) {
               // usage = calculateLanguageModelUsage(value.usage);
               usage = chunk.payload.usage;
             }
@@ -1322,9 +1390,15 @@ export class Agent extends BaseResource {
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
+    let requestBody = processedParams;
+    if (route === 'resume-stream') {
+      const { messages: _messages, ...resumeStreamBody } = processedParams;
+      requestBody = resumeStreamBody;
+    }
+
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
-      body: processedParams,
+      body: requestBody,
       stream: true,
     });
 
@@ -1449,7 +1523,9 @@ export class Agent extends BaseResource {
                   : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing
+                // This will wait for the recursive stream to complete before continuing.
+                // Forward `route` so stream-until-idle (and future non-default routes)
+                // stay on the same endpoint across client-tool continuations.
                 try {
                   await this.processStreamResponse(
                     {
@@ -1457,6 +1533,7 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
+                    route,
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);
@@ -1767,6 +1844,125 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  async streamUntilIdle<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions?: StreamParamsBaseWithoutMessages<any> & {
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle<OUTPUT>(
+    messagesOrParams: MessageListInput,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    // Handle both new signature (messages, options) and old signature (single param object)
+    let params: StreamParams<OUTPUT> = {
+      messages: messagesOrParams as MessageListInput,
+      ...options,
+    } as StreamParams<OUTPUT>;
+
+    let structuredOutput: SerializableStructuredOutputOptions<OUTPUT> | undefined = undefined;
+    if (params.structuredOutput?.schema) {
+      structuredOutput = {
+        ...params.structuredOutput,
+        schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
+      } as SerializableStructuredOutputOptions<OUTPUT>;
+    }
+    const processedParams: StreamParams<OUTPUT> = {
+      ...params,
+      requestContext: parseClientRequestContext(params.requestContext),
+      clientTools: processClientTools(params.clientTools),
+      structuredOutput,
+    };
+
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    // Start processing the response in the background
+    // This returns immediately with response metadata and continues streaming in background
+    const response = await this.processStreamResponse(processedParams, readableController!, 'stream-until-idle');
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
   async approveToolCall(params: {
     runId: string;
     toolCallId: string;
@@ -1863,6 +2059,202 @@ export class Agent extends BaseResource {
     };
 
     // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Observe (reconnect to) an existing agent stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param params.runId - The run ID to observe
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @returns Promise containing a streaming Response
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to a stream from a specific position
+   * const response = await client.agents('my-agent').observe({
+   *   runId: 'run-123',
+   *   offset: 42, // Resume from event 42
+   * });
+   *
+   * await response.processDataStream({
+   *   onChunk: (chunk) => console.log('Received:', chunk),
+   * });
+   * ```
+   */
+  async observe(params: { runId: string; offset?: number }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/agents/${this.agentId}/observe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Resumes a suspended agent stream with custom resume data.
+   * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
+   */
+  async resumeStream<OUTPUT extends {}>(
+    resumeData: JSONValue,
+    options: ResumeStreamParams<OUTPUT>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const processedParams = {
+      ...options,
+      resumeData,
+      requestContext: parseClientRequestContext(options.requestContext),
+      clientTools: processClientTools(options.clientTools),
+      structuredOutput: options.structuredOutput
+        ? {
+            ...options.structuredOutput,
+            schema: standardSchemaToJSONSchema(toStandardSchema(options.structuredOutput.schema)),
+          }
+        : undefined,
+    };
+
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream');
+
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Resumes a suspended agent stream until idle with custom resume data.
+   * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
+   */
+  async resumeStreamUntilIdle<OUTPUT extends {}>(
+    resumeData: JSONValue,
+    options: ResumeStreamParams<OUTPUT> & {
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const processedParams = {
+      ...options,
+      resumeData,
+      requestContext: parseClientRequestContext(options.requestContext),
+      clientTools: processClientTools(options.clientTools),
+      structuredOutput: options.structuredOutput
+        ? {
+            ...options.structuredOutput,
+            schema: standardSchemaToJSONSchema(toStandardSchema(options.structuredOutput.schema)),
+          }
+        : undefined,
+    };
+
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream-until-idle');
+
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
     streamResponse.processDataStream = async ({
       onChunk,
     }: {

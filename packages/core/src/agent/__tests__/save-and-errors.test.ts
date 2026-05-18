@@ -1656,9 +1656,16 @@ describe('savePerStep should persist messages during step execution (issue #1398
           (part as any).toolInvocation?.state === 'result',
       ) as any;
 
+    const persistedAssistantText = assistantMessages
+      .flatMap(message => message.content.parts ?? [])
+      .filter(part => part.type === 'text')
+      .map(part => part.text)
+      .join('');
+
     expect(toolResultPart).toBeDefined();
     expect(toolResultPart.toolInvocation.result).toEqual(rawResult);
     expect(toolResultPart.providerMetadata?.mastra?.modelOutput).toEqual(modelOutput);
+    expect(persistedAssistantText).toContain('Response after tool');
   });
 
   it('should persist messages from completed steps when stream is aborted', async () => {

@@ -12,6 +12,7 @@ import {
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
+import { githubCopilotProvider } from '../providers/github-copilot.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -24,6 +25,7 @@ import type { ThinkingLevel } from '../providers/openai-codex.js';
 const authStorage = new AuthStorage();
 
 const OPENAI_PREFIX = 'openai/';
+const GITHUB_COPILOT_PREFIX = 'github-copilot/';
 const MASTRA_GATEWAY_PREFIX = 'mastra/';
 
 const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
@@ -37,6 +39,7 @@ const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
 type ResolvedModel =
   | ReturnType<typeof openaiCodexProvider>
   | ReturnType<typeof opencodeClaudeMaxProvider>
+  | ReturnType<typeof githubCopilotProvider>
   | ModelRouterLanguageModel
   | ReturnType<ReturnType<typeof createAnthropic>>
   | ReturnType<ReturnType<typeof createOpenAI>>;
@@ -84,28 +87,31 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
 }
 
 /**
- * Resolve the Anthropic API key from stored credentials.
- * Returns the key if available, undefined otherwise.
+ * Resolve the Anthropic API key.
+ * Main slot → dedicated apikey: slot → env var.
  */
 export function getAnthropicApiKey(): string | undefined {
-  // Check stored API key credential (set via /apikey or UI prompt)
   const storedCred = authStorage.get('anthropic');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return undefined;
+  const dedicatedKey = authStorage.getStoredApiKey('anthropic')?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
 }
 
 /**
- * Resolve the OpenAI API key from stored credentials.
- * Returns the key if available, undefined otherwise.
+ * Resolve the OpenAI API key.
+ * Main slot → dedicated apikey: slot → env var.
  */
 export function getOpenAIApiKey(): string | undefined {
   const storedCred = authStorage.get('openai-codex');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return undefined;
+  const dedicatedKey = authStorage.getStoredApiKey('openai-codex')?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  return process.env.OPENAI_API_KEY?.trim() || undefined;
 }
 
 /**
@@ -200,9 +206,7 @@ export function resolveModel(
     // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
     // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
     if (normalizedModelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth
-        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
-        : normalizedModelId;
+      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
       const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
       const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
       const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
@@ -238,6 +242,12 @@ export function resolveModel(
   const isAnthropicModel = normalizedModelId.startsWith('anthropic/');
   const isOpenAIModel = normalizedModelId.startsWith(OPENAI_PREFIX);
   const isMoonshotModel = normalizedModelId.startsWith('moonshotai/');
+  const isGitHubCopilotModel = normalizedModelId.startsWith(GITHUB_COPILOT_PREFIX);
+
+  if (isGitHubCopilotModel) {
+    const bareModelId = normalizedModelId.substring(GITHUB_COPILOT_PREFIX.length);
+    return githubCopilotProvider(bareModelId, { headers });
+  }
 
   if (isMoonshotModel) {
     if (!process.env.MOONSHOT_AI_API_KEY) {
@@ -275,9 +285,7 @@ export function resolveModel(
     const storedCred = authStorage.get('openai-codex');
 
     if (storedCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth
-        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
-        : normalizedModelId;
+      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
         headers,
@@ -309,5 +317,5 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
 
   const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
-  return resolveModel(modelId, { thinkingLevel, requestContext });
+  return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }

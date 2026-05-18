@@ -256,6 +256,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -266,6 +273,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -374,6 +388,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -384,6 +405,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -908,6 +936,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -970,6 +1005,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -990,6 +1032,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -1207,6 +1256,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -1269,6 +1325,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -1279,6 +1342,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 26,
         },
       },
@@ -1458,6 +1528,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -1520,6 +1597,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -1530,6 +1614,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 26,
         },
       },
@@ -1752,6 +1843,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -1762,6 +1860,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -1912,6 +2017,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -1922,6 +2034,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -2445,6 +2564,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -2455,6 +2581,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -2698,6 +2831,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -2708,6 +2848,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -2904,6 +3051,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -2914,6 +3068,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -3022,6 +3183,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -3032,6 +3200,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -3545,6 +3720,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
               "cachedInputTokens": 3,
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": 3,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": 10,
+                "totalTokens": 23,
+              },
               "reasoningTokens": 10,
               "totalTokens": 23,
             },
@@ -3568,6 +3750,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           "cachedInputTokens": 3,
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": 3,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": 10,
+            "totalTokens": 23,
+          },
           "reasoningTokens": 10,
           "totalTokens": 23,
         },
@@ -3705,6 +3894,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
               "cachedInputTokens": 3,
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": 3,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": 10,
+                "totalTokens": 23,
+              },
               "reasoningTokens": 10,
               "totalTokens": 23,
             },
@@ -3728,6 +3924,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           "cachedInputTokens": 3,
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": 3,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": 10,
+            "totalTokens": 23,
+          },
           "reasoningTokens": 10,
           "totalTokens": 23,
         },
@@ -4207,6 +4410,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -4269,6 +4479,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -4289,6 +4506,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -4506,6 +4730,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -4568,6 +4799,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -4578,6 +4816,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 26,
         },
       },
@@ -4757,6 +5002,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -4819,6 +5071,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -4829,6 +5088,13 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 26,
         },
       },
@@ -5302,24 +5568,6 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
         },
         "type": "file",
       },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "Hello World",
-          "mediaType": "text/plain",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "QkFVRw==",
-          "mediaType": "image/jpeg",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
     ],
     "dynamicToolCalls": [],
     "dynamicToolResults": [],
@@ -5378,31 +5626,9 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
                 "mimeType": "image/jpeg",
                 "type": "file",
               },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:text/plain;base64,Hello World",
-                "mimeType": "text/plain",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
-                "type": "file",
-              },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:image/jpeg;base64,QkFVRw==",
-                "mimeType": "image/jpeg",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
-                "type": "file",
-              },
             ],
           },
-          "createdAt": 2024-01-01T00:00:00.001Z,
+          "createdAt": 2024-01-01T00:00:00.000Z,
           "id": "msg-0",
           "role": "assistant",
         },
@@ -5460,7 +5686,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
         {
           "id": "msg-0",
           "metadata": {
-            "createdAt": 2024-01-01T00:00:00.001Z,
+            "createdAt": 2024-01-01T00:00:00.000Z,
             "modelId": "mock-model-id",
             "provider": "mock-provider",
           },
@@ -5494,26 +5720,6 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
               "type": "file",
               "url": "data:image/jpeg;base64,QkFVRw==",
             },
-            {
-              "mediaType": "text/plain",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:text/plain;base64,Hello World",
-            },
-            {
-              "mediaType": "image/jpeg",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:image/jpeg;base64,QkFVRw==",
-            },
           ],
           "role": "assistant",
         },
@@ -5530,6 +5736,13 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
     "usage": {
       "inputTokens": 3,
       "outputTokens": 10,
+      "raw": {
+        "cachedInputTokens": undefined,
+        "inputTokens": 3,
+        "outputTokens": 10,
+        "reasoningTokens": undefined,
+        "totalTokens": 13,
+      },
       "totalTokens": 13,
     },
     "warnings": [],
@@ -5745,6 +5958,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -5811,6 +6031,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -5831,6 +6058,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 13,
         },
       },
@@ -6068,6 +6302,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -6134,6 +6375,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -6144,6 +6392,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 26,
         },
       },
@@ -6343,6 +6598,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -6409,6 +6671,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -6419,6 +6688,13 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
           "totalTokens": 26,
         },
       },
@@ -6853,6 +7129,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -6863,6 +7152,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -6971,6 +7273,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -6981,6 +7296,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -7505,6 +7833,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -7567,6 +7908,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -7587,6 +7941,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -7804,6 +8171,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -7866,6 +8246,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -7876,6 +8269,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 26,
         },
       },
@@ -8055,6 +8461,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -8117,6 +8536,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -8127,6 +8559,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 26,
         },
       },
@@ -8349,6 +8794,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -8359,6 +8817,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -8509,6 +8980,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -8519,6 +9003,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -9042,6 +9539,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -9052,6 +9562,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -9295,6 +9818,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -9305,6 +9841,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -9501,6 +10050,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -9511,6 +10073,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -9619,6 +10194,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -9629,6 +10217,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -10142,6 +10743,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
               "cachedInputTokens": 3,
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": 3,
+                  "cacheWrite": undefined,
+                  "noCache": 0,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": 10,
+                  "text": 0,
+                  "total": 10,
+                },
+              },
               "reasoningTokens": 10,
               "totalTokens": 13,
             },
@@ -10165,6 +10779,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "cachedInputTokens": 3,
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": 3,
+              "cacheWrite": undefined,
+              "noCache": 0,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": 10,
+              "text": 0,
+              "total": 10,
+            },
+          },
           "reasoningTokens": 10,
           "totalTokens": 13,
         },
@@ -10302,6 +10929,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
               "cachedInputTokens": 3,
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": 3,
+                  "cacheWrite": undefined,
+                  "noCache": 0,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": 10,
+                  "text": 0,
+                  "total": 10,
+                },
+              },
               "reasoningTokens": 10,
               "totalTokens": 13,
             },
@@ -10325,6 +10965,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "cachedInputTokens": 3,
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": 3,
+              "cacheWrite": undefined,
+              "noCache": 0,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": 10,
+              "text": 0,
+              "total": 10,
+            },
+          },
           "reasoningTokens": 10,
           "totalTokens": 13,
         },
@@ -10804,6 +11457,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -10866,6 +11532,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -10886,6 +11565,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         "usage": {
           "inputTokens": 3,
           "outputTokens": 10,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 13,
         },
       },
@@ -11103,6 +11795,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -11165,6 +11870,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -11175,6 +11893,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 26,
         },
       },
@@ -11354,6 +12085,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -11416,6 +12160,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "inputTokens": {
+                  "cacheRead": undefined,
+                  "cacheWrite": undefined,
+                  "noCache": 3,
+                  "total": 3,
+                },
+                "outputTokens": {
+                  "reasoning": undefined,
+                  "text": 10,
+                  "total": 10,
+                },
+              },
               "totalTokens": 13,
             },
             "warnings": [],
@@ -11426,6 +12183,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         "usage": {
           "inputTokens": 6,
           "outputTokens": 20,
+          "raw": {
+            "inputTokens": {
+              "cacheRead": undefined,
+              "cacheWrite": undefined,
+              "noCache": 3,
+              "total": 3,
+            },
+            "outputTokens": {
+              "reasoning": undefined,
+              "text": 10,
+              "total": 10,
+            },
+          },
           "totalTokens": 26,
         },
       },
@@ -11899,24 +12669,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
         },
         "type": "file",
       },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "Hello World",
-          "mediaType": "text/plain",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "QkFVRw==",
-          "mediaType": "image/jpeg",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
     ],
     "dynamicToolCalls": [],
     "dynamicToolResults": [],
@@ -11975,31 +12727,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
                 "mimeType": "image/jpeg",
                 "type": "file",
               },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:text/plain;base64,Hello World",
-                "mimeType": "text/plain",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
-                "type": "file",
-              },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:image/jpeg;base64,QkFVRw==",
-                "mimeType": "image/jpeg",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
-                "type": "file",
-              },
             ],
           },
-          "createdAt": 2024-01-01T00:00:00.001Z,
+          "createdAt": 2024-01-01T00:00:00.000Z,
           "id": "msg-0",
           "role": "assistant",
         },
@@ -12057,7 +12787,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
         {
           "id": "msg-0",
           "metadata": {
-            "createdAt": 2024-01-01T00:00:00.001Z,
+            "createdAt": 2024-01-01T00:00:00.000Z,
             "modelId": "mock-model-id",
             "provider": "mock-provider",
           },
@@ -12091,26 +12821,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
               "type": "file",
               "url": "data:image/jpeg;base64,QkFVRw==",
             },
-            {
-              "mediaType": "text/plain",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:text/plain;base64,Hello World",
-            },
-            {
-              "mediaType": "image/jpeg",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:image/jpeg;base64,QkFVRw==",
-            },
           ],
           "role": "assistant",
         },
@@ -12127,6 +12837,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
     "usage": {
       "inputTokens": 3,
       "outputTokens": 10,
+      "raw": {
+        "inputTokens": {
+          "cacheRead": undefined,
+          "cacheWrite": undefined,
+          "noCache": 3,
+          "total": 3,
+        },
+        "outputTokens": {
+          "reasoning": undefined,
+          "text": 10,
+          "total": 10,
+        },
+      },
       "totalTokens": 13,
     },
     "warnings": [],

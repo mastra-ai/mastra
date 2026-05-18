@@ -45,7 +45,7 @@ const workspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: './workspace',
   }),
-  skills: ['/skills'],
+  skills: ['skills'],
 })
 ```
 
@@ -164,6 +164,24 @@ const workspace = new Workspace({
 
 The agent receives the `execute_command` tool.
 
+### Dynamic filesystem (per-request)
+
+Pass a resolver function to `filesystem` to return a different filesystem per request. This is useful for multi-tenant applications or multi-role agents where each request needs a different storage root or different permissions.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: ({ requestContext }) => {
+    const role = requestContext.get('agent-role') || 'guest'
+    return new LocalFilesystem({
+      basePath: `/workspaces/${role}`,
+      readOnly: role !== 'admin',
+    })
+  },
+})
+```
+
+One workspace instance serves all requests. The resolver runs at tool execution time, so each request gets its own filesystem. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem) for details.
+
 ### Which pattern should I use?
 
 | Scenario | Pattern |
@@ -173,6 +191,7 @@ The agent receives the `execute_command` tool.
 | Multiple cloud providers in one sandbox | `mounts` + `sandbox` (one mount per provider) |
 | Agent reads/writes files, no command execution needed | `filesystem` only |
 | Agent runs commands, no file tools needed | `sandbox` only |
+| Multi-role or multi-tenant agent with per-request storage | `filesystem` with resolver function |
 
 ## Tool configuration
 

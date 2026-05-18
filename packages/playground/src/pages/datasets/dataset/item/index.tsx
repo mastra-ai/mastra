@@ -1,14 +1,10 @@
 import {
   AlertDialog,
-  Breadcrumb,
   Button,
   ButtonsGroup,
   Column,
   Columns,
   CopyButton,
-  Crumb,
-  Header,
-  Icon,
   MainContentContent,
   MainContentLayout,
   MainHeader,
@@ -22,7 +18,6 @@ import {
 } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import {
-  AlertTriangleIcon,
   ArrowRightToLineIcon,
   Calendar1Icon,
   DatabaseIcon,
@@ -32,7 +27,7 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
 import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
@@ -244,22 +239,6 @@ function DatasetItemPage() {
   return (
     <>
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/datasets">
-              <Icon>
-                <DatabaseIcon />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb as={Link} to={`/datasets/${datasetId}`}>
-              {dataset?.name}
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Item
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <div className="h-full overflow-hidden px-6 pb-4">
           <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
             <MainHeader>
@@ -308,22 +287,23 @@ function DatasetItemPage() {
             <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
               <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
-                  <Notice variant="destructive">
-                    <AlertTriangleIcon />
+                  <Notice variant="destructive" title="Item deleted">
                     <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
                   </Notice>
                 )}
 
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <>
-                    <Notice variant="warning">
-                      <AlertTriangleIcon />
-                      <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  <Notice
+                    variant="warning"
+                    title="Previous version"
+                    action={
                       <Notice.Button onClick={handleReturnToLatest}>
                         <ArrowRightToLineIcon /> Return to the latest version
                       </Notice.Button>
-                    </Notice>
-                  </>
+                    }
+                  >
+                    <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  </Notice>
                 )}
 
                 {isEditing ? (

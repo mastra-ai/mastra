@@ -402,8 +402,16 @@ export abstract class MastraBrowser extends MastraBase {
   /** Human-readable name */
   abstract readonly name: string;
 
-  /** Provider type (e.g., 'playwright', 'stagehand', 'browserbase') */
+  /** Provider identifier (e.g., 'playwright', 'stagehand', 'browserbase') */
   abstract readonly provider: string;
+
+  /**
+   * Provider type for runtime enforcement.
+   * - 'sdk': SDK providers (AgentBrowser, StagehandBrowser) — use with Agent.browser
+   * - 'cli': CLI providers (BrowserViewer) — use with Workspace.browser
+   * Defaults to 'sdk' for backward compatibility with existing providers.
+   */
+  readonly providerType: 'sdk' | 'cli' = 'sdk';
 
   // ---------------------------------------------------------------------------
   // State
@@ -611,10 +619,28 @@ export abstract class MastraBrowser extends MastraBase {
   protected abstract doClose(): Promise<void>;
 
   /**
+   * Get the CDP WebSocket URL for connecting to this browser.
+   * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
+   * SDK providers typically return null as they manage their own CDP connections.
+   *
+   * @param _threadId - Thread identifier (for thread-scoped browsers)
+   * @returns The CDP WebSocket URL (e.g., ws://127.0.0.1:9222/devtools/browser/...)
+   */
+  getCdpUrl(_threadId?: string): string | null {
+    return null;
+  }
+
+  /**
    * Launch the browser.
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
+   * @param _threadId - Thread identifier (for thread-scoped browsers, launches a browser for that thread)
    */
-  async launch(): Promise<void> {
+  async launch(threadId?: string): Promise<void> {
+    // Set current thread if provided, so thread-scoped browsers launch for that thread
+    if (threadId !== undefined) {
+      this.setCurrentThread(threadId);
+    }
+
     // Already ready
     if (this.status === 'ready') {
       return;
@@ -728,6 +754,23 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Connect to an external browser via CDP URL for screencast.
+   *
+   * Use this when an agent is using their own external CDP (e.g., browser-use cloud).
+   * Connects Playwright to the external browser to enable screencast without launching
+   * our own browser.
+   *
+   * Override this in subclasses that support external CDP connections.
+   * The base implementation throws an error.
+   *
+   * @param cdpUrl - The external CDP WebSocket URL (wss://... or ws://...)
+   * @param threadId - Thread ID to associate the session with
+   */
+  async connectToExternalCdp(_cdpUrl: string, _threadId?: string): Promise<void> {
+    throw new Error(`${this.provider} does not support connecting to external CDP`);
+  }
+
+  /**
    * Ensure the browser is ready, launching if needed.
    * If browser was previously closed, it will be re-launched.
    */
@@ -776,8 +819,9 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Check if the browser is currently running.
+   * @param _threadId - Thread identifier (for thread-scoped browsers)
    */
-  isBrowserRunning(): boolean {
+  isBrowserRunning(_threadId?: string): boolean {
     return this.status === 'ready';
   }
 
@@ -1364,15 +1408,16 @@ export abstract class MastraBrowser extends MastraBase {
    * - Returns null if the thread doesn't have an existing browser session
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
-    if (!this.isBrowserRunning()) {
-      return null;
-    }
-
     // Merge config screencast defaults with call-site overrides
     const mergedOptions = this.config.screencast || options ? { ...this.config.screencast, ...options } : undefined;
 
     const threadId = mergedOptions?.threadId;
     const scope = this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
+
+    // Check if browser is running (pass threadId for thread-scoped checks)
+    if (!this.isBrowserRunning(threadId)) {
+      return null;
+    }
 
     // Shared scope - just start the screencast
     if (scope === 'shared') {
@@ -1381,6 +1426,10 @@ export abstract class MastraBrowser extends MastraBase {
 
     // For 'thread' scope, only start if the thread has an existing session
     if (threadId && !this.hasThreadSession(threadId)) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[MastraBrowser] startScreencastIfBrowserActive: hasThreadSession(${threadId})=false, scope=${scope}`,
+      );
       return null;
     }
 

@@ -37,17 +37,11 @@ import type {
 export function extractV6NativeApproval(
   messages: V6UIMessage[],
 ): { resumeData: Record<string, unknown>; runId: string } | null {
-  // Find the last trailing assistant message — stop as soon as we see one.
-  let lastAssistantMsg: V6UIMessage | undefined;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i]!;
-    if (message.role === 'assistant') {
-      lastAssistantMsg = message;
-      break;
-    }
-  }
-
-  if (!lastAssistantMsg) return null;
+  // Only inspect the actual trailing message. If a user has already sent a
+  // follow-up turn after an approval response, we must treat that as a normal
+  // chat submission rather than replaying the stale approval response.
+  const lastAssistantMsg = messages.at(-1);
+  if (!lastAssistantMsg || lastAssistantMsg.role !== 'assistant') return null;
 
   for (const part of lastAssistantMsg.parts ?? []) {
     if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;

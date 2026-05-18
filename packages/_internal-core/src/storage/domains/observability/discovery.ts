@@ -10,7 +10,7 @@ import { entityTypeField } from '../shared';
 export const getMetricNamesArgsSchema = z
   .object({
     prefix: z.string().optional().describe('Filter metric names by prefix'),
-    limit: z.number().int().min(1).optional().describe('Maximum number of names to return'),
+    limit: z.coerce.number().int().min(1).optional().describe('Maximum number of names to return'),
   })
   .describe('Arguments for getting metric names');
 
@@ -45,7 +45,7 @@ export const getMetricLabelValuesArgsSchema = z
     metricName: z.string().describe('Metric name'),
     labelKey: z.string().describe('Label key to get values for'),
     prefix: z.string().optional().describe('Filter values by prefix'),
-    limit: z.number().int().min(1).optional().describe('Maximum number of values to return'),
+    limit: z.coerce.number().int().min(1).optional().describe('Maximum number of values to return'),
   })
   .describe('Arguments for getting label values');
 
@@ -75,6 +75,11 @@ export type GetEntityTypesResponse = z.infer<typeof getEntityTypesResponseSchema
 
 // --- getEntityNames ---
 
+// TODO(observability): Extend entity-name discovery with query/prefix and limit support.
+// The current UI autocomplete can only refine against a capped result set, which is
+// enough for "take the top hit" but not enough for globally-correct shell-style
+// completion. A richer discovery contract should support prefix filtering and bounded
+// result windows, and may also want a root-only mode for root-entity name UX.
 export const getEntityNamesArgsSchema = z
   .object({
     entityType: entityTypeField.optional().describe('Optional entity type filter'),

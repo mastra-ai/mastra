@@ -1,7 +1,16 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import type { ExperimentUISpan } from '../types';
 
-export const formatTraceSpans = (spans: SpanRecord[]): ExperimentUISpan[] => {
+/** Minimal span fields required for building the hierarchical timeline tree. */
+type TimelineSpan = {
+  spanId: string;
+  name: string;
+  spanType: string;
+  startedAt: Date | string;
+  endedAt?: Date | string | null;
+  parentSpanId?: string | null;
+};
+
+export const formatTraceSpans = (spans: TimelineSpan[]): ExperimentUISpan[] => {
   if (!spans || spans.length === 0) {
     return [];
   }

@@ -5,7 +5,10 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
+import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
+import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
@@ -80,7 +83,16 @@ export class MessageList {
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
+  private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
+
+  private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
+    return messages.map(message => AIV5Adapter.toUIMessage(message, options));
+  }
+
+  private toAIV4UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
+    return messages.map(message => AIV4Adapter.toUIMessage(message, options));
+  }
 
   // Event recording for observability
   private isRecording = false;
@@ -99,6 +111,7 @@ export class MessageList {
     resourceId,
     generateMessageId,
     logger,
+    filterIncompleteToolCalls,
     // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
   }: {
@@ -106,12 +119,14 @@ export class MessageList {
     resourceId?: string;
     generateMessageId?: (context?: IdGeneratorContext) => string;
     logger?: IMastraLogger;
+    filterIncompleteToolCalls?: boolean;
   } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
     }
     this.generateMessageId = generateMessageId;
     this.logger = logger;
+    this.filterIncompleteToolCalls = filterIncompleteToolCalls ?? true;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
@@ -158,6 +173,25 @@ export class MessageList {
     return events;
   }
 
+  public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
+    const source = options?.source ?? 'input';
+    const createdAt = this.generateCreatedAt(source, new Date());
+    const acceptedAt = signal.acceptedAt ?? signal.createdAt;
+    const signalForTranscript = createSignal({
+      id: signal.id,
+      type: signal.type,
+      contents: signal.contents,
+      attributes: signal.attributes,
+      metadata: signal.metadata,
+      providerOptions: signal.providerOptions,
+      createdAt,
+      acceptedAt,
+    });
+
+    this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
+    return signalForTranscript;
+  }
+
   public add(messages: MessageListInput, messageSource: MessageSource) {
     if (messageSource === `user`) messageSource = `input`;
 
@@ -174,13 +208,42 @@ export class MessageList {
     }
 
     for (const message of messageArray) {
-      this.addOne(
-        typeof message === `string`
+      if (isCreatedAgentSignal(message) && messageSource === 'input') {
+        this.addSignal(message, { source: messageSource });
+        continue;
+      }
+
+      const messageInput = isCreatedAgentSignal(message)
+        ? message.toDBMessage(this.memoryInfo ?? undefined)
+        : typeof message === `string`
           ? {
-              role: 'user',
+              role: 'user' as const,
               content: message,
             }
-          : message,
+          : message;
+
+      if (Array.isArray(messageInput)) {
+        for (const nestedMessage of messageInput) {
+          this.addOne(
+            typeof nestedMessage === `string`
+              ? {
+                  role: 'user',
+                  content: nestedMessage,
+                }
+              : nestedMessage,
+            messageSource,
+          );
+        }
+        continue;
+      }
+
+      this.addOne(
+        typeof messageInput === `string`
+          ? {
+              role: 'user',
+              content: messageInput,
+            }
+          : messageInput,
         messageSource,
       );
     }
@@ -234,7 +297,46 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
+    for (const message of this.messages) {
+      this.updateLastCreatedAt(message);
+    }
     return this;
+  }
+
+  private getMessagesForModelPrompt(): MastraDBMessage[] {
+    return this.messages.flatMap(message => {
+      if ((message.role as string) !== 'signal') {
+        return [message];
+      }
+
+      return this.convertSignalForModelPrompt(message);
+    });
+  }
+
+  private convertSignalForModelPrompt(message: MastraDBMessage): MastraDBMessage[] {
+    // Model providers only understand normal prompt messages, so project the signal into
+    // its LLM-facing UserModelMessage. Preserve the original id/createdAt so MessageList's
+    // timestamp/ordering bookkeeping stays anchored to the persisted signal row.
+    const signalMessage = mastraDBMessageToSignal(message).toLLMMessage();
+    const createdAt = message.createdAt;
+    const promptMessage = {
+      ...signalMessage,
+      id: message.id,
+      metadata: { createdAt },
+    };
+
+    return [
+      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+        memoryInfo: this.memoryInfo,
+        newMessageId: () => message.id,
+        generateCreatedAt: (_messageSource, start) => {
+          if (start instanceof Date) return start;
+          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+          return createdAt;
+        },
+        dbMessages: this.messages,
+      }),
+    ];
   }
 
   public makeMessageSourceChecker(): {
@@ -351,8 +453,14 @@ export class MessageList {
     v1: (): MastraMessageV1[] => convertToV1Messages(this.all.db()),
 
     aiV5: {
-      model: (): AIV5Type.ModelMessage[] => convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages),
-      ui: (): AIV5Type.UIMessage[] => this.all.db().map(AIV5Adapter.toUIMessage),
+      model: (): AIV5Type.ModelMessage[] => {
+        const promptMessages = this.getMessagesForModelPrompt();
+        return convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
+          promptMessages,
+        );
+      },
+      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.all.db()),
 
       // Used when calling AI SDK streamText/generateText
       prompt: (): AIV5Type.ModelMessage[] => {
@@ -362,8 +470,12 @@ export class MessageList {
           this.createAdapterContext(),
           this.messages,
         );
-        // Filter incomplete tool calls when sending messages TO the LLM
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const promptMessages = this.getMessagesForModelPrompt();
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
+          promptMessages,
+          this.filterIncompleteToolCalls,
+        );
 
         const messages = [...systemMessages, ...modelMessages];
 
@@ -381,8 +493,12 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
-        // Filter incomplete tool calls when sending messages TO the LLM
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const promptMessages = this.getMessagesForModelPrompt();
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
+          promptMessages,
+          this.filterIncompleteToolCalls,
+        );
 
         const storedModelOutputs = new Map<string, unknown>();
         for (const dbMsg of this.messages) {
@@ -419,7 +535,6 @@ export class MessageList {
             }
           }
         }
-
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
@@ -505,12 +620,16 @@ export class MessageList {
     /* @deprecated use list.get.all.aiV4.prompt() instead */
     prompt: () => this.all.aiV4.prompt(),
     /* @deprecated use list.get.all.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.all.db().map(AIV4Adapter.toUIMessage),
+    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.all.db()),
     /* @deprecated use list.get.all.aiV4.core() */
-    core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
+    core: (): CoreMessageV4[] =>
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { transformToolPayloads: false })),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.all.db().map(AIV4Adapter.toUIMessage),
-      core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
+      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.all.db()),
+      core: (): CoreMessageV4[] =>
+        aiV4UIMessagesToAIV4CoreMessages(
+          this.toAIV4UIMessages(this.getMessagesForModelPrompt(), { transformToolPayloads: false }),
+        ),
 
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
@@ -539,20 +658,26 @@ export class MessageList {
     v1: () => convertToV1Messages(this.remembered.db()),
 
     aiV5: {
-      model: () => convertAIV5UIToModelMessages(this.remembered.aiV5.ui(), this.messages),
-      ui: (): AIV5Type.UIMessage[] => this.remembered.db().map(AIV5Adapter.toUIMessage),
+      model: () =>
+        convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(this.remembered.db(), { transformToolPayloads: false }),
+          this.messages,
+        ),
+      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.remembered.db()),
     },
     aiV6: {
       ui: () => this.remembered.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.get.remembered.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.remembered.db().map(AIV4Adapter.toUIMessage),
+    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
     /* @deprecated use list.get.remembered.aiV4.core() */
-    core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
+    core: (): CoreMessageV4[] =>
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { transformToolPayloads: false })),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.remembered.db().map(AIV4Adapter.toUIMessage),
-      core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
+      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
+      core: (): CoreMessageV4[] =>
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { transformToolPayloads: false })),
     },
   };
   private rememberedPersisted = {
@@ -560,20 +685,30 @@ export class MessageList {
     v1: () => convertToV1Messages(this.rememberedPersisted.db()),
 
     aiV5: {
-      model: () => convertAIV5UIToModelMessages(this.rememberedPersisted.aiV5.ui(), this.messages),
-      ui: (): AIV5Type.UIMessage[] => this.rememberedPersisted.db().map(AIV5Adapter.toUIMessage),
+      model: () =>
+        convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
+          this.messages,
+        ),
+      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.rememberedPersisted.db()),
     },
     aiV6: {
       ui: () => this.rememberedPersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.remembered.aiV4.ui() */
-    ui: () => this.rememberedPersisted.db().map(AIV4Adapter.toUIMessage),
+    ui: () => this.toAIV4UIMessages(this.rememberedPersisted.db()),
     /* @deprecated use list.getPersisted.remembered.aiV4.core() */
-    core: () => aiV4UIMessagesToAIV4CoreMessages(this.rememberedPersisted.ui()),
+    core: () =>
+      aiV4UIMessagesToAIV4CoreMessages(
+        this.toAIV4UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
+      ),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.rememberedPersisted.db().map(AIV4Adapter.toUIMessage),
-      core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.rememberedPersisted.aiV4.ui()),
+      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.rememberedPersisted.db()),
+      core: (): CoreMessageV4[] =>
+        aiV4UIMessagesToAIV4CoreMessages(
+          this.toAIV4UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
+        ),
     },
   };
 
@@ -582,20 +717,26 @@ export class MessageList {
     v1: () => convertToV1Messages(this.input.db()),
 
     aiV5: {
-      model: () => convertAIV5UIToModelMessages(this.input.aiV5.ui(), this.messages),
-      ui: (): AIV5Type.UIMessage[] => this.input.db().map(AIV5Adapter.toUIMessage),
+      model: () =>
+        convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(this.input.db(), { transformToolPayloads: false }),
+          this.messages,
+        ),
+      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.input.db()),
     },
     aiV6: {
       ui: () => this.input.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.get.input.aiV4.ui() instead */
-    ui: () => this.input.db().map(AIV4Adapter.toUIMessage),
+    ui: () => this.toAIV4UIMessages(this.input.db()),
     /* @deprecated use list.get.core.aiV4.ui() instead */
-    core: () => aiV4UIMessagesToAIV4CoreMessages(this.input.ui()),
+    core: () =>
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { transformToolPayloads: false })),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.input.db().map(AIV4Adapter.toUIMessage),
-      core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.input.aiV4.ui()),
+      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.input.db()),
+      core: (): CoreMessageV4[] =>
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { transformToolPayloads: false })),
     },
   };
   private inputPersisted = {
@@ -603,20 +744,30 @@ export class MessageList {
     v1: (): MastraMessageV1[] => convertToV1Messages(this.inputPersisted.db()),
 
     aiV5: {
-      model: () => convertAIV5UIToModelMessages(this.inputPersisted.aiV5.ui(), this.messages),
-      ui: (): AIV5Type.UIMessage[] => this.inputPersisted.db().map(AIV5Adapter.toUIMessage),
+      model: () =>
+        convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
+          this.messages,
+        ),
+      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.inputPersisted.db()),
     },
     aiV6: {
       ui: () => this.inputPersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.input.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.inputPersisted.db().map(AIV4Adapter.toUIMessage),
+    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
     /* @deprecated use list.getPersisted.input.aiV4.core() */
-    core: () => aiV4UIMessagesToAIV4CoreMessages(this.inputPersisted.ui()),
+    core: () =>
+      aiV4UIMessagesToAIV4CoreMessages(
+        this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
+      ),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.inputPersisted.db().map(AIV4Adapter.toUIMessage),
-      core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.inputPersisted.aiV4.ui()),
+      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
+      core: (): CoreMessageV4[] =>
+        aiV4UIMessagesToAIV4CoreMessages(
+          this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
+        ),
     },
   };
 
@@ -625,11 +776,12 @@ export class MessageList {
     v1: (): MastraMessageV1[] => convertToV1Messages(this.response.db()),
 
     aiV5: {
-      ui: (): AIV5Type.UIMessage[] => this.response.db().map(AIV5Adapter.toUIMessage),
+      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.response.db()),
       model: (): AIV5ResponseMessage[] =>
-        convertAIV5UIToModelMessages(this.response.aiV5.ui(), this.messages).filter(
-          m => m.role === `tool` || m.role === `assistant`,
-        ),
+        convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(this.response.db(), { transformToolPayloads: false }),
+          this.messages,
+        ).filter(m => m.role === `tool` || m.role === `assistant`),
       modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
         if (typeof stepNumber === 'number') {
           // Delegate to StepContentExtractor for step-specific content extraction
@@ -654,26 +806,34 @@ export class MessageList {
     },
 
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.response.db().map(AIV4Adapter.toUIMessage),
-      core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.response.aiV4.ui()),
+      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.response.db()),
+      core: (): CoreMessageV4[] =>
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.response.db(), { transformToolPayloads: false })),
     },
   };
   private responsePersisted = {
     db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
 
     aiV5: {
-      model: () => convertAIV5UIToModelMessages(this.responsePersisted.aiV5.ui(), this.messages),
-      ui: (): AIV5Type.UIMessage[] => this.responsePersisted.db().map(AIV5Adapter.toUIMessage),
+      model: () =>
+        convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(this.responsePersisted.db(), { transformToolPayloads: false }),
+          this.messages,
+        ),
+      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.responsePersisted.db()),
     },
     aiV6: {
       ui: () => this.responsePersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.response.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.responsePersisted.db().map(AIV4Adapter.toUIMessage),
+    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.responsePersisted.db()),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.responsePersisted.db().map(AIV4Adapter.toUIMessage),
-      core: (): CoreMessageV4[] => aiV4UIMessagesToAIV4CoreMessages(this.responsePersisted.aiV4.ui()),
+      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.responsePersisted.db()),
+      core: (): CoreMessageV4[] =>
+        aiV4UIMessagesToAIV4CoreMessages(
+          this.toAIV4UIMessages(this.responsePersisted.db(), { transformToolPayloads: false }),
+        ),
     },
   };
 
@@ -681,7 +841,164 @@ export class MessageList {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages;
+    return messages.map(message => this.transformMessageForTranscript(message));
+  }
+
+  private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
+    if (!data || typeof data !== 'object') {
+      return data;
+    }
+
+    const stateData = data as Record<string, unknown>;
+    const metadata = stateData.metadata ?? stateData.providerMetadata;
+    const phaseTransform = getTransformedToolPayload(metadata, 'transcript', phase);
+    const inputTransform = getTransformedToolPayload(metadata, 'transcript', 'input-available');
+    const transformedArgs =
+      phase === 'approval'
+        ? hasTransformedToolPayload(phaseTransform)
+          ? phaseTransform.transformed
+          : hasTransformedToolPayload(inputTransform)
+            ? inputTransform.transformed
+            : undefined
+        : hasTransformedToolPayload(inputTransform)
+          ? inputTransform.transformed
+          : hasTransformedToolPayload(phaseTransform)
+            ? phaseTransform.transformed
+            : undefined;
+    const transformedSuspendPayload =
+      phase === 'suspend' && hasTransformedToolPayload(phaseTransform) ? phaseTransform.transformed : undefined;
+
+    return {
+      ...stateData,
+      ...(transformedArgs !== undefined ? { args: transformedArgs } : {}),
+      ...(transformedSuspendPayload !== undefined ? { suspendPayload: transformedSuspendPayload } : {}),
+    };
+  }
+
+  private transformMessageForTranscript(message: MastraDBMessage): MastraDBMessage {
+    if (message.content?.format !== 2 || !message.content.parts) {
+      return message;
+    }
+
+    let changed = false;
+    const transformedByToolCallId = new Map<string, { args?: unknown; result?: unknown; errorText?: string }>();
+
+    const parts = message.content.parts.map(part => {
+      if (part.type === 'tool-invocation' && part.toolInvocation) {
+        const inputTransform = getTransformedToolPayload(part.providerMetadata, 'transcript', 'input-available');
+        const outputTransform =
+          part.toolInvocation.state === 'result'
+            ? (getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
+              getTransformedToolPayload(part.providerMetadata, 'transcript', 'error'))
+            : part.toolInvocation.state === 'output-error'
+              ? getTransformedToolPayload(part.providerMetadata, 'transcript', 'error')
+              : undefined;
+
+        if (!inputTransform && !outputTransform) {
+          return part;
+        }
+
+        changed = true;
+        const transformedArgs = hasTransformedToolPayload(inputTransform)
+          ? inputTransform.transformed
+          : part.toolInvocation.args;
+        const transformedResult =
+          part.toolInvocation.state === 'result'
+            ? hasTransformedToolPayload(outputTransform)
+              ? outputTransform.transformed
+              : part.toolInvocation.result
+            : undefined;
+        const transformedErrorText =
+          part.toolInvocation.state === 'output-error'
+            ? hasTransformedToolPayload(outputTransform)
+              ? (outputTransform.transformed as string)
+              : part.toolInvocation.errorText
+            : undefined;
+        transformedByToolCallId.set(part.toolInvocation.toolCallId, {
+          args: transformedArgs,
+          ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
+          ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
+        });
+
+        return {
+          ...part,
+          toolInvocation: {
+            ...part.toolInvocation,
+            args: transformedArgs,
+            ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
+            ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
+          },
+        };
+      }
+
+      if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+        changed = true;
+        return {
+          ...part,
+          data: this.transformToolStateDataForTranscript(
+            part.data,
+            part.type === 'data-tool-call-suspended' ? 'suspend' : 'approval',
+          ),
+        };
+      }
+
+      return part;
+    });
+
+    const toolInvocations = message.content.toolInvocations?.map(invocation => {
+      const transformed = transformedByToolCallId.get(invocation.toolCallId);
+      if (!transformed) {
+        return invocation;
+      }
+
+      const invocationState = invocation.state as string;
+      changed = true;
+      return {
+        ...invocation,
+        ...(transformed.args !== undefined ? { args: transformed.args } : {}),
+        ...(invocation.state === 'result' && transformed.result !== undefined ? { result: transformed.result } : {}),
+        ...(invocationState === 'output-error' && transformed.errorText !== undefined
+          ? { errorText: transformed.errorText }
+          : {}),
+      };
+    });
+
+    const metadata =
+      message.content.metadata && typeof message.content.metadata === 'object'
+        ? { ...(message.content.metadata as Record<string, unknown>) }
+        : message.content.metadata;
+    if (metadata && typeof metadata === 'object') {
+      for (const [key, phase] of [
+        ['suspendedTools', 'suspend'],
+        ['pendingToolApprovals', 'approval'],
+      ] as const) {
+        const toolStates = metadata[key];
+        if (!toolStates || typeof toolStates !== 'object') {
+          continue;
+        }
+        changed = true;
+        metadata[key] = Object.fromEntries(
+          Object.entries(toolStates as Record<string, unknown>).map(([toolName, state]) => [
+            toolName,
+            this.transformToolStateDataForTranscript(state, phase),
+          ]),
+        );
+      }
+    }
+
+    if (!changed) {
+      return message;
+    }
+
+    return {
+      ...message,
+      content: {
+        ...message.content,
+        parts,
+        ...(toolInvocations ? { toolInvocations } : {}),
+        ...(metadata ? { metadata } : {}),
+      },
+    };
   }
 
   public getEarliestUnsavedMessageTimestamp(): number | undefined {
@@ -707,7 +1024,10 @@ export class MessageList {
    *
    * @returns true if the tool call was found and updated, false otherwise.
    */
-  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+  public updateToolInvocation(
+    inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
+    metadata?: Record<string, unknown>,
+  ): boolean {
     if (!inputPart.toolInvocation?.toolCallId) {
       return false;
     }
@@ -727,6 +1047,14 @@ export class MessageList {
             providerMetadata?: unknown;
           };
 
+          const mergedProviderMetadata =
+            originalPart.providerMetadata !== undefined || inputPartWithMeta.providerMetadata !== undefined
+              ? ({
+                  ...((originalPart.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
+                  ...((inputPartWithMeta.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
+                } as AIV5Type.ProviderMetadata)
+              : undefined;
+
           msg.content.parts[i] = {
             ...inputPart,
             toolInvocation: {
@@ -737,9 +1065,24 @@ export class MessageList {
             ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
               ? { providerExecuted: originalPart.providerExecuted }
               : {}),
-            // Preserve providerMetadata from original call if not in result
-            ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
-              ? { providerMetadata: originalPart.providerMetadata }
+            ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
+          };
+          this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+          this.updateLastCreatedAt(msg);
+
+          // `backgroundTasks` is a per-toolCallId record — merge instead of
+          // overwrite so multiple concurrent background dispatches on the
+          // same assistant message don't clobber each other's metadata.
+          const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+          const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+          const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+          const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+
+          msg.content.metadata = {
+            ...existingMeta,
+            ...incomingMeta,
+            ...(existingBgTasks || incomingBgTasks
+              ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
               : {}),
           };
 
@@ -792,6 +1135,31 @@ export class MessageList {
     if (!this.stateManager.isResponseMessage(lastMsg)) {
       this.stateManager.removeMessage(lastMsg);
       this.stateManager.addToSource(lastMsg, 'response');
+    }
+
+    return true;
+  }
+
+  public markResponseMessageBoundary(messageId?: string): boolean {
+    const message = messageId
+      ? this.messages.find(message => message.id === messageId)
+      : [...this.messages].reverse().find(message => message.role === 'assistant');
+
+    if (!message || message.role !== 'assistant') {
+      return false;
+    }
+
+    message.content.metadata = {
+      ...(message.content.metadata ?? {}),
+      mastra: {
+        ...((message.content.metadata?.mastra as Record<string, unknown> | undefined) ?? {}),
+        responseBoundary: true,
+      },
+    };
+
+    if (!this.stateManager.isResponseMessage(message)) {
+      this.stateManager.removeMessage(message);
+      this.stateManager.addToSource(message, 'response');
     }
 
     return true;
@@ -1024,10 +1392,29 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    const signalMetadata =
+      messageV2.role === 'signal'
+        ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
+        : undefined;
+    if (messageSource === 'input' && messageV2.role === 'signal' && !signalMetadata?.acceptedAt) {
+      const acceptedAt = signalMetadata?.createdAt ?? messageV2.createdAt.toISOString();
+      messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
+      messageV2.content.metadata = {
+        ...messageV2.content.metadata,
+        signal: {
+          ...signalMetadata,
+          createdAt: messageV2.createdAt.toISOString(),
+          acceptedAt,
+        },
+      };
+    }
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
+    const latestSealedIndex = this.messages.findLastIndex(message => MessageMerger.isSealed(message));
     const latestMessage = this.messages.at(-1);
+    const latestMessageIndex = this.messages.length - 1;
+    const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
 
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
@@ -1046,12 +1433,14 @@ export class MessageList {
     // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
+      latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger
       MessageMerger.merge(latestMessage, messageV2);
+      this.updateLastCreatedAt(latestMessage);
 
       // If latest message gets appended to, it should be added to the proper source
       this.pushMessageToSource(latestMessage, messageSource);
@@ -1065,6 +1454,8 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
+        const existingIsAtOrBeforeSealedBoundary = latestSealedIndex !== -1 && existingIndex <= latestSealedIndex;
+
         // If the existing message is sealed (e.g., after observation), don't replace it.
         // Instead, generate a new ID for the incoming message and add it as a new message.
         if (MessageMerger.isSealed(existingMessage)) {
@@ -1120,6 +1511,12 @@ export class MessageList {
             this.messages.push(messageV2);
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
+        } else if (existingIsAtOrBeforeSealedBoundary) {
+          messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+          if (messageV2.createdAt <= existingMessage.createdAt) {
+            messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+          }
+          this.messages.push(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting = MessageMerger.shouldMerge(
@@ -1131,6 +1528,7 @@ export class MessageList {
           );
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
+            this.updateLastCreatedAt(existingMessage);
             this.pushMessageToSource(existingMessage, messageSource);
             // Sort messages and return early — existingMessage stays in messages[] and its Sets
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -1145,6 +1543,10 @@ export class MessageList {
       this.pushMessageToSource(messageV2, messageSource);
     }
 
+    for (const storedMessage of this.messages) {
+      this.updateLastCreatedAt(storedMessage);
+    }
+
     // make sure messages are always stored in order of when they were created!
     this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
@@ -1156,6 +1558,21 @@ export class MessageList {
   }
 
   private lastCreatedAt?: number;
+
+  private updateLastCreatedAt(message: MastraDBMessage): void {
+    const latestMessageTime = message.createdAt.getTime();
+    const latestPartTime = Array.isArray(message.content.parts)
+      ? message.content.parts.reduce((latest, part) => {
+          if (typeof part.createdAt === 'number' && part.createdAt > latest) {
+            return part.createdAt;
+          }
+          return latest;
+        }, latestMessageTime)
+      : latestMessageTime;
+
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, latestPartTime);
+  }
+
   // this makes sure messages added in order will always have a date atleast 1ms apart.
   private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
     // Normalize timestamp
@@ -1179,11 +1596,8 @@ export class MessageList {
 
     const now = new Date();
     const nowTime = startDate?.getTime() || now.getTime();
-    // find the latest createdAt in all stored messages
-    const lastTime = this.messages.reduce((p, m) => {
-      if (m.createdAt.getTime() > p) return m.createdAt.getTime();
-      return p;
-    }, this.lastCreatedAt || 0);
+    // find the latest createdAt in stored messages and parts
+    const lastTime = this.lastCreatedAt || 0;
 
     // make sure our new message is created later than the latest known message time
     // it's expected that messages are added to the list in order if they don't have a createdAt date on them

@@ -2,6 +2,7 @@ import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
   LanguageModelV2CallWarning,
+  LanguageModelV2Prompt,
   LanguageModelV2ResponseMetadata,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
@@ -59,6 +60,24 @@ export type StreamTransport = {
   close: () => void;
   closeOnFinish: boolean;
 };
+
+export const MASTRA_MODEL_STREAM_TRANSPORT = Symbol.for('@mastra/core.modelStreamTransport');
+
+export type StreamTransportCarrier = {
+  [key: symbol]: StreamTransport | undefined;
+};
+
+export function attachModelStreamTransport(target: object, transport?: StreamTransport): void {
+  if (!transport) return;
+  Object.defineProperty(target, MASTRA_MODEL_STREAM_TRANSPORT, {
+    configurable: true,
+    value: transport,
+  });
+}
+
+export function readModelStreamTransport(target: unknown): StreamTransport | undefined {
+  return (target as StreamTransportCarrier | undefined)?.[MASTRA_MODEL_STREAM_TRANSPORT];
+}
 
 export type StreamTransportRef = {
   current?: StreamTransport;
@@ -249,6 +268,7 @@ export interface StepStartPayload {
     body?: string;
     [key: string]: unknown;
   };
+  inputMessages?: LanguageModelV2Prompt;
   warnings?: LanguageModelV2CallWarning[];
   [key: string]: unknown;
 }
@@ -385,8 +405,11 @@ export interface BackgroundTaskResultPayload {
   taskId: string;
   toolName: string;
   toolCallId: string;
+  agentId: string;
   result: unknown;
   runId: string;
+  completedAt: Date;
+  isError?: boolean;
 }
 
 export interface BackgroundTaskFailedPayload {
@@ -394,13 +417,66 @@ export interface BackgroundTaskFailedPayload {
   toolName: string;
   toolCallId: string;
   runId: string;
+  agentId: string;
   error: { message: string };
+  completedAt: Date;
 }
 
 export interface BackgroundTaskProgressPayload {
   taskIds: string[];
   runningCount: number;
   elapsedMs: number;
+}
+
+export interface BackgroundTaskRunningPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
+}
+
+export interface BackgroundTaskCancelledPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  completedAt: Date;
+}
+
+export interface BackgroundTaskOutputPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  payload: Extract<AgentChunkType, { type: 'tool-output' }>;
+}
+
+export interface BackgroundTaskSuspendedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  args: Record<string, unknown>;
+  /** Whatever the tool passed to `suspend(data)`. */
+  suspendPayload?: unknown;
+  /** When the task suspended. */
+  suspendedAt?: Date;
+}
+
+export interface BackgroundTaskResumedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
 }
 
 // Network-specific payload interfaces
@@ -728,6 +804,26 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & {
       type: 'background-task-progress';
       payload: BackgroundTaskProgressPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-running';
+      payload: BackgroundTaskRunningPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-cancelled';
+      payload: BackgroundTaskCancelledPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-output';
+      payload: BackgroundTaskOutputPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-suspended';
+      payload: BackgroundTaskSuspendedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-resumed';
+      payload: BackgroundTaskResumedPayload;
     });
 
 export type WorkflowStreamEvent =
@@ -840,6 +936,7 @@ export type TypedChunkType<OUTPUT = undefined> =
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
+export type StreamChunkType<OUTPUT = undefined> = ChunkType<OUTPUT> | DataChunkType;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
@@ -878,6 +975,7 @@ export type ModelManagerModelConfig = {
 export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:

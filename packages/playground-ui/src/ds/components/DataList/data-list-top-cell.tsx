@@ -24,7 +24,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
 
 export type DataListTopCellWithTooltipProps = {
   children: ReactNode;
-  tooltip: string;
+  tooltip: ReactNode;
   className?: string;
 };
 

@@ -22,7 +22,7 @@ function formatTokens(tokens: number): string {
 
 /** Truncate a string with ANSI codes to a visible width */
 function truncateAnsi(str: string, maxWidth: number): string {
-  const ansiRegex = /\x1b\[[0-9;]*m/g;
+  const ansiRegex = /\x1b\[[0-9;]{0,32}m/g;
   let visibleLength = 0;
   let result = '';
   let lastIndex = 0;

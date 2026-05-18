@@ -6,6 +6,8 @@ export enum EntityType {
   AGENT = 'agent',
   /** Scorer definition/execution */
   SCORER = 'scorer',
+  /** RAG ingestion pipeline execution */
+  RAG_INGESTION = 'rag_ingestion',
   /** Trajectory evaluation target */
   TRAJECTORY = 'trajectory',
   /** Input Processor */
@@ -91,7 +93,7 @@ export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direct
 
 /** Aggregation type schema shared across OLAP-style observability queries. */
 export const aggregationTypeSchema = z
-  .enum(['sum', 'avg', 'min', 'max', 'count', 'last'])
+  .enum(['sum', 'avg', 'min', 'max', 'count', 'count_distinct', 'last'])
   .describe('Aggregation function');
 export type AggregationType = z.infer<typeof aggregationTypeSchema>;
 

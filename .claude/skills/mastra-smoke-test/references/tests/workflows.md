@@ -64,3 +64,42 @@ Click: Run button
 Wait: For completion
 Verify: Success state and output
 ```
+
+## Curl / API (for `--skip-browser`)
+
+**`<workflowId>` is the workflow's registered id** (the key used in
+`Mastra({ workflows: { weatherWorkflow } })` or the workflow's `.id`,
+depending on how it was registered).
+
+**List workflows:**
+
+```bash
+curl -s http://localhost:4111/api/workflows
+```
+
+**Run a workflow synchronously:**
+
+```bash
+curl -s -X POST "http://localhost:4111/api/workflows/<workflowId>/start-async" \
+  -H "Content-Type: application/json" \
+  -d '{"inputData":{"city":"Tokyo"}}'
+```
+
+Note the `inputData` wrapper — the workflow's input schema fields go
+**inside** `inputData`, not at the top level.
+
+**Pass criteria:**
+
+- `/api/workflows` returns a JSON object keyed by workflow id
+- `/start-async` returns HTTP 200 with a result object containing the final
+  workflow output and a run id
+- Response typically includes a `traceId` — capture it to cross-reference in
+  `traces.md` verification
+
+**Common mistakes:**
+
+- Sending input fields at the top level instead of under `inputData` →
+  HTTP 500 "Invalid input data: `<field>` expected `<type>`, received
+  undefined"
+- Using the workflow's display name instead of its registered id → 404
+  "Workflow not found"

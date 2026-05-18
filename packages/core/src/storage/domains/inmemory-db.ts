@@ -9,6 +9,7 @@ import type {
   StoragePromptBlockType,
   StorageResourceType,
   StorageScorerDefinitionType,
+  StorageFavoriteType,
   StorageWorkspaceType,
   StorageSkillType,
   StorageWorkflowRun,
@@ -28,6 +29,7 @@ import type { LogRecord } from './observability/logs';
 import type { MetricRecord } from './observability/metrics';
 import type { ScoreRecord } from './observability/scores';
 import type { PromptBlockVersion } from './prompt-blocks';
+import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
 import type { WorkspaceVersion } from './workspaces';
@@ -64,6 +66,13 @@ export class InMemoryDB {
   readonly workspaceVersions = new Map<string, WorkspaceVersion>();
   readonly skills = new Map<string, StorageSkillType>();
   readonly skillVersions = new Map<string, SkillVersion>();
+  /**
+   * Favorites keyed by `${userId}\u0000${entityType}\u0000${entityId}`. The
+   * favorites domain owns reads/writes; this Map lives on InMemoryDB so the
+   * favorites domain can also mutate `agents` / `skills` `favoriteCount` atomically
+   * within the same synchronous block.
+   */
+  readonly favorites = new Map<string, StorageFavoriteType>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -78,6 +87,10 @@ export class InMemoryDB {
 
   // Background tasks domain
   readonly backgroundTasks = new Map<string, BackgroundTask>();
+
+  // Schedules domain
+  readonly schedules = new Map<string, Schedule>();
+  readonly scheduleTriggers: ScheduleTrigger[] = [];
 
   /**
    * Clears all data from all collections.
@@ -108,6 +121,7 @@ export class InMemoryDB {
     this.workspaceVersions.clear();
     this.skills.clear();
     this.skillVersions.clear();
+    this.favorites.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();
@@ -115,5 +129,7 @@ export class InMemoryDB {
     this.experiments.clear();
     this.experimentResults.clear();
     this.backgroundTasks.clear();
+    this.schedules.clear();
+    this.scheduleTriggers.length = 0;
   }
 }

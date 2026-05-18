@@ -18,11 +18,22 @@ interface CreateProjectArgs {
   mcp?: Editor;
   skills?: string[];
   template?: string | boolean;
+  observability?: boolean;
+  observabilityProject?: string;
 }
 
 export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
   // TODO(major): Remove args.projectName in favor of projectNameArg
   const projectName = projectNameArg || args.projectName;
+  if (args.observability !== undefined) {
+    analytics.trackEvent('cli_observability_selected', {
+      command: 'create',
+      enabled: args.observability,
+      answer: args.observability ? 'yes' : 'no',
+      selection_method: 'cli_args',
+    });
+  }
+
   await analytics.trackCommandExecution({
     command: 'create',
     args: { ...args, projectName },
@@ -38,6 +49,8 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
           mcpServer: args.mcp,
           skills: args.skills,
           template: args.template,
+          observability: args.observability,
+          observabilityProject: args.observabilityProject,
         });
         return;
       }
@@ -52,6 +65,8 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
         mcpServer: args.mcp,
         skills: args.skills,
         template: args.template,
+        observability: args.observability,
+        observabilityProject: args.observabilityProject,
       });
     },
     origin,

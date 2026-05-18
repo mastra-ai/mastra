@@ -121,6 +121,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.init(...args);
   }
 
+  async migrateSpans(
+    ...args: Parameters<ObservabilityStoreImpl['migrateSpans']>
+  ): ReturnType<ObservabilityStoreImpl['migrateSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.migrateSpans(...args);
+  }
+
   async dangerouslyClearAll(
     ...args: Parameters<ObservabilityStoreImpl['dangerouslyClearAll']>
   ): ReturnType<ObservabilityStoreImpl['dangerouslyClearAll']> {
@@ -147,6 +154,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getSpan(...args);
   }
 
+  async getSpans(
+    ...args: Parameters<ObservabilityStoreImpl['getSpans']>
+  ): ReturnType<ObservabilityStoreImpl['getSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getSpans(...args);
+  }
+
   async getRootSpan(
     ...args: Parameters<ObservabilityStoreImpl['getRootSpan']>
   ): ReturnType<ObservabilityStoreImpl['getRootSpan']> {
@@ -161,11 +175,25 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getTrace(...args);
   }
 
+  async getTraceLight(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceLight']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceLight']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceLight(...args);
+  }
+
   async listTraces(
     ...args: Parameters<ObservabilityStoreImpl['listTraces']>
   ): ReturnType<ObservabilityStoreImpl['listTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.listTraces(...args);
+  }
+
+  async listBranches(
+    ...args: Parameters<ObservabilityStoreImpl['listBranches']>
+  ): ReturnType<ObservabilityStoreImpl['listBranches']> {
+    const delegate = await this.requireDelegate();
+    return delegate.listBranches(...args);
   }
 
   async batchCreateSpans(
@@ -318,6 +346,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['listScores']> {
     const delegate = await this.requireDelegate();
     return delegate.listScores(...args);
+  }
+
+  async getScoreById(
+    ...args: Parameters<ObservabilityStoreImpl['getScoreById']>
+  ): ReturnType<ObservabilityStoreImpl['getScoreById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getScoreById(...args);
   }
 
   async getScoreAggregate(

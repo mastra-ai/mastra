@@ -1,4 +1,4 @@
-import { AlertDialog, IconButton } from '@mastra/playground-ui';
+import { AlertDialog, Button } from '@mastra/playground-ui';
 import { Trash2, Loader2, Download } from 'lucide-react';
 
 export interface SkillUpdateButtonProps {
@@ -12,9 +12,9 @@ export interface SkillUpdateButtonProps {
  */
 export function SkillUpdateButton({ skillName, onUpdate, isUpdating }: SkillUpdateButtonProps) {
   return (
-    <IconButton variant="light" size="sm" disabled={isUpdating} tooltip={`Update ${skillName}`} onClick={onUpdate}>
+    <Button variant="default" size="icon-sm" disabled={isUpdating} tooltip={`Update ${skillName}`} onClick={onUpdate}>
       {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-    </IconButton>
+    </Button>
   );
 }
 
@@ -31,9 +31,9 @@ export function SkillRemoveButton({ skillName, onRemove, isRemoving }: SkillRemo
   return (
     <AlertDialog>
       <AlertDialog.Trigger asChild>
-        <IconButton variant="light" size="sm" disabled={isRemoving} tooltip={`Remove ${skillName}`}>
+        <Button variant="default" size="icon-sm" disabled={isRemoving} tooltip={`Remove ${skillName}`}>
           {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-        </IconButton>
+        </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>

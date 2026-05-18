@@ -8,7 +8,7 @@ import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { Step } from '../../../workflows';
+import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
@@ -76,7 +76,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
-        if (options.savePerStep && !memoryConfig?.readOnly) {
+        // When OM is enabled saving per step corrupts things because OM handles its own saving
+        const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
+        if (shouldSavePerStep && !memoryConfig?.readOnly) {
           if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -88,12 +90,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
             threadCreatedByStep = true;
           }
-
-          await capabilities.saveStepMessages({
-            result: props,
-            messageList: memoryData.messageList!,
-            runId,
-          });
 
           if (saveQueueManager && memoryData.thread?.id) {
             await saveQueueManager.flushMessages(memoryData.messageList!, memoryData.thread.id, memoryConfig);
@@ -182,6 +178,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       if (capabilities.mastra) {
         structuredProcessor.__registerMastra(capabilities.mastra);
       }
+      if (options.structuredOutput.useAgent) {
+        structuredProcessor.setAgent(capabilities.agent);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -196,6 +195,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
           })
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
+
+    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
+      ? typeof capabilities.llmRequestInputProcessors === 'function'
+        ? await capabilities.llmRequestInputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+          })
+        : options.inputProcessors || capabilities.llmRequestInputProcessors
+      : effectiveInputProcessors;
 
     // Resolve error processors
     const effectiveErrorProcessors = capabilities.errorProcessors
@@ -283,10 +291,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (!aborted) {
             try {
-              const outputText = messageList.get.all
-                .core()
-                .map(m => m.content)
-                .join('\n');
+              const outputText =
+                options.structuredOutput?.schema && payload.object != null
+                  ? JSON.stringify(payload.object)
+                  : (payload.text ?? '');
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -346,13 +354,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
+      llmRequestInputProcessors: effectiveLLMRequestInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       errorProcessors: effectiveErrorProcessors,
       modelSettings: {
-        temperature: 0,
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      initialSignalEchoes: memoryData.initialSignalEchoes,
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,

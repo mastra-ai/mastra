@@ -5,8 +5,8 @@
  */
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
-import { parseSubagentMeta } from '@mastra/core/harness';
+import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
+import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
@@ -16,9 +16,10 @@ import { PlanResultComponent } from './components/plan-approval-inline.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
-import { UserMessageComponent } from './components/user-message.js';
-import { formatToolResult } from './handlers/tool.js';
+import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
@@ -34,7 +35,7 @@ export { formatToolResult };
  */
 export function renderCompletedTasksInline(
   state: TUIState,
-  tasks: TaskItem[],
+  tasks: TaskItemSnapshot[],
   insertIndex = -1,
   collapsed = false,
 ): void {
@@ -75,7 +76,7 @@ export function renderCompletedTasksInline(
 /**
  * Render inline display when tasks are cleared.
  */
-export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem[], insertIndex = -1): void {
+export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItemSnapshot[], insertIndex = -1): void {
   const container = new Container();
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
@@ -94,14 +95,64 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   }
 }
 
+function renderTaskTransitionFromHistory(
+  state: TUIState,
+  previousTasks: TaskItemSnapshot[],
+  nextTasks: TaskItemSnapshot[],
+): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
+  const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
+
+  if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
+    if (!wasAllCompleted) {
+      renderCompletedTasksInline(state, nextTasks, -1, state.quietMode);
+    }
+    return { tasks: nextTasks, replacedWithInline: true };
+  }
+
+  if (nextTasks.length === 0) {
+    if (previousTasks.length > 0) {
+      renderClearedTasksInline(state, previousTasks);
+      return { tasks: [], replacedWithInline: true };
+    }
+    return { tasks: [], replacedWithInline: false };
+  }
+
+  return { tasks: nextTasks, replacedWithInline: true };
+}
+
 // =============================================================================
 // addUserMessage
 // =============================================================================
 
+function createReminderComponent(
+  reminderType: string | undefined,
+  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
+): SystemReminderComponent | TemporalGapComponent {
+  if (reminderType === 'temporal-gap') {
+    return new TemporalGapComponent({
+      message: options.message,
+      gapText: options.gapText,
+    });
+  }
+
+  return new SystemReminderComponent({
+    message: options.message,
+    reminderType,
+    path: options.path,
+    goalMaxTurns: options.goalMaxTurns,
+    judgeModelId: options.judgeModelId,
+  });
+}
+
 function addChildBeforeFollowUps(state: TUIState, child: Component): void {
-  if (state.followUpComponents.length > 0) {
-    const firstFollowUp = state.followUpComponents[0];
-    const idx = state.chatContainer.children.indexOf(firstFollowUp as never);
+  const pendingSignalComponents = state.pendingSignalMessageComponentsById?.values() ?? [];
+  const firstPinned = [...state.followUpComponents, ...pendingSignalComponents].find(pinned =>
+    state.chatContainer.children.includes(('component' in pinned ? pinned.component : pinned) as never),
+  );
+
+  if (firstPinned) {
+    const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
+    const idx = state.chatContainer.children.indexOf(component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 0, child);
       state.chatContainer.invalidate();
@@ -112,10 +163,149 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
   state.chatContainer.addChild(child);
 }
 
+export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
+  if (precedesMessageId) {
+    const anchor = state.messageComponentsById.get(precedesMessageId);
+    if (anchor) {
+      const idx = state.chatContainer.children.indexOf(anchor as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, child);
+        state.chatContainer.invalidate();
+        return;
+      }
+    }
+  }
+
+  addChildBeforeFollowUps(state, child);
+}
+
 /**
  * Add a user message to the chat container.
  */
+export function addPendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  images?: Array<{ data: string; mimeType: string }>,
+): void {
+  const existing = state.pendingSignalMessageComponentsById.get(messageId);
+  if (existing) {
+    state.chatContainer.removeChild(existing.component as never);
+  }
+
+  const component = new PendingUserMessageComponent(text, images?.length ?? 0);
+  state.pendingSignalMessageComponentsById.set(messageId, { component, text });
+  state.chatContainer.addChild(component);
+  state.ui.requestRender();
+}
+
+export function confirmPendingUserMessage(state: TUIState, messageId: string, text: string): void {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return;
+
+  if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+    state.streamingComponent = undefined;
+    state.streamingMessage = undefined;
+  }
+
+  replacePendingUserMessage(state, messageId, text);
+}
+
+function replacePendingUserMessage(state: TUIState, messageId: string, text: string): void {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return;
+
+  const confirmed = new UserMessageComponent(text);
+  const idx = state.chatContainer.children.indexOf(pending.component as never);
+  if (idx >= 0) {
+    (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
+    state.chatContainer.invalidate();
+  } else {
+    addChildBeforeFollowUps(state, confirmed);
+  }
+  state.pendingSignalMessageComponentsById.delete(messageId);
+  state.messageComponentsById.set(messageId, confirmed);
+  state.ui.requestRender();
+}
+
+export function removePendingUserMessage(state: TUIState, messageId: string): void {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return;
+  state.chatContainer.removeChild(pending.component as never);
+  state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+}
+
+export function clearPendingUserMessages(state: TUIState): void {
+  for (const pending of state.pendingSignalMessageComponentsById.values()) {
+    state.chatContainer.removeChild(pending.component as never);
+  }
+  state.pendingSignalMessageComponentsById.clear();
+  state.ui.requestRender();
+}
+
+function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, text: string): boolean {
+  const normalizedText = text.trim();
+  for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
+    if (pending.text.trim() !== normalizedText) continue;
+
+    const confirmed = new UserMessageComponent(text);
+    const idx = state.chatContainer.children.indexOf(pending.component as never);
+    if (idx >= 0) {
+      (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
+      state.chatContainer.invalidate();
+    } else {
+      addChildBeforeFollowUps(state, confirmed);
+    }
+    state.pendingSignalMessageComponentsById.delete(pendingId);
+    state.messageComponentsById.set(messageId, confirmed);
+    state.ui.requestRender();
+    return true;
+  }
+  return false;
+}
+
+function unescapeSkillBoundary(text: string): string {
+  return text.replaceAll('&lt;/skill&gt;', '</skill>');
+}
+
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
+  if (state.messageComponentsById.has(message.id)) {
+    return;
+  }
+
+  const reminderPart = message.content.find(
+    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> =>
+      content.type === 'system_reminder',
+  );
+
+  if (reminderPart) {
+    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const reminderComponent = createReminderComponent(reminderPart.reminderType, {
+      message: reminderPart.message,
+      path: reminderPart.path,
+      gapText: reminderPart.gapText,
+      goalMaxTurns: goalMetadata.goalMaxTurns,
+      judgeModelId: goalMetadata.judgeModelId,
+    });
+    reminderComponent.setExpanded(state.toolOutputExpanded);
+    state.allSystemReminderComponents.push(reminderComponent);
+
+    if (!reminderPart.precedesMessageId && state.streamingComponent) {
+      const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, reminderComponent);
+        state.chatContainer.invalidate();
+        state.ui.requestRender();
+        return;
+      }
+    }
+
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, reminderPart.precedesMessageId);
+    state.ui.requestRender();
+    return;
+  }
+
   const textContent = message.content
     .filter(c => c.type === 'text')
     .map(c => (c as { type: 'text'; text: string }).text)
@@ -125,36 +315,77 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
-  // Check for system reminder tags
-  const systemReminderMatch = displayText.match(
-    /<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>/,
+  const exactDisplayText = displayText.trim();
+
+  if (state.pendingSignalMessageComponentsById.has(message.id)) {
+    confirmPendingUserMessage(state, message.id, displayText);
+    return;
+  }
+
+  if (confirmMatchingPendingUserMessage(state, message.id, displayText)) {
+    return;
+  }
+
+  const legacyReminderMatch = exactDisplayText.match(
+    /^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/,
   );
-  if (systemReminderMatch?.groups?.body) {
-    const reminderText = systemReminderMatch.groups.body.trim();
-    const attrs = systemReminderMatch.groups.attrs ?? '';
-    const reminderType = attrs.match(/\btype="([^"]*)"/)?.[1];
-    const path = attrs.match(/\bpath="([^"]*)"/)?.[1];
-    const reminderComponent = new SystemReminderComponent({
+  if (legacyReminderMatch?.groups?.body) {
+    const attrs = legacyReminderMatch.groups.attrs ?? '';
+    const reminderType = attrs.match(/\stype="([^"]+)"/)?.[1];
+    const path = attrs.match(/\spath="([^"]+)"/)?.[1];
+    const precedesMessageId = attrs.match(/\sprecedesMessageId="([^"]+)"/)?.[1];
+    const reminderText = unescapeSystemReminderText(legacyReminderMatch.groups.body.trim());
+    const reminderComponent = createReminderComponent(reminderType, {
       message: reminderText,
-      reminderType,
       path,
+      gapText: reminderType === 'temporal-gap' ? reminderText.split(' — ')[0]?.trim() : undefined,
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
 
-    addChildBeforeFollowUps(state, reminderComponent);
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, precedesMessageId);
     state.ui.requestRender();
     return;
   }
 
-  // Check for slash command tags
-  const slashCommandMatch = displayText.match(/<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>/);
+  // Check for persisted slash command tags.
+  const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
   if (slashCommandMatch) {
     const commandName = slashCommandMatch[1]!;
     const commandContent = slashCommandMatch[2]!.trim();
+    const existingSlashComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSlashComp) {
+      state.messageComponentsById.set(message.id, existingSlashComp);
+      return;
+    }
+
     const slashComp = new SlashCommandComponent(commandName, commandContent);
     state.allSlashCommandComponents.push(slashComp);
     state.chatContainer.addChild(slashComp);
+    state.ui.requestRender();
+    return;
+  }
+
+  // Check for persisted skill activation tags.
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
+  if (skillMatch) {
+    const commandName = `skill/${skillMatch[1]!}`;
+    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const existingSkillComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSkillComp) {
+      state.messageComponentsById.set(message.id, existingSkillComp);
+      return;
+    }
+
+    const skillComp = new SlashCommandComponent(commandName, skillContent);
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
     state.ui.requestRender();
     return;
   }
@@ -163,39 +394,119 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   if (displayText || prefix) {
     const userComponent = new UserMessageComponent(prefix + displayText);
 
-    // Always append to end — follow-ups should stay at the bottom
-    state.chatContainer.addChild(userComponent);
+    state.messageComponentsById.set(message.id, userComponent);
 
-    // Track follow-up components sent while streaming so tool calls
-    // can be inserted before them (keeping them anchored at bottom).
-    // Only track if the agent is already streaming a response — otherwise
-    // this is the initial message that triggers the response, not a follow-up.
-    if (state.harness.getDisplayState().isRunning && state.streamingComponent) {
+    if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+      state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
+      return;
     }
+
+    addChildBeforeFollowUps(state, userComponent);
   }
+}
+
+function getTaskResultTasks(result: unknown): TaskItemInput[] | undefined {
+  if (typeof result !== 'object' || result === null || !('tasks' in result)) return undefined;
+  const tasks = (result as { tasks?: unknown }).tasks;
+  return Array.isArray(tasks) ? (tasks as TaskItemInput[]) : undefined;
+}
+
+function areTasksEqual(left: readonly TaskItemSnapshot[] | undefined, right: readonly TaskItemSnapshot[]): boolean {
+  if (!left || left.length !== right.length) return false;
+  return left.every((task, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      task.id === other.id &&
+      task.content === other.content &&
+      task.status === other.status &&
+      task.activeForm === other.activeForm
+    );
+  });
+}
+
+function applyTaskPatchFallback(
+  tasks: TaskItemSnapshot[],
+  args: unknown,
+  status?: TaskItemSnapshot['status'],
+): TaskItemSnapshot[] {
+  if (
+    typeof args !== 'object' ||
+    args === null ||
+    !('id' in args) ||
+    typeof (args as { id?: unknown }).id !== 'string'
+  ) {
+    return tasks;
+  }
+
+  const patch = args as { id: string; content?: string; status?: TaskItemSnapshot['status']; activeForm?: string };
+  return tasks.map(task => (task.id === patch.id ? { ...task, ...patch, ...(status ? { status } : {}) } : task));
+}
+
+function applyTaskToolResult(
+  tasks: TaskItemSnapshot[],
+  toolName: string,
+  args: unknown,
+  result: unknown,
+  isError: boolean,
+): TaskItemSnapshot[] {
+  if (isError) return tasks;
+
+  if (toolName === 'task_write') {
+    const resultTasks = getTaskResultTasks(result);
+    const inputTasks = (args as { tasks?: TaskItemInput[] } | undefined)?.tasks;
+    const rawTasks = resultTasks ?? inputTasks;
+    const nextTasks = rawTasks ? assignTaskIds(rawTasks, tasks) : undefined;
+    return nextTasks ? [...nextTasks] : [];
+  }
+
+  if (toolName === 'task_update' || toolName === 'task_complete') {
+    const resultTasks = getTaskResultTasks(result);
+    // Current task patch tools return structured task snapshots. Keep this
+    // fallback only for early persisted histories created before that snapshot
+    // field existed.
+    return resultTasks
+      ? assignTaskIds(resultTasks, tasks)
+      : applyTaskPatchFallback(tasks, args, toolName === 'task_complete' ? 'completed' : undefined);
+  }
+
+  if (toolName === 'task_check') {
+    const resultTasks = getTaskResultTasks(result);
+    return resultTasks ? assignTaskIds(resultTasks, tasks) : tasks;
+  }
+
+  return tasks;
 }
 
 // =============================================================================
 // renderExistingMessages
 // =============================================================================
 
+const STARTUP_MESSAGE_WINDOW_SIZE = 40;
+
 /**
  * Re-render all existing messages from the harness thread into the chat container.
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const messages = await state.harness.listMessages({ limit: 40 });
+  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
 
   state.chatContainer.clear();
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
+  state.messageComponentsById.clear();
+  state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
 
-  // Local accumulator for detecting task clears during history reconstruction
-  let previousTasksAcc: TaskItem[] = [];
+  // Local accumulator for detecting task clears during visible history reconstruction.
+  // Startup only replays task state from the bounded message window. If no task
+  // snapshot exists in that window, keep the existing display-state snapshot.
+  let previousTasksAcc: TaskItemSnapshot[] = [];
+  let hasReplayedTaskState = false;
 
   for (const message of messages) {
     if (message.role === 'user') {
@@ -234,6 +545,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                   agentType?: string;
                   task?: string;
                   modelId?: string;
+                  forked?: boolean;
                 }
               | undefined;
             const rawResult = toolResult?.type === 'tool_result' ? formatToolResult(toolResult.result) : undefined;
@@ -242,7 +554,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
             const resultText = meta?.text ?? rawResult;
-            const modelId = meta?.modelId ?? subArgs?.modelId;
+            const currentModelId =
+              typeof (state.harness as { getFullModelId?: () => string }).getFullModelId === 'function'
+                ? (state.harness as { getFullModelId: () => string }).getFullModelId()
+                : undefined;
+            const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
             const subComponent = new SubagentExecutionComponent(
@@ -250,7 +566,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: state.quietMode },
+              { collapseOnComplete: state.quietMode, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -312,24 +628,28 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             );
           }
 
-          // If this was task_write with all completed or cleared, show inline instead of tool component
+          // Successful task transition tools render through the pinned task UI,
+          // not as regular tool result boxes.
           let replacedWithInline = false;
-          if (content.name === 'task_write' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-            const args = content.args as { tasks?: TaskItem[] } | undefined;
-            const tasks = args?.tasks;
-            if (tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed')) {
-              renderCompletedTasksInline(state, tasks);
-              replacedWithInline = true;
-            } else if (!tasks || tasks.length === 0) {
-              // Tasks were cleared - show with previous tasks if we have them
-              if (previousTasksAcc.length > 0) {
-                renderClearedTasksInline(state, previousTasksAcc);
-                previousTasksAcc = [];
-                replacedWithInline = true;
-              }
-            } else {
-              // Track for detecting clears
-              previousTasksAcc = [...tasks];
+          if (isTaskMutationTool(content.name) && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            hasReplayedTaskState = true;
+            const nextTasks = applyTaskToolResult(
+              previousTasksAcc,
+              content.name,
+              content.args,
+              toolResult.result,
+              toolResult.isError,
+            );
+            const transition = renderTaskTransitionFromHistory(state, previousTasksAcc, nextTasks);
+            previousTasksAcc = transition.tasks;
+            replacedWithInline = transition.replacedWithInline;
+          }
+
+          if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            const resultTasks = getTaskResultTasks(toolResult.result);
+            if (resultTasks) {
+              hasReplayedTaskState = true;
+              previousTasksAcc = assignTaskIds(resultTasks, previousTasksAcc);
             }
           }
 
@@ -438,10 +758,34 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     }
   }
 
-  // Restore pinned task list from the last active task_write in history
-  if (previousTasksAcc.length > 0 && state.taskProgress) {
-    state.taskProgress.updateTasks(previousTasksAcc);
+  // Restore or clear the pinned task list from history replay when the bounded
+  // window contains a task snapshot. Otherwise, keep the existing display-state
+  // snapshot instead of clobbering older tasks that are outside the render window.
+  if (hasReplayedTaskState) {
+    if (state.taskProgress) {
+      state.taskProgress.updateTasks(previousTasksAcc);
+    }
+    const currentTasks =
+      typeof state.harness.getState === 'function'
+        ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
+        : undefined;
+    if (!areTasksEqual(currentTasks, previousTasksAcc)) {
+      try {
+        await state.harness.setState({ tasks: previousTasksAcc });
+      } catch {
+        // Custom harness state schemas may not accept TUI replayed task state.
+        // Keep the reconstructed task list local to display state in that case.
+      }
+    }
+    const harnessWithReplayTasks = state.harness as typeof state.harness & {
+      restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
+    };
+    harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
   }
 
   state.ui.requestRender();
+}
+
+function unescapeSystemReminderText(text: string): string {
+  return text.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
 }

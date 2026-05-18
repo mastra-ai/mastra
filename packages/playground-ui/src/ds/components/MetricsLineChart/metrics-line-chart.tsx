@@ -10,17 +10,23 @@ export type MetricsLineChartSeries = {
   aggregate?: (data: Record<string, unknown>[]) => { value: string; suffix?: string };
 };
 
+export type MetricsLineChartPointClickHandler = (point: Record<string, unknown>, seriesKey: string) => void;
+
 export function MetricsLineChart({
   data,
   series,
   height = 210,
   yDomain,
+  onPointClick,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
   height?: number;
   yDomain?: [number, number];
+  onPointClick?: MetricsLineChartPointClickHandler;
 }) {
+  const isClickable = typeof onPointClick === 'function';
+
   return (
     <div>
       <div className="flex flex-wrap w-full items-end gap-4 gap-y-1 mb-4 ">
@@ -72,6 +78,18 @@ export function MetricsLineChart({
                 stroke={s.color}
                 strokeWidth={2}
                 dot={false}
+                activeDot={
+                  isClickable
+                    ? {
+                        r: 4,
+                        style: { cursor: 'pointer' },
+                        onClick: (_, payload) => {
+                          const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
+                          if (datum) onPointClick(datum, s.dataKey);
+                        },
+                      }
+                    : undefined
+                }
                 name={s.label}
               />
             ))}

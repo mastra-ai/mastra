@@ -47,9 +47,16 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.observationalMemory.clear();
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     const thread = this.db.threads.get(threadId);
-    return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
+    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
+    return { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata };
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -127,6 +134,11 @@ export class InMemoryMemory extends MemoryStorage {
     // Calculate offset from page
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
+    // When perPage is 0 with no includes, there's nothing to return.
+    if (perPage === 0 && (!include || include.length === 0)) {
+      return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+    }
+
     // Step 1: Get messages matching threadId(s) and optionally resourceId
     let threadMessages = Array.from(this.db.messages.values()).filter((msg: any) => {
       // Message must be in one of the specified threads
@@ -153,13 +165,13 @@ export class InMemoryMemory extends MemoryStorage {
         : String(bValue).localeCompare(String(aValue));
     });
 
-    // Get total count of thread messages (for pagination metadata)
-    const totalThreadMessages = threadMessages.length;
+    // Get total count of thread messages (for pagination metadata). When
+    // perPage is 0, the count query is skipped so the response total is 0.
+    const totalThreadMessages = perPage === 0 ? 0 : threadMessages.length;
 
-    // Apply pagination to thread messages
-    const start = offset;
-    const end = start + perPage;
-    const paginatedThreadMessages = threadMessages.slice(start, end);
+    // Apply pagination to thread messages. When perPage is 0, skip the main
+    // pagination entirely so only included messages are returned.
+    const paginatedThreadMessages = perPage === 0 ? [] : threadMessages.slice(offset, offset + perPage);
 
     // Convert paginated thread messages to MastraDBMessage
     const messages: MastraDBMessage[] = [];
@@ -271,14 +283,17 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Calculate hasMore
     let hasMore;
-    if (include && include.length > 0) {
+    if (perPage === 0) {
+      // perPage=0 fast path skips pagination entirely
+      hasMore = false;
+    } else if (include && include.length > 0) {
       // When using include, check if we've returned all messages from the thread
       // because include might bring in messages beyond the pagination window
       const returnedThreadMessageIds = new Set(messages.filter(m => m.threadId === threadId).map(m => m.id));
       hasMore = returnedThreadMessageIds.size < totalThreadMessages;
     } else {
       // Standard pagination: check if there are more pages
-      hasMore = end < totalThreadMessages;
+      hasMore = offset + perPage < totalThreadMessages;
     }
 
     return {

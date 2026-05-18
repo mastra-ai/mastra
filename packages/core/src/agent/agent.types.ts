@@ -5,9 +5,11 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -319,6 +321,15 @@ export interface DelegationConfig {
    * Runs before {@link includeSubAgentToolResults} and before `onDelegationComplete` overrides.
    */
   mapSubAgentToolResults?: (toolResults: DelegationSubAgentToolResult[]) => DelegationSubAgentToolResult[] | undefined;
+  
+  /**
+   * Include the full subagent result in the supervisor model context.
+   *
+   * By default, the supervisor model receives only the subagent's text response
+   * in later iterations. Set this to true to also include nested subagent tool
+   * results in the supervisor model context.
+   */
+  includeSubAgentToolResultsInModelContext?: boolean;
 
   /**
    * Callback that controls which parent messages are passed to each subagent as conversation
@@ -339,7 +350,6 @@ export interface DelegationConfig {
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
 }
-
 /**
  * Configuration for the routing agent's behavior.
  */
@@ -497,11 +507,17 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Unique identifier for this execution run */
   runId?: string;
 
-  /** Save messages incrementally after each stream step completes (default: false). */
+  /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
+
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   */
+  versions?: VersionOverrides;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -604,6 +620,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
 
+  /** Per-invocation transform policy for tool payloads in display and transcript serializers. */
+  transform?: ToolPayloadTransformPolicy;
+
   /**
    * Callback fired after each iteration (LLM call) completes.
    * Can control whether to continue and inject feedback.
@@ -654,6 +673,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to disable background tasks for this execution */
   disableBackgroundTasks?: boolean;
+
+  /**
+   * @internal
+   * When true, the in-loop `backgroundTaskCheckStep` returns immediately
+   * without waiting for running tasks to complete. Set by
+   * `agent.streamUntilIdle`, which drives continuation from outside the loop.
+   */
+  _skipBgTaskWait?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**

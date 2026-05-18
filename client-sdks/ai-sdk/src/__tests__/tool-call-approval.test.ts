@@ -290,6 +290,31 @@ describe('extractV6NativeApproval', () => {
     expect(result?.runId).toBe('new-run');
     expect(result?.resumeData.approved).toBe(false);
   });
+
+  it('ignores earlier approval responses once a later user follow-up exists', () => {
+    const messages = [
+      {
+        role: 'assistant' as const,
+        id: 'msg-1',
+        parts: [
+          {
+            type: 'tool-myTool',
+            toolCallId: 'old-call',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: `old-run${APPROVAL_ID_SEPARATOR}old-call`, approved: true },
+          },
+        ],
+      },
+      {
+        role: 'user' as const,
+        id: 'msg-2',
+        parts: [{ type: 'text', text: 'What happened?' }],
+      },
+    ];
+
+    expect(extractV6NativeApproval(messages as any)).toBeNull();
+  });
 });
 
 describe('handleChatStream v6 native approve() resume flow', () => {

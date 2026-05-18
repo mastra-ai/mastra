@@ -276,6 +276,70 @@ const glutenCheckerScorer = createScorer({...})
 })
 ```
 
+## Input filtering
+
+Agent conversations can contain hundreds of messages with tool calls, data parts, and system metadata. Most scorers only need a subset of this data. The `prepareRun` option transforms the run data before the scorer pipeline executes, reducing noise and keeping scorers focused.
+
+### Declarative filtering with `filterRun()`
+
+The [`filterRun()`](/reference/evals/filter-run) utility creates a `prepareRun` function from declarative options:
+
+```typescript title="src/mastra/scorers/tool-scorer.ts"
+import { createScorer, filterRun } from '@mastra/core/evals'
+
+const toolScorer = createScorer({
+  id: 'tool-quality',
+  description: 'Evaluates tool usage quality',
+  type: 'agent',
+  prepareRun: filterRun({
+    partTypes: ['tool-invocation', 'text'],
+    maxRememberedMessages: 20,
+  }),
+}).generateScore(({ run }) => {
+  // run.input.rememberedMessages has only tool and text messages, max 20
+  return 1
+})
+```
+
+Common options include:
+
+- `partTypes`: Keep only messages with matching part types (e.g., `'tool-invocation'`, `'text'`, `'reasoning'`)
+- `toolNames`: Keep only messages involving specific tools (e.g., `['write_file', 'execute_command']`)
+- `maxRememberedMessages`: Limit context window size
+- `dropRequestContext`, `dropGroundTruth`, `dropExpectedTrajectory`: Remove unused fields
+
+See the [`filterRun()` reference](/reference/evals/filter-run) for the full list of options.
+
+### Custom `prepareRun` functions
+
+For logic that `filterRun()` doesn't cover, write a `prepareRun` function directly:
+
+```typescript prettier:false
+import { createScorer } from '@mastra/core/evals'
+
+const customScorer = createScorer({
+  id: 'recent-output',
+  description: 'Scores only the last response',
+  type: 'agent',
+  prepareRun: (run) => ({
+    ...run,
+    output: run.output.slice(-1), // Keep only the last message
+    requestContext: undefined,
+  }),
+})
+.generateScore(({ run }) => {
+  return run.output.length > 0 ? 1 : 0
+})
+```
+
+The `prepareRun` function can also be async.
+
+:::note[System messages are always preserved]
+
+`filterRun()` never filters `systemMessages` or `taggedSystemMessages`. These contain agent instructions and are critical context for scoring.
+
+:::
+
 ## Example: Create a custom scorer
 
 A custom scorer in Mastra uses `createScorer` with four core components:
@@ -412,7 +476,7 @@ Defines how the LLM should analyze the input and what structured output to retur
 The analysis step uses a prompt object to:
 
 - Provide a clear description of the analysis task
-- Define expected output structure with Zod schema (both boolean result and list of gluten sources)
+- Define expected output structure with a Standard JSON Schema (both boolean result and list of gluten sources)
 - Generate dynamic prompts based on the input content
 
 ### Score Generation

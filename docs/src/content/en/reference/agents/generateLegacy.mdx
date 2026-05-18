@@ -336,7 +336,8 @@ await agent.generateLegacy('message for agent')
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,
-            description: 'Save messages incrementally after each stream step completes (default: false).',
+            description:
+              'Save messages incrementally after each generation step completes (default: false). Disabled internally when observational memory is enabled.',
           },
           {
             name: 'providerOptions',

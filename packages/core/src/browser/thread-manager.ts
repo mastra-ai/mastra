@@ -79,8 +79,8 @@ export abstract class ThreadManager<TManager = unknown> {
   /** Map of thread ID to dedicated manager instance (for 'thread' scope) */
   protected readonly threadManagers = new Map<string, TManager>();
 
-  private readonly onSessionCreated?: (session: ThreadSession) => void;
-  private readonly onSessionDestroyed?: (threadId: string) => void;
+  protected readonly onSessionCreated?: (session: ThreadSession) => void;
+  protected readonly onSessionDestroyed?: (threadId: string) => void;
 
   constructor(config: ThreadManagerConfig) {
     this.scope = config.scope;

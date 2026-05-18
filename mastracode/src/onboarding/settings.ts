@@ -139,14 +139,39 @@ export interface GlobalSettings {
      * Cleared when the user manually overrides via /om (falls back to omModelOverride).
      */
     activeOmPackId: string | null;
-    /** Explicit OM model override — used for custom OM pack or /om manual changes. */
+    /**
+     * Shared OM model override — used for both observer and reflector when a
+     * role-specific override is not set. Kept for back-compat with older settings
+     * files and set by onboarding when the user picks a custom OM pack.
+     */
     omModelOverride: string | null;
+    /**
+     * Explicit Observer model override — takes precedence over `omModelOverride`
+     * when set. Written by `/om` when the observer model is changed independently.
+     */
+    observerModelOverride: string | null;
+    /**
+     * Explicit Reflector model override — takes precedence over `omModelOverride`
+     * when set. Written by `/om` when the reflector model is changed independently.
+     */
+    reflectorModelOverride: string | null;
     /** Default OM observation threshold used for new threads unless overridden per-thread. */
     omObservationThreshold: number | null;
     /** Default OM reflection threshold used for new threads unless overridden per-thread. */
     omReflectionThreshold: number | null;
+    /**
+     * Whether observations and reflections use the terse caveman-style instruction.
+     * `null` means inherit the built-in default (currently `false` — caveman is
+     * opt-in via `/om` settings). Used as the default for new threads unless
+     * overridden per-thread.
+     */
+    omCavemanObservations: boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
+    /** Default judge model for /goal. */
+    goalJudgeModel: string | null;
+    /** Default max attempts for /goal. */
+    goalMaxTurns: number | null;
   };
   // Global behavior preferences
   preferences: {
@@ -173,7 +198,26 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
+  observability: ObservabilitySettings;
 }
+
+export interface ObservabilityResourceConfig {
+  /** Cloud project ID for this resource */
+  projectId: string;
+  /** When this config was created */
+  configuredAt: string;
+}
+
+export interface ObservabilitySettings {
+  /** Per-resource cloud project configs, keyed by resourceId */
+  resources: Record<string, ObservabilityResourceConfig>;
+  /** Whether to store traces locally in DuckDB. Off by default to avoid disk usage. */
+  localTracing: boolean;
+}
+
+/** Auth key prefix for observability tokens stored per-resource in auth.json */
+export const OBSERVABILITY_AUTH_PREFIX = 'observability:';
 
 export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
@@ -194,9 +238,14 @@ const DEFAULTS: GlobalSettings = {
     modeDefaults: {},
     activeOmPackId: null,
     omModelOverride: null,
+    observerModelOverride: null,
+    reflectorModelOverride: null,
     omObservationThreshold: null,
     omReflectionThreshold: null,
+    omCavemanObservations: null,
     subagentModels: {},
+    goalJudgeModel: null,
+    goalMaxTurns: null,
   },
   preferences: {
     yolo: null,
@@ -218,6 +267,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  observability: { resources: {}, localTracing: false },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -358,6 +408,29 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   };
 }
 
+const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
+
+function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
+  if (!raw || typeof raw !== 'object') return { resources: {}, localTracing: false };
+  const obj = raw as Record<string, unknown>;
+  const localTracing = obj.localTracing === true;
+  const rawResources = obj.resources;
+  if (!rawResources || typeof rawResources !== 'object') return { resources: {}, localTracing };
+  const resources: Record<string, ObservabilityResourceConfig> = {};
+  for (const [key, val] of Object.entries(rawResources as Record<string, unknown>)) {
+    if (val && typeof val === 'object') {
+      const v = val as Record<string, unknown>;
+      if (typeof v.projectId === 'string' && VALID_PROJECT_ID.test(v.projectId)) {
+        resources[key] = {
+          projectId: v.projectId,
+          configuredAt: typeof v.configuredAt === 'string' ? v.configuredAt : new Date().toISOString(),
+        };
+      }
+    }
+  }
+  return { resources, localTracing };
+}
+
 /**
  * One-time migration: move model-related data from auth.json to settings.json.
  * Reads `_modelRanks`, `_modeModelId_*`, `_subagentModelId*` from auth.json,
@@ -400,6 +473,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        observability: parseObservabilitySettings(raw.observability),
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -518,6 +592,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      observability: parseObservabilitySettings(raw.observability),
     };
 
     // Migrate legacy omModelId → omModelOverride
@@ -649,29 +724,47 @@ export function resolveModelDefaults(
 }
 
 /**
- * Resolve the effective OM model ID.
+ * Resolve the effective model ID for one of the two OM roles.
  *
- * If `activeOmPackId` is set, looks up the matching OM pack and returns its
- * model. Falls back to the explicit `omModelOverride`.
+ * Lookup order:
+ *   1. The role-specific override (`observerModelOverride` /
+ *      `reflectorModelOverride`) if set.
+ *   2. If `activeOmPackId` points at a built-in pack, that pack's model.
+ *   3. The shared `omModelOverride` fallback.
  *
  * @param settings  The loaded global settings.
+ * @param role      Which OM role to resolve (`'observer'` or `'reflector'`).
  * @param builtinOmPacks  Built-in OM packs for the current provider access
  *                        (from `getAvailableOmPacks`). Pass `[]` if unavailable.
  */
-export function resolveOmModel(
+export function resolveOmRoleModel(
   settings: GlobalSettings,
+  role: 'observer' | 'reflector',
   builtinOmPacks: Array<{ id: string; modelId: string }>,
 ): string | null {
-  const { activeOmPackId, omModelOverride } = settings.models;
-  if (!activeOmPackId) return omModelOverride;
+  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
+  const roleOverride = role === 'observer' ? observerModelOverride : reflectorModelOverride;
+  if (roleOverride) return roleOverride;
 
+  if (!activeOmPackId) return omModelOverride;
   if (activeOmPackId === 'custom') return omModelOverride;
 
   const pack = builtinOmPacks.find(p => p.id === activeOmPackId);
   if (pack) return pack.modelId;
 
-  // Unknown pack — fall back to override
   return omModelOverride;
+}
+
+/**
+ * @deprecated Use `resolveOmRoleModel(settings, 'observer' | 'reflector', ...)`.
+ * Equivalent to resolving the observer role (existing callers set both observer
+ * and reflector to the same value).
+ */
+export function resolveOmModel(
+  settings: GlobalSettings,
+  builtinOmPacks: Array<{ id: string; modelId: string }>,
+): string | null {
+  return resolveOmRoleModel(settings, 'observer', builtinOmPacks);
 }
 
 export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {

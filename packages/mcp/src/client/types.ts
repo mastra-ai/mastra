@@ -11,6 +11,7 @@ import type {
   LoggingLevel,
   ProgressNotification,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
 
 /**
  * Extended fetch function type that receives the current request context as a third argument.
@@ -171,6 +172,31 @@ export type BaseServerOptions = {
    * ```
    */
   requireToolApproval?: RequireToolApproval;
+  /**
+   * Optional custom JSON Schema validator forwarded to the underlying MCP SDK
+   * client. Use this to opt into a non-default validator implementation.
+   *
+   * Pass `CfWorkerJsonSchemaValidator` (from
+   * `@modelcontextprotocol/sdk/validation/cfworker`) when running in
+   * Cloudflare Workers / V8 isolates: the default `AjvJsonSchemaValidator`
+   * compiles validators with `new Function(...)`, which workerd refuses to
+   * evaluate when a tool advertises an `outputSchema`.
+   *
+   * @example
+   * ```typescript
+   * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+   *
+   * const mcp = new MCPClient({
+   *   servers: {
+   *     upstream: {
+   *       url: new URL('https://example/mcp'),
+   *       jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  jsonSchemaValidator?: jsonSchemaValidator;
   /**
    * List of filesystem roots to expose to the MCP server.
    *

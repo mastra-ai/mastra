@@ -2,7 +2,6 @@ import { useMessage } from '@assistant-ui/react';
 import {
   Button,
   CodeEditor,
-  IconButton,
   Label,
   Select,
   SelectTrigger,
@@ -205,15 +204,15 @@ function DatasetSaveActionInner() {
 
   return (
     <>
-      <IconButton
-        variant="light"
-        size="md"
+      <Button
+        variant="default"
+        size="icon-md"
         tooltip="Save to dataset"
         className="bg-transparent text-neutral3 hover:text-neutral6"
         onClick={handleClick}
       >
         <DatabaseIcon className="h-4 w-4" />
-      </IconButton>
+      </Button>
       <DatasetSaveDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}

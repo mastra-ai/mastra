@@ -242,7 +242,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
       </section>
 
       {canEditSettings && (
-        <Button onClick={() => resetAll()} variant="light" className="w-full" size="lg">
+        <Button onClick={() => resetAll()} variant="default" className="w-full" size="lg">
           <Icon>
             <RefreshCw />
           </Icon>

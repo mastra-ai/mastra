@@ -36,7 +36,7 @@ Tool providers implement these methods:
     name: 'resolveTools(slugs, options?)',
     type: '(slugs: string[], options?) => Promise<Record<string, ToolAction>>',
     description:
-      'Resolves tool slugs into executable Mastra tool actions. The options object can include userId for per-user authentication.',
+      'Resolves tool slugs into executable Mastra tool actions. Built-in providers use resourceId from request context for per-user authentication.',
   },
 ]}
 />
@@ -80,7 +80,7 @@ Composio tools use uppercase slug format: `GITHUB_CREATE_ISSUE`, `SLACK_SEND_MES
 
 ### Authentication
 
-Tool execution is scoped to a `userId` passed through request context. Each user authenticates with the integration separately through Composio's auth flow.
+Tool execution is scoped to the `resourceId` passed through request context. The provider maps that value to the user identity required by Composio's auth flow.
 
 ---
 
@@ -127,4 +127,4 @@ Arcade tools use `Toolkit.ToolName` format: `Github.GetRepository`, `Slack.SendM
 
 ### Authentication
 
-Like Composio, tool execution requires a `userId` for per-user authorization through Arcade's auth flow.
+Like Composio, tool execution uses `resourceId` from request context for per-user authorization. The provider maps that value to the user identity required by Arcade's auth flow.

@@ -8,14 +8,13 @@ const meta: Meta<typeof Combobox> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },
     },
     variant: {
       control: { type: 'select' },
-      options: ['inputLike', 'ghost'],
+      options: ['default', 'ghost'],
     },
   },
 };
@@ -109,13 +108,27 @@ export const ManyOptions: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['inputLike', 'ghost'] as const).map(variant => (
+      {(['default', 'ghost'] as const).map(variant => (
         <Fragment key={variant}>
           <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-[200px]" />
         </Fragment>
       ))}
     </div>
   ),
+};
+
+export const WithDescriptions: Story = {
+  args: {
+    options: [
+      { label: 'GPT-4', value: 'gpt-4', description: 'Most capable model' },
+      { label: 'GPT-4 Turbo', value: 'gpt-4-turbo', description: 'Faster, cheaper GPT-4' },
+      { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo', description: 'Fast and economical' },
+      { label: 'Claude 3 Opus', value: 'claude-3-opus', description: "Anthropic's most powerful" },
+    ],
+    value: 'gpt-4-turbo',
+    placeholder: 'Select a model...',
+    className: 'w-[280px]',
+  },
 };
 
 export const Sizes: Story = {

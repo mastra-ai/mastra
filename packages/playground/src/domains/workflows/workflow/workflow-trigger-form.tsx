@@ -40,7 +40,7 @@ export function WorkflowTriggerForm({
   }
 
   return (
-    <Button className="w-full" variant="light" disabled={isStreaming} onClick={() => onExecute(null)}>
+    <Button className="w-full" variant="default" disabled={isStreaming} onClick={() => onExecute(null)}>
       {isStreaming ? (
         <Icon>
           <Loader2 className="animate-spin" />

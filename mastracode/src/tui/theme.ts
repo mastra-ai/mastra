@@ -349,8 +349,8 @@ export const darkTheme: ThemeColors = {
   // System reminders
   systemReminderBg: '#1a1400', // Dark orange tint
   // Tool execution
-  toolPendingBg: '#0a1a10', // Dark green tint (matches brand accent)
-  toolSuccessBg: '#0a1a10', // Dark green tint (same as pending)
+  toolPendingBg: darkSurface.antiGrid,
+  toolSuccessBg: darkSurface.antiGrid,
   toolErrorBg: '#1f0a0a', // Dark red tint
   toolBorderPending: '#52525b', // Zinc-600 dim grey for pending
   toolBorderSuccess: '#52525b', // Zinc-600 dim grey for success
@@ -393,8 +393,8 @@ export const lightTheme: ThemeColors = {
   // System reminders
   systemReminderBg: '#fefce8', // Light yellow
   // Tool execution
-  toolPendingBg: '#f0fdf4', // Light green tint (matches brand accent)
-  toolSuccessBg: '#f0fdf4', // Light green tint (same as pending)
+  toolPendingBg: lightSurface.antiGrid,
+  toolSuccessBg: lightSurface.antiGrid,
   toolErrorBg: '#fef2f2', // Light red
   toolBorderPending: '#a1a1aa', // Zinc-400 dim grey for pending
   toolBorderSuccess: '#a1a1aa', // Zinc-400 dim grey for success
