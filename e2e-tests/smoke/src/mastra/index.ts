@@ -5,7 +5,15 @@ import { DuckDBStore } from '@mastra/duckdb';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter } from '@mastra/observability';
 
-import { testAgent, approvalAgent, helperAgent, networkAgent, workflowAgent } from './agents/index.js';
+import { smokeLogger } from './logger.js';
+import {
+  testAgent,
+  approvalAgent,
+  helperAgent,
+  networkAgent,
+  workflowAgent,
+  observationalAgent,
+} from './agents/index.js';
 import { calculatorTool, stringTool, failingTool, noInputTool, approvalTool } from './tools/index.js';
 import { sequentialSteps, schemaValidation, mapBetweenSteps } from './workflows/basic.js';
 import {
@@ -30,9 +38,11 @@ import {
 } from './workflows/nested-advanced.js';
 import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
 import { scoredWorkflow } from './workflows/scored.js';
+import { scheduledHeartbeatWorkflow } from './workflows/scheduled.js';
 import { testMcpServer } from './mcp/index.js';
 import { uppercaseProcessor, suffixProcessor, tripwireProcessor } from './processors/index.js';
 import { completenessScorer, lengthScorer } from './scorers/index.js';
+import { smokeChannel } from './channels/index.js';
 
 const testWorkspace = new Workspace({
   id: 'test-workspace',
@@ -50,6 +60,7 @@ try {
 }
 
 export const mastra = new Mastra({
+  logger: smokeLogger,
   workspace: testWorkspace,
   agents: {
     'test-agent': testAgent,
@@ -57,6 +68,7 @@ export const mastra = new Mastra({
     'helper-agent': helperAgent,
     'network-agent': networkAgent,
     'workflow-agent': workflowAgent,
+    'observational-agent': observationalAgent,
   },
   mcpServers: {
     'test-mcp': testMcpServer,
@@ -99,6 +111,17 @@ export const mastra = new Mastra({
     'foreach-error-workflow': foreachErrorWorkflow,
     'foreach-retry-workflow': foreachRetryWorkflow,
     'scored-workflow': scoredWorkflow,
+    'scheduled-heartbeat': scheduledHeartbeatWorkflow,
+  },
+  scheduler: {
+    enabled: true,
+    tickIntervalMs: 60_000,
+  },
+  backgroundTasks: {
+    enabled: true,
+  },
+  channels: {
+    'smoke-stub': smokeChannel,
   },
   scorers: {
     completeness: completenessScorer,
@@ -128,3 +151,29 @@ export const mastra = new Mastra({
     },
   }),
 });
+
+// Seed a completed background task so /background-tasks lists a real entry.
+try {
+  const storage = mastra.getStorage();
+  const bgStore = await storage?.getStore?.('backgroundTasks');
+  if (bgStore) {
+    await bgStore.createTask({
+      id: 'seed-background-task',
+      status: 'completed',
+      toolName: 'calculator',
+      toolCallId: 'seed-tool-call',
+      args: { operation: 'add', a: 1, b: 2 },
+      agentId: 'test-agent',
+      runId: 'seed-run',
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 30_000,
+      createdAt: new Date(),
+      startedAt: new Date(),
+      completedAt: new Date(),
+      result: { value: 3 },
+    });
+  }
+} catch (err) {
+  console.error('[background-tasks] Failed to seed task:', err);
+}

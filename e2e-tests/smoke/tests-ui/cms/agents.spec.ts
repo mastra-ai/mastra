@@ -10,7 +10,7 @@ test.describe('CMS — agents', () => {
       test.skip(true, 'CMS agent create page not available');
     }
     await expect(page).toHaveURL(/\/cms\/agents\/create/);
-    await expect(page.getByRole('heading', { name: /create agent/i, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /create an? agent/i, level: 1 })).toBeVisible();
 
     // Identity step is the first wizard step.
     await expect(page.getByRole('heading', { name: /^identity$/i, level: 2 })).toBeVisible();

@@ -13,6 +13,27 @@ export const memory = new Memory({
   },
 });
 
+export const observationalMemory = new Memory({
+  options: {
+    lastMessages: 20,
+    workingMemory: {
+      enabled: true,
+    },
+    observationalMemory: {
+      enabled: true,
+      observation: {
+        model: 'openai/gpt-4o-mini',
+        messageTokens: 20,
+        bufferTokens: false,
+      },
+      reflection: {
+        model: 'openai/gpt-4o-mini',
+        observationTokens: 50000,
+      },
+    },
+  },
+});
+
 export const testAgent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
@@ -55,4 +76,12 @@ export const approvalAgent = new Agent({
   instructions: 'You are a helpful agent. When asked to greet someone, always use the needs-approval tool.',
   model: 'openai/gpt-4o-mini',
   tools: { 'needs-approval': approvalTool },
+});
+
+export const observationalAgent = new Agent({
+  id: 'observational-agent',
+  name: 'Observational Agent',
+  instructions: 'You are a helpful test agent with observational memory enabled.',
+  model: 'openai/gpt-4o-mini',
+  memory: observationalMemory,
 });
