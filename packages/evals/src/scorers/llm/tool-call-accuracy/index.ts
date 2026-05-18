@@ -1,7 +1,7 @@
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { Tool } from '@mastra/core/tools';
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import {
   extractToolCalls,
   getAssistantMessageFromRunOutput,
@@ -15,16 +15,25 @@ export interface ToolCallAccuracyOptions {
   availableTools: Tool[];
 }
 
-const analyzeOutputSchema = z.object({
-  evaluations: z.array(
-    z.object({
-      toolCalled: z.string(),
-      wasAppropriate: z.boolean(),
-      reasoning: z.string(),
-    }),
-  ),
-  missingTools: z.array(z.string()).optional(),
-});
+const analyzeOutputSchema = {
+  type: 'object',
+  properties: {
+    evaluations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          toolCalled: { type: 'string' },
+          wasAppropriate: { type: 'boolean' },
+          reasoning: { type: 'string' },
+        },
+        required: ['toolCalled', 'wasAppropriate', 'reasoning'],
+      },
+    },
+    missingTools: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['evaluations'],
+} satisfies JSONSchema7;
 
 export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolCallAccuracyOptions) {
   const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
@@ -55,7 +64,10 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
         toolCallInfos,
       };
     })
-    .analyze({
+    .analyze<{
+      evaluations: { toolCalled: string; wasAppropriate: boolean; reasoning: string }[];
+      missingTools?: string[];
+    }>({
       description: 'Analyze the appropriateness of tool selections',
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ run, results }) => {

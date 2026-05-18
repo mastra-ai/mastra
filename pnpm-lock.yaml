@@ -2855,43 +2855,19 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: ^0.21.0
         version: 0.21.0(zod@4.3.6)
+      '@mastra/core':
+        specifier: '>=1.34.0-0 <2.0.0-0'
+        version: 1.35.0(@cfworker/json-schema@4.1.1)(@grpc/grpc-js@1.14.3)(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.18))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.2.0(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.2.0(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@6.0.3))(zod@4.3.6))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(express@5.2.1)(openapi-types@12.1.3)(zod@4.3.6)
+    devDependencies:
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       zod:
         specifier: 'catalog:'
         version: 4.3.6
-    devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
-      '@internal/lint':
-        specifier: workspace:*
-        version: link:../_config
-      '@internal/types-builder':
-        specifier: workspace:*
-        version: link:../_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
-      '@types/node':
-        specifier: 22.19.15
-        version: 22.19.15
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.5(vitest@4.1.5)
-      '@vitest/ui':
-        specifier: 'catalog:'
-        version: 4.1.5(vitest@4.1.5)
-      eslint:
-        specifier: ^10.2.1
-        version: 10.3.0(jiti@2.6.1)
-      tsup:
-        specifier: ^8.5.1
-        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/agent-builder:
     dependencies:
@@ -3095,9 +3071,6 @@ importers:
       yocto-spinner:
         specifier: ^1.1.0
         version: 1.2.0
-      zod:
-        specifier: ^3.25.0 || ^4.0.0
-        version: 3.25.76
     devDependencies:
       '@commander-js/extra-typings':
         specifier: ^14.0.0
@@ -3159,6 +3132,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
 
   packages/codemod:
     dependencies:
@@ -3765,6 +3741,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
       '@types/sentiment':
         specifier: ^5.0.4
         version: 5.0.4
@@ -3783,6 +3762,9 @@ importers:
       eslint:
         specifier: ^10.2.1
         version: 10.3.0(jiti@2.6.1)
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
@@ -12731,8 +12713,20 @@ packages:
     engines: {node: '>=20.0.0'}
     deprecated: please use @earendil-works/pi-tui instead going forward
 
+  '@mastra/core@1.35.0':
+    resolution: {integrity: sha512-bbrMlIawxXFasyqPcnm8fjAf0deOZ0zGEPHEjN/XdHFfdM/iyCs0fJpnaJwRh28R72EXn1N+H4wtkVbRuhOvKw==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+
   '@mastra/schema-compat@1.1.0':
     resolution: {integrity: sha512-2v8nTaAC/279jHs0ux2Emp+lNgBFq3QeNbZCGSHFeeBhbqqM5aWJCPY2Xgw8Z/dY3mTpFxBbmXQz3oRyYStnqg==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+
+  '@mastra/schema-compat@1.2.10':
+    resolution: {integrity: sha512-8Fg8PeO7GsRPOrEZAzc5udZgsF9ZDxih5JSoxjgnR79d0ImjKffhcoysPW6wIYXPEZ5i6/QDNR7rCazZZSD5Tg==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -35851,6 +35845,53 @@ snapshots:
     optionalDependencies:
       koffi: 2.15.1
 
+  '@mastra/core@1.35.0(@cfworker/json-schema@4.1.1)(@grpc/grpc-js@1.14.3)(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.18))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.2.0(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.2.0(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@6.0.3))(zod@4.3.6))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(express@5.2.1)(openapi-types@12.1.3)(zod@4.3.6)':
+    dependencies:
+      '@a2a-js/sdk': 0.3.13(@grpc/grpc-js@1.14.3)(express@5.2.1)
+      '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.25(zod@4.3.6)'
+      '@ai-sdk/provider-utils-v6': '@ai-sdk/provider-utils@4.0.27(zod@4.3.6)'
+      '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.3'
+      '@ai-sdk/provider-v6': '@ai-sdk/provider@3.0.10'
+      '@ai-sdk/ui-utils-v5': '@ai-sdk/ui-utils@1.2.11(zod@4.3.6)'
+      '@isaacs/ttlcache': 2.1.4
+      '@lukeed/uuid': 2.0.1
+      '@mastra/schema-compat': 1.2.10(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
+      '@sindresorhus/slugify': 2.2.1
+      '@standard-schema/spec': 1.1.0
+      ajv: 8.18.0
+      chat: 4.28.1
+      croner: 10.0.1
+      dotenv: 17.3.1
+      execa: 9.6.1
+      fastq: 1.20.1
+      gray-matter: 4.0.3
+      hono: 4.12.18
+      hono-openapi: 1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.18))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.2.0(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.2.0(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@6.0.3))(zod@4.3.6))(@types/json-schema@7.0.15)(hono@4.12.18)(openapi-types@12.1.3)
+      ignore: 7.0.5
+      json-schema: 0.4.0
+      lru-cache: 11.3.6
+      p-map: 7.0.4
+      p-retry: 7.1.1
+      picomatch: 4.0.4
+      tokenx: 1.3.0
+      ws: 8.20.0(bufferutil@4.1.0)
+      xxhash-wasm: 1.1.0
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@cfworker/json-schema'
+      - '@grpc/grpc-js'
+      - '@hono/standard-validator'
+      - '@standard-community/standard-json'
+      - '@standard-community/standard-openapi'
+      - '@types/json-schema'
+      - bufferutil
+      - express
+      - openapi-types
+      - supports-color
+      - utf-8-validate
+
   '@mastra/schema-compat@1.1.0(zod@3.25.76)':
     dependencies:
       json-schema-to-zod: 2.7.0
@@ -35858,6 +35899,14 @@ snapshots:
       zod-from-json-schema: 0.5.2
       zod-from-json-schema-v3: zod-from-json-schema@0.0.5
       zod-to-json-schema: 3.25.1(zod@3.25.76)
+
+  '@mastra/schema-compat@1.2.10(zod@4.3.6)':
+    dependencies:
+      json-schema-to-zod: 2.7.0
+      zod: 4.3.6
+      zod-from-json-schema: 0.5.2
+      zod-from-json-schema-v3: zod-from-json-schema@0.0.5
+      zod-to-json-schema: 3.25.1(zod@4.3.6)
 
   '@mcp-ui/client@7.1.1(@cfworker/json-schema@4.1.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:

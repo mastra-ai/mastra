@@ -1,6 +1,6 @@
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
@@ -42,19 +42,39 @@ export function createFaithfulnessScorer({
     },
     type: 'agent',
   })
-    .preprocess({
+    .preprocess<{ claims: string[] }>({
       description: 'Extract relevant statements from the LLM output',
-      outputSchema: z.object({
-        claims: z.array(z.string()),
-      }),
+      outputSchema: {
+        type: 'object',
+        properties: {
+          claims: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['claims'],
+      } satisfies JSONSchema7,
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
       },
     })
-    .analyze({
+    .analyze<{ verdicts: { verdict: string; reason: string }[] }>({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
+      outputSchema: {
+        type: 'object',
+        properties: {
+          verdicts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                verdict: { type: 'string' },
+                reason: { type: 'string' },
+              },
+              required: ['verdict', 'reason'],
+            },
+          },
+        },
+        required: ['verdicts'],
+      } satisfies JSONSchema7,
       createPrompt: ({ results, run }) => {
         // Use the context provided by the user, or the context from the tool invocations
         const context = options?.context ?? getToolInvocationContext(run.output);

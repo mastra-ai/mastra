@@ -2,7 +2,7 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
@@ -52,21 +52,40 @@ export function createHallucinationScorer({
     },
     type: 'agent',
   })
-    .preprocess({
+    .preprocess<{ claims: string[] }>({
       description: 'Extract all claims from the given output',
-      outputSchema: z.object({
-        claims: z.array(z.string()),
-      }),
+      outputSchema: {
+        type: 'object',
+        properties: {
+          claims: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['claims'],
+      } satisfies JSONSchema7,
       createPrompt: ({ run }) => {
         const prompt = createHallucinationExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
       },
     })
-    .analyze({
+    .analyze<{ verdicts: { statement: string; verdict: string; reason: string }[] }>({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.object({
-        verdicts: z.array(z.object({ statement: z.string(), verdict: z.string(), reason: z.string() })),
-      }),
+      outputSchema: {
+        type: 'object',
+        properties: {
+          verdicts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                statement: { type: 'string' },
+                verdict: { type: 'string' },
+                reason: { type: 'string' },
+              },
+              required: ['statement', 'verdict', 'reason'],
+            },
+          },
+        },
+        required: ['verdicts'],
+      } satisfies JSONSchema7,
       createPrompt: async ({ run, results }) => {
         let context: string[];
         if (options?.getContext) {

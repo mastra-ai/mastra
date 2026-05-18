@@ -1,6 +1,6 @@
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { createExtractPrompt, createReasonPrompt, createScorePrompt } from './prompts';
@@ -22,9 +22,34 @@ export const ANSWER_RELEVANCY_AGENT_INSTRUCTIONS = `
     6. Responses that discuss the type of information being asked show partial relevance
 `;
 
-const extractOutputSchema = z.object({
-  statements: z.array(z.string()),
-});
+const extractOutputSchema = {
+  type: 'object',
+  properties: {
+    statements: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+  },
+  required: ['statements'],
+} satisfies JSONSchema7;
+
+const analyzeOutputSchema = {
+  type: 'object',
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          result: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['result', 'reason'],
+      },
+    },
+  },
+  required: ['results'],
+} satisfies JSONSchema7;
 
 export function createAnswerRelevancyScorer({
   model,
@@ -43,7 +68,7 @@ export function createAnswerRelevancyScorer({
     },
     type: 'agent',
   })
-    .preprocess({
+    .preprocess<{ statements: string[] }>({
       description: 'Extract relevant statements from the LLM output',
       outputSchema: extractOutputSchema,
       createPrompt: ({ run }) => {
@@ -51,9 +76,9 @@ export function createAnswerRelevancyScorer({
         return createExtractPrompt(assistantMessage);
       },
     })
-    .analyze({
+    .analyze<{ results: { result: string; reason: string }[] }>({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
+      outputSchema: analyzeOutputSchema,
       createPrompt: ({ run, results }) => {
         const input = getUserMessageFromRunInput(run.input) ?? '';
         return createScorePrompt(JSON.stringify(input), results.preprocessStepResult?.statements || []);

@@ -1,6 +1,6 @@
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import {
   getAssistantMessageFromRunOutput,
   getUserMessageFromRunInput,
@@ -15,39 +15,73 @@ export interface PromptAlignmentOptions {
   evaluationMode?: 'user' | 'system' | 'both';
 }
 
-// Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
-const scoreSchema = z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' });
+const scoreSchema = {
+  type: 'number',
+  minimum: 0,
+  maximum: 1,
+} satisfies JSONSchema7;
 
-const analyzeOutputSchema = z.object({
-  intentAlignment: z.object({
-    score: scoreSchema,
-    primaryIntent: z.string(),
-    isAddressed: z.boolean(),
-    reasoning: z.string(),
-  }),
-  requirementsFulfillment: z.object({
-    requirements: z.array(
-      z.object({
-        requirement: z.string(),
-        isFulfilled: z.boolean(),
-        reasoning: z.string(),
-      }),
-    ),
-    overallScore: scoreSchema,
-  }),
-  completeness: z.object({
-    score: scoreSchema,
-    missingElements: z.array(z.string()),
-    reasoning: z.string(),
-  }),
-  responseAppropriateness: z.object({
-    score: scoreSchema,
-    formatAlignment: z.boolean(),
-    toneAlignment: z.boolean(),
-    reasoning: z.string(),
-  }),
-  overallAssessment: z.string(),
-});
+const analyzeOutputSchema = {
+  type: 'object',
+  properties: {
+    intentAlignment: {
+      type: 'object',
+      properties: {
+        score: scoreSchema,
+        primaryIntent: { type: 'string' },
+        isAddressed: { type: 'boolean' },
+        reasoning: { type: 'string' },
+      },
+      required: ['score', 'primaryIntent', 'isAddressed', 'reasoning'],
+    },
+    requirementsFulfillment: {
+      type: 'object',
+      properties: {
+        requirements: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              requirement: { type: 'string' },
+              isFulfilled: { type: 'boolean' },
+              reasoning: { type: 'string' },
+            },
+            required: ['requirement', 'isFulfilled', 'reasoning'],
+          },
+        },
+        overallScore: scoreSchema,
+      },
+      required: ['requirements', 'overallScore'],
+    },
+    completeness: {
+      type: 'object',
+      properties: {
+        score: scoreSchema,
+        missingElements: { type: 'array', items: { type: 'string' } },
+        reasoning: { type: 'string' },
+      },
+      required: ['score', 'missingElements', 'reasoning'],
+    },
+    responseAppropriateness: {
+      type: 'object',
+      properties: {
+        score: scoreSchema,
+        formatAlignment: { type: 'boolean' },
+        toneAlignment: { type: 'boolean' },
+        reasoning: { type: 'string' },
+      },
+      required: ['score', 'formatAlignment', 'toneAlignment', 'reasoning'],
+    },
+    overallAssessment: { type: 'string' },
+  },
+  required: [
+    'intentAlignment',
+    'requirementsFulfillment',
+    'completeness',
+    'responseAppropriateness',
+    'overallAssessment',
+  ],
+} satisfies JSONSchema7;
 
 // Weight distribution for different aspects of prompt alignment
 const SCORING_WEIGHTS = {
@@ -89,7 +123,21 @@ export function createPromptAlignmentScorerLLM({
       instructions: PROMPT_ALIGNMENT_INSTRUCTIONS,
     },
   })
-    .analyze({
+    .analyze<{
+      intentAlignment: { score: number; primaryIntent: string; isAddressed: boolean; reasoning: string };
+      requirementsFulfillment: {
+        requirements: { requirement: string; isFulfilled: boolean; reasoning: string }[];
+        overallScore: number;
+      };
+      completeness: { score: number; missingElements: string[]; reasoning: string };
+      responseAppropriateness: {
+        score: number;
+        formatAlignment: boolean;
+        toneAlignment: boolean;
+        reasoning: string;
+      };
+      overallAssessment: string;
+    }>({
       description: 'Analyze prompt-response alignment across multiple dimensions',
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ run }) => {

@@ -1,7 +1,7 @@
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import { getAssistantMessageFromRunOutput, roundToTwoDecimals } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
@@ -26,17 +26,37 @@ export function createBiasScorer({ model, options }: { model: MastraModelConfig;
     },
     type: 'agent',
   })
-    .preprocess({
+    .preprocess<{ opinions: string[] }>({
       description: 'Extract relevant statements from the LLM output',
-      outputSchema: z.object({
-        opinions: z.array(z.string()),
-      }),
+      outputSchema: {
+        type: 'object',
+        properties: {
+          opinions: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['opinions'],
+      } satisfies JSONSchema7,
       createPrompt: ({ run }) =>
         createBiasExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' }),
     })
-    .analyze({
+    .analyze<{ results: { result: string; reason: string }[] }>({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
+      outputSchema: {
+        type: 'object',
+        properties: {
+          results: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                result: { type: 'string' },
+                reason: { type: 'string' },
+              },
+              required: ['result', 'reason'],
+            },
+          },
+        },
+        required: ['results'],
+      } satisfies JSONSchema7,
       createPrompt: ({ run, results }) => {
         const prompt = createBiasAnalyzePrompt({
           output: getAssistantMessageFromRunOutput(run.output) ?? '',

@@ -1,7 +1,7 @@
 import { createScorer } from '@mastra/core/evals';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 import {
   roundToTwoDecimals,
   getAssistantMessageFromRunOutput,
@@ -22,15 +22,24 @@ export interface ContextPrecisionMetricOptions {
   contextExtractor?: (input: ScorerRunInputForAgent, output: ScorerRunOutputForAgent) => string[];
 }
 
-const contextRelevanceOutputSchema = z.object({
-  verdicts: z.array(
-    z.object({
-      context_index: z.number(),
-      verdict: z.string(),
-      reason: z.string(),
-    }),
-  ),
-});
+const contextRelevanceOutputSchema = {
+  type: 'object',
+  properties: {
+    verdicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          context_index: { type: 'number' },
+          verdict: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['context_index', 'verdict', 'reason'],
+      },
+    },
+  },
+  required: ['verdicts'],
+} satisfies JSONSchema7;
 
 const getContext = ({
   input,
@@ -73,7 +82,7 @@ export function createContextPrecisionScorer({
     },
     type: 'agent',
   })
-    .analyze({
+    .analyze<{ verdicts: { context_index: number; verdict: string; reason: string }[] }>({
       description: 'Evaluate the relevance of each context piece for generating the expected output',
       outputSchema: contextRelevanceOutputSchema,
       createPrompt: ({ run }) => {
