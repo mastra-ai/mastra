@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Fixed sidebar and route header jumping in during cold page load. The Studio Layout was gating both pieces of chrome on `useAuthCapabilities()` having resolved, which left the main content stretched full-width until the request returned. The layout now renders the sidebar and header optimistically (sidebar width is already hydrated synchronously from `localStorage` by `MainSidebarProvider`) and only hides them once auth resolves as enabled-but-unauthenticated, so the original UX of a chromeless inline login form is preserved.
+Fixed a layout shift on cold page loads where the Studio sidebar and route header would pop in after the page rendered, briefly stretching the main content to full width. The chromeless inline login screen for unauthenticated users still appears as before.
