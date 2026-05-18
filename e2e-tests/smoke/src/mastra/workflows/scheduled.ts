@@ -12,9 +12,8 @@ const heartbeat = createStep({
 
 /**
  * A workflow with a declarative `schedule` so the scheduler registers a row
- * the moment Mastra boots. We use a far-future cron (Feb 31 — never fires) so
- * the schedule is visible to /api/schedules without actually executing during
- * smoke runs.
+ * the moment Mastra boots. We use a far-future cron (Jan 1 yearly) so the
+ * schedule is visible to /api/schedules with a stable, non-noisy cadence.
  */
 export const scheduledHeartbeatWorkflow = createWorkflow({
   id: 'scheduled-heartbeat',
@@ -25,6 +24,25 @@ export const scheduledHeartbeatWorkflow = createWorkflow({
     cron: '0 0 1 1 *', // 00:00 on Jan 1 every year
     inputData: { source: 'smoke-scheduler' },
     metadata: { purpose: 'smoke-test-schedule' },
+  },
+})
+  .then(heartbeat)
+  .commit();
+
+/**
+ * A second scheduled workflow that fires every second (6-part cron) so the
+ * smoke suite can assert the scheduler actually publishes triggers and the
+ * workflow actually runs end-to-end (not just that the schedule row exists).
+ */
+export const scheduledTickWorkflow = createWorkflow({
+  id: 'scheduled-tick',
+  inputSchema: z.object({ source: z.string().default('scheduler') }),
+  outputSchema: z.object({ ok: z.literal(true), source: z.string(), at: z.string() }),
+  schedule: {
+    id: 'smoke-tick',
+    cron: '* * * * * *', // every second
+    inputData: { source: 'smoke-tick' },
+    metadata: { purpose: 'smoke-test-trigger' },
   },
 })
   .then(heartbeat)
