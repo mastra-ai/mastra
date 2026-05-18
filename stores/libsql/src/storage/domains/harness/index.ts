@@ -28,6 +28,7 @@ import type {
   AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
+  AttachmentSemanticMetadata,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
@@ -35,6 +36,7 @@ import type {
   ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
+  JsonValue,
   OperationAdmissionEvidence,
   OperationAdmissionTombstone,
   QueueAdmissionReceipt,
@@ -134,7 +136,18 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_ATTACHMENTS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
-      ifNotExists: ['harness_name', 'sha256', 'source'],
+      ifNotExists: [
+        'harness_name',
+        'sha256',
+        'source',
+        'kind',
+        'primitive_type',
+        'element_type',
+        'renderer_json',
+        'schema_id',
+        'metadata_json',
+        'object_json',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_ATTACHMENT_REFERENCES,
@@ -939,6 +952,7 @@ export class HarnessLibSQL extends HarnessStorage {
     mimeType,
     source,
     data,
+    semantic,
   }: SaveAttachmentInput): Promise<SaveAttachmentResult> {
     const namespace = this.#resolveHarnessName(harnessName);
     const sha256 = sha256Hex(data);
@@ -946,17 +960,44 @@ export class HarnessLibSQL extends HarnessStorage {
     const dataB64 = bytesToBase64(data);
     await this.#client.execute({
       sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENTS}
-            (harness_name, session_id, attachment_id, name, mime_type, size_bytes, sha256, source, created_at, data_b64)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (harness_name, session_id, attachment_id, name, mime_type, size_bytes, sha256, source,
+             kind, primitive_type, element_type, renderer_json, schema_id, metadata_json, object_json,
+             created_at, data_b64)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT DO UPDATE SET
               name = excluded.name,
               mime_type = excluded.mime_type,
               size_bytes = excluded.size_bytes,
               sha256 = excluded.sha256,
               source = excluded.source,
+              kind = excluded.kind,
+              primitive_type = excluded.primitive_type,
+              element_type = excluded.element_type,
+              renderer_json = excluded.renderer_json,
+              schema_id = excluded.schema_id,
+              metadata_json = excluded.metadata_json,
+              object_json = excluded.object_json,
               created_at = excluded.created_at,
               data_b64 = excluded.data_b64`,
-      args: [namespace, sessionId, attachmentId, name, mimeType, bytes, sha256, source, Date.now(), dataB64],
+      args: [
+        namespace,
+        sessionId,
+        attachmentId,
+        name,
+        mimeType,
+        bytes,
+        sha256,
+        source,
+        semantic?.kind ?? 'file',
+        semantic?.primitiveType ?? null,
+        semantic?.elementType ?? null,
+        semantic?.renderer ? JSON.stringify(semantic.renderer) : null,
+        semantic?.schemaId ?? null,
+        semantic?.metadata ? JSON.stringify(semantic.metadata) : null,
+        semantic?.object ? JSON.stringify(semantic.object) : null,
+        Date.now(),
+        dataB64,
+      ],
     });
     return { attachmentId, bytes, sha256 };
   }
@@ -972,7 +1013,9 @@ export class HarnessLibSQL extends HarnessStorage {
   }): Promise<LoadedAttachment | null> {
     const namespace = this.#resolveHarnessName(harnessName);
     const result = await this.#client.execute({
-      sql: `SELECT name, mime_type, size_bytes, sha256, data_b64 FROM ${TABLE_HARNESS_ATTACHMENTS}
+      sql: `SELECT name, mime_type, size_bytes, sha256, data_b64,
+                   kind, primitive_type, element_type, renderer_json, schema_id, metadata_json, object_json
+            FROM ${TABLE_HARNESS_ATTACHMENTS}
             WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
       args: [namespace, sessionId, attachmentId],
     });
@@ -984,6 +1027,7 @@ export class HarnessLibSQL extends HarnessStorage {
       bytes: Number(row.size_bytes),
       sha256: String(row.sha256),
       data: base64ToBytes(String(row.data_b64)),
+      semantic: rowToAttachmentSemantic(row),
     };
   }
 
@@ -1048,7 +1092,9 @@ export class HarnessLibSQL extends HarnessStorage {
   }): Promise<AttachmentRecord | null> {
     const namespace = this.#resolveHarnessName(harnessName);
     const result = await this.#client.execute({
-      sql: `SELECT session_id, attachment_id, name, mime_type, size_bytes, sha256, source, created_at
+      sql: `SELECT session_id, attachment_id, name, mime_type, size_bytes, sha256, source,
+                   kind, primitive_type, element_type, renderer_json, schema_id, metadata_json, object_json,
+                   created_at
             FROM ${TABLE_HARNESS_ATTACHMENTS}
             WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
       args: [namespace, sessionId, attachmentId],
@@ -1063,6 +1109,7 @@ export class HarnessLibSQL extends HarnessStorage {
       bytes: Number(row.size_bytes),
       sha256: String(row.sha256),
       source: toAttachmentSource(row.source),
+      ...rowToAttachmentSemantic(row),
       createdAt: Number(row.created_at),
     };
   }
@@ -1890,6 +1937,24 @@ function parseJson(value: unknown): any {
     }
   }
   return value;
+}
+
+function rowToAttachmentSemantic(row: Record<string, unknown>): AttachmentSemanticMetadata {
+  const semantic: AttachmentSemanticMetadata = { kind: toAttachmentKind(row.kind) };
+  if (row.primitive_type != null) {
+    semantic.primitiveType = String(row.primitive_type) as AttachmentSemanticMetadata['primitiveType'];
+  }
+  if (row.element_type != null) semantic.elementType = String(row.element_type);
+  if (row.renderer_json != null) semantic.renderer = parseJson(row.renderer_json);
+  if (row.schema_id != null) semantic.schemaId = String(row.schema_id);
+  if (row.metadata_json != null) semantic.metadata = parseJson(row.metadata_json) as Record<string, JsonValue>;
+  if (row.object_json != null) semantic.object = parseJson(row.object_json);
+  return semantic;
+}
+
+function toAttachmentKind(value: unknown): AttachmentSemanticMetadata['kind'] {
+  if (value === 'primitive' || value === 'element' || value === 'file') return value;
+  return 'file';
 }
 
 function isUniqueConstraintError(err: unknown): boolean {

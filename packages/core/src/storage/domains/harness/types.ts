@@ -60,6 +60,13 @@ export type PersistedAttachment =
       bytes: number;
       sha256: string;
       source: AttachmentSource;
+      attachmentKind?: HarnessAttachmentKind;
+      primitiveType?: HarnessPrimitiveType;
+      elementType?: string;
+      renderer?: AttachmentRendererDescriptor;
+      schemaId?: string;
+      metadata?: Record<string, JsonValue>;
+      object?: AttachmentObjectPointer;
     }
   | { kind: 'url'; name: string; mimeType: string; url: string };
 
@@ -205,6 +212,34 @@ export interface SessionWorkspaceState {
 }
 
 export type AttachmentSource = 'inline' | 'preupload' | 'url' | 'provider';
+
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+export type HarnessAttachmentKind = 'file' | 'primitive' | 'element';
+
+export type HarnessPrimitiveType = 'text' | 'markdown' | 'json' | 'table' | 'chart-data' | 'selection' | 'citation';
+
+export interface AttachmentRendererDescriptor {
+  id: string;
+  version?: string;
+}
+
+export interface AttachmentObjectPointer {
+  providerId: string;
+  objectKey: string;
+  etag?: string;
+  storageClass?: string;
+}
+
+export interface AttachmentSemanticMetadata {
+  kind?: HarnessAttachmentKind;
+  primitiveType?: HarnessPrimitiveType;
+  elementType?: string;
+  renderer?: AttachmentRendererDescriptor;
+  schemaId?: string;
+  metadata?: Record<string, JsonValue>;
+  object?: AttachmentObjectPointer;
+}
 
 export type AttachmentReferenceSource =
   | 'queued_item'
@@ -459,6 +494,14 @@ export interface AttachmentRecord {
   sha256: string;
   /** Where the attachment came from. */
   source: AttachmentSource;
+  /** Semantic class for UI/replay consumers. Defaults to `file` for legacy rows. */
+  kind?: HarnessAttachmentKind;
+  primitiveType?: HarnessPrimitiveType;
+  elementType?: string;
+  renderer?: AttachmentRendererDescriptor;
+  schemaId?: string;
+  metadata?: Record<string, JsonValue>;
+  object?: AttachmentObjectPointer;
   /** Epoch ms. */
   createdAt: number;
 }
@@ -576,6 +619,7 @@ export interface SaveAttachmentInput {
   mimeType: string;
   source: AttachmentSource;
   data: Uint8Array;
+  semantic?: AttachmentSemanticMetadata;
 }
 
 export interface SaveAttachmentResult {
@@ -590,6 +634,7 @@ export interface LoadedAttachment {
   bytes: number;
   sha256: string;
   data: Uint8Array;
+  semantic?: AttachmentSemanticMetadata;
 }
 
 export interface AttachmentReference {

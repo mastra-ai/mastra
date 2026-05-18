@@ -29,6 +29,8 @@ import type {
   SessionSummary,
   TokenUsage,
   HarnessStorage,
+  AttachmentSemanticMetadata,
+  JsonValue,
 } from '../../storage/domains/harness';
 import {
   HarnessStorageAttachmentInUseError,
@@ -55,6 +57,7 @@ import {
   HarnessSessionNotFoundError,
   HarnessStorageError,
   HarnessThreadNotFoundError,
+  HarnessValidationError,
   HarnessWorkspaceProviderMismatchError,
 } from './errors';
 import { EventEmitter } from './events';
@@ -174,6 +177,67 @@ function hasOnlyCloneableSkillMetadataValues(value: unknown, seen: WeakSet<objec
     return supported;
   }
   return true;
+}
+
+function assertAttachmentJsonValue(value: unknown, field: string, seen: WeakSet<object> = new WeakSet()): JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new HarnessValidationError(field, 'attachment JSON values must be finite numbers');
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (seen.has(value)) throw new HarnessValidationError(field, 'attachment value must not contain cycles');
+    seen.add(value);
+    const out: JsonValue[] = [];
+    try {
+      for (let index = 0; index < value.length; index += 1) {
+        if (!(index in value)) {
+          throw new HarnessValidationError(`${field}[${index}]`, 'attachment arrays must not contain holes');
+        }
+        out.push(assertAttachmentJsonValue(value[index], `${field}[${index}]`, seen));
+      }
+    } finally {
+      seen.delete(value);
+    }
+    return out;
+  }
+  if (value && typeof value === 'object' && isPlainSkillMetadata(value)) {
+    if (seen.has(value)) throw new HarnessValidationError(field, 'attachment value must not contain cycles');
+    seen.add(value);
+    const out: Record<string, JsonValue> = {};
+    try {
+      for (const [key, child] of Object.entries(value)) {
+        if (child !== undefined) out[key] = assertAttachmentJsonValue(child, `${field}.${key}`, seen);
+      }
+    } finally {
+      seen.delete(value);
+    }
+    return out;
+  }
+  throw new HarnessValidationError(field, 'attachment value must be JSON-serialisable');
+}
+
+function assertAttachmentJsonRecord(value: unknown, field: string): Record<string, JsonValue> {
+  const record = assertAttachmentJsonValue(value, field);
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    throw new HarnessValidationError(field, 'attachment metadata must be a JSON object');
+  }
+  return record;
+}
+
+function canonicalAttachmentJson(value: JsonValue): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalAttachmentJson).join(',')}]`;
+  return `{${Object.keys(value)
+    .sort()
+    .map(key => `${JSON.stringify(key)}:${canonicalAttachmentJson(value[key]!)}`)
+    .join(',')}}`;
+}
+
+function encodeAttachmentJson(value: JsonValue): Uint8Array {
+  return new TextEncoder().encode(canonicalAttachmentJson(value));
 }
 
 function hasExternalSessionStorageOwner(metadata: unknown): boolean {
@@ -2250,19 +2314,64 @@ export class Harness {
       const session = await this.session(
         opts.resourceId ? { sessionId: opts.sessionId, resourceId: opts.resourceId } : { sessionId: opts.sessionId },
       );
-      const data =
-        opts.data instanceof Uint8Array
-          ? new Uint8Array(opts.data)
-          : new Uint8Array(await new Response(opts.data).arrayBuffer());
+      const metadata =
+        opts.metadata === undefined
+          ? undefined
+          : assertAttachmentJsonRecord(opts.metadata, 'attachments.upload().metadata');
+      let upload: {
+        name: string;
+        mimeType: string;
+        data: Uint8Array;
+        semantic: AttachmentSemanticMetadata;
+      };
+      if (opts.kind === 'primitive') {
+        upload = {
+          name: opts.name,
+          mimeType: opts.mimeType ?? 'application/json',
+          data: encodeAttachmentJson(assertAttachmentJsonValue(opts.value, 'attachments.upload().value')),
+          semantic: {
+            kind: 'primitive',
+            primitiveType: opts.primitiveType,
+            ...(metadata ? { metadata } : {}),
+          },
+        };
+      } else if (opts.kind === 'element') {
+        upload = {
+          name: opts.name,
+          mimeType: opts.mimeType ?? 'application/vnd.mastra.harness.element+json',
+          data: encodeAttachmentJson(assertAttachmentJsonValue(opts.payload, 'attachments.upload().payload')),
+          semantic: {
+            kind: 'element',
+            elementType: opts.elementType,
+            ...(opts.renderer ? { renderer: { ...opts.renderer } } : {}),
+            ...(opts.schemaId ? { schemaId: opts.schemaId } : {}),
+            ...(metadata ? { metadata } : {}),
+          },
+        };
+      } else {
+        upload = {
+          name: opts.filename,
+          mimeType: opts.contentType,
+          data:
+            opts.data instanceof Uint8Array
+              ? new Uint8Array(opts.data)
+              : new Uint8Array(await new Response(opts.data).arrayBuffer()),
+          semantic: {
+            kind: 'file',
+            ...(metadata ? { metadata } : {}),
+          },
+        };
+      }
       const attachmentId = `attachment-${randomUUID()}`;
       const saved = await storage.saveAttachment({
         harnessName: session.getRecord().harnessName,
         sessionId: session.id,
         attachmentId,
-        name: opts.filename,
-        mimeType: opts.contentType,
+        name: upload.name,
+        mimeType: upload.mimeType,
         source: 'preupload',
-        data,
+        data: upload.data,
+        semantic: upload.semantic,
       });
       return {
         attachmentId: saved.attachmentId,
@@ -2271,6 +2380,9 @@ export class Harness {
         bytes: saved.bytes,
         sha256: saved.sha256,
         source: 'preupload',
+        name: upload.name,
+        mimeType: upload.mimeType,
+        ...upload.semantic,
       };
     },
     delete: async (opts: AttachmentDeleteOptions): Promise<void> => {

@@ -75,6 +75,93 @@ describe('Harness.attachments', () => {
     ).resolves.toBeNull();
   });
 
+  it('uploads primitive attachments as canonical bytes with semantic metadata', async () => {
+    const { harness, storage } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const result = await harness.attachments.upload({
+      sessionId: session.id,
+      kind: 'primitive',
+      name: 'selection.json',
+      primitiveType: 'selection',
+      value: { z: 1, a: ['paper-1', 'paper-2'] },
+      metadata: { label: 'Selected papers' },
+    });
+
+    const expectedBytes = Buffer.from('{"a":["paper-1","paper-2"],"z":1}');
+    expect(result).toMatchObject({
+      resourceId: 'u',
+      ownerSessionId: session.id,
+      kind: 'primitive',
+      name: 'selection.json',
+      mimeType: 'application/json',
+      primitiveType: 'selection',
+      metadata: { label: 'Selected papers' },
+      bytes: expectedBytes.length,
+      sha256: createHash('sha256').update(expectedBytes).digest('hex'),
+    });
+
+    await expect(
+      storage.getAttachmentRecord({ sessionId: session.id, attachmentId: result.attachmentId }),
+    ).resolves.toMatchObject({
+      kind: 'primitive',
+      primitiveType: 'selection',
+      metadata: { label: 'Selected papers' },
+    });
+
+    const loaded = await storage.loadAttachment({ sessionId: session.id, attachmentId: result.attachmentId });
+    expect(Buffer.from(loaded!.data).toString()).toBe('{"a":["paper-1","paper-2"],"z":1}');
+    expect(loaded?.semantic).toMatchObject({ kind: 'primitive', primitiveType: 'selection' });
+  });
+
+  it('rejects invalid primitive and element attachment JSON payloads', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const cyclicPrimitive: Record<string, unknown> = { title: 'loop' };
+    cyclicPrimitive.self = cyclicPrimitive;
+    const cyclicElement: unknown[] = [];
+    cyclicElement.push(cyclicElement);
+    const sparsePrimitive: unknown[] = [];
+    sparsePrimitive[1] = 'missing zero';
+
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'loop.json',
+        primitiveType: 'json',
+        value: cyclicPrimitive,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().value.self' });
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'element',
+        name: 'loop-element.json',
+        elementType: 'loop',
+        payload: cyclicElement,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().payload[0]' });
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        kind: 'primitive',
+        name: 'sparse.json',
+        primitiveType: 'json',
+        value: sparsePrimitive as never,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().value[0]' });
+    await expect(
+      harness.attachments.upload({
+        sessionId: session.id,
+        data: new Uint8Array([1]),
+        filename: 'metadata.bin',
+        contentType: 'application/octet-stream',
+        metadata: ['not-a-record'] as never,
+      }),
+    ).rejects.toMatchObject({ field: 'attachments.upload().metadata' });
+  });
+
   it('uses the explicit owning session instead of the most-recent resource session', async () => {
     const { harness, storage } = setupHarness();
     const older = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
@@ -130,6 +217,51 @@ describe('Harness.attachments', () => {
     await expect(
       harness.attachments.delete({ sessionId: session.id, attachmentId: result.attachmentId }),
     ).rejects.toBeInstanceOf(HarnessAttachmentInUseError);
+  });
+
+  it('freezes element attachment descriptors into queued refs and guarded delete', async () => {
+    const { harness, storage, agent } = setupHarness();
+    let releaseManual!: () => void;
+    const manualGate = new Promise<void>(resolve => {
+      releaseManual = resolve;
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'manual', holdUntil: manualGate });
+    agent.enqueueRun({ finishReason: 'stop', text: 'queued reply' });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const manual = session.message({ content: 'hold drain' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    const element = await harness.attachments.upload({
+      sessionId: session.id,
+      kind: 'element',
+      name: 'chart-card.json',
+      elementType: 'chart-card',
+      payload: { title: 'Trend', values: [1, 3, 2] },
+      renderer: { id: 'chart-card', version: '1' },
+      schemaId: 'chart-card.v1',
+      metadata: { purpose: 'preview' },
+    });
+    const queued = session.queue({ content: 'render this', attachments: [element] });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(session.getRecord().pendingQueue[0]?.attachments[0]).toMatchObject({
+      kind: 'ref',
+      attachmentKind: 'element',
+      elementType: 'chart-card',
+      renderer: { id: 'chart-card', version: '1' },
+      schemaId: 'chart-card.v1',
+      metadata: { purpose: 'preview' },
+    });
+    await expect(
+      storage.listAttachmentReferences({ sessionId: session.id, attachmentId: element.attachmentId }),
+    ).resolves.toEqual([{ source: 'queued_item', sourceId: expect.any(String) }]);
+    await expect(
+      harness.attachments.delete({ sessionId: session.id, attachmentId: element.attachmentId }),
+    ).rejects.toBeInstanceOf(HarnessAttachmentInUseError);
+
+    releaseManual();
+    await expect(manual).resolves.toMatchObject({ text: 'manual' });
+    await expect(queued).resolves.toMatchObject({ text: 'queued reply' });
   });
 
   it('rejects queue admission for cross-session or mismatched attachment refs', async () => {

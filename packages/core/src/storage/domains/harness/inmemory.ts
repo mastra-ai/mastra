@@ -19,6 +19,7 @@ import type {
   AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
+  AttachmentSemanticMetadata,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
@@ -26,6 +27,7 @@ import type {
   ListSessionsByThreadInput,
   ListSessionsInput,
   LoadedAttachment,
+  JsonValue,
   OperationAdmissionEvidence,
   OperationAdmissionTombstone,
   QueueAdmissionReceipt,
@@ -488,6 +490,7 @@ export class InMemoryHarness extends HarnessStorage {
     mimeType,
     source,
     data,
+    semantic,
   }: SaveAttachmentInput): Promise<SaveAttachmentResult> {
     const namespace = resolveHarnessName(harnessName, this.harnessName);
     const key = attachmentKey(namespace, sessionId, attachmentId);
@@ -501,6 +504,13 @@ export class InMemoryHarness extends HarnessStorage {
       bytes,
       sha256,
       source,
+      ...(semantic?.kind ? { kind: semantic.kind } : {}),
+      ...(semantic?.primitiveType ? { primitiveType: semantic.primitiveType } : {}),
+      ...(semantic?.elementType ? { elementType: semantic.elementType } : {}),
+      ...(semantic?.renderer ? { renderer: { ...semantic.renderer } } : {}),
+      ...(semantic?.schemaId ? { schemaId: semantic.schemaId } : {}),
+      ...(semantic?.metadata ? { metadata: cloneJsonRecord(semantic.metadata) } : {}),
+      ...(semantic?.object ? { object: { ...semantic.object } } : {}),
       createdAt: Date.now(),
     };
     this.db.harnessAttachmentRecords.set(key, record);
@@ -528,6 +538,7 @@ export class InMemoryHarness extends HarnessStorage {
       bytes: record.bytes,
       sha256: record.sha256,
       data: new Uint8Array(bytes),
+      semantic: attachmentSemantic(record),
     };
   }
 
@@ -1077,4 +1088,20 @@ function toSummary(record: SessionRecord): SessionSummary {
     closeDeadlineAt: record.closeDeadlineAt,
     closedAt: record.closedAt,
   };
+}
+
+function attachmentSemantic(record: AttachmentRecord): AttachmentSemanticMetadata {
+  return {
+    kind: record.kind ?? 'file',
+    ...(record.primitiveType ? { primitiveType: record.primitiveType } : {}),
+    ...(record.elementType ? { elementType: record.elementType } : {}),
+    ...(record.renderer ? { renderer: { ...record.renderer } } : {}),
+    ...(record.schemaId ? { schemaId: record.schemaId } : {}),
+    ...(record.metadata ? { metadata: cloneJsonRecord(record.metadata) } : {}),
+    ...(record.object ? { object: { ...record.object } } : {}),
+  };
+}
+
+function cloneJsonRecord(value: Record<string, JsonValue>): Record<string, JsonValue> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, JsonValue>;
 }

@@ -95,12 +95,15 @@ export type {
   AttachmentDeleteOptions,
   AttachmentRef,
   AttachmentUploadOptions,
+  ElementAttachmentUploadOptions,
+  FileAttachmentUploadOptions,
   GoalOptions,
   HarnessConfig,
   HarnessMode,
   HarnessSkill,
   InboxResponseOptions,
   InboxResponseResult,
+  PrimitiveAttachmentUploadOptions,
   UseSkillOptions,
   HarnessWorkspaceConfig,
   ListMessagesOptions,
@@ -128,4 +131,13 @@ export type {
   ToolCategory,
 } from './types';
 
-export type { InboxResponseReceipt, PermissionRules, SessionGrants } from '../../storage/domains/harness';
+export type {
+  AttachmentObjectPointer,
+  AttachmentRendererDescriptor,
+  HarnessAttachmentKind,
+  HarnessPrimitiveType,
+  InboxResponseReceipt,
+  JsonValue,
+  PermissionRules,
+  SessionGrants,
+} from '../../storage/domains/harness';

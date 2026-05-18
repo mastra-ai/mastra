@@ -77,6 +77,56 @@ describe('HarnessLibSQL attachments', () => {
     await expect(storage.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' })).resolves.toBeNull();
   });
 
+  it('persists attachment semantic metadata and provider object pointers', async () => {
+    const data = new TextEncoder().encode('{"kind":"primitive"}');
+    const expectedSha256 = createHash('sha256').update(data).digest('hex');
+
+    const saved = await storage.saveAttachment({
+      sessionId: 'session-1',
+      attachmentId: 'semantic-1',
+      name: 'primitive.json',
+      mimeType: 'application/json',
+      source: 'provider',
+      data,
+      semantic: {
+        kind: 'primitive',
+        primitiveType: 'json',
+        metadata: { label: 'Primitive payload' },
+        object: {
+          providerId: 'r2-dev',
+          objectKey: 'harness/default/sessions/session-1/attachments/semantic-1/hash',
+          etag: 'etag-1',
+          storageClass: 'standard',
+        },
+      },
+    });
+    expect(saved).toEqual({ attachmentId: 'semantic-1', bytes: data.byteLength, sha256: expectedSha256 });
+
+    await expect(storage.getAttachmentRecord({ sessionId: 'session-1', attachmentId: 'semantic-1' })).resolves.toEqual(
+      expect.objectContaining({
+        kind: 'primitive',
+        primitiveType: 'json',
+        source: 'provider',
+        metadata: { label: 'Primitive payload' },
+        object: {
+          providerId: 'r2-dev',
+          objectKey: 'harness/default/sessions/session-1/attachments/semantic-1/hash',
+          etag: 'etag-1',
+          storageClass: 'standard',
+        },
+      }),
+    );
+    await expect(storage.loadAttachment({ sessionId: 'session-1', attachmentId: 'semantic-1' })).resolves.toMatchObject(
+      {
+        semantic: {
+          kind: 'primitive',
+          primitiveType: 'json',
+          object: { providerId: 'r2-dev' },
+        },
+      },
+    );
+  });
+
   it('backfills digest/source metadata when init sees the old attachment table shape', async () => {
     const client = createClient({ url: ':memory:' });
     const data = new Uint8Array([9, 8, 7]);
@@ -115,7 +165,7 @@ describe('HarnessLibSQL attachments', () => {
     expect(Array.from(loaded?.data ?? [])).toEqual([9, 8, 7]);
 
     const record = await legacyStorage.getAttachmentRecord({ sessionId: 'session-1', attachmentId: 'a1' });
-    expect(record).toMatchObject({ source: 'preupload', sha256: expectedSha256, bytes: 3 });
+    expect(record).toMatchObject({ source: 'preupload', sha256: expectedSha256, bytes: 3, kind: 'file' });
     await expect(primaryKeyColumns(client, TABLE_HARNESS_ATTACHMENTS)).resolves.toEqual([
       'harness_name',
       'session_id',

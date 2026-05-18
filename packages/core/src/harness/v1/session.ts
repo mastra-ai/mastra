@@ -4951,6 +4951,13 @@ export class Session {
               bytes: attachment.bytes,
               sha256: attachment.sha256,
               source: attachment.source,
+              attachmentKind: attachment.attachmentKind ?? 'file',
+              ...(attachment.primitiveType ? { primitiveType: attachment.primitiveType } : {}),
+              ...(attachment.elementType ? { elementType: attachment.elementType } : {}),
+              ...(attachment.renderer ? { renderer: attachment.renderer } : {}),
+              ...(attachment.schemaId ? { schemaId: attachment.schemaId } : {}),
+              ...(attachment.metadata ? { metadata: cloneAttachmentMetadata(attachment.metadata) } : {}),
+              ...(attachment.object ? { object: attachment.object } : {}),
             }
           : { url: attachment.url }),
       })),
@@ -5006,6 +5013,13 @@ export class Session {
         bytes: record.bytes,
         sha256: record.sha256,
         source: record.source,
+        attachmentKind: record.kind ?? 'file',
+        ...(record.primitiveType ? { primitiveType: record.primitiveType } : {}),
+        ...(record.elementType ? { elementType: record.elementType } : {}),
+        ...(record.renderer ? { renderer: { ...record.renderer } } : {}),
+        ...(record.schemaId ? { schemaId: record.schemaId } : {}),
+        ...(record.metadata ? { metadata: cloneAttachmentMetadata(record.metadata) } : {}),
+        ...(record.object ? { object: { ...record.object } } : {}),
       });
     }
     return attachments;
@@ -5247,7 +5261,10 @@ export class Session {
   }
 
   private _queueReceiptTerminalFailureErrorFromReceipt(receipt: QueueAdmissionReceipt | undefined): Error | undefined {
-    if (!receipt || (receipt.status !== 'failed' && receipt.status !== 'dead' && receipt.status !== 'admission_failed')) {
+    if (
+      !receipt ||
+      (receipt.status !== 'failed' && receipt.status !== 'dead' && receipt.status !== 'admission_failed')
+    ) {
       return undefined;
     }
     return publicErrorProjectionToError(
@@ -6195,6 +6212,10 @@ function publicErrorProjectionToError(error: { code: string; message: string }):
   projected.name = error.code;
   (projected as Error & { code: string }).code = error.code;
   return projected;
+}
+
+function cloneAttachmentMetadata(metadata: Record<string, JsonValue>): Record<string, JsonValue> {
+  return JSON.parse(JSON.stringify(metadata)) as Record<string, JsonValue>;
 }
 
 class QueueRecoveryPendingError extends Error {
