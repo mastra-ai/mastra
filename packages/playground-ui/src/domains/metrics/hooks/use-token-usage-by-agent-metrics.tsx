@@ -24,10 +24,7 @@ export function useTokenUsageByAgentMetrics() {
         orderDirection: 'DESC' as const,
         filters,
       };
-      // The estimatedCost on total_input and total_output already includes every
-      // input/output detail cost (cache read, cache write, image, audio, ...), so
-      // summing those two breakdowns gives the full per-agent cost. No need to
-      // fetch the cache breakdowns since this table does not display them.
+      // total_input/total_output estimatedCost already rolls up cache + other detail costs.
       const [inputRes, outputRes] = await Promise.all([
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_input_tokens'] }),
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_output_tokens'] }),
