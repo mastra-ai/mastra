@@ -40,9 +40,135 @@ function evaluateZodExpression(expression, sourceFile) {
 }
 
 /**
+ * @param {import('typescript').ImportSpecifier} specifier
+ */
+function isCompileSchemaImportSpecifier(specifier) {
+  if ((specifier.propertyName?.text ?? specifier.name.text) !== 'compileSchema') {
+    return false;
+  }
+
+  const namedImports = specifier.parent;
+  const importClause = namedImports.parent;
+  const importDeclaration = importClause.parent;
+  const moduleSpecifier = importDeclaration.moduleSpecifier;
+
+  return ts.isStringLiteral(moduleSpecifier) && moduleSpecifier.text === COMPILE_ZOD_MODULE;
+}
+
+/**
  * @param {import('typescript').SourceFile} sourceFile
  */
-function findCompileSchemaCalls(sourceFile) {
+function findCompileSchemaImportSpecifiers(sourceFile) {
+  /** @type {Map<string, import('typescript').ImportSpecifier>} */
+  const specifiers = new Map();
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) {
+      continue;
+    }
+
+    const namedBindings = statement.importClause?.namedBindings;
+    if (!namedBindings || !ts.isNamedImports(namedBindings)) {
+      continue;
+    }
+
+    for (const element of namedBindings.elements) {
+      if (isCompileSchemaImportSpecifier(element)) {
+        specifiers.set(element.name.text, element);
+      }
+    }
+  }
+
+  return specifiers;
+}
+
+/**
+ * @param {import('typescript').BindingName | undefined} bindingName
+ * @param {string} name
+ */
+function bindingNameContains(bindingName, name) {
+  if (!bindingName) {
+    return false;
+  }
+
+  if (ts.isIdentifier(bindingName)) {
+    return bindingName.text === name;
+  }
+
+  return bindingName.elements.some(element => bindingNameContains(element.name, name));
+}
+
+/**
+ * @param {import('typescript').Node} node
+ * @param {string} name
+ */
+function declaresValueName(node, name) {
+  if (ts.isVariableStatement(node)) {
+    return node.declarationList.declarations.some(declaration => bindingNameContains(declaration.name, name));
+  }
+
+  if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) {
+    return node.name?.text === name;
+  }
+
+  if (ts.isImportDeclaration(node)) {
+    const namedBindings = node.importClause?.namedBindings;
+    return (
+      !!namedBindings &&
+      ts.isNamedImports(namedBindings) &&
+      namedBindings.elements.some(element => element.name.text === name)
+    );
+  }
+
+  return false;
+}
+
+/**
+ * @param {import('typescript').Identifier} identifier
+ * @param {import('typescript').SourceFile} sourceFile
+ * @param {Map<string, import('typescript').ImportSpecifier>} importSpecifiers
+ */
+function isImportBinding(identifier, sourceFile, importSpecifiers) {
+  const localName = identifier.text;
+  const importedSpecifier = importSpecifiers.get(localName);
+
+  if (!importedSpecifier) {
+    return false;
+  }
+
+  let current = identifier.parent;
+  while (current && current !== sourceFile) {
+    if (ts.isFunctionLike(current)) {
+      if (current.parameters.some(parameter => bindingNameContains(parameter.name, localName))) {
+        return false;
+      }
+
+      if ((ts.isFunctionExpression(current) || ts.isClassExpression(current)) && current.name?.text === localName) {
+        return false;
+      }
+    }
+
+    if (
+      (ts.isBlock(current) || ts.isModuleBlock(current)) &&
+      current.statements.some(statement => declaresValueName(statement, localName))
+    ) {
+      return false;
+    }
+
+    current = current.parent;
+  }
+
+  const topLevelDeclarations = sourceFile.statements.filter(
+    statement => statement !== importedSpecifier.parent.parent.parent,
+  );
+  return !topLevelDeclarations.some(statement => declaresValueName(statement, localName));
+}
+
+/**
+ * @param {import('typescript').SourceFile} sourceFile
+ * @param {Map<string, import('typescript').ImportSpecifier>} importSpecifiers
+ */
+function findCompileSchemaCalls(sourceFile, importSpecifiers) {
   /** @type {{ start: number; end: number; replacement: string }[]} */
   const replacements = [];
 
@@ -51,7 +177,7 @@ function findCompileSchemaCalls(sourceFile) {
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      node.expression.text === 'compileSchema' &&
+      isImportBinding(node.expression, sourceFile, importSpecifiers) &&
       node.arguments.length === 1
     ) {
       replacements.push({
@@ -91,7 +217,7 @@ function findCompileSchemaImportEdits(sourceFile) {
       continue;
     }
 
-    const compileSpecifier = namedBindings.elements.find(element => element.name.text === 'compileSchema');
+    const compileSpecifier = namedBindings.elements.find(isCompileSchemaImportSpecifier);
     if (!compileSpecifier) {
       continue;
     }
@@ -126,7 +252,11 @@ function findCompileSchemaImportEdits(sourceFile) {
  */
 function transform(code, path) {
   const sourceFile = ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const replacements = [...findCompileSchemaCalls(sourceFile), ...findCompileSchemaImportEdits(sourceFile)];
+  const importSpecifiers = findCompileSchemaImportSpecifiers(sourceFile);
+  const replacements = [
+    ...findCompileSchemaCalls(sourceFile, importSpecifiers),
+    ...findCompileSchemaImportEdits(sourceFile),
+  ];
 
   if (!replacements.length) {
     return code;
