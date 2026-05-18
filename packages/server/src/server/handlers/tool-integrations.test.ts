@@ -15,7 +15,6 @@ import {
   LIST_TOOL_INTEGRATION_TOOLS_ROUTE,
   LIST_TOOL_INTEGRATIONS_ROUTE,
   LIST_TOOL_SERVICES_ROUTE,
-  RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE,
   DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE,
   GET_TOOL_INTEGRATION_CONNECTION_USAGE_ROUTE,
   TOOL_INTEGRATION_CONNECTION_STATUS_ROUTE,
@@ -539,73 +538,6 @@ describe('LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE', () => {
         mastra: makeMastra(editor),
         integrationId: 'missing',
         toolService: 'gmail',
-      } as any),
-    ).rejects.toThrow(HTTPException);
-  });
-});
-
-describe('RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE', () => {
-  it('updates the persisted label for an existing row', async () => {
-    const integration = makeIntegration();
-    const editor = makeEditor(integration);
-    const toolConnections = makeToolConnectionsStore([
-      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1', label: 'Old' },
-    ]);
-    const ctx = new RequestContext();
-    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
-
-    const result = await RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
-      mastra: makeMastraWithStorage(editor, toolConnections),
-      integrationId: 'composio',
-      connectionId: 'ca_1',
-      label: 'Work Gmail',
-      requestContext: ctx,
-    } as any);
-
-    expect(result).toEqual({ connectionId: 'ca_1', toolService: 'gmail', label: 'Work Gmail' });
-    expect(toolConnections.upsert).toHaveBeenCalledWith({
-      authorId: 'user-1',
-      providerId: 'composio',
-      toolService: 'gmail',
-      connectionId: 'ca_1',
-      label: 'Work Gmail',
-    });
-  });
-
-  it('normalizes empty string and explicit null to null', async () => {
-    const integration = makeIntegration();
-    const editor = makeEditor(integration);
-    const toolConnections = makeToolConnectionsStore([
-      { authorId: 'user-1', providerId: 'composio', toolService: 'gmail', connectionId: 'ca_1', label: 'Old' },
-    ]);
-    const ctx = new RequestContext();
-    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
-
-    const result = await RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
-      mastra: makeMastraWithStorage(editor, toolConnections),
-      integrationId: 'composio',
-      connectionId: 'ca_1',
-      label: null,
-      requestContext: ctx,
-    } as any);
-
-    expect(result.label).toBeNull();
-  });
-
-  it('returns 404 when no persisted row exists', async () => {
-    const integration = makeIntegration();
-    const editor = makeEditor(integration);
-    const toolConnections = makeToolConnectionsStore();
-    const ctx = new RequestContext();
-    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
-
-    await expect(
-      RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
-        mastra: makeMastraWithStorage(editor, toolConnections),
-        integrationId: 'composio',
-        connectionId: 'missing',
-        label: 'x',
-        requestContext: ctx,
       } as any),
     ).rejects.toThrow(HTTPException);
   });

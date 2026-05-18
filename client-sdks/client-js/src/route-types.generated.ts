@@ -77757,48 +77757,6 @@ export interface GetToolIntegrationsIntegrationIdConnectionFields_RouteContract 
 }
 
 // ============================================================================
-// Route: PATCH /tool-integrations/:integrationId/connections/:connectionId
-// ============================================================================
-export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams = {
-  /** Unique identifier for the tool integration */
-  integrationId: string;
-  /** Adapter-native connection id (e.g. Composio ca_...) */
-  connectionId: string;
-};
-
-export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body = {
-  /** New display label for the persisted tool_connections row. Pass null to clear. */
-  label: string | null;
-};
-
-export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Response = {
-  connectionId: string;
-  toolService: string;
-  label: string | null;
-};
-
-export type PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Request = Simplify<
-  (PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams extends never
-    ? {}
-    : { params: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body extends never
-      ? {}
-      : {} extends PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body
-        ? { body?: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body }
-        : { body: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body })
->;
-
-export interface PatchToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract {
-  pathParams: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams;
-  queryParams: never;
-  body: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Body;
-  request: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Request;
-  response: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
 // Route: DELETE /tool-integrations/:integrationId/connections/:connectionId
 // ============================================================================
 export type DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_PathParams = {
@@ -81929,7 +81887,6 @@ export interface RouteTypes {
   'POST /tool-integrations/:integrationId/connection-status': PostToolIntegrationsIntegrationIdConnectionStatus_RouteContract;
   'GET /tool-integrations/:integrationId/connections': GetToolIntegrationsIntegrationIdConnections_RouteContract;
   'GET /tool-integrations/:integrationId/connection-fields': GetToolIntegrationsIntegrationIdConnectionFields_RouteContract;
-  'PATCH /tool-integrations/:integrationId/connections/:connectionId': PatchToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
   'DELETE /tool-integrations/:integrationId/connections/:connectionId': DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
   'GET /tool-integrations/:integrationId/connections/:connectionId/usage': GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_RouteContract;
   'GET /tool-integrations/:integrationId/health': GetToolIntegrationsIntegrationIdHealth_RouteContract;
@@ -82673,7 +82630,6 @@ export interface Client {
   };
   '/tool-integrations/:integrationId/connections/:connectionId': {
     DELETE: DeleteToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
-    PATCH: PatchToolIntegrationsIntegrationIdConnectionsConnectionId_RouteContract;
   };
   '/tool-integrations/:integrationId/connections/:connectionId/usage': {
     GET: GetToolIntegrationsIntegrationIdConnectionsConnectionIdUsage_RouteContract;

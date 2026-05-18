@@ -12,8 +12,6 @@ import type {
   ListToolIntegrationToolsParams,
   ListToolIntegrationToolsResponse,
   ListToolServicesResponse,
-  RenameToolIntegrationConnectionParams,
-  RenameToolIntegrationConnectionResponse,
   ToolIntegrationAuthStatusResponse,
   ToolIntegrationConnectionStatusParams,
   ToolIntegrationConnectionStatusResponse,
@@ -127,25 +125,6 @@ export class ToolIntegration extends BaseResource {
     searchParams.set('toolService', params.toolService);
     return this.request(
       `/tool-integrations/${encodeURIComponent(this.integrationId)}/connection-fields?${searchParams.toString()}`,
-    );
-  }
-
-  /**
-   * Renames a persisted connection (updates its label).
-   *
-   * Affects every agent that pins this connection. Pass `label: null` or
-   * `''` to clear the label entirely.
-   */
-  renameConnection(
-    connectionId: string,
-    params: RenameToolIntegrationConnectionParams,
-  ): Promise<RenameToolIntegrationConnectionResponse> {
-    return this.request(
-      `/tool-integrations/${encodeURIComponent(this.integrationId)}/connections/${encodeURIComponent(connectionId)}`,
-      {
-        method: 'PATCH',
-        body: params,
-      },
     );
   }
 

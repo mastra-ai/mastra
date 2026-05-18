@@ -48,6 +48,7 @@ describe('ConnectionsDetail', () => {
         toolServiceDisplayName: 'Gmail',
         multipleAllowed: true,
         hasSelectedTools: true,
+        supportsRevoke: true,
         connections: [{ connectionId: 'c1', toolService: 'gmail', label: 'Work' }],
       },
     ]);
@@ -65,6 +66,7 @@ describe('ConnectionsDetail', () => {
         toolServiceDisplayName: 'Gmail',
         multipleAllowed: true,
         hasSelectedTools: true,
+        supportsRevoke: true,
         connections: [],
       },
     ]);
@@ -83,6 +85,7 @@ describe('ConnectionsDetail', () => {
           toolServiceDisplayName: 'Gmail',
           multipleAllowed: true,
           hasSelectedTools: true,
+          supportsRevoke: true,
           connections: [{ connectionId: 'c1', toolService: 'gmail', label: 'Work' }],
         },
       ],

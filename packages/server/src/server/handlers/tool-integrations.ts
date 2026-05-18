@@ -23,8 +23,6 @@ import {
   listToolIntegrationToolsQuerySchema,
   listToolIntegrationToolsResponseSchema,
   listToolServicesResponseSchema,
-  renameConnectionBodySchema,
-  renameConnectionResponseSchema,
   toolIntegrationAuthStatusPathParams,
   toolIntegrationConnectionPathParams,
   toolIntegrationHealthResponseSchema,
@@ -364,65 +362,6 @@ export const LIST_TOOL_INTEGRATION_CONNECTION_FIELDS_ROUTE = createRoute({
       return { fields };
     } catch (error) {
       return handleError(error, 'Error listing tool integration connection fields');
-    }
-  },
-});
-
-/**
- * PATCH /tool-integrations/:integrationId/connections/:connectionId - Rename a
- * persisted tool_connections row. Adapter is not contacted; only the local
- * label is mutated. Returns the new label + connectionId.
- */
-export const RENAME_TOOL_INTEGRATION_CONNECTION_ROUTE = createRoute({
-  method: 'PATCH',
-  path: '/tool-integrations/:integrationId/connections/:connectionId',
-  responseType: 'json',
-  pathParamSchema: toolIntegrationConnectionPathParams,
-  bodySchema: renameConnectionBodySchema,
-  responseSchema: renameConnectionResponseSchema,
-  summary: 'Rename a connection',
-  description: 'Updates the persisted display label for a tool_connections row',
-  tags: ['Tool Integrations'],
-  requiresAuth: true,
-  handler: async ({ mastra, integrationId, connectionId, label, requestContext }) => {
-    try {
-      const editor = requireEditor(mastra.getEditor());
-      const integration = resolveIntegration(editor, integrationId);
-      const authorId = resolveOwnerId(requestContext);
-
-      const storage = mastra.getStorage();
-      const toolConnections = await storage?.getStore('toolConnections');
-      if (!toolConnections) {
-        throw new HTTPException(500, { message: 'Tool connections storage domain is not available' });
-      }
-
-      const existing = await toolConnections.get({
-        authorId,
-        providerId: integration.id,
-        connectionId,
-      });
-      if (!existing) {
-        throw new HTTPException(404, {
-          message: `No tool connection found for (${integration.id}, ${connectionId})`,
-        });
-      }
-
-      const normalized = typeof label === 'string' && label.length > 0 ? label : null;
-      const updated = await toolConnections.upsert({
-        authorId,
-        providerId: integration.id,
-        toolService: existing.toolService,
-        connectionId,
-        label: normalized,
-      });
-
-      return {
-        connectionId: updated.connectionId,
-        toolService: updated.toolService,
-        label: updated.label,
-      };
-    } catch (error) {
-      return handleError(error, 'Error renaming tool integration connection');
     }
   },
 });

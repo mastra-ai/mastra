@@ -438,9 +438,7 @@ describe('ConnectionPicker', () => {
     });
 
     await screen.findByTestId(`connection-existing-${TOOL_SERVICE}-ca_second`);
-    const pinBtn = screen.getByTestId(
-      `connection-existing-pin-${TOOL_SERVICE}-ca_second`,
-    ) as HTMLButtonElement;
+    const pinBtn = screen.getByTestId(`connection-existing-pin-${TOOL_SERVICE}-ca_second`) as HTMLButtonElement;
     // Even though we already have one pinned (so labels are required for the
     // multi-connection scenario), the persisted label "Personal" should be
     // inherited without making the user retype it.
@@ -479,49 +477,6 @@ describe('ConnectionPicker', () => {
     expect(lastCall[0].connectionId).toBe('ca_existing_1');
   });
 
-  it('renames a connection inline via PATCH and mirrors the new label on the pin', async () => {
-    const renameRequests: Array<{ connectionId: string; body: unknown }> = [];
-    server.use(
-      http.patch(
-        `${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId`,
-        async ({ params, request }) => {
-          const body = await request.json();
-          renameRequests.push({ connectionId: String(params.connectionId), body });
-          return HttpResponse.json({ connectionId: params.connectionId, label: (body as { label: string | null }).label });
-        },
-      ),
-    );
-
-    const onChange = vi.fn();
-    renderPicker({
-      initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Old' }],
-      onChange,
-    });
-
-    await openKebab(0);
-    const renameItem = await screen.findByTestId(`connection-rename-${TOOL_SERVICE}-0`);
-    await act(async () => {
-      fireEvent.click(renameItem);
-    });
-
-    const input = (await screen.findByTestId(
-      `connection-rename-input-${TOOL_SERVICE}-0`,
-    )) as HTMLInputElement;
-    fireEvent.change(input, { target: { value: 'New name' } });
-    await act(async () => {
-      fireEvent.click(screen.getByTestId(`connection-rename-save-${TOOL_SERVICE}-0`));
-    });
-
-    await waitFor(() => {
-      expect(renameRequests).toHaveLength(1);
-    });
-    expect(renameRequests[0].connectionId).toBe('c1');
-    expect(renameRequests[0].body).toEqual({ label: 'New name' });
-
-    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
-    expect(lastCall[0].label).toBe('New name');
-  });
-
   it('hides the Disconnect menu item when the integration does not support revoke', async () => {
     renderPicker({
       initial: [{ connectionId: 'c1', toolService: TOOL_SERVICE, label: 'Work' }],
@@ -536,9 +491,13 @@ describe('ConnectionPicker', () => {
   it('confirms disconnect with the usage count and calls DELETE with force=true', async () => {
     const deleteRequests: Array<{ connectionId: string; url: string }> = [];
     server.use(
-      http.get(
-        `${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId/usage`,
-        () => HttpResponse.json({ agents: [{ id: 'a1', name: 'Other agent' }, { id: 'a2', name: 'Another' }] }),
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId/usage`, () =>
+        HttpResponse.json({
+          agents: [
+            { id: 'a1', name: 'Other agent' },
+            { id: 'a2', name: 'Another' },
+          ],
+        }),
       ),
       http.delete(
         `${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections/:connectionId`,

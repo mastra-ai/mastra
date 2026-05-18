@@ -2382,13 +2382,6 @@ export type ListToolIntegrationConnectionFieldsResponse =
 
 export type ToolIntegrationHealthResponse = GeneratedResponse<'GET /tool-integrations/:integrationId/health'>;
 
-export type RenameToolIntegrationConnectionParams = GeneratedRequest<
-  Body<'PATCH /tool-integrations/:integrationId/connections/:connectionId'>
->;
-
-export type RenameToolIntegrationConnectionResponse =
-  GeneratedResponse<'PATCH /tool-integrations/:integrationId/connections/:connectionId'>;
-
 export type DisconnectToolIntegrationConnectionParams = GeneratedRequest<
   QueryParams<'DELETE /tool-integrations/:integrationId/connections/:connectionId'>
 >;

@@ -4280,6 +4280,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "config",
       "connectionId",
+      "label",
       "toolName",
       "toolService"
     ],
@@ -4352,6 +4353,42 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "fields"
+    }
+  },
+  "DELETE /tool-integrations/:integrationId/connections/:connectionId": {
+    "method": "DELETE",
+    "path": "/tool-integrations/:integrationId/connections/:connectionId",
+    "pathParams": [
+      "integrationId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "force",
+      "toolService"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-integrations/:integrationId/connections/:connectionId/usage": {
+    "method": "GET",
+    "path": "/tool-integrations/:integrationId/connections/:connectionId/usage",
+    "pathParams": [
+      "integrationId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "toolService"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "agents"
     }
   },
   "GET /tool-integrations/:integrationId/health": {

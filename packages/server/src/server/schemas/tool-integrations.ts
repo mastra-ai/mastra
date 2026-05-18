@@ -147,14 +147,6 @@ export const listConnectionsQuerySchema = z.object({
   toolService: z.string().describe('Tool service slug whose connections to list'),
 });
 
-export const renameConnectionBodySchema = z.object({
-  label: z
-    .string()
-    .max(64)
-    .nullable()
-    .describe('New display label for the persisted tool_connections row. Pass null to clear.'),
-});
-
 export const disconnectConnectionQuerySchema = z.object({
   force: z
     .union([z.boolean(), z.enum(['true', 'false'])])
@@ -251,12 +243,6 @@ export const listConnectionFieldsResponseSchema = z.object({
       default: z.unknown().optional(),
     }),
   ),
-});
-
-export const renameConnectionResponseSchema = z.object({
-  connectionId: z.string(),
-  toolService: z.string(),
-  label: z.string().nullable(),
 });
 
 export const disconnectConnectionResponseSchema = z.object({

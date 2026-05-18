@@ -17,7 +17,7 @@ export interface ToolServiceHealth {
   connected: number;
   disconnectedConnections: Array<{
     connectionId: string;
-    label: string;
+    label?: string;
   }>;
 }
 
@@ -46,7 +46,7 @@ export interface AgentHealthResult {
 interface ConnectionRef {
   toolService: string;
   connectionId: string;
-  label: string;
+  label?: string;
 }
 
 interface ProviderItems {

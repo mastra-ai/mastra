@@ -11,8 +11,6 @@ export { useAgentHealth } from './use-agent-health';
 export type { AgentHealthResult, IntegrationHealth, ToolServiceHealth } from './use-agent-health';
 export { useAllIntegrationTools } from './use-all-integration-tools';
 export type { AvailableIntegrationTool } from './use-all-integration-tools';
-export { useRenameConnection } from './use-rename-connection';
-export type { RenameConnectionArgs } from './use-rename-connection';
 export { useDisconnectConnection } from './use-disconnect-connection';
 export type { DisconnectConnectionArgs } from './use-disconnect-connection';
 export { useConnectionUsage } from './use-connection-usage';
