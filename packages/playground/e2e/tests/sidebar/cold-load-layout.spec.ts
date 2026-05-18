@@ -16,6 +16,10 @@ import { resetStorage } from '../__utils__/reset-storage';
  *   - RBAC nav-permission filtering still works correctly for authenticated users.
  */
 
+// Allow up to 1px drift on bounding-box comparisons to absorb subpixel CSS layout
+// values. Anything larger than this would be a visible jump.
+const LAYOUT_TOLERANCE_PX = 1;
+
 /**
  * Intercept /api/auth/capabilities and /api/auth/me with a configurable delay.
  * Returns a `release()` function that lets the mocked response flush.
@@ -61,6 +65,25 @@ async function mockAuthWithDelay(page: Page, config: MockAuthConfig): Promise<()
   return releaseFn;
 }
 
+/**
+ * Release the gated auth response and wait for it to be received by the page.
+ * The waiter is registered BEFORE releasing so we never miss the response.
+ */
+async function releaseAndAwaitAuth(page: Page, release: () => void): Promise<void> {
+  const responsePromise = page.waitForResponse('**/api/auth/capabilities');
+  release();
+  await responsePromise;
+}
+
+/**
+ * Flush one animation frame so any React commit triggered by the resolved auth
+ * query has been painted before the next measurement. More deterministic than
+ * `page.waitForTimeout(...)`.
+ */
+async function flushFrame(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+}
+
 test.describe('Studio Layout - Cold-Load Stability', () => {
   test.afterEach(async () => {
     await resetStorage();
@@ -79,8 +102,7 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
     await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
 
     // Cleanup: let auth resolve so the page can tear down cleanly.
-    releaseAuth();
-    await page.waitForResponse('**/api/auth/capabilities');
+    await releaseAndAwaitAuth(page, releaseAuth);
   });
 
   test('sidebar nav is rendered before auth capabilities resolve (authenticated user)', async ({ page }) => {
@@ -91,8 +113,7 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
     await expect(page.getByRole('link', { name: 'Agents', exact: true })).toBeVisible({ timeout: 5000 });
     await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
 
-    releaseAuth();
-    await page.waitForResponse('**/api/auth/capabilities');
+    await releaseAndAwaitAuth(page, releaseAuth);
   });
 
   test('sidebar column width stays constant when auth resolves (no layout jump)', async ({ page }) => {
@@ -100,7 +121,9 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
     const releaseAuth = await mockAuthWithDelay(page, { role: 'admin' });
     await page.goto('/agents');
 
-    // Wait for the sidebar root to be attached (optimistic render).
+    // Wait for the sidebar root to be attached (optimistic render). Only one
+    // `.sidebar-layout` exists per layout; `.first()` is defensive in case
+    // future code introduces a portal-rendered duplicate.
     const sidebar = page.locator('.sidebar-layout').first();
     await expect(sidebar).toBeVisible({ timeout: 5000 });
 
@@ -109,18 +132,16 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
     expect(sidebarBoxBefore).not.toBeNull();
     expect(sidebarBoxBefore!.width).toBeGreaterThan(100); // hydrated from MainSidebarProvider default (240px)
 
-    // ACT: Resolve auth.
-    releaseAuth();
-    await page.waitForResponse('**/api/auth/capabilities');
+    // ACT: Resolve auth (waiter is set up before release inside the helper).
+    await releaseAndAwaitAuth(page, releaseAuth);
+    await flushFrame(page);
 
-    // Give React a tick to re-render in case anything resubscribes.
-    await page.waitForTimeout(50);
-
-    // ASSERT: Sidebar dimensions are identical — proves no jump occurred.
+    // ASSERT: Sidebar dimensions are stable within sub-pixel tolerance — proves
+    // no horizontal jump occurred.
     const sidebarBoxAfter = await sidebar.boundingBox();
     expect(sidebarBoxAfter).not.toBeNull();
-    expect(sidebarBoxAfter!.x).toBe(sidebarBoxBefore!.x);
-    expect(sidebarBoxAfter!.width).toBe(sidebarBoxBefore!.width);
+    expect(Math.abs(sidebarBoxAfter!.x - sidebarBoxBefore!.x)).toBeLessThanOrEqual(LAYOUT_TOLERANCE_PX);
+    expect(Math.abs(sidebarBoxAfter!.width - sidebarBoxBefore!.width)).toBeLessThanOrEqual(LAYOUT_TOLERANCE_PX);
   });
 
   test('chrome is hidden after auth resolves as enabled-but-unauthenticated (chromeless login)', async ({ page }) => {
