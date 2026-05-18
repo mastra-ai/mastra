@@ -129,6 +129,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
     visibility,
     metadata,
     favoritedOnly,
+    pinFavoritedFor,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -155,12 +156,13 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       const callerId = getCallerAuthorId(requestContext);
       const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'favorites');
       const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
+      const favoriteSubjectId = pinFavoritedFor ?? callerId;
 
       // `?favoritedOnly=true` flow: fetch caller's favorited IDs, restrict the list
       // to that set, then post-filter by visibility and recompute total/pages.
       if (honoredStarredOnly) {
         const effectivePerPage: number = perPage ?? 100;
-        if (!callerId) {
+        if (!favoriteSubjectId) {
           // Caller cannot have favorited anything without an identity.
           return { skills: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
@@ -168,7 +170,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         if (!favoritesStore) {
           throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
         }
-        const starredIds = await favoritesStore.listFavoritedIds({ userId: callerId, entityType: 'skill' });
+        const starredIds = await favoritesStore.listFavoritedIds({ userId: favoriteSubjectId, entityType: 'skill' });
         if (starredIds.length === 0) {
           return { skills: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
         }
@@ -205,6 +207,14 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         metadata: scopedMetadata,
       });
 
+      // Post-filter to enforce ownership + visibility rules across all backends.
+      // Storage adapters can only do an equality filter on authorId, so we apply
+      // the ownedOrPublic / publicOnly logic here.
+      // Note: `result.total` / `result.hasMore` reflect the storage-reported
+      // count before this post-filter. For `unrestricted` / `exact` filters
+      // nothing is removed; for `ownedOrPublic` / `publicOnly`, downstream UIs
+      // should treat the filter as a view over the caller's scope — an
+      // approximation is OK and preserves pagination math.
       const visibleSkills = result.skills.filter(record => matchesAuthorFilter(record, filter));
 
       if (!favoritesEnabled) {

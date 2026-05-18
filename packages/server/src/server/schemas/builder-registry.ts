@@ -43,13 +43,24 @@ export const builderRegistryPathParams = z.object({
 
 export const builderRegistrySearchQuerySchema = z.object({
   q: z.string().describe('Search query'),
-  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(10).describe('Maximum number of results (1-100)'),
 });
 
-export const builderRegistryPopularQuerySchema = z.object({
-  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
-  offset: z.coerce.number().optional().default(0).describe('Offset for pagination'),
-});
+export const builderRegistryPopularQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).optional().default(10).describe('Maximum number of results (1-100)'),
+    offset: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .default(0)
+      .describe('Offset for pagination (must be a multiple of `limit`)'),
+  })
+  .refine(args => args.offset % args.limit === 0, {
+    message: 'offset must be a multiple of limit (the upstream registry pages by `limit`)',
+    path: ['offset'],
+  });
 
 export const builderRegistryPreviewQuerySchema = z.object({
   owner: z.string().describe('GitHub repository owner'),

@@ -1683,8 +1683,8 @@ export class MastraClient extends BaseResource {
    */
   public listStoredWorkspaces(params?: ListStoredWorkspacesParams): Promise<ListStoredWorkspacesResponse> {
     const searchParams = new URLSearchParams();
-    if (params?.page) searchParams.set('page', String(params.page));
-    if (params?.perPage) searchParams.set('perPage', String(params.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.authorId) searchParams.set('authorId', params.authorId);
     if (params?.orderBy?.field) searchParams.set('orderBy[field]', params.orderBy.field);
     if (params?.orderBy?.direction) searchParams.set('orderBy[direction]', params.orderBy.direction);
