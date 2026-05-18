@@ -22,6 +22,8 @@ const slack = new SlackProvider({
   baseUrl: process.env.SLACK_BASE_URL,
 });
 
+const workos = await initWorkOS();
+
 export const mastra = new Mastra({
   storage,
   channels: { slack },
@@ -39,7 +41,8 @@ export const mastra = new Mastra({
     sourcemap: true,
   },
   server: {
-    auth: (await initWorkOS()).mastraAuth,
+    auth: workos.mastraAuth,
+    rbac: workos.rbacProvider,
     build: {
       swaggerUI: true,
     },

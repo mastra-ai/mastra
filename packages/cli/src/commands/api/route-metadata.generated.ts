@@ -3210,6 +3210,7 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
       "visibility",
       "workflows",
@@ -3247,6 +3248,7 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
       "visibility",
       "workflows",
@@ -4353,6 +4355,146 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "POST /tool-providers/:providerId/authorize": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/authorize",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "config",
+      "connectionId",
+      "label",
+      "scope",
+      "toolName",
+      "toolkit"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/auth-status/:authId": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/auth-status/:authId",
+    "pathParams": [
+      "providerId",
+      "authId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /tool-providers/:providerId/connection-status": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/connection-status",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "items"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "authorId",
+      "cursor",
+      "limit",
+      "scope",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "items"
+    }
+  },
+  "GET /tool-providers/:providerId/connection-fields": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connection-fields",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "fields"
+    }
+  },
+  "DELETE /tool-providers/:providerId/connections/:connectionId": {
+    "method": "DELETE",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "force",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections/:connectionId/usage": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections/:connectionId/usage",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "agents"
+    }
+  },
+  "GET /tool-providers/:providerId/health": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/health",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /processor-providers": {
     "method": "GET",
     "path": "/processor-providers",
@@ -4906,6 +5048,20 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [],
     "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/settings/model-policy": {
+    "method": "GET",
+    "path": "/editor/settings/model-policy",
+    "pathParams": [],
+    "queryParams": [
+      "surface"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
