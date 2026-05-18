@@ -118,10 +118,39 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
 
   /**
    * List all available role definitions.
-   * Derives role definitions from the roleMapping configuration.
+   *
+   * If an organizationId is configured, fetches roles from WorkOS API and merges
+   * with permissions from the roleMapping. Otherwise, returns roles derived from
+   * the roleMapping only.
+   *
+   * This enables displaying provider-managed roles (created in WorkOS dashboard)
+   * while still mapping them to Mastra permissions.
    */
   async listRoleDefinitions(): Promise<RoleDefinition[]> {
-    // Convert roleMapping to role definitions
+    // If organization is configured, try to fetch roles from WorkOS
+    if (this.options.organizationId) {
+      try {
+        const workosRoles = await this.workos.organizations.listOrganizationRoles({
+          organizationId: this.options.organizationId,
+        });
+
+        // Merge WorkOS roles with permissions from roleMapping
+        return workosRoles.data.map(role => ({
+          id: role.slug,
+          name: role.name,
+          description: role.description ?? this.getRoleDescription(role.slug),
+          // Get permissions from roleMapping, or _default if not mapped
+          permissions: (this.options.roleMapping[role.slug] ??
+            this.options.roleMapping['_default'] ??
+            []) as RoleDefinition['permissions'],
+        }));
+      } catch {
+        // Fall back to roleMapping-derived roles on error
+        console.warn('[MastraRBACWorkos] Failed to fetch roles from WorkOS, falling back to roleMapping');
+      }
+    }
+
+    // Fall back: convert roleMapping to role definitions
     return Object.entries(this.options.roleMapping)
       .filter(([key]) => key !== '_default')
       .map(([roleName, permissions]) => ({
