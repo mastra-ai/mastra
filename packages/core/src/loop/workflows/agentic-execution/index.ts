@@ -80,7 +80,17 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: params => {
+        // We need a persisted snapshot record to support `resumeStream()`.
+        // - Create the initial record early ("pending")
+        // - Update it when execution is suspended ("paused"/"suspended")
+        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        return (
+          params.workflowStatus === 'pending' ||
+          params.workflowStatus === 'paused' ||
+          params.workflowStatus === 'suspended'
+        );
+      },
       validateInputs: false,
     },
   })

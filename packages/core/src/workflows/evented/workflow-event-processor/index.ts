@@ -504,6 +504,18 @@ export class WorkflowEventProcessor extends EventProcessor {
       const suspendedStepId = workflow && executionPath ? getStep(workflow, executionPath)?.id : undefined;
       const propagatedPath =
         suspendedStepId && existingPath[0] !== suspendedStepId ? [suspendedStepId, ...existingPath] : existingPath;
+
+      const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+
+      const nestedResumeLabels = prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
+
+      for (const label of Object.keys(nestedResumeLabels)) {
+        resumeLabels[label] = {
+          stepId: parentWorkflow.stepId,
+          foreachIndex: nestedResumeLabels[label].foreachIndex,
+        };
+      }
+
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         runId: parentWorkflow.runId, // Use parent's runId for event routing
@@ -520,6 +532,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               __workflow_meta: {
                 // keep resumeLabels / foreachIndex etc. — only the runId and path change as we propagate up
                 ...(prevResult.suspendPayload?.__workflow_meta ?? {}),
+                resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
                 runId: runId,
                 path: propagatedPath,
               },
@@ -889,6 +902,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Run nested workflow - check for both EventedWorkflow and regular Workflow
     if (step.step instanceof EventedWorkflow || (step.step as any).component === 'WORKFLOW') {
+      // Cast to Workflow since we know this is a nested workflow at this point
+      const nestedWorkflow = step.step as any;
       // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
       if (resumeSteps?.length === 1 && resumeSteps[0] === step.step.id) {
         const stepData = stepResults[step.step.id];
@@ -1068,8 +1083,6 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
-        // Cast to Workflow since we know this is a nested workflow at this point
-        const nestedWorkflow = step.step as any;
         const timeTravelParams = createTimeTravelExecutionParams({
           steps: timeTravel.steps.slice(1),
           inputData: timeTravel.inputData,
@@ -1123,8 +1136,6 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowName: step.step.id,
             runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
-        // Cast to Workflow since we know this is a nested workflow at this point
-        const nestedWorkflow = step.step as any;
 
         const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
 
@@ -1164,6 +1175,38 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else {
+        const nestedRunId = randomUUID();
+        const shouldPersist =
+          nestedWorkflow?.options?.shouldPersistSnapshot?.({
+            stepResults: {},
+            workflowStatus: 'pending',
+          }) ?? true;
+        const parentRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
+
+        //create nested workflow run snapshot in storage. use parent workflow resource id in nested workflow
+        if (shouldPersist) {
+          await workflowsStore?.persistWorkflowSnapshot({
+            workflowName: nestedWorkflow.id,
+            runId: nestedRunId,
+            resourceId: parentRun?.resourceId,
+            snapshot: {
+              runId: nestedRunId,
+              status: 'pending',
+              value: {},
+              context: {},
+              activePaths: [],
+              serializedStepGraph: nestedWorkflow.serializedStepGraph,
+              activeStepsPath: {},
+              suspendedPaths: {},
+              resumeLabels: {},
+              waitingPaths: {},
+              result: undefined,
+              error: undefined,
+              timestamp: Date.now(),
+            },
+          });
+        }
+
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.start',
           runId,
@@ -1183,7 +1226,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               resumeData,
             },
             executionPath: [0],
-            runId: randomUUID(),
+            runId: nestedRunId,
             resumeSteps,
             prevResult,
             resumeData,
