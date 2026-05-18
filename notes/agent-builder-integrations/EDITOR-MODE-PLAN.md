@@ -37,6 +37,32 @@ agent.listTools({ requestContext })
 
 The runtime hydration is already in place. `applyStoredOverrides` calls `resolveStoredToolIntegrations` for both stored agents and code-defined agents with an overlay. The missing pieces are **(a) a shared-bucket mode on the adapter** and **(b) the CMS edit UI for the new V1 shape**.
 
+### Reference: how MCP already works in the editor
+
+The CMS Tools page (`packages/playground/src/domains/agents/components/agent-cms-pages/tools-page.tsx:230`) already renders **three** tool sections today:
+
+1. **Native tools** — checkbox list from `useTools()`
+2. **`<MCPClientList />`** — full CRUD for stored MCP clients per agent
+3. **`<IntegrationToolsSection />`** — legacy `ToolProvider` (deprecated)
+
+The MCP section is the closest model for what the new V1 integration UI should feel like in the editor. Worth understanding before designing Phase C:
+
+| Concern | MCP today | What we're building (V1 integration) |
+|---|---|---|
+| Storage | Two-tier: `stored_mcp_clients` table + agent references by id (`mcpClients: { [id]: { selectedTools } }`) | Inline in agent's `toolIntegrations` JSON column |
+| Cross-agent reuse | ✅ MCP client is shared by id | ❌ Per-agent (until improvement #1 lands) |
+| Form field | `mcpClients: McpClientFormEntry[]` + `mcpClientsToDelete: string[]` | `toolIntegrations: Record<providerId, ToolIntegrationConfig>` (not yet wired in CMS) |
+| Save flow | `collectMCPClientIds` upserts clients, then attaches `{ [id]: { selectedTools } }` to the agent | Mappers serialize the agent's slice directly |
+| Auth model | Static headers per client | Per-user OAuth (per-author *or* shared with this plan) |
+| Multi-account | ❌ (one client = one set of credentials) | ✅ via `connections[]` + labels |
+| UI surface | `MCPClientList` + side dialog (`MCPClientCreateContent`) | `ConnectionsDetail` + `ConnectionPicker` (builder pattern) |
+
+**Implications for this plan:**
+
+- Don't fight the existing CMS layout. The MCP section already establishes the visual pattern (named section, list of attached "thing", side-panel editor for each thing). Phase C should slot in next to it, not on top of it.
+- The two-tier MCP storage model is the **right shape** for cross-agent connection reuse. When improvement #1 (`tool_connections` table) lands, it should mirror MCP's pattern: connections live in their own table, the agent references them by id. That work is outside this plan but the CMS UI should be built so it doesn't fight that direction.
+- Legacy `IntegrationToolsSection` lives **between** native tools and MCP — replace it inline rather than appending new sections.
+
 ### Why this is separate from V1
 
 V1 was scoped to agent-builder + per-author connections. The CMS / editor flow has different product requirements:
@@ -54,11 +80,13 @@ V1 was scoped to agent-builder + per-author connections. The CMS / editor flow h
 | Server routes `/tool-integrations/*` | ✅ Done (Phase 5) |
 | `ConnectionPicker`, `ConnectionsDetail`, `HealthPill` components | ✅ Done (Phase 6, 9) |
 | `useToolIntegrationsBridge`, `useAllIntegrationTools` hooks | ✅ Done |
-| CMS edit route `/cms/agents/:id/edit` + `tools-page.tsx` | ✅ Exists, but uses **legacy** `integrationTools` only |
+| CMS edit route `/cms/agents/:id/edit` + `tools-page.tsx` | ✅ Exists, renders native tools + `<MCPClientList />` + legacy `<IntegrationToolsSection />` |
+| MCP support on CMS tools page | ✅ Done (`domains/mcps/components/mcp-client-list`) — use as reference pattern |
 | `ComposioToolIntegration` shared-bucket mode | ❌ Not implemented (always per-author) |
 | CMS form schema includes `toolIntegrations` | ❌ Not wired |
 | CMS tools page renders new V1 tool integrations | ❌ Not wired |
-| Studio chat sidebar shows connected integrations | ❌ Not wired |
+| Studio chat sidebar shows connected integrations (V1 shape) | ❌ Not wired |
+| Studio chat sidebar shows MCP integrations | ✅ Already shown via `AgentMetadataToolList` |
 
 ### Open question resolutions (from prior discussion)
 
@@ -67,6 +95,7 @@ V1 was scoped to agent-builder + per-author connections. The CMS / editor flow h
 3. **Studio chat sidebar** → read-only health pill only; CMS is the management surface
 4. **`authorId` in shared mode** → still flows through for audit/logging, ignored for `userId` resolution
 5. **Per-agent connection labels** → keep current behavior (label per pin, not global)
+6. **Relationship to MCP** → MCP stays a separate parallel path for now. Its two-tier storage model (clients-table + agent-references-them) is the long-term shape we want for V1 integrations too, but unifying them is a follow-up, not a blocker. See [`./COMPOSIO-OLD-VS-NEW.md`](./COMPOSIO-OLD-VS-NEW.md) for the MCP unification discussion.
 
 ## Scope (overall)
 
@@ -172,18 +201,21 @@ The CMS agent-edit form (`/cms/agents/:id/edit`) carries `toolIntegrations` form
 
 `/cms/agents/:id/edit/tools` shows the new V1 integration tools as checkable rows alongside native tools, with inline `ConnectionPicker` per tool service. Legacy `integrationTools` section stays but is marked deprecated.
 
+The new section should slot **between** the legacy `<IntegrationToolsSection />` and `<MCPClientList />` so the editor learns the same visual language we already use for MCP (named section, attached items, side-panel editor).
+
 ### Scope
 
 - `packages/playground/src/domains/agents/components/agent-cms-pages/tools-page.tsx`
-  - Add a new section "Integrations" above (or below) the existing native tools section
+  - Add a new "Integrations" section. Placement: between the legacy `<IntegrationToolsSection />` and `<MCPClientList />` so users see native → legacy (deprecated) → V1 → MCP.
   - Reuse `useToolIntegrationsBridge` from `agent-builder/hooks` — extract to a shared location if needed (`packages/playground/src/domains/tool-integrations/hooks/`)
   - Render checkboxable rows from `useAllIntegrationTools` filtered by allowlist
   - Inline `ConnectionPicker` when a tool is checked without a connection (or move to a separate panel like Builder's `ConnectionsDetail`)
   - Mark legacy `IntegrationToolsSection` with a deprecation banner: "Legacy MCP-style integrations. Use the new Integrations section instead."
+  - Do **not** touch `<MCPClientList />` — it stays as-is. MCP unification is a separate effort.
 - `packages/playground/src/domains/tool-integrations/hooks/use-tool-integrations-bridge.ts` (move from builder if shared)
   - If the bridge needs to stay generic, make `formValues` / handlers pluggable
 - `packages/playground/src/domains/agents/components/agent-cms-sidebar/use-sidebar-descriptions.ts`
-  - Include `toolIntegrations` count in the sidebar tool count
+  - Include `toolIntegrations` count in the sidebar tool count (note: existing line already sums `tools` + legacy `integrationTools` — extend, don't replace)
 
 ### Tests
 
@@ -213,6 +245,8 @@ The CMS agent-edit form (`/cms/agents/:id/edit`) carries `toolIntegrations` form
 ### Goal
 
 The Overview tab on `/agents/:id` shows a compact "Integrations" section listing connected tool services with a health pill. No editing — links out to CMS for management.
+
+MCP tools already appear in `AgentMetadataToolList` because they're merged into `agent.listTools()`. This phase adds a **separate** section dedicated to V1 integrations so users can see connection health at a glance without scrolling through the flat tool list.
 
 ### Scope
 
@@ -321,3 +355,5 @@ After all phases land:
 - **Connection ownership transfer** — when a shared connection is created by user A and user A leaves the team, do we surface "orphaned" state? Out of scope for v1.
 - **Audit log** — should we log `authorId` when a shared connection is created? Use case for ops/security teams. Defer.
 - **CMS create flow** — this plan covers edit only. Creating a brand-new stored agent from CMS that uses code-defined integrations may need similar wiring.
+- **MCP ↔ V1 unification** — long-term, MCP could be wrapped as a `ToolIntegration` adapter so the editor has one section instead of three. Right trigger is when remote MCP gains OAuth (multi-account / per-user auth). Until then they coexist. Tracked in [`./COMPOSIO-OLD-VS-NEW.md`](./COMPOSIO-OLD-VS-NEW.md) improvement list.
+- **`tool_connections` table parity with MCP** — improvement #1 (persist labels across agents) should adopt MCP's two-tier storage shape (connections in their own table, agent references by id). When that lands, the CMS UI from Phase C should switch to the cross-agent list naturally without form-schema churn.
