@@ -1175,6 +1175,222 @@ function formatRoleDescription(permissions: string[]): string {
   return actionList.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ') + ' access';
 }
 
+// ============================================================================
+// GET /auth/permissions - List available permissions
+// ============================================================================
+
+/**
+ * Permission metadata for the UI.
+ */
+interface PermissionInfo {
+  /** Permission pattern (e.g., 'agents:read', '*:write') */
+  value: string;
+  /** Human-readable label (e.g., 'Agents: Read') */
+  label: string;
+  /** Description of what this permission allows */
+  description: string;
+  /** Resource name (e.g., 'agents') - null for wildcards */
+  resource: string | null;
+  /** Action name (e.g., 'read') - null for resource wildcards */
+  action: string | null;
+  /** Whether this is a wildcard permission */
+  isWildcard: boolean;
+}
+
+/**
+ * Descriptions for actions.
+ */
+const ACTION_DESCRIPTIONS: Record<string, string> = {
+  create: 'Create',
+  delete: 'Delete',
+  execute: 'Execute',
+  read: 'View',
+  write: 'Create and modify',
+};
+
+/**
+ * Descriptions for resources.
+ */
+const RESOURCE_DESCRIPTIONS: Record<string, string> = {
+  a2a: 'agent-to-agent communication',
+  'agent-builder': 'agent builder',
+  agents: 'agents',
+  'background-tasks': 'background tasks',
+  channels: 'channels',
+  datasets: 'datasets',
+  embedders: 'embedders',
+  experiments: 'experiments',
+  logs: 'logs',
+  mcp: 'MCP servers',
+  memory: 'memory and threads',
+  observability: 'traces and spans',
+  processors: 'processors',
+  'processor-providers': 'processor providers',
+  schedules: 'schedules',
+  scores: 'evaluation scores',
+  stored: 'stored data',
+  'stored-agents': 'stored agents',
+  system: 'system info',
+  team: 'team members',
+  'tool-providers': 'tool providers',
+  tools: 'tools',
+  users: 'external users/customers',
+  vector: 'vector stores',
+  vectors: 'vectors',
+  workflows: 'workflows',
+  workspaces: 'workspaces',
+};
+
+/**
+ * Generates human-readable label and description for a permission.
+ */
+function formatPermissionInfo(pattern: string): PermissionInfo {
+  // Global wildcard
+  if (pattern === '*') {
+    return {
+      value: '*',
+      label: 'All Permissions',
+      description: 'Full access to all resources and actions',
+      resource: null,
+      action: null,
+      isWildcard: true,
+    };
+  }
+
+  // Action wildcard (e.g., '*:read')
+  if (pattern.startsWith('*:')) {
+    const action = pattern.slice(2);
+    const actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
+    const actionDesc = ACTION_DESCRIPTIONS[action] || action;
+    return {
+      value: pattern,
+      label: `${actionLabel} All`,
+      description: `${actionDesc} all resources`,
+      resource: null,
+      action,
+      isWildcard: true,
+    };
+  }
+
+  // Resource wildcard (e.g., 'agents:*')
+  if (pattern.endsWith(':*')) {
+    const resource = pattern.slice(0, -2);
+    const resourceLabel = resource
+      .split('-')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+    const resourceDesc = RESOURCE_DESCRIPTIONS[resource] || resource;
+    return {
+      value: pattern,
+      label: `${resourceLabel}: All`,
+      description: `Full access to ${resourceDesc}`,
+      resource,
+      action: null,
+      isWildcard: true,
+    };
+  }
+
+  // Specific permission (e.g., 'agents:read')
+  const [resource = '', action = ''] = pattern.split(':');
+  const resourceLabel = resource
+    .split('-')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+  const actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
+  const resourceDesc = RESOURCE_DESCRIPTIONS[resource] || resource;
+  const actionDesc = ACTION_DESCRIPTIONS[action] || action;
+
+  return {
+    value: pattern,
+    label: `${resourceLabel}: ${actionLabel}`,
+    description: `${actionDesc} ${resourceDesc}`,
+    resource,
+    action,
+    isWildcard: false,
+  };
+}
+
+export const GET_PERMISSIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/permissions',
+  responseType: 'json',
+  requiresPermission: 'team:read',
+  summary: 'List available permissions',
+  description:
+    'Lists all available permission patterns for role assignment. Generated from server routes. Requires team:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra } = ctx as any;
+
+    try {
+      // Try to load generated permissions from core
+      let permissions: PermissionInfo[] = [];
+
+      try {
+        // Import the generated permissions from core
+        const { PERMISSIONS, RESOURCES, ACTIONS } = await import('@mastra/core/auth/ee');
+
+        // Build the permissions list with metadata
+        // First add wildcards
+        permissions.push(formatPermissionInfo('*'));
+
+        // Add action wildcards
+        for (const action of ACTIONS) {
+          permissions.push(formatPermissionInfo(`*:${action}`));
+        }
+
+        // Add resource wildcards
+        for (const resource of RESOURCES) {
+          permissions.push(formatPermissionInfo(`${resource}:*`));
+        }
+
+        // Add specific permissions
+        for (const perm of PERMISSIONS) {
+          permissions.push(formatPermissionInfo(perm));
+        }
+      } catch {
+        // Fallback to basic permissions if generated file not available
+        mastra
+          ?.getLogger?.()
+          ?.warn(
+            'Generated permissions not available, using fallback list. Run `pnpm generate:permissions` to generate.',
+          );
+
+        const fallbackPermissions = [
+          '*',
+          '*:read',
+          '*:write',
+          '*:execute',
+          '*:delete',
+          'agents:read',
+          'agents:write',
+          'agents:execute',
+          'workflows:read',
+          'workflows:write',
+          'workflows:execute',
+          'tools:read',
+          'tools:execute',
+          'memory:read',
+          'memory:write',
+          'memory:delete',
+          'observability:read',
+          'team:read',
+          'team:write',
+          'users:read',
+        ];
+
+        permissions = fallbackPermissions.map(p => formatPermissionInfo(p));
+      }
+
+      return { permissions };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to list permissions', { error });
+      throw new HTTPException(500, { message: 'Failed to list permissions' });
+    }
+  },
+});
+
 // POST /auth/roles - Create a new role
 // ============================================================================
 
@@ -1599,6 +1815,7 @@ export const AUTH_ROUTES = [
   PUT_USER_ROLE_ROUTE,
   DELETE_USER_ROLE_ROUTE,
   GET_ROLES_ROUTE,
+  GET_PERMISSIONS_ROUTE,
   POST_CREATE_ROLE_ROUTE,
   PUT_UPDATE_ROLE_ROUTE,
   DELETE_ROLE_ROUTE,

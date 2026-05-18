@@ -96,6 +96,106 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
+
+    // If syncPermissions is enabled, schedule permission sync
+    if (options.syncPermissions) {
+      // Sync asynchronously in the background to avoid blocking initialization
+      this.syncPermissionsToWorkOS().catch(error => {
+        console.warn('[MastraRBACWorkos] Failed to sync permissions to WorkOS:', error.message);
+      });
+    }
+  }
+
+  /**
+   * Sync Mastra's permissions to WorkOS.
+   *
+   * This method fetches the current permissions from WorkOS and creates
+   * any missing permissions from Mastra's roleMapping.
+   *
+   * @experimental This feature requires WorkOS Permissions API access.
+   */
+  async syncPermissionsToWorkOS(): Promise<{ created: string[]; existing: string[]; errors: string[] }> {
+    const apiKey = this.options.apiKey ?? process.env.WORKOS_API_KEY;
+    if (!apiKey) {
+      throw new Error('WorkOS API key is required for permission sync');
+    }
+
+    const result = { created: [] as string[], existing: [] as string[], errors: [] as string[] };
+
+    try {
+      // Collect all unique permissions from roleMapping
+      const mastraPermissions = new Set<string>();
+      for (const permissions of Object.values(this.options.roleMapping)) {
+        for (const permission of permissions) {
+          // Skip wildcards - they're not actual permissions in WorkOS
+          if (!permission.includes('*')) {
+            mastraPermissions.add(permission);
+          }
+        }
+      }
+
+      // Fetch existing permissions from WorkOS
+      const existingResponse = await fetch('https://api.workos.com/roles/permissions', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!existingResponse.ok) {
+        const error = await existingResponse.text();
+        throw new Error(`Failed to fetch WorkOS permissions: ${existingResponse.status} ${error}`);
+      }
+
+      const existingData = (await existingResponse.json()) as { data: Array<{ slug: string }> };
+      const existingPermissions = new Set(existingData.data?.map(p => p.slug) ?? []);
+
+      // Create missing permissions
+      for (const permission of mastraPermissions) {
+        if (existingPermissions.has(permission)) {
+          result.existing.push(permission);
+          continue;
+        }
+
+        try {
+          const createResponse = await fetch('https://api.workos.com/roles/permissions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              slug: permission,
+              name: permission
+                .split(':')
+                .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+                .join(': '),
+              description: `Mastra permission: ${permission}`,
+            }),
+          });
+
+          if (createResponse.ok) {
+            result.created.push(permission);
+            console.info(`[MastraRBACWorkos] Created permission in WorkOS: ${permission}`);
+          } else {
+            const error = await createResponse.text();
+            result.errors.push(`${permission}: ${error}`);
+          }
+        } catch (error) {
+          result.errors.push(`${permission}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      console.info(
+        `[MastraRBACWorkos] Permission sync complete: ${result.created.length} created, ${result.existing.length} existing, ${result.errors.length} errors`,
+      );
+    } catch (error) {
+      console.error('[MastraRBACWorkos] Permission sync failed:', error);
+      throw error;
+    }
+
+    return result;
   }
 
   /**

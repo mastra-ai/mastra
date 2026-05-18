@@ -15,10 +15,11 @@ import {
   Checkbox,
 } from '@mastra/playground-ui';
 import { PlusIcon, PencilIcon, TrashIcon, XIcon } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
-import { useRoles } from '@/domains/team/hooks';
+import { useRoles, useAvailablePermissions } from '@/domains/team/hooks';
+import type { PermissionInfo } from '@/domains/team/hooks';
 
 interface Role {
   id: string;
@@ -34,33 +35,53 @@ interface Role {
   };
 }
 
-// Available permissions that can be assigned to roles
-const AVAILABLE_PERMISSIONS = [
-  { value: '*', label: 'All Permissions', description: 'Full access to everything' },
-  { value: '*:read', label: 'Read All', description: 'Read access to all resources' },
-  { value: '*:write', label: 'Write All', description: 'Write access to all resources' },
-  { value: '*:execute', label: 'Execute All', description: 'Execute access to all resources' },
-  { value: 'agents:read', label: 'Agents: Read', description: 'View agents' },
-  { value: 'agents:write', label: 'Agents: Write', description: 'Create and modify agents' },
-  { value: 'agents:execute', label: 'Agents: Execute', description: 'Run agents' },
-  { value: 'workflows:read', label: 'Workflows: Read', description: 'View workflows' },
-  { value: 'workflows:write', label: 'Workflows: Write', description: 'Create and modify workflows' },
-  { value: 'workflows:execute', label: 'Workflows: Execute', description: 'Run workflows' },
-  { value: 'tools:read', label: 'Tools: Read', description: 'View tools' },
-  { value: 'tools:execute', label: 'Tools: Execute', description: 'Run tools' },
-  { value: 'team:read', label: 'Team: Read', description: 'View team members' },
-  { value: 'team:write', label: 'Team: Write', description: 'Manage team members and roles' },
-  { value: 'users:read', label: 'Users: Read', description: 'View customers/users' },
-  { value: 'observability:read', label: 'Observability: Read', description: 'View traces and logs' },
+// Fallback permissions when API is not available
+const FALLBACK_PERMISSIONS: PermissionInfo[] = [
+  {
+    value: '*',
+    label: 'All Permissions',
+    description: 'Full access to everything',
+    resource: null,
+    action: null,
+    isWildcard: true,
+  },
+  {
+    value: '*:read',
+    label: 'Read All',
+    description: 'Read access to all resources',
+    resource: null,
+    action: 'read',
+    isWildcard: true,
+  },
+  {
+    value: '*:write',
+    label: 'Write All',
+    description: 'Write access to all resources',
+    resource: null,
+    action: 'write',
+    isWildcard: true,
+  },
+  {
+    value: '*:execute',
+    label: 'Execute All',
+    description: 'Execute access to all resources',
+    resource: null,
+    action: 'execute',
+    isWildcard: true,
+  },
 ];
 
 function RoleFormModal({
   role,
+  availablePermissions,
+  permissionsLoading,
   onSave,
   onClose,
   isSaving,
 }: {
   role: Role | null; // null = create new role
+  availablePermissions: PermissionInfo[];
+  permissionsLoading: boolean;
   onSave: (role: Omit<Role, 'id'> & { id?: string }) => void;
   onClose: () => void;
   isSaving: boolean;
@@ -69,6 +90,24 @@ function RoleFormModal({
   const [name, setName] = useState(role?.name ?? '');
   const [description, setDescription] = useState(role?.description ?? '');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(role?.permissions ?? []);
+
+  // Group permissions by type for better organization
+  const groupedPermissions = useMemo(() => {
+    const wildcards = availablePermissions.filter(p => p.isWildcard);
+    const specific = availablePermissions.filter(p => !p.isWildcard);
+
+    // Group specific permissions by resource
+    const byResource: Record<string, PermissionInfo[]> = {};
+    for (const perm of specific) {
+      const resource = perm.resource || 'other';
+      if (!byResource[resource]) {
+        byResource[resource] = [];
+      }
+      byResource[resource].push(perm);
+    }
+
+    return { wildcards, byResource };
+  }, [availablePermissions]);
 
   const handleTogglePermission = (permission: string) => {
     setSelectedPermissions(prev =>
@@ -123,20 +162,65 @@ function RoleFormModal({
 
           <div>
             <label className="block text-sm font-medium text-text1 mb-2">Permissions</label>
-            <div className="border border-border1 rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
-              {AVAILABLE_PERMISSIONS.map(perm => (
-                <label key={perm.value} className="flex items-start gap-3 cursor-pointer hover:bg-surface2 p-2 rounded">
-                  <Checkbox
-                    checked={selectedPermissions.includes(perm.value)}
-                    onCheckedChange={() => handleTogglePermission(perm.value)}
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-text1">{perm.label}</div>
-                    <div className="text-xs text-text2">{perm.description}</div>
+            {permissionsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+              <div className="border border-border1 rounded-lg p-3 space-y-4 max-h-64 overflow-y-auto">
+                {/* Wildcard permissions at the top */}
+                {groupedPermissions.wildcards.length > 0 && (
+                  <div>
+                    <div className="text-xs font-medium text-text2 mb-2 uppercase">Global</div>
+                    <div className="space-y-1">
+                      {groupedPermissions.wildcards.map(perm => (
+                        <label
+                          key={perm.value}
+                          className="flex items-start gap-3 cursor-pointer hover:bg-surface2 p-2 rounded"
+                        >
+                          <Checkbox
+                            checked={selectedPermissions.includes(perm.value)}
+                            onCheckedChange={() => handleTogglePermission(perm.value)}
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-text1">{perm.label}</div>
+                            <div className="text-xs text-text2">{perm.description}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </label>
-              ))}
-            </div>
+                )}
+
+                {/* Specific permissions grouped by resource */}
+                {Object.entries(groupedPermissions.byResource)
+                  .sort()
+                  .map(([resource, perms]) => (
+                    <div key={resource}>
+                      <div className="text-xs font-medium text-text2 mb-2 uppercase">{resource.replace(/-/g, ' ')}</div>
+                      <div className="space-y-1">
+                        {perms.map(perm => (
+                          <label
+                            key={perm.value}
+                            className="flex items-start gap-3 cursor-pointer hover:bg-surface2 p-2 rounded"
+                          >
+                            <Checkbox
+                              checked={selectedPermissions.includes(perm.value)}
+                              onCheckedChange={() => handleTogglePermission(perm.value)}
+                            />
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-text1">{perm.label}</div>
+                              <div className="text-xs text-text2">{perm.description}</div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
             {selectedPermissions.length > 0 && (
               <div className="mt-2 text-xs text-text2">{selectedPermissions.length} permission(s) selected</div>
             )}
@@ -332,6 +416,11 @@ function Roles() {
   const { baseUrl, apiPrefix } = useStudioConfig();
   const canManage = hasPermission('team:write');
 
+  // Fetch available permissions from API (generated from SERVER_ROUTES)
+  const { permissions: availablePermissions, isLoading: permissionsLoading } = useAvailablePermissions();
+  // Use fallback if API fails
+  const permissionsToUse = availablePermissions.length > 0 ? availablePermissions : FALLBACK_PERMISSIONS;
+
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -463,6 +552,8 @@ function Roles() {
       {showCreateModal && (
         <RoleFormModal
           role={null}
+          availablePermissions={permissionsToUse}
+          permissionsLoading={permissionsLoading}
           onSave={handleSaveRole}
           onClose={() => setShowCreateModal(false)}
           isSaving={isSaving}
@@ -473,6 +564,8 @@ function Roles() {
       {editingRole && (
         <RoleFormModal
           role={editingRole}
+          availablePermissions={permissionsToUse}
+          permissionsLoading={permissionsLoading}
           onSave={handleSaveRole}
           onClose={() => setEditingRole(null)}
           isSaving={isSaving}

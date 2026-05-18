@@ -218,6 +218,24 @@ export interface MastraRBACWorkosOptions {
    */
   multiRole?: boolean;
 
+  /**
+   * Automatically sync Mastra's generated permissions to WorkOS on startup.
+   *
+   * When true:
+   * - On provider initialization, fetches current permissions from WorkOS
+   * - Creates any missing permissions from Mastra's PERMISSIONS list
+   * - Does NOT delete permissions that exist in WorkOS but not in Mastra
+   *
+   * When false (default):
+   * - Permissions must be manually created in WorkOS Dashboard
+   * - Or created via WorkOS API separately
+   *
+   * Note: Requires the WorkOS API key to have permission management access.
+   *
+   * @experimental This feature requires WorkOS Permissions API access.
+   */
+  syncPermissions?: boolean;
+
   /** Permission cache configuration */
   cache?: PermissionCacheOptions;
 }
