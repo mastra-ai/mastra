@@ -147,8 +147,10 @@
   "changesets": [
     "automated-provider-registry-20260516-010339",
     "cozy-walls-teach",
+    "fix-mcp-sse-transport-cleanup",
     "goofy-lines-fail",
     "green-birds-knock",
+    "jolly-games-cheer",
     "quiet-stagehand-logs",
     "shared-skill-formatter",
     "signals-narrow-contents",
