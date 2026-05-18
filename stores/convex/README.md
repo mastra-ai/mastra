@@ -2,7 +2,7 @@
 
 Convex adapters for Mastra:
 
-- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources).
+- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, channels).
 - `ConvexVector` stores embeddings inside Convex and performs cosine similarity search.
 - `@mastra/convex/server` exposes the required Convex table definitions and storage mutation.
 
@@ -26,6 +26,8 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraChannelInstallationsTable,
+  mastraChannelConfigTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
@@ -37,6 +39,8 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_channel_installations: mastraChannelInstallationsTable,
+  mastra_channel_config: mastraChannelConfigTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_documents: mastraDocumentsTable,
@@ -90,16 +94,17 @@ const vector = new ConvexVector({
 
 This adapter uses **typed Convex tables** for each Mastra domain:
 
-| Domain         | Convex Table                | Purpose              |
-| -------------- | --------------------------- | -------------------- |
-| Threads        | `mastra_threads`            | Conversation threads |
-| Messages       | `mastra_messages`           | Chat messages        |
-| Resources      | `mastra_resources`          | User working memory  |
-| Workflows      | `mastra_workflow_snapshots` | Workflow state       |
-| Scorers        | `mastra_scorers`            | Evaluation data      |
-| Vector Indexes | `mastra_vector_indexes`     | Index metadata       |
-| Vectors        | `mastra_vectors`            | Embeddings           |
-| Fallback       | `mastra_documents`          | Unknown tables       |
+| Domain         | Convex Table                                            | Purpose                          |
+| -------------- | ------------------------------------------------------- | -------------------------------- |
+| Threads        | `mastra_threads`                                        | Conversation threads             |
+| Messages       | `mastra_messages`                                       | Chat messages                    |
+| Resources      | `mastra_resources`                                      | User working memory              |
+| Workflows      | `mastra_workflow_snapshots`                             | Workflow state                   |
+| Scorers        | `mastra_scorers`                                        | Evaluation data                  |
+| Channels       | `mastra_channel_installations`, `mastra_channel_config` | Channel installations and config |
+| Vector Indexes | `mastra_vector_indexes`                                 | Index metadata                   |
+| Vectors        | `mastra_vectors`                                        | Embeddings                       |
+| Fallback       | `mastra_documents`                                      | Unknown tables                   |
 
 All typed tables include:
 

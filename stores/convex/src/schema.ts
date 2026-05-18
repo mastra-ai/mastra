@@ -15,6 +15,8 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -133,6 +135,44 @@ export const mastraScoresTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[
   .index('by_run', ['runId'])
   .index('by_created', ['createdAt']);
 
+/**
+ * Channel installations table - stores platform app installations for agents.
+ *
+ * Platform data is serialized as a JSON string because user/platform payloads
+ * can contain Convex-reserved field names such as `$schema`.
+ */
+export const mastraChannelInstallationsTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  agentId: v.string(),
+  status: v.string(),
+  webhookId: v.optional(v.union(v.string(), v.null())),
+  data: v.string(),
+  configHash: v.optional(v.union(v.string(), v.null())),
+  error: v.optional(v.union(v.string(), v.null())),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_webhook', ['webhookId'])
+  .index('by_platform_agent', ['platform', 'agentId'])
+  .index('by_platform', ['platform']);
+
+/**
+ * Channel config table - stores platform-level channel configuration.
+ *
+ * The synthetic id mirrors `platform` so the generic Convex storage operations
+ * can use their existing by-record-id lookup path.
+ */
+export const mastraChannelConfigTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  data: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_platform', ['platform']);
+
 // ============================================================================
 // Vector Tables - Not in core schemas (vector-specific)
 // ============================================================================
@@ -182,7 +222,15 @@ export const mastraDocumentsTable = defineTable({
 // Re-export table name constants for convenience
 // ============================================================================
 
-export { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_RESOURCES, TABLE_SCORERS };
+export {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_RESOURCES,
+  TABLE_SCORERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+};
 
 // Additional table name constants for vector tables (not in core)
 export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
