@@ -102,8 +102,8 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     this.workos = new WorkOS(apiKey, { clientId });
     this.options = options;
 
-    // Determine permission source: explicit flag > inferred from missing roleMapping
-    this.useProviderPermissions = options.useProviderPermissions ?? !options.roleMapping;
+    // Determine permission source: if roleMapping is provided, use it; otherwise use provider permissions
+    this.useProviderPermissions = !options.roleMapping;
 
     // Initialize LRU cache for user roles (the expensive WorkOS API call)
     this.rolesCache = new LRUCache<string, Promise<string[]>>({

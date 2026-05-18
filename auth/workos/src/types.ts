@@ -185,8 +185,8 @@ export interface MastraRBACWorkosOptions {
    * Map WorkOS organization roles to Mastra permissions.
    *
    * When provided, permissions are derived from this static mapping.
-   * When omitted (and useProviderPermissions is true), permissions
-   * are fetched directly from WorkOS role definitions.
+   * When omitted, permissions are fetched directly from WorkOS role
+   * definitions (permissions in WorkOS must match Mastra's resource:action pattern).
    *
    * @example
    * ```typescript
@@ -199,22 +199,6 @@ export interface MastraRBACWorkosOptions {
    * ```
    */
   roleMapping?: RoleMapping;
-
-  /**
-   * Use permissions defined on WorkOS roles instead of roleMapping.
-   *
-   * When true:
-   * - Permissions are fetched from WorkOS role definitions
-   * - roleMapping is ignored (if provided)
-   * - Permissions in WorkOS must match Mastra's resource:action pattern
-   *
-   * When false (default):
-   * - Permissions are derived from roleMapping
-   * - WorkOS role permissions are ignored
-   *
-   * This is automatically set to true if roleMapping is not provided.
-   */
-  useProviderPermissions?: boolean;
 
   /**
    * Organization ID to check roles for.
