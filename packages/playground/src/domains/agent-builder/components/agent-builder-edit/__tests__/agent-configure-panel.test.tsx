@@ -2,7 +2,7 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react';
 import type { UseFormReturn } from 'react-hook-form';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
@@ -362,7 +362,7 @@ describe('AgentConfigurePanel disabled propagation', () => {
     );
 
     const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
-    const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
+    const descInput = screen.getByTestId('agent-configure-description') as HTMLTextAreaElement;
     const avatarBtn = screen.getByTestId('agent-configure-avatar-trigger') as HTMLButtonElement;
     const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
 
@@ -453,7 +453,7 @@ describe('AgentConfigurePanel disabled propagation', () => {
     );
 
     const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
-    const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
+    const descInput = screen.getByTestId('agent-configure-description') as HTMLTextAreaElement;
     const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
 
     expect(nameInput.value).toBe('Published agent');
@@ -627,5 +627,96 @@ describe('AgentConfigurePanel config row chevron removal', () => {
     const button = screen.getByTestId(testId);
     expect(button.querySelector('svg.lucide-chevron-left')).toBeNull();
     expect(button.querySelector('svg.lucide-chevron-right')).toBeNull();
+  });
+});
+
+describe('AgentConfigurePanel header card', () => {
+  beforeEach(() => {
+    mockUseBuilderAgentFeatures.mockReset();
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: false,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders a header card containing the avatar, name, and description', () => {
+    renderPanel();
+
+    const card = screen.getByTestId('agent-configure-header-card');
+    expect(card).toBeTruthy();
+
+    expect(within(card).getByTestId('agent-configure-avatar-display')).toBeTruthy();
+    expect(within(card).getByTestId('agent-configure-name')).toBeTruthy();
+    expect(within(card).getByTestId('agent-configure-description')).toBeTruthy();
+  });
+
+  it('renders the description field as a textarea', () => {
+    renderPanel();
+
+    const descField = screen.getByTestId('agent-configure-description');
+    expect(descField.tagName).toBe('TEXTAREA');
+  });
+
+  it('header card has a max-width constraint and is horizontally centered', () => {
+    renderPanel();
+
+    const card = screen.getByTestId('agent-configure-header-card');
+    expect(card.className).toMatch(/\bmax-w-/);
+    expect(card.className).toContain('mx-auto');
+  });
+
+  it('renders the upload-capable avatar inside the header card when avatarUpload is enabled', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: true,
+    });
+
+    renderPanel();
+
+    const card = screen.getByTestId('agent-configure-header-card');
+    expect(within(card).getByTestId('agent-configure-avatar-trigger')).toBeTruthy();
+    expect(screen.queryByTestId('agent-configure-avatar-display')).toBeNull();
+  });
+
+  it('header card has no shadow utility classes', () => {
+    renderPanel();
+
+    const card = screen.getByTestId('agent-configure-header-card');
+    expect(card.className).not.toMatch(/\bshadow-/);
+  });
+
+  it('header card uses centered flex layout', () => {
+    renderPanel();
+
+    const card = screen.getByTestId('agent-configure-header-card');
+    expect(card.className).toContain('flex');
+    expect(card.className).toContain('flex-col');
+    expect(card.className).toContain('items-center');
+  });
+
+  it('renders the header card skeleton while loading', () => {
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel isLoading />
+      </FormWrapper>,
+    );
+
+    const skeleton = screen.getByTestId('agent-configure-panel-skeleton');
+    expect(skeleton).toBeTruthy();
+
+    const inner = skeleton.querySelector('.flex.flex-col.items-center.border-border1.bg-surface3');
+    expect(inner).not.toBeNull();
   });
 });

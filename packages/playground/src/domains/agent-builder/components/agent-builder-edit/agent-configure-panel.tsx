@@ -7,8 +7,10 @@ import {
   AccordionSummary,
   Avatar,
   cn,
+  FieldBlock,
   Skeleton,
   Switch,
+  Textarea,
   TextFieldBlock,
   toast,
   Txt,
@@ -141,8 +143,11 @@ function ConfigurePanelContent({
 
   return (
     <div className="grid grid-rows-[auto_1fr] gap-4 border border-border1 bg-surface2 rounded-3xl p-6 h-full min-h-0">
-      <div className="space-y-2">
-        <div className="flex items-center justify-center">
+      <div
+        className="mx-auto flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-border1 bg-surface3 p-4"
+        data-testid="agent-configure-header-card"
+      >
+        <div className="py-2 scale-150 origin-center">
           {features.avatarUpload ? (
             <>
               <button
@@ -174,25 +179,31 @@ function ConfigurePanelContent({
           )}
         </div>
 
-        <TextFieldBlock
-          name="agent-name"
-          label="Name"
-          value={panelName}
-          placeholder="Untitled agent"
-          onChange={e => setDraftName(e.target.value)}
-          disabled={disabled}
-          testId="agent-configure-name"
-        />
+        <div className="w-full space-y-2">
+          <TextFieldBlock
+            name="agent-name"
+            label="Name"
+            value={panelName}
+            placeholder="Untitled agent"
+            onChange={e => setDraftName(e.target.value)}
+            disabled={disabled}
+            testId="agent-configure-name"
+          />
 
-        <TextFieldBlock
-          name="agent-description"
-          label="Description"
-          value={panelDescription}
-          placeholder="What is this agent for?"
-          onChange={e => setDraftDescription(e.target.value)}
-          disabled={disabled}
-          testId="agent-configure-description"
-        />
+          <FieldBlock.Layout layout="vertical">
+            <FieldBlock.Column>
+              <FieldBlock.Label name="agent-description">Description</FieldBlock.Label>
+              <Textarea
+                name="agent-description"
+                value={panelDescription}
+                placeholder="What is this agent for?"
+                onChange={e => setDraftDescription(e.target.value)}
+                disabled={disabled}
+                testId="agent-configure-description"
+              />
+            </FieldBlock.Column>
+          </FieldBlock.Layout>
+        </div>
       </div>
 
       <ConfigSections
@@ -465,27 +476,25 @@ const ConfigSection = ({ value, icon, label, summaryValue, count, total, testId,
 
 const AgentConfigurePanelSkeleton = () => (
   <div
-    className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden"
+    className="flex h-full flex-col gap-4 border border-border1 bg-surface2 rounded-3xl overflow-hidden p-6"
     data-testid="agent-configure-panel-skeleton"
   >
-    <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
-      <div className="flex items-center gap-4 px-6">
-        <Skeleton className="h-avatar-lg w-avatar-lg rounded-full shrink-0" />
-        <div className="min-w-0 flex-1 flex flex-col gap-2">
-          <Skeleton className="h-3 w-12" />
-          <Skeleton className="h-9 w-full" />
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-border1 bg-surface3 p-4">
+      <Skeleton className="h-avatar-lg w-avatar-lg rounded-full shrink-0" />
+      <div className="w-full space-y-2">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    </div>
+    <div className="flex flex-col">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="flex items-center gap-3 px-6 py-4">
+          <Skeleton className="h-4 w-4 shrink-0 rounded" />
+          <Skeleton className="h-4 w-20 shrink-0" />
+          <Skeleton className="ml-auto h-4 w-24" />
+          <Skeleton className="h-4 w-4 shrink-0 rounded" />
         </div>
-      </div>
-      <div className="flex flex-col">
-        {[0, 1, 2].map(i => (
-          <div key={i} className="flex items-center gap-3 px-6 py-4">
-            <Skeleton className="h-4 w-4 shrink-0 rounded" />
-            <Skeleton className="h-4 w-20 shrink-0" />
-            <Skeleton className="ml-auto h-4 w-24" />
-            <Skeleton className="h-4 w-4 shrink-0 rounded" />
-          </div>
-        ))}
-      </div>
+      ))}
     </div>
   </div>
 );
