@@ -39,7 +39,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
+    "@internal/voice": "workspace:*",
     "@types/node": "22.19.15",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
@@ -51,9 +51,6 @@
     "vitest": "catalog:",
     "zod": "catalog:",
     "zod-to-json-schema": "^3.25.1"
-  },
-  "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

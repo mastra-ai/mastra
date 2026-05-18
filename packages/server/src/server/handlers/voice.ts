@@ -1,15 +1,22 @@
 import { Readable } from 'node:stream';
-import { MastraError } from '@mastra/core/error';
-import { HTTPException } from '../http-exception';
 import {
-  agentIdPathParams,
-  voiceSpeakersResponseSchema,
+  GET_LISTENER_ROUTE as GET_LISTENER_ROUTE_OBJECT,
+  GET_SPEAKERS_DEPRECATED_ROUTE as GET_SPEAKERS_DEPRECATED_ROUTE_OBJECT,
+  GET_SPEAKERS_ROUTE as GET_SPEAKERS_ROUTE_OBJECT,
+  GENERATE_SPEECH_DEPRECATED_ROUTE as GENERATE_SPEECH_DEPRECATED_ROUTE_OBJECT,
+  GENERATE_SPEECH_ROUTE as GENERATE_SPEECH_ROUTE_OBJECT,
+  TRANSCRIBE_SPEECH_DEPRECATED_ROUTE as TRANSCRIBE_SPEECH_DEPRECATED_ROUTE_OBJECT,
+  TRANSCRIBE_SPEECH_ROUTE as TRANSCRIBE_SPEECH_ROUTE_OBJECT,
   generateSpeechBodySchema,
+  getListenerResponseSchema,
   speakResponseSchema,
   transcribeSpeechBodySchema,
   transcribeSpeechResponseSchema,
-  getListenerResponseSchema,
-} from '../schemas/agents';
+  voiceSpeakersResponseSchema,
+} from '@internal/voice/routes';
+import { MastraError } from '@mastra/core/error';
+import { HTTPException } from '../http-exception';
+import { agentIdPathParams } from '../schemas/agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { getAgentFromSystem } from './agents';
@@ -21,15 +28,9 @@ import { validateBody } from './utils';
 // ============================================================================
 
 export const GET_SPEAKERS_ROUTE = createRoute({
-  method: 'GET',
-  path: '/agents/:agentId/voice/speakers',
-  responseType: 'json',
+  ...GET_SPEAKERS_ROUTE_OBJECT,
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
-  summary: 'Get voice speakers',
-  description: 'Returns available voice speakers for the specified agent',
-  tags: ['Agents', 'Voice'],
-  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {
@@ -58,29 +59,17 @@ export const GET_SPEAKERS_ROUTE = createRoute({
 });
 
 export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
-  method: 'GET',
-  path: '/agents/:agentId/speakers',
-  responseType: 'json',
+  ...GET_SPEAKERS_DEPRECATED_ROUTE_OBJECT,
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
-  summary: 'Get available speakers for an agent',
-  description: '[DEPRECATED] Use /agents/:agentId/voice/speakers instead. Get available speakers for an agent',
-  tags: ['Agents', 'Voice'],
-  requiresAuth: true,
   handler: GET_SPEAKERS_ROUTE.handler,
 });
 
 export const GENERATE_SPEECH_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/voice/speak',
-  responseType: 'stream',
+  ...GENERATE_SPEECH_ROUTE_OBJECT,
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
   responseSchema: speakResponseSchema,
-  summary: 'Generate speech',
-  description: 'Generates speech audio from text using the agent voice configuration',
-  tags: ['Agents', 'Voice'],
-  requiresAuth: true,
   handler: async ({ mastra, agentId, text, speakerId, requestContext }) => {
     try {
       if (!agentId) {
@@ -119,31 +108,18 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
 });
 
 export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/speak',
-  responseType: 'stream',
+  ...GENERATE_SPEECH_DEPRECATED_ROUTE_OBJECT,
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
   responseSchema: speakResponseSchema,
-  summary: 'Convert text to speech',
-  description:
-    "[DEPRECATED] Use /agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
-  tags: ['Agents', 'Voice'],
-  requiresAuth: true,
   handler: GENERATE_SPEECH_ROUTE.handler,
 });
 
 export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/voice/listen',
-  responseType: 'json',
+  ...TRANSCRIBE_SPEECH_ROUTE_OBJECT,
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
   responseSchema: transcribeSpeechResponseSchema,
-  summary: 'Transcribe speech',
-  description: 'Transcribes speech audio to text using the agent voice configuration',
-  tags: ['Agents', 'Voice'],
-  requiresAuth: true,
   handler: async ({ mastra, agentId, audio, options, requestContext }) => {
     try {
       if (!agentId) {
@@ -175,30 +151,17 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
 });
 
 export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/listen',
-  responseType: 'json',
+  ...TRANSCRIBE_SPEECH_DEPRECATED_ROUTE_OBJECT,
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
   responseSchema: transcribeSpeechResponseSchema,
-  summary: 'Convert speech to text',
-  description:
-    "[DEPRECATED] Use /agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
-  tags: ['Agents', 'Voice'],
-  requiresAuth: true,
   handler: TRANSCRIBE_SPEECH_ROUTE.handler,
 });
 
 export const GET_LISTENER_ROUTE = createRoute({
-  method: 'GET',
-  path: '/agents/:agentId/voice/listener',
-  responseType: 'json',
+  ...GET_LISTENER_ROUTE_OBJECT,
   pathParamSchema: agentIdPathParams,
   responseSchema: getListenerResponseSchema,
-  summary: 'Get voice listener',
-  description: 'Returns the voice listener configuration for the agent',
-  tags: ['Agents', 'Voice'],
-  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {
