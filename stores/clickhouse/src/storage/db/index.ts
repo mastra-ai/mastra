@@ -325,7 +325,7 @@ export class ClickhouseDB extends MastraBase {
             constraints.push("DEFAULT '{}'");
           }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
-          return `"${name}" ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
+          return `${quoteClickHouseIdentifier(name)} ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
         .join(',\n');
 
@@ -334,8 +334,8 @@ export class ClickhouseDB extends MastraBase {
           ${columns}
         )
         ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
-        PRIMARY KEY (traceId, spanId)
-        ORDER BY (traceId, spanId)
+        PRIMARY KEY (${quoteClickHouseIdentifier('traceId')}, ${quoteClickHouseIdentifier('spanId')})
+        ORDER BY (${quoteClickHouseIdentifier('traceId')}, ${quoteClickHouseIdentifier('spanId')})
         ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
         SETTINGS index_granularity = 8192
       `;
@@ -355,12 +355,16 @@ export class ClickhouseDB extends MastraBase {
 
       // Only copy columns that exist in both tables
       const columnsToInsert = Object.keys(schema).filter(col => backupColumnNames.has(col));
-      const columnList = columnsToInsert.map(c => `"${c}"`).join(', ');
+      const columnList = columnsToInsert.map(c => quoteClickHouseIdentifier(c)).join(', ');
 
       // Build SELECT expressions, using COALESCE for updatedAt to handle NULL values
       // (updatedAt must be non-nullable for ReplacingMergeTree version column)
       const selectExpressions = columnsToInsert
-        .map(c => (c === 'updatedAt' ? `COALESCE("updatedAt", "createdAt") as "updatedAt"` : `"${c}"`))
+        .map(c =>
+          c === 'updatedAt'
+            ? `COALESCE(${quoteClickHouseIdentifier('updatedAt')}, ${quoteClickHouseIdentifier('createdAt')}) as ${quoteClickHouseIdentifier('updatedAt')}`
+            : quoteClickHouseIdentifier(c),
+        )
         .join(', ');
 
       // Use LIMIT BY for deduplication with priority-based selection:
@@ -372,11 +376,11 @@ export class ClickhouseDB extends MastraBase {
         query: `INSERT INTO ${tableName} (${columnList})
                 SELECT ${selectExpressions}
                 FROM ${backupTableName}
-                ORDER BY traceId, spanId,
+                ORDER BY ${quoteClickHouseIdentifier('traceId')}, ${quoteClickHouseIdentifier('spanId')},
                          (endedAt IS NOT NULL AND endedAt != '') DESC,
-                         COALESCE(updatedAt, createdAt) DESC,
-                         createdAt DESC
-                LIMIT 1 BY traceId, spanId`,
+                         COALESCE(${quoteClickHouseIdentifier('updatedAt')}, ${quoteClickHouseIdentifier('createdAt')}) DESC,
+                         ${quoteClickHouseIdentifier('createdAt')} DESC
+                LIMIT 1 BY ${quoteClickHouseIdentifier('traceId')}, ${quoteClickHouseIdentifier('spanId')}`,
       });
 
       // Step 4: Drop backup table
@@ -476,7 +480,7 @@ export class ClickhouseDB extends MastraBase {
             constraints.push("DEFAULT '{}'");
           }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
-          return `"${name}" ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
+          return `${quoteClickHouseIdentifier(name)} ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
         .join(',\n');
 
@@ -486,11 +490,11 @@ export class ClickhouseDB extends MastraBase {
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         sql = `
             CREATE TABLE IF NOT EXISTS ${tableName} (
-              ${['id String'].concat(columns)}
+              ${[`${quoteClickHouseIdentifier('id')} String`].concat(columns)}
             )
             ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
-            PRIMARY KEY (createdAt, run_id, workflow_name)
-            ORDER BY (createdAt, run_id, workflow_name)
+            PRIMARY KEY (${quoteClickHouseIdentifier('createdAt')}, ${quoteClickHouseIdentifier('run_id')}, ${quoteClickHouseIdentifier('workflow_name')})
+            ORDER BY (${quoteClickHouseIdentifier('createdAt')}, ${quoteClickHouseIdentifier('run_id')}, ${quoteClickHouseIdentifier('workflow_name')})
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
             SETTINGS index_granularity = 8192
               `;
@@ -504,13 +508,15 @@ export class ClickhouseDB extends MastraBase {
               ${columns}
             )
             ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
-            PRIMARY KEY (traceId, spanId)
-            ORDER BY (traceId, spanId)
+            PRIMARY KEY (${quoteClickHouseIdentifier('traceId')}, ${quoteClickHouseIdentifier('spanId')})
+            ORDER BY (${quoteClickHouseIdentifier('traceId')}, ${quoteClickHouseIdentifier('spanId')})
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
             SETTINGS index_granularity = 8192
           `;
       } else {
-        const keyColumns = isHarnessTable(tableName) ? getClickHouseKeyColumns(tableName, schema) : ['createdAt', 'id'];
+        const keyColumns = isHarnessTable(tableName)
+          ? getClickHouseKeyColumns(tableName, schema)
+          : [quoteClickHouseIdentifier('createdAt'), quoteClickHouseIdentifier('id')];
         const keyClause = keyColumns.join(', ');
         sql = `
             CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -576,9 +582,9 @@ export class ClickhouseDB extends MastraBase {
             sqlType = `Nullable(${sqlType})`;
           }
           const defaultValue = columnDef.nullable === false ? getDefaultValue(columnDef.type) : '';
-          // Use backticks or double quotes as needed for identifiers
+          // Quote generated identifiers consistently with createTable().
           const alterSql =
-            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
+            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${quoteClickHouseIdentifier(columnName)} ${sqlType} ${defaultValue}`.trim();
 
           await this.client.query({
             query: alterSql,
@@ -738,12 +744,12 @@ export class ClickhouseDB extends MastraBase {
       const keyEntries = Object.entries(keys);
       const conditions = keyEntries
         .map(
-          ([key]) =>
-            `"${key}" = {var_${key}:${this.getSqlType(TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text')}}`,
+          ([key], index) =>
+            `${quoteClickHouseIdentifier(key)} = {var_${index}:${this.getSqlType(TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text')}}`,
         )
         .join(' AND ');
-      const values = keyEntries.reduce((acc, [key, value]) => {
-        return { ...acc, [`var_${key}`]: value };
+      const values = keyEntries.reduce<Record<string, string>>((acc, [, value], index) => {
+        return { ...acc, [`var_${index}`]: value };
       }, {});
 
       const hasUpdatedAt = TABLE_SCHEMAS[tableName as TABLE_NAMES]?.updatedAt;
@@ -798,23 +804,27 @@ export class ClickhouseDB extends MastraBase {
 function getClickHouseKeyColumns(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string[] {
   const compositePrimaryKey = TABLE_CONFIGS[tableName]?.compositePrimaryKey;
   if (compositePrimaryKey && compositePrimaryKey.length > 0) {
-    return compositePrimaryKey.map(column => `"${column}"`);
+    return compositePrimaryKey.map(column => quoteClickHouseIdentifier(column));
   }
 
-  if (schema.createdAt && schema.id) return ['createdAt', 'id'];
+  if (schema.createdAt && schema.id) return [quoteClickHouseIdentifier('createdAt'), quoteClickHouseIdentifier('id')];
 
   const primaryColumns = Object.entries(schema)
     .filter(([, column]) => column.primaryKey === true)
-    .map(([name]) => `"${name}"`);
+    .map(([name]) => quoteClickHouseIdentifier(name));
   if (primaryColumns.length > 0) return primaryColumns;
 
-  if (schema.createdAt) return ['createdAt'];
-  if (schema.created_at) return ['created_at'];
-  if (schema.id) return ['id'];
+  if (schema.createdAt) return [quoteClickHouseIdentifier('createdAt')];
+  if (schema.created_at) return [quoteClickHouseIdentifier('created_at')];
+  if (schema.id) return [quoteClickHouseIdentifier('id')];
 
   const firstColumn = Object.keys(schema)[0];
-  if (firstColumn) return [`"${firstColumn}"`];
+  if (firstColumn) return [quoteClickHouseIdentifier(firstColumn)];
   throw new Error(`Cannot derive ClickHouse key columns for empty table schema: ${tableName}`);
+}
+
+function quoteClickHouseIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
 function isHarnessTable(tableName: TABLE_NAMES): boolean {
