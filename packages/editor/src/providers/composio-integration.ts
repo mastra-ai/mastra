@@ -346,21 +346,12 @@ export class ComposioToolIntegration extends BaseToolIntegration {
       const res = (await composio.connectedAccounts.delete(connectionId)) as
         | { success?: boolean }
         | undefined;
-      // eslint-disable-next-line no-console
-      console.log('[composio] revokeConnection result', { connectionId, response: res });
       if (res && res.success === false) {
         throw new Error(
           `Composio refused to delete connected account ${connectionId} (success=false)`,
         );
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.log('[composio] revokeConnection error', {
-        connectionId,
-        message: err instanceof Error ? err.message : String(err),
-        statusCode: (err as { statusCode?: number; status?: number } | undefined)?.statusCode
-          ?? (err as { statusCode?: number; status?: number } | undefined)?.status,
-      });
       if (isNotFoundError(err)) return;
       throw err;
     }
