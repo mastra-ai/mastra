@@ -3836,6 +3836,7 @@ export class Agent<
           maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
           // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
           // to return a proper llm response
+          suspendedToolRunId: z.string().nullish().describe('The runId of the suspended tool'),
         });
 
         const agentOutputSchema = z.object({
@@ -4729,6 +4730,7 @@ export class Agent<
 
         const inputProperties: Record<string, JSONSchema7> = {
           inputData: inputDataJsonSchema,
+          suspendedToolRunId: { type: ['string', 'null'], description: 'The runId of the suspended tool' },
         };
         const inputRequired = ['inputData'];
 

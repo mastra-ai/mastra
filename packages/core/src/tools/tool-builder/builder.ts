@@ -13,7 +13,7 @@ import {
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
-import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
+import { backgroundOverrideJsonSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -26,7 +26,6 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
-import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
@@ -40,6 +39,132 @@ import type {
 } from '../types';
 import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
+
+const injectedToolInputKeys = ['_background', 'suspendedToolRunId', 'resumeData'] as const;
+const resumeDataJsonSchema = {
+  type: ['string', 'number', 'integer', 'boolean', 'object', 'null'],
+  description: 'The resumeData object created from the resumeSchema of suspended tool',
+};
+
+function injectToolInputFields(schema: Record<string, any>, isBackgroundEligible: boolean, isResumableTool: boolean) {
+  if (schema.type !== 'object') {
+    return schema;
+  }
+
+  const properties = schema.properties && typeof schema.properties === 'object' ? { ...schema.properties } : {};
+
+  if (isBackgroundEligible) {
+    properties._background = backgroundOverrideJsonSchema;
+  }
+
+  if (isResumableTool) {
+    properties.suspendedToolRunId = {
+      type: ['string', 'null'],
+      description: 'The runId of the suspended tool',
+    };
+    properties.resumeData = resumeDataJsonSchema;
+  }
+
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter(name => !injectedToolInputKeys.includes(name))
+    : schema.required;
+
+  return {
+    ...schema,
+    properties,
+    ...(required ? { required } : {}),
+  };
+}
+
+function stripModelOnlyToolInputFields(
+  value: unknown,
+  isBackgroundEligible: boolean,
+  isResumableTool: boolean,
+  forwardsResumeRunId: boolean,
+) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const stripped = { ...(value as Record<string, unknown>) };
+
+  if (isBackgroundEligible) {
+    delete stripped._background;
+  }
+
+  if (isResumableTool) {
+    delete stripped.resumeData;
+    if (!forwardsResumeRunId) {
+      delete stripped.suspendedToolRunId;
+    }
+  }
+
+  return stripped;
+}
+
+function mergeModelOnlyToolInputFields(
+  originalValue: unknown,
+  validatedValue: unknown,
+  isBackgroundEligible: boolean,
+  isResumableTool: boolean,
+  forwardsResumeRunId: boolean,
+) {
+  if (
+    !originalValue ||
+    typeof originalValue !== 'object' ||
+    Array.isArray(originalValue) ||
+    !validatedValue ||
+    typeof validatedValue !== 'object' ||
+    Array.isArray(validatedValue)
+  ) {
+    return validatedValue;
+  }
+
+  const source = originalValue as Record<string, unknown>;
+  const merged = { ...(validatedValue as Record<string, unknown>) };
+
+  if (isBackgroundEligible && '_background' in source) {
+    merged._background = source._background;
+  }
+
+  if (isResumableTool) {
+    if ('resumeData' in source) {
+      merged.resumeData = source.resumeData;
+    }
+    if (!forwardsResumeRunId && 'suspendedToolRunId' in source) {
+      merged.suspendedToolRunId = source.suspendedToolRunId;
+    }
+  }
+
+  return merged;
+}
+
+function wrapSchemaValidation(
+  validate: NonNullable<Schema['validate']>,
+  isBackgroundEligible: boolean,
+  isResumableTool: boolean,
+  forwardsResumeRunId: boolean,
+) {
+  return async (value: unknown) => {
+    const input = stripModelOnlyToolInputFields(value, isBackgroundEligible, isResumableTool, forwardsResumeRunId);
+    const validationResult = await validate(input);
+
+    if (!validationResult.success) {
+      return validationResult;
+    }
+
+    return {
+      ...validationResult,
+      value: mergeModelOnlyToolInputFields(
+        value,
+        validationResult.value,
+        isBackgroundEligible,
+        isResumableTool,
+        forwardsResumeRunId,
+      ),
+    };
+  };
+}
 
 /**
  * Types that can be converted to Mastra tools.
@@ -64,6 +189,9 @@ export class CoreToolBuilder extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
   private logType?: LogType;
+  private isBackgroundEligible = false;
+  private isResumableTool = false;
+  private forwardsResumeRunId = false;
 
   constructor(input: {
     originalTool: ToolToConvert;
@@ -77,71 +205,14 @@ export class CoreToolBuilder extends MastraBase {
     this.options = input.options;
     this.logType = input.logType;
 
-    // Only inject the `_background` override schema for tools that are actually
-    // eligible for background execution — otherwise every user tool's input
-    // schema would be mutated with a v4 Zod field, which breaks v3-authored
-    // tools (keyValidator._parse crashes in schema-compat validation).
-    const isBackgroundEligible = !!input.backgroundTaskEnabled;
-    const isResumableTool =
-      input.autoResumeSuspendedTools ||
+    const supportsInjectedInputFields = !isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool);
+    const isGeneratedResumeTool =
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
 
-    if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
-      if (isBackgroundEligible || isResumableTool) {
-        let schema = this.originalTool.inputSchema;
-        if (typeof schema === 'function') {
-          schema = schema();
-        }
-        if (!schema) {
-          schema = z.object({});
-        }
-
-        if (isZodObject(schema)) {
-          let nextSchema = schema;
-          if (isBackgroundEligible) {
-            nextSchema = safeExtendZodObject(nextSchema, {
-              _background: backgroundOverrideZodSchema,
-            });
-          }
-          if (isResumableTool) {
-            nextSchema = safeExtendZodObject(nextSchema, {
-              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
-            });
-          }
-          this.originalTool.inputSchema = nextSchema;
-        } else {
-          // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
-          // Extract JSON Schema, add suspend/resume fields, re-wrap.
-          const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
-          if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
-            if (isBackgroundEligible) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                _background: backgroundOverrideJsonSchema,
-              };
-            }
-            if (isResumableTool) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                suspendedToolRunId: {
-                  type: ['string', 'null'],
-                  description: 'The runId of the suspended tool',
-                },
-                resumeData: {
-                  description: 'The resumeData object created from the resumeSchema of suspended tool',
-                },
-              };
-            }
-            this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
-          }
-        }
-      }
-    }
+    this.isBackgroundEligible = supportsInjectedInputFields && !!input.backgroundTaskEnabled;
+    this.isResumableTool = supportsInjectedInputFields && (input.autoResumeSuspendedTools || isGeneratedResumeTool);
+    this.forwardsResumeRunId = supportsInjectedInputFields && isGeneratedResumeTool;
   }
 
   // Helper to get parameters based on tool type
@@ -611,12 +682,36 @@ export class CoreToolBuilder extends MastraBase {
         logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
 
         // Validate input parameters if schema exists
-        // Use the processed schema for validation if available, otherwise fall back to original
+        // Runtime validation uses the original tool schema. Model-only control
+        // fields are stripped here so they do not weaken user-defined validators.
+        const originalArgs = args;
+        if (
+          args &&
+          typeof args === 'object' &&
+          !Array.isArray(args) &&
+          (this.isBackgroundEligible || this.isResumableTool)
+        ) {
+          args = stripModelOnlyToolInputFields(
+            args,
+            this.isBackgroundEligible,
+            this.isResumableTool,
+            this.forwardsResumeRunId,
+          );
+        }
+
         const parameters = this.getParameters();
         const { data, error } = validateToolInput(parameters, args, options.name);
         //suspendedToolRunId is only required when resumeData is provided
+        const hasResumeData =
+          !!(execOptions && Object.prototype.hasOwnProperty.call(execOptions, 'resumeData')) ||
+          !!(
+            originalArgs &&
+            typeof originalArgs === 'object' &&
+            !Array.isArray(originalArgs) &&
+            Object.prototype.hasOwnProperty.call(originalArgs, 'resumeData')
+          );
         const suspendedToolRunIdErrToIgnore =
-          error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
+          error?.message?.includes('suspendedToolRunId: Required') && !hasResumeData;
         if (error && !suspendedToolRunIdErrToIgnore) {
           logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
           toolSpan?.end({ output: error, attributes: { success: false } });
@@ -727,25 +822,44 @@ export class CoreToolBuilder extends MastraBase {
     const originalSchema = this.getParameters();
     let processedInputSchema: Schema | undefined;
 
-    if (originalSchema) {
-      if (isStandardSchemaWithJSON(originalSchema)) {
+    const modelInputSchema =
+      originalSchema ?? (this.isBackgroundEligible || this.isResumableTool ? z.object({}) : null);
+
+    if (modelInputSchema) {
+      if (isStandardSchemaWithJSON(modelInputSchema)) {
         // Find the first applicable compatibility layer
         const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
 
         let schemaToUse: StandardSchemaWithJSON;
         if (applicableLayer) {
-          schemaToUse = applicableLayer.processToCompatSchema(originalSchema as any);
+          schemaToUse = applicableLayer.processToCompatSchema(modelInputSchema as any);
         } else {
-          schemaToUse = toStandardSchema(originalSchema);
+          schemaToUse = toStandardSchema(modelInputSchema);
         }
 
-        processedInputSchema = jsonSchema(
-          standardSchemaToJSONSchema(schemaToUse, {
+        const injectedJsonSchema = injectToolInputFields(
+          standardSchemaToJSONSchema(toStandardSchema(modelInputSchema), {
             io: 'input',
           }),
+          this.isBackgroundEligible,
+          this.isResumableTool,
+        );
+
+        const modelJsonSchema = applicableLayer
+          ? applicableLayer.processToJSONSchema(injectedJsonSchema, 'input')
+          : injectedJsonSchema;
+
+        processedInputSchema = jsonSchema(
+          modelJsonSchema,
           {
             validate: (value: unknown) => {
-              const result = schemaToUse['~standard'].validate(value);
+              const input = stripModelOnlyToolInputFields(
+                value,
+                this.isBackgroundEligible,
+                this.isResumableTool,
+                this.forwardsResumeRunId,
+              );
+              const result = schemaToUse['~standard'].validate(input);
               // standard-schema validate may return a Promise
               if (result instanceof Promise) {
                 return result.then(r => {
@@ -755,7 +869,16 @@ export class CoreToolBuilder extends MastraBase {
                       error: new Error(r.issues.map((i: any) => i.message).join(', ')),
                     };
                   }
-                  return { success: true as const, value: (r as { value: unknown }).value };
+                  return {
+                    success: true as const,
+                    value: mergeModelOnlyToolInputFields(
+                      value,
+                      (r as { value: unknown }).value,
+                      this.isBackgroundEligible,
+                      this.isResumableTool,
+                      this.forwardsResumeRunId,
+                    ),
+                  };
                 });
               }
               // standard-schema returns { value } on success or { issues } on failure,
@@ -766,16 +889,58 @@ export class CoreToolBuilder extends MastraBase {
                   error: new Error(result.issues.map((i: any) => i.message).join(', ')),
                 };
               }
-              return { success: true as const, value: (result as { value: unknown }).value };
+              return {
+                success: true as const,
+                value: mergeModelOnlyToolInputFields(
+                  value,
+                  (result as { value: unknown }).value,
+                  this.isBackgroundEligible,
+                  this.isResumableTool,
+                  this.forwardsResumeRunId,
+                ),
+              };
             },
           },
         );
       } else {
+        const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
         processedInputSchema = applyCompatLayer({
-          schema: originalSchema,
+          schema: modelInputSchema,
           compatLayers: schemaCompatLayers,
           mode: 'aiSdkSchema',
         });
+        if (processedInputSchema) {
+          const validate = processedInputSchema.validate;
+          const injectedJsonSchema = injectToolInputFields(
+            standardSchemaToJSONSchema(toStandardSchema(modelInputSchema), {
+              io: 'input',
+            }),
+            this.isBackgroundEligible,
+            this.isResumableTool,
+          );
+          const modelJsonSchema = applicableLayer
+            ? applicableLayer.processToJSONSchema(injectedJsonSchema, 'input')
+            : injectedJsonSchema;
+
+          processedInputSchema = {
+            ...processedInputSchema,
+            ...(validate
+              ? {
+                  validate: wrapSchemaValidation(
+                    validate,
+                    this.isBackgroundEligible,
+                    this.isResumableTool,
+                    this.forwardsResumeRunId,
+                  ),
+                }
+              : {}),
+            ...('jsonSchema' in processedInputSchema
+              ? {
+                  jsonSchema: modelJsonSchema,
+                }
+              : {}),
+          };
+        }
       }
     }
 

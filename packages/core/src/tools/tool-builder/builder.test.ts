@@ -1,6 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
+import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -436,6 +437,151 @@ describe('Provider-defined Tool Handling', () => {
   });
 });
 
+describe('Auto-resume tool schema injection', () => {
+  const model = {
+    modelId: 'gemini-3-flash-preview',
+    provider: 'google',
+    specificationVersion: 'v2',
+    supportsStructuredOutputs: false,
+  } as any;
+
+  const options = {
+    name: 'test-tool',
+    logger: {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    } as any,
+    description: 'Test tool',
+    requestContext: new RequestContext(),
+    tracingContext: {},
+    model,
+    runId: 'run-id',
+  };
+
+  it('adds resume fields to the model schema for Zod v3 tools without mutating the runtime schema', async () => {
+    const execute = vi.fn(async input => ({ input }));
+    const tool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z3
+        .object({
+          query: z3.string(),
+          limit: z3.number().optional(),
+        })
+        .strict(),
+      execute,
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options,
+      autoResumeSuspendedTools: true,
+    }).build();
+
+    const properties = (builtTool.parameters as any).jsonSchema.properties;
+    expect(properties.query).toBeDefined();
+    expect(properties.limit).toBeDefined();
+    expect(properties.suspendedToolRunId).toBeDefined();
+    expect(properties.resumeData).toBeDefined();
+    expect(properties.resumeData.type).toEqual(['string', 'number', 'integer', 'boolean', 'object', 'null']);
+    expect((tool.inputSchema as any).shape.suspendedToolRunId).toBeUndefined();
+
+    const validation = await (builtTool.parameters as any).validate({
+      query: 'hello',
+      suspendedToolRunId: 'suspended-run',
+      resumeData: { approved: true },
+    });
+
+    expect(validation).toEqual({
+      success: true,
+      value: {
+        query: 'hello',
+        suspendedToolRunId: 'suspended-run',
+        resumeData: { approved: true },
+      },
+    });
+
+    const result = await builtTool.execute?.(validation.value, {
+      toolCallId: 'tool-call-id',
+      messages: [],
+      resumeData: { approved: true },
+    });
+
+    expect(result).toEqual({ input: { query: 'hello' } });
+    expect(execute).toHaveBeenCalledWith({ query: 'hello' }, expect.any(Object));
+  });
+
+  it('runs injected control fields through provider schema compatibility', () => {
+    const tool = createTool({
+      id: 'openai-tool',
+      description: 'OpenAI tool',
+      inputSchema: z.object({
+        query: z.string().optional(),
+      }),
+      execute: async input => ({ input }),
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: {
+        ...options,
+        name: 'openai-tool',
+        description: 'OpenAI tool',
+        model: {
+          modelId: 'gpt-4.1-mini',
+          provider: 'openai',
+          specificationVersion: 'v2',
+          supportsStructuredOutputs: false,
+        } as any,
+      },
+      autoResumeSuspendedTools: true,
+      backgroundTaskEnabled: true,
+    }).build();
+
+    const schema = (builtTool.parameters as any).jsonSchema;
+    expect(schema.additionalProperties).toBe(false);
+    expect(schema.required).toEqual(
+      expect.arrayContaining(['query', '_background', 'suspendedToolRunId', 'resumeData']),
+    );
+    expect(schema.required).toEqual(expect.arrayContaining(Object.keys(schema.properties)));
+
+    const backgroundSchema = schema.properties._background.anyOf.find((entry: any) => entry.type === 'object');
+    expect(backgroundSchema).toMatchObject({
+      additionalProperties: false,
+    });
+    expect(backgroundSchema.required).toEqual(expect.arrayContaining(['enabled', 'timeoutMs', 'maxRetries']));
+  });
+
+  it('does not ignore missing suspendedToolRunId when resumeData was provided', async () => {
+    const execute = vi.fn(async input => ({ input }));
+    const tool = createTool({
+      id: 'workflow-required-run-id',
+      description: 'Workflow wrapper requiring a suspended run id',
+      inputSchema: z.object({
+        query: z.string(),
+        suspendedToolRunId: z.string(),
+      }),
+      execute,
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { ...options, name: 'workflow-required-run-id', description: 'Workflow wrapper requiring a run id' },
+      autoResumeSuspendedTools: true,
+    }).build();
+
+    const result = await builtTool.execute?.(
+      { query: 'hello', resumeData: false },
+      { toolCallId: 'tool-call-id', messages: [], resumeData: false },
+    );
+
+    expect(result).toMatchObject({ error: true });
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
 describe('CoreToolBuilder strict', () => {
   it('should pass through strict when building a tool', () => {
     const strictTool = createTool({
@@ -522,6 +668,7 @@ describe('CoreToolBuilder background task schema injection', () => {
         .refine(d => !!d.a || !!d.b, { message: 'pass a or b' }),
       execute: async () => ({ ok: true }),
     });
+    const originalInputSchema = refinedTool.inputSchema;
 
     const build = () =>
       new CoreToolBuilder({
@@ -530,11 +677,11 @@ describe('CoreToolBuilder background task schema injection', () => {
         backgroundTaskEnabled: true,
       }).build();
 
-    // The builder mutates originalTool.inputSchema, so the second build re-injects
-    // `_background` onto the already-refined schema. With `.extend()` Zod v4 threw
-    // "Cannot overwrite keys on object schemas containing refinements"; safeExtend fixes it.
+    // Control fields are injected only into the model-facing schema, so repeated
+    // builds should not mutate an already-refined runtime schema.
     expect(() => build()).not.toThrow();
     expect(() => build()).not.toThrow();
+    expect(refinedTool.inputSchema).toBe(originalInputSchema);
     expect((refinedTool.inputSchema as z.ZodTypeAny).safeParse({}).success).toBe(false);
   });
 });

@@ -1399,6 +1399,7 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
     resourceId: z.string().nullish().describe('Resource ID'),
     instructions: z.string().nullish().describe('Additional instructions'),
     maxSteps: z.number().min(3).nullish().describe('Max steps'),
+    suspendedToolRunId: z.string().nullish().describe('Suspended tool run ID'),
   });
 
   it('should normalize "query" to "prompt" through validateToolInput', async () => {
@@ -1457,5 +1458,20 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
     const subAgentTool = tools['agent-subAgent'];
     expect(subAgentTool).toBeDefined();
     expect(subAgentTool.description).toContain('subAgent');
+
+    const validation = await (subAgentTool.parameters as any).validate({
+      prompt: 'resume the child',
+      suspendedToolRunId: 'suspended-run',
+      resumeData: { approved: true },
+    });
+
+    expect(validation).toMatchObject({
+      success: true,
+      value: {
+        prompt: 'resume the child',
+        suspendedToolRunId: 'suspended-run',
+        resumeData: { approved: true },
+      },
+    });
   });
 });
