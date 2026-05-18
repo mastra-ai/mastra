@@ -100,13 +100,15 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
   /**
    * Get the capabilities of this RBAC provider.
-   * WorkOS uses single role per org membership, provider-managed roles.
+   *
+   * WorkOS supports both single-role and multi-role modes, configured at the
+   * environment level in the WorkOS Dashboard.
    */
   getCapabilities(): RBACCapabilities {
     return {
       ...DEFAULT_RBAC_CAPABILITIES,
-      // WorkOS uses single role per organization membership
-      multiRole: false,
+      // Multi-role support depends on WorkOS environment configuration
+      multiRole: this.options.multiRole ?? false,
       // Roles are managed in WorkOS dashboard (or via API)
       providerManagedRoles: true,
       // Roles come from the provider (WorkOS)
@@ -232,6 +234,10 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
   /**
    * Fetch roles from WorkOS API.
+   *
+   * Handles both single-role and multi-role modes:
+   * - Single-role: membership.role.slug
+   * - Multi-role: membership.roles[].slug (when enabled in WorkOS)
    */
   private async fetchRolesFromWorkOS(user: WorkOSUser): Promise<string[]> {
     try {
@@ -244,8 +250,25 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
         ? memberships.data.filter(m => m.organizationId === this.options.organizationId)
         : memberships.data;
 
-      // Extract role slugs
-      return relevantMemberships.map(m => m.role.slug);
+      // Collect all roles from all memberships
+      const roles = new Set<string>();
+      for (const membership of relevantMemberships) {
+        // Multi-role mode: check for roles array first
+        const membershipAny = membership as any;
+        if (Array.isArray(membershipAny.roles)) {
+          for (const role of membershipAny.roles) {
+            if (role?.slug) {
+              roles.add(role.slug);
+            }
+          }
+        }
+        // Single-role mode: use role.slug
+        else if (membership.role?.slug) {
+          roles.add(membership.role.slug);
+        }
+      }
+
+      return Array.from(roles);
     } catch {
       // Return empty roles on error - _default permissions will be applied
       return [];
@@ -363,8 +386,12 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
   /**
    * Extract role slugs from memberships attached to the user object.
    *
+   * Handles both single-role and multi-role modes:
+   * - Single-role: membership.role.slug
+   * - Multi-role: membership.roles[].slug (when enabled in WorkOS)
+   *
    * @param user - WorkOS user with memberships
-   * @returns Array of role slugs
+   * @returns Array of role slugs (deduplicated)
    */
   private extractRolesFromMemberships(user: WorkOSUser): string[] {
     if (!user.memberships) {
@@ -376,12 +403,33 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       ? user.memberships.filter(m => m.organizationId === this.options.organizationId)
       : user.memberships;
 
-    return relevantMemberships.map(m => m.role.slug);
+    // Collect all roles from all memberships
+    const roles = new Set<string>();
+    for (const membership of relevantMemberships) {
+      // Multi-role mode: check for roles array first
+      const membershipAny = membership as any;
+      if (Array.isArray(membershipAny.roles)) {
+        for (const role of membershipAny.roles) {
+          if (role?.slug) {
+            roles.add(role.slug);
+          }
+        }
+      }
+      // Single-role mode: use role.slug
+      else if (membership.role?.slug) {
+        roles.add(membership.role.slug);
+      }
+    }
+
+    return Array.from(roles);
   }
 
   /**
    * Assign a role to a user in the configured organization.
-   * WorkOS uses single role per org membership, so this replaces the current role.
+   *
+   * Behavior depends on multi-role mode:
+   * - Single-role (default): Replaces the user's current role
+   * - Multi-role: Adds the role to the user's existing roles
    *
    * @param userId - The WorkOS user ID
    * @param roleId - The role slug to assign
@@ -403,10 +451,26 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
     const membership = memberships.data[0]!;
 
-    // Update the membership with the new role
-    await this.workos.userManagement.updateOrganizationMembership(membership.id, {
-      roleSlug: roleId,
-    });
+    if (this.options.multiRole) {
+      // Multi-role mode: add role to existing roles
+      const membershipAny = membership as any;
+      const currentRoles: string[] = Array.isArray(membershipAny.roles)
+        ? membershipAny.roles.map((r: any) => r.slug)
+        : [membership.role?.slug].filter(Boolean);
+
+      // Add new role if not already present
+      if (!currentRoles.includes(roleId)) {
+        const newRoles = [...currentRoles, roleId];
+        await this.workos.userManagement.updateOrganizationMembership(membership.id, {
+          roleSlugs: newRoles,
+        } as any);
+      }
+    } else {
+      // Single-role mode: replace current role
+      await this.workos.userManagement.updateOrganizationMembership(membership.id, {
+        roleSlug: roleId,
+      });
+    }
 
     // Invalidate cache for this user
     this.rolesCache.delete(userId);
@@ -414,18 +478,56 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
 
   /**
    * Remove a role from a user.
-   * For WorkOS single-role model, this is not directly supported.
-   * Removing a role would require assigning a different role or removing the membership entirely.
+   *
+   * Behavior depends on multi-role mode:
+   * - Single-role (default): Not supported - throws error
+   * - Multi-role: Removes the specified role from the user's roles
    *
    * @param userId - The WorkOS user ID
-   * @param roleId - The role slug to remove (unused for WorkOS)
+   * @param roleId - The role slug to remove
    */
-  async removeRole(_userId: string, _roleId: string): Promise<void> {
-    // WorkOS doesn't support removing a role without removing the membership
-    // For single-role providers, the UI should use assignRole to change roles
-    throw new Error(
-      'WorkOS uses single role per membership. Use assignRole to change roles, ' +
-        'or remove the membership entirely via the WorkOS dashboard.',
-    );
+  async removeRole(userId: string, roleId: string): Promise<void> {
+    if (!this.options.multiRole) {
+      throw new Error(
+        'WorkOS single-role mode does not support removing roles. Use assignRole to change roles, ' +
+          'or remove the membership entirely via the WorkOS dashboard.',
+      );
+    }
+
+    if (!this.options.organizationId) {
+      throw new Error('organizationId is required for role removal');
+    }
+
+    // Find the user's membership in this organization
+    const memberships = await this.workos.userManagement.listOrganizationMemberships({
+      organizationId: this.options.organizationId,
+      userId,
+    });
+
+    if (memberships.data.length === 0) {
+      throw new Error(`User ${userId} is not a member of organization ${this.options.organizationId}`);
+    }
+
+    const membership = memberships.data[0]!;
+    const membershipAny = membership as any;
+
+    // Get current roles
+    const currentRoles: string[] = Array.isArray(membershipAny.roles)
+      ? membershipAny.roles.map((r: any) => r.slug)
+      : [membership.role?.slug].filter(Boolean);
+
+    // Remove the specified role
+    const newRoles = currentRoles.filter(r => r !== roleId);
+
+    if (newRoles.length === 0) {
+      throw new Error('Cannot remove the last role. Users must have at least one role.');
+    }
+
+    await this.workos.userManagement.updateOrganizationMembership(membership.id, {
+      roleSlugs: newRoles,
+    } as any);
+
+    // Invalidate cache for this user
+    this.rolesCache.delete(userId);
   }
 }

@@ -202,6 +202,22 @@ export interface MastraRBACWorkosOptions {
    */
   organizationId?: string;
 
+  /**
+   * Whether multiple roles per user is enabled in your WorkOS environment.
+   *
+   * When true:
+   * - Users can have multiple roles assigned
+   * - Permissions are the union of all role permissions
+   * - UI shows checkboxes for role selection
+   *
+   * When false (default):
+   * - Users have exactly one role
+   * - UI shows radio buttons for single role selection
+   *
+   * Configure this in WorkOS Dashboard: Authorization > Configuration > Multiple roles
+   */
+  multiRole?: boolean;
+
   /** Permission cache configuration */
   cache?: PermissionCacheOptions;
 }

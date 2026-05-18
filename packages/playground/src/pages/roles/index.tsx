@@ -171,9 +171,6 @@ function RoleRow({
   expanded: boolean;
   onToggleExpand: () => void;
 }) {
-  const hasProviderPermissions = role.providerPermissions && role.providerPermissions.length > 0;
-  const isFromProvider = role.metadata?.source === 'provider';
-
   return (
     <div className="border-b border-border1 last:border-b-0">
       <div
@@ -182,27 +179,15 @@ function RoleRow({
       >
         {/* Role name and description */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-text1">{role.name}</span>
-            {isFromProvider && (
-              <Badge variant="info" className="text-xs">
-                WorkOS
-              </Badge>
-            )}
-          </div>
+          <div className="font-medium text-text1">{role.name}</div>
           {role.description && <div className="text-sm text-text2 mt-0.5">{role.description}</div>}
         </div>
 
         {/* Permissions count */}
-        <div className="w-40 shrink-0 text-center">
+        <div className="w-32 shrink-0 text-center">
           <Badge variant="default">
-            {role.permissions.length} Mastra {role.permissions.length === 1 ? 'permission' : 'permissions'}
+            {role.permissions.length} {role.permissions.length === 1 ? 'permission' : 'permissions'}
           </Badge>
-          {hasProviderPermissions && (
-            <Badge variant="info" className="ml-1">
-              {role.providerPermissions!.length} WorkOS
-            </Badge>
-          )}
         </div>
 
         {/* Inherits */}
@@ -230,37 +215,15 @@ function RoleRow({
       {/* Expanded permissions detail */}
       {expanded && (
         <div className="px-4 pb-4 bg-surface2/30">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Mastra Permissions */}
-            <div>
-              <div className="text-xs font-medium text-text2 uppercase tracking-wide mb-2">Mastra Permissions</div>
-              <div className="flex flex-wrap gap-1">
-                {role.permissions.length > 0 ? (
-                  role.permissions.map(perm => (
-                    <Badge key={perm} variant="default" className="text-xs">
-                      {perm}
-                    </Badge>
-                  ))
-                ) : (
-                  <span className="text-sm text-text3">No permissions assigned</span>
-                )}
-              </div>
-              <p className="text-xs text-text3 mt-2">Used for authorization within Mastra Studio</p>
-            </div>
-
-            {/* Provider Permissions (WorkOS) */}
-            {hasProviderPermissions && (
-              <div>
-                <div className="text-xs font-medium text-text2 uppercase tracking-wide mb-2">WorkOS Permissions</div>
-                <div className="flex flex-wrap gap-1">
-                  {role.providerPermissions!.map(perm => (
-                    <Badge key={perm} variant="info" className="text-xs">
-                      {perm}
-                    </Badge>
-                  ))}
-                </div>
-                <p className="text-xs text-text3 mt-2">Configured in WorkOS Dashboard</p>
-              </div>
+          <div className="flex flex-wrap gap-1">
+            {role.permissions.length > 0 ? (
+              role.permissions.map(perm => (
+                <Badge key={perm} variant="default" className="text-xs">
+                  {perm}
+                </Badge>
+              ))
+            ) : (
+              <span className="text-sm text-text3">No permissions assigned</span>
             )}
           </div>
         </div>
