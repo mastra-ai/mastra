@@ -1106,9 +1106,14 @@ export const GET_ROLES_ROUTE = createRoute({
         // Return default roles if no RBAC manager
         return {
           roles: [
-            { id: 'admin', name: 'Admin', description: 'Full access' },
-            { id: 'member', name: 'Member', description: 'Read and execute access' },
-            { id: 'viewer', name: 'Viewer', description: 'Read-only access' },
+            { id: 'admin', name: 'Admin', description: 'Full access', permissions: ['*'] },
+            {
+              id: 'member',
+              name: 'Member',
+              description: 'Read and execute access',
+              permissions: ['*:read', '*:execute'],
+            },
+            { id: 'viewer', name: 'Viewer', description: 'Read-only access', permissions: ['*:read'] },
           ],
         };
       }
