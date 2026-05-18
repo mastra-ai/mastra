@@ -133,3 +133,49 @@ export const getTagsResponseSchema = z.object({
 });
 
 export type GetTagsResponse = z.infer<typeof getTagsResponseSchema>;
+
+// --- getRootSpanJsonKeys ---
+
+export const rootSpanJsonFieldSchema = z
+  .enum(['metadata', 'attributes'])
+  .describe('Which JSON field to introspect on root spans');
+
+export type RootSpanJsonField = z.infer<typeof rootSpanJsonFieldSchema>;
+
+export const getRootSpanJsonKeysArgsSchema = z
+  .object({
+    field: rootSpanJsonFieldSchema,
+    limit: z.number().int().min(1).optional().describe('Maximum number of keys to return'),
+  })
+  .describe('Arguments for getting distinct root-span JSON keys');
+
+export type GetRootSpanJsonKeysArgs = z.infer<typeof getRootSpanJsonKeysArgsSchema>;
+
+export const getRootSpanJsonKeysResponseSchema = z.object({
+  keys: z.array(z.string()).describe('Distinct top-level keys present on root-span JSON field'),
+});
+
+export type GetRootSpanJsonKeysResponse = z.infer<typeof getRootSpanJsonKeysResponseSchema>;
+
+// --- getLogJsonKeys ---
+
+export const logJsonFieldSchema = z
+  .enum(['metadata', 'data'])
+  .describe('Which JSON field to introspect on log records');
+
+export type LogJsonField = z.infer<typeof logJsonFieldSchema>;
+
+export const getLogJsonKeysArgsSchema = z
+  .object({
+    field: logJsonFieldSchema,
+    limit: z.number().int().min(1).optional().describe('Maximum number of keys to return'),
+  })
+  .describe('Arguments for getting distinct log JSON keys');
+
+export type GetLogJsonKeysArgs = z.infer<typeof getLogJsonKeysArgsSchema>;
+
+export const getLogJsonKeysResponseSchema = z.object({
+  keys: z.array(z.string()).describe('Distinct top-level keys present on log JSON field'),
+});
+
+export type GetLogJsonKeysResponse = z.infer<typeof getLogJsonKeysResponseSchema>;

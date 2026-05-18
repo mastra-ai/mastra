@@ -227,6 +227,20 @@ export const NEW_ROUTE_DEFS = {
     summary: 'Get tags',
     description: 'Returns distinct tags with optional entity type filtering',
   },
+
+  GET_ROOT_SPAN_JSON_KEYS: {
+    method: 'GET',
+    path: '/observability/discovery/root-span-keys',
+    summary: 'Get root-span JSON keys',
+    description: 'Returns distinct top-level keys from root-span metadata or attributes',
+  },
+
+  GET_LOG_JSON_KEYS: {
+    method: 'GET',
+    path: '/observability/discovery/log-keys',
+    summary: 'Get log JSON keys',
+    description: 'Returns distinct top-level keys from log metadata or data',
+  },
 } as const satisfies Record<string, RouteDetails>;
 
 export type NewRoutesKey = keyof typeof NEW_ROUTE_DEFS;

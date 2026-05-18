@@ -37,6 +37,8 @@ import {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_ROOT_SPAN_JSON_KEYS,
+  GET_LOG_JSON_KEYS,
 } from '../../handlers/observability-new-endpoints';
 
 export const OBSERVABILITY_ROUTES = [
@@ -78,4 +80,6 @@ export const OBSERVABILITY_ROUTES = [
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_ROOT_SPAN_JSON_KEYS,
+  GET_LOG_JSON_KEYS,
 ] as const;
