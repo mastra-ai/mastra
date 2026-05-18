@@ -340,7 +340,7 @@ function ConfigSections({
   modelSectionVisible,
 }: ConfigSectionsProps) {
   return (
-    <Accordion className="rounded-xl border border-border1 bg-surface3 overflow-hidden h-full min-h-0">
+    <Accordion className="rounded-none bg-surface3 overflow-visible h-full min-h-0 rounded-xl border border-border1">
       {modelSectionVisible && (
         <ConfigSection
           value="model"
@@ -430,9 +430,13 @@ interface ConfigSectionProps {
 const ConfigSection = ({ value, icon, label, summaryValue, count, total, testId, children }: ConfigSectionProps) => (
   <AccordionItem
     value={value}
-    className="grid grid-rows-[auto_minmax(0,1fr)] min-h-0 data-[open]:flex-1 data-[closed]:shrink-0"
+    className={cn(
+      'rounded-t-xl border border-border1 bg-surface3 overflow-hidden border-b-0 -mx-px first:-mt-px last:-mb-px -mt-2',
+      'min-h-0 shrink-0',
+      'data-[open]:flex-1 data-[open]:grid data-[open]:grid-rows-[auto_minmax(0,1fr)]',
+    )}
   >
-    <AccordionSummary data-testid={testId} className="px-4 shrink-0">
+    <AccordionSummary data-testid={testId} className="px-4 shrink-0 pb-4">
       <div className="flex items-center gap-2">
         <span className="text-neutral3">{icon}</span>
         <Txt variant="ui-sm" className="font-medium text-neutral6">
