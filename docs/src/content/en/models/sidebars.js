@@ -348,6 +348,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
@@ -475,6 +480,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
+        },
+        {
+          type: 'doc',
+          id: 'providers/orcarouter',
+          label: 'OrcaRouter',
         },
         {
           type: 'doc',

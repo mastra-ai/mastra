@@ -69,7 +69,7 @@ export default function Evaluation() {
 
   return (
     <PageLayout width="wide" height="full">
-      <div className="flex flex-col gap-6 pt-6">
+      <div className="flex flex-col gap-6">
         <MetricsFlexGrid>
           <EvaluationKpiCards
             scorers={scorers}

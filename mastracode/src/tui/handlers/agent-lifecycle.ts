@@ -194,25 +194,39 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
       ctx.updateStatusLine();
     });
   }
-  const activeGoalJudge = { modelId: goal.judgeModelId };
+  const abortController = new AbortController();
+  const judgeComponent = new JudgeDisplayComponent(null, goal.turnsUsed, goal.maxTurns);
+  const activeGoalJudge = { modelId: goal.judgeModelId, abortController, component: judgeComponent };
   state.activeGoalJudge = activeGoalJudge;
+  state.chatContainer.addChild(judgeComponent);
   state.gradientAnimator.start();
   ctx.updateStatusLine();
   state.ui.requestRender();
 
   state.goalManager
-    .evaluateAfterTurn(state)
+    .evaluateAfterTurn(state, {
+      abortSignal: abortController.signal,
+      onActivity: line => {
+        if (state.activeGoalJudge === activeGoalJudge) {
+          judgeComponent.addActivity(line);
+          state.ui.requestRender();
+        }
+      },
+    })
     .then(async ({ continuation, judgeResult }) => {
       if (state.activeGoalJudge !== activeGoalJudge) {
         return;
       }
 
-      // Display the judge result in chat if available
       if (judgeResult) {
         const goal = state.goalManager.getGoal()!;
-        const judgeComponent = new JudgeDisplayComponent(judgeResult, goal.turnsUsed, goal.maxTurns);
-        state.chatContainer.addChild(judgeComponent);
+        judgeComponent.setResult(judgeResult, goal.turnsUsed, goal.maxTurns);
         state.ui.requestRender();
+      }
+
+      if (abortController.signal.aborted) {
+        state.userInitiatedAbort = false;
+        return;
       }
 
       if (continuation) {

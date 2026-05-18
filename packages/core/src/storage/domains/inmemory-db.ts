@@ -9,6 +9,7 @@ import type {
   StoragePromptBlockType,
   StorageResourceType,
   StorageScorerDefinitionType,
+  StorageFavoriteType,
   StorageWorkspaceType,
   StorageSkillType,
   StorageWorkflowRun,
@@ -72,6 +73,13 @@ export class InMemoryDB {
   readonly workspaceVersions = new Map<string, WorkspaceVersion>();
   readonly skills = new Map<string, StorageSkillType>();
   readonly skillVersions = new Map<string, SkillVersion>();
+  /**
+   * Favorites keyed by `${userId}\u0000${entityType}\u0000${entityId}`. The
+   * favorites domain owns reads/writes; this Map lives on InMemoryDB so the
+   * favorites domain can also mutate `agents` / `skills` `favoriteCount` atomically
+   * within the same synchronous block.
+   */
+  readonly favorites = new Map<string, StorageFavoriteType>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -127,6 +135,7 @@ export class InMemoryDB {
     this.workspaceVersions.clear();
     this.skills.clear();
     this.skillVersions.clear();
+    this.favorites.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();

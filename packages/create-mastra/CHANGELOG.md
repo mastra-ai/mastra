@@ -1,5 +1,23 @@
 # create-mastra
 
+## 1.9.4-alpha.0
+
+## 1.9.3
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+## 1.9.3-alpha.3
+
+## 1.9.3-alpha.2
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+## 1.9.3-alpha.1
+
 ## 1.9.3-alpha.0
 
 ## 1.9.2
