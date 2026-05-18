@@ -5,8 +5,13 @@ import type {
   AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
+  ChannelActionInitialClaim,
+  ChannelActionReceipt,
+  ChannelActionToken,
   ChannelInboxInitialClaim,
   ChannelInboxItem,
+  CreateOrLoadChannelActionReceiptResult,
+  CreateOrLoadChannelActionTokenResult,
   CreateOrLoadChannelInboxItemResult,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
@@ -198,6 +203,43 @@ export class HarnessStorageChannelInboxTransitionError extends Error {
   ) {
     super(
       `Channel inbox item "${inboxItemId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
+    );
+  }
+}
+
+export class HarnessStorageChannelActionClaimConflictError extends Error {
+  readonly name = 'HarnessStorageChannelActionClaimConflictError';
+  readonly code = 'harness.storage.channel_action_claim_conflict' as const;
+  constructor(
+    public readonly receiptId: string,
+    public readonly claimId?: string,
+  ) {
+    super(`Channel action receipt "${receiptId}" is not held by claim "${claimId ?? '<none>'}"`);
+  }
+}
+
+export class HarnessStorageChannelActionTokenConflictError extends Error {
+  readonly name = 'HarnessStorageChannelActionTokenConflictError';
+  readonly code = 'harness.storage.channel_action_token_conflict' as const;
+  constructor(
+    public readonly actionTokenId: string,
+    reason: string,
+  ) {
+    super(`Channel action token "${actionTokenId}" conflicts with stored token: ${reason}`);
+  }
+}
+
+export class HarnessStorageChannelActionReceiptTransitionError extends Error {
+  readonly name = 'HarnessStorageChannelActionReceiptTransitionError';
+  readonly code = 'harness.storage.channel_action_receipt_transition_invalid' as const;
+  constructor(
+    public readonly receiptId: string,
+    public readonly fromStatus: ChannelActionReceipt['status'] | undefined,
+    public readonly toStatus: ChannelActionReceipt['status'],
+    reason: string,
+  ) {
+    super(
+      `Channel action receipt "${receiptId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
     );
   }
 }
@@ -592,6 +634,83 @@ export abstract class HarnessStorage extends StorageDomain {
   }): Promise<{ claimExpiresAt: number; storageNow: number }>;
 
   abstract updateChannelInboxItem(record: ChannelInboxItem, opts: { claimId: string }): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // Channel action token and receipt ledger
+  // -------------------------------------------------------------------------
+
+  abstract createOrLoadChannelActionToken(record: ChannelActionToken): Promise<CreateOrLoadChannelActionTokenResult>;
+
+  abstract loadChannelActionTokenById(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): Promise<ChannelActionToken | null>;
+
+  abstract loadChannelActionTokenByTransportHash(opts: {
+    harnessName: string;
+    channelId: string;
+    transportHash: string;
+  }): Promise<ChannelActionToken | null>;
+
+  abstract loadChannelActionTokenForPendingItem(opts: {
+    harnessName: string;
+    channelId: string;
+    bindingId: string;
+    bindingGeneration: number;
+    owningSessionId: string;
+    itemId: string;
+    kind: ChannelActionToken['kind'];
+    runId: string;
+    pendingRequestedAt: number;
+    metadataHash: string;
+  }): Promise<ChannelActionToken | null>;
+
+  abstract revokeChannelActionToken(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+    revokedAt?: number;
+    revokedReason?: ChannelActionToken['revokedReason'];
+  }): Promise<ChannelActionToken>;
+
+  abstract saveChannelActionReceipt(record: ChannelActionReceipt): Promise<void>;
+
+  abstract createOrLoadChannelActionReceipt(
+    record: ChannelActionReceipt,
+    opts?: { initialClaim?: ChannelActionInitialClaim },
+  ): Promise<CreateOrLoadChannelActionReceiptResult>;
+
+  abstract loadChannelActionReceiptByActionId(opts: {
+    harnessName: string;
+    channelId: string;
+    actionId: string;
+  }): Promise<ChannelActionReceipt | null>;
+
+  abstract loadChannelActionReceiptByTokenId(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): Promise<ChannelActionReceipt | null>;
+
+  abstract claimChannelActionReceipts(opts: {
+    harnessName: string;
+    channelId?: string;
+    statuses: Array<'received' | 'accepted' | 'failed'>;
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<ChannelActionReceipt[]>;
+
+  abstract renewChannelActionReceiptClaim(opts: {
+    receiptId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }>;
+
+  abstract updateChannelActionReceipt(record: ChannelActionReceipt, opts: { claimId: string }): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Test-only

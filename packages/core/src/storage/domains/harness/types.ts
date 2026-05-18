@@ -534,6 +534,102 @@ export interface CreateOrLoadChannelInboxItemResult {
   claimed: boolean;
 }
 
+export type ChannelActionKind = PendingResume['kind'];
+export type ChannelActionAudience = JsonValue;
+
+export interface ChannelActionActor {
+  platformUserId: string;
+  displayName?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface ChannelActionToken {
+  actionTokenId: string;
+  harnessName: string;
+  channelId: string;
+  providerId: string;
+  resourceId: string;
+  owningSessionId: string;
+  itemId: string;
+  kind: ChannelActionKind;
+  bindingId: string;
+  bindingGeneration: number;
+  runId: string;
+  pendingRequestedAt: number;
+  audience: ChannelActionAudience;
+  metadataHash: string;
+  transportHash: string;
+  keyId?: string;
+  expiresAt?: number;
+  revokedAt?: number;
+  revokedReason?: Extract<HarnessRowErrorCode, 'session_deleted'>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChannelActionReceipt {
+  id: string;
+  harnessName: string;
+  channelId: string;
+  providerId: string;
+  actionTokenId: string;
+  actionId: string;
+  bindingId: string;
+  bindingGeneration: number;
+  resourceId: string;
+  owningSessionId: string;
+  itemId: string;
+  kind: ChannelActionKind;
+  runId: string;
+  pendingRequestedAt: number;
+  audience: ChannelActionAudience;
+  verifiedActor?: ChannelActionActor;
+  responseHash: string;
+  response: JsonValue;
+  status: 'received' | 'accepted' | 'applied' | 'conflict' | 'failed' | 'dead';
+  conflictReason?:
+    | 'response_mismatch'
+    | 'stale_item'
+    | 'kind_mismatch'
+    | 'run_mismatch'
+    | 'binding_mismatch'
+    | 'session_closed'
+    | 'actor_not_allowed'
+    | 'token_expired'
+    | 'token_revoked';
+  attempts: number;
+  claimId?: string;
+  claimExpiresAt?: number;
+  nextAttemptAt?: number;
+  acceptedAt?: number;
+  appliedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  result?: JsonValue;
+  lastError?: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChannelActionInitialClaim {
+  claimId: string;
+  now: number;
+  claimTtlMs: number;
+}
+
+export interface CreateOrLoadChannelActionTokenResult {
+  token: ChannelActionToken;
+  duplicate: boolean;
+  conflict: boolean;
+}
+
+export interface CreateOrLoadChannelActionReceiptResult {
+  receipt: ChannelActionReceipt;
+  duplicate: boolean;
+  conflict: boolean;
+  claimed: boolean;
+}
+
 export interface OperationAdmissionTombstone {
   kind: HarnessOperationKind;
   harnessName: string;

@@ -8,10 +8,13 @@ import type { Client } from '@libsql/client';
 import {
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
   TABLE_HARNESS_CHANNEL_INBOX,
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
+  HarnessStorageChannelActionClaimConflictError,
+  HarnessStorageChannelActionReceiptTransitionError,
   HarnessStorageChannelInboxClaimConflictError,
   HarnessStorageChannelInboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
@@ -19,6 +22,8 @@ import {
   HarnessStorageVersionConflictError,
 } from '@mastra/core/storage';
 import type {
+  ChannelActionReceipt,
+  ChannelActionToken,
   ChannelInboxItem,
   SessionRecord,
   HarnessStorageParentSessionUnavailableError,
@@ -1333,6 +1338,293 @@ describe('HarnessLibSQL channel inbox ledger', () => {
   });
 });
 
+describe('HarnessLibSQL channel action ledger', () => {
+  let storage: HarnessLibSQL;
+  let client: Client;
+
+  beforeEach(async () => {
+    client = createHarnessTestClient();
+    storage = new HarnessLibSQL({ client });
+    await storage.init();
+  });
+
+  it('dedupes exact action tokens and flags immutable token mismatches', async () => {
+    await expect(storage.createOrLoadChannelActionToken(sampleChannelActionToken())).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+    });
+
+    await expect(storage.createOrLoadChannelActionToken(sampleChannelActionToken())).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      token: { actionTokenId: 'action-token-1', metadataHash: 'metadata-hash-1' },
+    });
+    await expect(
+      storage.createOrLoadChannelActionToken(sampleChannelActionToken({ metadataHash: 'metadata-hash-2' })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      token: { actionTokenId: 'action-token-1', metadataHash: 'metadata-hash-1' },
+    });
+    await expect(
+      storage.createOrLoadChannelActionToken(
+        sampleChannelActionToken({ actionTokenId: 'action-token-2', transportHash: 'transport-hash-1' }),
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      token: { actionTokenId: 'action-token-1', transportHash: 'transport-hash-1' },
+    });
+  });
+
+  it('creates receipt indexes on the lazy ensure path', async () => {
+    const client = createHarnessTestClient();
+    const lazyStorage = new HarnessLibSQL({ client });
+
+    await lazyStorage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt());
+    await lazyStorage.loadChannelActionReceiptByTokenId({
+      harnessName: 'default',
+      channelId: 'support',
+      actionTokenId: 'action-token-1',
+    });
+
+    await expect(indexNames(client, TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS)).resolves.toEqual(
+      expect.arrayContaining([
+        'idx_harness_channel_action_receipts_token',
+        'idx_harness_channel_action_receipts_action',
+        'idx_harness_channel_action_receipts_claim',
+      ]),
+    );
+  });
+
+  it('dedupes exact action receipts and does not steal an active initial claim', async () => {
+    const first = await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt(), {
+      initialClaim: { claimId: 'claim-1', now: 1000, claimTtlMs: 5000 },
+    });
+    const duplicate = await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt({ id: 'receipt-2' }), {
+      initialClaim: { claimId: 'claim-2', now: 2000, claimTtlMs: 5000 },
+    });
+
+    expect(first).toMatchObject({ duplicate: false, conflict: false, claimed: true });
+    expect(duplicate).toMatchObject({
+      duplicate: true,
+      conflict: false,
+      claimed: false,
+      receipt: { id: 'receipt-1', claimId: 'claim-1', claimExpiresAt: 6000 },
+    });
+  });
+
+  it('flags same action token with a different response hash as a conflict', async () => {
+    await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt());
+
+    await expect(
+      storage.createOrLoadChannelActionReceipt(
+        sampleChannelActionReceipt({ id: 'receipt-2', responseHash: 'response-hash-2' }),
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      claimed: false,
+      receipt: { id: 'receipt-1', responseHash: 'response-hash-1' },
+    });
+  });
+
+  it('treats action receipt provider action ids as immutable identity', async () => {
+    await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt());
+
+    await expect(
+      storage.createOrLoadChannelActionReceipt(
+        sampleChannelActionReceipt({ id: 'receipt-2', actionId: 'provider-action-2' }),
+      ),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      claimed: false,
+      receipt: { id: 'receipt-1', actionId: 'provider-action-1' },
+    });
+    await expect(
+      storage.saveChannelActionReceipt(sampleChannelActionReceipt({ actionId: 'provider-action-2', updatedAt: 1200 })),
+    ).rejects.toBeInstanceOf(HarnessStorageChannelActionReceiptTransitionError);
+  });
+
+  it('reclaims crashed action receipts after claim expiry but respects nextAttemptAt backoff', async () => {
+    await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt({ nextAttemptAt: 7000 }), {
+      initialClaim: { claimId: 'claim-1', now: 1000, claimTtlMs: 1000 },
+    });
+
+    await expect(
+      storage.claimChannelActionReceipts({
+        harnessName: 'default',
+        statuses: ['received'],
+        claimId: 'early',
+        limit: 10,
+        now: 6500,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      storage.claimChannelActionReceipts({
+        harnessName: 'default',
+        statuses: ['received'],
+        claimId: 'recovery',
+        limit: 10,
+        now: 7000,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'receipt-1', claimId: 'recovery', claimExpiresAt: 8000 })]);
+  });
+
+  it('does not treat non-positive claim limits as unbounded', async () => {
+    await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt());
+
+    await expect(
+      storage.claimChannelActionReceipts({
+        harnessName: 'default',
+        statuses: ['received'],
+        claimId: 'claim-1',
+        limit: -1,
+        now: 2000,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('guards action receipt renewal and applied updates by owner claim', async () => {
+    const now = 10_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt(), {
+        initialClaim: { claimId: 'claim-1', now, claimTtlMs: 5000 },
+      });
+
+      await expect(
+        storage.renewChannelActionReceiptClaim({
+          receiptId: 'receipt-1',
+          claimId: 'other',
+          now: now + 100,
+          claimTtlMs: 5000,
+        }),
+      ).rejects.toBeInstanceOf(HarnessStorageChannelActionClaimConflictError);
+      await expect(
+        storage.renewChannelActionReceiptClaim({
+          receiptId: 'receipt-1',
+          claimId: 'claim-1',
+          now: now + 100,
+          claimTtlMs: 5000,
+        }),
+      ).resolves.toEqual({ claimExpiresAt: now + 5100, storageNow: now + 100 });
+
+      await storage.updateChannelActionReceipt(
+        sampleChannelActionReceipt({
+          status: 'accepted',
+          acceptedAt: now + 200,
+          updatedAt: now + 200,
+          claimId: 'claim-1',
+          claimExpiresAt: now + 5100,
+        }),
+        { claimId: 'claim-1' },
+      );
+      await storage.updateChannelActionReceipt(
+        sampleChannelActionReceipt({
+          status: 'applied',
+          acceptedAt: now + 200,
+          appliedAt: now + 300,
+          result: { ok: true },
+          updatedAt: now + 300,
+          claimId: undefined,
+          claimExpiresAt: undefined,
+        }),
+        { claimId: 'claim-1' },
+      );
+      await expect(
+        storage.renewChannelActionReceiptClaim({
+          receiptId: 'receipt-1',
+          claimId: 'claim-1',
+          now: now + 400,
+          claimTtlMs: 5000,
+        }),
+      ).rejects.toBeInstanceOf(HarnessStorageChannelActionClaimConflictError);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('rejects stale same-claim action receipt updates after another writer changes the row', async () => {
+    const now = 10_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now + 100);
+    await storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt(), {
+      initialClaim: { claimId: 'claim-1', now, claimTtlMs: 5000 },
+    });
+    const originalExecute = client.execute.bind(client);
+    let injectConcurrentUpdate = false;
+    try {
+      vi.spyOn(client, 'execute').mockImplementation(async statement => {
+        const result = await originalExecute(statement);
+        const sql = typeof statement === 'string' ? statement : statement.sql;
+        if (
+          injectConcurrentUpdate &&
+          sql.includes(`SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}`) &&
+          sql.includes('WHERE harness_name = ? AND id = ?')
+        ) {
+          injectConcurrentUpdate = false;
+          await originalExecute({
+            sql: `UPDATE ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+                  SET attempts = ?
+                  WHERE id = ?`,
+            args: [1, 'receipt-1'],
+          });
+        }
+        return result;
+      });
+      injectConcurrentUpdate = true;
+
+      await expect(
+        storage.updateChannelActionReceipt(
+          sampleChannelActionReceipt({
+            status: 'accepted',
+            acceptedAt: now + 100,
+            attempts: 2,
+            updatedAt: now + 100,
+            claimId: 'claim-1',
+            claimExpiresAt: now + 5000,
+          }),
+          { claimId: 'claim-1' },
+        ),
+      ).rejects.toBeInstanceOf(HarnessStorageChannelActionClaimConflictError);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('validates new action receipt rows before insert and keeps terminal saves idempotent', async () => {
+    await expect(
+      storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt({ status: 'accepted' })),
+    ).rejects.toBeInstanceOf(HarnessStorageChannelActionReceiptTransitionError);
+    await expect(
+      storage.createOrLoadChannelActionReceipt(sampleChannelActionReceipt({ status: 'mystery' as any })),
+    ).rejects.toBeInstanceOf(HarnessStorageChannelActionReceiptTransitionError);
+    await expect(
+      storage.createOrLoadChannelActionReceipt(
+        sampleChannelActionReceipt({ status: 'conflict', conflictReason: 'mystery' as any }),
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageChannelActionReceiptTransitionError);
+    const terminal = sampleChannelActionReceipt({
+      status: 'applied',
+      acceptedAt: 1200,
+      appliedAt: 1300,
+      result: { b: 2, a: 1 },
+      updatedAt: 1300,
+    });
+    const replay = { ...terminal, result: { a: 1, b: 2 } };
+
+    await storage.saveChannelActionReceipt(terminal);
+    await expect(storage.saveChannelActionReceipt(replay)).resolves.toBeUndefined();
+    await expect(
+      storage.saveChannelActionReceipt({ ...terminal, result: { changed: true }, updatedAt: 1400 }),
+    ).rejects.toBeInstanceOf(HarnessStorageChannelActionReceiptTransitionError);
+  });
+});
+
 function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     harnessName: 'default',
@@ -1383,6 +1675,59 @@ function sampleChannelInbox(overrides: Partial<ChannelInboxItem> = {}): ChannelI
     },
     content: 'hello',
     attachments: [],
+    ...overrides,
+  };
+}
+
+function sampleChannelActionToken(overrides: Partial<ChannelActionToken> = {}): ChannelActionToken {
+  return {
+    actionTokenId: 'action-token-1',
+    harnessName: 'default',
+    channelId: 'support',
+    providerId: 'slack',
+    resourceId: 'resource-1',
+    owningSessionId: 'session-1',
+    itemId: 'question-1',
+    kind: 'question',
+    bindingId: 'binding-1',
+    bindingGeneration: 1,
+    runId: 'run-1',
+    pendingRequestedAt: 1000,
+    audience: { platformUserIds: ['user-1'] },
+    metadataHash: 'metadata-hash-1',
+    transportHash: 'transport-hash-1',
+    keyId: 'key-1',
+    expiresAt: 10_000,
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+function sampleChannelActionReceipt(overrides: Partial<ChannelActionReceipt> = {}): ChannelActionReceipt {
+  return {
+    id: 'receipt-1',
+    harnessName: 'default',
+    channelId: 'support',
+    providerId: 'slack',
+    actionTokenId: 'action-token-1',
+    actionId: 'provider-action-1',
+    bindingId: 'binding-1',
+    bindingGeneration: 1,
+    resourceId: 'resource-1',
+    owningSessionId: 'session-1',
+    itemId: 'question-1',
+    kind: 'question',
+    runId: 'run-1',
+    pendingRequestedAt: 1000,
+    audience: { platformUserIds: ['user-1'] },
+    verifiedActor: { platformUserId: 'user-1', displayName: 'User One' },
+    responseHash: 'response-hash-1',
+    response: { answer: 'approved' },
+    status: 'received',
+    attempts: 0,
+    createdAt: 1100,
+    updatedAt: 1100,
     ...overrides,
   };
 }

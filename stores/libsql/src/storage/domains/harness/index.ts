@@ -6,6 +6,9 @@ import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
+  HarnessStorageChannelActionClaimConflictError,
+  HarnessStorageChannelActionReceiptTransitionError,
+  HarnessStorageChannelActionTokenConflictError,
   HarnessStorageChannelInboxClaimConflictError,
   HarnessStorageChannelInboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
@@ -17,6 +20,8 @@ import {
   TABLE_CONFIGS,
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
+  TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
   TABLE_HARNESS_CHANNEL_INBOX,
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
@@ -32,9 +37,13 @@ import type {
   AttachmentReference,
   AttachmentRecord,
   AttachmentSemanticMetadata,
+  ChannelActionReceipt,
+  ChannelActionToken,
   ChannelInboxItem,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  CreateOrLoadChannelActionReceiptResult,
+  CreateOrLoadChannelActionTokenResult,
   CreateOrLoadChannelInboxItemResult,
   DeleteSessionOptions,
   ListActiveSessionsByThreadInput,
@@ -82,6 +91,7 @@ export class HarnessLibSQL extends HarnessStorage {
   #harnessName: string;
   #compactionLocks = new Map<string, Promise<void>>();
   #channelInboxIndexesReady: Promise<void> | undefined;
+  #channelActionIndexesReady: Promise<void> | undefined;
   #localThreadDeleteFences = new Map<string, { ownerId: string; leaseId: string; ttlMs: number }>();
 
   constructor(config: LibSQLDomainConfig) {
@@ -129,6 +139,7 @@ export class HarnessLibSQL extends HarnessStorage {
       compositePrimaryKey: threadDeleteFencesConfig?.compositePrimaryKey,
     });
     await this.#ensureChannelInboxTable();
+    await this.#ensureChannelActionTables();
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_SESSIONS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
@@ -201,12 +212,15 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#ensureOperationTombstonesTable();
     await this.#ensureThreadDeleteFencesTable();
     await this.#ensureChannelInboxTable();
+    await this.#ensureChannelActionTables();
     this.#localThreadDeleteFences.clear();
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_INBOX}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSIONS}`);
   }
@@ -1960,6 +1974,534 @@ export class HarnessLibSQL extends HarnessStorage {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Channel action token and receipt ledger
+  // -------------------------------------------------------------------------
+
+  async createOrLoadChannelActionToken(record: ChannelActionToken): Promise<CreateOrLoadChannelActionTokenResult> {
+    await this.#ensureChannelActionTables();
+    const token = { ...record, harnessName: this.#resolveHarnessName(record.harnessName) };
+    const existing = await this.loadChannelActionTokenById({
+      harnessName: token.harnessName,
+      channelId: token.channelId,
+      actionTokenId: token.actionTokenId,
+    });
+    if (existing) {
+      return { token: existing, duplicate: true, conflict: !channelActionTokensEquivalent(existing, token) };
+    }
+    const existingByTransport = await this.loadChannelActionTokenByTransportHash({
+      harnessName: token.harnessName,
+      channelId: token.channelId,
+      transportHash: token.transportHash,
+    });
+    if (existingByTransport) return { token: existingByTransport, duplicate: true, conflict: true };
+    const existingByPending = await this.loadChannelActionTokenForPendingItem({
+      harnessName: token.harnessName,
+      channelId: token.channelId,
+      bindingId: token.bindingId,
+      bindingGeneration: token.bindingGeneration,
+      owningSessionId: token.owningSessionId,
+      itemId: token.itemId,
+      kind: token.kind,
+      runId: token.runId,
+      pendingRequestedAt: token.pendingRequestedAt,
+      metadataHash: token.metadataHash,
+    });
+    if (existingByPending) return { token: existingByPending, duplicate: true, conflict: true };
+    const cols = channelActionTokenColumnValues(token);
+    try {
+      await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}
+              (${cols.names.join(', ')})
+              VALUES (${cols.names.map(() => '?').join(', ')})`,
+        args: cols.values,
+      });
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+      const raced =
+        (await this.loadChannelActionTokenById({
+          harnessName: token.harnessName,
+          channelId: token.channelId,
+          actionTokenId: token.actionTokenId,
+        })) ??
+        (await this.loadChannelActionTokenByTransportHash({
+          harnessName: token.harnessName,
+          channelId: token.channelId,
+          transportHash: token.transportHash,
+        })) ??
+        (await this.loadChannelActionTokenForPendingItem({
+          harnessName: token.harnessName,
+          channelId: token.channelId,
+          bindingId: token.bindingId,
+          bindingGeneration: token.bindingGeneration,
+          owningSessionId: token.owningSessionId,
+          itemId: token.itemId,
+          kind: token.kind,
+          runId: token.runId,
+          pendingRequestedAt: token.pendingRequestedAt,
+          metadataHash: token.metadataHash,
+        }));
+      if (raced) return { token: raced, duplicate: true, conflict: !channelActionTokensEquivalent(raced, token) };
+      throw err;
+    }
+    return { token, duplicate: false, conflict: false };
+  }
+
+  async loadChannelActionTokenById({
+    harnessName,
+    channelId,
+    actionTokenId,
+  }: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): Promise<ChannelActionToken | null> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(harnessName);
+    const row = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}
+            WHERE harness_name = ? AND channel_id = ? AND action_token_id = ?
+            LIMIT 1`,
+      args: [namespace, channelId, actionTokenId],
+    });
+    return row.rows[0] ? rowToChannelActionToken(row.rows[0] as Record<string, unknown>) : null;
+  }
+
+  async loadChannelActionTokenByTransportHash({
+    harnessName,
+    channelId,
+    transportHash,
+  }: {
+    harnessName: string;
+    channelId: string;
+    transportHash: string;
+  }): Promise<ChannelActionToken | null> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(harnessName);
+    const row = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}
+            WHERE harness_name = ? AND channel_id = ? AND transport_hash = ?
+            LIMIT 1`,
+      args: [namespace, channelId, transportHash],
+    });
+    return row.rows[0] ? rowToChannelActionToken(row.rows[0] as Record<string, unknown>) : null;
+  }
+
+  async loadChannelActionTokenForPendingItem(opts: {
+    harnessName: string;
+    channelId: string;
+    bindingId: string;
+    bindingGeneration: number;
+    owningSessionId: string;
+    itemId: string;
+    kind: ChannelActionToken['kind'];
+    runId: string;
+    pendingRequestedAt: number;
+    metadataHash: string;
+  }): Promise<ChannelActionToken | null> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(opts.harnessName);
+    const row = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}
+            WHERE harness_name = ? AND channel_id = ? AND binding_id = ? AND binding_generation = ?
+              AND owning_session_id = ? AND item_id = ? AND kind = ? AND run_id = ?
+              AND pending_requested_at = ? AND metadata_hash = ?
+            LIMIT 1`,
+      args: [
+        namespace,
+        opts.channelId,
+        opts.bindingId,
+        opts.bindingGeneration,
+        opts.owningSessionId,
+        opts.itemId,
+        opts.kind,
+        opts.runId,
+        opts.pendingRequestedAt,
+        opts.metadataHash,
+      ],
+    });
+    return row.rows[0] ? rowToChannelActionToken(row.rows[0] as Record<string, unknown>) : null;
+  }
+
+  async revokeChannelActionToken(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+    revokedAt?: number;
+    revokedReason?: ChannelActionToken['revokedReason'];
+  }): Promise<ChannelActionToken> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(opts.harnessName);
+    const revokedAt = opts.revokedAt ?? Date.now();
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}
+            SET revoked_at = ?, revoked_reason = ?, updated_at = ?
+            WHERE harness_name = ? AND channel_id = ? AND action_token_id = ?`,
+      args: [revokedAt, opts.revokedReason ?? null, revokedAt, namespace, opts.channelId, opts.actionTokenId],
+    });
+    if (result.rowsAffected === 0) {
+      throw new HarnessStorageChannelActionTokenConflictError(opts.actionTokenId, 'token was not found');
+    }
+    return (await this.loadChannelActionTokenById({
+      harnessName: namespace,
+      channelId: opts.channelId,
+      actionTokenId: opts.actionTokenId,
+    }))!;
+  }
+
+  async saveChannelActionReceipt(record: ChannelActionReceipt): Promise<void> {
+    await this.#ensureChannelActionTables();
+    const receipt = { ...record, harnessName: this.#resolveHarnessName(record.harnessName) };
+    assertValidChannelActionReceiptState(receipt);
+    const existing = await this.#loadChannelActionReceiptById(receipt.id);
+    if (existing) {
+      if (channelActionReceiptsEqual(existing, receipt)) return;
+      assertLegalChannelActionReceiptUpdate(existing, receipt);
+    }
+    const existingByToken = await this.loadChannelActionReceiptByTokenId({
+      harnessName: receipt.harnessName,
+      channelId: receipt.channelId,
+      actionTokenId: receipt.actionTokenId,
+    });
+    if (existingByToken && existingByToken.id !== receipt.id) {
+      throw new HarnessStorageChannelActionReceiptTransitionError(
+        receipt.id,
+        existingByToken.status,
+        receipt.status,
+        'action token is already owned by another receipt',
+      );
+    }
+    const cols = channelActionReceiptColumnValues(receipt);
+    try {
+      const result = await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+              (${cols.names.join(', ')})
+              VALUES (${cols.names.map(() => '?').join(', ')})
+              ON CONFLICT(id) DO UPDATE SET
+                ${cols.names
+                  .filter(name => name !== 'id')
+                  .map(name => `${name} = excluded.${name}`)
+                  .join(', ')}
+              WHERE ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.harness_name = excluded.harness_name
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.channel_id = excluded.channel_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.provider_id = excluded.provider_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.action_token_id = excluded.action_token_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.action_id = excluded.action_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.binding_id = excluded.binding_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.binding_generation = excluded.binding_generation
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.resource_id = excluded.resource_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.owning_session_id = excluded.owning_session_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.item_id = excluded.item_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.kind = excluded.kind
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.run_id = excluded.run_id
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.pending_requested_at = excluded.pending_requested_at
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.audience = excluded.audience
+                AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.response_hash = excluded.response_hash
+                AND (
+                  (
+                    ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.status = excluded.status
+                    AND ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.status NOT IN ('applied', 'conflict', 'dead')
+                  )
+                  OR (
+                    ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.status = 'received'
+                    AND excluded.status IN ('accepted', 'failed', 'conflict', 'dead')
+                  )
+                  OR (
+                    ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.status = 'accepted'
+                    AND excluded.status IN ('applied', 'failed', 'dead')
+                  )
+                  OR (
+                    ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}.status = 'failed'
+                    AND excluded.status IN ('received', 'accepted', 'failed', 'dead')
+                  )
+                )`,
+        args: cols.values,
+      });
+      if (result.rowsAffected === 0) {
+        const conflict = await this.#loadChannelActionReceiptById(receipt.id);
+        if (conflict && channelActionReceiptsEqual(conflict, receipt)) return;
+        if (conflict) assertLegalChannelActionReceiptUpdate(conflict, receipt);
+        throw new HarnessStorageChannelActionReceiptTransitionError(
+          receipt.id,
+          conflict?.status,
+          receipt.status,
+          'receipt upsert did not affect a row',
+        );
+      }
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+      const conflictingByToken = await this.loadChannelActionReceiptByTokenId({
+        harnessName: receipt.harnessName,
+        channelId: receipt.channelId,
+        actionTokenId: receipt.actionTokenId,
+      });
+      if (conflictingByToken && conflictingByToken.id !== receipt.id) {
+        throw new HarnessStorageChannelActionReceiptTransitionError(
+          receipt.id,
+          conflictingByToken.status,
+          receipt.status,
+          'action token is already owned by another receipt',
+        );
+      }
+      throw err;
+    }
+  }
+
+  async createOrLoadChannelActionReceipt(
+    record: ChannelActionReceipt,
+    opts?: { initialClaim?: { claimId: string; now: number; claimTtlMs: number } },
+  ): Promise<CreateOrLoadChannelActionReceiptResult> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(record.harnessName);
+    const incoming: ChannelActionReceipt = { ...record, harnessName: namespace };
+    assertValidChannelActionReceiptState(incoming);
+    let existing = await this.loadChannelActionReceiptByTokenId({
+      harnessName: namespace,
+      channelId: incoming.channelId,
+      actionTokenId: incoming.actionTokenId,
+    });
+    if (existing) return this.#channelActionReceiptDuplicate(existing, incoming, opts);
+    const insertReceipt =
+      opts?.initialClaim === undefined
+        ? incoming
+        : {
+            ...incoming,
+            claimId: opts.initialClaim.claimId,
+            claimExpiresAt: opts.initialClaim.now + opts.initialClaim.claimTtlMs,
+            updatedAt: opts.initialClaim.now,
+          };
+    const cols = channelActionReceiptColumnValues(insertReceipt);
+    try {
+      await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+              (${cols.names.join(', ')})
+              VALUES (${cols.names.map(() => '?').join(', ')})`,
+        args: cols.values,
+      });
+      return {
+        receipt: insertReceipt,
+        duplicate: false,
+        conflict: false,
+        claimed: opts?.initialClaim !== undefined,
+      };
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+    }
+    existing = await this.loadChannelActionReceiptByTokenId({
+      harnessName: namespace,
+      channelId: incoming.channelId,
+      actionTokenId: incoming.actionTokenId,
+    });
+    if (existing) return this.#channelActionReceiptDuplicate(existing, incoming, opts);
+    const existingById = await this.#loadChannelActionReceiptById(incoming.id);
+    if (existingById) {
+      throw new HarnessStorageChannelActionReceiptTransitionError(
+        incoming.id,
+        existingById.status,
+        incoming.status,
+        'id is already owned by another action receipt',
+      );
+    }
+    throw new HarnessStorageChannelActionClaimConflictError(incoming.id);
+  }
+
+  async #channelActionReceiptDuplicate(
+    existing: ChannelActionReceipt,
+    incoming: ChannelActionReceipt,
+    opts?: { initialClaim?: { claimId: string; now: number; claimTtlMs: number } },
+  ): Promise<CreateOrLoadChannelActionReceiptResult> {
+    const conflict = !channelActionReceiptsEquivalentForCreate(existing, incoming);
+    let receipt = existing;
+    let claimed = false;
+    if (!conflict && opts?.initialClaim && isChannelActionReceiptClaimable(existing, opts.initialClaim.now)) {
+      const update = await this.#client.execute({
+        sql: `UPDATE ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+              SET claim_id = ?, claim_expires_at = ?, updated_at = ?
+              WHERE id = ?
+                AND (claim_id IS NULL OR claim_expires_at IS NULL OR claim_expires_at <= ?)
+                AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                AND status NOT IN ('applied', 'conflict', 'dead')`,
+        args: [
+          opts.initialClaim.claimId,
+          opts.initialClaim.now + opts.initialClaim.claimTtlMs,
+          opts.initialClaim.now,
+          existing.id,
+          opts.initialClaim.now,
+          opts.initialClaim.now,
+        ],
+      });
+      if (update.rowsAffected > 0) {
+        claimed = true;
+        receipt = (await this.#loadChannelActionReceiptById(existing.id)) ?? existing;
+      }
+    }
+    return { receipt, duplicate: true, conflict, claimed };
+  }
+
+  async loadChannelActionReceiptByActionId(opts: {
+    harnessName: string;
+    channelId: string;
+    actionId: string;
+  }): Promise<ChannelActionReceipt | null> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(opts.harnessName);
+    const row = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+            WHERE harness_name = ? AND channel_id = ? AND action_id = ?
+            ORDER BY created_at ASC, id ASC
+            LIMIT 1`,
+      args: [namespace, opts.channelId, opts.actionId],
+    });
+    return row.rows[0] ? rowToChannelActionReceipt(row.rows[0] as Record<string, unknown>) : null;
+  }
+
+  async loadChannelActionReceiptByTokenId(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): Promise<ChannelActionReceipt | null> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(opts.harnessName);
+    const row = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+            WHERE harness_name = ? AND channel_id = ? AND action_token_id = ?
+            LIMIT 1`,
+      args: [namespace, opts.channelId, opts.actionTokenId],
+    });
+    return row.rows[0] ? rowToChannelActionReceipt(row.rows[0] as Record<string, unknown>) : null;
+  }
+
+  async #loadChannelActionReceiptById(id: string, harnessName?: string): Promise<ChannelActionReceipt | null> {
+    const conditions = ['id = ?'];
+    const args: string[] = [id];
+    if (harnessName !== undefined) {
+      conditions.unshift('harness_name = ?');
+      args.unshift(this.#resolveHarnessName(harnessName));
+    }
+    const row = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+            WHERE ${conditions.join(' AND ')}
+            LIMIT 1`,
+      args,
+    });
+    return row.rows[0] ? rowToChannelActionReceipt(row.rows[0] as Record<string, unknown>) : null;
+  }
+
+  async claimChannelActionReceipts(opts: {
+    harnessName: string;
+    channelId?: string;
+    statuses: Array<'received' | 'accepted' | 'failed'>;
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<ChannelActionReceipt[]> {
+    await this.#ensureChannelActionTables();
+    if (opts.limit <= 0 || opts.statuses.length === 0) return [];
+    const namespace = this.#resolveHarnessName(opts.harnessName);
+    const filters = ['harness_name = ?', `status IN (${opts.statuses.map(() => '?').join(', ')})`];
+    const args: any[] = [namespace, ...opts.statuses];
+    if (opts.channelId !== undefined) {
+      filters.push('channel_id = ?');
+      args.push(opts.channelId);
+    }
+    filters.push('(next_attempt_at IS NULL OR next_attempt_at <= ?)');
+    filters.push('(claim_id IS NULL OR claim_expires_at IS NULL OR claim_expires_at <= ?)');
+    args.push(opts.now, opts.now, opts.limit);
+    const rows = await this.#client.execute({
+      sql: `SELECT id FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+            WHERE ${filters.join(' AND ')}
+            ORDER BY created_at ASC, id ASC
+            LIMIT ?`,
+      args,
+    });
+    const claimed: ChannelActionReceipt[] = [];
+    for (const row of rows.rows) {
+      const id = String((row as Record<string, unknown>).id);
+      const result = await this.#client.execute({
+        sql: `UPDATE ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+              SET claim_id = ?, claim_expires_at = ?, updated_at = ?
+              WHERE id = ? AND status IN (${opts.statuses.map(() => '?').join(', ')})
+                AND (claim_id IS NULL OR claim_expires_at IS NULL OR claim_expires_at <= ?)
+                AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                AND status NOT IN ('applied', 'conflict', 'dead')`,
+        args: [opts.claimId, opts.now + opts.claimTtlMs, opts.now, id, ...opts.statuses, opts.now, opts.now],
+      });
+      if (result.rowsAffected === 0) continue;
+      const receipt = await this.#loadChannelActionReceiptById(id);
+      if (receipt) claimed.push(receipt);
+    }
+    return claimed;
+  }
+
+  async renewChannelActionReceiptClaim(opts: {
+    receiptId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    await this.#ensureChannelActionTables();
+    const claimExpiresAt = opts.now + opts.claimTtlMs;
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+            SET claim_expires_at = ?, updated_at = ?
+            WHERE id = ? AND claim_id = ?
+              AND claim_expires_at IS NOT NULL AND claim_expires_at > ?
+              AND status NOT IN ('applied', 'conflict', 'dead')`,
+      args: [claimExpiresAt, opts.now, opts.receiptId, opts.claimId, opts.now],
+    });
+    if (result.rowsAffected === 0) {
+      throw new HarnessStorageChannelActionClaimConflictError(opts.receiptId, opts.claimId);
+    }
+    return { claimExpiresAt, storageNow: opts.now };
+  }
+
+  async updateChannelActionReceipt(record: ChannelActionReceipt, opts: { claimId: string }): Promise<void> {
+    await this.#ensureChannelActionTables();
+    const namespace = this.#resolveHarnessName(record.harnessName);
+    const current = await this.#loadChannelActionReceiptById(record.id, namespace);
+    const storageNow = Date.now();
+    if (
+      !current ||
+      current.claimId !== opts.claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= storageNow ||
+      isTerminalChannelActionReceiptStatus(current.status)
+    ) {
+      throw new HarnessStorageChannelActionClaimConflictError(record.id, opts.claimId);
+    }
+    const next = { ...record, harnessName: namespace };
+    assertLegalChannelActionReceiptUpdate(current, next);
+    const cols = channelActionReceiptColumnValues(next);
+    const currentCols = channelActionReceiptColumnValues(current);
+    const preservesCurrentClaim = next.claimId === opts.claimId && next.claimExpiresAt !== undefined;
+    const updateNames = cols.names.filter(
+      name => name !== 'id' && (!preservesCurrentClaim || (name !== 'claim_id' && name !== 'claim_expires_at')),
+    );
+    const stateCompareNames = cols.names.filter(
+      name => name !== 'id' && name !== 'claim_id' && name !== 'claim_expires_at' && name !== 'updated_at',
+    );
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}
+            SET ${updateNames.map(name => `${name} = ?`).join(', ')}
+            WHERE harness_name = ? AND id = ? AND claim_id = ?
+              AND claim_expires_at IS NOT NULL AND claim_expires_at > ?
+              AND status NOT IN ('applied', 'conflict', 'dead')
+              AND ${stateCompareNames.map(name => `${name} IS ?`).join(' AND ')}`,
+      args: [
+        ...updateNames.map(name => cols.values[cols.names.indexOf(name)]),
+        namespace,
+        next.id,
+        opts.claimId,
+        storageNow,
+        ...stateCompareNames.map(name => currentCols.values[currentCols.names.indexOf(name)]),
+      ],
+    });
+    if (result.rowsAffected === 0) {
+      throw new HarnessStorageChannelActionClaimConflictError(record.id, opts.claimId);
+    }
+  }
+
   async #loadChannelInboxItemById(id: string, harnessName?: string): Promise<ChannelInboxItem | null> {
     const conditions = ['id = ?'];
     const args: string[] = [id];
@@ -2064,6 +2606,61 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#client.execute({
       sql: `CREATE INDEX IF NOT EXISTS idx_harness_channel_inbox_claim
             ON "${TABLE_HARNESS_CHANNEL_INBOX}" ("harness_name", "channel_id", "status", "next_attempt_at", "claim_expires_at", "received_at")`,
+      args: [],
+    });
+  }
+
+  async #ensureChannelActionTables(): Promise<void> {
+    const tokenConfig = TABLE_CONFIGS[TABLE_HARNESS_CHANNEL_ACTION_TOKENS];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_TOKENS],
+      compositePrimaryKey: tokenConfig?.compositePrimaryKey,
+    });
+    const receiptConfig = TABLE_CONFIGS[TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS],
+      compositePrimaryKey: receiptConfig?.compositePrimaryKey,
+    });
+    await this.#ensureChannelActionIndexes();
+  }
+
+  async #ensureChannelActionIndexes(): Promise<void> {
+    if (this.#channelActionIndexesReady !== undefined) {
+      return this.#channelActionIndexesReady;
+    }
+    this.#channelActionIndexesReady = this.#createChannelActionIndexes().catch(error => {
+      this.#channelActionIndexesReady = undefined;
+      throw error;
+    });
+    return this.#channelActionIndexesReady;
+  }
+
+  async #createChannelActionIndexes(): Promise<void> {
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_harness_channel_action_tokens_transport
+            ON "${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}" ("harness_name", "channel_id", "transport_hash")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_harness_channel_action_tokens_pending
+            ON "${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}" ("harness_name", "channel_id", "binding_id", "binding_generation", "owning_session_id", "item_id", "kind", "run_id", "pending_requested_at", "metadata_hash")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_harness_channel_action_receipts_token
+            ON "${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}" ("harness_name", "channel_id", "action_token_id")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_channel_action_receipts_action
+            ON "${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}" ("harness_name", "channel_id", "action_id", "created_at")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_channel_action_receipts_claim
+            ON "${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}" ("harness_name", "channel_id", "status", "next_attempt_at", "claim_expires_at", "created_at")`,
       args: [],
     });
   }
@@ -2398,6 +2995,195 @@ function rowToChannelInboxItem(row: Record<string, unknown>): ChannelInboxItem {
   };
 }
 
+const CHANNEL_ACTION_TOKEN_COLUMN_NAMES = [
+  'action_token_id',
+  'harness_name',
+  'channel_id',
+  'provider_id',
+  'resource_id',
+  'owning_session_id',
+  'item_id',
+  'kind',
+  'binding_id',
+  'binding_generation',
+  'run_id',
+  'pending_requested_at',
+  'audience',
+  'metadata_hash',
+  'transport_hash',
+  'key_id',
+  'expires_at',
+  'revoked_at',
+  'revoked_reason',
+  'created_at',
+  'updated_at',
+] as const;
+
+function channelActionTokenColumnValues(record: ChannelActionToken): { names: string[]; values: any[] } {
+  const values = [
+    record.actionTokenId,
+    record.harnessName,
+    record.channelId,
+    record.providerId,
+    record.resourceId,
+    record.owningSessionId,
+    record.itemId,
+    record.kind,
+    record.bindingId,
+    record.bindingGeneration,
+    record.runId,
+    record.pendingRequestedAt,
+    JSON.stringify(record.audience),
+    record.metadataHash,
+    record.transportHash,
+    record.keyId ?? null,
+    record.expiresAt ?? null,
+    record.revokedAt ?? null,
+    record.revokedReason ?? null,
+    record.createdAt,
+    record.updatedAt,
+  ];
+  return { names: [...CHANNEL_ACTION_TOKEN_COLUMN_NAMES], values };
+}
+
+function rowToChannelActionToken(row: Record<string, unknown>): ChannelActionToken {
+  return {
+    actionTokenId: String(row.action_token_id),
+    harnessName: String(row.harness_name),
+    channelId: String(row.channel_id),
+    providerId: String(row.provider_id),
+    resourceId: String(row.resource_id),
+    owningSessionId: String(row.owning_session_id),
+    itemId: String(row.item_id),
+    kind: String(row.kind) as ChannelActionToken['kind'],
+    bindingId: String(row.binding_id),
+    bindingGeneration: Number(row.binding_generation),
+    runId: String(row.run_id),
+    pendingRequestedAt: Number(row.pending_requested_at),
+    audience: parseJson(row.audience),
+    metadataHash: String(row.metadata_hash),
+    transportHash: String(row.transport_hash),
+    keyId: row.key_id == null ? undefined : String(row.key_id),
+    expiresAt: row.expires_at == null ? undefined : Number(row.expires_at),
+    revokedAt: row.revoked_at == null ? undefined : Number(row.revoked_at),
+    revokedReason:
+      row.revoked_reason == null ? undefined : (String(row.revoked_reason) as ChannelActionToken['revokedReason']),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+}
+
+const CHANNEL_ACTION_RECEIPT_COLUMN_NAMES = [
+  'id',
+  'harness_name',
+  'channel_id',
+  'provider_id',
+  'action_token_id',
+  'action_id',
+  'binding_id',
+  'binding_generation',
+  'resource_id',
+  'owning_session_id',
+  'item_id',
+  'kind',
+  'run_id',
+  'pending_requested_at',
+  'audience',
+  'verified_actor',
+  'response_hash',
+  'response',
+  'status',
+  'conflict_reason',
+  'attempts',
+  'claim_id',
+  'claim_expires_at',
+  'next_attempt_at',
+  'accepted_at',
+  'applied_at',
+  'failed_at',
+  'dead_at',
+  'result',
+  'last_error',
+  'created_at',
+  'updated_at',
+] as const;
+
+function channelActionReceiptColumnValues(record: ChannelActionReceipt): { names: string[]; values: any[] } {
+  const values = [
+    record.id,
+    record.harnessName,
+    record.channelId,
+    record.providerId,
+    record.actionTokenId,
+    record.actionId,
+    record.bindingId,
+    record.bindingGeneration,
+    record.resourceId,
+    record.owningSessionId,
+    record.itemId,
+    record.kind,
+    record.runId,
+    record.pendingRequestedAt,
+    JSON.stringify(record.audience),
+    record.verifiedActor ? JSON.stringify(record.verifiedActor) : null,
+    record.responseHash,
+    JSON.stringify(record.response),
+    record.status,
+    record.conflictReason ?? null,
+    record.attempts,
+    record.claimId ?? null,
+    record.claimExpiresAt ?? null,
+    record.nextAttemptAt ?? null,
+    record.acceptedAt ?? null,
+    record.appliedAt ?? null,
+    record.failedAt ?? null,
+    record.deadAt ?? null,
+    record.result === undefined ? null : JSON.stringify(record.result),
+    record.lastError ? JSON.stringify(record.lastError) : null,
+    record.createdAt,
+    record.updatedAt,
+  ];
+  return { names: [...CHANNEL_ACTION_RECEIPT_COLUMN_NAMES], values };
+}
+
+function rowToChannelActionReceipt(row: Record<string, unknown>): ChannelActionReceipt {
+  return {
+    id: String(row.id),
+    harnessName: String(row.harness_name),
+    channelId: String(row.channel_id),
+    providerId: String(row.provider_id),
+    actionTokenId: String(row.action_token_id),
+    actionId: String(row.action_id),
+    bindingId: String(row.binding_id),
+    bindingGeneration: Number(row.binding_generation),
+    resourceId: String(row.resource_id),
+    owningSessionId: String(row.owning_session_id),
+    itemId: String(row.item_id),
+    kind: String(row.kind) as ChannelActionReceipt['kind'],
+    runId: String(row.run_id),
+    pendingRequestedAt: Number(row.pending_requested_at),
+    audience: parseJson(row.audience),
+    verifiedActor: parseJson(row.verified_actor) ?? undefined,
+    responseHash: String(row.response_hash),
+    response: parseJson(row.response),
+    status: String(row.status) as ChannelActionReceipt['status'],
+    conflictReason:
+      row.conflict_reason == null ? undefined : (String(row.conflict_reason) as ChannelActionReceipt['conflictReason']),
+    attempts: Number(row.attempts),
+    claimId: row.claim_id == null ? undefined : String(row.claim_id),
+    claimExpiresAt: row.claim_expires_at == null ? undefined : Number(row.claim_expires_at),
+    nextAttemptAt: row.next_attempt_at == null ? undefined : Number(row.next_attempt_at),
+    acceptedAt: row.accepted_at == null ? undefined : Number(row.accepted_at),
+    appliedAt: row.applied_at == null ? undefined : Number(row.applied_at),
+    failedAt: row.failed_at == null ? undefined : Number(row.failed_at),
+    deadAt: row.dead_at == null ? undefined : Number(row.dead_at),
+    result: row.result == null ? undefined : parseJson(row.result),
+    lastError: parseJson(row.last_error) ?? undefined,
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+}
+
 function rowToSession(row: Record<string, unknown>): SessionRecord {
   return {
     harnessName: String(row.harness_name ?? 'default'),
@@ -2667,10 +3453,20 @@ function isTerminalChannelInboxStatus(status: ChannelInboxItem['status']): boole
   return status === 'accepted' || status === 'queued' || status === 'dead';
 }
 
+function isTerminalChannelActionReceiptStatus(status: ChannelActionReceipt['status']): boolean {
+  return status === 'applied' || status === 'conflict' || status === 'dead';
+}
+
 function isChannelInboxClaimable(item: ChannelInboxItem, now: number): boolean {
   if (isTerminalChannelInboxStatus(item.status)) return false;
   if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
   return item.claimId === undefined || item.claimExpiresAt === undefined || item.claimExpiresAt <= now;
+}
+
+function isChannelActionReceiptClaimable(receipt: ChannelActionReceipt, now: number): boolean {
+  if (isTerminalChannelActionReceiptStatus(receipt.status)) return false;
+  if (receipt.nextAttemptAt !== undefined && receipt.nextAttemptAt > now) return false;
+  return receipt.claimId === undefined || receipt.claimExpiresAt === undefined || receipt.claimExpiresAt <= now;
 }
 
 function assertLegalChannelInboxUpdate(current: ChannelInboxItem, next: ChannelInboxItem): void {
@@ -2754,10 +3550,223 @@ function assertValidChannelInboxState(record: ChannelInboxItem, currentStatus?: 
   }
 }
 
+function assertLegalChannelActionReceiptUpdate(current: ChannelActionReceipt, next: ChannelActionReceipt): void {
+  const immutableMismatch =
+    current.id !== next.id ||
+    current.harnessName !== next.harnessName ||
+    current.channelId !== next.channelId ||
+    current.providerId !== next.providerId ||
+    current.actionTokenId !== next.actionTokenId ||
+    current.actionId !== next.actionId ||
+    current.bindingId !== next.bindingId ||
+    current.bindingGeneration !== next.bindingGeneration ||
+    current.resourceId !== next.resourceId ||
+    current.owningSessionId !== next.owningSessionId ||
+    current.itemId !== next.itemId ||
+    current.kind !== next.kind ||
+    current.runId !== next.runId ||
+    current.pendingRequestedAt !== next.pendingRequestedAt ||
+    stableJsonString(current.audience) !== stableJsonString(next.audience) ||
+    current.responseHash !== next.responseHash;
+  if (immutableMismatch) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'immutable token, item, and response identity fields cannot change',
+    );
+  }
+  const allowed =
+    current.status === next.status ||
+    (current.status === 'received' &&
+      (next.status === 'accepted' ||
+        next.status === 'failed' ||
+        next.status === 'conflict' ||
+        next.status === 'dead')) ||
+    (current.status === 'accepted' &&
+      (next.status === 'applied' || next.status === 'failed' || next.status === 'dead')) ||
+    (current.status === 'failed' &&
+      (next.status === 'received' || next.status === 'accepted' || next.status === 'failed' || next.status === 'dead'));
+  if (!allowed || isTerminalChannelActionReceiptStatus(current.status)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'transition is not legal for channel action receipt state machine',
+    );
+  }
+  assertValidChannelActionReceiptState(next, current.status);
+}
+
+function assertValidChannelActionReceiptState(
+  record: ChannelActionReceipt,
+  currentStatus?: ChannelActionReceipt['status'],
+): void {
+  const validStatus =
+    record.status === 'received' ||
+    record.status === 'accepted' ||
+    record.status === 'applied' ||
+    record.status === 'conflict' ||
+    record.status === 'failed' ||
+    record.status === 'dead';
+  if (!validStatus) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'status is not a known channel action receipt state',
+    );
+  }
+  if (record.status === 'accepted' && record.acceptedAt == null) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'accepted receipts require acceptedAt',
+    );
+  }
+  if (record.status === 'applied' && (record.appliedAt == null || record.result === undefined)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'applied receipts require appliedAt and result',
+    );
+  }
+  if (record.status === 'conflict' && record.conflictReason == null) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'conflict receipts require conflictReason',
+    );
+  }
+  if (record.status === 'failed' && (record.failedAt == null || record.lastError == null)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'failed receipts require failedAt and lastError',
+    );
+  }
+  if (record.status === 'dead' && (record.deadAt == null || record.lastError == null)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'dead receipts require deadAt and lastError',
+    );
+  }
+  if (
+    record.conflictReason !== undefined &&
+    record.conflictReason !== 'response_mismatch' &&
+    record.conflictReason !== 'stale_item' &&
+    record.conflictReason !== 'kind_mismatch' &&
+    record.conflictReason !== 'run_mismatch' &&
+    record.conflictReason !== 'binding_mismatch' &&
+    record.conflictReason !== 'session_closed' &&
+    record.conflictReason !== 'actor_not_allowed' &&
+    record.conflictReason !== 'token_expired' &&
+    record.conflictReason !== 'token_revoked'
+  ) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'conflictReason is not a known channel action receipt reason',
+    );
+  }
+}
+
 function channelInboxItemsEqual(a: ChannelInboxItem, b: ChannelInboxItem): boolean {
   const aValues = channelInboxComparableValues(a);
   const bValues = channelInboxComparableValues(b);
   return aValues.length === bValues.length && aValues.every((value, index) => Object.is(value, bValues[index]));
+}
+
+function channelActionTokensEquivalent(a: ChannelActionToken, b: ChannelActionToken): boolean {
+  return (
+    a.actionTokenId === b.actionTokenId &&
+    a.harnessName === b.harnessName &&
+    a.channelId === b.channelId &&
+    a.providerId === b.providerId &&
+    a.resourceId === b.resourceId &&
+    a.owningSessionId === b.owningSessionId &&
+    a.itemId === b.itemId &&
+    a.kind === b.kind &&
+    a.bindingId === b.bindingId &&
+    a.bindingGeneration === b.bindingGeneration &&
+    a.runId === b.runId &&
+    a.pendingRequestedAt === b.pendingRequestedAt &&
+    stableJsonString(a.audience) === stableJsonString(b.audience) &&
+    a.metadataHash === b.metadataHash &&
+    a.transportHash === b.transportHash &&
+    a.keyId === b.keyId &&
+    a.expiresAt === b.expiresAt
+  );
+}
+
+function channelActionReceiptsEquivalentForCreate(a: ChannelActionReceipt, b: ChannelActionReceipt): boolean {
+  return (
+    a.harnessName === b.harnessName &&
+    a.channelId === b.channelId &&
+    a.providerId === b.providerId &&
+    a.actionTokenId === b.actionTokenId &&
+    a.actionId === b.actionId &&
+    a.bindingId === b.bindingId &&
+    a.bindingGeneration === b.bindingGeneration &&
+    a.resourceId === b.resourceId &&
+    a.owningSessionId === b.owningSessionId &&
+    a.itemId === b.itemId &&
+    a.kind === b.kind &&
+    a.runId === b.runId &&
+    a.pendingRequestedAt === b.pendingRequestedAt &&
+    stableJsonString(a.audience) === stableJsonString(b.audience) &&
+    a.responseHash === b.responseHash
+  );
+}
+
+function channelActionReceiptsEqual(a: ChannelActionReceipt, b: ChannelActionReceipt): boolean {
+  const aValues = channelActionReceiptComparableValues(a);
+  const bValues = channelActionReceiptComparableValues(b);
+  return aValues.length === bValues.length && aValues.every((value, index) => Object.is(value, bValues[index]));
+}
+
+function channelActionReceiptComparableValues(record: ChannelActionReceipt): unknown[] {
+  return [
+    record.id,
+    record.harnessName,
+    record.channelId,
+    record.providerId,
+    record.actionTokenId,
+    record.actionId,
+    record.bindingId,
+    record.bindingGeneration,
+    record.resourceId,
+    record.owningSessionId,
+    record.itemId,
+    record.kind,
+    record.runId,
+    record.pendingRequestedAt,
+    stableJsonString(record.audience),
+    stableJsonString(record.verifiedActor),
+    record.responseHash,
+    stableJsonString(record.response),
+    record.status,
+    record.conflictReason,
+    record.attempts,
+    record.claimId,
+    record.claimExpiresAt,
+    record.nextAttemptAt,
+    record.acceptedAt,
+    record.appliedAt,
+    record.failedAt,
+    record.deadAt,
+    stableJsonString(record.result),
+    record.lastError ? stableJsonString(record.lastError) : undefined,
+    record.createdAt,
+    record.updatedAt,
+  ];
 }
 
 function channelInboxComparableValues(record: ChannelInboxItem): unknown[] {

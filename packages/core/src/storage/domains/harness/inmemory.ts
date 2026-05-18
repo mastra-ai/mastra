@@ -6,6 +6,9 @@ import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
+  HarnessStorageChannelActionClaimConflictError,
+  HarnessStorageChannelActionReceiptTransitionError,
+  HarnessStorageChannelActionTokenConflictError,
   HarnessStorageChannelInboxClaimConflictError,
   HarnessStorageChannelInboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
@@ -23,8 +26,12 @@ import type {
   AttachmentReference,
   AttachmentRecord,
   AttachmentSemanticMetadata,
+  ChannelActionReceipt,
+  ChannelActionToken,
   ChannelInboxItem,
   CreateOrLoadActiveSessionOptions,
+  CreateOrLoadChannelActionReceiptResult,
+  CreateOrLoadChannelActionTokenResult,
   CreateOrLoadChannelInboxItemResult,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
@@ -1103,6 +1110,296 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessChannelInbox.set(channelInboxKey(namespace, record.id), cloneJson(next));
   }
 
+  // -------------------------------------------------------------------------
+  // Channel action token and receipt ledger
+  // -------------------------------------------------------------------------
+
+  async createOrLoadChannelActionToken(record: ChannelActionToken): Promise<CreateOrLoadChannelActionTokenResult> {
+    const token = { ...record, harnessName: resolveHarnessName(record.harnessName, this.harnessName) };
+    const existing = this.findChannelActionTokenById({
+      harnessName: token.harnessName,
+      channelId: token.channelId,
+      actionTokenId: token.actionTokenId,
+    });
+    if (existing) {
+      return { token: cloneJson(existing), duplicate: true, conflict: !channelActionTokensEquivalent(existing, token) };
+    }
+    const transportOwner = this.findChannelActionTokenByTransportHash({
+      harnessName: token.harnessName,
+      channelId: token.channelId,
+      transportHash: token.transportHash,
+    });
+    if (transportOwner) {
+      return { token: cloneJson(transportOwner), duplicate: true, conflict: true };
+    }
+    const pendingOwner = this.findChannelActionTokenForPendingItem({
+      harnessName: token.harnessName,
+      channelId: token.channelId,
+      bindingId: token.bindingId,
+      bindingGeneration: token.bindingGeneration,
+      owningSessionId: token.owningSessionId,
+      itemId: token.itemId,
+      kind: token.kind,
+      runId: token.runId,
+      pendingRequestedAt: token.pendingRequestedAt,
+      metadataHash: token.metadataHash,
+    });
+    if (pendingOwner) {
+      return { token: cloneJson(pendingOwner), duplicate: true, conflict: true };
+    }
+    this.db.harnessChannelActionTokens.set(
+      channelActionTokenKey(token.harnessName, token.channelId, token.actionTokenId),
+      cloneJson(token),
+    );
+    return { token: cloneJson(token), duplicate: false, conflict: false };
+  }
+
+  async loadChannelActionTokenById(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): Promise<ChannelActionToken | null> {
+    const token = this.findChannelActionTokenById({
+      ...opts,
+      harnessName: resolveHarnessName(opts.harnessName, this.harnessName),
+    });
+    return token ? cloneJson(token) : null;
+  }
+
+  async loadChannelActionTokenByTransportHash(opts: {
+    harnessName: string;
+    channelId: string;
+    transportHash: string;
+  }): Promise<ChannelActionToken | null> {
+    const token = this.findChannelActionTokenByTransportHash({
+      ...opts,
+      harnessName: resolveHarnessName(opts.harnessName, this.harnessName),
+    });
+    return token ? cloneJson(token) : null;
+  }
+
+  async loadChannelActionTokenForPendingItem(opts: {
+    harnessName: string;
+    channelId: string;
+    bindingId: string;
+    bindingGeneration: number;
+    owningSessionId: string;
+    itemId: string;
+    kind: ChannelActionToken['kind'];
+    runId: string;
+    pendingRequestedAt: number;
+    metadataHash: string;
+  }): Promise<ChannelActionToken | null> {
+    const token = this.findChannelActionTokenForPendingItem({
+      ...opts,
+      harnessName: resolveHarnessName(opts.harnessName, this.harnessName),
+    });
+    return token ? cloneJson(token) : null;
+  }
+
+  async revokeChannelActionToken(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+    revokedAt?: number;
+    revokedReason?: ChannelActionToken['revokedReason'];
+  }): Promise<ChannelActionToken> {
+    const namespace = resolveHarnessName(opts.harnessName, this.harnessName);
+    const key = channelActionTokenKey(namespace, opts.channelId, opts.actionTokenId);
+    const token = this.db.harnessChannelActionTokens.get(key);
+    if (!token) throw new HarnessStorageChannelActionTokenConflictError(opts.actionTokenId, 'token was not found');
+    const revokedAt = opts.revokedAt ?? Date.now();
+    const next = { ...token, revokedAt, revokedReason: opts.revokedReason, updatedAt: revokedAt };
+    this.db.harnessChannelActionTokens.set(key, cloneJson(next));
+    return cloneJson(next);
+  }
+
+  async saveChannelActionReceipt(record: ChannelActionReceipt): Promise<void> {
+    const receipt = { ...record, harnessName: resolveHarnessName(record.harnessName, this.harnessName) };
+    assertValidChannelActionReceiptState(receipt);
+    const existing = this.findChannelActionReceiptById(receipt.id);
+    if (existing) {
+      if (channelActionReceiptsEqual(existing, receipt)) return;
+      assertLegalChannelActionReceiptUpdate(existing, receipt);
+    }
+    const existingByToken = this.findChannelActionReceiptByTokenId({
+      harnessName: receipt.harnessName,
+      channelId: receipt.channelId,
+      actionTokenId: receipt.actionTokenId,
+    });
+    if (existingByToken && existingByToken.id !== receipt.id) {
+      throw new HarnessStorageChannelActionReceiptTransitionError(
+        receipt.id,
+        existingByToken.status,
+        receipt.status,
+        'action token is already owned by another receipt',
+      );
+    }
+    this.db.harnessChannelActionReceipts.set(
+      channelActionReceiptKey(receipt.harnessName, receipt.id),
+      cloneJson(receipt),
+    );
+  }
+
+  async createOrLoadChannelActionReceipt(
+    record: ChannelActionReceipt,
+    opts?: { initialClaim?: { claimId: string; now: number; claimTtlMs: number } },
+  ): Promise<CreateOrLoadChannelActionReceiptResult> {
+    const namespace = resolveHarnessName(record.harnessName, this.harnessName);
+    const incoming: ChannelActionReceipt = { ...record, harnessName: namespace };
+    assertValidChannelActionReceiptState(incoming);
+    const existing = this.findChannelActionReceiptByTokenId({
+      harnessName: namespace,
+      channelId: incoming.channelId,
+      actionTokenId: incoming.actionTokenId,
+    });
+    if (existing) {
+      const conflict = !channelActionReceiptsEquivalentForCreate(existing, incoming);
+      let claimed = false;
+      let receipt = existing;
+      if (!conflict && opts?.initialClaim && isChannelActionReceiptClaimable(existing, opts.initialClaim.now)) {
+        receipt = {
+          ...existing,
+          claimId: opts.initialClaim.claimId,
+          claimExpiresAt: opts.initialClaim.now + opts.initialClaim.claimTtlMs,
+          updatedAt: opts.initialClaim.now,
+        };
+        this.db.harnessChannelActionReceipts.set(channelActionReceiptKey(namespace, receipt.id), cloneJson(receipt));
+        claimed = true;
+      }
+      return { receipt: cloneJson(receipt), duplicate: true, conflict, claimed };
+    }
+    const existingById = this.findChannelActionReceiptById(incoming.id);
+    if (existingById) {
+      throw new HarnessStorageChannelActionReceiptTransitionError(
+        incoming.id,
+        existingById.status,
+        incoming.status,
+        'id is already owned by another action receipt',
+      );
+    }
+    const receipt =
+      opts?.initialClaim === undefined
+        ? incoming
+        : {
+            ...incoming,
+            claimId: opts.initialClaim.claimId,
+            claimExpiresAt: opts.initialClaim.now + opts.initialClaim.claimTtlMs,
+            updatedAt: opts.initialClaim.now,
+          };
+    this.db.harnessChannelActionReceipts.set(channelActionReceiptKey(namespace, receipt.id), cloneJson(receipt));
+    return {
+      receipt: cloneJson(receipt),
+      duplicate: false,
+      conflict: false,
+      claimed: opts?.initialClaim !== undefined,
+    };
+  }
+
+  async loadChannelActionReceiptByActionId(opts: {
+    harnessName: string;
+    channelId: string;
+    actionId: string;
+  }): Promise<ChannelActionReceipt | null> {
+    const namespace = resolveHarnessName(opts.harnessName, this.harnessName);
+    const receipt = Array.from(this.db.harnessChannelActionReceipts.values())
+      .filter(
+        item => item.harnessName === namespace && item.channelId === opts.channelId && item.actionId === opts.actionId,
+      )
+      .sort((a, b) => a.createdAt - b.createdAt)[0];
+    return receipt ? cloneJson(receipt) : null;
+  }
+
+  async loadChannelActionReceiptByTokenId(opts: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): Promise<ChannelActionReceipt | null> {
+    const receipt = this.findChannelActionReceiptByTokenId({
+      ...opts,
+      harnessName: resolveHarnessName(opts.harnessName, this.harnessName),
+    });
+    return receipt ? cloneJson(receipt) : null;
+  }
+
+  async claimChannelActionReceipts({
+    harnessName,
+    channelId,
+    statuses,
+    claimId,
+    limit,
+    now,
+    claimTtlMs,
+  }: {
+    harnessName: string;
+    channelId?: string;
+    statuses: Array<'received' | 'accepted' | 'failed'>;
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<ChannelActionReceipt[]> {
+    const namespace = resolveHarnessName(harnessName, this.harnessName);
+    const claimed: ChannelActionReceipt[] = [];
+    const sorted = Array.from(this.db.harnessChannelActionReceipts.values()).sort((a, b) => a.createdAt - b.createdAt);
+    for (const receipt of sorted) {
+      if (claimed.length >= limit) break;
+      if (receipt.harnessName !== namespace) continue;
+      if (channelId !== undefined && receipt.channelId !== channelId) continue;
+      if (!statuses.includes(receipt.status as 'received' | 'accepted' | 'failed')) continue;
+      if (!isChannelActionReceiptClaimable(receipt, now)) continue;
+      const next = { ...receipt, claimId, claimExpiresAt: now + claimTtlMs, updatedAt: now };
+      this.db.harnessChannelActionReceipts.set(channelActionReceiptKey(namespace, next.id), cloneJson(next));
+      claimed.push(cloneJson(next));
+    }
+    return claimed;
+  }
+
+  async renewChannelActionReceiptClaim({
+    receiptId,
+    claimId,
+    now,
+    claimTtlMs,
+  }: {
+    receiptId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    const current = this.findChannelActionReceiptById(receiptId);
+    if (
+      !current ||
+      current.claimId !== claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= now ||
+      isTerminalChannelActionReceiptStatus(current.status)
+    ) {
+      throw new HarnessStorageChannelActionClaimConflictError(receiptId, claimId);
+    }
+    const claimExpiresAt = now + claimTtlMs;
+    const next = { ...current, claimExpiresAt, updatedAt: now };
+    this.db.harnessChannelActionReceipts.set(channelActionReceiptKey(next.harnessName, next.id), cloneJson(next));
+    return { claimExpiresAt, storageNow: now };
+  }
+
+  async updateChannelActionReceipt(record: ChannelActionReceipt, opts: { claimId: string }): Promise<void> {
+    const namespace = resolveHarnessName(record.harnessName, this.harnessName);
+    const current = this.db.harnessChannelActionReceipts.get(channelActionReceiptKey(namespace, record.id));
+    const storageNow = Date.now();
+    if (
+      !current ||
+      current.claimId !== opts.claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= storageNow ||
+      isTerminalChannelActionReceiptStatus(current.status)
+    ) {
+      throw new HarnessStorageChannelActionClaimConflictError(record.id, opts.claimId);
+    }
+    const next = { ...record, harnessName: namespace };
+    assertLegalChannelActionReceiptUpdate(current, next);
+    this.db.harnessChannelActionReceipts.set(channelActionReceiptKey(namespace, record.id), cloneJson(next));
+  }
+
   private findChannelInboxByIdempotencyKey({
     harnessName,
     channelId,
@@ -1115,6 +1412,95 @@ export class InMemoryHarness extends HarnessStorage {
     for (const item of this.db.harnessChannelInbox.values()) {
       if (item.harnessName === harnessName && item.channelId === channelId && item.idempotencyKey === idempotencyKey) {
         return cloneJson(item);
+      }
+    }
+    return null;
+  }
+
+  private findChannelActionTokenById({
+    harnessName,
+    channelId,
+    actionTokenId,
+  }: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): ChannelActionToken | null {
+    const token = this.db.harnessChannelActionTokens.get(channelActionTokenKey(harnessName, channelId, actionTokenId));
+    return token ? cloneJson(token) : null;
+  }
+
+  private findChannelActionTokenByTransportHash({
+    harnessName,
+    channelId,
+    transportHash,
+  }: {
+    harnessName: string;
+    channelId: string;
+    transportHash: string;
+  }): ChannelActionToken | null {
+    for (const token of this.db.harnessChannelActionTokens.values()) {
+      if (token.harnessName === harnessName && token.channelId === channelId && token.transportHash === transportHash) {
+        return cloneJson(token);
+      }
+    }
+    return null;
+  }
+
+  private findChannelActionTokenForPendingItem(input: {
+    harnessName: string;
+    channelId: string;
+    bindingId: string;
+    bindingGeneration: number;
+    owningSessionId: string;
+    itemId: string;
+    kind: ChannelActionToken['kind'];
+    runId: string;
+    pendingRequestedAt: number;
+    metadataHash: string;
+  }): ChannelActionToken | null {
+    for (const token of this.db.harnessChannelActionTokens.values()) {
+      if (
+        token.harnessName === input.harnessName &&
+        token.channelId === input.channelId &&
+        token.bindingId === input.bindingId &&
+        token.bindingGeneration === input.bindingGeneration &&
+        token.owningSessionId === input.owningSessionId &&
+        token.itemId === input.itemId &&
+        token.kind === input.kind &&
+        token.runId === input.runId &&
+        token.pendingRequestedAt === input.pendingRequestedAt &&
+        token.metadataHash === input.metadataHash
+      ) {
+        return cloneJson(token);
+      }
+    }
+    return null;
+  }
+
+  private findChannelActionReceiptById(receiptId: string): ChannelActionReceipt | null {
+    for (const receipt of this.db.harnessChannelActionReceipts.values()) {
+      if (receipt.id === receiptId) return cloneJson(receipt);
+    }
+    return null;
+  }
+
+  private findChannelActionReceiptByTokenId({
+    harnessName,
+    channelId,
+    actionTokenId,
+  }: {
+    harnessName: string;
+    channelId: string;
+    actionTokenId: string;
+  }): ChannelActionReceipt | null {
+    for (const receipt of this.db.harnessChannelActionReceipts.values()) {
+      if (
+        receipt.harnessName === harnessName &&
+        receipt.channelId === channelId &&
+        receipt.actionTokenId === actionTokenId
+      ) {
+        return cloneJson(receipt);
       }
     }
     return null;
@@ -1167,6 +1553,8 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessMessageResultEvidence.clear();
     this.db.harnessOperationTombstones.clear();
     this.db.harnessChannelInbox.clear();
+    this.db.harnessChannelActionTokens.clear();
+    this.db.harnessChannelActionReceipts.clear();
     this.db.harnessThreadDeleteFences.clear();
   }
 }
@@ -1208,6 +1596,14 @@ function messageEvidenceKey(harnessName: string, sessionId: string, signalId: st
 
 function channelInboxKey(_harnessName: string, inboxItemId: string): string {
   return inboxItemId;
+}
+
+function channelActionTokenKey(harnessName: string, channelId: string, actionTokenId: string): string {
+  return `${harnessName}\u0000${channelId}\u0000${actionTokenId}`;
+}
+
+function channelActionReceiptKey(_harnessName: string, receiptId: string): string {
+  return receiptId;
 }
 
 function resolveHarnessName(input: string | undefined, fallback: string): string {
@@ -1261,10 +1657,20 @@ function isTerminalChannelInboxStatus(status: ChannelInboxItem['status']): boole
   return status === 'accepted' || status === 'queued' || status === 'dead';
 }
 
+function isTerminalChannelActionReceiptStatus(status: ChannelActionReceipt['status']): boolean {
+  return status === 'applied' || status === 'conflict' || status === 'dead';
+}
+
 function isChannelInboxClaimable(item: ChannelInboxItem, now: number): boolean {
   if (isTerminalChannelInboxStatus(item.status)) return false;
   if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
   return item.claimId === undefined || item.claimExpiresAt === undefined || item.claimExpiresAt <= now;
+}
+
+function isChannelActionReceiptClaimable(receipt: ChannelActionReceipt, now: number): boolean {
+  if (isTerminalChannelActionReceiptStatus(receipt.status)) return false;
+  if (receipt.nextAttemptAt !== undefined && receipt.nextAttemptAt > now) return false;
+  return receipt.claimId === undefined || receipt.claimExpiresAt === undefined || receipt.claimExpiresAt <= now;
 }
 
 function assertLegalChannelInboxUpdate(current: ChannelInboxItem, next: ChannelInboxItem): void {
@@ -1353,6 +1759,219 @@ function channelInboxItemsEqual(a: ChannelInboxItem, b: ChannelInboxItem): boole
   const aValues = channelInboxComparableValues(a);
   const bValues = channelInboxComparableValues(b);
   return aValues.length === bValues.length && aValues.every((value, index) => Object.is(value, bValues[index]));
+}
+
+function assertLegalChannelActionReceiptUpdate(current: ChannelActionReceipt, next: ChannelActionReceipt): void {
+  const immutableMismatch =
+    current.id !== next.id ||
+    current.harnessName !== next.harnessName ||
+    current.channelId !== next.channelId ||
+    current.providerId !== next.providerId ||
+    current.actionTokenId !== next.actionTokenId ||
+    current.actionId !== next.actionId ||
+    current.bindingId !== next.bindingId ||
+    current.bindingGeneration !== next.bindingGeneration ||
+    current.resourceId !== next.resourceId ||
+    current.owningSessionId !== next.owningSessionId ||
+    current.itemId !== next.itemId ||
+    current.kind !== next.kind ||
+    current.runId !== next.runId ||
+    current.pendingRequestedAt !== next.pendingRequestedAt ||
+    stableJsonString(current.audience) !== stableJsonString(next.audience) ||
+    current.responseHash !== next.responseHash;
+  if (immutableMismatch) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'immutable token, item, and response identity fields cannot change',
+    );
+  }
+  const allowed =
+    current.status === next.status ||
+    (current.status === 'received' &&
+      (next.status === 'accepted' ||
+        next.status === 'failed' ||
+        next.status === 'conflict' ||
+        next.status === 'dead')) ||
+    (current.status === 'accepted' &&
+      (next.status === 'applied' || next.status === 'failed' || next.status === 'dead')) ||
+    (current.status === 'failed' &&
+      (next.status === 'received' || next.status === 'accepted' || next.status === 'failed' || next.status === 'dead'));
+  if (!allowed || isTerminalChannelActionReceiptStatus(current.status)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'transition is not legal for channel action receipt state machine',
+    );
+  }
+  assertValidChannelActionReceiptState(next, current.status);
+}
+
+function assertValidChannelActionReceiptState(
+  record: ChannelActionReceipt,
+  currentStatus?: ChannelActionReceipt['status'],
+): void {
+  const validStatus =
+    record.status === 'received' ||
+    record.status === 'accepted' ||
+    record.status === 'applied' ||
+    record.status === 'conflict' ||
+    record.status === 'failed' ||
+    record.status === 'dead';
+  if (!validStatus) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'status is not a known channel action receipt state',
+    );
+  }
+  if (record.status === 'accepted' && record.acceptedAt == null) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'accepted receipts require acceptedAt',
+    );
+  }
+  if (record.status === 'applied' && (record.appliedAt == null || record.result === undefined)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'applied receipts require appliedAt and result',
+    );
+  }
+  if (record.status === 'conflict' && record.conflictReason == null) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'conflict receipts require conflictReason',
+    );
+  }
+  if (record.status === 'failed' && (record.failedAt == null || record.lastError == null)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'failed receipts require failedAt and lastError',
+    );
+  }
+  if (record.status === 'dead' && (record.deadAt == null || record.lastError == null)) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'dead receipts require deadAt and lastError',
+    );
+  }
+  if (
+    record.conflictReason !== undefined &&
+    record.conflictReason !== 'response_mismatch' &&
+    record.conflictReason !== 'stale_item' &&
+    record.conflictReason !== 'kind_mismatch' &&
+    record.conflictReason !== 'run_mismatch' &&
+    record.conflictReason !== 'binding_mismatch' &&
+    record.conflictReason !== 'session_closed' &&
+    record.conflictReason !== 'actor_not_allowed' &&
+    record.conflictReason !== 'token_expired' &&
+    record.conflictReason !== 'token_revoked'
+  ) {
+    throw new HarnessStorageChannelActionReceiptTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'conflictReason is not a known channel action receipt reason',
+    );
+  }
+}
+
+function channelActionTokensEquivalent(a: ChannelActionToken, b: ChannelActionToken): boolean {
+  return (
+    a.actionTokenId === b.actionTokenId &&
+    a.harnessName === b.harnessName &&
+    a.channelId === b.channelId &&
+    a.providerId === b.providerId &&
+    a.resourceId === b.resourceId &&
+    a.owningSessionId === b.owningSessionId &&
+    a.itemId === b.itemId &&
+    a.kind === b.kind &&
+    a.bindingId === b.bindingId &&
+    a.bindingGeneration === b.bindingGeneration &&
+    a.runId === b.runId &&
+    a.pendingRequestedAt === b.pendingRequestedAt &&
+    stableJsonString(a.audience) === stableJsonString(b.audience) &&
+    a.metadataHash === b.metadataHash &&
+    a.transportHash === b.transportHash &&
+    a.keyId === b.keyId &&
+    a.expiresAt === b.expiresAt
+  );
+}
+
+function channelActionReceiptsEquivalentForCreate(a: ChannelActionReceipt, b: ChannelActionReceipt): boolean {
+  return (
+    a.harnessName === b.harnessName &&
+    a.channelId === b.channelId &&
+    a.providerId === b.providerId &&
+    a.actionTokenId === b.actionTokenId &&
+    a.actionId === b.actionId &&
+    a.bindingId === b.bindingId &&
+    a.bindingGeneration === b.bindingGeneration &&
+    a.resourceId === b.resourceId &&
+    a.owningSessionId === b.owningSessionId &&
+    a.itemId === b.itemId &&
+    a.kind === b.kind &&
+    a.runId === b.runId &&
+    a.pendingRequestedAt === b.pendingRequestedAt &&
+    stableJsonString(a.audience) === stableJsonString(b.audience) &&
+    a.responseHash === b.responseHash
+  );
+}
+
+function channelActionReceiptsEqual(a: ChannelActionReceipt, b: ChannelActionReceipt): boolean {
+  const aValues = channelActionReceiptComparableValues(a);
+  const bValues = channelActionReceiptComparableValues(b);
+  return aValues.length === bValues.length && aValues.every((value, index) => Object.is(value, bValues[index]));
+}
+
+function channelActionReceiptComparableValues(record: ChannelActionReceipt): unknown[] {
+  return [
+    record.id,
+    record.harnessName,
+    record.channelId,
+    record.providerId,
+    record.actionTokenId,
+    record.actionId,
+    record.bindingId,
+    record.bindingGeneration,
+    record.resourceId,
+    record.owningSessionId,
+    record.itemId,
+    record.kind,
+    record.runId,
+    record.pendingRequestedAt,
+    stableJsonString(record.audience),
+    stableJsonString(record.verifiedActor),
+    record.responseHash,
+    stableJsonString(record.response),
+    record.status,
+    record.conflictReason,
+    record.attempts,
+    record.claimId,
+    record.claimExpiresAt,
+    record.nextAttemptAt,
+    record.acceptedAt,
+    record.appliedAt,
+    record.failedAt,
+    record.deadAt,
+    stableJsonString(record.result),
+    record.lastError ? stableJsonString(record.lastError) : undefined,
+    record.createdAt,
+    record.updatedAt,
+  ];
 }
 
 function channelInboxComparableValues(record: ChannelInboxItem): unknown[] {

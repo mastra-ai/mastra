@@ -52,6 +52,8 @@ export const TABLE_HARNESS_MESSAGE_RESULTS = 'mastra_harness_message_results';
 export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
 export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_fences';
 export const TABLE_HARNESS_CHANNEL_INBOX = 'mastra_harness_channel_inbox';
+export const TABLE_HARNESS_CHANNEL_ACTION_TOKENS = 'mastra_harness_channel_action_tokens';
+export const TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS = 'mastra_harness_channel_action_receipts';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -93,7 +95,9 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_MESSAGE_RESULTS
   | typeof TABLE_HARNESS_OPERATION_TOMBSTONES
   | typeof TABLE_HARNESS_THREAD_DELETE_FENCES
-  | typeof TABLE_HARNESS_CHANNEL_INBOX;
+  | typeof TABLE_HARNESS_CHANNEL_INBOX
+  | typeof TABLE_HARNESS_CHANNEL_ACTION_TOKENS
+  | typeof TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -782,6 +786,63 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     attachments: { type: 'jsonb', nullable: false },
     last_error: { type: 'jsonb', nullable: true },
   },
+  [TABLE_HARNESS_CHANNEL_ACTION_TOKENS]: {
+    action_token_id: { type: 'text', nullable: false },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    provider_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    owning_session_id: { type: 'text', nullable: false },
+    item_id: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: false },
+    binding_id: { type: 'text', nullable: false },
+    binding_generation: { type: 'integer', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    pending_requested_at: { type: 'bigint', nullable: false },
+    audience: { type: 'jsonb', nullable: false },
+    metadata_hash: { type: 'text', nullable: false },
+    transport_hash: { type: 'text', nullable: false },
+    key_id: { type: 'text', nullable: true },
+    expires_at: { type: 'bigint', nullable: true },
+    revoked_at: { type: 'bigint', nullable: true },
+    revoked_reason: { type: 'text', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    provider_id: { type: 'text', nullable: false },
+    action_token_id: { type: 'text', nullable: false },
+    action_id: { type: 'text', nullable: false },
+    binding_id: { type: 'text', nullable: false },
+    binding_generation: { type: 'integer', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    owning_session_id: { type: 'text', nullable: false },
+    item_id: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    pending_requested_at: { type: 'bigint', nullable: false },
+    audience: { type: 'jsonb', nullable: false },
+    verified_actor: { type: 'jsonb', nullable: true },
+    response_hash: { type: 'text', nullable: false },
+    response: { type: 'jsonb', nullable: false },
+    status: { type: 'text', nullable: false },
+    conflict_reason: { type: 'text', nullable: true },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    accepted_at: { type: 'bigint', nullable: true },
+    applied_at: { type: 'bigint', nullable: true },
+    failed_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+    result: { type: 'jsonb', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
 };
 
 /**
@@ -813,6 +874,13 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_CHANNEL_INBOX]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_INBOX],
+  },
+  [TABLE_HARNESS_CHANNEL_ACTION_TOKENS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_TOKENS],
+    compositePrimaryKey: ['harness_name', 'channel_id', 'action_token_id'],
+  },
+  [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS],
   },
 };
 

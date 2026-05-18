@@ -24,6 +24,8 @@ import type {
   AgentSignalResultEvidence,
   AttachmentRecord,
   AttachmentReference,
+  ChannelActionReceipt,
+  ChannelActionToken,
   ChannelInboxItem,
   OperationAdmissionTombstone,
   SessionRecord,
@@ -100,6 +102,8 @@ export class InMemoryDB {
   readonly harnessMessageResultEvidence = new Map<string, AgentSignalResultEvidence>();
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
   readonly harnessChannelInbox = new Map<string, ChannelInboxItem>();
+  readonly harnessChannelActionTokens = new Map<string, ChannelActionToken>();
+  readonly harnessChannelActionReceipts = new Map<string, ChannelActionReceipt>();
   readonly harnessThreadDeleteFences = new Map<
     string,
     { threadId: string; ownerId: string; leaseId: string; createdAt: number; expiresAt: number }
@@ -150,6 +154,8 @@ export class InMemoryDB {
     this.harnessMessageResultEvidence.clear();
     this.harnessOperationTombstones.clear();
     this.harnessChannelInbox.clear();
+    this.harnessChannelActionTokens.clear();
+    this.harnessChannelActionReceipts.clear();
     this.harnessThreadDeleteFences.clear();
   }
 }
