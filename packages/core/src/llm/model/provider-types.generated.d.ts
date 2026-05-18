@@ -4053,6 +4053,12 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-5.2-codex',
   ];
+  readonly lilac: readonly [
+    'google/gemma-4-31b-it',
+    'minimaxai/minimax-m2.7',
+    'moonshotai/kimi-k2.6',
+    'zai-org/glm-5.1',
+  ];
   readonly 'alibaba-cn': readonly [
     'MiniMax-M2.5',
     'MiniMax/MiniMax-M2.7',
