@@ -19,7 +19,7 @@ import {
 } from '../schemas/stored-agents';
 import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 import {
@@ -134,6 +134,9 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         queryVisibility: visibility === 'public' ? 'public' : undefined,
       });
 
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      const scopedMetadata = scopeStoredResourceMetadata(metadata, scope);
+
       const callerId = getCallerAuthorId(requestContext);
       const favoritesEnabled = await isBuilderFeatureEnabled(mastra, 'favorites');
       const honoredStarredOnly = favoritesEnabled && favoritedOnly === true;
@@ -157,7 +160,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
           orderBy,
           status,
           authorId: filter.kind === 'exact' ? filter.authorId : undefined,
-          metadata,
+          metadata: scopedMetadata,
           entityIds: starredIds,
         });
         const visible = allMatching.agents.filter(record => matchesAuthorFilter(record, filter));
@@ -176,7 +179,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         orderBy,
         status,
         authorId: filter.kind === 'exact' ? filter.authorId : undefined,
-        metadata,
+        metadata: scopedMetadata,
       });
 
       // Post-filter to enforce ownership + visibility rules across all backends.
@@ -242,6 +245,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
       // Throws 404 if the caller isn't the owner, admin, `agents:read[:<id>]`
       // holder, and the record isn't public/legacy-unowned.
@@ -345,7 +349,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         id,
         authorId,
         visibility,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
         name,
         description,
         instructions,
@@ -475,6 +479,8 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
 
       // Throws 404 if the caller isn't the owner, admin, or `agents:edit[:<id>]` holder.
       assertWriteAccess({
@@ -503,13 +509,18 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Resolve boolean browser shorthand from the UI
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
+
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
       // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
       const updatedAgent = await agentsStore.update({
         id: storedAgentId,
         authorId,
-        metadata,
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         visibility: resolvedVisibility,
         name,
         description,
@@ -639,6 +650,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       // Throws 404 if the caller isn't the owner, admin, or `agents:delete[:<id>]` holder.
       assertWriteAccess({

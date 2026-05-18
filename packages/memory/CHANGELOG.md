@@ -1,5 +1,52 @@
 # @mastra/memory
 
+## 1.18.3-alpha.0
+
+### Patch Changes
+
+- feat(memory): start background buffering of unobserved messages when agent goes idle ([#16694](https://github.com/mastra-ai/mastra/pull/16694))
+
+  In OM buffering mode, when the agent goes idle (turn.end()), any unobserved messages are now buffered in the background via a fire-and-forget buffer() call. This ensures observations are computed proactively rather than waiting for the next turn's step.prepare().
+
+## 1.18.2
+
+### Patch Changes
+
+- Fixed thread deletion so it also clears thread-scoped observational memory. ([#16628](https://github.com/mastra-ai/mastra/pull/16628))
+
+- Fixed Observational Memory missing the observation threshold for messages with large file parts. Previously `TokenCounter`'s local/sync counting path only stringified the file descriptor (`type`, `mimeType`, `filename`) for non-image files, so a 100KB PDF looked like ~8 tokens to OM and the conversation kept replaying the full unobserved history past every reasonable threshold. ([#16562](https://github.com/mastra-ai/mastra/pull/16562))
+
+  `TokenCounter` now estimates non-image file part tokens locally from the attachment's byte size and mime type using a per-provider heuristic, mirroring the existing local image-token estimator:
+  - Anthropic PDFs ≈ `bytes / 3` (floor 1500)
+  - Google PDFs ≈ `bytes / 20` (floor 258)
+  - OpenAI / unknown PDFs ≈ `bytes / 4` (floor 500)
+  - Text-ish mime types (`text/*`, JSON, XML, YAML) ≈ `bytes / 4`
+  - Other binary ≈ `bytes / 4`
+
+  URL-only file parts (no body to size) keep the previous descriptor-only local estimate. `countMessagesAsync()` continues to prefer provider token-count endpoints for supported providers; this change only improves the local fallback used when no provider endpoint is available.
+
+  ```ts
+  // Before: this PDF counted as ~8 tokens locally regardless of size, so OM never triggered.
+  const part = {
+    type: 'file',
+    data: largePdfBase64,
+    mimeType: 'application/pdf',
+    filename: 'report.pdf',
+  };
+  // counter.countMessage(message) ≈ 8
+
+  // After: estimated locally from byte size on the active provider.
+  // counter.countMessage(message) ≈ tens of thousands of tokens
+  //   → OM threshold trips as expected.
+  ```
+
+  The internal token-estimate cache version was bumped, which invalidates persisted estimates from older `@mastra/memory` releases on the next read; entries are recomputed automatically.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/16522
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0
+
 ## 1.18.2-alpha.1
 
 ### Patch Changes

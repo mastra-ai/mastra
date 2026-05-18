@@ -51,7 +51,7 @@ vi.mock('../status-line.js', () => ({
 
 import { showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
 
 function createState(isRunning: boolean) {
   const actions = new Map<string, () => unknown>();
@@ -111,6 +111,7 @@ describe('setupKeyboardShortcuts', () => {
       { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
       { name: 'ship', description: 'Ship release', template: '', sourcePath: '' },
     ];
+    state.skillCommands = [{ name: 'lint-fix', description: 'Fix lint issues', path: '/skills/lint-fix' }];
     state.goalSkillCommands = [
       { name: 'review', description: 'Review code', path: '/skills/review', metadata: { goal: true } },
     ];
@@ -137,11 +138,48 @@ describe('setupKeyboardShortcuts', () => {
     expect(goalCommand?.getArgumentCompletions?.('pa').map(command => command.value)).toEqual(['pause']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
     expect(commandNames.indexOf('goal')).toBeLessThan(commandNames.indexOf('judge'));
+    expect(commandNames).toContain('skill/');
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
+    expect(commandNames).toContain('skill/lint-fix');
     expect(commandNames).toContain('goal/deploy');
     expect(commandNames).toContain('goal/review');
-    expect(commandNames.slice(-4)).toEqual(['/deploy', 'goal/deploy', '/ship', 'goal/review']);
+    expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
+  });
+
+  it('refreshes autocomplete after workspace skills resolve', async () => {
+    autocompleteProviders.length = 0;
+    const { state, editor } = createState(false);
+    state.customSlashCommands = [];
+    state.skillCommands = [];
+    state.goalSkillCommands = [];
+    state.harness.getWorkspace = vi.fn(() => undefined);
+    state.harness.hasWorkspace = vi.fn(() => true);
+    state.harness.resolveWorkspace = vi.fn(async () => ({
+      skills: {
+        list: vi.fn(async () => [
+          { name: 'review', description: 'Review code', path: '/skills/review' },
+          {
+            name: 'internal-helper',
+            description: 'Internal helper',
+            path: '/skills/internal-helper',
+            'user-invocable': false,
+          },
+        ]),
+      },
+    }));
+
+    setupAutocomplete(state);
+    await refreshSkillsAutocomplete(state);
+
+    expect(editor.setAutocompleteProvider).toHaveBeenCalledTimes(2);
+    expect(autocompleteProviders).toHaveLength(2);
+    const initialCommands = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
+    const refreshedCommands = autocompleteProviders[1]?.commands.map(command => command.name) ?? [];
+    expect(initialCommands).toContain('skill/');
+    expect(initialCommands).not.toContain('skill/review');
+    expect(refreshedCommands).toContain('skill/review');
+    expect(refreshedCommands).not.toContain('skill/internal-helper');
   });
 
   it('submits immediately on Enter when the harness is idle', () => {

@@ -19,8 +19,9 @@ import {
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
-import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import type { ServerRoute } from './routes';
+import { SERVER_ROUTES, getEffectivePermission } from './routes';
+import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
@@ -125,101 +126,6 @@ function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
   return [getEffectivePermission(route), route.fga?.permission]
     .flatMap(value => (Array.isArray(value) ? value : [value]))
     .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
-}
-
-function getToolRoutePermission(path: string): MastraFGAPermissionInput {
-  return path.includes('/execute') ? 'tools:execute' : 'tools:read';
-}
-
-function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
-  if (!isProtectedFGARoute(route) || !route.path || !route.method) {
-    return null;
-  }
-
-  const permission = getEffectivePermission(route);
-  if (!permission) {
-    return null;
-  }
-
-  const path = route.path;
-  if (path.startsWith('/agents/:agentId/tools/:toolId')) {
-    return {
-      resourceType: 'tool',
-      resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
-      permission: getToolRoutePermission(path),
-    };
-  }
-
-  if (path.startsWith('/agents/:agentId')) {
-    return { resourceType: 'agent', resourceIdParam: 'agentId', permission };
-  }
-
-  if (path.startsWith('/workflows/:workflowId')) {
-    return { resourceType: 'workflow', resourceIdParam: 'workflowId', permission };
-  }
-
-  if (path.startsWith('/tools/:toolId')) {
-    return { resourceType: 'tool', resourceIdParam: 'toolId', permission };
-  }
-
-  if (path.startsWith('/mcp/:serverId/tools/:toolId')) {
-    return {
-      resourceType: 'tool',
-      resourceId: ({ serverId, toolId }) => JSON.stringify([String(serverId), String(toolId)]),
-      permission: getToolRoutePermission(path),
-    };
-  }
-
-  if (path.startsWith('/mcp/:serverId')) {
-    return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
-  }
-
-  if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
-    return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
-  }
-
-  if (path === '/memory/threads' || path === '/memory/network/threads') {
-    return {
-      resourceType: 'thread',
-      resourceId: ({ threadId, resourceId }) => {
-        if (typeof threadId === 'string') return threadId;
-        return typeof resourceId === 'string' ? resourceId : undefined;
-      },
-      permission,
-    };
-  }
-
-  if (path === '/memory/save-messages' || path === '/memory/network/save-messages') {
-    return {
-      resourceType: 'thread',
-      resourceId: ({ messages }) => {
-        if (!Array.isArray(messages)) return undefined;
-        const threadId = messages.find(
-          message => message && typeof message === 'object' && 'threadId' in message,
-        )?.threadId;
-        return typeof threadId === 'string' ? threadId : undefined;
-      },
-      permission,
-    };
-  }
-
-  if (path === '/v1/responses') {
-    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
-  }
-
-  if (path.startsWith('/v1/responses/:responseId')) {
-    return { resourceType: 'response', resourceIdParam: 'responseId', permission };
-  }
-
-  if (path === '/v1/conversations') {
-    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
-  }
-
-  if (path.startsWith('/v1/conversations/:conversationId')) {
-    return { resourceType: 'conversation', resourceIdParam: 'conversationId', permission };
-  }
-
-  return null;
 }
 
 async function resolveRouteFGAConfig(
@@ -654,6 +560,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerAuthMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
+    await this.validateAgentBuilderLicense();
     await this.validateFGAPolicyCoverage();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
@@ -689,6 +596,36 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       // @mastra/core/auth/ee module not available; EE authorization cannot function.
       throw new Error(
         `[mastra/auth-ee] ${configuredFeatures.join(' and ')} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n` +
+          'Ensure @mastra/core is updated to a version that includes EE support.',
+      );
+    }
+  }
+
+  /**
+   * Validate that an Agent Builder configuration has a valid EE license.
+   * Throws if the editor is configured with builder support but no valid EE license is available.
+   */
+  async validateAgentBuilderLicense(): Promise<void> {
+    const editor = this.mastra.getEditor();
+    if (!editor?.hasEnabledBuilderConfig?.()) return;
+
+    try {
+      const { isEEEnabled } = await import('@mastra/core/auth/ee');
+      if (!isEEEnabled()) {
+        throw new Error(
+          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
+            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+            'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
+        throw err;
+      }
+      // @mastra/core/auth/ee module not available — Agent Builder cannot function
+      throw new Error(
+        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }

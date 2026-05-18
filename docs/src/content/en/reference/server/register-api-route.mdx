@@ -58,6 +58,13 @@ registerApiRoute("/items/:itemId", { ... })
     isOptional: true,
   },
   {
+    name: 'cors',
+    type: 'CorsOptions',
+    description:
+      'Route-specific CORS configuration. Use this when one custom route needs a different cross-origin policy from `server.cors`.',
+    isOptional: true,
+  },
+  {
     name: 'openapi',
     type: 'DescribeRouteOptions',
     description: 'OpenAPI metadata for Swagger UI documentation',
@@ -221,6 +228,23 @@ registerApiRoute('/protected', {
   ],
   handler: async c => {
     return c.json({ data: 'protected content' })
+  },
+})
+```
+
+### Route with CORS
+
+Use route-specific CORS when one custom route needs cross-origin credentials, but the rest of the server should keep the global CORS policy.
+
+```typescript
+registerApiRoute('/customer-webhook', {
+  method: 'POST',
+  cors: {
+    origin: ['https://customer-saas.example'],
+    credentials: true,
+  },
+  handler: async c => {
+    return c.json({ ok: true })
   },
 })
 ```

@@ -33,19 +33,13 @@ const res = await fetch('/api/auth/roles/admin/permissions', { credentials: 'inc
 // { "roleId": "admin", "permissions": ["*"] }
 ```
 
-**Namespaced request-context keys**
+**Namespaced request-context keys (non-breaking)**
 
-`coreAuthMiddleware` now writes user state under namespaced keys (`mastra__user`, `mastra__userPermissions`, `mastra__userRoles`) instead of the previous bare keys (`user`, `userPermissions`, `userRoles`). This prevents collisions with caller-supplied request-context entries. Read these keys via the new `MASTRA_USER_KEY` / `MASTRA_USER_PERMISSIONS_KEY` / `MASTRA_USER_ROLES_KEY` constants exported from `@mastra/server/auth`.
+`coreAuthMiddleware` now writes user state under namespaced keys (`mastra__user`, `mastra__userPermissions`, `mastra__userRoles`) in addition to the existing bare keys (`user`, `userPermissions`, `userRoles`). The bare keys are still written for backward compatibility, so existing middleware, integrations, and built-in handlers that read `requestContext.get('user')` continue to work unchanged.
 
-If you have custom middleware that reads bare keys, switch to the namespaced constants:
+New code should prefer the namespaced constants to avoid collisions with caller-supplied request-context entries:
 
 ```ts
-// Before
-const user = requestContext.get('user');
-const permissions = requestContext.get('userPermissions') as string[] | undefined;
-const roles = requestContext.get('userRoles') as string[] | undefined;
-
-// After
 import {
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
@@ -56,6 +50,8 @@ const user = requestContext.get(MASTRA_USER_KEY);
 const permissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
 const roles = requestContext.get(MASTRA_USER_ROLES_KEY) as string[] | undefined;
 ```
+
+The bare keys (`user`, `userPermissions`, `userRoles`) remain populated and are considered the documented public surface for this release; a future major release may deprecate them.
 
 **Route permission derivation**
 
