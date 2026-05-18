@@ -233,11 +233,11 @@ function ModelSection({ editable }: ModelSectionProps) {
     !isModelAllowed(policy.allowed, { provider: cleanProviderId(provider), modelId });
 
   return (
-    <div className="grid h-full grid-rows-[1fr_auto] gap-2">
+    <div className="grid h-full grid-rows-[1fr_auto] gap-4 p-4">
       {locked ? (
         <LockedModelChip provider={policy.default?.provider ?? provider} modelId={policy.default?.modelId ?? modelId} />
       ) : (
-        <div className="grid grid-rows-1 gap-2 text-neutral4 min-w-0" data-testid="model-detail-picker">
+        <div className="grid grid-rows-1 gap-4 text-neutral4 min-w-0 pb-6" data-testid="model-detail-picker">
           <label className="sr-only">Model</label>
           <ModelCardPicker
             value={provider && modelId ? { provider, name: modelId } : undefined}
@@ -340,7 +340,7 @@ function ConfigSections({
   modelSectionVisible,
 }: ConfigSectionsProps) {
   return (
-    <Accordion className="rounded-none bg-surface3 overflow-visible h-full min-h-0 rounded-xl border border-border1">
+    <Accordion className="overflow-hidden bg-surface3 h-full min-h-0 rounded-xl border border-border1">
       {modelSectionVisible && (
         <ConfigSection
           value="model"

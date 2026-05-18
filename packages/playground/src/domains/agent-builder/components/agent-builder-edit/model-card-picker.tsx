@@ -71,7 +71,7 @@ export const ModelCardPicker = ({ value, onChange, disabled = false }: ModelCard
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2" data-testid="model-card-picker">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4" data-testid="model-card-picker">
       <div data-testid="model-card-picker-search" className="shrink-0">
         <Searchbar
           onSearch={setSearch}
@@ -89,7 +89,7 @@ export const ModelCardPicker = ({ value, onChange, disabled = false }: ModelCard
           </Txt>
         </div>
       ) : (
-        <div className="grid min-h-0 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-h-0 grid-cols-1 gap-1.5 lg:gap-4 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
           {visibleEntries.map(entry => {
             const cleanedProvider = cleanProviderId(entry.providerId);
             const isSelected = cleanedProvider === selectedProvider && entry.modelId === selectedModel;
