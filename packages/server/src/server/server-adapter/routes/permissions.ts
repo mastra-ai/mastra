@@ -47,6 +47,17 @@ const EXECUTE_PATTERNS = [
   '/clone',
 ];
 
+const PUBLISH_PATTERNS = ['/publish', '/activate', '/restore'];
+
+const STORED_RESOURCE_SEGMENTS: Record<string, string> = {
+  agents: 'stored-agents',
+  'mcp-clients': 'stored-mcp-clients',
+  'prompt-blocks': 'stored-prompt-blocks',
+  scorers: 'stored-scorers',
+  skills: 'stored-skills',
+  workspaces: 'stored-workspaces',
+};
+
 /**
  * Extracts the primary resource name from a route path.
  *
@@ -74,9 +85,9 @@ export function extractResource(path: string): string | null {
 
   const firstSegment = segments[0];
 
-  // Handle special case: /stored/agents → 'stored-agents'
-  if (firstSegment === 'stored' && segments[1] === 'agents') {
-    return 'stored-agents';
+  // Handle special case: /stored/<family> → 'stored-<family>'
+  if (firstSegment === 'stored' && segments[1]) {
+    return STORED_RESOURCE_SEGMENTS[segments[1]] ?? null;
   }
 
   // Handle .well-known paths (A2A protocol)
@@ -99,6 +110,11 @@ export function deriveAction(method: string, path: string): string {
 
   // For POST requests, check if it's an execute operation
   if (upperMethod === 'POST') {
+    const isPublishOperation = PUBLISH_PATTERNS.some(pattern => path.includes(pattern));
+    if (isPublishOperation) {
+      return 'publish';
+    }
+
     const isExecuteOperation = EXECUTE_PATTERNS.some(pattern => path.includes(pattern));
     return isExecuteOperation ? 'execute' : 'write';
   }

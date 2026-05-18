@@ -24,9 +24,17 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
   create: 'Create',
   delete: 'Delete',
   execute: 'Execute',
+  publish: 'Publish, activate, or restore',
   read: 'View',
+  share: 'Change visibility/audience',
   write: 'Create and modify',
 };
+
+/**
+ * Permission actions that are valid for role definitions even when no current
+ * server route derives them directly.
+ */
+const ADDITIONAL_ACTIONS = ['share'];
 
 /** Descriptions for resources (used for TSDoc comments in autocomplete) */
 const RESOURCE_DESCRIPTIONS: Record<string, string> = {
@@ -40,13 +48,31 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   observability: 'traces and spans',
   processors: 'processors',
   scores: 'evaluation scores',
+  stored: 'all stored resource families',
   'stored-agents': 'stored agents',
+  'stored-mcp-clients': 'stored MCP clients',
+  'stored-prompt-blocks': 'stored prompt blocks',
+  'stored-scorers': 'stored scorers',
+  'stored-skills': 'stored skills',
+  'stored-workspaces': 'stored workspaces',
   system: 'system info',
   tools: 'tools',
   vector: 'vector stores',
   workflows: 'workflows',
   workspaces: 'workspaces',
 };
+
+/**
+ * Compound permission patterns supported by the RBAC matcher.
+ */
+const ADDITIONAL_PERMISSION_PATTERNS = [
+  'stored:*',
+  'stored:read',
+  'stored:write',
+  'stored:delete',
+  'stored-agents:share',
+  'stored-skills:share',
+];
 
 /**
  * Generates a human-readable description for a permission pattern.
@@ -106,7 +132,7 @@ export function derivePermissionData(): PermissionData {
   }
 
   const resources = [...resourceSet].sort();
-  const actions = [...actionSet].sort();
+  const actions = [...new Set([...actionSet, ...ADDITIONAL_ACTIONS])].sort();
   const permissions = [...permissionSet].sort();
 
   return { resources, actions, permissions };
@@ -124,6 +150,7 @@ export function generatePermissionFileContent(data: PermissionData): string {
     ...actions.map(a => `*:${a}`), // Action wildcards
     ...resources.map(r => `${r}:*`), // Resource wildcards
     ...permissions, // Specific permissions
+    ...ADDITIONAL_PERMISSION_PATTERNS, // Compound aliases
   ];
 
   // Generate the PERMISSION_PATTERNS object entries with TSDoc comments
