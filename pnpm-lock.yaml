@@ -2600,6 +2600,55 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
+  packages/_internals/voice:
+    dependencies:
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../../_vendored/ai_v5
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../_internal-core
+    devDependencies:
+      '@ai-sdk/openai-v5':
+        specifier: npm:@ai-sdk/openai@2.0.106
+        version: '@ai-sdk/openai@2.0.106(zod@4.4.3)'
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../_config
+      '@internal/llm-recorder':
+        specifier: workspace:*
+        version: link:../../_llm-recorder
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../../_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../_types-builder
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      eslint:
+        specifier: ^10.2.1
+        version: 10.3.0(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+
   packages/_llm-recorder:
     dependencies:
       diff:
@@ -3265,6 +3314,12 @@ importers:
       '@ai-sdk/ui-utils-v5':
         specifier: npm:@ai-sdk/ui-utils@1.2.11
         version: '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../_internal-core
+      '@internal/voice':
+        specifier: workspace:*
+        version: link:../_internals/voice
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
@@ -3422,9 +3477,6 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../_vendored/ai_v6
-      '@internal/core':
-        specifier: workspace:*
-        version: link:../_internal-core
       '@internal/external-types':
         specifier: workspace:*
         version: link:../_external-types
@@ -4834,6 +4886,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@internal/voice':
+        specifier: workspace:*
+        version: link:../_internals/voice
       hono:
         specifier: ^4.12.8
         version: 4.12.18
@@ -6532,9 +6587,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6572,9 +6627,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6612,9 +6667,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6655,9 +6710,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6695,9 +6750,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6728,9 +6783,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6777,9 +6832,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6820,9 +6875,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6869,9 +6924,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6902,9 +6957,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6939,9 +6994,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -6979,9 +7034,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -7022,9 +7077,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -7065,9 +7120,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -7098,9 +7153,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -7141,9 +7196,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
+      '@internal/voice':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/_internals/voice
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -43278,7 +43333,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.59.2
       debug: 4.4.3
       minimatch: 10.2.4
-      semver: 7.8.0
+      semver: 7.7.4
       tinyglobby: 0.2.16
       ts-api-utils: 2.5.0(typescript@6.0.3)
       typescript: 6.0.3
