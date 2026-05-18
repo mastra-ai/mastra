@@ -18,6 +18,11 @@ export type GetAgents_Response = {
   [key: string]: {
     name: string;
     description?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
     instructions?: (string | string[] | any | any[]) | undefined;
     tools: {
       [key: string]: {
@@ -198,6 +203,11 @@ export type GetAgentsAgentId_QueryParams = {
 export type GetAgentsAgentId_Response = {
   name: string;
   description?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   instructions?: (string | string[] | any | any[]) | undefined;
   tools: {
     [key: string]: {
@@ -5383,6 +5393,349 @@ export interface PostAgentsAgentIdObserve_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/signals
+// ============================================================================
+export type PostAgentsAgentIdSignals_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+type PostAgentsAgentIdSignals_Body_Auxiliary_2 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostAgentsAgentIdSignals_Body_Auxiliary_2[]
+  | {
+      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+    };
+
+export type PostAgentsAgentIdSignals_Body =
+  | {
+      signal: {
+        id?: string | undefined;
+        createdAt?: (string | Date) | undefined;
+        metadata?:
+          | {
+              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+            }
+          | undefined;
+        attributes?:
+          | {
+              [key: string]: string | number | boolean | null | undefined;
+            }
+          | undefined;
+        type: string;
+        contents:
+          | string
+          | (
+              | {
+                  type: 'text';
+                  text: string;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
+                }
+              | {
+                  type: 'file';
+                  data: string;
+                  mediaType: string;
+                  filename?: string | undefined;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
+                }
+            )[];
+        providerOptions?:
+          | {
+              [key: string]: {
+                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+              };
+            }
+          | undefined;
+      };
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          }
+        | undefined;
+      runId: string;
+      resourceId?: string | undefined;
+      threadId?: string | undefined;
+      ifIdle?: undefined | undefined;
+    }
+  | {
+      signal: {
+        id?: string | undefined;
+        createdAt?: (string | Date) | undefined;
+        metadata?:
+          | {
+              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+            }
+          | undefined;
+        attributes?:
+          | {
+              [key: string]: string | number | boolean | null | undefined;
+            }
+          | undefined;
+        type: string;
+        contents:
+          | string
+          | (
+              | {
+                  type: 'text';
+                  text: string;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
+                }
+              | {
+                  type: 'file';
+                  data: string;
+                  mediaType: string;
+                  filename?: string | undefined;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                        };
+                      }
+                    | undefined;
+                }
+            )[];
+        providerOptions?:
+          | {
+              [key: string]: {
+                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+              };
+            }
+          | undefined;
+      };
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          }
+        | undefined;
+      runId?: string | undefined;
+      resourceId: string;
+      threadId: string;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            streamOptions?:
+              | {
+                  instructions?: (string | string[] | any | any[]) | undefined;
+                  system?: (string | string[] | any | any[]) | undefined;
+                  context?: any[] | undefined;
+                  memory?:
+                    | {
+                        thread:
+                          | string
+                          | {
+                              id: string;
+                              [x: string]: unknown;
+                            };
+                        resource: string;
+                        options?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        readOnly?: boolean | undefined;
+                      }
+                    | undefined;
+                  runId?: string | undefined;
+                  savePerStep?: boolean | undefined;
+                  requestContext?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  versions?:
+                    | {
+                        agents?:
+                          | {
+                              [key: string]:
+                                | {
+                                    versionId: string;
+                                  }
+                                | {
+                                    status: 'draft' | 'published';
+                                  };
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  maxSteps?: number | undefined;
+                  stopWhen?: any | undefined;
+                  providerOptions?:
+                    | {
+                        anthropic?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        google?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        openai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        xai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  modelSettings?: any | undefined;
+                  activeTools?: string[] | undefined;
+                  toolsets?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  clientTools?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  toolChoice?:
+                    | (
+                        | ('auto' | 'none' | 'required')
+                        | {
+                            type: 'tool';
+                            toolName: string;
+                          }
+                      )
+                    | undefined;
+                  requireToolApproval?: boolean | undefined;
+                  scorers?:
+                    | (
+                        | {
+                            [key: string]: any;
+                          }
+                        | {
+                            [key: string]: {
+                              scorer: string;
+                              sampling?: any | undefined;
+                            };
+                          }
+                      )
+                    | undefined;
+                  returnScorerData?: boolean | undefined;
+                  tracingOptions?:
+                    | {
+                        metadata?:
+                          | {
+                              [key: string]: unknown;
+                            }
+                          | undefined;
+                        requestContextKeys?: string[] | undefined;
+                        traceId?: string | undefined;
+                        parentSpanId?: string | undefined;
+                        tags?: string[] | undefined;
+                        hideInput?: boolean | undefined;
+                        hideOutput?: boolean | undefined;
+                      }
+                    | undefined;
+                  output?: any | undefined;
+                  structuredOutput?:
+                    | {
+                        schema: {
+                          [x: string]: unknown;
+                        };
+                        model?: (string | any) | undefined;
+                        instructions?: string | undefined;
+                        jsonPromptInjection?: boolean | undefined;
+                        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+                        fallbackValue?: any | undefined;
+                      }
+                    | undefined;
+                  [x: string]: unknown;
+                }
+              | undefined;
+          }
+        | undefined;
+    };
+
+export type PostAgentsAgentIdSignals_Response = {
+  accepted: true;
+  runId: string;
+};
+
+export type PostAgentsAgentIdSignals_Request = Simplify<
+  (PostAgentsAgentIdSignals_PathParams extends never ? {} : { params: PostAgentsAgentIdSignals_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdSignals_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdSignals_Body
+        ? { body?: PostAgentsAgentIdSignals_Body }
+        : { body: PostAgentsAgentIdSignals_Body })
+>;
+
+export interface PostAgentsAgentIdSignals_RouteContract {
+  pathParams: PostAgentsAgentIdSignals_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdSignals_Body;
+  request: PostAgentsAgentIdSignals_Request;
+  response: PostAgentsAgentIdSignals_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/threads/subscribe
+// ============================================================================
+export type PostAgentsAgentIdThreadsSubscribe_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdThreadsSubscribe_Body = {
+  resourceId?: string | undefined;
+  threadId: string;
+};
+
+export type PostAgentsAgentIdThreadsSubscribe_Response = any;
+
+export type PostAgentsAgentIdThreadsSubscribe_Request = Simplify<
+  (PostAgentsAgentIdThreadsSubscribe_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdThreadsSubscribe_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdThreadsSubscribe_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdThreadsSubscribe_Body
+        ? { body?: PostAgentsAgentIdThreadsSubscribe_Body }
+        : { body: PostAgentsAgentIdThreadsSubscribe_Body })
+>;
+
+export interface PostAgentsAgentIdThreadsSubscribe_RouteContract {
+  pathParams: PostAgentsAgentIdThreadsSubscribe_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdThreadsSubscribe_Body;
+  request: PostAgentsAgentIdThreadsSubscribe_Request;
+  response: PostAgentsAgentIdThreadsSubscribe_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/tools/:toolId/execute
 // ============================================================================
 export type PostAgentsAgentIdToolsToolIdExecute_PathParams = {
@@ -7407,6 +7760,33 @@ export interface PostAuthCredentialsSignUp_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /auth/roles/:roleId/permissions
+// ============================================================================
+export type GetAuthRolesRoleIdPermissions_PathParams = {
+  roleId: string;
+};
+
+export type GetAuthRolesRoleIdPermissions_Response = {
+  roleId: string;
+  permissions: string[];
+};
+
+export type GetAuthRolesRoleIdPermissions_Request = Simplify<
+  (GetAuthRolesRoleIdPermissions_PathParams extends never ? {} : { params: GetAuthRolesRoleIdPermissions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthRolesRoleIdPermissions_RouteContract {
+  pathParams: GetAuthRolesRoleIdPermissions_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAuthRolesRoleIdPermissions_Request;
+  response: GetAuthRolesRoleIdPermissions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows
 // ============================================================================
 export type GetWorkflows_QueryParams = {
@@ -9088,7 +9468,7 @@ export type PostProcessorsProcessorIdExecute_Body = {
   phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
   messages: {
     id: string;
-    role: 'user' | 'assistant' | 'system' | 'tool';
+    role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
     createdAt?: Date | undefined;
     content:
       | {
@@ -9114,7 +9494,7 @@ export type PostProcessorsProcessorIdExecute_Response = {
   messages?:
     | {
         id: string;
-        role: 'user' | 'assistant' | 'system' | 'tool';
+        role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
         createdAt?: Date | undefined;
         content:
           | {
@@ -9131,7 +9511,7 @@ export type PostProcessorsProcessorIdExecute_Response = {
     | {
         messages: {
           id: string;
-          role: 'user' | 'assistant' | 'system' | 'tool';
+          role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
           createdAt?: Date | undefined;
           content:
             | {
@@ -11665,6 +12045,296 @@ export interface GetObservabilityTraces_RouteContract {
   body: never;
   request: GetObservabilityTraces_Request;
   response: GetObservabilityTraces_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /observability/traces/light
+// ============================================================================
+export type GetObservabilityTracesLight_QueryParams = {
+  startedAt?:
+    | (
+        | (
+            | {
+                /** Start of date range (inclusive by default) */
+                start?: Date | undefined;
+                /** End of date range (inclusive by default) */
+                end?: Date | undefined;
+                /** When true, excludes the start date from results (uses > instead of >=) */
+                startExclusive?: boolean | undefined;
+                /** When true, excludes the end date from results (uses < instead of <=) */
+                endExclusive?: boolean | undefined;
+              }
+            | undefined
+          )
+        | undefined
+      )
+    | any;
+  endedAt?:
+    | (
+        | (
+            | {
+                /** Start of date range (inclusive by default) */
+                start?: Date | undefined;
+                /** End of date range (inclusive by default) */
+                end?: Date | undefined;
+                /** When true, excludes the start date from results (uses > instead of >=) */
+                startExclusive?: boolean | undefined;
+                /** When true, excludes the end date from results (uses < instead of <=) */
+                endExclusive?: boolean | undefined;
+              }
+            | undefined
+          )
+        | undefined
+      )
+    | any;
+  spanType?:
+    | (
+        | (
+            | 'agent_run'
+            | 'scorer_run'
+            | 'scorer_step'
+            | 'generic'
+            | 'model_generation'
+            | 'model_step'
+            | 'model_inference'
+            | 'model_chunk'
+            | 'mcp_tool_call'
+            | 'processor_run'
+            | 'tool_call'
+            | 'workflow_run'
+            | 'workflow_step'
+            | 'workflow_conditional'
+            | 'workflow_conditional_eval'
+            | 'workflow_parallel'
+            | 'workflow_loop'
+            | 'workflow_sleep'
+            | 'workflow_wait_event'
+            | 'memory_operation'
+            | 'workspace_action'
+            | 'rag_ingestion'
+            | 'rag_embedding'
+            | 'rag_vector_operation'
+            | 'rag_action'
+            | 'graph_action'
+            | 'mapping'
+          )
+        | undefined
+      )
+    | undefined;
+  traceId?: (string | undefined) | undefined;
+  entityType?: (string | undefined) | undefined;
+  entityId?: ((string | null) | undefined) | undefined;
+  entityName?: ((string | null) | undefined) | undefined;
+  parentEntityType?:
+    | (
+        | (
+            | (
+                | 'agent'
+                | 'scorer'
+                | 'rag_ingestion'
+                | 'trajectory'
+                | 'input_processor'
+                | 'input_step_processor'
+                | 'output_processor'
+                | 'output_step_processor'
+                | 'workflow_step'
+                | 'tool'
+                | 'workflow_run'
+                | 'memory'
+              )
+            | null
+          )
+        | undefined
+      )
+    | undefined;
+  parentEntityId?: ((string | null) | undefined) | undefined;
+  parentEntityName?: ((string | null) | undefined) | undefined;
+  rootEntityType?:
+    | (
+        | (
+            | (
+                | 'agent'
+                | 'scorer'
+                | 'rag_ingestion'
+                | 'trajectory'
+                | 'input_processor'
+                | 'input_step_processor'
+                | 'output_processor'
+                | 'output_step_processor'
+                | 'workflow_step'
+                | 'tool'
+                | 'workflow_run'
+                | 'memory'
+              )
+            | null
+          )
+        | undefined
+      )
+    | undefined;
+  rootEntityId?: ((string | null) | undefined) | undefined;
+  rootEntityName?: ((string | null) | undefined) | undefined;
+  userId?: ((string | null) | undefined) | undefined;
+  organizationId?: ((string | null) | undefined) | undefined;
+  resourceId?: ((string | null) | undefined) | undefined;
+  runId?: ((string | null) | undefined) | undefined;
+  sessionId?: ((string | null) | undefined) | undefined;
+  threadId?: ((string | null) | undefined) | undefined;
+  requestId?: ((string | null) | undefined) | undefined;
+  environment?: ((string | null) | undefined) | undefined;
+  serviceName?: ((string | null) | undefined) | undefined;
+  scope?:
+    | (
+        | (
+            | ({
+                [key: string]: unknown;
+              } | null)
+            | undefined
+          )
+        | undefined
+      )
+    | any;
+  entityVersionId?: ((string | null) | undefined) | undefined;
+  parentEntityVersionId?: ((string | null) | undefined) | undefined;
+  rootEntityVersionId?: ((string | null) | undefined) | undefined;
+  experimentId?: ((string | null) | undefined) | undefined;
+  source?: ((string | null) | undefined) | undefined;
+  metadata?:
+    | (
+        | (
+            | ({
+                [key: string]: unknown;
+              } | null)
+            | undefined
+          )
+        | undefined
+      )
+    | any;
+  tags?: (((string[] | null) | undefined) | undefined) | any;
+  status?: (('success' | 'error' | 'running') | undefined) | undefined;
+  hasChildError?: (boolean | undefined) | undefined;
+  page?: (number | undefined) | undefined;
+  perPage?: (number | undefined) | undefined;
+  field?: ('startedAt' | 'endedAt') | undefined;
+  direction?: ('ASC' | 'DESC') | undefined;
+  dateRange?:
+    | (
+        | (
+            | {
+                /** Start of date range (inclusive by default) */
+                start?: Date | undefined;
+                /** End of date range (inclusive by default) */
+                end?: Date | undefined;
+                /** When true, excludes the start date from results (uses > instead of >=) */
+                startExclusive?: boolean | undefined;
+                /** When true, excludes the end date from results (uses < instead of <=) */
+                endExclusive?: boolean | undefined;
+              }
+            | undefined
+          )
+        | undefined
+      )
+    | any;
+  name?: (string | undefined) | undefined;
+};
+
+export type GetObservabilityTracesLight_Response = {
+  pagination: {
+    /** Total number of items available */
+    total: number;
+    /** Current page */
+    page: number;
+    /** Number of items per page, or false if pagination is disabled */
+    perPage: number | false;
+    /** True if more pages are available */
+    hasMore: boolean;
+  };
+  spans: {
+    /** Unique trace identifier */
+    traceId: string;
+    /** Unique span identifier within a trace */
+    spanId: string;
+    /** Human-readable span name */
+    name: string;
+    /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
+    spanType:
+      | 'agent_run'
+      | 'scorer_run'
+      | 'scorer_step'
+      | 'generic'
+      | 'model_generation'
+      | 'model_step'
+      | 'model_inference'
+      | 'model_chunk'
+      | 'mcp_tool_call'
+      | 'processor_run'
+      | 'tool_call'
+      | 'workflow_run'
+      | 'workflow_step'
+      | 'workflow_conditional'
+      | 'workflow_conditional_eval'
+      | 'workflow_parallel'
+      | 'workflow_loop'
+      | 'workflow_sleep'
+      | 'workflow_wait_event'
+      | 'memory_operation'
+      | 'workspace_action'
+      | 'rag_ingestion'
+      | 'rag_embedding'
+      | 'rag_vector_operation'
+      | 'rag_action'
+      | 'graph_action'
+      | 'mapping';
+    /** Whether this is an event (point-in-time) vs a span (duration) */
+    isEvent: boolean;
+    /** When the span started */
+    startedAt: Date;
+    parentSpanId?: (string | null) | undefined;
+    endedAt?: (Date | null) | undefined;
+    error?: (unknown | null) | undefined;
+    entityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    entityId?: (string | null) | undefined;
+    entityName?: (string | null) | undefined;
+    /** Database record creation time */
+    createdAt: Date;
+    updatedAt: Date | null;
+  }[];
+};
+
+export type GetObservabilityTracesLight_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityTracesLight_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityTracesLight_QueryParams
+        ? { query?: GetObservabilityTracesLight_QueryParams }
+        : { query: GetObservabilityTracesLight_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityTracesLight_RouteContract {
+  pathParams: never;
+  queryParams: GetObservabilityTracesLight_QueryParams;
+  body: never;
+  request: GetObservabilityTracesLight_Request;
+  response: GetObservabilityTracesLight_Response;
   responseType: 'json';
 }
 
@@ -16961,870 +17631,6 @@ export interface PostA2aAgentId_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /agent-builder
-// ============================================================================
-export type GetAgentBuilder_Response = {
-  [key: string]: {
-    steps: {
-      [key: string]: {
-        id: string;
-        description?: string | undefined;
-        stateSchema?: string | undefined;
-        inputSchema?: string | undefined;
-        outputSchema?: string | undefined;
-        resumeSchema?: string | undefined;
-        suspendSchema?: string | undefined;
-        component?: string | undefined;
-        isWorkflow?: boolean | undefined;
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      };
-    };
-    allSteps: {
-      [key: string]: {
-        id: string;
-        description?: string | undefined;
-        stateSchema?: string | undefined;
-        inputSchema?: string | undefined;
-        outputSchema?: string | undefined;
-        resumeSchema?: string | undefined;
-        suspendSchema?: string | undefined;
-        component?: string | undefined;
-        isWorkflow?: boolean | undefined;
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      };
-    };
-    name?: string | undefined;
-    description?: string | undefined;
-    stepGraph: {
-      type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
-    }[];
-    inputSchema?: string | undefined;
-    outputSchema?: string | undefined;
-    stateSchema?: string | undefined;
-    options?: {} | undefined;
-    isProcessorWorkflow?: boolean | undefined;
-  };
-};
-
-export type GetAgentBuilder_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetAgentBuilder_RouteContract {
-  pathParams: never;
-  queryParams: never;
-  body: never;
-  request: GetAgentBuilder_Request;
-  response: GetAgentBuilder_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /agent-builder/:actionId
-// ============================================================================
-export type GetAgentBuilderActionId_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type GetAgentBuilderActionId_Response = {
-  steps: {
-    [key: string]: {
-      id: string;
-      description?: string | undefined;
-      stateSchema?: string | undefined;
-      inputSchema?: string | undefined;
-      outputSchema?: string | undefined;
-      resumeSchema?: string | undefined;
-      suspendSchema?: string | undefined;
-      component?: string | undefined;
-      isWorkflow?: boolean | undefined;
-      metadata?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-    };
-  };
-  allSteps: {
-    [key: string]: {
-      id: string;
-      description?: string | undefined;
-      stateSchema?: string | undefined;
-      inputSchema?: string | undefined;
-      outputSchema?: string | undefined;
-      resumeSchema?: string | undefined;
-      suspendSchema?: string | undefined;
-      component?: string | undefined;
-      isWorkflow?: boolean | undefined;
-      metadata?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-    };
-  };
-  name?: string | undefined;
-  description?: string | undefined;
-  stepGraph: {
-    type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
-  }[];
-  inputSchema?: string | undefined;
-  outputSchema?: string | undefined;
-  stateSchema?: string | undefined;
-  options?: {} | undefined;
-  isProcessorWorkflow?: boolean | undefined;
-};
-
-export type GetAgentBuilderActionId_Request = Simplify<
-  (GetAgentBuilderActionId_PathParams extends never ? {} : { params: GetAgentBuilderActionId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetAgentBuilderActionId_RouteContract {
-  pathParams: GetAgentBuilderActionId_PathParams;
-  queryParams: never;
-  body: never;
-  request: GetAgentBuilderActionId_Request;
-  response: GetAgentBuilderActionId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /agent-builder/:actionId/runs
-// ============================================================================
-export type GetAgentBuilderActionIdRuns_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type GetAgentBuilderActionIdRuns_QueryParams = {
-  page?: number | undefined;
-  perPage?: number | undefined;
-  offset?: number | undefined;
-  limit?: number | undefined;
-  fromDate?: Date | undefined;
-  toDate?: Date | undefined;
-  resourceId?: string | undefined;
-  status?:
-    | (
-        | 'running'
-        | 'waiting'
-        | 'suspended'
-        | 'success'
-        | 'failed'
-        | 'canceled'
-        | 'pending'
-        | 'bailed'
-        | 'tripwire'
-        | 'paused'
-      )
-    | undefined;
-};
-
-export type GetAgentBuilderActionIdRuns_Response = {
-  runs: {
-    workflowName: string;
-    runId: string;
-    snapshot:
-      | {
-          [key: string]: any;
-        }
-      | string;
-    createdAt: Date;
-    updatedAt: Date;
-    resourceId?: string | undefined;
-  }[];
-  total: number;
-};
-
-export type GetAgentBuilderActionIdRuns_Request = Simplify<
-  (GetAgentBuilderActionIdRuns_PathParams extends never ? {} : { params: GetAgentBuilderActionIdRuns_PathParams }) &
-    (GetAgentBuilderActionIdRuns_QueryParams extends never
-      ? {}
-      : {} extends GetAgentBuilderActionIdRuns_QueryParams
-        ? { query?: GetAgentBuilderActionIdRuns_QueryParams }
-        : { query: GetAgentBuilderActionIdRuns_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetAgentBuilderActionIdRuns_RouteContract {
-  pathParams: GetAgentBuilderActionIdRuns_PathParams;
-  queryParams: GetAgentBuilderActionIdRuns_QueryParams;
-  body: never;
-  request: GetAgentBuilderActionIdRuns_Request;
-  response: GetAgentBuilderActionIdRuns_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /agent-builder/:actionId/runs/:runId
-// ============================================================================
-export type GetAgentBuilderActionIdRunsRunId_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-  /** Unique identifier for the action run */
-  runId: string;
-};
-
-export type GetAgentBuilderActionIdRunsRunId_QueryParams = {
-  /** Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included. */
-  fields?: string | undefined;
-  /** Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance. */
-  withNestedWorkflows?: ('true' | 'false') | undefined;
-};
-
-export type GetAgentBuilderActionIdRunsRunId_Response = {
-  runId: string;
-  workflowName: string;
-  resourceId?: string | undefined;
-  createdAt: Date;
-  updatedAt: Date;
-  status:
-    | 'running'
-    | 'waiting'
-    | 'suspended'
-    | 'success'
-    | 'failed'
-    | 'canceled'
-    | 'pending'
-    | 'bailed'
-    | 'tripwire'
-    | 'paused';
-  initialState?:
-    | {
-        [key: string]: any;
-      }
-    | undefined;
-  result?: unknown | undefined;
-  error?: unknown | undefined;
-  payload?: unknown | undefined;
-  steps?:
-    | {
-        [key: string]: any;
-      }
-    | undefined;
-  activeStepsPath?:
-    | {
-        [key: string]: number[];
-      }
-    | undefined;
-  serializedStepGraph?:
-    | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
-      }[]
-    | undefined;
-};
-
-export type GetAgentBuilderActionIdRunsRunId_Request = Simplify<
-  (GetAgentBuilderActionIdRunsRunId_PathParams extends never
-    ? {}
-    : { params: GetAgentBuilderActionIdRunsRunId_PathParams }) &
-    (GetAgentBuilderActionIdRunsRunId_QueryParams extends never
-      ? {}
-      : {} extends GetAgentBuilderActionIdRunsRunId_QueryParams
-        ? { query?: GetAgentBuilderActionIdRunsRunId_QueryParams }
-        : { query: GetAgentBuilderActionIdRunsRunId_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetAgentBuilderActionIdRunsRunId_RouteContract {
-  pathParams: GetAgentBuilderActionIdRunsRunId_PathParams;
-  queryParams: GetAgentBuilderActionIdRunsRunId_QueryParams;
-  body: never;
-  request: GetAgentBuilderActionIdRunsRunId_Request;
-  response: GetAgentBuilderActionIdRunsRunId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/create-run
-// ============================================================================
-export type PostAgentBuilderActionIdCreateRun_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdCreateRun_QueryParams = {
-  runId?: string | undefined;
-};
-
-export type PostAgentBuilderActionIdCreateRun_Response = {
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdCreateRun_Request = Simplify<
-  (PostAgentBuilderActionIdCreateRun_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdCreateRun_PathParams }) &
-    (PostAgentBuilderActionIdCreateRun_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdCreateRun_QueryParams
-        ? { query?: PostAgentBuilderActionIdCreateRun_QueryParams }
-        : { query: PostAgentBuilderActionIdCreateRun_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostAgentBuilderActionIdCreateRun_RouteContract {
-  pathParams: PostAgentBuilderActionIdCreateRun_PathParams;
-  queryParams: PostAgentBuilderActionIdCreateRun_QueryParams;
-  body: never;
-  request: PostAgentBuilderActionIdCreateRun_Request;
-  response: PostAgentBuilderActionIdCreateRun_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/stream
-// ============================================================================
-export type PostAgentBuilderActionIdStream_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdStream_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdStream_Body = {
-  resourceId?: string | undefined;
-  inputData?: unknown | undefined;
-  initialState?: unknown | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  tracingOptions?:
-    | {
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContextKeys?: string[] | undefined;
-        traceId?: string | undefined;
-        parentSpanId?: string | undefined;
-        tags?: string[] | undefined;
-        hideInput?: boolean | undefined;
-        hideOutput?: boolean | undefined;
-      }
-    | undefined;
-  perStep?: boolean | undefined;
-  closeOnSuspend?: boolean | undefined;
-};
-
-export type PostAgentBuilderActionIdStream_Response = any;
-
-export type PostAgentBuilderActionIdStream_Request = Simplify<
-  (PostAgentBuilderActionIdStream_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdStream_PathParams }) &
-    (PostAgentBuilderActionIdStream_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStream_QueryParams
-        ? { query?: PostAgentBuilderActionIdStream_QueryParams }
-        : { query: PostAgentBuilderActionIdStream_QueryParams }) &
-    (PostAgentBuilderActionIdStream_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStream_Body
-        ? { body?: PostAgentBuilderActionIdStream_Body }
-        : { body: PostAgentBuilderActionIdStream_Body })
->;
-
-export interface PostAgentBuilderActionIdStream_RouteContract {
-  pathParams: PostAgentBuilderActionIdStream_PathParams;
-  queryParams: PostAgentBuilderActionIdStream_QueryParams;
-  body: PostAgentBuilderActionIdStream_Body;
-  request: PostAgentBuilderActionIdStream_Request;
-  response: PostAgentBuilderActionIdStream_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/start-async
-// ============================================================================
-export type PostAgentBuilderActionIdStartAsync_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdStartAsync_QueryParams = {
-  runId?: string | undefined;
-};
-
-export type PostAgentBuilderActionIdStartAsync_Body = {
-  resourceId?: string | undefined;
-  inputData?: unknown | undefined;
-  initialState?: unknown | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  tracingOptions?:
-    | {
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContextKeys?: string[] | undefined;
-        traceId?: string | undefined;
-        parentSpanId?: string | undefined;
-        tags?: string[] | undefined;
-        hideInput?: boolean | undefined;
-        hideOutput?: boolean | undefined;
-      }
-    | undefined;
-  perStep?: boolean | undefined;
-};
-
-export type PostAgentBuilderActionIdStartAsync_Response = {
-  status?:
-    | (
-        | 'running'
-        | 'waiting'
-        | 'suspended'
-        | 'success'
-        | 'failed'
-        | 'canceled'
-        | 'pending'
-        | 'bailed'
-        | 'tripwire'
-        | 'paused'
-      )
-    | undefined;
-  result?: unknown | undefined;
-  error?: unknown | undefined;
-  payload?: unknown | undefined;
-  initialState?: unknown | undefined;
-  steps?:
-    | {
-        [key: string]: any;
-      }
-    | undefined;
-  activeStepsPath?:
-    | {
-        [key: string]: number[];
-      }
-    | undefined;
-  serializedStepGraph?:
-    | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
-      }[]
-    | undefined;
-};
-
-export type PostAgentBuilderActionIdStartAsync_Request = Simplify<
-  (PostAgentBuilderActionIdStartAsync_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdStartAsync_PathParams }) &
-    (PostAgentBuilderActionIdStartAsync_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStartAsync_QueryParams
-        ? { query?: PostAgentBuilderActionIdStartAsync_QueryParams }
-        : { query: PostAgentBuilderActionIdStartAsync_QueryParams }) &
-    (PostAgentBuilderActionIdStartAsync_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStartAsync_Body
-        ? { body?: PostAgentBuilderActionIdStartAsync_Body }
-        : { body: PostAgentBuilderActionIdStartAsync_Body })
->;
-
-export interface PostAgentBuilderActionIdStartAsync_RouteContract {
-  pathParams: PostAgentBuilderActionIdStartAsync_PathParams;
-  queryParams: PostAgentBuilderActionIdStartAsync_QueryParams;
-  body: PostAgentBuilderActionIdStartAsync_Body;
-  request: PostAgentBuilderActionIdStartAsync_Request;
-  response: PostAgentBuilderActionIdStartAsync_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/start
-// ============================================================================
-export type PostAgentBuilderActionIdStart_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdStart_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdStart_Body = {
-  resourceId?: string | undefined;
-  inputData?: unknown | undefined;
-  initialState?: unknown | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  tracingOptions?:
-    | {
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContextKeys?: string[] | undefined;
-        traceId?: string | undefined;
-        parentSpanId?: string | undefined;
-        tags?: string[] | undefined;
-        hideInput?: boolean | undefined;
-        hideOutput?: boolean | undefined;
-      }
-    | undefined;
-  perStep?: boolean | undefined;
-};
-
-export type PostAgentBuilderActionIdStart_Response = {
-  message: string;
-};
-
-export type PostAgentBuilderActionIdStart_Request = Simplify<
-  (PostAgentBuilderActionIdStart_PathParams extends never ? {} : { params: PostAgentBuilderActionIdStart_PathParams }) &
-    (PostAgentBuilderActionIdStart_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStart_QueryParams
-        ? { query?: PostAgentBuilderActionIdStart_QueryParams }
-        : { query: PostAgentBuilderActionIdStart_QueryParams }) &
-    (PostAgentBuilderActionIdStart_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStart_Body
-        ? { body?: PostAgentBuilderActionIdStart_Body }
-        : { body: PostAgentBuilderActionIdStart_Body })
->;
-
-export interface PostAgentBuilderActionIdStart_RouteContract {
-  pathParams: PostAgentBuilderActionIdStart_PathParams;
-  queryParams: PostAgentBuilderActionIdStart_QueryParams;
-  body: PostAgentBuilderActionIdStart_Body;
-  request: PostAgentBuilderActionIdStart_Request;
-  response: PostAgentBuilderActionIdStart_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/observe
-// ============================================================================
-export type PostAgentBuilderActionIdObserve_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdObserve_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdObserve_Response = any;
-
-export type PostAgentBuilderActionIdObserve_Request = Simplify<
-  (PostAgentBuilderActionIdObserve_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdObserve_PathParams }) &
-    (PostAgentBuilderActionIdObserve_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdObserve_QueryParams
-        ? { query?: PostAgentBuilderActionIdObserve_QueryParams }
-        : { query: PostAgentBuilderActionIdObserve_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostAgentBuilderActionIdObserve_RouteContract {
-  pathParams: PostAgentBuilderActionIdObserve_PathParams;
-  queryParams: PostAgentBuilderActionIdObserve_QueryParams;
-  body: never;
-  request: PostAgentBuilderActionIdObserve_Request;
-  response: PostAgentBuilderActionIdObserve_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/resume-async
-// ============================================================================
-export type PostAgentBuilderActionIdResumeAsync_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdResumeAsync_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdResumeAsync_Body = {
-  step?: (string | string[]) | undefined;
-  resumeData?: unknown | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  tracingOptions?:
-    | {
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContextKeys?: string[] | undefined;
-        traceId?: string | undefined;
-        parentSpanId?: string | undefined;
-        tags?: string[] | undefined;
-        hideInput?: boolean | undefined;
-        hideOutput?: boolean | undefined;
-      }
-    | undefined;
-  perStep?: boolean | undefined;
-  forEachIndex?: number | undefined;
-};
-
-export type PostAgentBuilderActionIdResumeAsync_Response = {
-  status?:
-    | (
-        | 'running'
-        | 'waiting'
-        | 'suspended'
-        | 'success'
-        | 'failed'
-        | 'canceled'
-        | 'pending'
-        | 'bailed'
-        | 'tripwire'
-        | 'paused'
-      )
-    | undefined;
-  result?: unknown | undefined;
-  error?: unknown | undefined;
-  payload?: unknown | undefined;
-  initialState?: unknown | undefined;
-  steps?:
-    | {
-        [key: string]: any;
-      }
-    | undefined;
-  activeStepsPath?:
-    | {
-        [key: string]: number[];
-      }
-    | undefined;
-  serializedStepGraph?:
-    | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
-      }[]
-    | undefined;
-};
-
-export type PostAgentBuilderActionIdResumeAsync_Request = Simplify<
-  (PostAgentBuilderActionIdResumeAsync_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdResumeAsync_PathParams }) &
-    (PostAgentBuilderActionIdResumeAsync_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdResumeAsync_QueryParams
-        ? { query?: PostAgentBuilderActionIdResumeAsync_QueryParams }
-        : { query: PostAgentBuilderActionIdResumeAsync_QueryParams }) &
-    (PostAgentBuilderActionIdResumeAsync_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdResumeAsync_Body
-        ? { body?: PostAgentBuilderActionIdResumeAsync_Body }
-        : { body: PostAgentBuilderActionIdResumeAsync_Body })
->;
-
-export interface PostAgentBuilderActionIdResumeAsync_RouteContract {
-  pathParams: PostAgentBuilderActionIdResumeAsync_PathParams;
-  queryParams: PostAgentBuilderActionIdResumeAsync_QueryParams;
-  body: PostAgentBuilderActionIdResumeAsync_Body;
-  request: PostAgentBuilderActionIdResumeAsync_Request;
-  response: PostAgentBuilderActionIdResumeAsync_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/resume
-// ============================================================================
-export type PostAgentBuilderActionIdResume_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdResume_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdResume_Body = {
-  step?: (string | string[]) | undefined;
-  resumeData?: unknown | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  tracingOptions?:
-    | {
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContextKeys?: string[] | undefined;
-        traceId?: string | undefined;
-        parentSpanId?: string | undefined;
-        tags?: string[] | undefined;
-        hideInput?: boolean | undefined;
-        hideOutput?: boolean | undefined;
-      }
-    | undefined;
-  perStep?: boolean | undefined;
-  forEachIndex?: number | undefined;
-};
-
-export type PostAgentBuilderActionIdResume_Response = {
-  message: string;
-};
-
-export type PostAgentBuilderActionIdResume_Request = Simplify<
-  (PostAgentBuilderActionIdResume_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdResume_PathParams }) &
-    (PostAgentBuilderActionIdResume_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdResume_QueryParams
-        ? { query?: PostAgentBuilderActionIdResume_QueryParams }
-        : { query: PostAgentBuilderActionIdResume_QueryParams }) &
-    (PostAgentBuilderActionIdResume_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdResume_Body
-        ? { body?: PostAgentBuilderActionIdResume_Body }
-        : { body: PostAgentBuilderActionIdResume_Body })
->;
-
-export interface PostAgentBuilderActionIdResume_RouteContract {
-  pathParams: PostAgentBuilderActionIdResume_PathParams;
-  queryParams: PostAgentBuilderActionIdResume_QueryParams;
-  body: PostAgentBuilderActionIdResume_Body;
-  request: PostAgentBuilderActionIdResume_Request;
-  response: PostAgentBuilderActionIdResume_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/resume-stream
-// ============================================================================
-export type PostAgentBuilderActionIdResumeStream_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdResumeStream_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdResumeStream_Body = {
-  step?: (string | string[]) | undefined;
-  resumeData?: unknown | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  tracingOptions?:
-    | {
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContextKeys?: string[] | undefined;
-        traceId?: string | undefined;
-        parentSpanId?: string | undefined;
-        tags?: string[] | undefined;
-        hideInput?: boolean | undefined;
-        hideOutput?: boolean | undefined;
-      }
-    | undefined;
-  perStep?: boolean | undefined;
-  forEachIndex?: number | undefined;
-};
-
-export type PostAgentBuilderActionIdResumeStream_Response = any;
-
-export type PostAgentBuilderActionIdResumeStream_Request = Simplify<
-  (PostAgentBuilderActionIdResumeStream_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdResumeStream_PathParams }) &
-    (PostAgentBuilderActionIdResumeStream_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdResumeStream_QueryParams
-        ? { query?: PostAgentBuilderActionIdResumeStream_QueryParams }
-        : { query: PostAgentBuilderActionIdResumeStream_QueryParams }) &
-    (PostAgentBuilderActionIdResumeStream_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdResumeStream_Body
-        ? { body?: PostAgentBuilderActionIdResumeStream_Body }
-        : { body: PostAgentBuilderActionIdResumeStream_Body })
->;
-
-export interface PostAgentBuilderActionIdResumeStream_RouteContract {
-  pathParams: PostAgentBuilderActionIdResumeStream_PathParams;
-  queryParams: PostAgentBuilderActionIdResumeStream_QueryParams;
-  body: PostAgentBuilderActionIdResumeStream_Body;
-  request: PostAgentBuilderActionIdResumeStream_Request;
-  response: PostAgentBuilderActionIdResumeStream_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/runs/:runId/cancel
-// ============================================================================
-export type PostAgentBuilderActionIdRunsRunIdCancel_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-  /** Unique identifier for the action run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdRunsRunIdCancel_Response = {
-  message: string;
-};
-
-export type PostAgentBuilderActionIdRunsRunIdCancel_Request = Simplify<
-  (PostAgentBuilderActionIdRunsRunIdCancel_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdRunsRunIdCancel_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
-  pathParams: PostAgentBuilderActionIdRunsRunIdCancel_PathParams;
-  queryParams: never;
-  body: never;
-  request: PostAgentBuilderActionIdRunsRunIdCancel_Request;
-  response: PostAgentBuilderActionIdRunsRunIdCancel_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
 // Route: GET /workspaces
 // ============================================================================
 export type GetWorkspaces_Response = {
@@ -19311,109 +19117,6 @@ export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
   body: never;
   request: PostWorkflowsWorkflowIdObserveStreamLegacy_Request;
   response: PostWorkflowsWorkflowIdObserveStreamLegacy_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/stream-legacy
-// ============================================================================
-export type PostAgentBuilderActionIdStreamLegacy_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdStreamLegacy_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdStreamLegacy_Body = {
-  resourceId?: string | undefined;
-  inputData?: unknown | undefined;
-  initialState?: unknown | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  tracingOptions?:
-    | {
-        metadata?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContextKeys?: string[] | undefined;
-        traceId?: string | undefined;
-        parentSpanId?: string | undefined;
-        tags?: string[] | undefined;
-        hideInput?: boolean | undefined;
-        hideOutput?: boolean | undefined;
-      }
-    | undefined;
-  perStep?: boolean | undefined;
-};
-
-export type PostAgentBuilderActionIdStreamLegacy_Response = any;
-
-export type PostAgentBuilderActionIdStreamLegacy_Request = Simplify<
-  (PostAgentBuilderActionIdStreamLegacy_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdStreamLegacy_PathParams }) &
-    (PostAgentBuilderActionIdStreamLegacy_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStreamLegacy_QueryParams
-        ? { query?: PostAgentBuilderActionIdStreamLegacy_QueryParams }
-        : { query: PostAgentBuilderActionIdStreamLegacy_QueryParams }) &
-    (PostAgentBuilderActionIdStreamLegacy_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStreamLegacy_Body
-        ? { body?: PostAgentBuilderActionIdStreamLegacy_Body }
-        : { body: PostAgentBuilderActionIdStreamLegacy_Body })
->;
-
-export interface PostAgentBuilderActionIdStreamLegacy_RouteContract {
-  pathParams: PostAgentBuilderActionIdStreamLegacy_PathParams;
-  queryParams: PostAgentBuilderActionIdStreamLegacy_QueryParams;
-  body: PostAgentBuilderActionIdStreamLegacy_Body;
-  request: PostAgentBuilderActionIdStreamLegacy_Request;
-  response: PostAgentBuilderActionIdStreamLegacy_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/observe-stream-legacy
-// ============================================================================
-export type PostAgentBuilderActionIdObserveStreamLegacy_PathParams = {
-  /** Unique identifier for the agent-builder action */
-  actionId: string;
-};
-
-export type PostAgentBuilderActionIdObserveStreamLegacy_QueryParams = {
-  /** Unique identifier for the run */
-  runId: string;
-};
-
-export type PostAgentBuilderActionIdObserveStreamLegacy_Response = any;
-
-export type PostAgentBuilderActionIdObserveStreamLegacy_Request = Simplify<
-  (PostAgentBuilderActionIdObserveStreamLegacy_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdObserveStreamLegacy_PathParams }) &
-    (PostAgentBuilderActionIdObserveStreamLegacy_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdObserveStreamLegacy_QueryParams
-        ? { query?: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams }
-        : { query: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostAgentBuilderActionIdObserveStreamLegacy_RouteContract {
-  pathParams: PostAgentBuilderActionIdObserveStreamLegacy_PathParams;
-  queryParams: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams;
-  body: never;
-  request: PostAgentBuilderActionIdObserveStreamLegacy_Request;
-  response: PostAgentBuilderActionIdObserveStreamLegacy_Response;
   responseType: 'stream';
 }
 
@@ -75337,6 +75040,8 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-until-idle': PostAgentsAgentIdStreamUntilIdle_RouteContract;
   'POST /agents/:agentId/stream/vnext': PostAgentsAgentIdStreamVnext_RouteContract;
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
+  'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
+  'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
@@ -75370,6 +75075,7 @@ export interface RouteTypes {
   'POST /auth/refresh': PostAuthRefresh_RouteContract;
   'POST /auth/credentials/sign-in': PostAuthCredentialsSignIn_RouteContract;
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
+  'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -75438,6 +75144,7 @@ export interface RouteTypes {
   'GET /scores/entity/:entityType/:entityId': GetScoresEntityEntityTypeEntityId_RouteContract;
   'POST /scores': PostScores_RouteContract;
   'GET /observability/traces': GetObservabilityTraces_RouteContract;
+  'GET /observability/traces/light': GetObservabilityTracesLight_RouteContract;
   'GET /observability/branches': GetObservabilityBranches_RouteContract;
   'GET /observability/traces/:traceId/branches/:spanId': GetObservabilityTracesTraceIdBranchesSpanId_RouteContract;
   'GET /observability/traces/:traceId': GetObservabilityTracesTraceId_RouteContract;
@@ -75485,19 +75192,6 @@ export interface RouteTypes {
   'GET /embedders': GetEmbedders_RouteContract;
   'GET /.well-known/:agentId/agent-card.json': GetWellKnownAgentIdAgentCardJson_RouteContract;
   'POST /a2a/:agentId': PostA2aAgentId_RouteContract;
-  'GET /agent-builder': GetAgentBuilder_RouteContract;
-  'GET /agent-builder/:actionId': GetAgentBuilderActionId_RouteContract;
-  'GET /agent-builder/:actionId/runs': GetAgentBuilderActionIdRuns_RouteContract;
-  'GET /agent-builder/:actionId/runs/:runId': GetAgentBuilderActionIdRunsRunId_RouteContract;
-  'POST /agent-builder/:actionId/create-run': PostAgentBuilderActionIdCreateRun_RouteContract;
-  'POST /agent-builder/:actionId/stream': PostAgentBuilderActionIdStream_RouteContract;
-  'POST /agent-builder/:actionId/start-async': PostAgentBuilderActionIdStartAsync_RouteContract;
-  'POST /agent-builder/:actionId/start': PostAgentBuilderActionIdStart_RouteContract;
-  'POST /agent-builder/:actionId/observe': PostAgentBuilderActionIdObserve_RouteContract;
-  'POST /agent-builder/:actionId/resume-async': PostAgentBuilderActionIdResumeAsync_RouteContract;
-  'POST /agent-builder/:actionId/resume': PostAgentBuilderActionIdResume_RouteContract;
-  'POST /agent-builder/:actionId/resume-stream': PostAgentBuilderActionIdResumeStream_RouteContract;
-  'POST /agent-builder/:actionId/runs/:runId/cancel': PostAgentBuilderActionIdRunsRunIdCancel_RouteContract;
   'GET /workspaces': GetWorkspaces_RouteContract;
   'GET /workspaces/:workspaceId': GetWorkspacesWorkspaceId_RouteContract;
   'GET /workspaces/:workspaceId/fs/read': GetWorkspacesWorkspaceIdFsRead_RouteContract;
@@ -75523,8 +75217,6 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-legacy': PostAgentsAgentIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/stream-legacy': PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/observe-stream-legacy': PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
-  'POST /agent-builder/:actionId/stream-legacy': PostAgentBuilderActionIdStreamLegacy_RouteContract;
-  'POST /agent-builder/:actionId/observe-stream-legacy': PostAgentBuilderActionIdObserveStreamLegacy_RouteContract;
   'GET /mcp/v0/servers': GetMcpV0Servers_RouteContract;
   'GET /mcp/v0/servers/:id': GetMcpV0ServersId_RouteContract;
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
@@ -75660,51 +75352,6 @@ export interface Client {
   '/a2a/:agentId': {
     POST: PostA2aAgentId_RouteContract;
   };
-  '/agent-builder': {
-    GET: GetAgentBuilder_RouteContract;
-  };
-  '/agent-builder/:actionId': {
-    GET: GetAgentBuilderActionId_RouteContract;
-  };
-  '/agent-builder/:actionId/create-run': {
-    POST: PostAgentBuilderActionIdCreateRun_RouteContract;
-  };
-  '/agent-builder/:actionId/observe': {
-    POST: PostAgentBuilderActionIdObserve_RouteContract;
-  };
-  '/agent-builder/:actionId/observe-stream-legacy': {
-    POST: PostAgentBuilderActionIdObserveStreamLegacy_RouteContract;
-  };
-  '/agent-builder/:actionId/resume': {
-    POST: PostAgentBuilderActionIdResume_RouteContract;
-  };
-  '/agent-builder/:actionId/resume-async': {
-    POST: PostAgentBuilderActionIdResumeAsync_RouteContract;
-  };
-  '/agent-builder/:actionId/resume-stream': {
-    POST: PostAgentBuilderActionIdResumeStream_RouteContract;
-  };
-  '/agent-builder/:actionId/runs': {
-    GET: GetAgentBuilderActionIdRuns_RouteContract;
-  };
-  '/agent-builder/:actionId/runs/:runId': {
-    GET: GetAgentBuilderActionIdRunsRunId_RouteContract;
-  };
-  '/agent-builder/:actionId/runs/:runId/cancel': {
-    POST: PostAgentBuilderActionIdRunsRunIdCancel_RouteContract;
-  };
-  '/agent-builder/:actionId/start': {
-    POST: PostAgentBuilderActionIdStart_RouteContract;
-  };
-  '/agent-builder/:actionId/start-async': {
-    POST: PostAgentBuilderActionIdStartAsync_RouteContract;
-  };
-  '/agent-builder/:actionId/stream': {
-    POST: PostAgentBuilderActionIdStream_RouteContract;
-  };
-  '/agent-builder/:actionId/stream-legacy': {
-    POST: PostAgentBuilderActionIdStreamLegacy_RouteContract;
-  };
   '/agents': {
     GET: GetAgents_RouteContract;
   };
@@ -75771,6 +75418,9 @@ export interface Client {
   '/agents/:agentId/resume-stream-until-idle': {
     POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
   };
+  '/agents/:agentId/signals': {
+    POST: PostAgentsAgentIdSignals_RouteContract;
+  };
   '/agents/:agentId/skills/:skillName': {
     GET: GetAgentsAgentIdSkillsSkillName_RouteContract;
   };
@@ -75800,6 +75450,9 @@ export interface Client {
   };
   '/agents/:agentId/streamVNext': {
     POST: PostAgentsAgentIdStreamVNext_RouteContract;
+  };
+  '/agents/:agentId/threads/subscribe': {
+    POST: PostAgentsAgentIdThreadsSubscribe_RouteContract;
   };
   '/agents/:agentId/tools/:toolId': {
     GET: GetAgentsAgentIdToolsToolId_RouteContract;
@@ -75839,6 +75492,9 @@ export interface Client {
   };
   '/auth/refresh': {
     POST: PostAuthRefresh_RouteContract;
+  };
+  '/auth/roles/:roleId/permissions': {
+    GET: GetAuthRolesRoleIdPermissions_RouteContract;
   };
   '/auth/sso/callback': {
     GET: GetAuthSsoCallback_RouteContract;
@@ -76126,6 +75782,9 @@ export interface Client {
   };
   '/observability/traces/:traceId/trajectory': {
     GET: GetObservabilityTracesTraceIdTrajectory_RouteContract;
+  };
+  '/observability/traces/light': {
+    GET: GetObservabilityTracesLight_RouteContract;
   };
   '/observability/traces/score': {
     POST: PostObservabilityTracesScore_RouteContract;

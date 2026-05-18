@@ -109,6 +109,29 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface SubscribeAgentThreadParams {
+  resourceId?: string;
+  threadId: string;
+}
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -414,6 +437,7 @@ export interface GetAgentResponse {
   id: string;
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
@@ -450,6 +474,20 @@ export interface GetAgentResponse {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+}
+
+/**
+ * Response from the browser session probe endpoint.
+ *
+ * Use this to decide whether to open a screencast WebSocket for an agent/thread:
+ * - `screencastAvailable`: server has the `ws` / `@hono/node-ws` packages installed.
+ *   When false, opening a WS will fail and trigger a reconnect loop — skip it.
+ * - `hasSession`: the agent has an active browser session for this thread. When
+ *   false, the WS would just sit idle waiting for the agent to invoke a tool.
+ */
+export interface GetAgentBrowserSessionResponse {
+  hasSession: boolean;
+  screencastAvailable: boolean;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -1916,7 +1954,8 @@ export interface CreateStoredSkillParams {
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;
-  description?: string;
+  /** Required by the server: description of what the skill does and when to use it. */
+  description: string;
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];

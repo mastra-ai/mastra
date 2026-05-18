@@ -15,7 +15,87 @@ const promptMocks = vi.hoisted(() => ({
   cyclesSubmitHandler: undefined as ((value: number) => void) | undefined,
 }));
 
+const overlayMocks = vi.hoisted(() => ({
+  showModalOverlay: vi.fn(),
+}));
+
 vi.mock('../../../onboarding/settings.js', () => settingsMock);
+
+vi.mock('@mariozechner/pi-tui', () => ({
+  Box: class {
+    children: unknown[] = [];
+    constructor() {}
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
+  },
+  SelectList: class {
+    onSelect?: (item: { value: string; label: string }) => void;
+    onCancel?: () => void;
+    constructor(
+      public items: Array<{ value: string; label: string }>,
+      public visibleItems: number,
+      public theme: unknown,
+    ) {}
+    handleInput() {}
+  },
+  Spacer: class {
+    constructor(public size: number) {}
+  },
+  Text: class {
+    constructor(
+      public text: string,
+      public x?: number,
+      public y?: number,
+    ) {}
+  },
+}));
+
+vi.mock('../../overlay.js', () => ({
+  showModalOverlay: overlayMocks.showModalOverlay,
+}));
+
+vi.mock('@mastra/core/agent', () => ({
+  Agent: vi.fn(),
+}));
+
+vi.mock('@mastra/core/processors', () => ({
+  PrefillErrorHandler: class {},
+  ProviderHistoryCompat: class {},
+  StreamErrorRetryProcessor: class {},
+}));
+
+vi.mock('../../../agents/model.js', () => ({
+  getModel: vi.fn(() => ({ modelId: 'mock-model' })),
+}));
+
+vi.mock('@mastra/core/workspace', () => ({
+  createWorkspaceTools: vi.fn(),
+  WORKSPACE_TOOLS: {
+    FILESYSTEM: {
+      READ_FILE: 'filesystem.read_file',
+      WRITE_FILE: 'filesystem.write_file',
+      EDIT_FILE: 'filesystem.edit_file',
+      DELETE_FILE: 'filesystem.delete_file',
+      LIST_FILES: 'filesystem.list_files',
+      CREATE_DIRECTORY: 'filesystem.create_directory',
+      GET_FILE_INFO: 'filesystem.get_file_info',
+      SEARCH_FILES: 'filesystem.search_files',
+      AST_EDIT: 'filesystem.ast_edit',
+    },
+    SANDBOX: {
+      EXECUTE_COMMAND: 'sandbox.execute_command',
+      GET_PROCESS_OUTPUT: 'sandbox.get_process_output',
+      KILL_PROCESS: 'sandbox.kill_process',
+    },
+    LSP: { INSPECT: 'lsp.inspect' },
+    SKILLS: {
+      ACTIVATE: 'skills.activate',
+      SEARCH: 'skills.search',
+      READ: 'skills.read',
+    },
+  },
+}));
 
 vi.mock('../../components/model-selector.js', () => ({
   ModelSelectorComponent: class {
@@ -66,6 +146,25 @@ describe('createGoalReminderMessage', () => {
 });
 
 describe('handleGoalCommand', () => {
+  it('opens an action modal for /goal with no arguments', async () => {
+    overlayMocks.showModalOverlay.mockClear();
+    const ctx = {
+      state: {
+        goalManager: { getGoal: vi.fn(() => null) },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+    } as any;
+
+    const result = handleGoalCommand(ctx, []);
+
+    expect(overlayMocks.showModalOverlay).toHaveBeenCalledTimes(1);
+    expect(ctx.showInfo).not.toHaveBeenCalledWith('No goal set. Use /goal <text> to set one.');
+    const modal = overlayMocks.showModalOverlay.mock.calls[0]?.[1] as { handleInput?: (data: string) => void };
+    expect(modal.handleInput).toEqual(expect.any(Function));
+    void result;
+  });
+
   it('resumes a paused goal without resetting the turn counter', async () => {
     const goal = {
       id: 'goal-1',
@@ -122,7 +221,7 @@ describe('handleGoalCommand', () => {
     const createThread = vi.fn(async () => {
       currentThreadId = 'new-thread';
     });
-    const sendMessage = vi.fn();
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
     const ctx = {
       state: {
         pendingNewThread: true,
@@ -130,7 +229,7 @@ describe('handleGoalCommand', () => {
         harness: {
           createThread,
           getCurrentThreadId: vi.fn(() => currentThreadId),
-          sendMessage,
+          sendSignal,
         },
       },
       addUserMessage: vi.fn(),
@@ -144,8 +243,11 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(createThread.mock.invocationCallOrder[0]).toBeLessThan(goalManager.saveToThread.mock.invocationCallOrder[0]);
     expect(goalManager.persistOnNextThreadCreate).not.toHaveBeenCalled();
-    expect(sendMessage).toHaveBeenCalledWith({
-      content: '<system-reminder type="goal">finish the task</system-reminder>',
+    expect(sendSignal).toHaveBeenCalledWith({
+      type: 'system-reminder',
+      contents: 'finish the task',
+      attributes: { type: 'goal' },
+      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
     });
   });
 
@@ -170,14 +272,14 @@ describe('handleGoalCommand', () => {
       saveToThread: vi.fn(),
       isActive: vi.fn(() => true),
     };
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
     const ctx = {
       state: {
         pendingNewThread: false,
         goalManager,
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
-          sendMessage,
+          sendSignal,
         },
       },
       addUserMessage: vi.fn(),
@@ -190,20 +292,16 @@ describe('handleGoalCommand', () => {
     // judge runs after the agent's first response.
     expect(goalManager.setGoal).toHaveBeenCalledWith(objective, 'openai/gpt-5.5', 50);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendMessage.mock.invocationCallOrder[0]);
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
 
-    // The trigger is exactly one canonical goal reminder — no preamble, no
-    // concatenated reminders. The trailing $ in the assertion mirrors the
-    // legacy whole-message reminder regex used at render time.
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith({
-      content: '<system-reminder type="goal"># Ship it\n\n1. Build\n2. Test</system-reminder>',
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith({
+      type: 'system-reminder',
+      contents: '# Ship it\n\n1. Build\n2. Test',
+      attributes: { type: 'goal' },
+      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
     });
-    const sentContent = sendMessage.mock.calls[0][0].content as string;
-    expect(sentContent).toMatch(/^<system-reminder type="goal">[\s\S]*<\/system-reminder>$/);
-    expect(sentContent).not.toMatch(/begin executing/);
-    expect(sentContent.match(/<system-reminder/g)).toHaveLength(1);
   });
 
   it('enters real goal mode (active + persisted) before sending the trigger so the judge runs on agent_end', async () => {
@@ -228,8 +326,9 @@ describe('handleGoalCommand', () => {
       isActiveAtSetThreadSetting = goalManager.isActive();
       persistedGoalAtSetThreadSetting = value;
     });
-    const sendMessage = vi.fn(async () => {
+    const sendSignal = vi.fn(() => {
       isActiveAtSendMessage = goalManager.isActive();
+      return { accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) };
     });
 
     const ctx = {
@@ -239,7 +338,7 @@ describe('handleGoalCommand', () => {
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
           setThreadSetting,
-          sendMessage,
+          sendSignal,
         },
       },
       addUserMessage: vi.fn(),

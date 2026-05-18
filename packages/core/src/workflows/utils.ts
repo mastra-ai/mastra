@@ -7,6 +7,7 @@ import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
+  RestartExecutionParams,
   StepFlowEntry,
   StepResult,
   TimeTravelContext,
@@ -295,7 +296,8 @@ export const createTimeTravelExecutionParams = (params: {
       break;
     }
     const stepIds = getStepIds(entry);
-    if (stepIds.includes(firstStepId)) {
+    const isTargetEntry = stepIds.includes(firstStepId);
+    if (isTargetEntry) {
       const innerExecutionPath = stepIds?.length > 1 ? [stepIds?.findIndex(s => s === firstStepId)] : [];
       //parallel and loop steps will have more than one step id,
       // and if the step is one of those, we need the index for the execution path
@@ -353,7 +355,15 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      const defaultStepStatus = steps?.includes(stepId) ? 'running' : 'success';
+      // Siblings of the time-travel target inside a conditional were not selected by the
+      // branch's condition, so they should be reported as skipped rather than as a fake
+      // success (otherwise their empty output leaks into the conditional's aggregated result).
+      const isUnselectedConditionalSibling = isTargetEntry && entry.type === 'conditional' && !steps?.includes(stepId);
+      const defaultStepStatus = steps?.includes(stepId)
+        ? 'running'
+        : isUnselectedConditionalSibling
+          ? 'skipped'
+          : 'success';
       const status = ['failed', 'canceled'].includes(stepContext?.status)
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);
@@ -412,6 +422,61 @@ export const createTimeTravelExecutionParams = (params: {
   };
 
   return timeTravelData;
+};
+
+export const createRestartExecutionParams = ({
+  snapshot,
+  graph,
+}: {
+  snapshot: WorkflowRunState;
+  graph: ExecutionGraph;
+}) => {
+  let nestedWorkflowPending = false;
+
+  if (snapshot.status !== 'running' && snapshot.status !== 'waiting') {
+    const hasPendingInput =
+      snapshot.status === 'pending' &&
+      snapshot.context &&
+      Object.prototype.hasOwnProperty.call(snapshot.context, 'input');
+    if (hasPendingInput) {
+      //possible the server died just before the nested workflow execution started.
+      //only nested workflows have input data in context when it's still pending
+      nestedWorkflowPending = true;
+    } else {
+      throw new Error('This workflow run was not active');
+    }
+  }
+
+  let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+
+  const firstEntry = graph.steps[0]!;
+
+  if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+    nestedWorkflowActiveStepsPath = {
+      [firstEntry.step.id]: [0],
+    };
+  } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
+    nestedWorkflowActiveStepsPath = {
+      [firstEntry.id]: [0],
+    };
+  } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
+    nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
+      (acc, step) => {
+        acc[step.step.id] = [0];
+        return acc;
+      },
+      {} as Record<string, number[]>,
+    );
+  }
+  const restartData: RestartExecutionParams = {
+    activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
+    activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+    stepResults: snapshot.context,
+    state: snapshot.value,
+    stepExecutionPath: snapshot?.stepExecutionPath,
+  };
+
+  return restartData;
 };
 
 /**

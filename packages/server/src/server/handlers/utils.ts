@@ -106,7 +106,7 @@ export async function validateThreadOwnership(
 
 /**
  * Validates both coarse resource ownership and fine-grained thread access.
- * FGA enforcement is a no-op when either auth user or FGA provider is absent.
+ * FGA enforcement is a no-op when no FGA provider is configured.
  */
 export async function enforceThreadAccess({
   mastra,

@@ -25,6 +25,24 @@ export interface McpHttpServerConfig {
   url: string;
   /** Optional HTTP headers (e.g. for authentication) */
   headers?: Record<string, string>;
+  /** Optional OAuth configuration for protected HTTP MCP servers */
+  oauth?: McpHttpOAuthConfig;
+}
+
+/**
+ * OAuth client configuration for an HTTP MCP server.
+ */
+export interface McpHttpOAuthConfig {
+  /** Redirect URL controlled by the user/application for OAuth callbacks */
+  redirectUrl: string;
+  /** Human-readable OAuth client name */
+  clientName?: string;
+  /** Optional scopes requested during OAuth */
+  scopes?: string[];
+  /** Optional pre-registered OAuth client ID */
+  clientId?: string;
+  /** Optional pre-registered OAuth client secret */
+  clientSecret?: string;
 }
 
 /**

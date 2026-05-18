@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { createLLMMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { TestCaseWithContext } from '../../utils';
@@ -7,6 +8,8 @@ import type { TestCaseWithContext } from '../../utils';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createHallucinationScorer } from './index';
 import type { GetContextFn, GetContextParams } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 

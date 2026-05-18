@@ -151,7 +151,6 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
   requiresAuth: true,
-  fga: { resourceType: 'workflow', resourceIdParam: 'workflowId', permission: MastraFGAPermissions.WORKFLOWS_READ },
   handler: (async ({ mastra, workflowId }: any) => {
     try {
       if (!workflowId) {

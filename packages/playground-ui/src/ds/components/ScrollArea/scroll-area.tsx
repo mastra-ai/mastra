@@ -92,14 +92,35 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
     const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
     const sides = resolveMask(effectiveMask, orientation);
 
+    const viewportStyle: React.CSSProperties = {};
+    if (maxHeight) viewportStyle.maxHeight = maxHeight;
+    if (orientation === 'vertical') {
+      viewportStyle.overflowX = 'hidden';
+      viewportStyle.overflowY = 'scroll';
+    } else if (orientation === 'horizontal') {
+      viewportStyle.overflowX = 'scroll';
+      viewportStyle.overflowY = 'hidden';
+    }
+
+    // Base UI's ScrollAreaContent forces `min-width: fit-content` so the
+    // content can grow wider than the viewport (required for horizontal scroll
+    // measurement). For vertical-only scroll we override it so children shrink
+    // to the viewport width instead of forcing horizontal scroll.
+    const contentStyle: React.CSSProperties | undefined =
+      orientation === 'vertical'
+        ? { minWidth: '0px' }
+        : orientation === 'horizontal'
+          ? { minHeight: '0px' }
+          : undefined;
+
     return (
       <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
         <ScrollAreaPrimitive.Viewport
           ref={areaRef}
           className={cn('h-full w-full rounded-[inherit]', maskClasses(sides), viewPortClassName)}
-          style={maxHeight ? { maxHeight } : undefined}
+          style={viewportStyle}
         >
-          <ScrollAreaPrimitive.Content>{children}</ScrollAreaPrimitive.Content>
+          <ScrollAreaPrimitive.Content style={contentStyle}>{children}</ScrollAreaPrimitive.Content>
         </ScrollAreaPrimitive.Viewport>
         {(orientation === 'vertical' || orientation === 'both') && <ScrollBar orientation="vertical" />}
         {(orientation === 'horizontal' || orientation === 'both') && <ScrollBar orientation="horizontal" />}

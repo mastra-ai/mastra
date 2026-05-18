@@ -168,6 +168,20 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/signals": {
+    "method": "POST",
+    "path": "/agents/:agentId/signals",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
@@ -409,6 +423,21 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /auth/roles/:roleId/permissions": {
+    "method": "GET",
+    "path": "/auth/roles/:roleId/permissions",
+    "pathParams": [
+      "roleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "permissions"
     }
   },
   "GET /workflows": {
@@ -1577,6 +1606,59 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "pagination"
     }
   },
+  "GET /observability/traces/light": {
+    "method": "GET",
+    "path": "/observability/traces/light",
+    "pathParams": [],
+    "queryParams": [
+      "dateRange",
+      "direction",
+      "endedAt",
+      "entityId",
+      "entityName",
+      "entityType",
+      "entityVersionId",
+      "environment",
+      "experimentId",
+      "field",
+      "hasChildError",
+      "metadata",
+      "name",
+      "organizationId",
+      "page",
+      "parentEntityId",
+      "parentEntityName",
+      "parentEntityType",
+      "parentEntityVersionId",
+      "perPage",
+      "requestId",
+      "resourceId",
+      "rootEntityId",
+      "rootEntityName",
+      "rootEntityType",
+      "rootEntityVersionId",
+      "runId",
+      "scope",
+      "serviceName",
+      "sessionId",
+      "source",
+      "spanType",
+      "startedAt",
+      "status",
+      "tags",
+      "threadId",
+      "traceId",
+      "userId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "spans",
+      "paginationProperty": "pagination"
+    }
+  },
   "GET /observability/branches": {
     "method": "GET",
     "path": "/observability/branches",
@@ -2458,197 +2540,6 @@ export const API_ROUTE_METADATA = {
     "path": "/.well-known/:agentId/agent-card.json",
     "pathParams": [
       "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "GET /agent-builder": {
-    "method": "GET",
-    "path": "/agent-builder",
-    "pathParams": [],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "record"
-    }
-  },
-  "GET /agent-builder/:actionId": {
-    "method": "GET",
-    "path": "/agent-builder/:actionId",
-    "pathParams": [
-      "actionId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "GET /agent-builder/:actionId/runs": {
-    "method": "GET",
-    "path": "/agent-builder/:actionId/runs",
-    "pathParams": [
-      "actionId"
-    ],
-    "queryParams": [
-      "fromDate",
-      "limit",
-      "offset",
-      "page",
-      "perPage",
-      "resourceId",
-      "status",
-      "toDate"
-    ],
-    "bodyParams": [],
-    "hasQuery": true,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "object-property",
-      "listProperty": "runs"
-    }
-  },
-  "GET /agent-builder/:actionId/runs/:runId": {
-    "method": "GET",
-    "path": "/agent-builder/:actionId/runs/:runId",
-    "pathParams": [
-      "actionId",
-      "runId"
-    ],
-    "queryParams": [
-      "fields",
-      "withNestedWorkflows"
-    ],
-    "bodyParams": [],
-    "hasQuery": true,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agent-builder/:actionId/create-run": {
-    "method": "POST",
-    "path": "/agent-builder/:actionId/create-run",
-    "pathParams": [
-      "actionId"
-    ],
-    "queryParams": [
-      "runId"
-    ],
-    "bodyParams": [],
-    "hasQuery": true,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agent-builder/:actionId/start-async": {
-    "method": "POST",
-    "path": "/agent-builder/:actionId/start-async",
-    "pathParams": [
-      "actionId"
-    ],
-    "queryParams": [
-      "runId"
-    ],
-    "bodyParams": [
-      "initialState",
-      "inputData",
-      "perStep",
-      "requestContext",
-      "resourceId",
-      "tracingOptions"
-    ],
-    "hasQuery": true,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agent-builder/:actionId/start": {
-    "method": "POST",
-    "path": "/agent-builder/:actionId/start",
-    "pathParams": [
-      "actionId"
-    ],
-    "queryParams": [
-      "runId"
-    ],
-    "bodyParams": [
-      "initialState",
-      "inputData",
-      "perStep",
-      "requestContext",
-      "resourceId",
-      "tracingOptions"
-    ],
-    "hasQuery": true,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agent-builder/:actionId/resume-async": {
-    "method": "POST",
-    "path": "/agent-builder/:actionId/resume-async",
-    "pathParams": [
-      "actionId"
-    ],
-    "queryParams": [
-      "runId"
-    ],
-    "bodyParams": [
-      "forEachIndex",
-      "perStep",
-      "requestContext",
-      "resumeData",
-      "step",
-      "tracingOptions"
-    ],
-    "hasQuery": true,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agent-builder/:actionId/resume": {
-    "method": "POST",
-    "path": "/agent-builder/:actionId/resume",
-    "pathParams": [
-      "actionId"
-    ],
-    "queryParams": [
-      "runId"
-    ],
-    "bodyParams": [
-      "forEachIndex",
-      "perStep",
-      "requestContext",
-      "resumeData",
-      "step",
-      "tracingOptions"
-    ],
-    "hasQuery": true,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agent-builder/:actionId/runs/:runId/cancel": {
-    "method": "POST",
-    "path": "/agent-builder/:actionId/runs/:runId/cancel",
-    "pathParams": [
-      "actionId",
-      "runId"
     ],
     "queryParams": [],
     "bodyParams": [],

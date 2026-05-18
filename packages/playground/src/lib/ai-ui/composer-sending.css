@@ -1,0 +1,25 @@
+@keyframes composer-sending {
+  0% {
+    transform: translate3d(0, 300%, 0);
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 0.35;
+  }
+
+  85% {
+    opacity: 0.35;
+  }
+
+  100% {
+    transform: translate3d(0, -200%, 0);
+    opacity: 0;
+  }
+}
+
+.composer-sending {
+  animation: composer-sending 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
