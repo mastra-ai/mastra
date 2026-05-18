@@ -97,7 +97,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
   const label = isRoot ? 'Trace' : 'Subtrace';
   const icon = (
     <span aria-label={label} className="inline-flex shrink-0">
-      <Icon className={cn('shrink-0 text-neutral3', isRoot ? 'size-4' : 'size-3')} aria-hidden />
+      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-neutral3' : 'text-neutral2')} aria-hidden />
     </span>
   );
   return (
