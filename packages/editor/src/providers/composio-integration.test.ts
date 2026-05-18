@@ -507,6 +507,7 @@ describe('ComposioToolIntegration — listConnections', () => {
     expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
       toolkitSlugs: ['gmail'],
       userIds: ['user_42'],
+      limit: 50,
     });
     expect(result.items).toEqual([
       { connectionId: 'ca_1', status: 'active', createdAt: '2026-01-01T00:00:00Z' },
@@ -526,6 +527,81 @@ describe('ComposioToolIntegration — listConnections', () => {
     expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
       toolkitSlugs: ['gmail'],
       userIds: ['default'],
+      limit: 50,
+    });
+  });
+
+  it('forwards userIds[] for multi-bucket lookup', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration
+      .listConnections({ toolService: 'gmail', userIds: ['user_a', 'user_b'] })
+      .catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.list.mockResolvedValue({ items: [] });
+
+    await integration.listConnections({ toolService: 'gmail', userIds: ['user_a', 'user_b'] });
+
+    expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
+      toolkitSlugs: ['gmail'],
+      userIds: ['user_a', 'user_b'],
+      limit: 50,
+    });
+  });
+
+  it('short-circuits when userIds is empty', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    // Prime the SDK instance so getRawInstance() works.
+    await integration.listConnections({ toolService: 'gmail' }).catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.list.mockClear();
+
+    const result = await integration.listConnections({ toolService: 'gmail', userIds: [] });
+
+    expect(result).toEqual({ items: [] });
+    expect(raw.connectedAccounts.list).not.toHaveBeenCalled();
+  });
+
+  it('forwards cursor + clamps limit and returns nextCursor + per-item authorId', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.listConnections({ toolService: 'gmail' }).catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.list.mockClear();
+    raw.connectedAccounts.list.mockResolvedValue({
+      items: [
+        {
+          id: 'ca_1',
+          status: 'ACTIVE',
+          isDisabled: false,
+          createdAt: '2026-01-01T00:00:00Z',
+          user_id: 'user_42',
+        },
+      ],
+      nextCursor: 'next_page',
+    });
+
+    const result = await integration.listConnections({
+      toolService: 'gmail',
+      userIds: ['user_42'],
+      cursor: 'page_2',
+      limit: 9999,
+    });
+
+    expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
+      toolkitSlugs: ['gmail'],
+      userIds: ['user_42'],
+      cursor: 'page_2',
+      limit: 200,
+    });
+    expect(result).toEqual({
+      items: [
+        {
+          connectionId: 'ca_1',
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00Z',
+          authorId: 'user_42',
+        },
+      ],
+      nextCursor: 'next_page',
     });
   });
 });

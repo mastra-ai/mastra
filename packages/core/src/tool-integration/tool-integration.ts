@@ -320,12 +320,22 @@ export interface ToolIntegration {
 
 /**
  * Options for `ToolIntegration.listConnections`.
+ *
+ * Use `userIds[]` to list across multiple buckets in a single call (admin
+ * cross-author listing). `userId` is kept as a convenience for the
+ * single-bucket case; it is normalized to `[userId]` internally.
  */
 export interface ListConnectionsOpts {
   /** Tool service slug (e.g. `'gmail'`). */
   toolService: string;
-  /** Connection owner. Defaults to `'default'` when no auth context is present. */
+  /** Multi-bucket lookup. Preferred when present. */
+  userIds?: string[];
+  /** Single-bucket convenience. Normalized to `[userId]` internally. */
   userId?: string;
+  /** Opaque cursor returned by a previous call. */
+  cursor?: string;
+  /** Max items per page. Adapters clamp to a sane upper bound (default 50, max 200). */
+  limit?: number;
 }
 
 /**
@@ -338,8 +348,16 @@ export interface ExistingConnection {
   status: 'active' | 'inactive' | 'failed' | 'pending';
   /** When the connection was created, if the provider reports it. */
   createdAt?: string;
+  /**
+   * Bucket owner this connection belongs to. Mirrors the `userId` /
+   * `authorId` the connection was created under. Surfaced for admin
+   * cross-author UI.
+   */
+  authorId?: string;
 }
 
 export interface ListConnectionsResult {
   items: ExistingConnection[];
+  /** Forward-progress cursor; null/undefined when the listing is exhausted. */
+  nextCursor?: string;
 }

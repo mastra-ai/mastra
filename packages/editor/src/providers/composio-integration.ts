@@ -314,20 +314,34 @@ export class ComposioToolIntegration extends BaseToolIntegration {
 
   async listConnections(opts: ListConnectionsOpts): Promise<ListConnectionsResult> {
     const composio = this.getRawClient();
-    const userId = opts.userId || DEFAULT_INTERNAL_USER_ID;
+
+    // Normalize userIds[] / userId. Empty array = no buckets to list against,
+    // short-circuit to avoid an unbounded Composio response.
+    const userIds = resolveUserIds(opts);
+    if (userIds && userIds.length === 0) {
+      return { items: [] };
+    }
+
+    const limit = clampLimit(opts.limit);
 
     const list: ConnectedAccountListResponse = await composio.connectedAccounts.list({
       toolkitSlugs: [opts.toolService],
-      userIds: [userId],
+      ...(userIds ? { userIds } : {}),
+      ...(opts.cursor ? { cursor: opts.cursor } : {}),
+      ...(limit ? { limit } : {}),
     });
 
     const items: ExistingConnection[] = list.items.map(account => ({
       connectionId: account.id,
       status: mapComposioStatus(account.status, account.isDisabled),
       createdAt: account.createdAt,
+      // `user_id` is preserved by the Composio SDK transform via spread but
+      // isn't on the typed shape. Read it via a narrow cast.
+      authorId: (account as unknown as { user_id?: string }).user_id,
     }));
 
-    return { items };
+    const nextCursor = (list as { nextCursor?: string | null }).nextCursor ?? undefined;
+    return { items, ...(nextCursor ? { nextCursor } : {}) };
   }
 
   /**
@@ -492,4 +506,28 @@ function resolveInternalUserId(requestContext?: Record<string, unknown>): string
   }
 
   return DEFAULT_INTERNAL_USER_ID;
+}
+
+/**
+ * Resolve `userIds[]` from `listConnections` opts.
+ *
+ * - If `userIds` is provided, use it as-is (including empty array, which
+ *   means "no buckets to list against").
+ * - If `userId` is provided, normalize to `[userId]`.
+ * - Otherwise fall back to the default internal user id (single-bucket).
+ */
+function resolveUserIds(opts: ListConnectionsOpts): string[] | undefined {
+  if (Array.isArray(opts.userIds)) return opts.userIds;
+  if (typeof opts.userId === 'string' && opts.userId.length > 0) return [opts.userId];
+  return [DEFAULT_INTERNAL_USER_ID];
+}
+
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 200;
+
+function clampLimit(limit: number | undefined): number {
+  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) {
+    return DEFAULT_LIMIT;
+  }
+  return Math.min(Math.floor(limit), MAX_LIMIT);
 }
