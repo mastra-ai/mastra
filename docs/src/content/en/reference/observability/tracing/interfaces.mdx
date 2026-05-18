@@ -215,9 +215,13 @@ interface ExportedScore {
   scorerId: string
   scorerName?: string
   scorerVersion?: string
+  /** @deprecated Use `scoreSource` instead. */
+  source?: string
   scoreSource?: string
   score: number
   reason?: string
+  /** @deprecated Use `correlationContext.experimentId` instead. */
+  experimentId?: string
   scoreTraceId?: string
   targetEntityType?: EntityType
   correlationContext?: CorrelationContext
@@ -227,7 +231,9 @@ interface ExportedScore {
 
 `scoreId` identifies the emitted score event. `traceId` and `spanId` anchor the
 target being scored when available, while `scoreTraceId` can point to the trace
-that produced the score itself.
+that produced the score itself. Deprecated fields may still appear on events for
+backwards compatibility, but new exporters should prefer `scoreSource` and
+`correlationContext`.
 
 ### `ObservabilityDropEvent`
 
