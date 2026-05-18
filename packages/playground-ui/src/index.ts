@@ -18,6 +18,7 @@ export * from './ds/components/Textarea';
 export * from './ds/components/Txt/index';
 
 // DS Components - Migrated Primitives
+export * from './ds/components/Accordion';
 export * from './ds/components/AlertDialog';
 export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';

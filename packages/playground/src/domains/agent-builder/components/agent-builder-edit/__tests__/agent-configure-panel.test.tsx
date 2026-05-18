@@ -138,7 +138,26 @@ describe('AgentConfigurePanel feature gating', () => {
     expect(screen.queryByTestId('agent-configure-avatar-display')).toBeNull();
   });
 
-  it('renders Tools row only when features.tools is true', () => {
+  it('renders Tools row only when features.tools is true and there is at least one tool', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: true,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]} />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-preview-tools-button')).toBeTruthy();
+    expect(screen.queryByTestId('agent-preview-skills-button')).toBeNull();
+  });
+
+  it('hides the Tools row when there are no tools available', () => {
     mockUseBuilderAgentFeatures.mockReturnValue({
       tools: true,
       skills: false,
@@ -149,7 +168,20 @@ describe('AgentConfigurePanel feature gating', () => {
 
     renderPanel();
 
-    expect(screen.getByTestId('agent-preview-tools-button')).toBeTruthy();
+    expect(screen.queryByTestId('agent-preview-tools-button')).toBeNull();
+  });
+
+  it('hides the Skills row when there are no skills available', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: true,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+
+    renderPanel();
+
     expect(screen.queryByTestId('agent-preview-skills-button')).toBeNull();
   });
 });
@@ -215,13 +247,12 @@ describe('AgentConfigurePanel agent-as-tool rendering', () => {
 
     render(
       <FormWrapper>
-        <AgentConfigurePanel
-          availableAgentTools={availableAgentTools}
-          activeDetail="tools"
-          onActiveDetailChange={() => {}}
-        />
+        <AgentConfigurePanel availableAgentTools={availableAgentTools} />
       </FormWrapper>,
     );
+
+    // Expand the Tools accordion section to reveal contents.
+    fireEvent.click(screen.getByTestId('agent-preview-tools-button'));
 
     // No separate "agents" config row / preview button exists.
     expect(screen.queryByTestId('agent-preview-agents-button')).toBeNull();
@@ -244,13 +275,11 @@ describe('AgentConfigurePanel agent-as-tool rendering', () => {
 
     render(
       <FormWrapper>
-        <AgentConfigurePanel
-          availableAgentTools={availableAgentTools}
-          activeDetail="tools"
-          onActiveDetailChange={() => {}}
-        />
+        <AgentConfigurePanel availableAgentTools={availableAgentTools} />
       </FormWrapper>,
     );
+
+    fireEvent.click(screen.getByTestId('agent-preview-tools-button'));
 
     const toolsButton = screen.getByTestId('agent-preview-tools-button');
     expect(toolsButton.textContent).toContain('0 / 2');
@@ -283,9 +312,11 @@ describe('AgentConfigurePanel instructions persistence', () => {
   it('writes edits from InstructionsDetail back to the form instructions field in editable mode', () => {
     render(
       <FormWrapper>
-        <AgentConfigurePanel activeDetail="instructions" onActiveDetailChange={() => {}} />
+        <AgentConfigurePanel />
       </FormWrapper>,
     );
+
+    fireEvent.click(screen.getByTestId('agent-preview-edit-system-prompt'));
 
     expect(capturedInstructionsProps.length).toBeGreaterThan(0);
     const latest = capturedInstructionsProps[capturedInstructionsProps.length - 1];
@@ -316,28 +347,42 @@ describe('AgentConfigurePanel disabled propagation', () => {
     cleanup();
   });
 
-  it('disables form mutations but keeps config rows navigable when disabled is true', () => {
-    const onActiveDetailChange = vi.fn();
+  it('disables form mutations but keeps config rows expandable when disabled is true', () => {
     render(
       <FormWrapper>
-        <AgentConfigurePanel disabled onActiveDetailChange={onActiveDetailChange} />
+        <AgentConfigurePanel disabled />
       </FormWrapper>,
     );
 
     const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
     const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
     const avatarBtn = screen.getByTestId('agent-configure-avatar-trigger') as HTMLButtonElement;
-    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt') as HTMLButtonElement;
-    const toolsRow = screen.getByTestId('agent-preview-tools-button') as HTMLButtonElement;
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
+    const instructionsDetails = instructionsRow.closest('details') as HTMLDetailsElement;
 
     expect(nameInput.disabled).toBe(true);
     expect(descInput.disabled).toBe(true);
     expect(avatarBtn.disabled).toBe(true);
-    expect(instructionsRow.disabled).toBe(false);
-    expect(toolsRow.disabled).toBe(false);
 
+    expect(instructionsDetails.open).toBe(false);
     fireEvent.click(instructionsRow);
-    expect(onActiveDetailChange).toHaveBeenCalledWith('instructions');
+    expect(screen.getByTestId('instructions-detail-textarea')).toBeTruthy();
+  });
+
+  it('collapses other sections when opening a new one (mutual exclusivity via shared name)', () => {
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]} />
+      </FormWrapper>,
+    );
+
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
+    const toolsRow = screen.getByTestId('agent-preview-tools-button');
+    const instructionsDetails = instructionsRow.closest('details') as HTMLDetailsElement;
+    const toolsDetails = toolsRow.closest('details') as HTMLDetailsElement;
+
+    expect(instructionsDetails.getAttribute('name')).toBe(toolsDetails.getAttribute('name'));
+    expect(instructionsDetails.getAttribute('name')).toBeTruthy();
   });
 
   it('renders enabled controls by default', () => {
@@ -348,21 +393,17 @@ describe('AgentConfigurePanel disabled propagation', () => {
     );
 
     const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
-    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt') as HTMLButtonElement;
 
     expect(nameInput.disabled).toBe(false);
-    expect(instructionsRow.disabled).toBe(false);
+    expect(screen.getByTestId('agent-preview-edit-system-prompt')).toBeTruthy();
   });
 
   it('uses the same controls in read-only mode but disables mutations', () => {
     capturedInstructionsProps.length = 0;
-    const onActiveDetailChange = vi.fn();
     render(
       <FormWrapper>
         <AgentConfigurePanel
           editable={false}
-          activeDetail="instructions"
-          onActiveDetailChange={onActiveDetailChange}
           availableAgentTools={[
             { id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' },
           ]}
@@ -379,22 +420,15 @@ describe('AgentConfigurePanel disabled propagation', () => {
 
     const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
     const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
-    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt') as HTMLButtonElement;
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt');
 
     expect(nameInput.value).toBe('Published agent');
     expect(descInput.value).toBe('Published description');
     expect(nameInput.disabled).toBe(true);
     expect(descInput.disabled).toBe(true);
-    expect(instructionsRow.disabled).toBe(false);
-    expect(screen.getByTestId('instructions-detail-textarea')).toHaveProperty('readOnly', true);
 
     fireEvent.click(instructionsRow);
-    expect(onActiveDetailChange).toHaveBeenCalledWith(null);
-
-    const toolsRow = screen.getByTestId('agent-preview-tools-button') as HTMLButtonElement;
-    expect(toolsRow.disabled).toBe(false);
-    fireEvent.click(toolsRow);
-    expect(onActiveDetailChange).toHaveBeenCalledWith('tools');
+    expect(screen.getByTestId('instructions-detail-textarea')).toHaveProperty('readOnly', true);
 
     const latest = capturedInstructionsProps[capturedInstructionsProps.length - 1];
     expect(latest.editable).toBe(false);
@@ -411,8 +445,6 @@ describe('AgentConfigurePanel disabled propagation', () => {
       <FormWrapper>
         <AgentConfigurePanel
           editable={false}
-          activeDetail="tools"
-          onActiveDetailChange={() => {}}
           availableAgentTools={[
             { id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' },
           ]}
@@ -424,6 +456,8 @@ describe('AgentConfigurePanel disabled propagation', () => {
         />
       </FormWrapper>,
     );
+
+    fireEvent.click(screen.getByTestId('agent-preview-tools-button'));
 
     expect(screen.getByRole('checkbox')).toHaveProperty('disabled', true);
   });
@@ -534,47 +568,26 @@ describe('AgentConfigurePanel config row chevron removal', () => {
   ] as const;
 
   it.each(rowTestIds)('does not render a chevron inside the %s row', testId => {
-    renderPanel();
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel
+          availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]}
+          availableSkills={[
+            {
+              id: 'skill-a',
+              name: 'skill-a',
+              status: 'ready',
+              instructions: '',
+              createdAt: new Date(0).toISOString(),
+              updatedAt: new Date(0).toISOString(),
+            },
+          ]}
+        />
+      </FormWrapper>,
+    );
 
     const button = screen.getByTestId(testId);
     expect(button.querySelector('svg.lucide-chevron-left')).toBeNull();
     expect(button.querySelector('svg.lucide-chevron-right')).toBeNull();
-  });
-});
-
-describe('AgentConfigurePanel delete action slot', () => {
-  beforeEach(() => {
-    mockUseBuilderAgentFeatures.mockReturnValue({
-      tools: false,
-      skills: false,
-      memory: false,
-      workflows: false,
-      agents: false,
-    });
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('renders the deleteAction node when the prop is provided', () => {
-    render(
-      <FormWrapper>
-        <AgentConfigurePanel deleteAction={<div data-testid="stub-delete-action">stub</div>} />
-      </FormWrapper>,
-    );
-
-    expect(screen.getByTestId('agent-configure-delete-action')).toBeTruthy();
-    expect(screen.getByTestId('stub-delete-action')).toBeTruthy();
-  });
-
-  it('does not render the delete-action footer when the prop is omitted', () => {
-    render(
-      <FormWrapper>
-        <AgentConfigurePanel />
-      </FormWrapper>,
-    );
-
-    expect(screen.queryByTestId('agent-configure-delete-action')).toBeNull();
   });
 });

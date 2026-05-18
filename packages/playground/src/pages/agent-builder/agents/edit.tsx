@@ -1,13 +1,12 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Spinner } from '@mastra/playground-ui';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
-import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-builder-edit/autosave-indicator';
-import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import {
   ConversationPanelChat,
   ConversationPanelProvider,
@@ -198,8 +197,6 @@ const AgentBuilderAgentEditReady = ({
     excludeAgentId: id,
   });
 
-  const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
-
   const autosave = useAutosaveAgent({ agentId: id, availableAgentTools, availableSkills });
 
   const isFreshThread = initialUserMessage !== undefined;
@@ -229,8 +226,6 @@ const AgentBuilderAgentEditReady = ({
         autosave={autosave}
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}
-        activeDetail={activeDetail}
-        onActiveDetailChange={setActiveDetail}
         onModeToggle={onModeToggle}
       />
     </ConversationPanelProvider>
@@ -244,8 +239,6 @@ interface EditWorkspaceLayoutConnectedProps {
   autosave: ReturnType<typeof useAutosaveAgent>;
   availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
   availableSkills: StoredSkillResponse[];
-  activeDetail: ActiveDetail;
-  onActiveDetailChange: (next: ActiveDetail) => void;
   onModeToggle: (() => void) | undefined;
 }
 
@@ -256,8 +249,6 @@ const EditWorkspaceLayoutConnected = ({
   autosave,
   availableAgentTools,
   availableSkills,
-  activeDetail,
-  onActiveDetailChange,
   onModeToggle,
 }: EditWorkspaceLayoutConnectedProps) => {
   const isRunning = useStreamRunning();
@@ -274,19 +265,13 @@ const EditWorkspaceLayoutConnected = ({
         <div className="hidden lg:flex items-center gap-2">
           {canPublishToChannel && <PublishToChannelButton agentId={agentId} />}
           <VisibilitySelectConnected agentId={agentId} />
+          {isOwner && <DeleteAgentPanelButtonConnected agentId={agentId} />}
         </div>
       }
       mobileExtra={<AgentBuilderMobileMenuConnected agentId={agentId} showPublishToChannel={canPublishToChannel} />}
       chat={<ConversationPanelChat />}
       configure={
-        <ConfigurePanelConnected
-          editable
-          availableAgentTools={availableAgentTools}
-          availableSkills={availableSkills}
-          activeDetail={activeDetail}
-          onActiveDetailChange={onActiveDetailChange}
-          deleteAction={isOwner ? <DeleteAgentPanelButtonConnected agentId={agentId} /> : undefined}
-        />
+        <AgentConfigurePanel editable availableAgentTools={availableAgentTools} availableSkills={availableSkills} />
       }
     />
   );

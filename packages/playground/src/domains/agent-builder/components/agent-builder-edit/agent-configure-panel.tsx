@@ -1,8 +1,19 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
-import { Avatar, cn, Skeleton, Switch, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionSummary,
+  Avatar,
+  cn,
+  Skeleton,
+  Switch,
+  TextFieldBlock,
+  toast,
+  Txt,
+} from '@mastra/playground-ui';
+import { Cpu, FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
+import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
@@ -11,6 +22,7 @@ import { downscaleImageToDataUrl } from '../../utils/downscale-avatar';
 import { InstructionsDetail } from './details/instructions-detail';
 import { SkillsDetail } from './details/skills-detail';
 import { ToolsDetail } from './details/tools-detail';
+import { useStreamRunning } from './stream-chat-context';
 import { useBuilderModelPolicy } from '@/domains/builder';
 import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
 
@@ -25,34 +37,30 @@ export interface AgentConfig {
   browserEnabled?: boolean;
 }
 
-export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
+const ACCORDION_GROUP_NAME = 'agent-configure-section';
 
 interface BaseProps {
   availableAgentTools?: AgentTool[];
   availableSkills?: StoredSkillResponse[];
   isLoading?: boolean;
-  activeDetail?: ActiveDetail;
-  onActiveDetailChange?: (next: ActiveDetail) => void;
-  disabled?: boolean;
-  deleteAction?: React.ReactNode;
 }
 
 type AgentConfigurePanelProps = BaseProps & {
   editable?: boolean;
   agent?: AgentConfig;
+  disabled?: boolean;
 };
 
 export function AgentConfigurePanel({
   availableAgentTools = [],
   availableSkills = [],
   isLoading = false,
-  activeDetail = null,
-  onActiveDetailChange = () => {},
-  disabled = false,
   editable = true,
   agent,
-  deleteAction,
+  disabled,
 }: AgentConfigurePanelProps) {
+  const isRunning = useStreamRunning();
+
   if (isLoading) {
     return <AgentConfigurePanelSkeleton />;
   }
@@ -62,11 +70,8 @@ export function AgentConfigurePanel({
       agent={agent}
       availableAgentTools={availableAgentTools}
       availableSkills={availableSkills}
-      activeDetail={activeDetail}
-      onActiveDetailChange={onActiveDetailChange}
       editable={editable}
-      disabled={disabled}
-      deleteAction={deleteAction}
+      disabled={disabled ?? isRunning}
     />
   );
 }
@@ -75,22 +80,16 @@ interface ConfigurePanelContentProps {
   agent?: AgentConfig;
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
-  activeDetail: ActiveDetail;
-  onActiveDetailChange: (next: ActiveDetail) => void;
   editable: boolean;
   disabled?: boolean;
-  deleteAction?: React.ReactNode;
 }
 
 function ConfigurePanelContent({
   agent,
   availableAgentTools,
   availableSkills,
-  activeDetail,
-  onActiveDetailChange,
   editable,
   disabled: propDisabled = false,
-  deleteAction,
 }: ConfigurePanelContentProps) {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
@@ -125,23 +124,6 @@ function ConfigurePanelContent({
   const activeSkillsCount = availableSkills.filter(skill => selectedSkills[skill.id]).length;
   const totalSkillsCount = availableSkills.length;
 
-  const toggleDetail = (next: ActiveDetail) => {
-    onActiveDetailChange(activeDetail === next ? null : next);
-  };
-  const closeDetail = () => onActiveDetailChange(null);
-
-  // Keep the last non-null detail rendered during the close animation so the
-  // sheet still has visible content while sliding out on mobile/tablet.
-  const [renderedDetail, setRenderedDetail] = useState<ActiveDetail>(activeDetail);
-  useEffect(() => {
-    if (activeDetail) {
-      setRenderedDetail(activeDetail);
-      return;
-    }
-    const timeout = window.setTimeout(() => setRenderedDetail(null), 320);
-    return () => window.clearTimeout(timeout);
-  }, [activeDetail]);
-
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -160,29 +142,9 @@ function ConfigurePanelContent({
 
   return (
     <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden">
-      <div
-        className={cn(
-          'absolute inset-0 z-10 overflow-hidden bg-surface2',
-          'transition-opacity duration-200 ease-out',
-          activeDetail ? 'opacity-100' : 'opacity-0 pointer-events-none',
-        )}
-        aria-hidden={!activeDetail}
-      >
-        <DetailPane
-          activeDetail={renderedDetail}
-          features={features}
-          editable={!disabled}
-          instructionsPrompt={panelInstructions}
-          onInstructionsChange={setDraftInstructions}
-          onClose={closeDetail}
-          availableAgentTools={availableAgentTools}
-          availableSkills={availableSkills}
-        />
-      </div>
-
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex-1 flex flex-col py-6 overflow-y-auto">
-          <div className="flex flex-col gap-2 px-6 pb-6 border-b border-border1">
+          <div className="flex flex-col gap-2 px-6 pb-6">
             <div className="flex items-center justify-center">
               {features.avatarUpload ? (
                 <>
@@ -234,27 +196,24 @@ function ConfigurePanelContent({
               disabled={disabled}
               testId="agent-configure-description"
             />
-
-            {modelSectionVisible && <ModelSection editable={!disabled} />}
           </div>
 
-          <ConfigRows
+          <ConfigSections
             features={features}
             instructionsDescription={instructionsDescription}
             activeToolsCount={activeToolsCount}
             totalToolsCount={totalToolsCount}
             activeSkillsCount={activeSkillsCount}
             totalSkillsCount={totalSkillsCount}
-            activeDetail={activeDetail}
-            toggleDetail={toggleDetail}
+            modelSectionVisible={modelSectionVisible}
+            editable={!disabled}
+            panelInstructions={panelInstructions}
+            onInstructionsChange={setDraftInstructions}
+            availableAgentTools={availableAgentTools}
+            availableSkills={availableSkills}
             disabled={disabled}
           />
         </div>
-        {deleteAction && (
-          <div className="px-6 pb-6 pt-4 border-t border-border1" data-testid="agent-configure-delete-action">
-            {deleteAction}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -363,35 +322,31 @@ const LockedModelChip = ({ provider, modelId }: ModelChipProps) => (
   </div>
 );
 
-interface ConfigRowsProps {
+interface ConfigSectionsProps {
   features: ReturnType<typeof useBuilderAgentFeatures>;
   instructionsDescription: string;
   activeToolsCount: number;
   totalToolsCount: number;
   activeSkillsCount: number;
   totalSkillsCount: number;
-  activeDetail: ActiveDetail;
-  toggleDetail: (next: ActiveDetail) => void;
+  editable: boolean;
+  panelInstructions: string;
+  onInstructionsChange: (next: string) => void;
+  availableAgentTools: AgentTool[];
+  availableSkills: StoredSkillResponse[];
   disabled?: boolean;
+  modelSectionVisible: boolean;
 }
 
-function BrowserToggleRow({ disabled = false }: { disabled?: boolean }) {
+function BrowserSection({ disabled = false }: { disabled?: boolean }) {
   const { setValue } = useFormContext<AgentBuilderEditFormValues>();
   const browserEnabled = useWatch<AgentBuilderEditFormValues, 'browserEnabled'>({ name: 'browserEnabled' });
 
   return (
-    <div className={cn('flex items-center gap-3 px-6 py-4', disabled && 'cursor-not-allowed opacity-60')}>
-      <span className="shrink-0 text-neutral3">
-        <Globe className="h-4 w-4" />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <Txt variant="ui-sm" className="font-medium text-neutral6">
-          Browser
-        </Txt>
-        <Txt variant="ui-xs" className="truncate text-neutral3">
-          Allow your agent to browse the web
-        </Txt>
-      </div>
+    <div className={cn('flex items-center gap-3', disabled && 'cursor-not-allowed opacity-60')}>
+      <Txt variant="ui-sm" className="min-w-0 flex-1 text-neutral3">
+        Allow your agent to browse the web
+      </Txt>
       <Switch
         checked={browserEnabled ?? false}
         onCheckedChange={checked => setValue('browserEnabled', checked, { shouldDirty: true })}
@@ -402,136 +357,124 @@ function BrowserToggleRow({ disabled = false }: { disabled?: boolean }) {
   );
 }
 
-function ConfigRows({
+function BrowserSummaryValue() {
+  const browserEnabled = useWatch<AgentBuilderEditFormValues, 'browserEnabled'>({ name: 'browserEnabled' });
+  return browserEnabled ? 'On' : 'Off';
+}
+
+function ConfigSections({
   features,
   instructionsDescription,
   activeToolsCount,
   totalToolsCount,
   activeSkillsCount,
   totalSkillsCount,
-  activeDetail,
-  toggleDetail,
-  disabled = false,
-}: ConfigRowsProps) {
-  return (
-    <div className="flex flex-col">
-      <ConfigRow
-        icon={<FileText className="h-4 w-4" />}
-        label="Instructions"
-        value={instructionsDescription}
-        isActive={activeDetail === 'instructions'}
-        onClick={() => toggleDetail('instructions')}
-        testId="agent-preview-edit-system-prompt"
-      />
-      {features.tools && (
-        <ConfigRow
-          icon={<Wrench className="h-4 w-4" />}
-          label="Tools"
-          count={activeToolsCount}
-          total={totalToolsCount}
-          isActive={activeDetail === 'tools'}
-          onClick={() => toggleDetail('tools')}
-          testId="agent-preview-tools-button"
-        />
-      )}
-      {features.skills && (
-        <ConfigRow
-          icon={<Sparkles className="h-4 w-4" />}
-          label="Skills"
-          count={activeSkillsCount}
-          total={totalSkillsCount}
-          isActive={activeDetail === 'skills'}
-          onClick={() => toggleDetail('skills')}
-          testId="agent-preview-skills-button"
-        />
-      )}
-      {features.browser && <BrowserToggleRow disabled={disabled} />}
-    </div>
-  );
-}
-
-interface DetailPaneProps {
-  activeDetail: ActiveDetail;
-  features: ReturnType<typeof useBuilderAgentFeatures>;
-  editable: boolean;
-  instructionsPrompt: string;
-  onInstructionsChange: (next: string) => void;
-  onClose: () => void;
-  availableAgentTools: AgentTool[];
-  availableSkills: StoredSkillResponse[];
-}
-
-function DetailPane({
-  activeDetail,
-  features,
   editable,
-  instructionsPrompt,
+  panelInstructions,
   onInstructionsChange,
-  onClose,
   availableAgentTools,
   availableSkills,
-}: DetailPaneProps) {
+  disabled = false,
+  modelSectionVisible,
+}: ConfigSectionsProps) {
   return (
-    <div className="h-full w-full min-w-0 overflow-hidden">
-      {activeDetail === 'instructions' && (
-        <InstructionsDetail
-          prompt={instructionsPrompt}
-          onChange={onInstructionsChange}
-          onClose={onClose}
-          editable={editable}
-        />
-      )}
-      {activeDetail === 'tools' && features.tools && (
-        <ToolsDetail onClose={onClose} editable={editable} availableAgentTools={availableAgentTools} />
-      )}
-      {activeDetail === 'skills' && features.skills && (
-        <SkillsDetail onClose={onClose} editable={editable} availableSkills={availableSkills} />
-      )}
+    <div className="flex flex-col gap-2 px-6 py-4">
+      <div className="flex flex-col rounded-xl border border-border1 bg-surface3 overflow-hidden">
+        {modelSectionVisible && (
+          <ConfigAccordion
+            icon={<Cpu className="h-4 w-4" />}
+            label="Model"
+            value={<ModelSummaryValue />}
+            testId="agent-preview-model-button"
+          >
+            <ModelSection editable={editable} />
+          </ConfigAccordion>
+        )}
+        <ConfigAccordion
+          icon={<FileText className="h-4 w-4" />}
+          label="Instructions"
+          value={instructionsDescription}
+          testId="agent-preview-edit-system-prompt"
+        >
+          <InstructionsDetail prompt={panelInstructions} onChange={onInstructionsChange} editable={editable} />
+        </ConfigAccordion>
+        {features.tools && totalToolsCount > 0 && (
+          <ConfigAccordion
+            icon={<Wrench className="h-4 w-4" />}
+            label="Tools"
+            count={activeToolsCount}
+            total={totalToolsCount}
+            testId="agent-preview-tools-button"
+          >
+            <ToolsDetail editable={editable} availableAgentTools={availableAgentTools} />
+          </ConfigAccordion>
+        )}
+        {features.skills && totalSkillsCount > 0 && (
+          <ConfigAccordion
+            icon={<Sparkles className="h-4 w-4" />}
+            label="Skills"
+            count={activeSkillsCount}
+            total={totalSkillsCount}
+            testId="agent-preview-skills-button"
+          >
+            <SkillsDetail editable={editable} availableSkills={availableSkills} />
+          </ConfigAccordion>
+        )}
+        {features.browser && (
+          <ConfigAccordion
+            icon={<Globe className="h-4 w-4" />}
+            label="Browser"
+            value={<BrowserSummaryValue />}
+            testId="agent-preview-browser-button"
+          >
+            <BrowserSection disabled={disabled} />
+          </ConfigAccordion>
+        )}
+      </div>
     </div>
   );
 }
 
-interface ConfigRowProps {
-  icon: React.ReactNode;
-  label: string;
-  value?: string;
-  count?: number;
-  total?: number;
-  isActive?: boolean;
-  onClick: () => void;
-  testId: string;
+function ModelSummaryValue() {
+  const policy = useBuilderModelPolicy();
+  const model = useWatch<AgentBuilderEditFormValues, 'model'>({ name: 'model' });
+  const locked = policy.active && policy.pickerVisible === false;
+  const provider = locked ? (policy.default?.provider ?? model?.provider ?? '') : (model?.provider ?? '');
+  const modelId = locked ? (policy.default?.modelId ?? model?.name ?? '') : (model?.name ?? '');
+  if (provider && modelId) return `${provider}/${modelId}`;
+  return 'Select a model';
 }
 
-const ConfigRow = ({ icon, label, value, count, total, isActive = false, onClick, testId }: ConfigRowProps) => (
-  <button
-    type="button"
-    onClick={onClick}
-    data-testid={testId}
-    aria-pressed={isActive}
-    className={cn(
-      'group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3',
-      isActive && 'bg-surface3',
-    )}
-  >
-    <span
-      className={cn('shrink-0 text-neutral3 transition-colors group-hover:text-neutral5', isActive && 'text-neutral5')}
-    >
-      {icon}
-    </span>
-    <Txt variant="ui-sm" className="shrink-0 font-medium text-neutral6">
-      {label}
-    </Txt>
-    {value !== undefined && (
-      <Txt variant="ui-sm" className="ml-auto min-w-0 truncate text-neutral3">
-        {value}
+interface ConfigAccordionProps {
+  icon: React.ReactNode;
+  label: string;
+  value?: React.ReactNode;
+  count?: number;
+  total?: number;
+  testId: string;
+  children: React.ReactNode;
+}
+
+const ConfigAccordion = ({ icon, label, value, count, total, testId, children }: ConfigAccordionProps) => (
+  <Accordion name={ACCORDION_GROUP_NAME} className="-mx-px border-0 border-none">
+    <AccordionSummary data-testid={testId} className="px-4 py-3">
+      <span className="shrink-0 text-neutral3 transition-colors group-open:text-neutral5">{icon}</span>
+      <Txt variant="ui-sm" className="shrink-0 font-medium text-neutral6">
+        {label}
       </Txt>
-    )}
-    {count !== undefined && total !== undefined && (
-      <Txt variant="ui-sm" className={cn('shrink-0 tabular-nums text-neutral3', value === undefined && 'ml-auto')}>
-        {count} / {total}
-      </Txt>
-    )}
-  </button>
+      {value !== undefined && (
+        <Txt variant="ui-sm" className="ml-auto min-w-0 truncate text-neutral3">
+          {value}
+        </Txt>
+      )}
+      {count !== undefined && total !== undefined && (
+        <Txt variant="ui-sm" className={cn('shrink-0 tabular-nums text-neutral3', value === undefined && 'ml-auto')}>
+          {count} / {total}
+        </Txt>
+      )}
+    </AccordionSummary>
+    <AccordionContent>{children}</AccordionContent>
+  </Accordion>
 );
 
 const AgentConfigurePanelSkeleton = () => (

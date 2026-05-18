@@ -82,14 +82,13 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
   return (
     <>
       <Button
-        size="lg"
-        variant="default"
+        size="sm"
+        variant="destructive"
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
-        className="w-full"
         data-testid="agent-builder-delete-agent"
       >
-        <Trash2 />
+        <Trash2 className="h-3.5 w-3.5" />
         <span>Delete agent</span>
       </Button>
       <DeleteAgentDialog

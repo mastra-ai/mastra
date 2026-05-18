@@ -32,7 +32,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
 const renderTools = (availableAgentTools: AgentTool[]) =>
   render(
     <FormWrapper>
-      <ToolsDetail onClose={() => {}} availableAgentTools={availableAgentTools} />
+      <ToolsDetail availableAgentTools={availableAgentTools} />
     </FormWrapper>,
   );
 
