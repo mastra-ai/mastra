@@ -215,6 +215,30 @@ describe('resolveStoredToolIntegrations', () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
+  it('all connections failing returns empty map (does not crash)', async () => {
+    const integration = makeIntegration({
+      async resolveTools() {
+        throw new Error('connection not found');
+      },
+    });
+    const stored: ToolIntegrations = {
+      composio: {
+        tools: { 'gmail.fetch_emails': {} },
+        connections: {
+          gmail: [
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_revoked_1', label: 'Work' },
+            { kind: 'author', toolService: 'gmail', connectionId: 'ca_revoked_2', label: 'Personal' },
+          ],
+        },
+      },
+    };
+    const logger = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() } as any;
+    const out = await resolveStoredToolIntegrations(stored, () => integration, { logger });
+
+    expect(out).toEqual({});
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
+
   it('plumbs requestContext through to every resolveTools call', async () => {
     const spy = vi.fn(async (opts: ResolveToolsOpts) => ({
       [opts.toolSlugs[0]!]: makeTool(opts.toolSlugs[0]!),
