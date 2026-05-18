@@ -249,8 +249,11 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
   /**
    * Sync roles from roleMapping to WorkOS.
    *
-   * This method creates or updates roles in WorkOS based on the roleMapping
-   * configuration, then assigns the appropriate permissions to each role.
+   * This method creates or updates **environment roles** in WorkOS based on the
+   * roleMapping configuration, then assigns the appropriate permissions to each role.
+   *
+   * Environment roles are shared across all organizations. For org-specific roles,
+   * use the WorkOS Dashboard to create custom roles (which require `org-` prefix).
    *
    * @experimental This feature requires WorkOS Roles API access.
    */
@@ -267,12 +270,6 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       errors: [] as string[],
     };
 
-    const organizationId = this.options.organizationId;
-    if (!organizationId) {
-      console.warn('[MastraRBACWorkos] Role sync skipped: organizationId not configured');
-      return result;
-    }
-
     const roleMapping = this.options.roleMapping;
     if (!roleMapping) {
       console.warn('[MastraRBACWorkos] Role sync skipped: roleMapping not configured');
@@ -280,8 +277,8 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     }
 
     try {
-      // Fetch existing roles from WorkOS
-      const existingRolesResponse = await this.workos.authorization.listOrganizationRoles(organizationId);
+      // Fetch existing environment roles from WorkOS
+      const existingRolesResponse = await this.workos.authorization.listEnvironmentRoles();
       const existingRolesMap = new Map(existingRolesResponse.data?.map(r => [r.slug, r]) ?? []);
 
       // Sync each role from roleMapping
@@ -295,27 +292,27 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
         try {
           if (existing) {
             // Role exists - update permissions
-            await this.workos.authorization.setOrganizationRolePermissions(organizationId, roleSlug, {
+            await this.workos.authorization.setEnvironmentRolePermissions(roleSlug, {
               permissions: permissions as string[],
             });
             result.updated.push(roleSlug);
             console.info(
-              `[MastraRBACWorkos] Updated role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
+              `[MastraRBACWorkos] Updated environment role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
             );
           } else {
-            // Create new role
-            await this.workos.authorization.createOrganizationRole(organizationId, {
+            // Create new environment role
+            await this.workos.authorization.createEnvironmentRole({
               slug: roleSlug,
               name,
               description,
             });
             // Set permissions on the new role
-            await this.workos.authorization.setOrganizationRolePermissions(organizationId, roleSlug, {
+            await this.workos.authorization.setEnvironmentRolePermissions(roleSlug, {
               permissions: permissions as string[],
             });
             result.created.push(roleSlug);
             console.info(
-              `[MastraRBACWorkos] Created role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
+              `[MastraRBACWorkos] Created environment role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
             );
           }
         } catch (error) {
