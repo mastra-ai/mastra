@@ -1,6 +1,7 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { NOISE_SENSITIVITY_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
@@ -25,34 +26,22 @@ export interface NoiseSensitivityOptions {
   };
 }
 
-const scoreSchema = {
-  type: 'number',
-  minimum: 0,
-  maximum: 1,
-} satisfies JSONSchema7;
-
-const analyzeOutputSchema = {
-  type: 'object',
-  properties: {
-    dimensions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          dimension: { type: 'string' },
-          impactLevel: { type: 'string', enum: ['none', 'minimal', 'moderate', 'significant', 'severe'] },
-          specificChanges: { type: 'string' },
-          noiseInfluence: { type: 'string' },
-        },
-        required: ['dimension', 'impactLevel', 'specificChanges', 'noiseInfluence'],
-      },
-    },
-    overallAssessment: { type: 'string' },
-    majorIssues: { type: 'array', items: { type: 'string' }, default: [] },
-    robustnessScore: scoreSchema,
-  },
-  required: ['dimensions', 'overallAssessment', 'robustnessScore'],
-} satisfies JSONSchema7;
+// Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    dimensions: z.array(
+      z.object({
+        dimension: z.string(),
+        impactLevel: z.enum(['none', 'minimal', 'moderate', 'significant', 'severe']),
+        specificChanges: z.string(),
+        noiseInfluence: z.string(),
+      }),
+    ),
+    overallAssessment: z.string(),
+    majorIssues: z.array(z.string()).optional().default([]),
+    robustnessScore: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+  }),
+);
 
 // Default scoring constants for maintainability and clarity
 const DEFAULT_IMPACT_WEIGHTS = {
@@ -90,17 +79,7 @@ export function createNoiseSensitivityScorerLLM({
     },
     type: 'agent',
   })
-    .analyze<{
-      dimensions: {
-        dimension: string;
-        impactLevel: 'none' | 'minimal' | 'moderate' | 'significant' | 'severe';
-        specificChanges: string;
-        noiseInfluence: string;
-      }[];
-      overallAssessment: string;
-      majorIssues?: string[];
-      robustnessScore: number;
-    }>({
+    .analyze({
       description: 'Analyze the impact of noise on agent response quality',
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ run }) => {

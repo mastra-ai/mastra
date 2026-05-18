@@ -44,7 +44,8 @@
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {
@@ -63,10 +64,5 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0"
-  },
-  "devDependencies": {
-    "@types/json-schema": "^7.0.15",
-    "json-schema": "^0.4.0",
-    "zod": "catalog:"
   }
 }
