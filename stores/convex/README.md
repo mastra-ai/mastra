@@ -90,6 +90,7 @@ const cache = new ConvexServerCache({
   deploymentUrl: process.env.CONVEX_URL!,
   adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
   cacheFunction: 'mastra/cache:handle', // default
+  requestTimeoutMs: 30_000, // default
 });
 ```
 

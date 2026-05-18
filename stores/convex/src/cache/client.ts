@@ -4,6 +4,7 @@ export type ConvexCacheClientConfig = {
   deploymentUrl: string;
   adminAuthToken: string;
   cacheFunction?: string;
+  requestTimeoutMs?: number;
 };
 
 export type RawCacheResult<T = unknown> = {
@@ -12,13 +13,15 @@ export type RawCacheResult<T = unknown> = {
 };
 
 const DEFAULT_CACHE_FUNCTION = 'mastra/cache:handle';
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 export class ConvexCacheClient {
   private readonly deploymentUrl: string;
   private readonly adminAuthToken: string;
   private readonly cacheFunction: string;
+  private readonly requestTimeoutMs: number;
 
-  constructor({ deploymentUrl, adminAuthToken, cacheFunction }: ConvexCacheClientConfig) {
+  constructor({ deploymentUrl, adminAuthToken, cacheFunction, requestTimeoutMs }: ConvexCacheClientConfig) {
     if (!deploymentUrl) {
       throw new Error('ConvexCacheClient: deploymentUrl is required.');
     }
@@ -27,24 +30,43 @@ export class ConvexCacheClient {
       throw new Error('ConvexCacheClient: adminAuthToken is required.');
     }
 
+    if (requestTimeoutMs !== undefined && requestTimeoutMs < 0) {
+      throw new Error('ConvexCacheClient: requestTimeoutMs must be greater than or equal to 0.');
+    }
+
     this.deploymentUrl = deploymentUrl.replace(/\/$/, '');
     this.adminAuthToken = adminAuthToken;
     this.cacheFunction = cacheFunction ?? DEFAULT_CACHE_FUNCTION;
+    this.requestTimeoutMs = requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   async callCacheRaw<T = unknown>(request: CacheRequest): Promise<RawCacheResult<T>> {
-    const response = await fetch(`${this.deploymentUrl}/api/mutation`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Convex ${this.adminAuthToken}`,
-      },
-      body: JSON.stringify({
-        path: this.cacheFunction,
-        args: request,
-        format: 'json',
-      }),
-    });
+    const controller = this.requestTimeoutMs > 0 ? new AbortController() : undefined;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), this.requestTimeoutMs) : undefined;
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.deploymentUrl}/api/mutation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Convex ${this.adminAuthToken}`,
+        },
+        body: JSON.stringify({
+          path: this.cacheFunction,
+          args: request,
+          format: 'json',
+        }),
+        signal: controller?.signal,
+      });
+    } catch (error) {
+      if (controller?.signal.aborted) {
+        throw new Error(`Convex cache request timed out after ${this.requestTimeoutMs} ms.`);
+      }
+      throw error;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const text = await response.text();

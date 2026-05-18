@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CacheRequest } from './types';
-import type { ConvexCacheClient } from './index';
-import { ConvexServerCache } from './index';
+import { ConvexCacheClient, ConvexServerCache } from './index';
 
 class MockConvexCacheClient {
   calls: CacheRequest[] = [];
@@ -123,5 +122,58 @@ describe('ConvexServerCache', () => {
         expiresAt: Date.now() + 300_000,
       },
     ]);
+  });
+});
+
+describe('ConvexCacheClient', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('times out hung Convex mutation requests', async () => {
+    vi.useFakeTimers();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      }),
+    );
+
+    const client = new ConvexCacheClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'token',
+      requestTimeoutMs: 1,
+    });
+
+    const call = client.callCacheRaw({ op: 'get', key: 'key' });
+    const assertion = expect(call).rejects.toThrow('Convex cache request timed out after 1 ms.');
+    await vi.advanceTimersByTimeAsync(1);
+
+    await assertion;
+  });
+
+  it('passes Convex mutation requests through with an abort signal', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ value: { ok: true, result: 'cached' } }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new ConvexCacheClient({
+      deploymentUrl: 'https://example.convex.cloud/',
+      adminAuthToken: 'token',
+    });
+
+    await expect(client.callCache({ op: 'get', key: 'key' })).resolves.toBe('cached');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.convex.cloud/api/mutation',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 });
