@@ -759,14 +759,19 @@ describe.skipIf(!process.env.ARCADE_API_KEY)('ArcadeToolProvider e2e (real API)'
 });
 
 // ---------------------------------------------------------------------------
-// Scalekit e2e tests — skipped unless SCALEKIT_CLIENT_ID is set
+// Scalekit e2e tests — skipped unless all three env vars are set
 // ---------------------------------------------------------------------------
-describe.skipIf(!process.env.SCALEKIT_CLIENT_ID)('ScalekitToolProvider e2e (real API)', () => {
+const SCALEKIT_ENV_URL = process.env.SCALEKIT_ENV_URL ?? process.env.SCALEKIT_ENVIRONMENT_URL;
+const hasScalekitE2EEnv = Boolean(
+  SCALEKIT_ENV_URL && process.env.SCALEKIT_CLIENT_ID && process.env.SCALEKIT_CLIENT_SECRET,
+);
+
+describe.skipIf(!hasScalekitE2EEnv)('ScalekitToolProvider e2e (real API)', () => {
   let provider: InstanceType<typeof ScalekitToolProvider>;
 
   beforeEach(() => {
     provider = new ScalekitToolProvider({
-      envURL: process.env.SCALEKIT_ENV_URL ?? process.env.SCALEKIT_ENVIRONMENT_URL!,
+      envURL: SCALEKIT_ENV_URL!,
       clientId: process.env.SCALEKIT_CLIENT_ID!,
       clientSecret: process.env.SCALEKIT_CLIENT_SECRET!,
     });

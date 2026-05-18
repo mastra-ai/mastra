@@ -93,15 +93,25 @@ export class ScalekitToolProvider implements ToolProvider {
   }
 
   private async apiFetch(path: string, init?: RequestInit): Promise<Response> {
-    const token = await this.getToken();
-    return fetch(`${this.config.envURL}${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...(init?.headers ?? {}),
-      },
-    });
+    const doFetch = async () => {
+      const token = await this.getToken();
+      return fetch(`${this.config.envURL}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(init?.headers ?? {}),
+        },
+      });
+    };
+
+    let res = await doFetch();
+    if (res.status === 401) {
+      this.token = null;
+      this.tokenExpiry = 0;
+      res = await doFetch();
+    }
+    return res;
   }
 
   // ── Discovery: list toolkits (providers) ────────────────────────────────
@@ -140,7 +150,7 @@ export class ScalekitToolProvider implements ToolProvider {
     const res = await this.apiFetch(`/api/v1/tools?${qs}`);
     if (!res.ok) throw new Error(`listTools failed (${res.status}): ${await res.text()}`);
 
-    const body = await res.json();
+    let body = await res.json();
     let tools: ScalekitRawTool[] = body.tools ?? [];
 
     // Provider filter fallback: if filter.provider returned 0 results,
@@ -156,6 +166,7 @@ export class ScalekitToolProvider implements ToolProvider {
         tools = (retryBody.tools ?? []).filter(
           (t: ScalekitRawTool) => t.provider?.toUpperCase().includes(upper),
         );
+        body = retryBody;
       }
     }
 
@@ -228,7 +239,7 @@ export class ScalekitToolProvider implements ToolProvider {
     }
 
     const res = await this.apiFetch(`/api/v1/tools?${qs}`);
-    if (!res.ok) return {};
+    if (!res.ok) throw new Error(`resolveTools failed (${res.status}): ${await res.text()}`);
 
     const body = await res.json();
     const rawTools: ScalekitRawTool[] = body.tools ?? [];
