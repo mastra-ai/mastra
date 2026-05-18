@@ -77678,6 +77678,12 @@ export type GetToolIntegrationsIntegrationIdConnections_PathParams = {
 export type GetToolIntegrationsIntegrationIdConnections_QueryParams = {
   /** Tool service slug whose connections to list */
   toolService: string;
+  /** Admin-only: restrict the listing to a specific author. Silently ignored for non-admin callers. */
+  authorId?: string | undefined;
+  /** Opaque pagination cursor returned by a previous call */
+  cursor?: string | undefined;
+  /** Max items per page (default 50, max 200) */
+  limit?: number | undefined;
 };
 
 export type GetToolIntegrationsIntegrationIdConnections_Response = {
@@ -77687,7 +77693,11 @@ export type GetToolIntegrationsIntegrationIdConnections_Response = {
     createdAt?: string | undefined;
     /** Persisted display label from tool_connections, if any */
     label?: (string | null) | undefined;
+    /** Owner of the connection (when known) */
+    authorId?: string | undefined;
   }[];
+  /** Opaque cursor for the next page, when more results exist */
+  nextCursor?: string | undefined;
 };
 
 export type GetToolIntegrationsIntegrationIdConnections_Request = Simplify<

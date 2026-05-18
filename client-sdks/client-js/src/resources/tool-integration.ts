@@ -98,16 +98,30 @@ export class ToolIntegration extends BaseResource {
   }
 
   /**
-   * Lists existing provider connections for the caller, scoped to a tool service.
+   * Lists existing provider connections, scoped to a tool service.
    *
-   * The connection owner is resolved server-side from the request's auth
-   * context — clients cannot pass a userId. Use this to surface
-   * already-authorized accounts so authors can pin them onto an agent
-   * without re-running OAuth.
+   * Default behavior: the connection owner is resolved server-side from the
+   * request's auth context. Admin callers (with `tool-integrations:admin`
+   * permission) may also pass `authorId` to target a specific author, or
+   * omit it to receive connections across all authors known to
+   * `tool_connections` for this provider/service.
+   *
+   * Cursor pagination: pass `cursor` from the previous response's
+   * `nextCursor` to fetch the next page. `limit` caps page size
+   * (default 50, max 200).
    */
   listConnections(params: ListToolIntegrationConnectionsParams): Promise<ListToolIntegrationConnectionsResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('toolService', params.toolService);
+    if (params.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params.cursor) {
+      searchParams.set('cursor', params.cursor);
+    }
+    if (params.limit !== undefined && params.limit !== null) {
+      searchParams.set('limit', String(params.limit));
+    }
     return this.request(
       `/tool-integrations/${encodeURIComponent(this.integrationId)}/connections?${searchParams.toString()}`,
     );
