@@ -1,33 +1,109 @@
-import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+'use client';
+
+import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-const TooltipProvider = TooltipPrimitive.Provider;
+type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay'> & {
+  delay?: number;
+  /** Radix API compatibility alias for `delay`. */
+  delayDuration?: number;
+};
+
+function TooltipProvider({ delay, delayDuration, ...props }: TooltipProviderProps) {
+  return <TooltipPrimitive.Provider delay={delay ?? delayDuration ?? 0} {...props} />;
+}
 
 const Tooltip = TooltipPrimitive.Root;
 
-const TooltipTrigger = TooltipPrimitive.Trigger;
+type TooltipTriggerProps = Omit<TooltipPrimitive.Trigger.Props, 'render'> & {
+  asChild?: boolean;
+};
 
-const TooltipContent = React.forwardRef<
-  React.ElementRef<typeof TooltipPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 4, children, ...props }, ref) => (
-  <TooltipPrimitive.Portal>
-    <TooltipPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-50 overflow-hidden rounded-lg border border-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <TooltipPrimitive.Arrow className="fill-surface3" />
-    </TooltipPrimitive.Content>
-  </TooltipPrimitive.Portal>
-));
-TooltipContent.displayName = TooltipPrimitive.Content.displayName;
+const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipTriggerProps>(
+  ({ asChild, children, ...props }, ref) => {
+    if (asChild && React.isValidElement(children)) {
+      return (
+        <TooltipPrimitive.Trigger ref={ref} render={children as React.ReactElement} {...props} />
+      );
+    }
+    return (
+      <TooltipPrimitive.Trigger ref={ref} {...props}>
+        {children}
+      </TooltipPrimitive.Trigger>
+    );
+  },
+);
+TooltipTrigger.displayName = 'TooltipTrigger';
+
+type TooltipContentProps = TooltipPrimitive.Popup.Props &
+  Pick<TooltipPrimitive.Positioner.Props, 'side' | 'sideOffset' | 'align' | 'alignOffset'>;
+
+const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
+  (
+    {
+      className,
+      side = 'top',
+      sideOffset = 8,
+      align = 'center',
+      alignOffset = 0,
+      children,
+      ...props
+    },
+    ref,
+  ) => (
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Positioner
+        side={side}
+        sideOffset={sideOffset}
+        align={align}
+        alignOffset={alignOffset}
+        className="isolate z-50"
+      >
+        <TooltipPrimitive.Popup
+          ref={ref}
+          className={cn(
+            'relative z-50 origin-(--transform-origin) rounded-lg border border-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition duration-150',
+            'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
+            'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
+            'data-[instant]:transition-none',
+            className,
+          )}
+          {...props}
+        >
+          {children}
+          <TooltipPrimitive.Arrow
+            className={cn(
+              'pointer-events-none flex',
+              'data-[side=top]:-bottom-2 data-[side=top]:rotate-180',
+              'data-[side=bottom]:-top-2',
+              'data-[side=left]:-right-[13px] data-[side=left]:rotate-90',
+              'data-[side=right]:-left-[13px] data-[side=right]:-rotate-90',
+            )}
+          >
+            <TooltipArrowSvg />
+          </TooltipPrimitive.Arrow>
+        </TooltipPrimitive.Popup>
+      </TooltipPrimitive.Positioner>
+    </TooltipPrimitive.Portal>
+  ),
+);
+TooltipContent.displayName = 'TooltipContent';
+
+function TooltipArrowSvg() {
+  return (
+    <svg width="20" height="10" viewBox="0 0 20 10" fill="none">
+      <path
+        d="M9.66437 2.60207L4.80758 6.97318C4.07308 7.63423 3.11989 8 2.13172 8H0V10H20V8H18.5349C17.5468 8 16.5936 7.63423 15.8591 6.97318L11.0023 2.60207C10.622 2.2598 10.0447 2.25979 9.66437 2.60207Z"
+        className="fill-surface3"
+      />
+      <path
+        d="M8.99542 1.85876C9.75604 1.17425 10.9106 1.17422 11.6713 1.85878L16.5281 6.22989C17.0789 6.72568 17.7938 7.00001 18.5349 7.00001L15.89 7L11.0023 2.60207C10.622 2.2598 10.0447 2.2598 9.66436 2.60207L4.77734 7L2.13171 7.00001C2.87284 7.00001 3.58774 6.72568 4.13861 6.22989L8.99542 1.85876Z"
+        className="fill-border1"
+      />
+    </svg>
+  );
+}
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
