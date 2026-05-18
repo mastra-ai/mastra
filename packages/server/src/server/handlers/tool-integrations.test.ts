@@ -651,7 +651,7 @@ describe('DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE', () => {
     expect(toolConnections.rows.size).toBe(0);
   });
 
-  it('tolerates revoke errors and still drops the row', async () => {
+  it('surfaces revoke errors and preserves the local row so the user can retry', async () => {
     const revokeConnection = vi.fn().mockRejectedValue(new Error('upstream 500'));
     const integration = makeIntegration({
       capabilities: {
@@ -670,16 +670,19 @@ describe('DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE', () => {
     const ctx = new RequestContext();
     ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
 
-    const result = await DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
-      mastra: makeMastraWithStorageAndAgents(editor, toolConnections, agents),
-      integrationId: 'composio',
-      connectionId: 'ca_1',
-      force: true,
-      requestContext: ctx,
-    } as any);
+    await expect(
+      DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE.handler({
+        mastra: makeMastraWithStorageAndAgents(editor, toolConnections, agents),
+        integrationId: 'composio',
+        connectionId: 'ca_1',
+        force: true,
+        requestContext: ctx,
+      } as any),
+    ).rejects.toThrow('upstream 500');
 
-    expect(result).toEqual({ ok: true, revoked: false });
-    expect(toolConnections.rows.size).toBe(0);
+    expect(revokeConnection).toHaveBeenCalledWith('ca_1');
+    // Local row must remain so the caller can retry without losing the pin.
+    expect(toolConnections.rows.size).toBe(1);
   });
 });
 

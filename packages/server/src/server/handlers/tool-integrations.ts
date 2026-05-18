@@ -404,20 +404,14 @@ export const DISCONNECT_TOOL_INTEGRATION_CONNECTION_ROUTE = createRoute({
         }
       }
 
-      // Best-effort provider revoke. Tolerate adapters that don't implement it
-      // or providers that already 404'd the row.
+      // Provider revoke. The adapter already tolerates 404 (already deleted)
+      // as success. Any other error means the provider-side row is still live,
+      // so we surface it and skip the local delete — otherwise we'd orphan
+      // the connection in Composio with no way for the user to find it again.
       let revoked = false;
       if (integration.capabilities.supportsRevoke && typeof integration.revokeConnection === 'function') {
-        try {
-          await integration.revokeConnection(connectionId);
-          revoked = true;
-        } catch (revokeError) {
-          mastra.getLogger?.()?.warn?.('[tool-integrations] revokeConnection failed', {
-            error: revokeError instanceof Error ? revokeError.message : String(revokeError),
-            integrationId,
-            connectionId,
-          });
-        }
+        await integration.revokeConnection(connectionId);
+        revoked = true;
       }
 
       if (toolConnections) {
