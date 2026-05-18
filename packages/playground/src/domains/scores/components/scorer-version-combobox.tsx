@@ -29,7 +29,7 @@ export function ScorerVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
   activeVersionId,
 }: ScorerVersionComboboxProps) {
   const { data, isLoading } = useScorerVersions({

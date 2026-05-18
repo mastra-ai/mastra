@@ -154,6 +154,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getSpan(...args);
   }
 
+  async getSpans(
+    ...args: Parameters<ObservabilityStoreImpl['getSpans']>
+  ): ReturnType<ObservabilityStoreImpl['getSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getSpans(...args);
+  }
+
   async getRootSpan(
     ...args: Parameters<ObservabilityStoreImpl['getRootSpan']>
   ): ReturnType<ObservabilityStoreImpl['getRootSpan']> {
@@ -180,6 +187,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['listTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.listTraces(...args);
+  }
+
+  async listBranches(
+    ...args: Parameters<ObservabilityStoreImpl['listBranches']>
+  ): ReturnType<ObservabilityStoreImpl['listBranches']> {
+    const delegate = await this.requireDelegate();
+    return delegate.listBranches(...args);
   }
 
   async batchCreateSpans(
@@ -332,6 +346,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['listScores']> {
     const delegate = await this.requireDelegate();
     return delegate.listScores(...args);
+  }
+
+  async getScoreById(
+    ...args: Parameters<ObservabilityStoreImpl['getScoreById']>
+  ): ReturnType<ObservabilityStoreImpl['getScoreById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getScoreById(...args);
   }
 
   async getScoreAggregate(

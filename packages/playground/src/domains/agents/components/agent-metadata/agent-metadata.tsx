@@ -2,9 +2,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import {
-  Alert,
-  AlertTitle,
-  AlertDescription,
+  Notice,
   Badge,
   useCodemirrorTheme,
   Skeleton,
@@ -129,9 +127,8 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
             <span aria-hidden="true">On</span>
           </Badge>
         ) : (
-          <Alert variant="warning">
-            <AlertTitle as="h5">Memory not enabled</AlertTitle>
-            <AlertDescription as="p">
+          <Notice variant="warning" title="Memory not enabled">
+            <Notice.Message>
               Thread messages will not be stored. To activate memory, see the{' '}
               <a
                 href="https://mastra.ai/en/docs/agents/agent-memory"
@@ -142,8 +139,8 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
                 documentation
               </a>
               .
-            </AlertDescription>
-          </Alert>
+            </Notice.Message>
+          </Notice>
         )}
       </AgentMetadataSection>
 
@@ -237,9 +234,8 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           theme={codemirrorTheme}
         />
         {!isCmsLoading && !isCmsAvailable && (
-          <Alert variant="warning">
-            <AlertTitle as="h5">Read-only</AlertTitle>
-            <AlertDescription as="p">
+          <Notice variant="warning" title="Read-only">
+            <Notice.Message>
               To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
               project. See the{' '}
               <a
@@ -251,8 +247,8 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
                 documentation
               </a>
               .
-            </AlertDescription>
-          </Alert>
+            </Notice.Message>
+          </Notice>
         )}
       </AgentMetadataSection>
     </AgentMetadataWrapper>

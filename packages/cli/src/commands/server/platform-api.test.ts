@@ -588,9 +588,44 @@ describe('uploadServerDeploy', () => {
       .mockResolvedValueOnce({ error: undefined, response: { status: 200 } });
 
     const { uploadServerDeploy } = await import('./platform-api.js');
-    const result = await uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'));
+    const result = await uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'), {
+      projectName: 'my-app',
+      envVars: { FOO: 'bar' },
+      disablePlatformObservability: true,
+    });
 
     expect(result).toEqual({ id: 'dep-1', status: 'queued' });
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/deploys', {
+      body: {
+        projectId: 'proj-1',
+        projectName: 'my-app',
+        envVars: { FOO: 'bar' },
+        disablePlatformObservability: true,
+      },
+    });
     expect(mockFetch).toHaveBeenCalledWith('https://signed.example/put', expect.objectContaining({ method: 'PUT' }));
+  });
+
+  it('omits disablePlatformObservability from deploy body when not provided', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { id: 'dep-1', uploadUrl: 'https://signed.example/put', status: 'queued' },
+        error: undefined,
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({ error: undefined, response: { status: 200 } });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    await uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'));
+
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/deploys', {
+      body: {
+        projectId: 'proj-1',
+        projectName: undefined,
+        envVars: undefined,
+      },
+    });
+    expect(mockPOST.mock.calls[0]![1].body).not.toHaveProperty('disablePlatformObservability');
   });
 });

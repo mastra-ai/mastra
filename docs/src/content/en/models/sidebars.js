@@ -143,6 +143,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ambient',
+          label: 'Ambient',
+        },
+        {
+          type: 'doc',
+          id: 'providers/atomic-chat',
+          label: 'Atomic Chat',
+        },
+        {
+          type: 'doc',
+          id: 'providers/auriko',
+          label: 'Auriko',
+        },
+        {
+          type: 'doc',
           id: 'providers/azure',
           label: 'Azure',
         },
@@ -178,6 +193,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/claudinio',
+          label: 'Claudinio',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },
@@ -208,6 +228,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/databricks',
+          label: 'Databricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
         },
@@ -233,13 +258,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/fireworks-ai',
-          label: 'Fireworks AI',
+          id: 'providers/firepass',
+          label: 'Fireworks (Firepass)',
         },
         {
           type: 'doc',
-          id: 'providers/firmware',
-          label: 'Firmware',
+          id: 'providers/fireworks-ai',
+          label: 'Fireworks AI',
         },
         {
           type: 'doc',
@@ -248,8 +273,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/frogbot',
+          label: 'FrogBot',
+        },
+        {
+          type: 'doc',
           id: 'providers/github-models',
           label: 'GitHub Models',
+        },
+        {
+          type: 'doc',
+          id: 'providers/gmicloud',
+          label: 'GMI Cloud',
         },
         {
           type: 'doc',
@@ -313,6 +348,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
@@ -349,12 +389,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/minimax-coding-plan',
-          label: 'MiniMax Coding Plan (minimax.io)',
+          label: 'MiniMax Token Plan (minimax.io)',
         },
         {
           type: 'doc',
           id: 'providers/minimax-cn-coding-plan',
-          label: 'MiniMax Coding Plan (minimaxi.com)',
+          label: 'MiniMax Token Plan (minimaxi.com)',
         },
         {
           type: 'doc',
@@ -393,8 +433,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nearai',
+          label: 'NEAR AI Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/neuralwatt',
+          label: 'Neuralwatt',
         },
         {
           type: 'doc',
@@ -430,6 +480,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
+        },
+        {
+          type: 'doc',
+          id: 'providers/orcarouter',
+          label: 'OrcaRouter',
         },
         {
           type: 'doc',
@@ -475,6 +530,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sarvam',
+          label: 'Sarvam AI',
         },
         {
           type: 'doc',
@@ -533,6 +593,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/umans-ai-coding-plan',
+          label: 'Umans AI Coding Plan',
+        },
+        {
+          type: 'doc',
           id: 'providers/upstage',
           label: 'Upstage',
         },
@@ -575,6 +640,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi-token-plan-sgp',
           label: 'Xiaomi Token Plan (Singapore)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xpersona',
+          label: 'Xpersona',
         },
         {
           type: 'doc',

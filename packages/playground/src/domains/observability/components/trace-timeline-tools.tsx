@@ -1,5 +1,5 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
-import { Button, CombinedButtons, SearchFieldBlock, Icon } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, SearchFieldBlock, Icon } from '@mastra/playground-ui';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { useThrottledCallback } from 'use-debounce';
@@ -66,7 +66,7 @@ export function TraceTimelineTools({
           onReset={() => setLocalSearchPhrase('')}
         />
       </div>
-      <CombinedButtons>
+      <ButtonsGroup spacing="close">
         {usedSpanTypes.map(item => {
           const spanUI = getSpanTypeUi(item);
           const isFaded = fadedTypes?.includes(item);
@@ -101,7 +101,7 @@ export function TraceTimelineTools({
             <XIcon />
           </Icon>
         </Button>
-      </CombinedButtons>
+      </ButtonsGroup>
     </div>
   );
 }

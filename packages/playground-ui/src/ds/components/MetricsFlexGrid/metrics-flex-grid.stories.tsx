@@ -8,7 +8,6 @@ const meta: Meta<typeof MetricsFlexGrid> = {
   parameters: {
     layout: 'padded',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

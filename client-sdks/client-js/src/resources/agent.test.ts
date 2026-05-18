@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v3';
 
 import { MastraClient } from '../client';
-import type { ClientOptions } from '../types';
+import type { Body } from '../route-types.generated';
+import type { ClientOptions, SendAgentSignalParams, SubscribeAgentThreadParams } from '../types';
 import { processClientTools } from '../utils/process-client-tools';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
@@ -22,6 +23,86 @@ class TestAgent extends Agent {
     }) as Promise<Response>;
   }
 }
+
+describe('Agent signal routes', () => {
+  const mockClientOptions = {
+    baseUrl: 'http://localhost:4111',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-key',
+      'x-mastra-client-type': 'js',
+    },
+  };
+
+  it('sends run-targeted signals with active behavior unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      signal: { type: 'user-message', contents: 'pause here' },
+      runId: 'run-123',
+      ifActive: { behavior: 'persist' },
+    } as SendAgentSignalParams;
+    const routeBody: Body<'POST /agents/:agentId/signals'> = params;
+
+    await agent.sendSignal(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/signals', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('sends thread-targeted signals with active and idle behavior unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      signal: { type: 'system-reminder', contents: '<system-reminder>review PR comment</system-reminder>' },
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      ifActive: { behavior: 'discard' },
+      ifIdle: {
+        behavior: 'wake',
+        streamOptions: {
+          maxSteps: 3,
+          instructions: 'Use the PR context.',
+        },
+      },
+    } as SendAgentSignalParams;
+    const routeBody: Body<'POST /agents/:agentId/signals'> = params;
+
+    await agent.sendSignal(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/signals', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('subscribes to threads with the same body shape as the server route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const response = new Response(new ReadableStream());
+    const mockRequest = vi.fn().mockResolvedValue(response);
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies SubscribeAgentThreadParams;
+    const routeBody: Body<'POST /agents/:agentId/threads/subscribe'> = params;
+
+    await agent.subscribeToThread(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/subscribe', {
+      method: 'POST',
+      body: routeBody,
+      stream: true,
+    });
+  });
+});
 
 describe('Agent.stream', () => {
   const mockClientOptions = {
@@ -97,6 +178,38 @@ describe('Agent.stream', () => {
 
     const requestBody = mockRequest.mock.calls[0][1].body;
     expect(requestBody.clientTools).toEqual(processClientTools(clientTools));
+  });
+
+  it('should handle vNext step-finish and finish chunks without stepResult payloads', async () => {
+    const encoder = new TextEncoder();
+    const chunks = [{ type: 'text-delta', payload: { text: 'hello' } }, { type: 'step-finish' }, { type: 'finish' }];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+        controller.close();
+      },
+    });
+    const updates: any[] = [];
+    const onFinish = vi.fn();
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+
+    await expect(
+      (agent as any).processChatResponse_vNext({
+        stream,
+        update: (update: any) => updates.push(update),
+        onFinish,
+        lastMessage: undefined,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(updates[updates.length - 1].message.content).toBe('hello');
+    expect(onFinish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        finishReason: 'unknown',
+      }),
+    );
   });
 });
 
@@ -498,13 +611,12 @@ describe('Agent Client Methods', () => {
     const result = await agent.listVersions({
       page: 0,
       perPage: 10,
-      orderBy: 'createdAt',
-      sortDirection: 'DESC',
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
 
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/stored/agents/test-agent/versions?page=0&perPage=10&orderBy=createdAt&sortDirection=DESC`,
+      `${clientOptions.baseUrl}/api/stored/agents/test-agent/versions?page=0&perPage=10&orderBy%5Bfield%5D=createdAt&orderBy%5Bdirection%5D=DESC`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

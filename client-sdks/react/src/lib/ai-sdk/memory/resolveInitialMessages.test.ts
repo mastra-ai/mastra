@@ -1438,6 +1438,51 @@ describe('resolveToChildMessages', () => {
       expect((result[0].metadata as any).requireApprovalMetadata.malformedObject).toBeUndefined();
     });
 
+    it('should preserve suspendedTools metadata with runId on page refresh', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-suspended',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'workflow-multi-step',
+              toolCallId: 'tool-1',
+              state: 'input-available',
+              input: { data: 'test' },
+            } as any,
+          ],
+          metadata: {
+            suspendedTools: {
+              'workflow-multi-step': {
+                toolCallId: 'tool-1',
+                toolName: 'workflow-multi-step',
+                args: { data: 'test' },
+                suspendPayload: { question: 'Step 2 question' },
+                runId: 'run-abc-123',
+              },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      // After page refresh, suspendedTools metadata must be preserved with runId
+      // so the frontend can resume the correct agentic-loop run (issue #14875)
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        suspendedTools: {
+          'workflow-multi-step': {
+            toolCallId: 'tool-1',
+            toolName: 'workflow-multi-step',
+            suspendPayload: { question: 'Step 2 question' },
+            runId: 'run-abc-123',
+          },
+        },
+      });
+    });
+
     it('should handle empty text content', () => {
       const messages: MastraUIMessage[] = [
         {

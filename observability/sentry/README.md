@@ -125,8 +125,8 @@ const mastra = new Mastra({
 - `gen_ai.response.text`: Output text response
 - `gen_ai.usage.input_tokens`: Input token count
 - `gen_ai.usage.output_tokens`: Output token count
-- `gen_ai.usage.cache_read_input_tokens`: Cached input tokens
-- `gen_ai.usage.cache_write_input_tokens`: Cache write tokens
+- `gen_ai.usage.cache_read.input_tokens`: Cached input tokens
+- `gen_ai.usage.cache_creation.input_tokens`: Cache write tokens
 - `gen_ai.usage.reasoning_tokens`: Reasoning tokens (for models like o1)
 - `gen_ai.request.temperature`: Temperature parameter
 - `gen_ai.request.max_tokens`: Max tokens parameter
@@ -161,8 +161,8 @@ const mastra = new Mastra({
 - `gen_ai.usage.input_tokens`: Input tokens from the child MODEL_GENERATION span
 - `gen_ai.usage.output_tokens`: Output tokens from the child MODEL_GENERATION span
 - `gen_ai.usage.total_tokens`: Total tokens from the child MODEL_GENERATION span
-- `gen_ai.usage.cache_read_input_tokens`: Cached input tokens from the child MODEL_GENERATION span
-- `gen_ai.usage.cache_write_input_tokens`: Cache write tokens from the child MODEL_GENERATION span
+- `gen_ai.usage.cache_read.input_tokens`: Cached input tokens from the child MODEL_GENERATION span
+- `gen_ai.usage.cache_creation.input_tokens`: Cache write tokens from the child MODEL_GENERATION span
 - `gen_ai.usage.reasoning_tokens`: Reasoning tokens from the child MODEL_GENERATION span
 - `agent.max_steps`: Maximum steps allowed
 - `agent.available_tools`: Available tools (comma-separated)

@@ -393,4 +393,45 @@ describe('DynamoDBStore', () => {
       await memoryDomain.deleteThread({ threadId: thread.id });
     });
   });
+
+  // Regression test for https://github.com/mastra-ai/mastra/issues/15998
+  // PR #13151 changed core to pass an empty title for pre-created threads
+  // so that title generation runs on the first message (gated by !thread.title).
+  // The DynamoDB adapter previously overwrote `''` with `Thread <id>`, which
+  // permanently disabled title generation. The adapter must preserve an empty
+  // title round-trip.
+  describe('Issue #15998: thread title preservation for title generation', () => {
+    it('should preserve an empty thread title through saveThread/getThreadById', async () => {
+      const memoryDomain = new MemoryStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+      await memoryDomain.init();
+
+      const threadId = `thread-empty-title-${Date.now()}`;
+      const thread = {
+        id: threadId,
+        resourceId: 'test-resource',
+        title: '',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await memoryDomain.saveThread({ thread });
+      expect(savedThread.title).toBe('');
+
+      const fetched = await memoryDomain.getThreadById({ threadId });
+      expect(fetched).not.toBeNull();
+      // Title generation in core checks `!thread.title` to decide whether to
+      // generate. If the adapter substitutes a placeholder here, generation
+      // will never fire for pre-created threads.
+      expect(fetched?.title).toBe('');
+
+      // Clean up
+      await memoryDomain.deleteThread({ threadId });
+    });
+  });
 });

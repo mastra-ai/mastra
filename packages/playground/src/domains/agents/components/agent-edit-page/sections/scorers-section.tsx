@@ -3,7 +3,7 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
   MultiCombobox,
-  IconButton,
+  Button,
   Input,
   Label,
   RadioGroup,
@@ -111,7 +111,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                         emptyText="No scorers available"
                         disabled={isLoading || readOnly}
                         error={error}
-                        variant="light"
+                        variant="default"
                       />
 
                       {selectedOptions.length > 0 && (
@@ -190,9 +190,9 @@ function ScorerConfigPanel({
           <span className="text-xs font-medium text-neutral6">{scorerName}</span>
         </div>
         {!readOnly && (
-          <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
+          <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
             <Trash2 />
-          </IconButton>
+          </Button>
         )}
       </div>
 

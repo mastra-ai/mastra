@@ -150,6 +150,357 @@ describe('Koa Server Adapter', () => {
     },
   });
 
+  describe('Route dispatcher', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('registers a single dispatcher middleware for built-in routes', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      await adapter.init();
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+    });
+
+    it('preserves route registration order with static and parameterized paths', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/special',
+          responseType: 'json',
+          handler: async () => ({ route: 'static' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/:id',
+          responseType: 'json',
+          handler: async ({ id }) => ({ route: 'param', id }),
+        },
+        { prefix: '' },
+      );
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const staticResponse = await fetch(`http://localhost:${port}/items/special`);
+      expect(staticResponse.status).toBe(200);
+      await expect(staticResponse.json()).resolves.toEqual({ route: 'static' });
+
+      const paramResponse = await fetch(`http://localhost:${port}/items/42`);
+      expect(paramResponse.status).toBe(200);
+      await expect(paramResponse.json()).resolves.toEqual({ route: 'param', id: '42' });
+    });
+
+    it('preserves middleware ordering when routes are registered around app.use calls', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/before',
+          responseType: 'json',
+          handler: async () => ({ route: 'before' }),
+        },
+        { prefix: '' },
+      );
+
+      app.use(async (ctx, next) => {
+        ctx.set('x-interleaved', 'true');
+        await next();
+      });
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/after',
+          responseType: 'json',
+          handler: async () => ({ route: 'after' }),
+        },
+        { prefix: '' },
+      );
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(2);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const beforeResponse = await fetch(`http://localhost:${port}/before`);
+      expect(beforeResponse.status).toBe(200);
+      expect(beforeResponse.headers.get('x-interleaved')).toBeNull();
+      await expect(beforeResponse.json()).resolves.toEqual({ route: 'before' });
+
+      const afterResponse = await fetch(`http://localhost:${port}/after`);
+      expect(afterResponse.status).toBe(200);
+      expect(afterResponse.headers.get('x-interleaved')).toBe('true');
+      await expect(afterResponse.json()).resolves.toEqual({ route: 'after' });
+    });
+
+    it('reuses a dispatcher group when app.use wraps middleware functions', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const originalUse = app.use.bind(app);
+      app.use = ((middleware: Koa.Middleware) => {
+        const wrapped = async function wrappedMiddleware(ctx: Koa.Context, next: Koa.Next) {
+          return middleware(ctx, next);
+        };
+        return originalUse(wrapped);
+      }) as typeof app.use;
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/first',
+          responseType: 'json',
+          handler: async () => ({ route: 'first' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/second',
+          responseType: 'json',
+          handler: async () => ({ route: 'second' }),
+        },
+        { prefix: '' },
+      );
+
+      expect(app.middleware).toHaveLength(3);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const firstResponse = await fetch(`http://localhost:${port}/first`);
+      expect(firstResponse.status).toBe(200);
+      await expect(firstResponse.json()).resolves.toEqual({ route: 'first' });
+
+      const secondResponse = await fetch(`http://localhost:${port}/second`);
+      expect(secondResponse.status).toBe(200);
+      await expect(secondResponse.json()).resolves.toEqual({ route: 'second' });
+    });
+
+    // Regression: subclasses sometimes forward an app-like object (e.g. a
+    // koa-router instance or a mounted sub-app) to super.registerRoute().
+    // Before the fix, getRouteDispatcherGroup unconditionally read
+    // `app.middleware.length` and threw `TypeError: Cannot read properties of
+    // undefined (reading 'length')` during init.
+    describe('non-Koa app-like targets', () => {
+      const buildRouterLike = () => {
+        const used: Koa.Middleware[] = [];
+        const routerLike = {
+          use(mw: Koa.Middleware) {
+            used.push(mw);
+            return routerLike;
+          },
+        };
+        return { routerLike, used };
+      };
+
+      it('does not throw when app.middleware is missing entirely', async () => {
+        const koaApp = new Koa();
+        const adapter = new MastraServer({ app: koaApp, mastra: new Mastra({}) });
+        const { routerLike, used } = buildRouterLike();
+
+        await expect(
+          adapter.registerRoute(
+            routerLike as unknown as Koa,
+            {
+              method: 'GET',
+              path: '/ping',
+              responseType: 'json',
+              handler: async () => ({ ok: true }),
+            },
+            { prefix: '' },
+          ),
+        ).resolves.toBeUndefined();
+
+        expect(used).toHaveLength(1);
+        expect(used[0].name).toBe('mastraRouteDispatcher');
+      });
+
+      it('does not reuse a dispatcher when app.middleware is present but not an array', async () => {
+        const koaApp = new Koa();
+        const adapter = new MastraServer({ app: koaApp, mastra: new Mastra({}) });
+        const { routerLike, used } = buildRouterLike();
+        // Some wrappers expose `middleware` as a non-array (e.g. an object map).
+        // Without the Array.isArray() guard, the reuse-cache path would either
+        // crash on `.length` or silently cache a bogus `stackLengthAfterRegistration`
+        // and start incorrectly reusing the dispatcher across calls.
+        (routerLike as any).middleware = { not: 'an array' };
+
+        await adapter.registerRoute(
+          routerLike as unknown as Koa,
+          {
+            method: 'GET',
+            path: '/x',
+            responseType: 'json',
+            handler: async () => ({ route: 'x' }),
+          },
+          { prefix: '' },
+        );
+
+        await adapter.registerRoute(
+          routerLike as unknown as Koa,
+          {
+            method: 'GET',
+            path: '/y',
+            responseType: 'json',
+            handler: async () => ({ route: 'y' }),
+          },
+          { prefix: '' },
+        );
+
+        expect(used).toHaveLength(2);
+        expect(used.every(mw => mw.name === 'mastraRouteDispatcher')).toBe(true);
+      });
+
+      it('registers a fresh dispatcher per route on non-Koa targets (no reuse)', async () => {
+        const koaApp = new Koa();
+        const adapter = new MastraServer({ app: koaApp, mastra: new Mastra({}) });
+        const { routerLike, used } = buildRouterLike();
+
+        await adapter.registerRoute(
+          routerLike as unknown as Koa,
+          {
+            method: 'GET',
+            path: '/a',
+            responseType: 'json',
+            handler: async () => ({ route: 'a' }),
+          },
+          { prefix: '' },
+        );
+
+        await adapter.registerRoute(
+          routerLike as unknown as Koa,
+          {
+            method: 'GET',
+            path: '/b',
+            responseType: 'json',
+            handler: async () => ({ route: 'b' }),
+          },
+          { prefix: '' },
+        );
+
+        // Without `app.middleware`, reuse is impossible — each registration
+        // must produce its own dispatcher middleware on the target.
+        expect(used).toHaveLength(2);
+        expect(used.every(mw => mw.name === 'mastraRouteDispatcher')).toBe(true);
+        expect(used[0]).not.toBe(used[1]);
+      });
+
+      it('serves the route end-to-end when the router-like target is mounted on a real Koa app', async () => {
+        const koaApp = new Koa();
+        koaApp.use(bodyParser());
+
+        const adapter = new MastraServer({ app: koaApp, mastra: new Mastra({}) });
+        adapter.registerContextMiddleware();
+
+        // routerLike forwards `.use` straight onto the real Koa app, mimicking
+        // a mount/wrapper pattern where the dispatcher ultimately runs inside
+        // the parent app's middleware stack.
+        const routerLike = {
+          use: (mw: Koa.Middleware) => {
+            koaApp.use(mw);
+            return routerLike;
+          },
+        };
+
+        await adapter.registerRoute(
+          routerLike as unknown as Koa,
+          {
+            method: 'GET',
+            path: '/mounted',
+            responseType: 'json',
+            handler: async () => ({ route: 'mounted' }),
+          },
+          { prefix: '' },
+        );
+
+        server = await new Promise(resolve => {
+          const s = koaApp.listen(0, () => resolve(s));
+        });
+
+        const address = server.address();
+        const port = typeof address === 'object' && address ? address.port : 0;
+
+        const response = await fetch(`http://localhost:${port}/mounted`);
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toEqual({ route: 'mounted' });
+      });
+    });
+  });
+
   describe('Stream Data Redaction', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;

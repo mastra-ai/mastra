@@ -1,3 +1,4 @@
+import type { ComponentPropsWithoutRef } from 'react';
 import type { NavLink } from './main-sidebar-nav-link';
 import { cn } from '@/lib/utils';
 
@@ -7,12 +8,15 @@ export type NavSection = {
   href?: string;
   links: NavLink[];
   separator?: boolean;
+  isHeaderActive?: boolean;
 };
 
-export type MainSidebarNavSectionProps = {
-  children: React.ReactNode;
-  className?: string;
-};
-export function MainSidebarNavSection({ children, className }: MainSidebarNavSectionProps) {
-  return <section className={cn('grid items-start content-center relative', className)}>{children}</section>;
+export type MainSidebarNavSectionProps = ComponentPropsWithoutRef<'section'>;
+
+export function MainSidebarNavSection({ className, children, ...props }: MainSidebarNavSectionProps) {
+  return (
+    <section className={cn('grid grid-cols-[minmax(0,1fr)] items-start content-center relative', className)} {...props}>
+      {children}
+    </section>
+  );
 }

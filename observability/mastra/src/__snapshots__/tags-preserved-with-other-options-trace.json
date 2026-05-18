@@ -22,7 +22,8 @@
         },
         "metadata": {
           "runId": "<runId-1>",
-          "someKey": "someValue"
+          "someKey": "someValue",
+          "environment": "test"
         },
         "input": "Hello",
         "output": {
@@ -66,7 +67,8 @@
             },
             "metadata": {
               "runId": "<runId-1>",
-              "someKey": "someValue"
+              "someKey": "someValue",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -130,7 +132,8 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -157,7 +160,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "someKey": "someValue"
+                      "someKey": "someValue",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Mock V2 generate response"

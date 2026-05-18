@@ -981,6 +981,28 @@ describe('CloudExporter', () => {
       await multiSignalExporter.shutdown();
     });
 
+    it('should drop model chunk spans by default', async () => {
+      const cloudExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+      });
+
+      await cloudExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: getMockSpan({
+          id: 'chunk-span',
+          traceId: 'trace-chunk',
+          name: 'text chunk',
+          type: SpanType.MODEL_CHUNK,
+        }),
+      });
+      await cloudExporter.flush();
+
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
+
+      await cloudExporter.shutdown();
+    });
+
     it('should derive signal endpoints from a base endpoint', async () => {
       const derivedExporter = new CloudExporter({
         accessToken: testJWT,

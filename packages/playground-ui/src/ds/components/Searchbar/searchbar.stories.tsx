@@ -8,7 +8,6 @@ const meta: Meta<typeof Searchbar> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

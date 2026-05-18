@@ -723,6 +723,81 @@ describe('activate()', () => {
       }
     });
 
+    it('does not activate buffered observations when observation.activateAfterIdle disables the top-level ttl', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const om = new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          activateAfterIdle: 300_000,
+          observation: {
+            model: createMockObserverModel(),
+            messageTokens: 50_000,
+            bufferTokens: 5_000,
+            activateAfterIdle: false,
+          },
+          reflection: {
+            model: createMockReflectorModel(),
+            observationTokens: 50_000,
+          },
+        });
+        const staleAssistantPartTime = now.getTime() - 301_000;
+        const messages: MastraDBMessage[] = [
+          {
+            ...createTestMessage(
+              'Earlier question',
+              'user',
+              'ttl-disabled-user-1',
+              new Date(staleAssistantPartTime - 1000),
+            ),
+            threadId,
+          },
+          {
+            ...createTestMessage(
+              'Earlier answer',
+              'assistant',
+              'ttl-disabled-assistant-1',
+              new Date(staleAssistantPartTime),
+            ),
+            threadId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Earlier answer', createdAt: staleAssistantPartTime }],
+            } as MastraMessageContentV2,
+          },
+          {
+            ...createTestMessage('Latest user follow-up', 'user', 'ttl-disabled-user-2', now),
+            threadId,
+          },
+        ];
+
+        await storage.saveMessages({ messages });
+        await om.buffer({ threadId, messages });
+
+        const { record } = await om.getStatus({ threadId, messages });
+        await storage.updateBufferedObservations({
+          id: record!.id,
+          chunk: {
+            observations: '- Buffered observation',
+            tokenCount: 80,
+            messageIds: ['ttl-disabled-user-1', 'ttl-disabled-assistant-1'],
+            cycleId: 'ttl-disabled-cycle-1',
+            messageTokens: 200,
+            lastObservedAt: new Date(staleAssistantPartTime),
+          },
+        });
+
+        const result = await om.activate({ threadId, checkThreshold: true, messages });
+
+        expect(result.activated).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('does not activate when ttl has not expired and pending tokens stay below threshold', async () => {
       vi.useFakeTimers();
       try {

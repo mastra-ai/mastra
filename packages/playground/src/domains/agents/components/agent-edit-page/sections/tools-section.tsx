@@ -51,7 +51,10 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
               control={control}
               render={({ field }) => {
                 const selectedIds = Object.keys(field.value || {});
-                const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+                const selectedOptions = selectedIds.map(id => {
+                  const existing = options.find(opt => opt.value === id);
+                  return existing || { value: id, label: id, description: field.value?.[id]?.description || '' };
+                });
 
                 const handleValueChange = (newIds: string[]) => {
                   const newValue: Record<string, EntityConfig> = {};
@@ -87,7 +90,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
                       emptyText="No tools available"
                       disabled={isLoading || readOnly}
                       error={error}
-                      variant="light"
+                      variant="default"
                     />
                     {selectedOptions.length > 0 && (
                       <div className="flex flex-col gap-3 mt-2">

@@ -172,6 +172,13 @@ describe('AzureBlobFilesystem', () => {
       expect(config.accountKey).toBeUndefined();
       expect(config.connectionString).toBeUndefined();
     });
+
+    it('includes normalized prefix when provided', () => {
+      const fs = new AzureBlobFilesystem({ container: 'test', prefix: '//workspace/data//' });
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('workspace/data/');
+    });
   });
 
   describe('getInfo()', () => {

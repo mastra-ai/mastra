@@ -3,7 +3,7 @@ import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useMCPServerTool = (serverId: string, toolId: string) => {
+export const useMCPServerTool = (serverId: string, toolId: string, options?: { enabled?: boolean }) => {
   const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
 
@@ -13,6 +13,7 @@ export const useMCPServerTool = (serverId: string, toolId: string) => {
       const instance = client.getMcpServerTool(serverId, toolId);
       return instance.details(requestContext);
     },
+    enabled: options?.enabled !== false && !!serverId && !!toolId,
   });
 };
 

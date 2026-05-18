@@ -18,7 +18,6 @@ const meta: Meta<typeof DataCodeSection> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

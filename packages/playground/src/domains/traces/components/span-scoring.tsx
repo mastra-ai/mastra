@@ -1,7 +1,7 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Button, SelectFieldBlock, Notification, TextAndIcon } from '@mastra/playground-ui';
+import { Button, Notice, SelectFieldBlock, TextAndIcon, toast } from '@mastra/playground-ui';
 import { InfoIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
 
 export interface SpanScoringProps {
@@ -22,14 +22,7 @@ export function SpanScoring({
   isLoadingScorers,
 }: SpanScoringProps) {
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
-  const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
-  const [notificationIsVisible, setNotificationIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (isSuccess) {
-      setNotificationIsVisible(true);
-    }
-  }, [isSuccess]);
+  const { mutate: triggerScorer, isPending } = useTriggerScorer();
 
   let scorerList = Object.entries(scorers || {})
     .map(([key, scorer]) => ({
@@ -50,71 +43,55 @@ export function SpanScoring({
 
   const handleStartScoring = () => {
     if (selectedScorer && traceId) {
-      setNotificationIsVisible(false);
-      triggerScorer({
-        scorerName: selectedScorer,
-        traceId,
-        spanId,
-      });
+      triggerScorer(
+        { scorerName: selectedScorer, traceId, spanId },
+        {
+          onSuccess: () =>
+            toast.info('Scorer triggered', {
+              description: 'Results will appear once scoring completes.',
+            }),
+        },
+      );
     }
-  };
-
-  const handleScorerChange = (val: string) => {
-    setSelectedScorer(val);
-    setNotificationIsVisible(false);
   };
 
   const selectedScorerDescription = scorerList.find(s => s.id === selectedScorer)?.description || '';
 
   if (scorers === undefined && !isLoadingScorers) {
-    return (
-      <Notification isVisible={true} autoDismiss={false} type="error">
-        <InfoIcon /> Failed to load scorers.
-      </Notification>
-    );
+    return <Notice variant="destructive">Failed to load scorers.</Notice>;
   }
 
   if (!isLoadingScorers && scorerList.length === 0) {
-    return (
-      <Notification isVisible={true} dismissible={false}>
-        No eligible scorers have been defined to run.
-      </Notification>
-    );
+    return <Notice variant="info">No eligible scorers have been defined to run.</Notice>;
   }
 
   return (
-    <div>
-      <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
-        <div className="grid gap-2">
-          <SelectFieldBlock
-            name="select-scorer"
-            label="Select scorer"
-            labelIsHidden={true}
-            placeholder="Select a scorer..."
-            options={scorerList.map(scorer => ({
-              label: scorer.name || scorer.id,
-              value: scorer.id || scorer.name || '',
-            }))}
-            onValueChange={handleScorerChange}
-            value={selectedScorer || ''}
-            className="min-w-80"
-            disabled={isWaiting}
-          />
-          {selectedScorerDescription && (
-            <TextAndIcon className="text-neutral3 text-ui-sm">
-              <InfoIcon /> {selectedScorerDescription}
-            </TextAndIcon>
-          )}
-        </div>
-
-        <Button disabled={!selectedScorer || isWaiting} onClick={handleStartScoring}>
-          {isPending ? 'Starting...' : 'Start Scoring'}
-        </Button>
+    <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
+      <div className="grid gap-2">
+        <SelectFieldBlock
+          name="select-scorer"
+          label="Select scorer"
+          labelIsHidden={true}
+          placeholder="Select a scorer..."
+          options={scorerList.map(scorer => ({
+            label: scorer.name || scorer.id,
+            value: scorer.id || scorer.name || '',
+          }))}
+          onValueChange={setSelectedScorer}
+          value={selectedScorer || ''}
+          className="min-w-80"
+          disabled={isWaiting}
+        />
+        {selectedScorerDescription && (
+          <TextAndIcon className="text-neutral3 text-ui-sm">
+            <InfoIcon /> {selectedScorerDescription}
+          </TextAndIcon>
+        )}
       </div>
 
-      <Notification isVisible={notificationIsVisible} className="mt-4">
-        Scorer triggered! When finished successfully, it will appear in the list below. It could take a moment.
-      </Notification>
+      <Button disabled={!selectedScorer || isWaiting} onClick={handleStartScoring}>
+        {isPending ? 'Starting...' : 'Start Scoring'}
+      </Button>
     </div>
   );
 }

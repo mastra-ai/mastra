@@ -34,6 +34,20 @@ describe('loadProjectConfig', () => {
     expect(result).toEqual(config);
   });
 
+  it('loads disablePlatformObservability from config', async () => {
+    const config = {
+      projectId: 'proj-1',
+      projectName: 'My App',
+      organizationId: 'org-1',
+      disablePlatformObservability: true,
+    };
+
+    writeFileSync(join(tempDir, PROJECT_CONFIG_FILE), JSON.stringify(config, null, 2));
+
+    const result = await loadProjectConfig(tempDir);
+    expect(result).toEqual(config);
+  });
+
   it('loads config from custom file path', async () => {
     const config = {
       projectId: 'proj-1',
@@ -76,6 +90,37 @@ describe('saveProjectConfig', () => {
     const parsed = JSON.parse(content);
 
     expect(parsed).toEqual(config);
+  });
+
+  it('writes disablePlatformObservability when present', async () => {
+    const config = {
+      projectId: 'proj-1',
+      projectName: 'My App',
+      organizationId: 'org-1',
+      disablePlatformObservability: true,
+    };
+
+    await saveProjectConfig(tempDir, config);
+
+    const content = readFileSync(join(tempDir, PROJECT_CONFIG_FILE), 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed).toEqual(config);
+  });
+
+  it('omits disablePlatformObservability when not provided', async () => {
+    const config = {
+      projectId: 'proj-1',
+      projectName: 'My App',
+      organizationId: 'org-1',
+    };
+
+    await saveProjectConfig(tempDir, config);
+
+    const content = readFileSync(join(tempDir, PROJECT_CONFIG_FILE), 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed).not.toHaveProperty('disablePlatformObservability');
   });
 
   it('writes config to custom file path', async () => {

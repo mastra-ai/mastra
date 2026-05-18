@@ -155,7 +155,12 @@ export {
   AzureOpenAIGateway,
   MastraGateway,
 } from './model/gateways';
-export type { AzureOpenAIGatewayConfig, MastraGatewayConfig } from './model/gateways';
+export type {
+  AzureAccessToken,
+  AzureOpenAIGatewayConfig,
+  AzureTokenCredential,
+  MastraGatewayConfig,
+} from './model/gateways';
 export { GATEWAY_AUTH_HEADER } from './model/gateways/constants';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';

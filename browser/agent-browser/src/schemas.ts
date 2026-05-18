@@ -201,6 +201,21 @@ export const dragInputSchema = z
 export type DragInput = z.output<typeof dragInputSchema>;
 
 // =============================================================================
+// Utility (1)
+// =============================================================================
+
+/**
+ * browser_screenshot - Capture a screenshot of the current page
+ */
+export const screenshotInputSchema = z.object({
+  fullPage: z
+    .boolean()
+    .optional()
+    .describe('Capture the full scrollable page instead of just the viewport (default: false)'),
+});
+export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
+
+// =============================================================================
 // Escape Hatch (1)
 // =============================================================================
 
@@ -238,6 +253,8 @@ export const browserSchemas = {
   wait: waitInputSchema,
   tabs: tabsInputSchema,
   drag: dragInputSchema,
+  // Utility
+  screenshot: screenshotInputSchema,
   // Escape hatch
   evaluate: evaluateInputSchema,
 } as const;

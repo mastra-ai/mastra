@@ -13,6 +13,9 @@ import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import {
   LIST_TRACES_ROUTE,
+  LIST_TRACES_LIGHT_ROUTE,
+  LIST_BRANCHES_ROUTE,
+  GET_BRANCH_ROUTE,
   GET_TRACE_ROUTE,
   GET_TRACE_LIGHT_ROUTE,
   GET_SPAN_ROUTE,
@@ -39,10 +42,14 @@ const createMockObservabilityStore = () => ({
   getTrace: vi.fn(),
   getTraceLight: vi.fn(),
   getSpan: vi.fn(),
+  getBranch: vi.fn(),
   listTraces: vi.fn(),
+  listTracesLight: vi.fn(),
+  listBranches: vi.fn(),
   listLogs: vi.fn(),
   listScores: vi.fn(),
   createScore: vi.fn(),
+  getScoreById: vi.fn(),
   getScoreAggregate: vi.fn(),
   getScoreBreakdown: vi.fn(),
   getScoreTimeSeries: vi.fn(),
@@ -624,6 +631,238 @@ describe('Observability Handlers', () => {
     });
   });
 
+  describe('LIST_TRACES_LIGHT_ROUTE', () => {
+    it('should return paginated lightweight results', async () => {
+      const mockResult = {
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        spans: [
+          {
+            traceId: 'test-trace-123',
+            spanId: 'test-span-456',
+            parentSpanId: null,
+            name: 'test-span',
+            spanType: SpanType.GENERIC,
+            isEvent: false,
+            startedAt: new Date('2024-01-01T00:00:00Z'),
+            endedAt: new Date('2024-01-01T00:01:00Z'),
+            error: null,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+            createdAt: new Date('2024-01-01T00:00:00Z'),
+            updatedAt: null,
+          },
+        ],
+      };
+
+      (mockObservabilityStore.listTracesLight as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        entityType: 'AGENT',
+        page: 1,
+        perPage: 10,
+        field: 'startedAt',
+        direction: 'DESC',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listTracesLight).toHaveBeenCalledWith({
+        filters: { entityType: 'AGENT' },
+        pagination: { page: 1, perPage: 10 },
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+      expect(mockObservabilityStore.listTraces).not.toHaveBeenCalled();
+    });
+
+    it('falls back to listTraces when the store predates listTracesLight', async () => {
+      const fullResult = {
+        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        spans: [],
+      };
+
+      // Simulate an older `@mastra/core` whose `ObservabilityStorage` base
+      // class doesn't expose `listTracesLight` at all.
+      const original = mockObservabilityStore.listTracesLight;
+      // @ts-expect-error - intentionally remove method to simulate old core
+      delete mockObservabilityStore.listTracesLight;
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(fullResult);
+
+      try {
+        const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+        });
+
+        expect(result).toEqual(fullResult);
+        expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
+          filters: {},
+          pagination: {},
+          orderBy: {},
+        });
+      } finally {
+        mockObservabilityStore.listTracesLight = original;
+      }
+    });
+  });
+
+  describe('LIST_BRANCHES_ROUTE', () => {
+    it('should return paginated results with default parameters', async () => {
+      const mockResult = {
+        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        branches: [],
+      };
+
+      (mockObservabilityStore.listBranches as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_BRANCHES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listBranches).toHaveBeenCalledWith({
+        filters: {},
+        pagination: {},
+        orderBy: {},
+      });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass filters, pagination, and orderBy to storage', async () => {
+      const mockResult = {
+        pagination: { total: 2, page: 0, perPage: 10, hasMore: false },
+        branches: [],
+      };
+
+      (mockObservabilityStore.listBranches as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+
+      const result = await LIST_BRANCHES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        spanType: SpanType.AGENT_RUN,
+        entityName: 'Observer',
+        page: 1,
+        perPage: 5,
+        field: 'startedAt',
+        direction: 'DESC',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockObservabilityStore.listBranches).toHaveBeenCalledWith({
+        filters: { spanType: SpanType.AGENT_RUN, entityName: 'Observer' },
+        pagination: { page: 1, perPage: 5 },
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+    });
+
+    it('should throw 500 when storage is not available', async () => {
+      const mastraWithoutStorage = createMockMastra(undefined);
+
+      await expect(
+        LIST_BRANCHES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database query failed');
+      (mockObservabilityStore.listBranches as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        LIST_BRANCHES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing branches');
+    });
+  });
+
+  describe('GET_BRANCH_ROUTE', () => {
+    it('should return branch when found', async () => {
+      const mockBranch = {
+        traceId: 'trace-123',
+        spans: [createSampleSpan({ traceId: 'trace-123', spanId: 'span-anchor' })],
+      };
+
+      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockResolvedValue(mockBranch);
+
+      const result = await GET_BRANCH_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceId: 'trace-123',
+        spanId: 'span-anchor',
+      });
+
+      expect(result).toEqual(mockBranch);
+      expect(mockObservabilityStore.getBranch).toHaveBeenCalledWith({
+        traceId: 'trace-123',
+        spanId: 'span-anchor',
+        depth: undefined,
+      });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass depth through to storage when provided', async () => {
+      const mockBranch = {
+        traceId: 'trace-123',
+        spans: [createSampleSpan({ traceId: 'trace-123', spanId: 'span-anchor' })],
+      };
+
+      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockResolvedValue(mockBranch);
+
+      await GET_BRANCH_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceId: 'trace-123',
+        spanId: 'span-anchor',
+        depth: 1,
+      });
+
+      expect(mockObservabilityStore.getBranch).toHaveBeenCalledWith({
+        traceId: 'trace-123',
+        spanId: 'span-anchor',
+        depth: 1,
+      });
+    });
+
+    it('should throw 404 when branch is not found', async () => {
+      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      await expect(
+        GET_BRANCH_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          traceId: 'trace-123',
+          spanId: 'missing-span',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await GET_BRANCH_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          traceId: 'trace-123',
+          spanId: 'missing-span',
+        });
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(404);
+        expect((error as HTTPException).message).toBe("Branch not found for span 'missing-span' in trace 'trace-123'");
+      }
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database query failed');
+      (mockObservabilityStore.getBranch as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        GET_BRANCH_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          traceId: 'trace-123',
+          spanId: 'span-anchor',
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting branch');
+    });
+  });
+
   describe('SCORE_TRACES_ROUTE', () => {
     let scoreTracesMock: ReturnType<typeof vi.fn>;
 
@@ -1073,6 +1312,28 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list scores'");
+    });
+  });
+
+  describe('GET_SCORE_ROUTE', () => {
+    it('should get a score directly by scoreId', async () => {
+      const mockScore = {
+        scoreId: 'score-123',
+        timestamp: new Date('2024-01-01T00:00:00Z'),
+        scorerId: 'accuracy',
+        score: 0.95,
+      };
+
+      (mockObservabilityStore.getScoreById as ReturnType<typeof vi.fn>).mockResolvedValue(mockScore);
+
+      const result = await NEW_ROUTES.GET_SCORE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreId: 'score-123',
+      });
+
+      expect(result).toEqual({ score: mockScore });
+      expect(mockObservabilityStore.getScoreById).toHaveBeenCalledWith('score-123');
+      expect(mockObservabilityStore.listScores).not.toHaveBeenCalled();
     });
   });
 

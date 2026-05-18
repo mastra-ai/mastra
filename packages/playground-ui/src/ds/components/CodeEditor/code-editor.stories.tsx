@@ -16,7 +16,6 @@ const meta: Meta<typeof CodeEditor> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     showCopyButton: {
       control: { type: 'boolean' },

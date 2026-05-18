@@ -26,6 +26,7 @@
 
 export const TABLE_SPAN_EVENTS = 'mastra_span_events';
 export const TABLE_TRACE_ROOTS = 'mastra_trace_roots';
+export const TABLE_TRACE_BRANCHES = 'mastra_trace_branches';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
@@ -38,8 +39,28 @@ export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 // ---------------------------------------------------------------------------
 
 export const MV_TRACE_ROOTS = 'mastra_mv_trace_roots';
+export const MV_TRACE_BRANCHES = 'mastra_mv_trace_branches';
 export const MV_DISCOVERY_VALUES = 'mastra_mv_discovery_values';
 export const MV_DISCOVERY_PAIRS = 'mastra_mv_discovery_pairs';
+
+/**
+ * Span types that anchor a listable trace branch -- a named entity got
+ * invoked. Materialized into `mastra_trace_branches` so they're listable
+ * independently of where they appear in a trace tree.
+ *
+ * Kept as a literal SQL list (not derived from {@link BRANCH_SPAN_TYPES})
+ * so the MV definition is hermetic and doesn't trigger re-creation if a
+ * future enum re-order changes the value source.
+ */
+export const BRANCH_SPAN_TYPE_VALUES = [
+  'agent_run',
+  'workflow_run',
+  'processor_run',
+  'scorer_run',
+  'rag_ingestion',
+  'tool_call',
+  'mcp_tool_call',
+] as const;
 
 // ---------------------------------------------------------------------------
 // span_events — completed spans, ReplacingMergeTree (dedupeKey)
@@ -197,6 +218,98 @@ WHERE parentSpanId IS NULL
 `;
 
 // ---------------------------------------------------------------------------
+// trace_branches — anchor spans of every named-entity invocation across the
+//                  tree, ReplacingMergeTree
+//
+// Same column shape as span_events / trace_roots (the MV does SELECT *), so a
+// row can flow trace_roots ← span_events → trace_branches without
+// column-by-column projection. Differs in ORDER BY: this table is
+// filter-by-spanType-first to support "all branches anchored at entity X"
+// listings independent of trace identity. Pairs with getBranch() to expand a
+// single anchor into its subtree.
+// ---------------------------------------------------------------------------
+
+export const TRACE_BRANCHES_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
+  -- Identity
+  dedupeKey          String,
+
+  -- IDs
+  traceId            String,
+  spanId             String,
+  parentSpanId       Nullable(String),
+  experimentId       Nullable(String),
+
+  -- Entity
+  entityType         LowCardinality(Nullable(String)),
+  entityId           Nullable(String),
+  entityName         Nullable(String),
+  entityVersionId    Nullable(String),
+
+  -- Parent entity
+  parentEntityVersionId Nullable(String),
+  parentEntityType   LowCardinality(Nullable(String)),
+  parentEntityId     Nullable(String),
+  parentEntityName   Nullable(String),
+
+  -- Root entity
+  rootEntityVersionId Nullable(String),
+  rootEntityType     LowCardinality(Nullable(String)),
+  rootEntityId       Nullable(String),
+  rootEntityName     Nullable(String),
+
+  -- Context
+  userId             Nullable(String),
+  organizationId     Nullable(String),
+  resourceId         Nullable(String),
+  runId              Nullable(String),
+  sessionId          Nullable(String),
+  threadId           Nullable(String),
+  requestId          Nullable(String),
+  environment        LowCardinality(Nullable(String)),
+  executionSource    LowCardinality(Nullable(String)),
+  serviceName        LowCardinality(Nullable(String)),
+
+  -- Span scalars
+  name               String,
+  spanType           LowCardinality(String),
+  isEvent            Bool DEFAULT false,
+  startedAt          DateTime64(3, 'UTC'),
+  endedAt            DateTime64(3, 'UTC'),
+
+  -- Query-relevant flexible fields
+  tags               Array(LowCardinality(String)) DEFAULT [],
+  metadataSearch     Map(LowCardinality(String), String) DEFAULT map(),
+
+  -- Information-only JSON payloads
+  attributes         Nullable(String),
+  scope              Nullable(String),
+  links              Nullable(String),
+  input              Nullable(String),
+  output             Nullable(String),
+  error              Nullable(String),
+  metadataRaw        Nullable(String),
+  requestContext     Nullable(String)
+)
+ENGINE = ReplacingMergeTree
+PARTITION BY toDate(endedAt)
+ORDER BY (spanType, startedAt, traceId, dedupeKey)
+`;
+
+// ---------------------------------------------------------------------------
+// MV: span_events → trace_branches (only branch-anchor span types, incremental)
+// ---------------------------------------------------------------------------
+
+export const TRACE_BRANCHES_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_TRACE_BRANCHES}
+TO ${TABLE_TRACE_BRANCHES}
+AS
+SELECT *
+FROM ${TABLE_SPAN_EVENTS}
+WHERE spanType IN (${BRANCH_SPAN_TYPE_VALUES.map(v => `'${v}'`).join(', ')})
+`;
+
+// ---------------------------------------------------------------------------
 // metric_events — ReplacingMergeTree with metricId dedup
 // ---------------------------------------------------------------------------
 
@@ -252,7 +365,22 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   -- Information-only JSON payloads
   costMetadata       Nullable(String),
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Bloom-filter skip indexes for high-cardinality ID drilldowns.
+  -- Equality and IN filters on these columns can skip granule chunks that
+  -- definitely do not contain the value. GRANULARITY 2 = 16K-row chunks.
+  -- ID columns are out-of-sort-key, so without these every drilldown scans
+  -- every row in the time range.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -562,6 +690,7 @@ SELECT DISTINCT kind, key1, key2, value FROM (
 export const ALL_TABLE_DDL = [
   SPAN_EVENTS_DDL,
   TRACE_ROOTS_DDL,
+  TRACE_BRANCHES_DDL,
   METRIC_EVENTS_DDL,
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
@@ -570,7 +699,7 @@ export const ALL_TABLE_DDL = [
   DISCOVERY_PAIRS_DDL,
 ];
 
-export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL];
+export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL];
 
 /** Discovery-specific refreshable MVs — created separately from core MVs. */
 export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL];
@@ -579,39 +708,93 @@ export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL
  * Additive migrations for existing ClickHouse databases.
  * ClickHouse's `CREATE TABLE IF NOT EXISTS` skips if the table already exists,
  * so new columns must be added explicitly via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+ *
+ * Entries are structured so init() can skip ones whose target column/index
+ * already exists. On Replicated/Shared MergeTree, every issued ALTER bumps the
+ * metadata version regardless of `IF NOT EXISTS`, causing replica catch-up
+ * races on every boot. Skipping no-op ALTERs eliminates that churn.
  */
-export const ALL_MIGRATIONS = [
+export type MigrationEntry =
+  | { kind: 'column'; table: string; name: string; sql: string }
+  | { kind: 'index'; table: string; name: string; sql: string };
+
+const addColumn = (table: string, name: string, type: string): MigrationEntry => ({
+  kind: 'column',
+  table,
+  name,
+  sql: `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${name} ${type}`,
+});
+
+const addBloomIndex = (table: string, name: string, column: string): MigrationEntry => ({
+  kind: 'index',
+  table,
+  name,
+  sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY 2`,
+});
+
+export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   // Span events
-  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Trace roots
-  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_TRACE_ROOTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Metrics
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_METRIC_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_METRIC_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_METRIC_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Logs
-  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_LOG_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_LOG_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_LOG_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Scores
-  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_SCORE_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Feedback
-  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  // Metric skip indexes — additive, instant DDL. Existing parts keep no index
+  // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
+  // immediately. With normal retention turning over the table, the index
+  // converges to full coverage without an explicit backfill.
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_traceId', 'traceId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_threadId', 'threadId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_resourceId', 'resourceId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_userId', 'userId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_organizationId', 'organizationId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_experimentId', 'experimentId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_runId', 'runId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_sessionId', 'sessionId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_requestId', 'requestId'),
 ];
+
+/**
+ * Names of the bloom-filter skip indexes added to `metric_events`. Exposed so
+ * tooling (e.g. a follow-up `mastra migrate` command) can detect and optionally
+ * `MATERIALIZE INDEX` them across pre-existing parts.
+ */
+export const METRIC_SKIP_INDEX_NAMES = [
+  'idx_traceId',
+  'idx_threadId',
+  'idx_resourceId',
+  'idx_userId',
+  'idx_organizationId',
+  'idx_experimentId',
+  'idx_runId',
+  'idx_sessionId',
+  'idx_requestId',
+] as const;
 
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 
 export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
+  TABLE_TRACE_BRANCHES,
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
@@ -649,6 +832,7 @@ export interface RetentionConfig {
 const SIGNAL_TTL_COLUMNS: Record<string, string> = {
   [TABLE_SPAN_EVENTS]: 'endedAt',
   [TABLE_TRACE_ROOTS]: 'endedAt',
+  [TABLE_TRACE_BRANCHES]: 'endedAt',
   [TABLE_METRIC_EVENTS]: 'timestamp',
   [TABLE_LOG_EVENTS]: 'timestamp',
   [TABLE_SCORE_EVENTS]: 'timestamp',
@@ -657,7 +841,7 @@ const SIGNAL_TTL_COLUMNS: Record<string, string> = {
 
 /** Maps each signal key to the table(s) it controls. */
 const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
-  tracing: [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS],
+  tracing: [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES],
   logs: [TABLE_LOG_EVENTS],
   metrics: [TABLE_METRIC_EVENTS],
   scores: [TABLE_SCORE_EVENTS],
@@ -665,13 +849,19 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
 };
 
 /**
- * Generates `ALTER TABLE ... MODIFY TTL` statements for the given retention config.
- * Returns empty array if no retention is configured.
- *
- * Uses `MODIFY TTL` so re-running init is idempotent (overwrites any previous TTL).
+ * Structured retention plan entry. Init uses these to skip `MODIFY TTL`
+ * statements whose effect is already in place (avoiding metadata churn on
+ * Replicated/Shared MergeTree tables).
  */
-export function buildRetentionDDL(retention: RetentionConfig): string[] {
-  const statements: string[] = [];
+export interface RetentionEntry {
+  table: string;
+  column: string;
+  days: number;
+  sql: string;
+}
+
+export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
+  const entries: RetentionEntry[] = [];
 
   for (const [signal, days] of Object.entries(retention)) {
     const safeDays = Math.floor(Number(days));
@@ -683,9 +873,42 @@ export function buildRetentionDDL(retention: RetentionConfig): string[] {
     for (const table of tables) {
       const col = SIGNAL_TTL_COLUMNS[table];
       if (!col) continue;
-      statements.push(`ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`);
+      entries.push({
+        table,
+        column: col,
+        days: safeDays,
+        sql: `ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`,
+      });
     }
   }
 
-  return statements;
+  return entries;
+}
+
+/**
+ * Generates `ALTER TABLE ... MODIFY TTL` statements for the given retention config.
+ * Returns empty array if no retention is configured.
+ *
+ * Uses `MODIFY TTL` so re-running init is idempotent (overwrites any previous TTL).
+ */
+export function buildRetentionDDL(retention: RetentionConfig): string[] {
+  return buildRetentionEntries(retention).map(e => e.sql);
+}
+
+/**
+ * Parses a ClickHouse `TTL` expression of the form
+ *   `TTL <col> + INTERVAL <N> DAY`     (input form)
+ *   `TTL <col> + toIntervalDay(<N>)`   (normalized form in system.tables)
+ * The column may appear as `\`col\`` (backtick-quoted, common in
+ * system.tables.create_table_query) or as a plain identifier.
+ * Returns `{ column, days }` if matched, otherwise null.
+ */
+export function parseTtlExpression(expr: string): { column: string; days: number } | null {
+  const match = expr.match(/TTL\s+(?:`([^`]+)`|(\w+))\s*\+\s*(?:toIntervalDay\((\d+)\)|INTERVAL\s+(\d+)\s+DAY)/i);
+  if (!match) return null;
+  const column = match[1] ?? match[2];
+  if (!column) return null;
+  const days = Number(match[3] ?? match[4]);
+  if (!Number.isFinite(days)) return null;
+  return { column, days };
 }

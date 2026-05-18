@@ -19,12 +19,12 @@
   --geist-mono: 'GeistMonoVF', monospace;
 
   /* Dark theme (default) */
-  --surface1: oklch(0.141 0 0);
-  --surface2: oklch(0.179 0 0);
-  --surface3: oklch(0.21 0 0);
-  --surface4: oklch(0.251 0 0);
-  --surface5: oklch(0.275 0 0 / 0.9);
-  --surface6: oklch(0.345 0 0);
+  --surface1: oklch(0% 0 0deg);
+  --surface2: oklch(16.84% 0 0deg);
+  --surface3: oklch(19.13% 0 0deg);
+  --surface4: oklch(21.78% 0 0deg);
+  --surface5: oklch(24.35% 0 0deg / 90%);
+  --surface6: oklch(30.92% 0 0deg);
 
   --accent1: oklch(0.723 0.219 149.579);
   --accent2: oklch(0.637 0.237 25.331);
@@ -52,24 +52,42 @@
   --neutral6: oklch(0.985 0 0);
 
   --error: oklch(0.637 0.237 25.331);
-  --overlay: oklch(0 0 0 / 0.75);
-  --border1: oklch(1 0 0 / 0.08);
-  --border2: oklch(1 0 0 / 0.12);
+  --overlay: oklch(0% 0 0deg / 75%);
+  --border1: oklch(100% 0 0deg / 6%);
+  --border2: oklch(100% 0 0deg / 10%);
+  --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
+  --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
+  --sidebar-nav-active: oklch(100% 0 0deg / 11%);
+  --section-card-bg: oklch(100% 0 0deg / 1.4%);
+  --section-card-header: oklch(100% 0 0deg / 3.5%);
+  --section-card-border: oklch(100% 0 0deg / 4.5%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
   --warning1: var(--accent6);
   --positive1: var(--accent1);
   --negative1: var(--accent2);
+
+  /* Notice admonition colors — bg uses /20 alpha overlay; fg is the on-surface text/icon color */
+  --notice-success: oklch(0.92 0.27 138);
+  --notice-success-fg: oklch(0.96 0.025 145);
+  --notice-destructive: oklch(0.69 0.24 22);
+  --notice-destructive-fg: oklch(0.95 0.014 18);
+  --notice-warning: oklch(0.91 0.16 105);
+  --notice-warning-fg: oklch(0.97 0.025 100);
+  --notice-info: oklch(0.81 0.12 230);
+  --notice-info-fg: oklch(0.97 0.013 224);
+  --notice-note: oklch(0.18 0 0);
+  --notice-note-fg: oklch(0.99 0.001 230);
 }
 
 html.light {
-  --surface1: oklch(1 0 0);
-  --surface2: oklch(0.984 0 0);
-  --surface3: oklch(0.968 0 0);
-  --surface4: oklch(0.929 0 0);
-  --surface5: oklch(0.929 0 0 / 0.9);
-  --surface6: oklch(0.869 0 0);
+  --surface1: oklch(95.6% 0 0deg);
+  --surface2: oklch(98.5% 0 0deg);
+  --surface3: oklch(100% 0 0deg);
+  --surface4: oklch(96.5% 0 0deg);
+  --surface5: oklch(94.4% 0 0deg / 94%);
+  --surface6: oklch(89.5% 0 0deg);
 
   --accent1: oklch(0.627 0.194 149.214);
   --accent2: oklch(0.577 0.245 27.325);
@@ -97,15 +115,33 @@ html.light {
   --neutral6: oklch(0.13 0 0);
 
   --error: oklch(0.577 0.245 27.325);
-  --overlay: oklch(0.208 0 0 / 0.45);
-  --border1: oklch(0.208 0 0 / 0.12);
-  --border2: oklch(0.208 0 0 / 0.2);
+  --overlay: oklch(20.8% 0 0deg / 45%);
+  --border1: oklch(20.8% 0 0deg / 10%);
+  --border2: oklch(20.8% 0 0deg / 16%);
+  --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
+  --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
+  --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
+  --section-card-bg: oklch(20.8% 0 0deg / 1.4%);
+  --section-card-header: oklch(20.8% 0 0deg / 3.5%);
+  --section-card-border: oklch(20.8% 0 0deg / 6%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
   --warning1: var(--accent6);
   --positive1: var(--accent1);
   --negative1: var(--accent2);
+
+  /* Notice admonition colors — bg keeps saturation, fg flips to deep tint for contrast on light surface */
+  --notice-success: oklch(0.55 0.2 140);
+  --notice-success-fg: oklch(0.32 0.1 145);
+  --notice-destructive: oklch(0.55 0.22 22);
+  --notice-destructive-fg: oklch(0.36 0.18 22);
+  --notice-warning: oklch(0.65 0.16 95);
+  --notice-warning-fg: oklch(0.36 0.1 95);
+  --notice-info: oklch(0.55 0.15 230);
+  --notice-info-fg: oklch(0.36 0.13 225);
+  --notice-note: oklch(0.97 0 0);
+  --notice-note-fg: oklch(0.18 0 0);
 }
 
 @utility container {
@@ -117,6 +153,42 @@ html.light {
   @media (width >= 1400px) {
     max-width: 1400px;
   }
+}
+
+@utility shadow-main-frame {
+  box-shadow: var(--shadow-main-frame);
+}
+
+@utility shadow-dialog {
+  box-shadow: var(--shadow-dialog);
+}
+
+@utility rounded-studio-frame {
+  border-radius: var(--studio-frame-radius, 1.5rem);
+}
+
+@utility rounded-studio-panel {
+  border-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+}
+
+@utility bg-sidebar-nav-hover {
+  background-color: var(--sidebar-nav-hover);
+}
+
+@utility bg-sidebar-nav-active {
+  background-color: var(--sidebar-nav-active);
+}
+
+@utility bg-section-card {
+  background-color: var(--section-card-bg);
+}
+
+@utility bg-section-card-header {
+  background-color: var(--section-card-header);
+}
+
+@utility border-section-card {
+  border-color: var(--section-card-border);
 }
 
 @theme {
@@ -184,9 +256,10 @@ html.light {
   --leading-header-xl: 129%;
 
   --radius-none: 0px;
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
@@ -288,6 +361,17 @@ html.light {
   --color-positive1: var(--positive1);
   --color-negative1: var(--negative1);
 
+  --color-notice-success: var(--notice-success);
+  --color-notice-success-fg: var(--notice-success-fg);
+  --color-notice-destructive: var(--notice-destructive);
+  --color-notice-destructive-fg: var(--notice-destructive-fg);
+  --color-notice-warning: var(--notice-warning);
+  --color-notice-warning-fg: var(--notice-warning-fg);
+  --color-notice-info: var(--notice-info);
+  --color-notice-info-fg: var(--notice-info-fg);
+  --color-notice-note: var(--notice-note);
+  --color-notice-note-fg: var(--notice-note-fg);
+
   --font-serif: var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   --font-mono:
     var(--geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
@@ -307,7 +391,12 @@ html.light {
   --shadow-inner: inset 0 2px 4px oklch(0 0 0 / 0.3);
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
-  --shadow-dialog: 0 16px 48px oklch(0 0 0 / 0.6);
+
+  /* Drop-shadow only. A previous version added `inset 0 1px 0 0 oklch(100% 0 0deg / 4%)` for
+     a 1px gloss highlight on top, but Tailwind v4 inlines @theme values into utility
+     classes so it can't be themed per-mode via a CSS var override — and the white inset
+     reads as a dirty band on dark surfaces and is invisible on white-ish light surfaces. */
+  --shadow-dialog: 0 8px 24px -8px oklch(0% 0 0deg / 28%), 0 24px 56px -16px oklch(0% 0 0deg / 36%);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);

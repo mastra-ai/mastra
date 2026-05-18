@@ -5,7 +5,7 @@
   "devDependencies": {
     "execa": "^9.6.1",
     "get-port": "^7.1.0",
-    "globby": "^16.1.0",
+    "tinyglobby": "^0.2.16",
     "npm-cli-login": "^1.0.0",
     "rollup": "^4.59.0",
     "verdaccio": "^6.2.5",

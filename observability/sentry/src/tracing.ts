@@ -69,8 +69,8 @@ const ATTRIBUTE_KEYS = {
   GEN_AI_USAGE_INPUT_TOKENS: 'gen_ai.usage.input_tokens',
   GEN_AI_USAGE_OUTPUT_TOKENS: 'gen_ai.usage.output_tokens',
   GEN_AI_USAGE_TOTAL_TOKENS: 'gen_ai.usage.total_tokens',
-  GEN_AI_USAGE_CACHE_READ_TOKENS: 'gen_ai.usage.cache_read_input_tokens',
-  GEN_AI_USAGE_CACHE_WRITE_TOKENS: 'gen_ai.usage.cache_write_input_tokens',
+  GEN_AI_USAGE_CACHE_READ_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
+  GEN_AI_USAGE_CACHE_WRITE_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
   GEN_AI_USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
 } as const;
 
