@@ -102,8 +102,11 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     this.workos = new WorkOS(apiKey, { clientId });
     this.options = options;
 
-    // Determine permission source: if roleMapping is provided, use it; otherwise use provider permissions
-    this.useProviderPermissions = !options.roleMapping;
+    // Determine permission source:
+    // - syncRoles enabled → WorkOS is source of truth (we synced roleMapping to WorkOS)
+    // - No roleMapping → use provider permissions directly from WorkOS
+    // - roleMapping without syncRoles → use static roleMapping
+    this.useProviderPermissions = options.syncRoles || !options.roleMapping;
 
     // Initialize LRU cache for user roles (the expensive WorkOS API call)
     this.rolesCache = new LRUCache<string, Promise<string[]>>({
@@ -117,12 +120,33 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
 
-    // If syncPermissions is enabled, schedule permission sync
+    // Validate sync options
+    if (options.syncRoles && !options.syncPermissions) {
+      throw new Error(
+        '[MastraRBACWorkos] syncRoles requires syncPermissions to be enabled. ' +
+          'Permissions must exist in WorkOS before roles can reference them.',
+      );
+    }
+    if (options.syncRoles && !options.roleMapping) {
+      throw new Error(
+        '[MastraRBACWorkos] syncRoles requires roleMapping to be defined. ' +
+          'Provide a roleMapping to specify which roles and permissions to sync.',
+      );
+    }
+
+    // If syncPermissions is enabled, schedule permission sync (and role sync if enabled)
     if (options.syncPermissions) {
       // Sync asynchronously in the background to avoid blocking initialization
-      this.syncPermissionsToWorkOS().catch(error => {
-        console.warn('[MastraRBACWorkos] Failed to sync permissions to WorkOS:', error.message);
-      });
+      this.syncPermissionsToWorkOS()
+        .then(async () => {
+          // If syncRoles is enabled, sync roles after permissions
+          if (options.syncRoles) {
+            await this.syncRolesToWorkOS();
+          }
+        })
+        .catch(error => {
+          console.warn('[MastraRBACWorkos] Failed to sync to WorkOS:', error.message);
+        });
     }
   }
 
@@ -220,6 +244,113 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     }
 
     return result;
+  }
+
+  /**
+   * Sync roles from roleMapping to WorkOS.
+   *
+   * This method creates or updates roles in WorkOS based on the roleMapping
+   * configuration, then assigns the appropriate permissions to each role.
+   *
+   * @experimental This feature requires WorkOS Roles API access.
+   */
+  async syncRolesToWorkOS(): Promise<{
+    created: string[];
+    updated: string[];
+    unchanged: string[];
+    errors: string[];
+  }> {
+    const result = {
+      created: [] as string[],
+      updated: [] as string[],
+      unchanged: [] as string[],
+      errors: [] as string[],
+    };
+
+    const organizationId = this.options.organizationId;
+    if (!organizationId) {
+      console.warn('[MastraRBACWorkos] Role sync skipped: organizationId not configured');
+      return result;
+    }
+
+    const roleMapping = this.options.roleMapping;
+    if (!roleMapping) {
+      console.warn('[MastraRBACWorkos] Role sync skipped: roleMapping not configured');
+      return result;
+    }
+
+    try {
+      // Fetch existing roles from WorkOS
+      const existingRolesResponse = await this.workos.authorization.listOrganizationRoles(organizationId);
+      const existingRolesMap = new Map(existingRolesResponse.data?.map(r => [r.slug, r]) ?? []);
+
+      // Sync each role from roleMapping
+      for (const [roleSlug, permissions] of Object.entries(roleMapping)) {
+        // Skip _default as it's not a real role
+        if (roleSlug === '_default') continue;
+
+        const { name, description } = this.getRoleDisplayInfo(roleSlug);
+        const existing = existingRolesMap.get(roleSlug);
+
+        try {
+          if (existing) {
+            // Role exists - update permissions
+            await this.workos.authorization.setOrganizationRolePermissions(organizationId, roleSlug, {
+              permissions: permissions as string[],
+            });
+            result.updated.push(roleSlug);
+            console.info(
+              `[MastraRBACWorkos] Updated role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
+            );
+          } else {
+            // Create new role
+            await this.workos.authorization.createOrganizationRole(organizationId, {
+              slug: roleSlug,
+              name,
+              description,
+            });
+            // Set permissions on the new role
+            await this.workos.authorization.setOrganizationRolePermissions(organizationId, roleSlug, {
+              permissions: permissions as string[],
+            });
+            result.created.push(roleSlug);
+            console.info(
+              `[MastraRBACWorkos] Created role in WorkOS: ${roleSlug} with ${permissions.length} permissions`,
+            );
+          }
+        } catch (error) {
+          const errorMsg = `${roleSlug}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          result.errors.push(errorMsg);
+          console.warn(`[MastraRBACWorkos] Failed to sync role: ${errorMsg}`);
+        }
+      }
+
+      console.info(
+        `[MastraRBACWorkos] Role sync complete: ${result.created.length} created, ${result.updated.length} updated, ${result.errors.length} errors`,
+      );
+    } catch (error) {
+      console.error('[MastraRBACWorkos] Role sync failed:', error);
+      throw error;
+    }
+
+    return result;
+  }
+
+  /**
+   * Generate human-readable name and description for a role slug.
+   */
+  private getRoleDisplayInfo(roleSlug: string): { name: string; description: string } {
+    const name = this.formatLabel(roleSlug);
+    const descriptions: Record<string, string> = {
+      admin: 'Full administrative access',
+      owner: 'Organization owner with full access',
+      member: 'Standard team member access',
+      viewer: 'Read-only access',
+    };
+    return {
+      name,
+      description: descriptions[roleSlug] ?? `Role: ${name}`,
+    };
   }
 
   /**

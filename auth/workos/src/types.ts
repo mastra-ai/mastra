@@ -240,6 +240,24 @@ export interface MastraRBACWorkosOptions {
    */
   syncPermissions?: boolean;
 
+  /**
+   * Automatically sync roles from roleMapping to WorkOS on startup.
+   *
+   * When true:
+   * - Requires `syncPermissions: true` (permissions must exist first)
+   * - Requires `roleMapping` to be defined (need roles to sync)
+   * - On provider initialization, creates/updates roles in WorkOS
+   * - Assigns permissions from roleMapping to each role
+   * - WorkOS becomes the source of truth for role permissions at runtime
+   *
+   * When false (default):
+   * - Roles must be manually created in WorkOS Dashboard
+   * - roleMapping is used as the source of truth at runtime
+   *
+   * @experimental This feature requires WorkOS Roles API access.
+   */
+  syncRoles?: boolean;
+
   /** Permission cache configuration */
   cache?: PermissionCacheOptions;
 }

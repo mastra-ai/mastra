@@ -185,7 +185,15 @@ export const mastra = new Mastra({
     rbac: new MastraRBACWorkos({
       organizationId: process.env.WORKOS_ORGANIZATION_ID, // Only get roles from this org
       syncPermissions: true, // Sync Mastra permissions to WorkOS on startup
-      // When syncPermissions is true and no roleMapping, permissions come from WorkOS roles
+      syncRoles: true, // Sync roles and their permissions to WorkOS
+      roleMapping: {
+        owner: ['*'], // Full access
+        admin: ['*:read', '*:write', '*:execute', '*:delete'], // All actions
+        member: ['*:read', '*:execute'], // Read and execute
+        viewer: ['*:read'], // Read only
+      },
+      // With syncRoles: true, roleMapping is synced to WorkOS on startup,
+      // then WorkOS becomes the source of truth for permissions at runtime
     }),
   },
   backgroundTasks: {
