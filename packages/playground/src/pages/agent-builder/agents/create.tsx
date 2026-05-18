@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { useBuilderAgentAccess, useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentBuilderStarter } from '@/domains/agent-builder/components/agent-builder-starter/agent-builder-starter';
+import { AgentBuilderStarter } from '@/domains/agent-builder/components/agent-starter/agent-builder-starter';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';

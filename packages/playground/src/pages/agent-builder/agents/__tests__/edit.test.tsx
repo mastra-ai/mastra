@@ -53,7 +53,7 @@ vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
   useAvailableAgentTools: () => [],
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message', () => ({
+vi.mock('@/domains/agent-builder/hooks/use-starter-user-message', () => ({
   useStarterUserMessage: () => undefined,
 }));
 
@@ -104,15 +104,15 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
 }));
 
 // Heavy panels not under test — replace with dumb stubs.
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/conversation-panel', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
   ConversationPanel: () => <div data-testid="stub-conversation-panel" />,
   ConversationPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,
 }));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
   StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => false,
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
@@ -121,7 +121,7 @@ vi.mock('@/domains/builder', () => ({
   useBuilderModelPolicy: () => ({ active: false }),
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/publish-to-channel-button', () => ({
   PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
     agentId ? (
       <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
@@ -130,7 +130,7 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channe
     ) : null,
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu', () => ({
   AgentBuilderMobileMenu: () => null,
 }));
 
@@ -281,12 +281,12 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).not.toHaveBeenCalled();
     });
 
-    it('renders the configure panel alongside the chat without a tab strip', () => {
+    it('renders the profile panel alongside the chat without a tab strip', () => {
       const { getByTestId, queryByTestId } = renderAt();
-      // Configure panel is rendered (the name input lives inside it).
+      // Profile panel is rendered (the name input lives inside it).
       expect(getByTestId('agent-configure-name')).not.toBeNull();
       expect(getByTestId('agent-builder-panel-chat')).not.toBeNull();
-      expect(getByTestId('agent-builder-panel-configure')).not.toBeNull();
+      expect(getByTestId('agent-builder-panel-profile')).not.toBeNull();
       // No Chat/Configuration tab buttons.
       expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
       expect(queryByTestId('agent-builder-tab-configure')).toBeNull();

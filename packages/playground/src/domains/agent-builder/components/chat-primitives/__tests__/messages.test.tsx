@@ -9,8 +9,9 @@ import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { CONNECT_CHANNEL_TOOL_NAME } from '../../agent-builder-edit/hooks/use-connect-channel-tool';
+import { CONNECT_CHANNEL_TOOL_NAME } from '../../../hooks/use-connect-channel-tool';
 import { MessageRow } from '../messages';
+import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
   SET_AGENT_DESCRIPTION_TOOL_NAME,
@@ -20,8 +21,7 @@ import {
   SET_AGENT_SKILLS_TOOL_NAME,
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
-} from '@/domains/agent-builder/hooks/use-agent-builder-tools';
-import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+} from '@/domains/agent-builder/services/tool-constants';
 import { server } from '@/test/msw-server';
 
 type ToolPart = MastraUIMessage['parts'][number];

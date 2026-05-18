@@ -3,20 +3,20 @@ import { useEffect, useMemo } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
+import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentChatPanelChat,
   AgentChatPanelProvider,
-} from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
-import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
-import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
-import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
-import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
-import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
+} from '@/domains/agent-builder/components/agent-edit/agent-chat-panel';
+import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
+import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
+import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
-import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
-import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
+import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
+import { WorkspaceLayout } from '@/domains/agent-builder/layouts/workspace-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import { storedAgentToAgentConfig } from '@/domains/agent-builder/services/stored-agent-to-agent-config';
+import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
@@ -35,9 +35,7 @@ export default function AgentBuilderAgentView() {
 
   if (!isReady) return <AgentBuilderAgentViewSkeleton />;
 
-  return (
-    <AgentBuilderAgentViewPage id={id} storedAgent={storedAgent} currentUser={currentUser ?? null} />
-  );
+  return <AgentBuilderAgentViewPage id={id} storedAgent={storedAgent} currentUser={currentUser ?? null} />;
 }
 
 interface PageProps {

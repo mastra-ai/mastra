@@ -16,11 +16,11 @@ import { useNavigate } from 'react-router';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
-} from '@/domains/agent-builder/components/agent-builder-list/agent-builder-list';
+} from '@/domains/agent-builder/components/agent-list/agent-builder-list';
 import {
   SkillBuilderList,
   SkillBuilderListSkeleton,
-} from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
+} from '@/domains/agent-builder/components/skill-list/skill-builder-list';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';

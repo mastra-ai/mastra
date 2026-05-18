@@ -2,7 +2,7 @@ import type { MastraUIMessage } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
-import { useAutoScroll } from './use-auto-scroll';
+import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously.

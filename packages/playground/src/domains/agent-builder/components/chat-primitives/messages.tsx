@@ -14,9 +14,10 @@ import { AlignLeft, Check, ChevronRight, FileText, Globe, Loader2, Sparkles, Typ
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Controller, useFormContext } from 'react-hook-form';
-import { ConnectChannelMessage } from '../agent-builder-edit/connect-channel-message';
-import { CONNECT_CHANNEL_TOOL_NAME } from '../agent-builder-edit/hooks/use-connect-channel-tool';
+import { CONNECT_CHANNEL_TOOL_NAME } from '../../hooks/use-connect-channel-tool';
+import { ConnectChannelMessage } from '../agent-edit/connect-channel-message';
 import { Shimmer } from './shimmer';
+import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
   SET_AGENT_DESCRIPTION_TOOL_NAME,
@@ -26,8 +27,7 @@ import {
   SET_AGENT_SKILLS_TOOL_NAME,
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
-} from '@/domains/agent-builder/hooks/use-agent-builder-tools';
-import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+} from '@/domains/agent-builder/services/tool-constants';
 import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
 
 export const MessageRow = ({

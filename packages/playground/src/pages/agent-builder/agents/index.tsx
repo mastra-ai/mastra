@@ -18,7 +18,7 @@ import { useMemo, useState } from 'react';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
-} from '@/domains/agent-builder/components/agent-builder-list/agent-builder-list';
+} from '@/domains/agent-builder/components/agent-list/agent-builder-list';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';

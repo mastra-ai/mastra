@@ -81,21 +81,18 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'current-user' } }),
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/agent-chat-panel', () => ({
   AgentChatPanel: () => <div data-testid="stub-chat-panel" />,
   AgentChatPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   AgentChatPanelChat: () => <div data-testid="stub-chat-panel" />,
 }));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
   StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => false,
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
-}));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
-  AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,
 }));
 vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
@@ -112,7 +109,7 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
   }),
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/publish-to-channel-button', () => ({
   PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
     agentId ? (
       <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
@@ -121,7 +118,7 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channe
     ) : null,
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu', () => ({
   AgentBuilderMobileMenu: () => null,
 }));
 
