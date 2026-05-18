@@ -4,9 +4,17 @@ import type { StorageThreadType } from '../memory';
 import type { StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
 import type { FullOutput } from '../stream/base/output';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, AgentExecutionOptionsBase } from './agent.types';
+import type { AgentExecutionOptionsBase } from './agent.types';
 import type { MessageListInput } from './message-list';
-import type { StructuredOutputOptions } from './types';
+import type { PublicStructuredOutputOptions, StructuredOutputOptions } from './types';
+
+type JsonFallbackOptions<OUTPUT> = AgentExecutionOptionsBase<OUTPUT> & {
+  structuredOutput: StructuredOutputOptions<OUTPUT>;
+};
+
+type PublicJsonFallbackOptions<OUTPUT> = AgentExecutionOptionsBase<OUTPUT> & {
+  structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+};
 
 export const supportedLanguageModelSpecifications = ['v2', 'v3'];
 export const isSupportedLanguageModel = (
@@ -18,16 +26,16 @@ export const isSupportedLanguageModel = (
 export async function tryGenerateWithJsonFallback<
   SCHEMA extends StandardSchemaWithJSON,
   OUTPUT extends InferStandardSchemaOutput<SCHEMA>,
->(agent: Agent, prompt: MessageListInput, options: AgentExecutionOptions<OUTPUT>): Promise<FullOutput<OUTPUT>>;
+>(agent: Agent, prompt: MessageListInput, options: JsonFallbackOptions<OUTPUT>): Promise<FullOutput<OUTPUT>>;
 export async function tryGenerateWithJsonFallback<OUTPUT extends {}>(
   agent: Agent,
   prompt: MessageListInput,
-  options: AgentExecutionOptions<OUTPUT>,
+  options: JsonFallbackOptions<OUTPUT>,
 ): Promise<FullOutput<OUTPUT>>;
-export async function tryGenerateWithJsonFallback<OUTPUT>(
+export async function tryGenerateWithJsonFallback<OUTPUT extends {}>(
   agent: Agent,
   prompt: MessageListInput,
-  options: AgentExecutionOptions<OUTPUT>,
+  options: JsonFallbackOptions<OUTPUT>,
 ): Promise<FullOutput<OUTPUT>> {
   if (!options.structuredOutput?.schema) {
     throw new MastraError({
@@ -38,13 +46,15 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
     });
   }
 
+  const publicOptions = options as PublicJsonFallbackOptions<OUTPUT>;
+
   try {
-    return await agent.generate(prompt, options);
+    return await agent.generate(prompt, publicOptions);
   } catch (error) {
     console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
     return await agent.generate(prompt, {
-      ...options,
-      structuredOutput: { ...options.structuredOutput, jsonPromptInjection: true },
+      ...publicOptions,
+      structuredOutput: { ...publicOptions.structuredOutput, jsonPromptInjection: true },
     });
   }
 }
