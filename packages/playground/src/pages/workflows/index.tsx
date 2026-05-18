@@ -59,7 +59,7 @@ function Workflows() {
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
           </div>
-          <Button as={Link} to="/workflows/schedules" variant="ghost" className="shrink-0">
+          <Button as={Link} to="/workflows/schedules" variant="primary" className="shrink-0">
             <CalendarClockIcon />
             Schedules
           </Button>
