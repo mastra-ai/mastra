@@ -24,6 +24,7 @@ import type {
   AgentSignalResultEvidence,
   AttachmentRecord,
   AttachmentReference,
+  ChannelInboxItem,
   OperationAdmissionTombstone,
   SessionRecord,
 } from './harness/types';
@@ -98,6 +99,7 @@ export class InMemoryDB {
   readonly harnessAttachmentReferences = new Map<string, AttachmentReference>();
   readonly harnessMessageResultEvidence = new Map<string, AgentSignalResultEvidence>();
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
+  readonly harnessChannelInbox = new Map<string, ChannelInboxItem>();
   readonly harnessThreadDeleteFences = new Map<
     string,
     { threadId: string; ownerId: string; leaseId: string; createdAt: number; expiresAt: number }
@@ -147,6 +149,7 @@ export class InMemoryDB {
     this.harnessAttachmentReferences.clear();
     this.harnessMessageResultEvidence.clear();
     this.harnessOperationTombstones.clear();
+    this.harnessChannelInbox.clear();
     this.harnessThreadDeleteFences.clear();
   }
 }

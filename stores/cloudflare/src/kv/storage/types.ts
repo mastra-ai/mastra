@@ -40,6 +40,7 @@ import type {
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
+  TABLE_HARNESS_CHANNEL_INBOX,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -187,6 +188,7 @@ export type RecordTypes = {
   [TABLE_HARNESS_SESSIONS]: Record<string, any>;
   [TABLE_HARNESS_ATTACHMENTS]: Record<string, any>;
   [TABLE_HARNESS_ATTACHMENT_REFERENCES]: Record<string, any>;
+  [TABLE_HARNESS_CHANNEL_INBOX]: Record<string, any>;
   [TABLE_HARNESS_MESSAGE_RESULTS]: Record<string, any>;
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: Record<string, any>;
   [TABLE_HARNESS_THREAD_DELETE_FENCES]: Record<string, any>;

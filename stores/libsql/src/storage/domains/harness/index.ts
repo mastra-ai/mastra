@@ -6,16 +6,18 @@ import {
   HarnessStorageAdmissionConflictError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
+  HarnessStorageChannelInboxClaimConflictError,
+  HarnessStorageChannelInboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
-  type WriteMessageResultEvidenceResult,
   TABLE_CONFIGS,
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_ATTACHMENTS,
+  TABLE_HARNESS_CHANNEL_INBOX,
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_SESSIONS,
@@ -30,8 +32,10 @@ import type {
   AttachmentReference,
   AttachmentRecord,
   AttachmentSemanticMetadata,
+  ChannelInboxItem,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  CreateOrLoadChannelInboxItemResult,
   DeleteSessionOptions,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
@@ -54,6 +58,7 @@ import type {
   StorageColumn,
   ThreadDeleteFenceLease,
   WithThreadDeleteFenceInput,
+  WriteMessageResultEvidenceResult,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -76,6 +81,7 @@ export class HarnessLibSQL extends HarnessStorage {
   #client: Client;
   #harnessName: string;
   #compactionLocks = new Map<string, Promise<void>>();
+  #channelInboxIndexesReady: Promise<void> | undefined;
   #localThreadDeleteFences = new Map<string, { ownerId: string; leaseId: string; ttlMs: number }>();
 
   constructor(config: LibSQLDomainConfig) {
@@ -122,6 +128,7 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
       compositePrimaryKey: threadDeleteFencesConfig?.compositePrimaryKey,
     });
+    await this.#ensureChannelInboxTable();
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_SESSIONS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
@@ -193,11 +200,13 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#ensureMessageResultsTable();
     await this.#ensureOperationTombstonesTable();
     await this.#ensureThreadDeleteFencesTable();
+    await this.#ensureChannelInboxTable();
     this.#localThreadDeleteFences.clear();
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_INBOX}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSIONS}`);
   }
@@ -1623,6 +1632,351 @@ export class HarnessLibSQL extends HarnessStorage {
     });
   }
 
+  // -------------------------------------------------------------------------
+  // Channel inbox ledger
+  // -------------------------------------------------------------------------
+
+  async saveChannelInboxItem(record: ChannelInboxItem): Promise<void> {
+    await this.#ensureChannelInboxTable();
+    const namespaced = { ...record, harnessName: this.#resolveHarnessName(record.harnessName) };
+    assertValidChannelInboxState(namespaced);
+    const existingByKey = await this.loadChannelInboxItemByIdempotencyKey({
+      harnessName: namespaced.harnessName,
+      channelId: namespaced.channelId,
+      idempotencyKey: namespaced.idempotencyKey,
+    });
+    if (existingByKey && existingByKey.id !== namespaced.id) {
+      throw new HarnessStorageChannelInboxTransitionError(
+        namespaced.id,
+        undefined,
+        namespaced.status,
+        'idempotency key is already owned by another inbox item',
+      );
+    }
+    const existing = await this.#loadChannelInboxItemById(namespaced.id);
+    if (existing) {
+      if (channelInboxItemsEqual(existing, namespaced)) return;
+      assertLegalChannelInboxUpdate(existing, namespaced);
+    }
+    const cols = channelInboxColumnValues(namespaced);
+    try {
+      const result = await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_CHANNEL_INBOX}
+              (${cols.names.join(', ')})
+              VALUES (${cols.names.map(() => '?').join(', ')})
+              ON CONFLICT(id) DO UPDATE SET
+                ${cols.names
+                  .filter(name => name !== 'id')
+                  .map(name => `${name} = excluded.${name}`)
+                  .join(', ')}
+              WHERE ${TABLE_HARNESS_CHANNEL_INBOX}.harness_name = excluded.harness_name
+                AND ${TABLE_HARNESS_CHANNEL_INBOX}.channel_id = excluded.channel_id
+                AND ${TABLE_HARNESS_CHANNEL_INBOX}.provider_id = excluded.provider_id
+                AND ${TABLE_HARNESS_CHANNEL_INBOX}.idempotency_key = excluded.idempotency_key
+                AND ${TABLE_HARNESS_CHANNEL_INBOX}.payload_hash = excluded.payload_hash
+                AND ${TABLE_HARNESS_CHANNEL_INBOX}.admission_id = excluded.admission_id
+                AND ${TABLE_HARNESS_CHANNEL_INBOX}.external_message_id = excluded.external_message_id
+                AND ${TABLE_HARNESS_CHANNEL_INBOX}.received_at = excluded.received_at
+                AND (
+                  (
+                    ${TABLE_HARNESS_CHANNEL_INBOX}.status = excluded.status
+                    AND ${TABLE_HARNESS_CHANNEL_INBOX}.status NOT IN ('accepted', 'queued', 'dead')
+                  )
+                  OR (
+                    ${TABLE_HARNESS_CHANNEL_INBOX}.status = 'received'
+                    AND excluded.status IN ('admitted', 'failed', 'dead')
+                  )
+                  OR (
+                    ${TABLE_HARNESS_CHANNEL_INBOX}.status = 'admitted'
+                    AND excluded.status IN ('accepted', 'queued', 'failed', 'dead')
+                  )
+                  OR (
+                    ${TABLE_HARNESS_CHANNEL_INBOX}.status = 'failed'
+                    AND excluded.status IN ('received', 'admitted', 'failed', 'dead')
+                  )
+                )`,
+        args: cols.values,
+      });
+      if (result.rowsAffected === 0) {
+        const conflict = await this.#loadChannelInboxItemById(namespaced.id);
+        if (conflict && channelInboxItemsEqual(conflict, namespaced)) return;
+        if (conflict) assertLegalChannelInboxUpdate(conflict, namespaced);
+        throw new HarnessStorageChannelInboxTransitionError(
+          namespaced.id,
+          conflict?.status,
+          namespaced.status,
+          'id is already owned by another inbox item',
+        );
+      }
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+      const conflictingByKey = await this.loadChannelInboxItemByIdempotencyKey({
+        harnessName: namespaced.harnessName,
+        channelId: namespaced.channelId,
+        idempotencyKey: namespaced.idempotencyKey,
+      });
+      if (conflictingByKey && conflictingByKey.id !== namespaced.id) {
+        throw new HarnessStorageChannelInboxTransitionError(
+          namespaced.id,
+          undefined,
+          namespaced.status,
+          'idempotency key is already owned by another inbox item',
+        );
+      }
+      throw err;
+    }
+  }
+
+  async createOrLoadChannelInboxItem(
+    record: ChannelInboxItem,
+    opts?: { initialClaim?: { claimId: string; now: number; claimTtlMs: number } },
+  ): Promise<CreateOrLoadChannelInboxItemResult> {
+    await this.#ensureChannelInboxTable();
+    const namespace = this.#resolveHarnessName(record.harnessName);
+    const incoming: ChannelInboxItem = { ...record, harnessName: namespace };
+    assertValidChannelInboxState(incoming);
+    const initialClaim = opts?.initialClaim;
+    const insertItem =
+      initialClaim === undefined
+        ? incoming
+        : {
+            ...incoming,
+            claimId: initialClaim.claimId,
+            claimExpiresAt: initialClaim.now + initialClaim.claimTtlMs,
+            updatedAt: initialClaim.now,
+          };
+    const cols = channelInboxColumnValues(insertItem);
+    try {
+      await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_CHANNEL_INBOX}
+              (${cols.names.join(', ')})
+              VALUES (${cols.names.map(() => '?').join(', ')})`,
+        args: cols.values,
+      });
+      return {
+        item: insertItem,
+        duplicate: false,
+        conflict: false,
+        claimed: initialClaim !== undefined,
+      };
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+    }
+
+    let existing = await this.loadChannelInboxItemByIdempotencyKey({
+      harnessName: namespace,
+      channelId: incoming.channelId,
+      idempotencyKey: incoming.idempotencyKey,
+    });
+    if (!existing) {
+      const existingById = await this.#loadChannelInboxItemById(incoming.id);
+      if (existingById) {
+        throw new HarnessStorageChannelInboxTransitionError(
+          incoming.id,
+          existingById.status,
+          incoming.status,
+          'id is already owned by another inbox item',
+        );
+      }
+    }
+    if (!existing) throw new HarnessStorageChannelInboxClaimConflictError(incoming.id);
+    const conflict = existing.payloadHash !== incoming.payloadHash;
+    let claimed = false;
+    if (!conflict && initialClaim && isChannelInboxClaimable(existing, initialClaim.now)) {
+      const update = await this.#client.execute({
+        sql: `UPDATE ${TABLE_HARNESS_CHANNEL_INBOX}
+              SET claim_id = ?, claim_expires_at = ?, updated_at = ?
+              WHERE harness_name = ? AND id = ?
+                AND (claim_id IS NULL OR claim_expires_at IS NULL OR claim_expires_at <= ?)
+                AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                AND status NOT IN ('accepted', 'queued', 'dead')`,
+        args: [
+          initialClaim.claimId,
+          initialClaim.now + initialClaim.claimTtlMs,
+          initialClaim.now,
+          namespace,
+          existing.id,
+          initialClaim.now,
+          initialClaim.now,
+        ],
+      });
+      if (update.rowsAffected > 0) {
+        claimed = true;
+        existing = (await this.#loadChannelInboxItemById(existing.id, namespace)) ?? existing;
+      }
+    }
+    return { item: existing, duplicate: true, conflict, claimed };
+  }
+
+  async loadChannelInboxItemByIdempotencyKey({
+    harnessName,
+    channelId,
+    idempotencyKey,
+  }: {
+    harnessName: string;
+    channelId: string;
+    idempotencyKey: string;
+  }): Promise<ChannelInboxItem | null> {
+    await this.#ensureChannelInboxTable();
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_INBOX}
+            WHERE harness_name = ? AND channel_id = ? AND idempotency_key = ?
+            LIMIT 1`,
+      args: [this.#resolveHarnessName(harnessName), channelId, idempotencyKey],
+    });
+    const row = result.rows[0];
+    return row ? rowToChannelInboxItem(row as Record<string, unknown>) : null;
+  }
+
+  async claimChannelInboxItems({
+    harnessName,
+    channelId,
+    statuses,
+    claimId,
+    limit,
+    now,
+    claimTtlMs,
+  }: {
+    harnessName: string;
+    channelId?: string;
+    statuses: Array<'received' | 'admitted' | 'failed'>;
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<ChannelInboxItem[]> {
+    await this.#ensureChannelInboxTable();
+    if (limit <= 0 || statuses.length === 0) return [];
+    const namespace = this.#resolveHarnessName(harnessName);
+    const filters = [
+      'harness_name = ?',
+      `status IN (${statuses.map(() => '?').join(', ')})`,
+      '(claim_id IS NULL OR claim_expires_at IS NULL OR claim_expires_at <= ?)',
+      '(next_attempt_at IS NULL OR next_attempt_at <= ?)',
+    ];
+    const args: (string | number)[] = [namespace, ...statuses, now, now];
+    if (channelId !== undefined) {
+      filters.splice(1, 0, 'channel_id = ?');
+      args.splice(1, 0, channelId);
+    }
+    const claimed: ChannelInboxItem[] = [];
+    const candidates = await this.#client.execute({
+      sql: `SELECT id FROM ${TABLE_HARNESS_CHANNEL_INBOX}
+            WHERE ${filters.join(' AND ')}
+            ORDER BY received_at ASC
+            LIMIT ?`,
+      args: [...args, limit],
+    });
+    for (const row of candidates.rows) {
+      const id = String(row.id);
+      const update = await this.#client.execute({
+        sql: `UPDATE ${TABLE_HARNESS_CHANNEL_INBOX}
+              SET claim_id = ?, claim_expires_at = ?, updated_at = ?
+              WHERE harness_name = ? AND id = ?
+                AND status IN (${statuses.map(() => '?').join(', ')})
+                AND (claim_id IS NULL OR claim_expires_at IS NULL OR claim_expires_at <= ?)
+                AND (next_attempt_at IS NULL OR next_attempt_at <= ?)`,
+        args: [claimId, now + claimTtlMs, now, namespace, id, ...statuses, now, now],
+      });
+      if (update.rowsAffected === 0) continue;
+      const item = await this.#loadChannelInboxItemById(id, namespace);
+      if (item) claimed.push(item);
+    }
+    return claimed;
+  }
+
+  async renewChannelInboxClaim({
+    inboxItemId,
+    claimId,
+    now,
+    claimTtlMs,
+  }: {
+    inboxItemId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    await this.#ensureChannelInboxTable();
+    const claimExpiresAt = now + claimTtlMs;
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_INBOX}
+            SET claim_expires_at = ?, updated_at = ?
+            WHERE id = ? AND claim_id = ?
+              AND claim_expires_at IS NOT NULL
+              AND claim_expires_at > ?
+              AND status NOT IN ('accepted', 'queued', 'dead')`,
+      args: [claimExpiresAt, now, inboxItemId, claimId, now],
+    });
+    if (result.rowsAffected === 0) {
+      throw new HarnessStorageChannelInboxClaimConflictError(inboxItemId, claimId);
+    }
+    return { claimExpiresAt, storageNow: now };
+  }
+
+  async updateChannelInboxItem(record: ChannelInboxItem, opts: { claimId: string }): Promise<void> {
+    await this.#ensureChannelInboxTable();
+    const namespace = this.#resolveHarnessName(record.harnessName);
+    const current = await this.#loadChannelInboxItemById(record.id, namespace);
+    const storageNow = Date.now();
+    if (
+      !current ||
+      current.claimId !== opts.claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= storageNow ||
+      isTerminalChannelInboxStatus(current.status)
+    ) {
+      throw new HarnessStorageChannelInboxClaimConflictError(record.id, opts.claimId);
+    }
+    const next = { ...record, harnessName: namespace };
+    assertLegalChannelInboxUpdate(current, next);
+    const cols = channelInboxColumnValues(next);
+    const currentCols = channelInboxColumnValues(current);
+    const preservesCurrentClaim = next.claimId === opts.claimId && next.claimExpiresAt !== undefined;
+    const updateNames = cols.names.filter(
+      name => name !== 'id' && (!preservesCurrentClaim || (name !== 'claim_id' && name !== 'claim_expires_at')),
+    );
+    const stateCompareNames = cols.names.filter(
+      name => name !== 'id' && name !== 'claim_id' && name !== 'claim_expires_at' && name !== 'updated_at',
+    );
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_INBOX}
+            SET ${updateNames.map(name => `${name} = ?`).join(', ')}
+            WHERE harness_name = ? AND id = ? AND claim_id = ?
+              AND claim_expires_at IS NOT NULL
+              AND claim_expires_at > ?
+              AND status NOT IN ('accepted', 'queued', 'dead')
+              AND ${stateCompareNames.map(name => `${name} IS ?`).join(' AND ')}`,
+      args: [
+        ...updateNames.map(name => cols.values[cols.names.indexOf(name)]),
+        namespace,
+        next.id,
+        opts.claimId,
+        storageNow,
+        ...stateCompareNames.map(name => currentCols.values[currentCols.names.indexOf(name)]),
+      ],
+    });
+    if (result.rowsAffected === 0) {
+      throw new HarnessStorageChannelInboxClaimConflictError(record.id, opts.claimId);
+    }
+  }
+
+  async #loadChannelInboxItemById(id: string, harnessName?: string): Promise<ChannelInboxItem | null> {
+    const conditions = ['id = ?'];
+    const args: string[] = [id];
+    if (harnessName !== undefined) {
+      conditions.unshift('harness_name = ?');
+      args.unshift(this.#resolveHarnessName(harnessName));
+    }
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_INBOX}
+            WHERE ${conditions.join(' AND ')}
+            LIMIT 1`,
+      args,
+    });
+    const row = result.rows[0];
+    return row ? rowToChannelInboxItem(row as Record<string, unknown>) : null;
+  }
+
   async #backfillHarnessNamespace(): Promise<void> {
     await this.#client.execute({
       sql: `UPDATE ${TABLE_HARNESS_SESSIONS}
@@ -1677,6 +2031,40 @@ export class HarnessLibSQL extends HarnessStorage {
       tableName: TABLE_HARNESS_THREAD_DELETE_FENCES,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
       ifNotExists: ['lease_id'],
+    });
+  }
+
+  async #ensureChannelInboxTable(): Promise<void> {
+    const inboxConfig = TABLE_CONFIGS[TABLE_HARNESS_CHANNEL_INBOX];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_CHANNEL_INBOX,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_INBOX],
+      compositePrimaryKey: inboxConfig?.compositePrimaryKey,
+    });
+    await this.#ensureChannelInboxIndexes();
+  }
+
+  async #ensureChannelInboxIndexes(): Promise<void> {
+    if (this.#channelInboxIndexesReady !== undefined) {
+      return this.#channelInboxIndexesReady;
+    }
+    this.#channelInboxIndexesReady = this.#createChannelInboxIndexes().catch(error => {
+      this.#channelInboxIndexesReady = undefined;
+      throw error;
+    });
+    return this.#channelInboxIndexesReady;
+  }
+
+  async #createChannelInboxIndexes(): Promise<void> {
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_harness_channel_inbox_idempotency
+            ON "${TABLE_HARNESS_CHANNEL_INBOX}" ("harness_name", "channel_id", "idempotency_key")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_channel_inbox_claim
+            ON "${TABLE_HARNESS_CHANNEL_INBOX}" ("harness_name", "channel_id", "status", "next_attempt_at", "claim_expires_at", "received_at")`,
+      args: [],
     });
   }
 
@@ -1889,6 +2277,125 @@ function sessionColumnValues(record: SessionRecord, version: number): { names: s
     record.leaseExpiresAt ?? null,
   ];
   return { names: [...SESSION_COLUMN_NAMES], values };
+}
+
+const CHANNEL_INBOX_COLUMN_NAMES = [
+  'id',
+  'harness_name',
+  'channel_id',
+  'provider_id',
+  'idempotency_key',
+  'payload_hash',
+  'admission_hash',
+  'admission_id',
+  'binding_id',
+  'resource_id',
+  'thread_id',
+  'session_id',
+  'run_id',
+  'signal_id',
+  'queued_item_id',
+  'external_message_id',
+  'received_at',
+  'admitted_at',
+  'accepted_at',
+  'queued_at',
+  'failed_at',
+  'dead_at',
+  'updated_at',
+  'status',
+  'delivery',
+  'mode',
+  'model',
+  'attempts',
+  'claim_id',
+  'claim_expires_at',
+  'next_attempt_at',
+  'request_context',
+  'content',
+  'attachments',
+  'last_error',
+] as const;
+
+function channelInboxColumnValues(record: ChannelInboxItem): { names: string[]; values: any[] } {
+  const values = [
+    record.id,
+    record.harnessName,
+    record.channelId,
+    record.providerId,
+    record.idempotencyKey,
+    record.payloadHash,
+    record.admissionHash ?? null,
+    record.admissionId,
+    record.bindingId ?? null,
+    record.resourceId ?? null,
+    record.threadId ?? null,
+    record.sessionId ?? null,
+    record.runId ?? null,
+    record.signalId ?? null,
+    record.queuedItemId ?? null,
+    record.externalMessageId,
+    record.receivedAt,
+    record.admittedAt ?? null,
+    record.acceptedAt ?? null,
+    record.queuedAt ?? null,
+    record.failedAt ?? null,
+    record.deadAt ?? null,
+    record.updatedAt,
+    record.status,
+    record.delivery ?? null,
+    record.mode ?? null,
+    record.model ?? null,
+    record.attempts,
+    record.claimId ?? null,
+    record.claimExpiresAt ?? null,
+    record.nextAttemptAt ?? null,
+    JSON.stringify(record.requestContext),
+    record.content,
+    JSON.stringify(record.attachments),
+    record.lastError ? JSON.stringify(record.lastError) : null,
+  ];
+  return { names: [...CHANNEL_INBOX_COLUMN_NAMES], values };
+}
+
+function rowToChannelInboxItem(row: Record<string, unknown>): ChannelInboxItem {
+  return {
+    id: String(row.id),
+    harnessName: String(row.harness_name),
+    channelId: String(row.channel_id),
+    providerId: String(row.provider_id),
+    idempotencyKey: String(row.idempotency_key),
+    payloadHash: String(row.payload_hash),
+    admissionHash: row.admission_hash == null ? undefined : String(row.admission_hash),
+    admissionId: String(row.admission_id),
+    bindingId: row.binding_id == null ? undefined : String(row.binding_id),
+    resourceId: row.resource_id == null ? undefined : String(row.resource_id),
+    threadId: row.thread_id == null ? undefined : String(row.thread_id),
+    sessionId: row.session_id == null ? undefined : String(row.session_id),
+    runId: row.run_id == null ? undefined : String(row.run_id),
+    signalId: row.signal_id == null ? undefined : String(row.signal_id),
+    queuedItemId: row.queued_item_id == null ? undefined : String(row.queued_item_id),
+    externalMessageId: String(row.external_message_id),
+    receivedAt: Number(row.received_at),
+    admittedAt: row.admitted_at == null ? undefined : Number(row.admitted_at),
+    acceptedAt: row.accepted_at == null ? undefined : Number(row.accepted_at),
+    queuedAt: row.queued_at == null ? undefined : Number(row.queued_at),
+    failedAt: row.failed_at == null ? undefined : Number(row.failed_at),
+    deadAt: row.dead_at == null ? undefined : Number(row.dead_at),
+    updatedAt: Number(row.updated_at),
+    status: String(row.status) as ChannelInboxItem['status'],
+    delivery: row.delivery == null ? undefined : (String(row.delivery) as ChannelInboxItem['delivery']),
+    mode: row.mode == null ? undefined : String(row.mode),
+    model: row.model == null ? undefined : String(row.model),
+    attempts: Number(row.attempts),
+    claimId: row.claim_id == null ? undefined : String(row.claim_id),
+    claimExpiresAt: row.claim_expires_at == null ? undefined : Number(row.claim_expires_at),
+    nextAttemptAt: row.next_attempt_at == null ? undefined : Number(row.next_attempt_at),
+    requestContext: parseJson(row.request_context) ?? {},
+    content: String(row.content),
+    attachments: parseJson(row.attachments) ?? [],
+    lastError: parseJson(row.last_error) ?? undefined,
+  };
 }
 
 function rowToSession(row: Record<string, unknown>): SessionRecord {
@@ -2154,6 +2661,160 @@ function isTerminalMessageEvidence(record: AgentSignalResultEvidence): boolean {
 
 function isTerminalQueueReceipt(receipt: QueueAdmissionReceipt): boolean {
   return receipt.status === 'completed' || receipt.status === 'failed' || receipt.status === 'dead';
+}
+
+function isTerminalChannelInboxStatus(status: ChannelInboxItem['status']): boolean {
+  return status === 'accepted' || status === 'queued' || status === 'dead';
+}
+
+function isChannelInboxClaimable(item: ChannelInboxItem, now: number): boolean {
+  if (isTerminalChannelInboxStatus(item.status)) return false;
+  if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
+  return item.claimId === undefined || item.claimExpiresAt === undefined || item.claimExpiresAt <= now;
+}
+
+function assertLegalChannelInboxUpdate(current: ChannelInboxItem, next: ChannelInboxItem): void {
+  const immutableMismatch =
+    current.id !== next.id ||
+    current.harnessName !== next.harnessName ||
+    current.channelId !== next.channelId ||
+    current.providerId !== next.providerId ||
+    current.idempotencyKey !== next.idempotencyKey ||
+    current.payloadHash !== next.payloadHash ||
+    current.admissionId !== next.admissionId ||
+    current.externalMessageId !== next.externalMessageId ||
+    current.receivedAt !== next.receivedAt;
+  if (immutableMismatch) {
+    throw new HarnessStorageChannelInboxTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'immutable provider identity fields cannot change',
+    );
+  }
+  const allowed =
+    current.status === next.status ||
+    (current.status === 'received' &&
+      (next.status === 'admitted' || next.status === 'failed' || next.status === 'dead')) ||
+    (current.status === 'admitted' &&
+      (next.status === 'accepted' || next.status === 'queued' || next.status === 'failed' || next.status === 'dead')) ||
+    (current.status === 'failed' &&
+      (next.status === 'received' || next.status === 'admitted' || next.status === 'failed' || next.status === 'dead'));
+  if (!allowed || isTerminalChannelInboxStatus(current.status)) {
+    throw new HarnessStorageChannelInboxTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'transition is not legal for channel inbox state machine',
+    );
+  }
+  assertValidChannelInboxState(next, current.status);
+}
+
+function assertValidChannelInboxState(record: ChannelInboxItem, currentStatus?: ChannelInboxItem['status']): void {
+  if (
+    record.status === 'admitted' &&
+    (record.delivery === undefined ||
+      (record.delivery !== 'message' && record.delivery !== 'queue') ||
+      record.admittedAt == null)
+  ) {
+    throw new HarnessStorageChannelInboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'admitted rows require delivery and admittedAt',
+    );
+  }
+  if (
+    record.status === 'accepted' &&
+    (record.delivery !== 'message' || !record.runId || !record.signalId || record.acceptedAt == null)
+  ) {
+    throw new HarnessStorageChannelInboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'accepted rows require message delivery, runId, signalId, and acceptedAt',
+    );
+  }
+  if (record.status === 'queued' && (record.delivery !== 'queue' || !record.queuedItemId || record.queuedAt == null)) {
+    throw new HarnessStorageChannelInboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'queued rows require queue delivery, queuedItemId, and queuedAt',
+    );
+  }
+  if ((record.status === 'failed' || record.status === 'dead') && record.lastError == null) {
+    throw new HarnessStorageChannelInboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'failed and dead rows require lastError',
+    );
+  }
+}
+
+function channelInboxItemsEqual(a: ChannelInboxItem, b: ChannelInboxItem): boolean {
+  const aValues = channelInboxComparableValues(a);
+  const bValues = channelInboxComparableValues(b);
+  return aValues.length === bValues.length && aValues.every((value, index) => Object.is(value, bValues[index]));
+}
+
+function channelInboxComparableValues(record: ChannelInboxItem): unknown[] {
+  return [
+    record.id,
+    record.harnessName,
+    record.channelId,
+    record.providerId,
+    record.idempotencyKey,
+    record.payloadHash,
+    record.admissionHash,
+    record.admissionId,
+    record.bindingId,
+    record.resourceId,
+    record.threadId,
+    record.sessionId,
+    record.runId,
+    record.signalId,
+    record.queuedItemId,
+    record.externalMessageId,
+    record.receivedAt,
+    record.admittedAt,
+    record.acceptedAt,
+    record.queuedAt,
+    record.failedAt,
+    record.deadAt,
+    record.updatedAt,
+    record.status,
+    record.delivery,
+    record.mode,
+    record.model,
+    record.attempts,
+    record.claimId,
+    record.claimExpiresAt,
+    record.nextAttemptAt,
+    stableJsonString(record.requestContext),
+    record.content,
+    stableJsonString(record.attachments),
+    record.lastError ? stableJsonString(record.lastError) : undefined,
+  ];
+}
+
+function stableJsonString(value: unknown): string {
+  return JSON.stringify(canonicalJsonValue(value));
+}
+
+function canonicalJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, entry]) => [key, canonicalJsonValue(entry)]),
+    );
+  }
+  return value;
 }
 
 function arraysEqual(a: string[], b: string[]): boolean {

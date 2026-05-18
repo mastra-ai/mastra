@@ -447,6 +447,93 @@ export interface InboxResponseReceipt {
   updatedAt: number;
 }
 
+export type HarnessRowErrorCode =
+  | 'session_closed'
+  | 'session_closing'
+  | 'session_deleted'
+  | 'live_session_limit'
+  | 'session_locked'
+  | 'queue_full'
+  | 'override_conflict'
+  | 'channel_binding_closed'
+  | 'channel_payload_conflict'
+  | 'provider_payload_invalid'
+  | 'worker_unavailable'
+  | 'unknown';
+
+export interface PersistedRequestContextInput {
+  channel?: {
+    origin: 'inbound' | 'binding';
+    harnessName: string;
+    channelId: string;
+    providerId: string;
+    platform: string;
+    externalThreadId: string;
+    externalMessageId?: string;
+    bindingId?: string;
+    externalTenantId?: string;
+    externalChannelId?: string;
+    actor?: {
+      platformUserId: string;
+      displayName?: string;
+      metadata?: Record<string, JsonValue>;
+    };
+    capabilities?: Record<string, JsonValue>;
+  };
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface ChannelInboxItem {
+  id: string;
+  harnessName: string;
+  channelId: string;
+  providerId: string;
+  idempotencyKey: string;
+  payloadHash: string;
+  admissionHash?: string;
+  admissionId: string;
+  bindingId?: string;
+  resourceId?: string;
+  threadId?: string;
+  sessionId?: string;
+  runId?: string;
+  signalId?: string;
+  queuedItemId?: string;
+  externalMessageId: string;
+  receivedAt: number;
+  admittedAt?: number;
+  acceptedAt?: number;
+  queuedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  updatedAt: number;
+  status: 'received' | 'admitted' | 'accepted' | 'queued' | 'failed' | 'dead';
+  delivery?: 'message' | 'queue';
+  mode?: string;
+  model?: string;
+  attempts: number;
+  claimId?: string;
+  claimExpiresAt?: number;
+  nextAttemptAt?: number;
+  requestContext: PersistedRequestContextInput;
+  content: string;
+  attachments: PersistedAttachment[];
+  lastError?: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
+}
+
+export interface ChannelInboxInitialClaim {
+  claimId: string;
+  now: number;
+  claimTtlMs: number;
+}
+
+export interface CreateOrLoadChannelInboxItemResult {
+  item: ChannelInboxItem;
+  duplicate: boolean;
+  conflict: boolean;
+  claimed: boolean;
+}
+
 export interface OperationAdmissionTombstone {
   kind: HarnessOperationKind;
   harnessName: string;

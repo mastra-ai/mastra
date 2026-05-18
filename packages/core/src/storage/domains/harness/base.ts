@@ -5,6 +5,9 @@ import type {
   AgentSignalResultStatus,
   AttachmentReference,
   AttachmentRecord,
+  ChannelInboxInitialClaim,
+  ChannelInboxItem,
+  CreateOrLoadChannelInboxItemResult,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
@@ -170,6 +173,32 @@ export class HarnessStorageThreadDeleteFenceUnsupportedError extends Error {
   readonly code = 'harness.storage.thread_delete_fence_unsupported' as const;
   constructor() {
     super('HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageChannelInboxClaimConflictError extends Error {
+  readonly name = 'HarnessStorageChannelInboxClaimConflictError';
+  readonly code = 'harness.storage.channel_inbox_claim_conflict' as const;
+  constructor(
+    public readonly inboxItemId: string,
+    public readonly claimId?: string,
+  ) {
+    super(`Channel inbox item "${inboxItemId}" is not held by claim "${claimId ?? '<none>'}"`);
+  }
+}
+
+export class HarnessStorageChannelInboxTransitionError extends Error {
+  readonly name = 'HarnessStorageChannelInboxTransitionError';
+  readonly code = 'harness.storage.channel_inbox_transition_invalid' as const;
+  constructor(
+    public readonly inboxItemId: string,
+    public readonly fromStatus: ChannelInboxItem['status'] | undefined,
+    public readonly toStatus: ChannelInboxItem['status'],
+    reason: string,
+  ) {
+    super(
+      `Channel inbox item "${inboxItemId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
+    );
   }
 }
 
@@ -519,6 +548,50 @@ export abstract class HarnessStorage extends StorageDomain {
     threadId?: string;
     signalId?: string;
   }): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // Channel inbox ledger
+  // -------------------------------------------------------------------------
+
+  abstract saveChannelInboxItem(record: ChannelInboxItem): Promise<void>;
+
+  /**
+   * Atomic insert-or-load for provider callback retries. The unique
+   * idempotency identity is `(harnessName, channelId, idempotencyKey)`;
+   * `payloadHash` is the adapter-normalized content/files/context hash used
+   * to distinguish exact provider retries from same-key payload conflicts.
+   * `initialClaim` may claim a newly created row or an unclaimed/expired
+   * existing row, but it must not steal an unexpired active claim.
+   */
+  abstract createOrLoadChannelInboxItem(
+    record: ChannelInboxItem,
+    opts?: { initialClaim?: ChannelInboxInitialClaim },
+  ): Promise<CreateOrLoadChannelInboxItemResult>;
+
+  abstract loadChannelInboxItemByIdempotencyKey(opts: {
+    harnessName: string;
+    channelId: string;
+    idempotencyKey: string;
+  }): Promise<ChannelInboxItem | null>;
+
+  abstract claimChannelInboxItems(opts: {
+    harnessName: string;
+    channelId?: string;
+    statuses: Array<'received' | 'admitted' | 'failed'>;
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<ChannelInboxItem[]>;
+
+  abstract renewChannelInboxClaim(opts: {
+    inboxItemId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }>;
+
+  abstract updateChannelInboxItem(record: ChannelInboxItem, opts: { claimId: string }): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Test-only
