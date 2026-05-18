@@ -1,18 +1,10 @@
-import {
-  Badge,
-  Entity,
-  EntityContent,
-  EntityName,
-  EntityDescription,
-  Section,
-  SubSectionRoot,
-  stringToColor,
-} from '@mastra/playground-ui';
+import { Badge, Section, SubSectionRoot, stringToColor } from '@mastra/playground-ui';
 import { Plug } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useToolProviders } from '../hooks/use-tool-providers';
 import { ToolProviderDialog } from './tool-provider-dialog';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/components/entity';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 
 interface Provider {

@@ -1,15 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import {
-  Button,
-  EmptyState,
-  Entity,
-  EntityContent,
-  EntityName,
-  EntityDescription,
-  ScrollArea,
-  Searchbar,
-  Switch,
-} from '@mastra/playground-ui';
+import { Button, EmptyState, ScrollArea, Searchbar, Switch } from '@mastra/playground-ui';
 import { Plus, Drill } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -17,6 +7,7 @@ import { useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useStoredSkills } from '../../hooks/use-stored-skills';
 import { SkillEditDialog } from './skill-edit-dialog';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/components/entity';
 import { SectionHeader } from '@/domains/cms';
 
 export function SkillsPage() {

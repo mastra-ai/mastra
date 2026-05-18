@@ -2,10 +2,6 @@ import type { StoredMCPServerConfig } from '@mastra/client-js';
 import {
   Button,
   EmptyState,
-  Entity,
-  EntityContent,
-  EntityDescription,
-  EntityName,
   Section,
   SubSectionRoot,
   SideDialog,
@@ -19,6 +15,7 @@ import { useWatch } from 'react-hook-form';
 
 import { MCPClientCreateContent } from '../mcp-client-create';
 import type { MCPClientFormValues } from '../mcp-client-create';
+import { Entity, EntityContent, EntityDescription, EntityName } from '@/components/entity';
 import { useAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 

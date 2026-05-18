@@ -1,10 +1,6 @@
 import {
   Button,
   EmptyState,
-  Entity,
-  EntityContent,
-  EntityName,
-  EntityDescription,
   Input,
   Label,
   ScrollArea,
@@ -19,6 +15,7 @@ import {
 import { Controller, useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/components/entity';
 import { SectionHeader, SubSectionHeader } from '@/domains/cms';
 import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';

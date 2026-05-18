@@ -1,18 +1,6 @@
-import {
-  Entity,
-  EntityContent,
-  EntityDescription,
-  EntityIcon,
-  EntityName,
-  Spinner,
-  Switch,
-  Txt,
-  Icon,
-  McpServerIcon,
-  ToolsIcon,
-  cn,
-} from '@mastra/playground-ui';
+import { Spinner, Switch, Txt, Icon, McpServerIcon, ToolsIcon, cn } from '@mastra/playground-ui';
 import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
+import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/components/entity';
 
 interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';
