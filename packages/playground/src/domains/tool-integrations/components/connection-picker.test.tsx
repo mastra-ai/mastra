@@ -419,6 +419,44 @@ describe('ConnectionPicker', () => {
     expect(labelInput.placeholder).toContain('Saved label');
   });
 
+  it('inherits the persisted label when pinning a second existing connection with no override', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
+        HttpResponse.json({
+          items: [
+            { connectionId: 'ca_first', toolService: TOOL_SERVICE, status: 'active', label: 'Work' },
+            { connectionId: 'ca_second', toolService: TOOL_SERVICE, status: 'active', label: 'Personal' },
+          ],
+        }),
+      ),
+    );
+
+    const onChange = vi.fn();
+    renderPicker({
+      initial: [{ connectionId: 'ca_first', toolService: TOOL_SERVICE, label: 'Work' }],
+      onChange,
+    });
+
+    await screen.findByTestId(`connection-existing-${TOOL_SERVICE}-ca_second`);
+    const pinBtn = screen.getByTestId(
+      `connection-existing-pin-${TOOL_SERVICE}-ca_second`,
+    ) as HTMLButtonElement;
+    // Even though we already have one pinned (so labels are required for the
+    // multi-connection scenario), the persisted label "Personal" should be
+    // inherited without making the user retype it.
+    expect(pinBtn.disabled).toBe(false);
+
+    fireEvent.click(pinBtn);
+
+    const lastCall = onChange.mock.calls.at(-1)?.[0] as PickerConnection[];
+    expect(lastCall).toHaveLength(2);
+    expect(lastCall[1]).toEqual({
+      connectionId: 'ca_second',
+      toolService: TOOL_SERVICE,
+      label: 'Personal',
+    });
+  });
+
   it('inherits the persisted label when pinning an existing connection with no override', async () => {
     server.use(
       http.get(`${BASE_URL}/api/tool-integrations/${INTEGRATION_ID}/connections`, () =>
