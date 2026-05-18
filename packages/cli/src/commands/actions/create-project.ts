@@ -25,6 +25,15 @@ interface CreateProjectArgs {
 export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
   // TODO(major): Remove args.projectName in favor of projectNameArg
   const projectName = projectNameArg || args.projectName;
+  if (args.observability !== undefined) {
+    analytics.trackEvent('cli_observability_selected', {
+      command: 'create',
+      enabled: args.observability,
+      answer: args.observability ? 'yes' : 'no',
+      selection_method: 'cli_args',
+    });
+  }
+
   await analytics.trackCommandExecution({
     command: 'create',
     args: { ...args, projectName },

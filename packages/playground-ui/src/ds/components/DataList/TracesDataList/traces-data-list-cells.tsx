@@ -1,4 +1,5 @@
 import { format, isToday } from 'date-fns';
+import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { DataListCell } from '../data-list-cells';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
@@ -31,6 +32,28 @@ export function TracesDataListIdCell({ traceId }: TracesDataListIdCellProps) {
   return (
     <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
       {getShortId(traceId)}
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// KindCell
+// ---------------------------------------------------------------------------
+
+export interface TracesDataListKindCellProps {
+  /** `null`/missing → root span (Trace). Set → nested span (Subtrace). */
+  parentSpanId?: string | null;
+}
+
+export function TracesDataListKindCell({ parentSpanId }: TracesDataListKindCellProps) {
+  const isRoot = parentSpanId == null;
+  const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
+  const label = isRoot ? 'Trace' : 'Subtrace';
+  return (
+    <DataListCell height="compact" className="flex items-center justify-center">
+      <span title={label} aria-label={label} className="inline-flex">
+        <Icon className={cn('shrink-0', isRoot ? 'size-4 text-neutral3' : 'size-3 text-neutral3')} aria-hidden />
+      </span>
     </DataListCell>
   );
 }

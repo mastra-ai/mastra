@@ -63,9 +63,9 @@ createWorkflowTestSuite({
     Agent,
   }),
 
-  // Skip restart domain - restart() is not supported on evented workflows
   skip: {
-    restart: true,
+    // All domains should work on Evented Engine
+    restart: false, // Evented engine supports restart
   },
 
   // Provide access to storage for tests that need to spy on storage operations
@@ -111,9 +111,14 @@ createWorkflowTestSuite({
     rebindRegistryWorkflows();
   },
 
-  // All shared suite tests pass on the evented engine; only the `restart` domain is
-  // unsupported (see `skip` above).
-  skipTests: {},
+  skipTests: {
+    // Enable all tests - Default Engine is the reference implementation
+    // Enable opt-in tests that require storage
+    errorStorageRoundtrip: false,
+    //persistWorkflowSnapshot error-handling tests are skipped because it's not used in evented-engine
+    errorPersistWithoutStack: true,
+    errorPersistMastraError: true,
+  },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
     // Create a fresh Mastra instance for each test execution

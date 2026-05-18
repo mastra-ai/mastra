@@ -14,7 +14,7 @@ const MODE = getLLMTestMode();
 // Set dummy API keys for replay/auto modes. These keys contain '-dummy-' so
 // hasRealApiKey() will correctly identify them as dummy keys. The dummy keys
 // satisfy provider validation while MSW intercepts the actual HTTP calls.
-setupDummyApiKeys(MODE, ['openai', 'openrouter']);
+setupDummyApiKeys(MODE, ['openai', 'openrouter', 'google']);
 
 // V4
 describe('V4', async () => {

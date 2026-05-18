@@ -3,7 +3,6 @@
  * ask_question, sandbox_access_request, plan_approval_required.
  */
 import { savePlanToDisk } from '../../utils/plans.js';
-import { createGoalReminderXml } from '../commands/goal.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -250,61 +249,74 @@ export async function handlePlanApproval(
 ): Promise<void> {
   const { state } = ctx;
   return new Promise(resolve => {
-    const approvalComponent = new PlanApprovalInlineComponent(
-      {
-        planId,
-        title,
-        plan,
-        onApprove: async () => {
-          state.activeInlinePlanApproval = undefined;
-          await approvePlan(ctx, planId, title, plan);
+    const approvalOptions = {
+      planId,
+      title,
+      plan,
+      onApprove: async () => {
+        state.activeInlinePlanApproval = undefined;
+        await approvePlan(ctx, planId, title, plan);
 
-          // Now that mode switch is complete, add system reminder and trigger build agent
-          // Use setTimeout to ensure the plan approval component has fully rendered
-          setTimeout(() => {
-            const reminderText = '<system-reminder>The user has approved the plan, begin executing.</system-reminder>';
-            ctx.addUserMessage({
-              id: `system-${Date.now()}`,
-              role: 'user',
-              content: [{ type: 'text', text: reminderText }],
-              createdAt: new Date(),
-            });
-            ctx.fireMessage(reminderText);
-          }, 50);
+        // Fire a structured system-reminder signal to wake the freshly
+        // switched-to default-mode agent. The signal echoes back as a
+        // `system_reminder` content part and renders through the same
+        // path as any other reminder — no legacy XML regex, no companion
+        // `addUserMessage` call, so the reminder shows up exactly once.
+        //
+        // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
+        // for the aborted plan-mode run to fully idle before returning, so
+        // this signal always starts a fresh build-mode run instead of
+        // queuing onto the dying one.
+        try {
+          await state.harness.sendSignal({
+            type: 'system-reminder',
+            contents: 'The user has approved the plan, begin executing.',
+          }).accepted;
+        } catch (err) {
+          ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
+        }
 
-          resolve();
-        },
-        onGoal: async () => {
-          state.activeInlinePlanApproval = undefined;
-          await approvePlan(ctx, planId, title, plan);
-
-          const objective = formatPlanGoalObjective(title, plan);
-          await ctx.startGoal(objective, 'Goal cancelled.', { trigger: 'none' });
-
-          // Match the normal approval path: inject the trigger through the TUI
-          // instead of harness follow-up queueing, while goal state is already active.
-          setTimeout(() => {
-            ctx.fireMessage(createGoalReminderXml(objective));
-          }, 50);
-
-          resolve();
-        },
-        onReject: async (feedback?: string) => {
-          state.activeInlinePlanApproval = undefined;
-          await state.harness.respondToPlanApproval({
-            planId,
-            response: { action: 'rejected', feedback },
-          });
-          resolve();
-        },
+        resolve();
       },
-      state.ui,
-    );
+      onGoal: async () => {
+        state.activeInlinePlanApproval = undefined;
+        await approvePlan(ctx, planId, title, plan);
+
+        // Hand off to the normal `/goal` flow. `startGoal` (default
+        // `trigger: 'send'`) sets + persists the goal, then fires the
+        // canonical structured goal-reminder via `harness.sendSignal` —
+        // identical to typing `/goal <objective>` by hand. No second
+        // reminder is sent; the goal judge in `handleAgentEnd` keeps the
+        // agent driving toward the goal after its first response.
+        //
+        // `approvePlan` already waited for the aborted plan-mode run to
+        // idle, so this signal starts a fresh build-mode run.
+        const objective = formatPlanGoalObjective(title, plan);
+        await ctx.startGoal(objective, 'Goal cancelled.');
+
+        resolve();
+      },
+      onReject: async (feedback?: string) => {
+        state.activeInlinePlanApproval = undefined;
+        await state.harness.respondToPlanApproval({
+          planId,
+          response: { action: 'rejected', feedback },
+        });
+        resolve();
+      },
+    };
+
+    const approvalComponent =
+      state.lastSubmitPlanComponent instanceof PlanApprovalInlineComponent
+        ? state.lastSubmitPlanComponent
+        : new PlanApprovalInlineComponent(approvalOptions, state.ui);
+    approvalComponent.activate(approvalOptions);
 
     // Store as active plan approval
     state.activeInlinePlanApproval = approvalComponent;
 
-    // Insert after the submit_plan tool component (same pattern as ask_user)
+    // Insert after the submit_plan placeholder; if streaming already created the
+    // plan box, activate that component in place instead of rendering a duplicate.
     if (state.lastSubmitPlanComponent) {
       const children = [...state.chatContainer.children];
       const submitPlanIndex = children.indexOf(state.lastSubmitPlanComponent as any);
@@ -313,7 +325,9 @@ export async function handlePlanApproval(
         for (let i = 0; i <= submitPlanIndex; i++) {
           state.chatContainer.addChild(children[i]!);
         }
-        state.chatContainer.addChild(approvalComponent);
+        if (state.lastSubmitPlanComponent !== approvalComponent) {
+          state.chatContainer.addChild(approvalComponent);
+        }
         for (let i = submitPlanIndex + 1; i < children.length; i++) {
           state.chatContainer.addChild(children[i]!);
         }
