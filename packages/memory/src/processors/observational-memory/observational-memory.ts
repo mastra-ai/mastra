@@ -3168,13 +3168,8 @@ ${formattedMessages}
       }
     }
 
-    // Check for buffered chunks
-    const chunks = getBufferedChunks(record);
-    if (!chunks.length) {
-      return { activated: false, record };
-    }
-
-    // Compute and store system prompt hash for change detection
+    // Compute and persist system prompt hash on every step so we can detect
+    // changes between steps even when no buffered chunks exist yet.
     let systemPromptChanged = false;
     let previousSystemPromptHash: string | undefined;
     let currentSystemPromptHash: string | undefined;
@@ -3195,6 +3190,12 @@ ${formattedMessages}
             .catch(() => {});
         }
       }
+    }
+
+    // Check for buffered chunks
+    const chunks = getBufferedChunks(record);
+    if (!chunks.length) {
+      return { activated: false, record };
     }
 
     let activationTriggeredBy: 'threshold' | 'ttl' | 'provider_change' | 'system_change' = 'threshold';
