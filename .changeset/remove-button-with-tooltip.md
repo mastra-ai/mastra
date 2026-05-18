@@ -23,4 +23,4 @@ import { Button } from '@mastra/playground-ui';
 </Button>
 ```
 
-`tooltip` supports the same values as `tooltipContent`, and string tooltips continue to be used as the `aria-label` for icon-only buttons.
+`tooltip` supports the same values as `tooltipContent`. Icon-only buttons that pass a string `tooltip` now also get it as their `aria-label` automatically, matching how labelled controls have always behaved. Pass an explicit `aria-label` to override.
