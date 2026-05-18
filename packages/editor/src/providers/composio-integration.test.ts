@@ -16,6 +16,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
       initiate: ReturnType<typeof vi.fn>;
       get: ReturnType<typeof vi.fn>;
       list: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof vi.fn>;
     };
     authConfigs: { list: ReturnType<typeof vi.fn> };
   }
@@ -28,7 +29,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
       hasProvider: Boolean(opts.provider),
       toolkits: { get: vi.fn(), getConnectedAccountInitiationFields: vi.fn() },
       tools: { get: vi.fn(), getRawComposioTools: vi.fn() },
-      connectedAccounts: { initiate: vi.fn(), get: vi.fn(), list: vi.fn() },
+      connectedAccounts: { initiate: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn() },
       authConfigs: { list: vi.fn() },
     };
     instances.push(inst);
@@ -76,6 +77,7 @@ describe('ComposioToolIntegration — identity & capabilities', () => {
       multipleConnectionsPerService: true,
       batchConnectionStatus: true,
       reauthorizeReusesConnectionId: true,
+      supportsRevoke: true,
     });
   });
 });
@@ -545,5 +547,50 @@ describe('ComposioToolIntegration — getHealth', () => {
     const health = await integration.getHealth();
     expect(health.ok).toBe(false);
     expect(health.message).toBe('boom');
+  });
+});
+
+describe('ComposioToolIntegration — revokeConnection', () => {
+  beforeEach(() => {
+    composioInstances.length = 0;
+  });
+
+  it('declares supportsRevoke capability', () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    expect(integration.capabilities.supportsRevoke).toBe(true);
+  });
+
+  it('calls composio.connectedAccounts.delete with the connection id', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.getHealth().catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.delete.mockResolvedValue(undefined);
+    await integration.revokeConnection('ca_xyz');
+    expect(raw.connectedAccounts.delete).toHaveBeenCalledWith('ca_xyz');
+  });
+
+  it('treats a 404 statusCode error as success', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.getHealth().catch(() => undefined);
+    const raw = getRawInstance();
+    const err = Object.assign(new Error('Connected account not found'), { statusCode: 404 });
+    raw.connectedAccounts.delete.mockRejectedValue(err);
+    await expect(integration.revokeConnection('ca_missing')).resolves.toBeUndefined();
+  });
+
+  it('treats a "not found" message as success', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.getHealth().catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.delete.mockRejectedValue(new Error('connection not found'));
+    await expect(integration.revokeConnection('ca_missing')).resolves.toBeUndefined();
+  });
+
+  it('rethrows non-404 errors', async () => {
+    const integration = new ComposioToolIntegration({ apiKey: 'k' });
+    await integration.getHealth().catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.delete.mockRejectedValue(new Error('boom'));
+    await expect(integration.revokeConnection('ca_xyz')).rejects.toThrow('boom');
   });
 });

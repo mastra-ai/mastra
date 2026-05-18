@@ -55,6 +55,7 @@ export class ComposioToolIntegration extends BaseToolIntegration {
     multipleConnectionsPerService: true,
     batchConnectionStatus: true,
     reauthorizeReusesConnectionId: true,
+    supportsRevoke: true,
   };
 
   private readonly apiKey: string;
@@ -329,6 +330,21 @@ export class ComposioToolIntegration extends BaseToolIntegration {
     return { items };
   }
 
+  /**
+   * Revoke a Composio connected account. Treats a 404 (account already
+   * deleted or never existed) as success so the caller can drop its local
+   * pin without an error path.
+   */
+  async revokeConnection(connectionId: string): Promise<void> {
+    const composio = this.getRawClient();
+    try {
+      await composio.connectedAccounts.delete(connectionId);
+    } catch (err) {
+      if (isNotFoundError(err)) return;
+      throw err;
+    }
+  }
+
   async getHealth(): Promise<ToolIntegrationHealth> {
     try {
       const composio = this.getRawClient();
@@ -374,6 +390,23 @@ export class ComposioToolIntegration extends BaseToolIntegration {
 type ComposioAuthScheme = NonNullable<
   Awaited<ReturnType<Composio['authConfigs']['list']>>['items'][number]['authScheme']
 >;
+
+/**
+ * Best-effort 404 detection across the various error shapes the Composio
+ * SDK surfaces (typed error with `statusCode`, HTTP-like error with
+ * `status`, or a plain message containing "404" / "not found").
+ *
+ * We only need this to be lenient — a false negative just rethrows, which
+ * the route surfaces as a 500. A false positive is safe because the local
+ * pin is the source of truth from the picker's perspective.
+ */
+function isNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { statusCode?: number; status?: number; message?: string };
+  if (e.statusCode === 404 || e.status === 404) return true;
+  const msg = typeof e.message === 'string' ? e.message.toLowerCase() : '';
+  return msg.includes('not found') || msg.includes('404');
+}
 
 /**
  * Composio reports a free-form `type` string (e.g. `'string'`, `'text'`,

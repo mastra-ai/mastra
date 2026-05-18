@@ -50,6 +50,12 @@ export interface ToolIntegrationCapabilities {
   batchConnectionStatus: boolean;
   /** Re-authorizing a connection reuses the same `connectionId` (token refresh in place). */
   reauthorizeReusesConnectionId: boolean;
+  /**
+   * Integration supports revoking a connection at the provider (true) vs.
+   * only unpinning it locally (false). UI hides the "Disconnect" affordance
+   * when this is falsy.
+   */
+  supportsRevoke?: boolean;
 }
 
 /**
@@ -303,6 +309,13 @@ export interface ToolIntegration {
 
   /** Integration-level health (config, reachability, etc.). */
   getHealth(): Promise<ToolIntegrationHealth>;
+
+  /**
+   * Revoke an existing connection at the provider. Only implemented when
+   * `capabilities.supportsRevoke` is true. Implementations should treat a
+   * missing connection (already revoked / never existed) as a success.
+   */
+  revokeConnection?(connectionId: string): Promise<void>;
 }
 
 /**
