@@ -1,5 +1,4 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
@@ -31,7 +30,7 @@ export type TracesListViewTrace = {
 };
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '4rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
+const COLUMNS = '6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -50,6 +49,9 @@ export type TracesListViewProps = {
    * a row is featured only when both `traceId` and `spanId` match.
    */
   featuredSpanId?: string | null;
+  /** Branches mode mixes root traces with subtraces — enables the Trace/Subtrace tooltip on the
+   *  level icon in the Name column, which is meaningless when every row is a root. */
+  isBranchesMode?: boolean;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
 };
@@ -67,6 +69,7 @@ export function TracesListView({
   filtersApplied,
   featuredTraceId,
   featuredSpanId,
+  isBranchesMode,
   onTraceClick,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -109,22 +112,6 @@ export function TracesListView({
   return (
     <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCellWithTooltip
-          tooltip={
-            <div className="grid gap-1">
-              <span className="flex items-center gap-1.5">
-                <ListTreeIcon className="size-4 shrink-0" aria-hidden />
-                Trace
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CornerDownRightIcon className="size-4 shrink-0" aria-hidden />
-                Subtrace
-              </span>
-            </div>
-          }
-        >
-          Level
-        </TracesDataList.TopCellWithTooltip>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
@@ -158,10 +145,13 @@ export function TracesListView({
                 onClick={() => onTraceClick(trace)}
                 className={cn(isFeatured && 'bg-surface4')}
               >
-                <TracesDataList.KindCell parentSpanId={trace.parentSpanId} />
                 <TracesDataList.DateCell timestamp={displayDate} />
                 <TracesDataList.TimeCell timestamp={displayDate} />
-                <TracesDataList.NameCell name={trace.name} />
+                <TracesDataList.NameCell
+                  name={trace.name}
+                  parentSpanId={trace.parentSpanId}
+                  showLevelTooltip={isBranchesMode}
+                />
                 <TracesDataList.InputCell input={getInputPreview(trace.input)} />
                 <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
                 <TracesDataList.StatusCell status={trace.attributes?.status} />
