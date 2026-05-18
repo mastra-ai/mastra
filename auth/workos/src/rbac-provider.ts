@@ -102,10 +102,11 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
     this.workos = new WorkOS(apiKey, { clientId });
     this.options = options;
 
-    // Determine permission source:
-    // - roleMapping provided → use static roleMapping (run `mastra migrate` to sync to WorkOS)
-    // - No roleMapping → use WorkOS as source of truth
-    this.useProviderPermissions = !options.roleMapping;
+    // Determine permission source based on mode:
+    // - 'static' (default): use roleMapping as source of truth at runtime
+    // - 'seed': use WorkOS as source of truth (roleMapping only for `mastra migrate`)
+    const mode = options.mode ?? 'static';
+    this.useProviderPermissions = mode === 'seed';
 
     // Initialize LRU cache for user roles (the expensive WorkOS API call)
     this.rolesCache = new LRUCache<string, Promise<string[]>>({
@@ -118,6 +119,39 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
       max: 1, // Single org's role definitions
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
+
+    // In seed mode, check if roles have been migrated (async, runs in background)
+    if (this.useProviderPermissions && options.roleMapping) {
+      void this.checkSeedModeSetup();
+    }
+  }
+
+  /**
+   * Check if seed mode is properly set up (roles migrated to WorkOS).
+   * Logs a warning if roles haven't been migrated yet.
+   */
+  private async checkSeedModeSetup(): Promise<void> {
+    try {
+      // Fetch environment roles from WorkOS
+      const rolesResponse = await this.workos.authorization.listEnvironmentRoles().catch(() => null);
+      const workosRoles = rolesResponse?.data ?? [];
+
+      // Get roles from roleMapping (excluding special keys like _default)
+      const configRoles = Object.keys(this.options.roleMapping ?? {}).filter(k => !k.startsWith('_'));
+
+      // Check if any configured roles are missing from WorkOS
+      const workosRoleSlugs = new Set(workosRoles.map((r: { slug: string }) => r.slug));
+      const missingRoles = configRoles.filter(role => !workosRoleSlugs.has(role));
+
+      if (missingRoles.length > 0) {
+        console.warn(
+          `[Mastra RBAC] Mode is 'seed' but ${missingRoles.length} role(s) not found in WorkOS: ${missingRoles.join(', ')}. ` +
+            `Run \`mastra migrate\` to sync roles to WorkOS.`,
+        );
+      }
+    } catch {
+      // Silently ignore errors - this is just a helpful warning
+    }
   }
 
   /**
@@ -380,29 +414,28 @@ export class MastraRBACWorkos implements IRBACManager<WorkOSUser> {
   /**
    * Get the capabilities of this RBAC provider.
    *
-   * WorkOS supports both single-role and multi-role modes, configured at the
-   * environment level in the WorkOS Dashboard.
-   *
-   * When roleMapping is provided, roles/permissions are static (config-driven).
-   * When roleMapping is absent, roles/permissions are dynamic (WorkOS-driven).
+   * Capabilities depend on the mode:
+   * - 'static': roles/permissions come from config, read-only in UI
+   * - 'seed': roles/permissions come from WorkOS, editable in UI
    */
   getCapabilities(): RBACCapabilities {
-    const isStaticConfig = !!this.options.roleMapping;
+    const mode = this.options.mode ?? 'static';
+    const isStaticMode = mode === 'static';
 
     return {
       ...DEFAULT_RBAC_CAPABILITIES,
       // Multi-role support depends on WorkOS environment configuration
       multiRole: this.options.multiRole ?? false,
-      // Dynamic roles only available when NOT using static roleMapping
-      dynamicRoles: !isStaticConfig,
-      // Roles are provider-managed only when NOT using static roleMapping
-      providerManagedRoles: !isStaticConfig,
-      // Roles come from config when roleMapping provided, otherwise from WorkOS
-      roleSource: isStaticConfig ? 'config' : 'provider',
-      // Permissions come from config when roleMapping provided, otherwise from WorkOS
-      permissionSource: isStaticConfig ? 'roleMapping' : 'provider',
-      // Permissions can only be edited when NOT using static roleMapping
-      permissionEditing: !isStaticConfig,
+      // Dynamic roles only available in seed mode (WorkOS is source of truth)
+      dynamicRoles: !isStaticMode,
+      // Roles are provider-managed only in seed mode
+      providerManagedRoles: !isStaticMode,
+      // Roles come from config in static mode, WorkOS in seed mode
+      roleSource: isStaticMode ? 'config' : 'provider',
+      // Permissions come from roleMapping in static mode, WorkOS in seed mode
+      permissionSource: isStaticMode ? 'roleMapping' : 'provider',
+      // Permissions can only be edited in seed mode (WorkOS is source of truth)
+      permissionEditing: !isStaticMode,
       // Role assignment is always supported via WorkOS API
       roleAssignment: true,
     };

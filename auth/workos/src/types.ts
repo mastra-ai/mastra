@@ -173,6 +173,14 @@ export interface PermissionCacheOptions {
 }
 
 /**
+ * RBAC mode determines how roleMapping is used.
+ *
+ * - 'static': roleMapping is the source of truth at runtime. Roles are read-only in UI.
+ * - 'seed': roleMapping is used by `mastra migrate` to provision WorkOS. Runtime uses WorkOS as source of truth. Roles are editable in UI.
+ */
+export type RBACMode = 'static' | 'seed';
+
+/**
  * Options for MastraRBACWorkos.
  */
 export interface MastraRBACWorkosOptions {
@@ -182,29 +190,42 @@ export interface MastraRBACWorkosOptions {
   clientId?: string;
 
   /**
-   * Map WorkOS organization roles to Mastra permissions.
+   * Map role names to Mastra permissions.
    *
-   * When provided:
-   * - Permissions are derived from this static mapping
-   * - Run `mastra migrate` to sync roles and permissions to WorkOS
-   * - roleMapping is the source of truth
+   * Usage depends on `mode`:
    *
-   * When omitted:
-   * - WorkOS is the source of truth
-   * - Permissions are fetched directly from WorkOS role definitions
-   * - Permissions in WorkOS must match Mastra's resource:action pattern
+   * - `mode: 'static'` (default): roleMapping is the source of truth at runtime.
+   *   Permissions are derived from this config. Roles are read-only in UI.
+   *
+   * - `mode: 'seed'`: roleMapping is used by `mastra migrate` to provision WorkOS.
+   *   Runtime fetches permissions from WorkOS. Roles are editable in UI.
    *
    * @example
    * ```typescript
    * roleMapping: {
-   *   'admin': ['*'],
-   *   'member': ['agents:read', 'workflows:*'],
-   *   'viewer': ['agents:read', 'workflows:read'],
-   *   '_default': [],
+   *   'owner': ['*'],
+   *   'admin': ['*:read', '*:write'],
+   *   'member': ['*:read', '*:execute'],
+   *   'viewer': ['*:read'],
    * }
    * ```
    */
   roleMapping?: RoleMapping;
+
+  /**
+   * RBAC mode determines how roleMapping is used.
+   *
+   * - 'static' (default): roleMapping is the source of truth at runtime.
+   *   Permissions come from config. Roles are read-only in UI.
+   *   Simple, no sync needed, no WorkOS dependency for permissions.
+   *
+   * - 'seed': roleMapping is used by `mastra migrate` to provision WorkOS.
+   *   Runtime uses WorkOS as source of truth. Roles are editable in UI.
+   *   Requires running `mastra migrate` to sync roles to WorkOS.
+   *
+   * @default 'static'
+   */
+  mode?: RBACMode;
 
   /**
    * Organization ID to scope roles and permissions.

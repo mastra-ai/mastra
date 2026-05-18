@@ -185,9 +185,8 @@ export const mastra = new Mastra({
     }),
     rbac: new MastraRBACWorkos({
       organizationId: process.env.WORKOS_ORGANIZATION_ID,
-      // roleMapping defines permissions for each role
-      // Run `mastra migrate` to sync these to WorkOS
-      // If roleMapping is omitted, WorkOS is the source of truth
+      // mode: 'static' (default) - roleMapping is source of truth, roles are read-only in UI
+      // mode: 'seed' - roleMapping used for `mastra migrate`, WorkOS is source of truth, roles editable in UI
       roleMapping: {
         owner: ['*'], // Full access
         admin: ['*:read', '*:write', '*:execute', '*:delete'], // All actions
