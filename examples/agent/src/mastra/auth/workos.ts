@@ -15,6 +15,7 @@ export async function initWorkOS(): Promise<AuthResult> {
   });
 
   const rbacProvider = new MastraRBACWorkos({
+    organizationId: process.env.WORKOS_ORGANIZATION_ID,
     cache: {
       ttlMs: 1,
     },

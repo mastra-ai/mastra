@@ -145,8 +145,11 @@ function RoleFormModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-surface1 border border-border1 rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="bg-surface1 border border-border1 rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-text1">{isEditing ? `Edit Role: ${role.name}` : 'Create Role'}</h3>
           <Button variant="ghost" size="sm" onClick={onClose}>
