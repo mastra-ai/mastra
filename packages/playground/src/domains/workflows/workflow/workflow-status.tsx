@@ -60,7 +60,7 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
           hasMetadata={hasTripwireMetadata}
         />
       ) : (
-        <CodeEditor data={result} />
+        <CodeEditor data={result} lineWrapping />
       )}
     </WorkflowCard>
   );

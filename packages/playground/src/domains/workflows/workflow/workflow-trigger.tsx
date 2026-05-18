@@ -156,12 +156,14 @@ export function WorkflowTrigger({
       setInnerRunId(paramsRunId);
       setContextRunId(paramsRunId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramsRunId]);
 
   useEffect(() => {
     if (streamResult) {
       setResult(streamResult);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamResult]);
 
   if (isLoading) {
@@ -260,7 +262,7 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
             <DialogDescription>JSON view of the workflow execution result</DialogDescription>
           </DialogHeader>
           <DialogBody className="max-h-[90vh]">
-            <CodeEditor data={result} className="p-4" />
+            <CodeEditor data={result} className="p-4" lineWrapping />
           </DialogBody>
         </DialogContent>
       </Dialog>
