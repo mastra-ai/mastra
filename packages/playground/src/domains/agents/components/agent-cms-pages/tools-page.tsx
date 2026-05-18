@@ -1,9 +1,5 @@
 import {
   Button,
-  EntityName,
-  EntityDescription,
-  EntityContent,
-  Entity,
   Popover,
   PopoverTrigger,
   PopoverContent,
@@ -20,6 +16,7 @@ import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { Entity, EntityName, EntityDescription, EntityContent } from '@/components/entity';
 import { DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';

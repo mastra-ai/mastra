@@ -1,6 +1,4 @@
-import { Txt } from '../Txt';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
+import { Icon, Txt, cn } from '@mastra/playground-ui';
 
 export interface EntityProps {
   children: React.ReactNode;

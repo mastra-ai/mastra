@@ -7,7 +7,6 @@ export * from './ds/components/Breadcrumb/index';
 export * from './ds/components/Button/index';
 export * from './ds/components/CodeEditor/index';
 export * from './ds/components/EmptyState/index';
-export * from './ds/components/Entity/index';
 export * from './ds/components/PermissionDenied';
 export * from './ds/components/SessionExpired';
 export * from './ds/components/Header/index';
