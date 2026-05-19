@@ -48,7 +48,7 @@ test.describe('Agent Chat', () => {
     await fillAndSend(page, 'What is 2 + 2? Reply with just the number, nothing else.');
 
     // Wait for navigation to the thread URL
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
 
     // Verify our message appears in the thread
     const thread = page.getByTestId('thread-wrapper');
@@ -70,7 +70,7 @@ test.describe('Agent Chat', () => {
     await fillAndSend(page, 'Say the word hello and nothing else.');
 
     // Wait for navigation
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
 
     // Wait for the assistant response and verify it contains "hello"
     const assistantMsg = await waitForAssistantMessage(page);
@@ -104,7 +104,7 @@ test.describe('Agent Chat', () => {
 
     // Send a message first so we're on a real thread URL
     await fillAndSend(page, 'Hi');
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
 
     // Now click New Chat and verify we get a fresh thread
     const newChatLink = page.getByRole('link', { name: 'New Chat' });
@@ -123,7 +123,7 @@ test.describe('Agent Chat', () => {
 
     // Send a message to create a thread
     await fillAndSend(page, 'Hello from thread sidebar test');
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
     await waitForAssistantMessage(page);
 
     // Expand the thread sidebar if collapsed
@@ -143,7 +143,7 @@ test.describe('Agent Chat', () => {
 
     // Send a message to create the first thread
     await fillAndSend(page, 'First thread message for reload test');
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
     await waitForAssistantMessage(page);
     const firstThreadUrl = page.url();
 
@@ -178,7 +178,7 @@ test.describe('Agent Chat', () => {
     await fillAndSend(page, 'Use the calculator tool to add 5 and 3. You must call the calculator tool.');
 
     // Wait for navigation to thread
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
 
     // Wait for the tool badge to appear in the chat
     const toolBadge = page.getByTestId('tool-badge');

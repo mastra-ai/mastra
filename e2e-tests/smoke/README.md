@@ -2,6 +2,8 @@
 
 Post-release smoke tests that run against `alpha`-tagged Mastra packages. Tests exercise Mastra features end-to-end through the HTTP API and Studio UI.
 
+> **Hitting a flaky test, suite hang, or wondering why a fixture is configured the way it is?** Read [`KNOWN_ISSUES.md`](./KNOWN_ISSUES.md) first — it documents the scheduler/LibSQL race, the `backgroundTasks` tool-use regression, the local HTML-reporter hang, and other gotchas.
+
 ## Setup
 
 ```bash

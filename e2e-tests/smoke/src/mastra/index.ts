@@ -38,7 +38,9 @@ import {
 } from './workflows/nested-advanced.js';
 import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
 import { scoredWorkflow } from './workflows/scored.js';
-import { scheduledHeartbeatWorkflow, scheduledTickWorkflow } from './workflows/scheduled.js';
+// NOTE: scheduled workflows intentionally not registered — upstream race between
+// scheduler tick and LibSQL `mastra_schedules` table migration floods the server
+// with SQLITE_ERROR every 10s and stalls long UI suites. See follow-up bug.
 import { testMcpServer } from './mcp/index.js';
 import { uppercaseProcessor, suffixProcessor, tripwireProcessor } from './processors/index.js';
 import { completenessScorer, lengthScorer } from './scorers/index.js';
@@ -111,16 +113,13 @@ export const mastra = new Mastra({
     'foreach-error-workflow': foreachErrorWorkflow,
     'foreach-retry-workflow': foreachRetryWorkflow,
     'scored-workflow': scoredWorkflow,
-    'scheduled-heartbeat': scheduledHeartbeatWorkflow,
-    'scheduled-tick': scheduledTickWorkflow,
   },
-  scheduler: {
-    enabled: true,
-    tickIntervalMs: 1_000,
-  },
-  backgroundTasks: {
-    enabled: true,
-  },
+  // NOTE: `backgroundTasks: { enabled: true }` intentionally omitted — when
+  // enabled, the BackgroundTaskManager injects a system prompt that teaches
+  // the LLM to opt tool calls into background mode, which makes
+  // `agent.generate()` return "Background task started…" instead of tool
+  // results and breaks deterministic tool-use tests. The `/background-tasks`
+  // route still returns an empty envelope without the manager.
   channels: {
     'smoke-stub': smokeChannel,
   },
@@ -152,29 +151,3 @@ export const mastra = new Mastra({
     },
   }),
 });
-
-// Seed a completed background task so /background-tasks lists a real entry.
-try {
-  const storage = mastra.getStorage();
-  const bgStore = await storage?.getStore?.('backgroundTasks');
-  if (bgStore) {
-    await bgStore.createTask({
-      id: 'seed-background-task',
-      status: 'completed',
-      toolName: 'calculator',
-      toolCallId: 'seed-tool-call',
-      args: { operation: 'add', a: 1, b: 2 },
-      agentId: 'test-agent',
-      runId: 'seed-run',
-      retryCount: 0,
-      maxRetries: 0,
-      timeoutMs: 30_000,
-      createdAt: new Date(),
-      startedAt: new Date(),
-      completedAt: new Date(),
-      result: { value: 3 },
-    });
-  }
-} catch (err) {
-  console.error('[background-tasks] Failed to seed task:', err);
-}
