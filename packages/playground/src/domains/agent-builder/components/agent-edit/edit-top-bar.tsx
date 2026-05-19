@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui';
 import { ArrowLeftIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import type { WorkspaceMode } from '../../layouts/workspace-layout';
+import type { WorkspaceMode } from '../../layouts/types';
 import { AgentBuilderTitle } from './agent-builder-title';
 
 export interface EditTopBarProps {

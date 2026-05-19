@@ -39,6 +39,17 @@ vi.mock('@/domains/agent-builder', () => ({
   useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false, skills: false }),
 }));
 
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
+  useBuilderAgentFeatures: () => ({
+    tools: false,
+    memory: false,
+    workflows: false,
+    agents: false,
+    skills: false,
+    browser: false,
+  }),
+}));
+
 vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
   useStoredSkills: () => ({ data: { skills: [] }, isPending: false }),
 }));
@@ -213,5 +224,15 @@ describe('AgentBuilderAgentView', () => {
     expect(queryByTestId('agent-builder-panel-configure')).toBeNull();
     expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
     expect(queryByTestId('agent-builder-tab-configure')).toBeNull();
+  });
+
+  it('renders the view top bar above the chat panel within the view layout', () => {
+    const { getByTestId } = renderAt();
+    const topBar = getByTestId('agent-builder-view-top-bar');
+    const chatPanel = getByTestId('agent-builder-panel-chat');
+    expect(topBar).not.toBeNull();
+    expect(chatPanel).not.toBeNull();
+    const position = topBar.compareDocumentPosition(chatPanel);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

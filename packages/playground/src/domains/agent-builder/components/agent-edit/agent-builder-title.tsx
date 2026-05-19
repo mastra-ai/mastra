@@ -1,7 +1,7 @@
 import { IconButton, Skeleton, StatusBadge } from '@mastra/playground-ui';
 import { RefreshCwIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import type { WorkspaceMode } from '../../layouts/workspace-layout';
+import type { WorkspaceMode } from '../../layouts/types';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 
 export interface AgentBuilderTitleProps {
