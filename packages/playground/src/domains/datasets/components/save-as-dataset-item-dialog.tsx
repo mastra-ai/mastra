@@ -77,7 +77,7 @@ export function SaveAsDatasetItemDialog({
     }
   }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
 
-  // Mark field as user-edited so async seeding won't overwrite
+  // Mark fields as user-edited so async seeding won't overwrite them.
   const handleInputChange = (value: string) => {
     inputSeededRef.current = true;
     setInput(value);
@@ -86,6 +86,11 @@ export function SaveAsDatasetItemDialog({
   const handleGroundTruthChange = (value: string) => {
     groundTruthSeededRef.current = true;
     setGroundTruth(value);
+  };
+
+  const handleExpectedTrajectoryChange = (value: string) => {
+    trajectorySeededRef.current = true;
+    setExpectedTrajectory(value);
   };
 
   // Seed input when it arrives asynchronously after the dialog is already open
@@ -241,7 +246,7 @@ export function SaveAsDatasetItemDialog({
             <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
             <CodeEditor
               value={expectedTrajectory}
-              onChange={setExpectedTrajectory}
+              onChange={handleExpectedTrajectoryChange}
               showCopyButton={false}
               className="min-h-[80px]"
             />
