@@ -437,7 +437,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
 
-      // Throws 404 if the caller isn't the owner, admin, or `skills:edit[:<id>]` holder.
+      // Throws 404 if the caller isn't the owner, admin, or `stored-skills:write[:<id>]` holder.
       assertWriteAccess({
         requestContext,
         resource: 'stored-skills',
@@ -601,7 +601,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
-      // Throws 404 if the caller isn't the owner, admin, or `skills:edit[:<id>]` holder.
+      // Throws 404 if the caller isn't the owner, admin, or `stored-skills:write[:<id>]` holder.
       assertWriteAccess({
         requestContext,
         resource: 'stored-skills',
