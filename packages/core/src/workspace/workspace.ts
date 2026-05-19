@@ -1206,8 +1206,11 @@ export class Workspace<
     };
 
     const shouldResolveDynamicProviders = options?.resolveDynamicProviders ?? true;
+    // Prefer a provider already resolved for this request. When getInfo runs on
+    // the effective workspace proxy during tool execution, `this.filesystem` is
+    // the resolved instance, so metadata stays accurate without re-resolving.
     const filesystem =
-      this._fs ??
+      (this.filesystem as WorkspaceFilesystem | undefined) ??
       (this._filesystemResolver && shouldResolveDynamicProviders
         ? await this.resolveFilesystem({ requestContext: options?.requestContext ?? new RequestContext() })
         : undefined);
@@ -1242,11 +1245,16 @@ export class Workspace<
       };
     }
 
-    if (this._sandbox) {
-      const sandboxInfo = await this._sandbox.getInfo?.();
+    // `this.sandbox` picks up a sandbox already resolved for this request when
+    // getInfo runs on the effective workspace proxy. getInfo never invokes the
+    // sandbox resolver itself — resolver-backed sandboxes can provision real
+    // infrastructure, so resolving stays a tool-execution concern.
+    const sandbox = this.sandbox as WorkspaceSandbox | undefined;
+    if (sandbox) {
+      const sandboxInfo = await sandbox.getInfo?.();
       info.sandbox = {
-        provider: this._sandbox.provider,
-        status: sandboxInfo?.status ?? this._sandbox.status,
+        provider: sandbox.provider,
+        status: sandboxInfo?.status ?? sandbox.status,
         resources: sandboxInfo?.resources,
       };
     } else if (this._sandboxResolver) {

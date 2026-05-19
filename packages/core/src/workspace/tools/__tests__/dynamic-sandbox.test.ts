@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { RequestContext } from '../../../request-context';
 import { WORKSPACE_TOOLS } from '../../constants';
@@ -313,5 +313,27 @@ describe('dynamic sandbox tools', () => {
     );
 
     expect(resolverCalls).toBe(2);
+  });
+
+  it('should emit the resolved sandbox provider in workspace metadata', async () => {
+    // Metadata emission must not invoke the resolver again, but should still
+    // report the sandbox the tool actually resolved for this request — not the
+    // `dynamic` placeholder.
+    const custom = vi.fn(async () => {});
+    const workspace = new Workspace({
+      sandbox: () => new LocalSandbox({ workingDirectory: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
+      { command: 'echo hi' },
+      { requestContext: new RequestContext(), writer: { custom } },
+    );
+
+    const metadataCall = custom.mock.calls.find(call => (call[0] as any)?.type === 'data-workspace-metadata');
+    expect(metadataCall?.[0]).toMatchObject({
+      type: 'data-workspace-metadata',
+      data: { sandbox: { provider: 'local' } },
+    });
   });
 });
