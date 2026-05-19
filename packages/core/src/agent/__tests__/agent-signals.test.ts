@@ -1,6 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
@@ -104,7 +105,10 @@ describe('Agent signals', () => {
       metadata: { source: 'test', signal: { userProvided: true } },
     });
 
-    expect(signal.toLLMMessage()).toBe('Signal contents');
+    expect(signal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<user-message priority="high">Signal contents</user-message>',
+    });
     expect(signal.toDataPart()).toEqual({
       type: 'data-user-message',
       data: {
@@ -127,7 +131,6 @@ describe('Agent signals', () => {
         type: 'user-message',
         createdAt: '2026-01-01T00:00:00.000Z',
         acceptedAt: '2026-01-01T00:00:01.000Z',
-        contents: 'Signal contents',
         attributes: { priority: 'high' },
         metadata: { source: 'test', signal: { userProvided: true } },
       },
@@ -164,13 +167,11 @@ describe('Agent signals', () => {
       attributes: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md', enabled: true, ignored: null },
     });
 
-    expect(reminderSignal.toLLMMessage()).toEqual([
-      {
-        role: 'user',
-        content:
-          '<system-reminder type="dynamic-agents-md" path="/tmp/AGENTS.md" enabled="true">Use &lt;safe&gt; content &amp; continue</system-reminder>',
-      },
-    ]);
+    expect(reminderSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content:
+        '<system-reminder type="dynamic-agents-md" path="/tmp/AGENTS.md" enabled="true">Use &lt;safe&gt; content &amp; continue</system-reminder>',
+    });
     expect(reminderSignal.toDataPart().data.attributes).toEqual({
       type: 'dynamic-agents-md',
       path: '/tmp/AGENTS.md',
@@ -184,18 +185,15 @@ describe('Agent signals', () => {
       ignored: null,
     });
 
-    const fileContents = {
-      role: 'user' as const,
-      content: [
-        { type: 'text' as const, text: 'Review this file' },
-        {
-          type: 'file' as const,
-          data: 'data:text/plain;base64,aGVsbG8=',
-          mediaType: 'text/plain',
-          filename: 'note.txt',
-        },
-      ],
-    };
+    const fileContents = [
+      { type: 'text' as const, text: 'Review this file' },
+      {
+        type: 'file' as const,
+        data: 'data:text/plain;base64,aGVsbG8=',
+        mediaType: 'text/plain',
+        filename: 'note.txt',
+      },
+    ];
     const fileSignal = createSignal({
       id: 'signal-3',
       type: 'user-message',
@@ -203,9 +201,409 @@ describe('Agent signals', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
-    expect(fileSignal.toLLMMessage()).toEqual(fileContents);
+    // toLLMMessage emits the v5 UserModelMessage shape (uses mediaType for FilePart).
+    expect(fileSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Review this file' },
+        {
+          type: 'file',
+          data: 'data:text/plain;base64,aGVsbG8=',
+          mediaType: 'text/plain',
+          filename: 'note.txt',
+        },
+      ],
+    });
     expect(fileSignal.toDataPart().data.contents).toEqual(fileContents);
     expect(mastraDBMessageToSignal(fileSignal.toDBMessage()).contents).toEqual(fileContents);
+  });
+
+  it('renders user-message attributes inline-wrapped for text and multimodal contents', () => {
+    const stringSignal = createSignal({
+      type: 'user-message',
+      contents: 'Hello',
+      attributes: { messageId: 'm-1', userId: 'u-1' },
+    });
+    expect(stringSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<user-message messageId="m-1" userId="u-1">Hello</user-message>',
+    });
+
+    const partsTextSignal = createSignal({
+      type: 'user-message',
+      contents: [{ type: 'text', text: 'Hello again' }],
+      attributes: { messageId: 'm-1b' },
+    });
+    expect(partsTextSignal.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<user-message messageId="m-1b">Hello again</user-message>',
+    });
+
+    const fileContents = [
+      { type: 'text' as const, text: 'Look at this' },
+      {
+        type: 'file' as const,
+        data: 'data:image/png;base64,aGVsbG8=',
+        mediaType: 'image/png',
+      },
+    ];
+    const multimodalSignal = createSignal({
+      type: 'user-message',
+      contents: fileContents,
+      attributes: { messageId: 'm-2' },
+    });
+    // Multimodal: text part is inline-wrapped, file part is preserved.
+    const multimodalResult = multimodalSignal.toLLMMessage();
+    expect(multimodalResult.role).toBe('user');
+    expect(multimodalResult.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'text',
+          text: '<user-message messageId="m-2">Look at this</user-message>',
+        }),
+        expect.objectContaining({
+          type: 'file',
+          data: 'data:image/png;base64,aGVsbG8=',
+        }),
+      ]),
+    );
+
+    // file-only: no text part exists, so the marker is prepended as a synthetic text part on
+    // the same message so the attributes still surface alongside the file payload.
+    const fileOnlyContents = [
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+    ];
+    const fileOnlySignal = createSignal({
+      type: 'user-message',
+      contents: fileOnlyContents,
+      attributes: { messageId: 'm-2d' },
+    });
+    const fileOnlyResult = fileOnlySignal.toLLMMessage();
+    expect(fileOnlyResult.role).toBe('user');
+    expect(fileOnlyResult.content).toEqual([
+      expect.objectContaining({ type: 'text', text: '<user-message messageId="m-2d" />' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
+
+    const noAttributeSignal = createSignal({
+      type: 'user-message',
+      contents: 'Plain message',
+    });
+    expect(noAttributeSignal.toLLMMessage()).toEqual({ role: 'user', content: 'Plain message' });
+
+    const onlyNullAttributesSignal = createSignal({
+      type: 'user-message',
+      contents: 'Plain message',
+      attributes: { ignored: null, alsoIgnored: undefined },
+    });
+    expect(onlyNullAttributesSignal.toLLMMessage()).toEqual({ role: 'user', content: 'Plain message' });
+  });
+
+  it('renders system-reminder signals with multimodal contents the same way as user-message attributes', () => {
+    // Text-only system-reminder still wraps even without attributes (the wrapper is the signal).
+    const plainReminder = createSignal({
+      type: 'system-reminder',
+      contents: 'Be concise.',
+    });
+    expect(plainReminder.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<system-reminder>Be concise.</system-reminder>',
+    });
+
+    // System-reminder with multimodal contents: text part is inline-wrapped with the marker,
+    // file part is preserved alongside it on the same logical turn.
+    const screenshotContents = [
+      { type: 'text' as const, text: 'The user is looking at this screen.' },
+      {
+        type: 'file' as const,
+        data: 'data:image/png;base64,aGVsbG8=',
+        mediaType: 'image/png',
+      },
+    ];
+    const screenshotReminder = createSignal({
+      type: 'system-reminder',
+      contents: screenshotContents,
+      attributes: { kind: 'screenshot' },
+    });
+    const screenshotResult = screenshotReminder.toLLMMessage();
+    expect(screenshotResult.role).toBe('user');
+    expect(screenshotResult.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'text',
+          text: '<system-reminder kind="screenshot">The user is looking at this screen.</system-reminder>',
+        }),
+        expect.objectContaining({
+          type: 'file',
+          data: 'data:image/png;base64,aGVsbG8=',
+        }),
+      ]),
+    );
+
+    // System-reminder with only file parts has no text to inline-wrap, so the marker is
+    // prepended as a synthetic text part on the same message.
+    const fileOnlyReminderContents = [
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+    ];
+    const fileOnlyReminder = createSignal({
+      type: 'system-reminder',
+      contents: fileOnlyReminderContents,
+      attributes: { kind: 'reference-image' },
+    });
+    const fileOnlyResult = fileOnlyReminder.toLLMMessage();
+    expect(fileOnlyResult.role).toBe('user');
+    expect(fileOnlyResult.content).toEqual([
+      expect.objectContaining({ type: 'text', text: '<system-reminder kind="reference-image" />' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
+
+    // System-reminder with mixed text + file parts: the marker is inlined into the very first
+    // text part, subsequent parts pass through untouched on the same logical turn.
+    const mixedReminderContents = [
+      { type: 'text' as const, text: 'Step one of the screen.' },
+      { type: 'text' as const, text: 'Step two has this attachment.' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+    ];
+    const mixedReminder = createSignal({
+      type: 'system-reminder',
+      contents: mixedReminderContents,
+      attributes: { kind: 'walkthrough' },
+    });
+    const mixedResult = mixedReminder.toLLMMessage();
+    expect(mixedResult.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: '<system-reminder kind="walkthrough">Step one of the screen.</system-reminder>',
+      }),
+      expect.objectContaining({ type: 'text', text: 'Step two has this attachment.' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
+  });
+
+  it('persists multimodal signal contents as faithful DB parts so UIs can render them', () => {
+    const fileContents = [
+      { type: 'text' as const, text: 'Look at this' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+    ];
+
+    const userMessage = createSignal({
+      type: 'user-message',
+      contents: fileContents,
+      attributes: { messageId: 'm-1' },
+    });
+    const userDb = userMessage.toDBMessage();
+    expect(userDb.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Look at this' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
+    // Stash is dropped — metadata.signal carries only envelope fields (id/type/attributes/createdAt).
+    const signalMeta = (userDb.content.metadata as { signal: Record<string, unknown> }).signal;
+    expect(signalMeta).not.toHaveProperty('contents');
+    expect(signalMeta).toMatchObject({ type: 'user-message', attributes: { messageId: 'm-1' } });
+
+    const reminder = createSignal({
+      type: 'system-reminder',
+      contents: fileContents,
+      attributes: { kind: 'screenshot' },
+    });
+    const reminderDb = reminder.toDBMessage();
+    expect(reminderDb.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Look at this' }),
+      expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
+    ]);
+
+    // Empty contents still produce a single empty text part so consumers that assume non-empty parts stay happy.
+    const emptyReminder = createSignal({ type: 'system-reminder', contents: '' });
+    expect(emptyReminder.toDBMessage().content.parts).toEqual([{ type: 'text', text: '' }]);
+  });
+
+  it('round-trips multimodal non-user-message signals through DB without dropping file parts', () => {
+    const screenshotContents = [
+      { type: 'text' as const, text: 'The user is looking at this screen.' },
+      { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+    ];
+    const reminder = createSignal({
+      type: 'system-reminder',
+      contents: screenshotContents,
+      attributes: { kind: 'screenshot' },
+    });
+    const rehydrated = mastraDBMessageToSignal(reminder.toDBMessage());
+    expect(rehydrated.type).toBe('system-reminder');
+    expect(rehydrated.contents).toEqual(screenshotContents);
+    expect(rehydrated.attributes).toEqual({ kind: 'screenshot' });
+
+    // dataPart round-trip preserves the multimodal shape too.
+    const fromDataPart = dataPartToSignal(reminder.toDataPart());
+    expect(fromDataPart.contents).toEqual(screenshotContents);
+  });
+
+  it('threads providerOptions through LLM message, DB storage, and rehydration', () => {
+    const providerOptions = {
+      openai: { reasoningEffort: 'high' },
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+    };
+    const signal = createSignal({
+      type: 'user-message',
+      contents: 'hello',
+      providerOptions,
+    });
+
+    // LLM message: providerOptions on the CoreMessage so it flows to the model.
+    const llmMessage = signal.toLLMMessage();
+    expect(llmMessage).toMatchObject({ role: 'user', content: 'hello', providerOptions });
+
+    // DB storage: content.providerMetadata (canonical location, also surfaces to useChat).
+    const db = signal.toDBMessage();
+    expect(db.content.providerMetadata).toEqual(providerOptions);
+
+    // Round-trip: rehydrated signal carries providerOptions and re-emits it.
+    const rehydrated = mastraDBMessageToSignal(db);
+    expect(rehydrated.providerOptions).toEqual(providerOptions);
+    expect(rehydrated.toLLMMessage()).toMatchObject({ providerOptions });
+  });
+
+  it('omits providerOptions on LLM / DB output when not provided', () => {
+    const signal = createSignal({ type: 'user-message', contents: 'hi' });
+    const llmMessage = signal.toLLMMessage();
+    expect((llmMessage as { providerOptions?: unknown }).providerOptions).toBeUndefined();
+    expect(signal.toDBMessage().content.providerMetadata).toBeUndefined();
+  });
+
+  it('threads per-part providerOptions through LLM, DB, and rehydration', () => {
+    const partProviderOptions = { anthropic: { cacheControl: { type: 'ephemeral' } } };
+    const signal = createSignal({
+      type: 'user-message',
+      contents: [
+        { type: 'text', text: 'hello', providerOptions: partProviderOptions },
+        { type: 'file', data: 'AAA=', mediaType: 'image/png' },
+      ],
+    });
+
+    // LLM: parts array carries per-part providerOptions (not collapsed to bare string).
+    const llmMessage = signal.toLLMMessage();
+    expect(llmMessage.role).toBe('user');
+    expect(Array.isArray(llmMessage.content)).toBe(true);
+    const llmParts = llmMessage.content as Array<{ type: string; providerOptions?: unknown }>;
+    expect(llmParts[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
+    expect(llmParts[1]).toMatchObject({ type: 'file', data: 'AAA=', mediaType: 'image/png' });
+
+    // DB: per-part providerMetadata persisted alongside the storage part.
+    const db = signal.toDBMessage();
+    const textPart = db.content.parts[0] as { type: string; providerMetadata?: unknown };
+    expect(textPart).toMatchObject({ type: 'text', text: 'hello', providerMetadata: partProviderOptions });
+
+    // Round-trip: rehydrated signal restores per-part providerOptions.
+    const rehydrated = mastraDBMessageToSignal(db);
+    const rehydratedContents = rehydrated.contents as Array<{ type: string; providerOptions?: unknown }>;
+    expect(rehydratedContents[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
+  });
+
+  it('preserves per-part providerOptions on a single-text user-message (no bare-string collapse)', () => {
+    const partProviderOptions = { anthropic: { cacheControl: { type: 'ephemeral' } } };
+    const signal = createSignal({
+      type: 'user-message',
+      contents: [{ type: 'text', text: 'hello', providerOptions: partProviderOptions }],
+    });
+
+    const llmMessage = signal.toLLMMessage();
+    // Must keep parts array — collapsing to a bare string would drop providerOptions.
+    expect(Array.isArray(llmMessage.content)).toBe(true);
+    const llmParts = llmMessage.content as Array<{ type: string; providerOptions?: unknown }>;
+    expect(llmParts[0]).toMatchObject({ type: 'text', text: 'hello', providerOptions: partProviderOptions });
+  });
+
+  describe('legacy metadata.signal.contents rehydration', () => {
+    function buildLegacyDBRow(legacyContents: unknown) {
+      const row = createSignal({
+        id: 'signal-legacy',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        type: 'user-message',
+        contents: 'placeholder',
+      }).toDBMessage();
+      row.content.metadata = {
+        ...row.content.metadata,
+        signal: {
+          ...(row.content.metadata?.signal as Record<string, unknown>),
+          contents: legacyContents,
+        },
+      };
+      return row;
+    }
+
+    it('recovers a bare string stash', () => {
+      const rehydrated = mastraDBMessageToSignal(buildLegacyDBRow('hello world'));
+      expect(rehydrated.contents).toBe('hello world');
+    });
+
+    it('recovers an Array<TextPart | FilePart> stash with mediaType', () => {
+      const rehydrated = mastraDBMessageToSignal(
+        buildLegacyDBRow([
+          { type: 'text', text: 'caption' },
+          { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
+        ]),
+      );
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'caption' },
+        { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
+      ]);
+    });
+
+    it('recovers a CoreUserMessage wrapper with text-only content', () => {
+      const rehydrated = mastraDBMessageToSignal(buildLegacyDBRow({ role: 'user', content: 'hello world' }));
+      expect(rehydrated.contents).toBe('hello world');
+    });
+
+    it('recovers a CoreUserMessage wrapper with mixed text + image parts', () => {
+      const rehydrated = mastraDBMessageToSignal(
+        buildLegacyDBRow({
+          role: 'user',
+          content: [
+            { type: 'text', text: 'what is this?' },
+            { type: 'image', image: 'BASE64', mediaType: 'image/png' },
+          ],
+        }),
+      );
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'what is this?' },
+        { type: 'file', data: 'BASE64', mediaType: 'image/png' },
+      ]);
+    });
+
+    it('recovers a CoreUserMessage[] stash from the React hook', () => {
+      const rehydrated = mastraDBMessageToSignal(
+        buildLegacyDBRow([
+          { role: 'user', content: 'first' },
+          { role: 'user', content: [{ type: 'text', text: 'second' }] },
+        ]),
+      );
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'first' },
+        { type: 'text', text: 'second' },
+      ]);
+    });
+
+    it('falls back to canonical content.parts when the stash is unrecognisable', () => {
+      const row = buildLegacyDBRow({ totally: 'unrelated' });
+      row.content.parts = [{ type: 'text', text: 'from canonical parts' }];
+      const rehydrated = mastraDBMessageToSignal(row);
+      expect(rehydrated.contents).toBe('from canonical parts');
+    });
+
+    it('prefers a valid multimodal stash over flattened-text content.parts (main-era rows)', () => {
+      // Main wrote the full original input to metadata.signal.contents and a flattened text
+      // projection to content.parts. If we preferred parts here we'd silently drop the file
+      // payload on rehydrate.
+      const row = buildLegacyDBRow([
+        { type: 'text', text: 'caption' },
+        { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
+      ]);
+      row.content.parts = [{ type: 'text', text: 'caption' }];
+      const rehydrated = mastraDBMessageToSignal(row);
+      expect(rehydrated.contents).toEqual([
+        { type: 'text', text: 'caption' },
+        { type: 'file', data: 'BASE64', mediaType: 'image/png', filename: 'photo.png' },
+      ]);
+    });
   });
 
   it('rejects invalid XML names for contextual signal markup', () => {
@@ -335,7 +733,11 @@ describe('Agent signals', () => {
     const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
     expect(streamCount).toBe(0);
     expect(recalled.messages).toHaveLength(1);
-    expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ contents: 'persist without waking' });
+    // Stash dropped; payload lives in content.parts now.
+    expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user-message' });
+    expect(recalled.messages[0]?.content.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'persist without waking' })]),
+    );
   });
 
   it('discards an active signal when active behavior is discard', async () => {
@@ -399,18 +801,104 @@ describe('Agent signals', () => {
     expect(JSON.stringify(prompts)).not.toContain('discard while running');
   });
 
-  it('supports cross-instance thread subscriptions through the shared runtime without Mastra', async () => {
+  it('routes active-run signals across runtime instances through PubSub', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const owner = new Agent({
+      id: 'remote-signal-agent',
+      name: 'Remote Signal Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+    });
+    const sender = new Agent({
+      id: 'remote-signal-agent',
+      name: 'Remote Signal Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+    });
+    let finishRun!: () => void;
+    const output = {
+      runId: 'remote-run-1',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+    } as any;
+
+    const ownerSubscription = await ownerRuntime.subscribeToThread(
+      owner,
+      {
+        resourceId: 'remote-resource',
+        threadId: 'remote-thread',
+      },
+      pubsub,
+    );
+    const senderSubscription = await senderRuntime.subscribeToThread(
+      sender,
+      {
+        resourceId: 'remote-resource',
+        threadId: 'remote-thread',
+      },
+      pubsub,
+    );
+
+    ownerRuntime.registerRun(
+      owner,
+      output,
+      { runId: 'remote-run-1', memory: { resource: 'remote-resource', thread: 'remote-thread' } } as any,
+      pubsub,
+    );
+    await waitForCondition(() => senderSubscription.activeRunId() === 'remote-run-1');
+
+    let waitResolved = false;
+    const waitForRemoteRun = senderRuntime
+      .waitForCrossAgentThreadRun(
+        new Agent({
+          id: 'remote-other-agent',
+          name: 'Remote Other Agent',
+          instructions: 'Test',
+          model: createTextStreamModel('other response'),
+        }),
+        { memory: { resource: 'remote-resource', thread: 'remote-thread' } },
+        pubsub,
+      )
+      .then(() => {
+        waitResolved = true;
+      });
+    await nextTick();
+    expect(waitResolved).toBe(false);
+
+    const result = senderRuntime.sendSignal(
+      sender,
+      { type: 'user-message', contents: [{ role: 'user', content: 'remote follow-up' }] },
+      { resourceId: 'remote-resource', threadId: 'remote-thread' },
+      pubsub,
+    );
+
+    expect(result.accepted).toBe(true);
+    await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
+
+    finishRun();
+    await waitForRemoteRun;
+    ownerSubscription.unsubscribe();
+    senderSubscription.unsubscribe();
+  });
+
+  it('supports cross-instance thread subscriptions through an injected PubSub without Mastra', async () => {
+    const pubsub = new EventEmitterPubSub();
     const runner = new Agent({
       id: 'standalone-shared-agent',
       name: 'Standalone Shared Runner Agent',
       instructions: 'Test',
       model: createTextStreamModel('standalone shared response'),
+      pubsub,
     });
     const observer = new Agent({
       id: 'standalone-shared-agent',
       name: 'Standalone Shared Observer Agent',
       instructions: 'Test',
       model: createTextStreamModel('standalone observer response'),
+      pubsub,
     });
 
     const subscription = await observer.subscribeToThread({
@@ -447,7 +935,82 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('propagates standalone parent pubsub to child agents without their own pubsub', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const child = new Agent({
+      id: 'standalone-child-agent',
+      name: 'Standalone Child Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('child response'),
+    });
+    const parent = new Agent({
+      id: 'standalone-parent-agent',
+      name: 'Standalone Parent Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('parent response'),
+      pubsub,
+      agents: { child },
+    });
+
+    await parent.listAgents();
+
+    expect(child.getPubSub()).toBe(pubsub);
+
+    const secondPubSub = new EventEmitterPubSub();
+    const secondParent = new Agent({
+      id: 'second-standalone-parent-agent',
+      name: 'Second Standalone Parent Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('second parent response'),
+      pubsub: secondPubSub,
+      agents: { child },
+    });
+
+    await secondParent.listAgents();
+
+    expect(child.getPubSub()).toBe(secondPubSub);
+  });
+
+  it('isolates standalone agents that use different injected pubsubs', async () => {
+    const runner = new Agent({
+      id: 'standalone-isolated-agent',
+      name: 'Standalone Isolated Runner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('isolated response'),
+      pubsub: new EventEmitterPubSub(),
+    });
+    const observer = new Agent({
+      id: 'standalone-isolated-agent',
+      name: 'Standalone Isolated Observer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('isolated observer response'),
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    const subscription = await observer.subscribeToThread({
+      threadId: 'standalone-isolated-thread',
+      resourceId: 'standalone-isolated-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const nextRunPromise = readNextRun(iterator);
+
+    await runner.stream('Hello', {
+      memory: { thread: 'standalone-isolated-thread', resource: 'standalone-isolated-user' },
+    });
+
+    await runner.getPubSub()?.flush?.();
+    const result = await Promise.race([
+      nextRunPromise.then(() => 'delivered'),
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 100)),
+    ]);
+    expect(result).toBe('timeout');
+
+    subscription.unsubscribe();
+    await nextRunPromise;
+  });
+
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
+    const pubsub = new EventEmitterPubSub();
     const runner = new Agent({
       id: 'shared-agent',
       name: 'Shared Runner Agent',
@@ -460,7 +1023,9 @@ describe('Agent signals', () => {
       instructions: 'Test',
       model: createTextStreamModel('observer response'),
     });
-    new Mastra({ agents: { runner, observer }, logger: false });
+    new Mastra({ agents: { runner, observer }, logger: false, pubsub });
+    expect(runner.getPubSub()).toBe(pubsub);
+    expect(observer.getPubSub()).toBe(pubsub);
 
     const subscription = await observer.subscribeToThread({
       threadId: 'shared-thread',

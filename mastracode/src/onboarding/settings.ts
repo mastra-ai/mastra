@@ -119,6 +119,7 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
+    quietModePreferenceSelected: boolean;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -166,6 +167,12 @@ export interface GlobalSettings {
      * overridden per-thread.
      */
     omCavemanObservations: boolean | null;
+    /**
+     * Whether Observational Memory forwards image/file attachment parts to the
+     * Observer LLM. `null` ⇒ inherit built-in default (true). Turn off when
+     * using a text-only observer model.
+     */
+    omObserveAttachments: boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
     /** Default judge model for /goal. */
@@ -181,6 +188,8 @@ export interface GlobalSettings {
     thinkingLevel: ThinkingLevelSetting;
     /** When true, components like subagent output collapse to compact summaries on completion. */
     quietMode: boolean;
+    /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
+    quietModeMaxToolPreviewLines: number;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -232,6 +241,7 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
+    quietModePreferenceSelected: true,
   },
   models: {
     activeModelPackId: null,
@@ -243,6 +253,7 @@ const DEFAULTS: GlobalSettings = {
     omObservationThreshold: null,
     omReflectionThreshold: null,
     omCavemanObservations: null,
+    omObserveAttachments: null,
     subagentModels: {},
     goalJudgeModel: null,
     goalMaxTurns: null,
@@ -252,6 +263,7 @@ const DEFAULTS: GlobalSettings = {
     theme: 'auto',
     thinkingLevel: 'off',
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -271,11 +283,18 @@ const DEFAULTS: GlobalSettings = {
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
     ? (value as ThinkingLevelSetting)
     : DEFAULTS.preferences.thinkingLevel;
+}
+
+function parseQuietModeMaxToolPreviewLines(value: unknown): number {
+  const rawValue =
+    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
+  return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
 }
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
@@ -285,7 +304,28 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+    quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
   };
+}
+
+function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
+  return Boolean(
+    rawOnboarding &&
+    typeof rawOnboarding === 'object' &&
+    Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
+  );
+}
+
+function applyQuietModePreferenceRollout(settings: GlobalSettings, rawOnboarding: unknown): void {
+  if (hasQuietModePreferenceSelected(rawOnboarding)) return;
+  settings.onboarding.quietModePreferenceSelected = settings.preferences.quietMode === true;
+}
+
+function getNewInstallDefaults(): GlobalSettings {
+  const settings = structuredClone(DEFAULTS);
+  settings.preferences.quietMode = true;
+  settings.onboarding.quietModePreferenceSelected = true;
+  return settings;
 }
 
 export function getSettingsPath(): string {
@@ -475,6 +515,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         observability: parseObservabilitySettings(raw.observability),
       };
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
     }
@@ -569,7 +610,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return structuredClone(DEFAULTS);
+  if (!existsSync(filePath)) return getNewInstallDefaults();
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
@@ -597,6 +638,10 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 
     // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
+    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
+      settingsChanged = true;
+    }
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;

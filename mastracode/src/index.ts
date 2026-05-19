@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
+import type { PubSub } from '@mastra/core/events';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -134,6 +135,10 @@ export interface MastraCodeConfig {
   memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: HarnessConfig['browser'];
+  /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
+  pubsub?: PubSub;
+  /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
+  crossProcessPubSub?: boolean;
 }
 
 export function createAuthStorage() {
@@ -227,6 +232,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (resourceIdOverride) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
+  }
+
+  const signalsPubSub = config?.pubsub;
+  const crossProcessPubSub = config?.crossProcessPubSub ?? false;
+  if (crossProcessPubSub && !signalsPubSub) {
+    throw new Error('crossProcessPubSub requires a pubsub instance');
   }
 
   // Storage
@@ -463,6 +474,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
+  const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -512,6 +524,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (effectiveCavemanObservations !== undefined) {
     globalInitialState.cavemanObservations = effectiveCavemanObservations;
   }
+  if (effectiveObserveAttachments !== undefined) {
+    globalInitialState.observeAttachments = effectiveObserveAttachments;
+  }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
@@ -533,6 +548,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     storage,
     observability,
     memory,
+    pubsub: signalsPubSub,
     stateSchema,
     subagents,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
@@ -637,10 +653,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
       return customModels;
     },
-    threadLock: {
-      acquire: acquireThreadLock,
-      release: releaseThreadLock,
-    },
+    threadLock: crossProcessPubSub
+      ? undefined
+      : {
+          acquire: acquireThreadLock,
+          release: releaseThreadLock,
+        },
   });
 
   githubSignals.addAgent(codeAgent, {
@@ -683,6 +701,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     resolveModel,
     storageWarning,
     observabilityWarning,
+    signalsPubSub,
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,

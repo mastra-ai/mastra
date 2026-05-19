@@ -137,10 +137,10 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/signals',
-          label: 'Signals',
+          id: 'agents/acp',
+          label: 'ACP',
           customProps: {
-            tags: ['alpha'],
+            tags: ['new'],
           },
         },
         {
@@ -150,10 +150,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/response-caching',
           label: 'Response Caching',
           customProps: {
-            tags: ['experimental'],
+            tags: ['alpha'],
           },
         },
         {
@@ -708,6 +716,11 @@ const sidebars = {
           type: 'doc',
           id: 'evals/running-in-ci',
           label: 'Running in CI',
+        },
+        {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
         },
         {
           type: 'category',

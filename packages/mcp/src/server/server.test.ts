@@ -986,6 +986,34 @@ describe('MCPServer', () => {
       });
       expect(res.status).toBe(503);
     });
+
+    it('should close previous SSE transport when a new client connects', async () => {
+      // First SSE connection
+      const firstRes = await fetch(`http://localhost:${PORT}/sse`, {
+        headers: { Accept: 'text/event-stream' },
+      });
+      expect(firstRes.status).toBe(200);
+      const firstTransport = (server as any).sseTransport;
+      expect(firstTransport).toBeDefined();
+
+      // Spy on close of the first transport
+      const closeSpy = vi.spyOn(firstTransport, 'close');
+
+      // Second SSE connection — should close the first transport
+      const secondRes = await fetch(`http://localhost:${PORT}/sse`, {
+        headers: { Accept: 'text/event-stream' },
+      });
+      expect(secondRes.status).toBe(200);
+
+      expect(closeSpy).toHaveBeenCalled();
+      expect((server as any).sseTransport).not.toBe(firstTransport);
+
+      // Clean up: close the active transport so the protocol is reset for subsequent tests
+      await (server as any).sseTransport?.close?.();
+      (server as any).sseTransport = undefined;
+      await firstRes.body?.cancel().catch(() => {});
+      await secondRes.body?.cancel().catch(() => {});
+    });
   });
 
   describe('MCPServer stdio transport', () => {

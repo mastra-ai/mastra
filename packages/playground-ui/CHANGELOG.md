@@ -1,5 +1,171 @@
 # @mastra/playground-ui
 
+## 29.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+  - @mastra/client-js@1.20.0-alpha.5
+  - @mastra/react@0.4.0-alpha.5
+
+## 29.0.0-alpha.4
+
+### Minor Changes
+
+- Refreshed Button + Card design system tokens. ([#16769](https://github.com/mastra-ai/mastra/pull/16769))
+
+  **Button variants (breaking)**: consolidated to `default`, `primary`, `outline`, `ghost`. The `cta`, `contrast`, and unused `link` variants have been removed. `primary` now uses a high-contrast `neutral6` fill instead of `surface4`, so it reads clearly as the form submit action in both themes.
+
+  ```tsx
+  // Before
+  <Button variant="cta">Save</Button>
+  <Button variant="contrast">Done</Button>
+  <Button variant="link">Open</Button>
+
+  // After
+  <Button variant="primary">Save</Button>     // cta → primary (no brand green; theme-aware high contrast)
+  <Button variant="primary">Done</Button>     // contrast → primary (same recipe, renamed)
+  <Button as="a" href="…" variant="ghost">Open</Button>  // link → ghost (or plain <a> for inline text links)
+  ```
+
+  **New tokens**: `--surface-overlay-soft` and `--surface-overlay-strong` — alpha overlays of the opposite-theme color, used by `SectionCard` header strip and `DashboardCard` fill so cards read consistently on any surface.
+
+  **Other**:
+  - DashboardCard radius reduced to `rounded-xl` and padding tightened to `px-4 py-3` for better grid density.
+  - SectionCard wrapper no longer fills its background — header strip + border carry definition.
+  - Dark `surface2` / `surface3` darkened slightly (16.84% → 16%, 19.13% → 18%) so the main frame reads as a distinct surface.
+  - Dark `border1` / `border2` alphas bumped (6% → 7%, 10% → 11%) for closer dark/light parity.
+  - Removed deprecated `--section-card-*` tokens and their `@utility` blocks.
+
+### Patch Changes
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/client-js@1.20.0-alpha.4
+  - @mastra/react@0.4.0-alpha.4
+
+## 29.0.0-alpha.3
+
+### Minor Changes
+
+- Removed `ButtonWithTooltip` from `@mastra/playground-ui`. Use `Button` with the `tooltip` prop instead. ([#16719](https://github.com/mastra-ai/mastra/pull/16719))
+
+  **Migration**
+
+  ```tsx
+  // before
+  import { ButtonWithTooltip } from '@mastra/playground-ui';
+
+  <ButtonWithTooltip tooltipContent="Search">
+    <Search />
+  </ButtonWithTooltip>;
+
+  // after
+  import { Button } from '@mastra/playground-ui';
+
+  <Button tooltip="Search">
+    <Search />
+  </Button>;
+  ```
+
+  `tooltip` supports the same values as `tooltipContent`. Icon-only buttons that pass a string `tooltip` now also get it as their `aria-label` automatically, matching how labelled controls have always behaved. Pass an explicit `aria-label` to override.
+
+### Patch Changes
+
+- The Traces list now updates live via delta polling. Previously the list was refetched every 10 seconds, replacing the whole page with no signal about what changed; now new traces appear within a few seconds of being created, with a brief highlight to draw attention. Status changes on already-visible rows (running → success / error) also propagate without intervention, and returning to the tab after being idle re-syncs from a fresh cursor. ([#16727](https://github.com/mastra-ai/mastra/pull/16727))
+
+  **New `useTraces` return fields**
+  - `isRefetching` — true while any meaningful refetch is in flight. Use it to drive a heartbeat indicator.
+  - `autoRefetch` / `setAutoRefetch` — pause / resume all automatic polling so the consumer can render an opt-out toggle.
+  - `recentlyAddedKeys` — `Set<string>` of `traceId:spanId` for rows that just arrived via delta polling. Drives the temporary highlight in `TracesListView`.
+
+  **New polling config**
+
+  Every timing in the hook is tunable per-instance via a new `polling` option:
+
+  ```ts
+  import { useTraces, type TracesPollingConfig } from '@mastra/playground-ui';
+
+  useTraces({
+    filters,
+    listMode,
+    polling: {
+      deltaPollIntervalMs: 10_000,
+      idleGuardThresholdMs: 5 * 60_000,
+    },
+  });
+  ```
+
+  Omitted fields fall through to the defaults (delta poll every 5s, idle reset after 15 min, status refresh every 60s, etc).
+
+  **TracesListView**
+
+  New optional `recentlyAddedKeys?: Set<string>` prop. Rows whose `traceId:spanId` is in the set get the `animate-row-highlight` class — a brief fade-out to transparent, added to `index.css`.
+
+  **Compatibility**
+
+  Requires `@mastra/server` and `@mastra/client-js` at the versions that ship the observability delta-polling endpoints, and a store that opts into delta polling (`@mastra/clickhouse`, `@mastra/duckdb`, and the in-memory store today). When unavailable — older server or a store without delta capability — the hook silently falls back to page-mode interval refetching. No consumer changes required.
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021)]:
+  - @mastra/core@1.36.0-alpha.3
+  - @mastra/client-js@1.20.0-alpha.3
+  - @mastra/react@0.4.0-alpha.3
+
+## 29.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`6b25032`](https://github.com/mastra-ai/mastra/commit/6b250329fa4795b4d085cba4077c7998893c1d59), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/client-js@1.20.0-alpha.2
+  - @mastra/react@0.4.0-alpha.2
+
+## 29.0.0-alpha.1
+
+### Patch Changes
+
+- Moved the Level icon from its own column into the Name column, next to the trace name, on the Observability traces list. ([#16712](https://github.com/mastra-ai/mastra/pull/16712))
+
+- Added `align` and `stack` variants to `PageLayout.Row`. Use `stack="responsive"` for top bars that should collapse to a vertical stack on narrow viewports, and `align="center"` to vertically center children. Applied the new variants to the Prompts and Workflows top bars so the search field and primary action share a single row on desktop and stack on mobile. ([#16714](https://github.com/mastra-ai/mastra/pull/16714))
+
+  ```tsx
+  <PageLayout.Row align="center" stack="responsive">
+    <ListSearch ... />
+    <Button ...>Create</Button>
+  </PageLayout.Row>
+  ```
+
+- Fixed double-counted cache token costs in the Metrics dashboard. The Model Usage & Cost table and the Token Usage by Agent table were summing cache read/write costs on top of the total input cost, which already includes them. ([#16737](https://github.com/mastra-ai/mastra/pull/16737))
+
+- Migrated the Tooltip primitive to Base UI while preserving the existing API. The popup explicitly sets `role="tooltip"` so consumers can keep querying it via `getByRole('tooltip')` (Base UI does not add this role automatically). Existing `<TooltipTrigger asChild>` usage continues to work unchanged, and Base UI's native `render` prop is now also supported on `TooltipTrigger` so consumers wrapping anchors, custom router links, or icons can pass the element directly without an `asChild` adapter: ([#16713](https://github.com/mastra-ai/mastra/pull/16713))
+
+  ```tsx
+  // Still supported
+  <TooltipTrigger asChild>
+    <Button>Save</Button>
+  </TooltipTrigger>
+
+  // New: pass the element via Base UI's native API
+  <TooltipTrigger render={<Button>Save</Button>} />
+  ```
+
+  Also fixed the arrow rendering so the diagonal stroke meets the popup outline at the exact same pixel center on every side, removing the ~1px seam previously visible where the arrow joined the popup edge.
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`9692d60`](https://github.com/mastra-ai/mastra/commit/9692d60298e8f629d10de54867642a38955fb708), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25)]:
+  - @mastra/core@1.36.0-alpha.1
+  - @mastra/client-js@1.20.0-alpha.1
+  - @mastra/react@0.4.0-alpha.1
+
+## 29.0.0-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+  - @mastra/client-js@1.20.0-alpha.0
+  - @mastra/react@0.4.0-alpha.0
+
 ## 28.0.1
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
 import {
-  ButtonWithTooltip,
+  Button,
   ButtonsGroup,
   PageLayout,
   SpanDataPanelView,
@@ -160,18 +160,18 @@ export default function TracePage() {
   const traceHeaderActions = rootSpan ? (
     <RouteHeaderActions owner="trace-detail">
       <ButtonsGroup>
-        <ButtonWithTooltip tooltipContent="Evaluate Trace" aria-label="Evaluate Trace" onClick={handleEvaluateTrace}>
+        <Button tooltip="Evaluate Trace" aria-label="Evaluate Trace" onClick={handleEvaluateTrace}>
           <CircleGaugeIcon />
           Evaluate
-        </ButtonWithTooltip>
-        <ButtonWithTooltip
-          tooltipContent="Save as Dataset Item"
+        </Button>
+        <Button
+          tooltip="Save as Dataset Item"
           aria-label="Save as Dataset Item"
           onClick={() => setDatasetDialogOpen(true)}
         >
           <SaveIcon />
           Save
-        </ButtonWithTooltip>
+        </Button>
       </ButtonsGroup>
     </RouteHeaderActions>
   ) : null;

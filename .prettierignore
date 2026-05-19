@@ -31,3 +31,4 @@ packages/cli/src/commands/api/route-metadata.generated.ts
 **/*.d.ts
 
 packages/memory/integration-tests/src/worker/*.js
+stores/clickhouse/docker/keeper.test.xml

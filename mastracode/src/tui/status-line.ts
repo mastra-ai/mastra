@@ -24,11 +24,11 @@ function isGenericTitle(title: string): boolean {
   );
 }
 
-function formatGoalDuration(startedAt: string): string {
-  const startedMs = Date.parse(startedAt);
-  if (!Number.isFinite(startedMs)) return '<1m';
-
-  const elapsedMinutes = Math.floor(Math.max(0, Date.now() - startedMs) / 60_000);
+function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number }): string {
+  const activeStartedAt = goal.activeStartedAt ?? (goal.activeDurationMs === undefined ? goal.startedAt : undefined);
+  const startedMs = activeStartedAt ? Date.parse(activeStartedAt) : NaN;
+  const activeRunMs = Number.isFinite(startedMs) ? Math.max(0, Date.now() - startedMs) : 0;
+  const elapsedMinutes = Math.floor(((goal.activeDurationMs ?? 0) + activeRunMs) / 60_000);
   if (elapsedMinutes < 1) return '<1m';
 
   const days = Math.floor(elapsedMinutes / 1_440);
@@ -159,7 +159,7 @@ export function updateStatusLine(state: TUIState): void {
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
-  const goalDuration = goalState?.status === 'active' ? formatGoalDuration(goalState.startedAt) : null;
+  const goalDuration = goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
   const goalLabel = goalDuration ? `pursuing goal (${goalDuration})` : null;
   const shortGoalLabel = goalDuration ? `goal (${goalDuration})` : null;
   const activeGithubPr = state.activeGithubPrSubscriptions?.[0];

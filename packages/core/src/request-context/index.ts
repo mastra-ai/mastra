@@ -53,6 +53,45 @@ export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 export type { VersionOverrides, VersionSelector } from '../mastra/types';
 export { mergeVersionOverrides } from '../mastra/types';
 
+/**
+ * Marker thrown by `RequestContext.toJSON()` when it detects cyclic re-entry.
+ *
+ * Cyclic re-entry happens when a stored value transitively references another
+ * `RequestContext` whose `toJSON()` is already on the call stack. `JSON.stringify`
+ * inside `isSerializable` then walks into that context, V8 invokes its
+ * `toJSON()`, which iterates its registry and calls `JSON.stringify` on values
+ * that may walk back through the first context — and so on. Each step is a
+ * fresh `JSON.stringify` call with a fresh internal cycle stack, so V8's
+ * built-in cycle detection never trips and the recursion would pin one CPU
+ * core at 100% indefinitely.
+ *
+ * The fix: throw this marker on reentry. The marker propagates upward through
+ * `isSerializable`'s nested catches (which re-throw it) until it reaches the
+ * outermost `toJSON()`'s `isSerializable` — there it is swallowed and the
+ * offending key is filtered, the same way in-value circular references are
+ * filtered today.
+ */
+class CyclicRequestContextToJSONError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CyclicRequestContextToJSONError';
+  }
+}
+
+/**
+ * Tracks `RequestContext` instances whose `toJSON()` is currently on the call
+ * stack. Used to detect cyclic re-entry. Stored as a `WeakSet` so entries are
+ * garbage-collected with their owning context.
+ */
+const _toJSONInProgress = new WeakSet<RequestContext<any>>();
+
+/**
+ * Nesting depth of active `toJSON()` calls. The outermost call (depth === 1
+ * after entry) catches the cyclic marker error and filters the offending
+ * value; inner calls re-throw so the marker propagates to the outermost.
+ */
+let _toJSONDepth = 0;
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
@@ -162,21 +201,48 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Custom JSON serialization method.
    * Converts the internal Map to a plain object for proper JSON serialization.
-   * Non-serializable values (e.g., RPC proxies, functions, circular references)
-   * are skipped to prevent serialization errors when storing to database.
+   * Non-serializable values (functions, symbols, RPC proxies, in-value
+   * circular references, and values whose serialization re-enters this
+   * `toJSON` via cross-context back-references) are skipped to prevent
+   * serialization errors when storing to database.
+   *
+   * Reentry safety: if a stored value's `isSerializable` probe re-enters
+   * `toJSON()` on this same instance (through a chain of RequestContexts
+   * holding references to each other), we throw `CyclicRequestContextToJSONError`.
+   * Inner `isSerializable` calls re-throw the marker; the outermost
+   * `isSerializable` swallows it and filters the offending key, the same
+   * way it filters in-value circular references today.
    */
   public toJSON(): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const [key, value] of this.registry.entries()) {
-      if (this.isSerializable(value)) {
-        result[key] = value;
-      }
+    if (_toJSONInProgress.has(this)) {
+      throw new CyclicRequestContextToJSONError(
+        'RequestContext.toJSON: detected cyclic re-entry (a stored value transitively references this context)',
+      );
     }
-    return result;
+    _toJSONInProgress.add(this);
+    _toJSONDepth++;
+    try {
+      const result: Record<string, any> = {};
+      for (const [key, value] of this.registry.entries()) {
+        if (this.isSerializable(value)) {
+          result[key] = value;
+        }
+      }
+      return result;
+    } finally {
+      _toJSONInProgress.delete(this);
+      _toJSONDepth--;
+    }
   }
 
   /**
    * Check if a value can be safely serialized to JSON.
+   *
+   * Re-throws `CyclicRequestContextToJSONError` when called from a nested
+   * `toJSON()` (`_toJSONDepth > 1`), so the marker propagates up to the
+   * outermost `toJSON()`'s `isSerializable`, which then swallows it and
+   * filters the offending key. This is what lets the outermost call return
+   * a clean JSON-safe dict for cross-context cycles.
    */
   private isSerializable(value: unknown): boolean {
     if (value === null || value === undefined) return true;
@@ -187,7 +253,10 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
     try {
       JSON.stringify(value);
       return true;
-    } catch {
+    } catch (e) {
+      if (e instanceof CyclicRequestContextToJSONError && _toJSONDepth > 1) {
+        throw e;
+      }
       return false;
     }
   }

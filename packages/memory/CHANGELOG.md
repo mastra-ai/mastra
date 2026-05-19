@@ -1,5 +1,58 @@
 # @mastra/memory
 
+## 1.19.0-alpha.1
+
+### Minor Changes
+
+- Added `activateAfterIdle: "auto"` for Observational Memory early activation. ([#16663](https://github.com/mastra-ai/mastra/pull/16663))
+
+  Mastra can now choose an idle activation timeout from the active model provider's prompt cache behavior. OpenAI also respects `providerOptions.openai.promptCacheRetention` when available.
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        activateAfterIdle: 'auto',
+        activateOnProviderChange: true,
+      },
+    },
+  });
+  ```
+
+- Add `observeAttachments` to `ObservationConfig` for Observational Memory. Use it to control whether image/file parts on observed messages are forwarded to the Observer model alongside their placeholder text lines. ([#16671](https://github.com/mastra-ai/mastra/pull/16671))
+  - `true` (default) — forward all attachments (existing behavior).
+  - `false` — drop all attachments; placeholders still appear in the observer transcript.
+  - `string[]` — allowlist of mimeType patterns, e.g. `['image/*']` or `['application/pdf']`. Matching is case-insensitive and supports exact, `type/*`, and `*` patterns.
+
+  Useful when the Observer model is text-only (some DeepSeek endpoints, etc.) while the main agent uses a multimodal model. Tool-result attachments are filtered with the same rule.
+
+  ```ts
+  new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          model: 'deepseek/deepseek-chat', // text-only observer
+          observeAttachments: false, // or e.g. ['image/*', 'application/pdf']
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+
+## 1.18.3-alpha.0
+
+### Patch Changes
+
+- feat(memory): start background buffering of unobserved messages when agent goes idle ([#16694](https://github.com/mastra-ai/mastra/pull/16694))
+
+  In OM buffering mode, when the agent goes idle (turn.end()), any unobserved messages are now buffered in the background via a fire-and-forget buffer() call. This ensures observations are computed proactively rather than waiting for the next turn's step.prepare().
+
 ## 1.18.2
 
 ### Patch Changes

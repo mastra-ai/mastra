@@ -6,6 +6,7 @@
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
@@ -194,6 +195,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMes
         ...message,
         content: trailingParts,
       });
+      reconcileChatBoundarySpacers(state.chatContainer);
     }
     state.ui.requestRender();
   }
@@ -268,6 +270,10 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
           state.ui,
         );
         component.setExpanded(state.toolOutputExpanded);
+        if (state.quietMode) {
+          component.setQuietModeDisplay('quiet');
+          component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
+        }
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);
         state.allToolComponents.push(component);
@@ -282,6 +288,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         const component = state.pendingTools.get(content.id);
         if (component) {
           component.updateArgs(content.args);
+          reconcileChatBoundarySpacers(state.chatContainer);
         }
       }
     }
@@ -295,6 +302,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
       ...message,
       content: trailingParts,
     });
+    reconcileChatBoundarySpacers(state.chatContainer);
   }
 
   state.ui.requestRender();
@@ -314,6 +322,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         ...message,
         content: trailingParts,
       });
+      reconcileChatBoundarySpacers(state.chatContainer);
     }
 
     if (message.stopReason === 'aborted' || message.stopReason === 'error') {
@@ -327,6 +336,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
           false,
         );
       }
+      reconcileChatBoundarySpacers(state.chatContainer);
       state.pendingTools.clear();
       state.pendingTaskToolIds?.clear();
     }
