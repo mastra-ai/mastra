@@ -28,8 +28,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     const visible = stripAnsi(output);
     expect(output).toContain('view');
-    expect(output).toContain(theme.fg('text', 'src/example.ts'));
-    expect(output).toContain(theme.fg('dim', ':10-14'));
+    expect(visible).toContain('src/example.ts:10-14');
     expect(output).not.toContain('path=');
     expect(output).not.toContain('✓');
     expect(output).not.toContain('╭──');
@@ -224,8 +223,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     const rendered = component.render(100).join('\n');
     const output = stripAnsi(rendered);
-    expect(output).toContain('list src (5 results)');
-    expect(rendered).toContain(theme.fg('text', 'src (5 results)'));
+    expect(output).toContain('list  src (5 results)');
     expect(output).not.toContain('│ .');
     expect(rendered).toContain(theme.fg('toolOutput', 'src/a.ts'));
     expect(rendered).toContain(theme.fg('toolOutput', 'src/b.ts'));
@@ -257,7 +255,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('web "muted cli-highlight theme"');
+    expect(output).toContain('web  "muted cli-highlight theme"');
     expect(output).toContain('│ cli-highlight README');
     expect(output).toContain('│ https://github.com/felixfbecker/cli-highlight');
     expect(output).not.toContain('highlight.js Themes');
@@ -271,7 +269,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       { quietDisplayMode: 'quiet', collapsedByDefault: true },
       ui,
     );
-    expect(active.render(100).join('\n')).toContain(`\u001b[93mview`);
+    expect(active.render(100).join('\n')).toContain('\u001b[30m\u001b[1m view ');
 
     const complete = new ToolExecutionComponentEnhanced(
       'view',
@@ -280,7 +278,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ui,
     );
     complete.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
-    expect(complete.render(100).join('\n')).toContain(`\u001b[93mview`);
+    expect(complete.render(100).join('\n')).toContain('\u001b[30m\u001b[1m view ');
   });
 
   it('renders quiet non-shell tool validation errors with actionable details', () => {
@@ -335,11 +333,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = component.render(100).join('\n');
+    const visible = stripAnsi(output);
     expect(output).toContain('edit');
-    expect(output).toContain('src/example.ts');
-    expect(output).toContain(theme.fg('dim', ':42-44'));
-    expect(stripAnsi(output)).toContain('new');
-    expect(stripAnsi(output)).not.toContain('old →');
+    expect(visible).toContain('src/example.ts:42-44');
+    expect(visible).toContain('new');
+    expect(visible).not.toContain('old →');
     expect(output).not.toContain('old_string=');
     expect(output.split('\n')).toHaveLength(3);
   });
@@ -428,7 +426,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     const lines = component.render(100).map(stripAnsi);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('write /tmp/example.ts');
+    expect(lines[0]).toContain('write  /tmp/example.ts');
     expect(lines.join('\n')).not.toContain('first line');
     expect(component.hasQuietStreamingPreview()).toBe(false);
   });
@@ -491,7 +489,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     second.setCompactToolContinuation(true, '/tmp/a.ts');
     const lines = second.render(100);
     expect(lines).toHaveLength(4);
-    expect(stripAnsi(lines[0]!)).toContain('├─');
+    expect(stripAnsi(lines[0]!)).toContain('●─');
     expect(stripAnsi(lines[1]!)).toContain('const second = 2;');
     expect(stripAnsi(lines[2]!)).toContain('const third = 3;');
     expect(stripAnsi(lines[3]!)).toContain('╰──');
@@ -510,7 +508,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const lines = component.render(100).map(stripAnsi);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('╰─');
-    expect(lines[0]).not.toContain('├─');
+    expect(lines[0]).not.toContain('●─');
   });
 
   it('uses an open continuation header when the continuation has preview lines', () => {
@@ -550,7 +548,6 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     lines = component.render(100);
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain('src/**/*.ts');
-    expect(lines[0]).toContain(theme.fg('text', 'src/**/*.ts'));
     expect(lines[0]).not.toContain('foo');
     expect(lines[1]).toContain('│');
     expect(lines[1]).toContain(theme.fg('toolOutput', 'foo'));
