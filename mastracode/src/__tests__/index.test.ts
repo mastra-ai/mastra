@@ -52,6 +52,7 @@ function createMockSettings() {
       omObservationThreshold: null,
       omReflectionThreshold: null,
       omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
     },
     preferences: {
@@ -346,6 +347,31 @@ describe('createMastraCode', () => {
     expect(harnessSubscribeMock).toHaveBeenCalled();
     expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
     expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
+  });
+
+  it('seeds observeAttachments from persisted global setting at startup', async () => {
+    const settings = createMockSettings();
+    (settings.models as { omObserveAttachments: boolean | null }).omObserveAttachments = false;
+    loadSettingsMock.mockReturnValue(settings);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessCall?.initialState?.observeAttachments).toBe(false);
+  });
+
+  it('omits observeAttachments from initial state when global setting is null', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessCall?.initialState).not.toHaveProperty('observeAttachments');
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {
