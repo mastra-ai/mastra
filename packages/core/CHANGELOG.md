@@ -1,5 +1,45 @@
 # @mastra/core
 
+## 1.36.0-alpha.3
+
+### Minor Changes
+
+- Added the `EditorFavorite*` types and an optional `favorites` namespace on `IMastraEditor` so editor implementations can expose favoriting of stored agents and skills. ([#16749](https://github.com/mastra-ai/mastra/pull/16749))
+
+  ```ts
+  import type {
+    IMastraEditor,
+    IEditorFavoritesNamespace,
+    EditorFavoriteTargetInput,
+    EditorFavoriteToggleResult,
+  } from '@mastra/core/editor';
+
+  interface IMastraEditor {
+    // ...existing members...
+    favorites?: IEditorFavoritesNamespace;
+  }
+  ```
+
+  The `favorites` field is optional — existing implementations of `IMastraEditor` continue to work unchanged. `@mastra/editor` ships a default `EditorFavoritesNamespace` that wires this up against the storage `favorites` domain.
+
+  Also renamed `AgentFeatures.stars` to `AgentFeatures.favorites` in `@mastra/core/agent-builder/ee` so the feature flag aligns with the storage column (`favoriteCount`), HTTP routes (`/favorite`), and the editor `favorites` namespace. The field had no functional consumers, so this is a name-only change.
+
+- Added delta polling support for observability list APIs in core, DuckDB, and ClickHouse. ([#16632](https://github.com/mastra-ai/mastra/pull/16632))
+
+### Patch Changes
+
+- Fixed durable agents to honor activeTools when streaming. ([#16646](https://github.com/mastra-ai/mastra/pull/16646))
+
+- Fixed infinite recursion in `RequestContext.toJSON()` when multiple ([#16686](https://github.com/mastra-ai/mastra/pull/16686))
+  `RequestContext` instances reference each other through stored values.
+  Previously, serializing such cross-context cycles would cause a CPU hang.
+  Cyclic references are now detected and omitted from the serialized output,
+  consistent with how circular references within a single context are handled.
+
+- Fixed crash in CacheKeyGenerator.fromAIV4Part when a tool-invocation part has undefined toolInvocation. This can happen when observational memory seals a partially-streamed assistant message. Also guarded MessageMerger against the same condition. ([#16773](https://github.com/mastra-ai/mastra/pull/16773))
+
+- Restore MastraCode local command execution to inherit parent environment variables while redacting env-shaped and secret-looking workspace trace data. ([#16691](https://github.com/mastra-ai/mastra/pull/16691))
+
 ## 1.36.0-alpha.2
 
 ### Minor Changes
