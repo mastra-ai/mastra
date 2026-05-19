@@ -813,11 +813,13 @@ function extractToolResultAttachments(
   const record = result;
 
   const attachments: ObserverInputAttachmentPart[] = [];
+  let hadAttachmentBlocks = false;
   const newValue = (record.value as unknown[]).map(block => {
     const attachment = mapToolResultBlockToAttachment(block);
     if (!attachment) {
       return block;
     }
+    hadAttachmentBlocks = true;
 
     if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
       attachments.push(toObserverInputAttachmentPart(attachment));
@@ -826,7 +828,7 @@ function extractToolResultAttachments(
     return { type: isRecord(block) ? block.type : undefined, placeholder };
   });
 
-  if (attachments.length === 0) {
+  if (!hadAttachmentBlocks) {
     return { resultWithoutAttachments: result, attachments };
   }
 
