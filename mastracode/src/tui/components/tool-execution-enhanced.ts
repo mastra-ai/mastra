@@ -13,8 +13,8 @@ import type { Theme as HighlightTheme } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
-import { ErrorDisplayComponent } from './error-display.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { ErrorDisplayComponent } from './error-display.js';
 import type {
   CompactToolLabelColor,
   IToolExecutionComponent,

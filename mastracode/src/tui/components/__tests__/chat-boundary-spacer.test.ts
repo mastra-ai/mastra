@@ -1,7 +1,10 @@
 import { Container } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import { describe, expect, it } from 'vitest';
-import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from '../../chat-boundary-reconciliation.js';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../assistant-message.js';
 import { PlanApprovalInlineComponent } from '../plan-approval-inline.js';
 import { ToolExecutionComponentEnhanced } from '../tool-execution-enhanced.js';
@@ -21,7 +24,12 @@ function renderSequence(components: Component[]): string[] {
 }
 
 function quietTool(name = 'view'): ToolExecutionComponentEnhanced {
-  const component = new ToolExecutionComponentEnhanced(name, { path: 'src/example.ts', command: 'echo hi' }, { quietDisplayMode: 'quiet' }, ui);
+  const component = new ToolExecutionComponentEnhanced(
+    name,
+    { path: 'src/example.ts', command: 'echo hi' },
+    { quietDisplayMode: 'quiet' },
+    ui,
+  );
   component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
   return component;
 }
@@ -59,7 +67,12 @@ describe('ChatBoundarySpacer', () => {
   });
 
   it('renders no blank line between adjacent singleton quiet compact tools with different tool names', () => {
-    const lines = renderSequence([quietTool('view'), quietTool('string_replace_lsp'), quietTool('view'), quietTool('string_replace_lsp')]);
+    const lines = renderSequence([
+      quietTool('view'),
+      quietTool('string_replace_lsp'),
+      quietTool('view'),
+      quietTool('string_replace_lsp'),
+    ]);
     expect(lines.filter(line => line === '')).toHaveLength(0);
   });
 
@@ -76,8 +89,20 @@ describe('ChatBoundarySpacer', () => {
   });
 
   it('keeps the visible grouped tool label orange unless a continuation fails', () => {
-    const first = new ToolExecutionComponentEnhanced('view', { path: 'src/example.ts' }, { quietDisplayMode: 'quiet' }, ui);
-    const second = completeTool(new ToolExecutionComponentEnhanced('view', { path: 'src/example.ts', offset: 1, limit: 1 }, { quietDisplayMode: 'quiet' }, ui));
+    const first = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet' },
+      ui,
+    );
+    const second = completeTool(
+      new ToolExecutionComponentEnhanced(
+        'view',
+        { path: 'src/example.ts', offset: 1, limit: 1 },
+        { quietDisplayMode: 'quiet' },
+        ui,
+      ),
+    );
 
     let lines = renderSequence([first, second]);
     expect(lines[0]).toContain('\u001b[93mview');

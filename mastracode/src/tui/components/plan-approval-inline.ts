@@ -17,8 +17,8 @@ import {
 } from '@mariozechner/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import type { ChatSpacingKind } from './chat-spacing.js';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface PlanApprovalInlineOptions {
   planId: string;
@@ -327,6 +327,5 @@ export class PlanResultComponent extends Container {
       contentBox.addChild(new Text(theme.fg('warning', `Requested changes: ${options.feedback}`), 0, 0));
       contentBox.addChild(new Spacer(1));
     }
-
   }
 }

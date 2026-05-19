@@ -285,7 +285,10 @@ function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
   const raw = rawPreferences && typeof rawPreferences === 'object' ? (rawPreferences as Record<string, unknown>) : {};
-  const maxPreviewLines = typeof raw.quietModeMaxToolPreviewLines === 'number' ? raw.quietModeMaxToolPreviewLines : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
+  const maxPreviewLines =
+    typeof raw.quietModeMaxToolPreviewLines === 'number'
+      ? raw.quietModeMaxToolPreviewLines
+      : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
 
   return {
     ...DEFAULTS.preferences,
@@ -298,8 +301,8 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
 function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
   return Boolean(
     rawOnboarding &&
-      typeof rawOnboarding === 'object' &&
-      Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
+    typeof rawOnboarding === 'object' &&
+    Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
   );
 }
 

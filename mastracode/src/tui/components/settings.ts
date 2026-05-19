@@ -371,7 +371,10 @@ export class SettingsComponent extends Box implements Focusable {
                   [0, 1, 2, 4, 8].map(lines => ({
                     value: String(lines),
                     label: `  ${quietPreviewLinesLabel(lines)}`,
-                    description: lines === 0 ? 'Hide compact tool detail previews' : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
+                    description:
+                      lines === 0
+                        ? 'Hide compact tool detail previews'
+                        : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
                   })),
                   String(config.quietModeMaxToolPreviewLines),
                   value => {

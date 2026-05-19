@@ -113,10 +113,18 @@ describe('customProviders parsing/persistence', () => {
 
   it('normalizes quiet mode preview line limits', () => {
     withTempSettingsFile(filePath => {
-      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 2.9 }, storage: {} }), 'utf-8');
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 2.9 }, storage: {} }),
+        'utf-8',
+      );
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
 
-      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: -4 }, storage: {} }), 'utf-8');
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: -4 }, storage: {} }),
+        'utf-8',
+      );
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(0);
     });
   });
@@ -132,7 +140,11 @@ describe('customProviders parsing/persistence', () => {
 
   it('marks existing classic users as needing the quiet mode preference prompt', () => {
     withTempSettingsFile(filePath => {
-      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: false }, storage: {} }), 'utf-8');
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: false }, storage: {} }),
+        'utf-8',
+      );
 
       const settings = loadSettings(filePath);
 
@@ -143,7 +155,11 @@ describe('customProviders parsing/persistence', () => {
 
   it('does not prompt existing users who already enabled quiet mode', () => {
     withTempSettingsFile(filePath => {
-      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: true }, storage: {} }), 'utf-8');
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: true }, storage: {} }),
+        'utf-8',
+      );
 
       const settings = loadSettings(filePath);
 
@@ -156,7 +172,12 @@ describe('customProviders parsing/persistence', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(
         filePath,
-        JSON.stringify({ onboarding: { quietModePreferenceSelected: true }, models: {}, preferences: { quietMode: false }, storage: {} }),
+        JSON.stringify({
+          onboarding: { quietModePreferenceSelected: true },
+          models: {},
+          preferences: { quietMode: false },
+          storage: {},
+        }),
         'utf-8',
       );
 

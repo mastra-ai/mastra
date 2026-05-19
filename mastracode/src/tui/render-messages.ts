@@ -8,8 +8,13 @@ import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from './chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
+import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
@@ -19,8 +24,6 @@ import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
-import type { ChatSpacingKind } from './components/chat-spacing.js';
-import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';

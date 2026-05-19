@@ -5,8 +5,8 @@
 import { Container, Markdown, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import type { ChatSpacingKind } from './chat-spacing.js';
 import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
  * Strip ANSI escape sequences from a string.
@@ -23,7 +23,10 @@ class BorderedBox {
   private pending: boolean;
   private borderColor?: string;
 
-  constructor(child: { render(width: number): string[]; invalidate?(): void }, options: { pending?: boolean; borderColor?: string } = {}) {
+  constructor(
+    child: { render(width: number): string[]; invalidate?(): void },
+    options: { pending?: boolean; borderColor?: string } = {},
+  ) {
     this.child = child;
     this.pending = options.pending ?? false;
     this.borderColor = options.borderColor;

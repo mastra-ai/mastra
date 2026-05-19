@@ -11,6 +11,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -18,7 +19,6 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
-import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { showModalOverlay } from '../overlay.js';
 import { getMarkdownTheme } from '../theme.js';
 

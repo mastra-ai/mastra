@@ -6,12 +6,12 @@
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../components/user-message.js';
-import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
@@ -251,7 +251,11 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         state.pendingTools.set(content.id, component);
         state.allToolComponents.push(component);
 
-        state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+        state.streamingComponent = new AssistantMessageComponent(
+          undefined,
+          state.hideThinkingBlock,
+          getMarkdownTheme(),
+        );
         ctx.addChildBeforeFollowUps(state.streamingComponent);
       } else {
         const component = state.pendingTools.get(content.id);

@@ -26,11 +26,25 @@ export function insertChatComponentWithBoundarySpacing(
   const inserted: Component[] = [];
 
   if (previous) {
-    inserted.push(new ChatBoundarySpacer(() => previous, () => child, () => previousPrevious, () => next));
+    inserted.push(
+      new ChatBoundarySpacer(
+        () => previous,
+        () => child,
+        () => previousPrevious,
+        () => next,
+      ),
+    );
   }
   inserted.push(child);
   if (next) {
-    inserted.push(new ChatBoundarySpacer(() => child, () => next, () => previous, () => nextNext));
+    inserted.push(
+      new ChatBoundarySpacer(
+        () => child,
+        () => next,
+        () => previous,
+        () => nextNext,
+      ),
+    );
   }
 
   children.splice(boundedIndex, 0, ...inserted);
@@ -94,7 +108,9 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
     const nextCompactToolGroupKey = nextParticipant?.getCompactToolGroupKey?.();
     const isContinuation = !!compactToolGroupKey && compactToolGroupKey === previousCompactToolGroupKey;
     participant.setCompactToolContinuation?.(isContinuation, isContinuation ? previousCompactToolSummary : undefined);
-    participant.setCompactToolHasFollowingContinuation?.(!!compactToolGroupKey && compactToolGroupKey === nextCompactToolGroupKey);
+    participant.setCompactToolHasFollowingContinuation?.(
+      !!compactToolGroupKey && compactToolGroupKey === nextCompactToolGroupKey,
+    );
     if (compactToolGroupKey) {
       if (!isContinuation) flushCompactRunColor();
       currentCompactRun.push(participant);
@@ -114,7 +130,14 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
       const nextIndex = next ? components.indexOf(next) : -1;
       const nextNext = nextIndex >= 0 ? findNextSpacingComponentInList(components, nextIndex) : undefined;
       if (next) {
-        nextChildren.push(new ChatBoundarySpacer(() => component, () => next, () => previous, () => nextNext));
+        nextChildren.push(
+          new ChatBoundarySpacer(
+            () => component,
+            () => next,
+            () => previous,
+            () => nextNext,
+          ),
+        );
       }
     }
   }

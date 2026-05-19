@@ -30,8 +30,8 @@ import {
   isNewerVersion,
   runUpdate,
 } from '../utils/update-check.js';
-import { dispatchSlashCommand } from './command-dispatch.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
+import { dispatchSlashCommand } from './command-dispatch.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
@@ -1209,7 +1209,8 @@ export class MastraTUI {
     if (settings.onboarding.quietModePreferenceSelected) return;
 
     const answer = await askModalQuestion(this.state.ui, {
-      question: 'Try compact quiet mode?\n\nQuiet mode keeps tool calls and task progress compact so long sessions are easier to scan.',
+      question:
+        'Try compact quiet mode?\n\nQuiet mode keeps tool calls and task progress compact so long sessions are easier to scan.',
       options: [
         { label: 'Enable quiet mode', description: 'Use compact rendering by default' },
         { label: 'Keep classic mode', description: 'Keep the current full rendering' },

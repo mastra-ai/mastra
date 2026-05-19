@@ -17,7 +17,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ui,
     );
 
-    component.updateResult({ content: [{ type: 'text', text: '    10→const first = 1;\n    11→const second = 2;' }], isError: false });
+    component.updateResult({
+      content: [{ type: 'text', text: '    10→const first = 1;\n    11→const second = 2;' }],
+      isError: false,
+    });
 
     const output = component.render(100).join('\n');
     const visible = stripAnsi(output);
@@ -192,7 +195,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ui,
     );
 
-    component.updateResult({ content: [{ type: 'text', text: '.\nsrc/a.ts\nsrc/b.ts\nsrc/c.ts\nsrc/d.ts\nsrc/e.ts' }], isError: false });
+    component.updateResult({
+      content: [{ type: 'text', text: '.\nsrc/a.ts\nsrc/b.ts\nsrc/c.ts\nsrc/d.ts\nsrc/e.ts' }],
+      isError: false,
+    });
 
     const output = stripAnsi(component.render(100).join('\n'));
     expect(output).toContain('list src (5 results)');
@@ -479,7 +485,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines[1]).not.toContain('src/**/*.ts');
     expect(stripAnsi(lines[2]!)).toContain('╰──');
 
-    component.updateResult({ content: [{ type: 'text', text: '2 matches across 1 file\nsrc/a.ts:1:foo\nsrc/b.ts:2:foo' }], isError: false });
+    component.updateResult({
+      content: [{ type: 'text', text: '2 matches across 1 file\nsrc/a.ts:1:foo\nsrc/b.ts:2:foo' }],
+      isError: false,
+    });
     lines = component.render(100);
     expect(stripAnsi(lines[1]!)).toContain('foo (2 results)');
   });

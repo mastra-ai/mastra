@@ -3,10 +3,10 @@ import type { HarnessMessage } from '@mastra/core/harness';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
+import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { UserMessageComponent } from './components/user-message.js';
-import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { addUserMessage, renderCompletedTasksInline, renderExistingMessages } from './render-messages.js';
 import type { TUIState } from './state.js';
 

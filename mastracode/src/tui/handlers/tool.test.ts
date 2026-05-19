@@ -1,7 +1,7 @@
 import { Container } from '@mariozechner/pi-tui';
-import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
-import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { describe, expect, it, vi } from 'vitest';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 
 import type { TUIState } from '../state.js';
 import { handleToolEnd, handleToolInputDelta, handleToolInputStart, handleToolStart } from './tool.js';

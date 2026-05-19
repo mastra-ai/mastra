@@ -266,7 +266,9 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children).toHaveLength(3);
     expect(state.chatContainer.children[0]).toBe(state.messageComponentsById.get('user-2'));
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
-    expect(state.chatContainer.children[2]).toBe(state.pendingSignalMessageComponentsById.get('pending-signal-1')?.component);
+    expect(state.chatContainer.children[2]).toBe(
+      state.pendingSignalMessageComponentsById.get('pending-signal-1')?.component,
+    );
   });
 
   it('uses the same spacing for pending and confirmed user messages', () => {

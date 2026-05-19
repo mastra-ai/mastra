@@ -84,7 +84,12 @@ describe('TaskProgressComponent', () => {
         activeForm: 'Implementing item aware quiet task summary wrapping',
         status: 'in_progress',
       },
-      { id: 'three', content: 'Verify quiet task wrapping', activeForm: 'Verifying quiet task wrapping', status: 'pending' },
+      {
+        id: 'three',
+        content: 'Verify quiet task wrapping',
+        activeForm: 'Verifying quiet task wrapping',
+        status: 'pending',
+      },
     ]);
 
     const lines = component.render(80).map(line => stripAnsi(line).trimEnd());

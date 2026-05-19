@@ -19,8 +19,8 @@ vi.mock('../../onboarding/index.js', () => ({
   saveSettings: mocks.saveSettings,
 }));
 
-import { MastraTUI } from '../mastra-tui.js';
 import type { GlobalSettings } from '../../onboarding/settings.js';
+import { MastraTUI } from '../mastra-tui.js';
 
 function createSettings(overrides: Partial<GlobalSettings> = {}): GlobalSettings {
   return {
@@ -62,7 +62,13 @@ function createSettings(overrides: Partial<GlobalSettings> = {}): GlobalSettings
     updateDismissedVersion: null,
     memoryGateway: {},
     lsp: {},
-    browser: { enabled: false, provider: 'stagehand', headless: false, viewport: { width: 1280, height: 720 }, stagehand: { env: 'LOCAL' } },
+    browser: {
+      enabled: false,
+      provider: 'stagehand',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      stagehand: { env: 'LOCAL' },
+    },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -102,7 +108,9 @@ describe('MastraTUI quiet mode preference prompt', () => {
   });
 
   it('enables quiet mode and marks the preference selected when accepted', async () => {
-    const settings = createSettings({ onboarding: { quietModePreferenceSelected: false } as GlobalSettings['onboarding'] });
+    const settings = createSettings({
+      onboarding: { quietModePreferenceSelected: false } as GlobalSettings['onboarding'],
+    });
     const { tui, tool } = createBareTui();
     mocks.loadSettings.mockReturnValue(settings);
     mocks.askModalQuestion.mockResolvedValueOnce('Enable quiet mode').mockResolvedValueOnce('4 lines');
@@ -122,7 +130,9 @@ describe('MastraTUI quiet mode preference prompt', () => {
   });
 
   it('keeps classic mode and marks the preference selected when declined', async () => {
-    const settings = createSettings({ onboarding: { quietModePreferenceSelected: false } as GlobalSettings['onboarding'] });
+    const settings = createSettings({
+      onboarding: { quietModePreferenceSelected: false } as GlobalSettings['onboarding'],
+    });
     const { tui, tool } = createBareTui();
     mocks.loadSettings.mockReturnValue(settings);
     mocks.askModalQuestion.mockResolvedValue('Keep classic mode');
