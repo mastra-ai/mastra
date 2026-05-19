@@ -1,5 +1,28 @@
 # mastracode
 
+## 0.20.0-alpha.6
+
+### Minor Changes
+
+- Added automatic return to Plan mode when a goal started from an approved plan finishes. ([#16676](https://github.com/mastra-ai/mastra/pull/16676))
+
+### Patch Changes
+
+- Add an "Observe attachments" toggle in `/om` settings that controls whether ([#16682](https://github.com/mastra-ai/mastra/pull/16682))
+  file and image attachments are forwarded to the Observer LLM. Turn it off when
+  running with a text-only observer model. Stored as `omObserveAttachments` in
+  global settings and seeded into the harness state at startup.
+
+- Updated MastraCode to use provider-aware Observational Memory idle activation. ([#16663](https://github.com/mastra-ai/mastra/pull/16663))
+
+  MastraCode now sets `activateAfterIdle: "auto"`, shows an idle-time counter above the input after one minute of inactivity, and combines back-to-back OM activation markers into a single line.
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`14b69c6`](https://github.com/mastra-ai/mastra/commit/14b69c6b05ce1e50c140b030a48cafb41d0746e3), [`4bd4e8e`](https://github.com/mastra-ai/mastra/commit/4bd4e8e042f6687559f49a560a7914cee9b85447), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`96d225b`](https://github.com/mastra-ai/mastra/commit/96d225b05ed52ff250e0a342a7e6398e291945f0)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/memory@1.19.0-alpha.1
+  - @mastra/mcp@1.8.0-alpha.1
+  - @mastra/fastembed@1.1.0-alpha.0
+
 ## 0.20.0-alpha.5
 
 ### Patch Changes
