@@ -1,5 +1,5 @@
 import { MarkdownRenderer } from '@mastra/playground-ui';
-import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, CloudCog } from 'lucide-react';
+import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, CloudCog, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { ObservationRenderer } from './observation-renderer';
 
@@ -14,6 +14,7 @@ export interface OmMarkerData {
   observations?: string;
   currentTask?: string;
   suggestedResponse?: string;
+  extractedValues?: Record<string, unknown>;
   durationMs?: number;
   error?: string;
   recordId?: string;
@@ -21,7 +22,15 @@ export interface OmMarkerData {
   threadId?: string;
   threadIds?: string[];
   operationType?: 'observation' | 'reflection';
-  _state?: 'loading' | 'complete' | 'failed' | 'buffering' | 'buffering-complete' | 'buffering-failed' | 'activated';
+  _state?:
+    | 'loading'
+    | 'complete'
+    | 'failed'
+    | 'buffering'
+    | 'buffering-complete'
+    | 'buffering-failed'
+    | 'activated'
+    | 'extracted';
   // Activation-specific fields
   chunksActivated?: number;
   tokensActivated?: number;
@@ -40,11 +49,14 @@ export interface OmMarkerData {
 export interface ObservationMarkerBadgeProps {
   toolName: string;
   args: Record<string, unknown>;
+  result?: unknown;
   metadata?: {
     mode?: string;
     omData?: OmMarkerData;
   };
 }
+
+export type ExtractedValuesBadgeProps = ObservationMarkerBadgeProps;
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "234")
@@ -56,6 +68,67 @@ const formatTokens = (tokens: number): string => {
   return String(Math.round(tokens));
 };
 
+const formatExtractedValue = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value === null) return 'null';
+  const serialized = JSON.stringify(value);
+  return serialized.length > 160 ? `${serialized.slice(0, 157)}...` : serialized;
+};
+
+const formatExtractedValueDetails = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value === null) return 'null';
+  return JSON.stringify(value, null, 2);
+};
+
+export const ExtractedValuesBadge = ({ args, result, metadata }: ExtractedValuesBadgeProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const resultOmData = result && typeof result === 'object' ? (result as { omData?: OmMarkerData }).omData : undefined;
+  const omData = (resultOmData || metadata?.omData || args) as OmMarkerData;
+  const extractedValues = omData.extractedValues;
+  const extractedEntries = extractedValues ? Object.entries(extractedValues) : [];
+
+  if (extractedEntries.length === 0) return null;
+
+  const label = omData.operationType === 'reflection' ? 'Reflected extractions' : 'Extracted values';
+
+  return (
+    <div className="mb-3" data-testid="om-extracted-marker">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/10 px-2 py-1 text-xs font-medium text-green-600 transition-colors hover:bg-green-500/20"
+      >
+        {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <CheckCircle2 className="h-3 w-3 shrink-0" />
+        <span className="shrink-0">{label}</span>
+        <span className="max-w-80 truncate text-[10px] opacity-80" data-testid="om-extracted-summary">
+          {extractedEntries.map(([key, value]) => `${key}: ${formatExtractedValue(value)}`).join(', ')}
+        </span>
+      </button>
+      {isExpanded && (
+        <div
+          className="mt-1 ml-6 rounded-md border border-green-500/10 bg-green-500/5 p-2 text-xs"
+          data-testid="om-extracted-values"
+        >
+          <div className="text-[10px] font-medium uppercase tracking-wide text-green-600">Extracted Values</div>
+          <div className="mt-1 space-y-1">
+            {extractedEntries.map(([key, value]) => (
+              <div key={key} className="grid grid-cols-[minmax(0,0.35fr)_minmax(0,0.65fr)] gap-2 text-[11px]">
+                <span className="truncate font-medium text-foreground/70">{key}</span>
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-black/10 px-1 py-0.5 text-[10px] text-foreground">
+                  {formatExtractedValueDetails(value)}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 /**
  * Renders an inline badge for OM observation markers.
  * These are converted from data-om-* parts to tool-call format for assistant-ui compatibility.
@@ -63,8 +136,9 @@ const formatTokens = (tokens: number): string => {
  * The badge includes a `data-om-badge` attribute with the cycleId so that
  * the BracketOverlay can find it via DOM queries for positioning bracket lines.
  */
-export const ObservationMarkerBadge = ({ toolName, args, metadata }: ObservationMarkerBadgeProps) => {
-  const omData = (metadata?.omData || args) as OmMarkerData;
+export const ObservationMarkerBadge = ({ toolName, args, result, metadata }: ObservationMarkerBadgeProps) => {
+  const resultOmData = result && typeof result === 'object' ? (result as { omData?: OmMarkerData }).omData : undefined;
+  const omData = (resultOmData || metadata?.omData || args) as OmMarkerData;
   const cycleId = omData.cycleId || '';
 
   // Use the _state field set during part merging, or fallback to detecting from data
@@ -86,6 +160,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const isBufferingComplete = state === 'buffering-complete';
   const isBufferingFailed = state === 'buffering-failed';
   const isActivated = state === 'activated';
+  const isExtracted = state === 'extracted';
   const isReflection = omData.operationType === 'reflection';
 
   // Failed reflections should be expanded by default to draw attention to the error
@@ -113,6 +188,10 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const labelColor = 'text-green-600';
   const actionLabel = isReflection ? 'Reflecting' : 'Observing';
   const completedLabel = isReflection ? 'Reflected' : 'Observed';
+
+  if (isExtracted) {
+    return <ExtractedValuesBadge toolName={toolName} args={args} result={result} metadata={metadata} />;
+  }
 
   // Render based on marker type
   if (isStart) {
@@ -144,6 +223,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const observations = omData.observations;
     const currentTask = omData.currentTask;
     const suggestedResponse = omData.suggestedResponse;
+    const extractedValues = omData.extractedValues;
+    const extractedEntries = extractedValues ? Object.entries(extractedValues) : [];
     const durationMs = omData.durationMs;
     const compressionRatio =
       tokensObserved && observationTokens && observationTokens > 0
@@ -181,6 +262,9 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
               {compressionRatio ? ` (-${compressionRatio}x)` : ''}
             </span>
           </button>
+          {extractedEntries.length > 0 && (
+            <ExtractedValuesBadge toolName={toolName} args={{ ...omData, _state: 'extracted' }} />
+          )}
           {isExpanded && (
             <div
               className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}
@@ -237,6 +321,23 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                       <MarkdownRenderer>{currentTask}</MarkdownRenderer>
                     </div>
                   )}
+                </div>
+              )}
+              {extractedEntries.length > 0 && (
+                <div className={`mt-2 pt-2 border-t border-neutral-700`} data-testid="om-extracted-values">
+                  <div className="text-[10px] font-medium text-foreground uppercase tracking-wide">
+                    Extracted Values
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {extractedEntries.map(([key, value]) => (
+                      <div key={key} className="grid grid-cols-[minmax(0,0.4fr)_minmax(0,0.6fr)] gap-2 text-[11px]">
+                        <span className="truncate font-medium text-foreground/70">{key}</span>
+                        <code className="truncate rounded bg-black/10 px-1 py-0.5 text-[10px] text-foreground">
+                          {formatExtractedValue(value)}
+                        </code>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               {suggestedResponse && (

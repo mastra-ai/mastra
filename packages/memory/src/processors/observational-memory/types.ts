@@ -2,6 +2,7 @@ import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
@@ -188,9 +189,59 @@ export interface ObservationConfig {
    * When enabled, the Observer will analyze conversation context and
    * suggest a short, descriptive title for the thread.
    *
+   * When an explicit `extract` array includes the `thread-title` slug, that
+   * extractor overrides the built-in thread title extractor.
+   *
    * @default false
    */
   threadTitle?: boolean;
+
+  /**
+   * Declarative list of extractors that drive what the Observer outputs.
+   *
+   * Each `Extractor` is emitted as its own XML-tagged section in the
+   * observer's structured output, parsed back out, schema-validated,
+   * optionally carried forward into the next observer call, persisted to
+   * thread metadata, and surfaced to a lifecycle hook (`onExtracted`).
+   *
+   * When omitted, ObservationalMemory defaults to extracting `current-task`,
+   * `suggested-response`, and (when `threadTitle: true`) `thread-title`.
+   *
+   * When set, this array extends the default list. Supplying an extractor
+   * with the same slug as a built-in overrides that built-in.
+   *
+   * @example
+   * ```ts
+   * import { Extractor } from '@mastra/memory/processors';
+   * import { z } from 'zod';
+   *
+   * new ObservationalMemory({
+   *   storage,
+   *   observation: {
+   *     extract: [
+   *       Extractor.currentTask(),
+   *       Extractor.suggestedResponse(),
+   *       Extractor.threadTitle(),
+   *       new Extractor({
+   *         name: 'follows-policy',
+   *         instructions: 'Output "ok" or describe the policy violation.',
+   *         schema: z.string(),
+   *         injectionBehaviour: 'carry-forward',
+   *         onExtracted: ({ extracted, threadId }) => {
+   *           if (extracted.current !== 'ok') {
+   *             console.warn(`Policy issue in ${threadId}: ${extracted.current}`);
+   *           }
+   *           return extracted.current;
+   *         },
+   *       }),
+   *     ],
+   *   },
+   * });
+   * ```
+   *
+   * @experimental
+   */
+  extract?: Array<Extractor<any>>;
 }
 
 /**
@@ -278,6 +329,21 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Declarative list of extractors that drive what the Reflector outputs.
+   *
+   * Each `Extractor` is emitted as its own XML-tagged section in the
+   * reflector's structured output, parsed, schema-validated, surfaced to a
+   * thread-scoped lifecycle hook (`onExtracted`) for optional normalization,
+   * and then persisted to thread metadata.
+   *
+   * Extractor sections are stripped from reflected observations before the
+   * reflection is stored so extracted values do not leak into memory text.
+   *
+   * @experimental
+   */
+  extract?: Array<Extractor<any>>;
 }
 
 /**
@@ -405,6 +471,32 @@ export interface DataOmObservationEndPart {
  * Failed marker inserted when observation fails.
  * Allows for retry logic and debugging.
  */
+export interface DataOmExtractedPart {
+  type: 'data-om-extracted';
+  data: {
+    /** Unique ID for this observation/reflection cycle */
+    cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When extracted values were persisted */
+    completedAt: string;
+
+    /** The OM record ID */
+    recordId?: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** Resource ID for the thread */
+    resourceId?: string;
+
+    /** Values extracted and persisted for this cycle */
+    extractedValues: Record<string, unknown>;
+  };
+}
+
 export interface DataOmObservationFailedPart {
   type: 'data-om-observation-failed';
   data: {
@@ -705,6 +797,7 @@ export interface DataOmThreadUpdatePart {
 export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
+  | DataOmExtractedPart
   | DataOmObservationFailedPart
   | DataOmStatusPart
   | DataOmThreadUpdatePart;

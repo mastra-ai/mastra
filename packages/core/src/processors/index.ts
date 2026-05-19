@@ -1,6 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent/agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { TripWireOptions } from '../agent/trip-wire';
@@ -45,6 +46,11 @@ export interface ProcessorStreamWriter {
 }
 
 /**
+ * Agent instance passed to processors for the agent execution they operate on.
+ */
+export type ProcessorAgent = Agent<any, any, any, any>;
+
+/**
  * Base context shared by all processor methods
  */
 export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<ObservabilityContext> {
@@ -54,8 +60,10 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
    * @param options - Options including retry flag and metadata
    */
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
-  /** Optional runtime context with execution metadata */
-  requestContext?: RequestContext;
+  /** Agent execution this processor is operating on */
+  agent: ProcessorAgent;
+  /** Runtime context with execution metadata */
+  requestContext: RequestContext;
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
@@ -196,8 +204,17 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
 
 export type RunProcessInputStepArgs = Omit<
   ProcessInputStepArgs,
-  'messages' | 'systemMessages' | 'abort' | 'state' | 'messageId' | 'rotateResponseMessageId' | 'retryCount'
+  | 'messages'
+  | 'systemMessages'
+  | 'abort'
+  | 'state'
+  | 'agent'
+  | 'requestContext'
+  | 'messageId'
+  | 'rotateResponseMessageId'
+  | 'retryCount'
 > & {
+  requestContext?: RequestContext;
   messageId?: string;
   rotateResponseMessageId?: () => string;
   retryCount?: number;

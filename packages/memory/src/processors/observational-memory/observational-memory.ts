@@ -5,7 +5,7 @@ import { resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
@@ -180,6 +180,7 @@ function parseActivationTTL(value: number | string | false | undefined, fieldPat
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
+import { Extractor, isBuiltInExtractorSlug, validateExtractorList, BUILT_IN_EXTRACTOR_SLUGS } from './extractor';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -292,6 +293,27 @@ export class ObservationalMemory {
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
+
+  /**
+   * Resolved list of extractors driving the Observer agent (built-ins +
+   * user-supplied customs). Initialized in the constructor.
+   * @internal
+   */
+  private observerExtractors: ReadonlyArray<Extractor<any>> = [];
+
+  /**
+   * Subset of `observerExtractors` whose slugs are NOT built-in. These need
+   * to be threaded into the Observer prompt as additional XML output
+   * sections and parsed back from the response.
+   * @internal
+   */
+  private observerAdditionalExtractors: ReadonlyArray<Extractor<any>> = [];
+
+  /**
+   * Resolved list of user-defined extractors driving the Reflector agent.
+   * @internal
+   */
+  private reflectorExtractors: ReadonlyArray<Extractor<any>> = [];
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -497,6 +519,9 @@ export class ObservationalMemory {
       threadTitle: config.observation?.threadTitle ?? false,
     };
 
+    this.resolveObserverExtractors(config.observation?.extract);
+    this.resolveReflectorExtractors(config.reflection?.extract);
+
     // Resolve reflection config with defaults
     this.reflectionConfig = {
       model: reflectionModel,
@@ -564,6 +589,7 @@ export class ObservationalMemory {
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
+      extractors: this.reflectorExtractors,
       mastra: config.mastra,
     });
 
@@ -681,6 +707,47 @@ export class ObservationalMemory {
     routingThresholds?: string;
   } {
     return this.resolveTieredModel(this.reflectionConfig.model, inputTokens);
+  }
+
+  /**
+   * Resolve the final list of extractors driving the Observer agent by
+   * merging built-in extractors (controlled by legacy boolean flags) with
+   * any user-supplied extractors from `observation.extract`.
+   *
+   * The current task and suggested-response built-ins are always included
+   * unless the user has already supplied an extractor with the matching
+   * slug. The thread-title built-in is only included when the legacy
+   * `observation.threadTitle` flag is enabled (default `false`).
+   *
+   * Validation (uniqueness, reserved tag collisions) is performed once
+   * here so the constructor surface reports configuration errors eagerly.
+   */
+  private resolveObserverExtractors(userExtractors: ReadonlyArray<Extractor<any>> | undefined): void {
+    const supplied = userExtractors ?? [];
+    const suppliedSlugs = new Set(supplied.map(e => e.slug));
+
+    const builtIns: Extractor<any>[] = [];
+    if (!suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.currentTask)) {
+      builtIns.push(Extractor.currentTask() as Extractor<any>);
+    }
+    if (!suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.suggestedResponse)) {
+      builtIns.push(Extractor.suggestedResponse() as Extractor<any>);
+    }
+    if (this.observationConfig.threadTitle && !suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.threadTitle)) {
+      builtIns.push(Extractor.threadTitle() as Extractor<any>);
+    }
+
+    const merged: Extractor<any>[] = [...builtIns, ...supplied];
+    validateExtractorList(merged, 'observer.extract');
+
+    this.observerExtractors = merged;
+    this.observerAdditionalExtractors = merged.filter(e => !isBuiltInExtractorSlug(e.slug));
+  }
+
+  private resolveReflectorExtractors(userExtractors: ReadonlyArray<Extractor<any>> | undefined): void {
+    const supplied = userExtractors ?? [];
+    validateExtractorList(supplied, 'reflection.extract');
+    this.reflectorExtractors = [...supplied];
   }
 
   private resolveTieredModel<TModel extends ObservationalMemoryModel>(
@@ -1950,6 +2017,7 @@ ${formattedMessages}
     lockKey: string,
     writer?: ProcessorStreamWriter,
     contextWindowTokens?: number,
+    agent?: ProcessorAgent,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<void> {
@@ -1976,6 +2044,7 @@ ${formattedMessages}
       unobservedMessages,
       bufferKey,
       writer,
+      agent,
       requestContext,
       observabilityContext,
     ).finally(() => {
@@ -2001,6 +2070,7 @@ ${formattedMessages}
     unobservedMessages: MastraDBMessage[],
     bufferKey: string,
     writer?: ProcessorStreamWriter,
+    agent?: ProcessorAgent,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<void> {
@@ -2111,6 +2181,7 @@ ${formattedMessages}
       cycleId,
       startedAt,
       writer,
+      agent,
       requestContext,
       observabilityContext,
     }).run();
@@ -2140,6 +2211,7 @@ ${formattedMessages}
     unobservedMessages: MastraDBMessage[];
     threshold: number;
     writer?: ProcessorStreamWriter;
+    agent?: ProcessorAgent;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
   }): Promise<boolean> {
@@ -2162,6 +2234,7 @@ ${formattedMessages}
         lockKey,
         opts.writer,
         opts.unbufferedPendingTokens,
+        opts.agent,
         opts.requestContext,
       );
     }
@@ -2880,6 +2953,7 @@ ${formattedMessages}
      *  before lastBufferedBoundary is set. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
+    agent?: ProcessorAgent;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     /** Called with the final candidate messages after cursor filtering, before the observer runs.
@@ -3331,6 +3405,7 @@ ${formattedMessages}
     resourceId?: string;
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
+    agent?: ProcessorAgent;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3339,7 +3414,7 @@ ${formattedMessages}
     reflected: boolean;
     record: ObservationalMemoryRecord;
   }> {
-    const { threadId, resourceId, messages, hooks, requestContext } = opts;
+    const { threadId, resourceId, messages, hooks, agent, requestContext } = opts;
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
     const reflectionHooks = hooks
       ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
@@ -3379,6 +3454,7 @@ ${formattedMessages}
           resourceId,
           messages: unobservedMessages,
           reflectionHooks,
+          agent,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
@@ -3584,6 +3660,41 @@ ${formattedMessages}
   }
 
   /**
+   * Get the fully-resolved list of extractors driving the Observer agent.
+   *
+   * Includes both the built-in factories (`Extractor.currentTask`,
+   * `Extractor.suggestedResponse`, optionally `Extractor.threadTitle`) and
+   * any user-supplied extractors from `observation.extract`.
+   *
+   * @experimental
+   */
+  getObserverExtractors(): ReadonlyArray<Extractor<any>> {
+    return [...this.observerExtractors];
+  }
+
+  /**
+   * Get the subset of observer extractors that are *not* built-in. These
+   * are the ones that need to be threaded into the Observer prompt as
+   * additional XML output sections.
+   *
+   * @experimental
+   * @internal
+   */
+  getObserverAdditionalExtractors(): ReadonlyArray<Extractor<any>> {
+    return [...this.observerAdditionalExtractors];
+  }
+
+  /**
+   * Get the fully-resolved list of extractors driving the Reflector agent.
+   *
+   * @experimental
+   * @internal
+   */
+  getReflectorExtractors(): ReadonlyArray<Extractor<any>> {
+    return [...this.reflectorExtractors];
+  }
+
+  /**
    * Begin a new observation turn — the high-level API for managing the
    * observe/buffer/activate/reflect lifecycle across agentic loop steps.
    *
@@ -3603,6 +3714,8 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    agent: ProcessorAgent;
+    requestContext: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3611,6 +3724,8 @@ ${formattedMessages}
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       messageList: opts.messageList,
+      agent: opts.agent,
+      requestContext: opts.requestContext,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });

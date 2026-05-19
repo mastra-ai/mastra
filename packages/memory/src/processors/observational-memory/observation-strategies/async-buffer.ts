@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { setThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
@@ -10,6 +10,26 @@ import { buildMessageRange } from '../observational-memory';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
+
+/**
+ * Filter the raw `extractedValues` returned from the observer down to
+ * just the slugs registered for non-built-in extractors. Mirrors the helper
+ * used by the sync strategy.
+ */
+function filterExtractedValuesForStorage(
+  values: Record<string, unknown> | undefined,
+  additionalExtractors: ReadonlyArray<{ slug: string }>,
+): Record<string, unknown> | undefined {
+  if (!values || additionalExtractors.length === 0) return undefined;
+  const result: Record<string, unknown> = {};
+  for (const extractor of additionalExtractors) {
+    const value = values[extractor.slug];
+    if (value !== undefined && value !== '') {
+      result[extractor.slug] = value;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
 
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
   private readonly startedAt: string;
@@ -48,10 +68,20 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
+    // Pull any prior custom-extractor values from thread metadata so the
+    // observer can carry them forward if the user opted into that behaviour.
+    let priorExtractedValues: Record<string, unknown> | undefined;
+    if (this.deps.additionalExtractors.length > 0) {
+      const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
+      priorExtractedValues = thread ? getThreadOMMetadata(thread.metadata)?.extracted : undefined;
+    }
+
     return this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
+      additionalExtractors: this.deps.additionalExtractors,
+      priorExtractedValues,
     });
   }
 
@@ -91,9 +121,13 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       cycleObservationTokens: observationTokens,
       observedMessageIds: messageIds,
       lastObservedAt,
+      observedMessages: messages,
+      activeObservations: this.opts.record.activeObservations ?? '',
+      newObservations: output.observations,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
+      extractedValues: filterExtractedValuesForStorage(output.extractedValues, this.deps.additionalExtractors),
     };
   }
 
@@ -120,27 +154,38 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
-    // Update thread title immediately — don't wait for activation.
+    // Update thread title immediately — don't wait for activation. Custom
+    // extractor values are already normalized by onExtracted hooks and are
+    // written through so the next observation cycle can carry them forward.
     const newTitle = processed.threadTitle?.trim();
-    if (newTitle && newTitle.length >= 3) {
+    const shouldWriteTitle = !!newTitle && newTitle.length >= 3;
+    const extractedValues = processed.extractedValues;
+    if (shouldWriteTitle || extractedValues) {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
         const oldTitle = thread.title?.trim();
-        if (newTitle !== oldTitle) {
-          const newMetadata = setThreadOMMetadata(thread.metadata, {
-            threadTitle: processed.threadTitle,
-          });
-          await this.storage.updateThread({
-            id: threadId,
-            title: newTitle,
-            metadata: newMetadata,
-          });
+        const titleChanged = shouldWriteTitle && newTitle !== oldTitle;
+        const priorMeta = getThreadOMMetadata(thread.metadata);
+        const mergedExtractedValues =
+          priorMeta?.extracted || extractedValues
+            ? { ...(priorMeta?.extracted ?? {}), ...(extractedValues ?? {}) }
+            : undefined;
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          ...(shouldWriteTitle ? { threadTitle: processed.threadTitle } : {}),
+          ...(mergedExtractedValues ? { extracted: mergedExtractedValues } : {}),
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: titleChanged ? newTitle! : (thread.title ?? ''),
+          metadata: newMetadata,
+        });
 
+        if (titleChanged) {
           const marker = createThreadUpdateMarker({
             cycleId: this.cycleId,
             threadId,
             oldTitle,
-            newTitle,
+            newTitle: newTitle!,
           });
           await this.streamMarker(marker);
         }
@@ -157,6 +202,15 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const updatedChunks = getBufferedChunks(updatedRecord);
     const totalBufferedTokens =
       updatedChunks.reduce((sum, c) => sum + (c.tokenCount ?? 0), 0) || processed.observationTokens;
+
+    await this.emitExtractedMarker({
+      cycleId: this.cycleId,
+      operationType: 'observation',
+      threadId,
+      resourceId: record.resourceId ?? undefined,
+      recordId: record.id,
+      extractedValues: processed.extractedValues,
+    });
 
     const endMarker = createBufferingEndMarker({
       cycleId: this.cycleId,

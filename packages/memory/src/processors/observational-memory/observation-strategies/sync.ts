@@ -15,6 +15,28 @@ import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
+/**
+ * Filter a raw `extractedValues` map (as returned by the observer) down
+ * to just the slugs registered for non-built-in extractors. Built-in slugs
+ * (current-task, suggested-response, thread-title) are stored on their
+ * dedicated thread-metadata fields, so they should not be duplicated into
+ * the generic `extractors` map.
+ */
+function filterExtractedValuesForStorage(
+  values: Record<string, unknown> | undefined,
+  additionalExtractors: ReadonlyArray<{ slug: string }>,
+): Record<string, unknown> | undefined {
+  if (!values || additionalExtractors.length === 0) return undefined;
+  const result: Record<string, unknown> = {};
+  for (const extractor of additionalExtractors) {
+    const value = values[extractor.slug];
+    if (value !== undefined && value !== '') {
+      result[extractor.slug] = value;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 export class SyncObservationStrategy extends ObservationStrategy {
   private readonly startedAt = new Date().toISOString();
   private readonly lastMessage: MastraDBMessage | undefined;
@@ -105,6 +127,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
       priorCurrentTask: omMeta?.currentTask,
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
+      additionalExtractors: this.deps.additionalExtractors,
+      priorExtractedValues: omMeta?.extracted,
     });
     this.observerResult = result;
     return result;
@@ -150,9 +174,13 @@ export class SyncObservationStrategy extends ObservationStrategy {
       cycleObservationTokens,
       observedMessageIds,
       lastObservedAt,
+      observedMessages: messages,
+      activeObservations: existingObservations,
+      newObservations: output.observations,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
+      extractedValues: filterExtractedValuesForStorage(output.extractedValues, this.deps.additionalExtractors),
     };
   }
 
@@ -166,11 +194,20 @@ export class SyncObservationStrategy extends ObservationStrategy {
       const oldTitle = thread.title?.trim();
       const newTitle = processed.threadTitle?.trim();
       const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+      // Merge new custom-extractor values on top of any prior persisted values
+      // so an empty cycle (e.g. observer didn't emit a value for one extractor)
+      // doesn't wipe out the previous extracted state.
+      const priorMeta = getThreadOMMetadata(thread.metadata);
+      const mergedExtractedValues =
+        priorMeta?.extracted || processed.extractedValues
+          ? { ...(priorMeta?.extracted ?? {}), ...(processed.extractedValues ?? {}) }
+          : undefined;
       const newMetadata = setThreadOMMetadata(thread.metadata, {
         suggestedResponse: processed.suggestedContinuation,
         currentTask: processed.currentTask,
         threadTitle: processed.threadTitle,
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
+        extracted: mergedExtractedValues,
       });
       await this.storage.updateThread({
         id: threadId,
@@ -205,6 +242,15 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
     const actualTokensObserved = await this.tokenCounter.countMessagesAsync(this.opts.messages);
+    await this.emitExtractedMarker({
+      cycleId,
+      operationType: 'observation',
+      threadId: this.opts.threadId,
+      resourceId: this.opts.resourceId,
+      recordId: this.opts.record.id,
+      extractedValues: processed.extractedValues,
+    });
+
     if (this.lastMessage?.id) {
       const endMarker = createObservationEndMarker({
         cycleId,

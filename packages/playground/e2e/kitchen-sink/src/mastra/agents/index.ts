@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
+import { Extractor } from '@mastra/memory/processors';
 
 import * as aiTest from 'ai/test';
 import { z } from 'zod';
@@ -32,7 +33,8 @@ const observerText = `<observations>
 -  User mentioned they need assistance
 </observations>
 <current-task>Help the user with their request</current-task>
-<suggested-response>I can help you with that. What specifically do you need?</suggested-response>`;
+<suggested-response>I can help you with that. What specifically do you need?</suggested-response>
+<active-topic>{"topic":"billing","confidence":0.91}</active-topic>`;
 
 const reflectorText = `<observations>
 ## January 27, 2026
@@ -93,6 +95,26 @@ const mockReflectorModel = new aiTest.MockLanguageModelV2({
   }),
 });
 
+const activeTopicExtractor = new Extractor({
+  name: 'active-topic',
+  instructions: 'Extract the active topic as JSON with topic and confidence.',
+  schema: z.object({
+    topic: z.string(),
+    confidence: z.number(),
+    normalized: z.boolean().optional(),
+    source: z.enum(['observer', 'reflector']).optional(),
+    observationPreview: z.string().optional(),
+  }),
+  injectionBehaviour: 'carry-forward',
+  onExtracted: ({ source, extracted, observations }) => ({
+    ...extracted.previous,
+    ...extracted.current,
+    normalized: true,
+    source,
+    observationPreview: observations.newObservations.slice(0, 40),
+  }),
+});
+
 // Memory with Observational Memory enabled for testing OM UI
 // Using very low thresholds so observations trigger quickly in E2E tests
 // Using mock models for observation/reflection to avoid real API calls
@@ -104,6 +126,7 @@ const omMemory = new Memory({
       observation: {
         model: mockObserverModel,
         messageTokens: 20, // Very low threshold for E2E tests
+        extract: [activeTopicExtractor],
       },
       reflection: {
         model: mockReflectorModel,

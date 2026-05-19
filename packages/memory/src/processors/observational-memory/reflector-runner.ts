@@ -1,17 +1,21 @@
 import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
+import type { Extractor } from './extractor';
+import { invokeExtractorHooks } from './extractor';
 import {
   createActivationMarker,
   createBufferingEndMarker,
   createBufferingFailedMarker,
+  createExtractedMarker,
   createBufferingStartMarker,
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -145,6 +149,7 @@ export class ReflectorRunner {
     resourceId?: string,
   ) => Promise<void>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
+  private readonly extractors: ReadonlyArray<Extractor<any>>;
   private mastra?: Mastra;
 
   constructor(opts: {
@@ -168,6 +173,7 @@ export class ReflectorRunner {
     ) => Promise<void>;
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
+    extractors?: ReadonlyArray<Extractor<any>>;
     mastra?: Mastra;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
@@ -181,6 +187,7 @@ export class ReflectorRunner {
     this.persistMarkerToStorage = opts.persistMarkerToStorage;
     this.persistMarkerToMessage = opts.persistMarkerToMessage;
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
+    this.extractors = opts.extractors ?? [];
     this.mastra = opts.mastra;
   }
 
@@ -188,11 +195,70 @@ export class ReflectorRunner {
     this.mastra = mastra;
   }
 
+  private async persistExtractedValues(
+    threadId: string,
+    resourceId: string | undefined,
+    values: Record<string, unknown>,
+    context: {
+      agent?: ProcessorAgent;
+      requestContext?: RequestContext;
+      writer?: ProcessorStreamWriter;
+      cycleId?: string;
+      recordId?: string;
+      activeObservations?: string;
+      newObservations?: string;
+    } = {},
+  ): Promise<void> {
+    if (Object.keys(values).length === 0) return;
+
+    const thread = await this.storage.getThreadById({ threadId });
+    if (!thread) return;
+
+    const priorMeta = getThreadOMMetadata(thread.metadata);
+    const normalizedValues = await invokeExtractorHooks(
+      this.extractors,
+      { extractedValues: values },
+      {
+        source: 'reflector',
+        observations: {
+          activeObservations: context.activeObservations ?? '',
+          newObservations: context.newObservations ?? '',
+        },
+        threadId,
+        resourceId,
+        mainAgent: context.agent!,
+        requestContext: context.requestContext ?? new RequestContext(),
+        previousValues: { extractedValues: priorMeta?.extracted },
+      },
+      (extractor, error) => omError(`[OM] reflector extractor.onExtracted (${extractor.slug}) threw`, error),
+    );
+    const metadata = setThreadOMMetadata(thread.metadata, {
+      extracted: { ...(priorMeta?.extracted ?? {}), ...normalizedValues },
+    });
+    await this.storage.updateThread({
+      id: threadId,
+      title: thread.title ?? '',
+      metadata,
+    });
+
+    if (context.writer && context.cycleId) {
+      const marker = createExtractedMarker({
+        cycleId: context.cycleId,
+        operationType: 'reflection',
+        threadId,
+        resourceId,
+        recordId: context.recordId,
+        extractedValues: normalizedValues,
+      });
+      await context.writer.custom({ ...marker, transient: true }).catch(() => {});
+    }
+  }
+
   private createAgent(model: ConcreteReflectionModel): Agent {
     const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
-      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction),
+      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, this.extractors),
       model,
     });
     if (this.mastra) {
@@ -253,6 +319,7 @@ export class ReflectorRunner {
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
+    extractedValues?: Record<string, unknown>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
@@ -273,7 +340,13 @@ export class ReflectorRunner {
       attemptNumber++;
       const isRetry = attemptNumber > 1;
 
-      const prompt = buildReflectorPrompt(observations, manualPrompt, currentLevel, skipContinuationHints);
+      const prompt = buildReflectorPrompt(
+        observations,
+        manualPrompt,
+        currentLevel,
+        skipContinuationHints,
+        this.extractors,
+      );
       omDebug(
         `[OM:callReflector] ${isRetry ? `retry #${attemptNumber - 1}` : 'first attempt'}: level=${currentLevel}, originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
       );
@@ -359,7 +432,9 @@ export class ReflectorRunner {
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
 
-      parsed = parseReflectorOutput(result.text, observations);
+      parsed = parseReflectorOutput(result.text, observations, this.extractors, (extractor, error) =>
+        omError(`[OM:callReflector] failed to parse extractor section (${extractor.slug})`, error),
+      );
 
       if (parsed.degenerate) {
         omDebug(
@@ -421,6 +496,7 @@ export class ReflectorRunner {
     return {
       observations: parsed.observations,
       suggestedContinuation: parsed.suggestedContinuation,
+      extractedValues: parsed.extractedValues,
       usage: totalUsage.totalTokens > 0 ? totalUsage : undefined,
     };
   }
@@ -433,6 +509,7 @@ export class ReflectorRunner {
     observationTokens: number,
     lockKey: string,
     writer?: ProcessorStreamWriter,
+    agent?: ProcessorAgent,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>,
@@ -446,12 +523,19 @@ export class ReflectorRunner {
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     registerOp(record.id, 'bufferingReflection');
-    this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
+    this.storage.setBufferingReflectionFlag(record.id, true).catch((err: unknown) => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
     reflectionHooks?.onReflectionStart?.();
-    const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer, requestContext, observabilityContext)
+    const asyncOp = this.doAsyncBufferedReflection(
+      record,
+      bufferKey,
+      writer,
+      agent,
+      requestContext,
+      observabilityContext,
+    )
       .then(usage => {
         reflectionHooks?.onReflectionEnd?.({ usage });
       })
@@ -482,7 +566,7 @@ export class ReflectorRunner {
       .finally(() => {
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
-        this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
+        this.storage.setBufferingReflectionFlag(record.id, false).catch((err: unknown) => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
       });
@@ -498,6 +582,7 @@ export class ReflectorRunner {
     record: ObservationalMemoryRecord,
     _bufferKey: string,
     writer?: ProcessorStreamWriter,
+    agent?: ProcessorAgent,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<{ inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined> {
@@ -576,6 +661,7 @@ export class ReflectorRunner {
       tokenCount: reflectionTokenCount,
       inputTokenCount: sliceTokenEstimate,
       reflectedObservationLineCount,
+      extractedValues: reflectResult.extractedValues,
     });
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
@@ -611,6 +697,7 @@ export class ReflectorRunner {
     lockKey: string,
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
+    context: { agent?: ProcessorAgent; requestContext?: RequestContext } = {},
     activationMetadata?: {
       triggeredBy: 'threshold' | 'ttl' | 'provider_change';
       lastActivityAt?: number;
@@ -714,6 +801,8 @@ export class ReflectorRunner {
       }
     }
 
+    const bufferedReflectionExtracted = freshRecord.bufferedReflectionExtracted;
+
     omDebug(
       `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
     );
@@ -730,10 +819,28 @@ export class ReflectorRunner {
       `[OM:reflect] tryActivateBufferedReflection: activation complete! beforeTokens=${beforeTokens}, afterTokens=${afterTokens}, newRecordId=${afterRecord?.id}, newGenCount=${afterRecord?.generationCount}`,
     );
 
+    const originalCycleId = BufferingCoordinator.reflectionBufferCycleIds.get(bufferKey);
+    const activationCycleId = originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    if (bufferedReflectionExtracted && Object.keys(bufferedReflectionExtracted).length > 0) {
+      await this.persistExtractedValues(
+        freshRecord.threadId ?? '',
+        freshRecord.resourceId ?? undefined,
+        bufferedReflectionExtracted,
+        {
+          ...context,
+          writer,
+          cycleId: activationCycleId,
+          recordId: freshRecord.id,
+          activeObservations: currentObservations,
+          newObservations: freshRecord.bufferedReflection ?? '',
+        },
+      );
+    }
+
     if (writer) {
-      const originalCycleId = BufferingCoordinator.reflectionBufferCycleIds.get(bufferKey);
       const activationMarker = createActivationMarker({
-        cycleId: originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+        cycleId: activationCycleId,
         operationType: 'reflection',
         chunksActivated: 1,
         tokensActivated: beforeTokens,
@@ -779,6 +886,7 @@ export class ReflectorRunner {
     messageList?: MessageList;
     currentModel?: ObservationModelContext;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+    agent?: ProcessorAgent;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     lastActivityAt?: number;
@@ -791,6 +899,7 @@ export class ReflectorRunner {
       messageList,
       currentModel,
       reflectionHooks,
+      agent,
       requestContext,
       observabilityContext,
       lastActivityAt,
@@ -823,6 +932,7 @@ export class ReflectorRunner {
           observationTokens,
           lockKey,
           writer,
+          agent,
           requestContext,
           observabilityContext,
           reflectionHooks,
@@ -879,6 +989,7 @@ export class ReflectorRunner {
         lockKey,
         writer,
         messageList,
+        { agent, requestContext },
         activationMetadata,
       );
       if (activationResult.status === 'activated') {
@@ -916,6 +1027,7 @@ export class ReflectorRunner {
           observationTokens,
           lockKey,
           writer,
+          agent,
           requestContext,
           observabilityContext,
           reflectionHooks,
@@ -993,6 +1105,18 @@ export class ReflectorRunner {
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });
+
+      if (reflectResult.extractedValues && Object.keys(reflectResult.extractedValues).length > 0) {
+        await this.persistExtractedValues(threadId, record.resourceId ?? undefined, reflectResult.extractedValues, {
+          agent,
+          requestContext,
+          writer,
+          cycleId: streamContext?.cycleId,
+          recordId: record.id,
+          activeObservations: record.activeObservations,
+          newObservations: reflectResult.observations,
+        });
+      }
 
       if (writer && streamContext) {
         const endMarker = createObservationEndMarker({
