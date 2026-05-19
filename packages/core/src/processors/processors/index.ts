@@ -68,6 +68,22 @@ export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
 export {
+  AdaptiveModelRouter,
+  type AdaptiveModelRouterModel,
+  type AdaptiveModelRouterOptions,
+  type AdaptiveModelRouterRule,
+  type AdaptiveModelRouterTripwireMetadata,
+  type AdaptiveModelRouterViolationDetail,
+  type ErrorRateRule,
+  type ScoreRule,
+  type FeedbackRule,
+  type FallbackModel,
+  type FallbackModelSettings,
+  type RouterScope,
+  type RouterWindow,
+} from './adaptive-model-router';
+
+export {
   ResponseCache,
   DEFAULT_RESPONSE_CACHE_TTL_SECONDS,
   RESPONSE_CACHE_CONTEXT_KEY,

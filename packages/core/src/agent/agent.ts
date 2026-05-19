@@ -59,6 +59,8 @@ import type {
   Processor,
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
+import { AdaptiveModelRouter } from '../processors/processors/adaptive-model-router';
+import type { AdaptiveModelRouterModel, FallbackModel } from '../processors/processors/adaptive-model-router';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
@@ -750,6 +752,52 @@ export class Agent<
   }
 
   /**
+   * Gets an AdaptiveModelRouter processor when the agent has model fallbacks
+   * (array of 2+ enabled models). This is created automatically — no extra
+   * config is needed. The router tracks error rates per model and skips
+   * models in cooldown, making fallbacks "smart" instead of always trying
+   * each model in order.
+   * @internal
+   */
+  private getAdaptiveModelRouterProcessor(
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[],
+  ): AdaptiveModelRouter[] {
+    // Only applies when the agent has model fallbacks (array of models)
+    if (!Array.isArray(this.model)) return [];
+
+    // Check for existing AdaptiveModelRouter in configured processors to avoid duplicates
+    const hasRouter = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'adaptive-model-router',
+    );
+    if (hasRouter) return [];
+
+    // Need at least 2 enabled models for the router to be useful
+    const fallbacks = (this.model as ModelFallbacks).filter(f => f.enabled !== false);
+    if (fallbacks.length < 2) return [];
+
+    // Build the router from the agent's model fallbacks.
+    // DynamicArgument fields (model, modelSettings, etc.) may be functions —
+    // pass them through directly and let the router resolve them with request
+    // context at runtime via buildFallbackResult.
+    const router = new AdaptiveModelRouter({
+      models: fallbacks.map(f => ({
+        id: f.id,
+        model: f.model as FallbackModel | AdaptiveModelRouterModel['model'],
+        modelSettings: f.modelSettings as AdaptiveModelRouterModel['modelSettings'],
+        providerOptions: f.providerOptions as AdaptiveModelRouterModel['providerOptions'],
+        headers: f.headers as AdaptiveModelRouterModel['headers'],
+      })),
+    });
+
+    // Register mastra instance if available so the router gets access to storage/cache
+    if (this.#mastra) {
+      router.__registerMastra(this.#mastra);
+    }
+
+    return [router];
+  }
+
+  /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
    */
@@ -978,9 +1026,17 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get adaptive model router for output step monitoring (soft-failure detection).
+    // The same router instance used for input processors also implements processOutputStep,
+    // so it needs to be in the output processor list for the runner to invoke it.
+    const adaptiveRouterProcessors = this.getAdaptiveModelRouterProcessor(
+      configuredProcessors,
+    ) as unknown as OutputProcessorOrWorkflow[];
+
     // Combine all processors into a single workflow
+    // Adaptive router runs first (to detect soft failures before memory persists)
     // Memory processors should run last (to persist messages after other processing)
-    const allProcessors = [...configuredProcessors, ...memoryProcessors];
+    const allProcessors = [...adaptiveRouterProcessors, ...configuredProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
@@ -1022,11 +1078,17 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
+    // Get adaptive model router processor if model fallbacks are configured (with deduplication)
+    const adaptiveRouterProcessors = this.getAdaptiveModelRouterProcessor(
+      configuredProcessors,
+    ) as unknown as InputProcessorOrWorkflow[];
+
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
+    // Adaptive model router runs after browser — it only affects model selection in processInputStep
     // User-configured processors run after auto-derived layers to allow customization
     return [
       ...memoryProcessors,
@@ -1034,6 +1096,7 @@ export class Agent<
       ...skillsProcessors,
       ...channelProcessors,
       ...browserProcessors,
+      ...adaptiveRouterProcessors,
       ...configuredProcessors,
     ];
   }
