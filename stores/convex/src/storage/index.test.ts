@@ -236,6 +236,29 @@ describe('ConvexStore domains', () => {
 
     expect(store.stores.channels).toBeInstanceOf(ChannelsConvex);
   });
+  it('cache tables should include indexes used by ConvexServerCache', async () => {
+    const { mastraCacheTable, mastraCacheListItemsTable } = await import('../schema');
+    const normalizeIndexes = (indexes: any[]) =>
+      indexes.map(index =>
+        Array.isArray(index) ? index : [index.indexDescriptor ?? index.name, index.fields ?? index.indexFields],
+      );
+
+    const cacheIndexes = normalizeIndexes((mastraCacheTable as any).indexes ?? []);
+    expect(cacheIndexes).toEqual(
+      expect.arrayContaining([
+        ['by_key', ['key']],
+        ['by_key_prefix', ['keyPrefix']],
+      ]),
+    );
+
+    const listIndexes = normalizeIndexes((mastraCacheListItemsTable as any).indexes ?? []);
+    expect(listIndexes).toEqual(
+      expect.arrayContaining([
+        ['by_key_prefix', ['keyPrefix']],
+        ['by_key_index', ['key', 'index']],
+      ]),
+    );
+  });
 });
 
 // Configuration validation tests (run even without credentials)

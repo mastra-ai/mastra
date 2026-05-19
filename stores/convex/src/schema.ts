@@ -204,6 +204,38 @@ export const mastraVectorsTable = defineTable({
   .index('by_index', ['indexName']);
 
 // ============================================================================
+// Server Cache Tables - Used by ConvexServerCache
+// ============================================================================
+
+/**
+ * Cache metadata table - stores scalar cache values, list counters, and numeric
+ * counters used by ConvexServerCache.
+ */
+export const mastraCacheTable = defineTable({
+  key: v.string(),
+  keyPrefix: v.string(),
+  kind: v.union(v.literal('value'), v.literal('list'), v.literal('counter'), v.literal('deleted')),
+  value: v.optional(v.string()),
+  counter: v.optional(v.number()),
+  expiresAt: v.union(v.number(), v.null()),
+})
+  .index('by_key', ['key'])
+  .index('by_key_prefix', ['keyPrefix']);
+
+/**
+ * Cache list item table - stores each list entry as its own row so replay
+ * history does not grow into a single large Convex document.
+ */
+export const mastraCacheListItemsTable = defineTable({
+  key: v.string(),
+  keyPrefix: v.string(),
+  index: v.number(),
+  value: v.string(),
+})
+  .index('by_key_prefix', ['keyPrefix'])
+  .index('by_key_index', ['key', 'index']);
+
+// ============================================================================
 // Fallback Table - For unknown/custom tables
 // ============================================================================
 

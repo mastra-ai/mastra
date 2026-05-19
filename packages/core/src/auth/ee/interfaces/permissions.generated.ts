@@ -13,15 +13,12 @@
  */
 export const RESOURCES = [
   'a2a',
-  'agent-builder',
   'agents',
-  'auth',
   'background-tasks',
   'channels',
   'datasets',
   'embedders',
   'experiments',
-  'infrastructure',
   'logs',
   'mcp',
   'memory',
@@ -83,18 +80,14 @@ export const PERMISSION_PATTERNS = {
   '*:publish': '*:publish',
   /** View all resources */
   '*:read': '*:read',
-  /** Change visibility/audience (e.g. private↔public) all resources */
+  /** Change visibility/audience all resources */
   '*:share': '*:share',
   /** Create and modify all resources */
   '*:write': '*:write',
   /** Full access to agent-to-agent communication */
   'a2a:*': 'a2a:*',
-  /** Full access to agent builder */
-  'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
-  /** Full access to auth */
-  'auth:*': 'auth:*',
   /** Full access to background tasks */
   'background-tasks:*': 'background-tasks:*',
   /** Full access to channels */
@@ -105,8 +98,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:*': 'embedders:*',
   /** Full access to experiments */
   'experiments:*': 'experiments:*',
-  /** Full access to infrastructure */
-  'infrastructure:*': 'infrastructure:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -153,12 +144,6 @@ export const PERMISSION_PATTERNS = {
   'a2a:read': 'a2a:read',
   /** Create and modify agent-to-agent communication */
   'a2a:write': 'a2a:write',
-  /** Execute agent builder */
-  'agent-builder:execute': 'agent-builder:execute',
-  /** View agent builder */
-  'agent-builder:read': 'agent-builder:read',
-  /** Create and modify agent builder */
-  'agent-builder:write': 'agent-builder:write',
   /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
@@ -169,8 +154,6 @@ export const PERMISSION_PATTERNS = {
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
-  /** View auth */
-  'auth:read': 'auth:read',
   /** View background tasks */
   'background-tasks:read': 'background-tasks:read',
   /** View channels */
@@ -189,8 +172,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:read': 'embedders:read',
   /** View experiments */
   'experiments:read': 'experiments:read',
-  /** View infrastructure */
-  'infrastructure:read': 'infrastructure:read',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -233,8 +214,6 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:publish': 'stored-agents:publish',
   /** View stored agents */
   'stored-agents:read': 'stored-agents:read',
-  /** Change visibility/audience (e.g. private↔public) stored agents */
-  'stored-agents:share': 'stored-agents:share',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
   /** Delete stored MCP clients */
@@ -267,8 +246,6 @@ export const PERMISSION_PATTERNS = {
   'stored-skills:publish': 'stored-skills:publish',
   /** View stored skills */
   'stored-skills:read': 'stored-skills:read',
-  /** Change visibility/audience (e.g. private↔public) stored skills */
-  'stored-skills:share': 'stored-skills:share',
   /** Create and modify stored skills */
   'stored-skills:write': 'stored-skills:write',
   /** Delete stored workspaces */
@@ -309,14 +286,18 @@ export const PERMISSION_PATTERNS = {
   'workspaces:read': 'workspaces:read',
   /** Create and modify workspaces */
   'workspaces:write': 'workspaces:write',
-  /** Full access to all stored-* resources (stored-agents, stored-skills, stored-prompt-blocks, stored-mcp-clients, stored-scorers, stored-workspaces) */
+  /** Full access to all stored resource families */
   'stored:*': 'stored:*',
-  /** View any stored-* resource */
+  /** View all stored resource families */
   'stored:read': 'stored:read',
-  /** Create and modify any stored-* resource */
+  /** Create and modify all stored resource families */
   'stored:write': 'stored:write',
-  /** Delete any stored-* resource */
+  /** Delete all stored resource families */
   'stored:delete': 'stored:delete',
+  /** Change visibility/audience stored agents */
+  'stored-agents:share': 'stored-agents:share',
+  /** Change visibility/audience stored skills */
+  'stored-skills:share': 'stored-skills:share',
 } as const;
 
 /**
@@ -335,15 +316,11 @@ export type PermissionPattern = keyof typeof PERMISSION_PATTERNS;
 export const PERMISSIONS = [
   'a2a:read',
   'a2a:write',
-  'agent-builder:execute',
-  'agent-builder:read',
-  'agent-builder:write',
   'agents:create',
   'agents:delete',
   'agents:execute',
   'agents:read',
   'agents:write',
-  'auth:read',
   'background-tasks:read',
   'channels:read',
   'channels:write',
@@ -353,7 +330,6 @@ export const PERMISSIONS = [
   'datasets:write',
   'embedders:read',
   'experiments:read',
-  'infrastructure:read',
   'logs:read',
   'mcp:execute',
   'mcp:read',
@@ -375,7 +351,6 @@ export const PERMISSIONS = [
   'stored-agents:delete',
   'stored-agents:publish',
   'stored-agents:read',
-  'stored-agents:share',
   'stored-agents:write',
   'stored-mcp-clients:delete',
   'stored-mcp-clients:publish',
@@ -392,7 +367,6 @@ export const PERMISSIONS = [
   'stored-skills:delete',
   'stored-skills:publish',
   'stored-skills:read',
-  'stored-skills:share',
   'stored-skills:write',
   'stored-workspaces:delete',
   'stored-workspaces:read',
@@ -431,12 +405,6 @@ export const MastraFGAPermissions = {
   A2A_READ: 'a2a:read',
   /** Create and modify agent-to-agent communication */
   A2A_WRITE: 'a2a:write',
-  /** Execute agent builder */
-  AGENT_BUILDER_EXECUTE: 'agent-builder:execute',
-  /** View agent builder */
-  AGENT_BUILDER_READ: 'agent-builder:read',
-  /** Create and modify agent builder */
-  AGENT_BUILDER_WRITE: 'agent-builder:write',
   /** Create agents */
   AGENTS_CREATE: 'agents:create',
   /** Delete agents */
@@ -447,8 +415,6 @@ export const MastraFGAPermissions = {
   AGENTS_READ: 'agents:read',
   /** Create and modify agents */
   AGENTS_WRITE: 'agents:write',
-  /** View auth */
-  AUTH_READ: 'auth:read',
   /** View background tasks */
   BACKGROUND_TASKS_READ: 'background-tasks:read',
   /** View channels */
@@ -467,8 +433,6 @@ export const MastraFGAPermissions = {
   EMBEDDERS_READ: 'embedders:read',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
-  /** View infrastructure */
-  INFRASTRUCTURE_READ: 'infrastructure:read',
   /** View logs */
   LOGS_READ: 'logs:read',
   /** Execute MCP servers */
@@ -511,8 +475,6 @@ export const MastraFGAPermissions = {
   STORED_AGENTS_PUBLISH: 'stored-agents:publish',
   /** View stored agents */
   STORED_AGENTS_READ: 'stored-agents:read',
-  /** Change visibility/audience (e.g. private↔public) stored agents */
-  STORED_AGENTS_SHARE: 'stored-agents:share',
   /** Create and modify stored agents */
   STORED_AGENTS_WRITE: 'stored-agents:write',
   /** Delete stored MCP clients */
@@ -545,8 +507,6 @@ export const MastraFGAPermissions = {
   STORED_SKILLS_PUBLISH: 'stored-skills:publish',
   /** View stored skills */
   STORED_SKILLS_READ: 'stored-skills:read',
-  /** Change visibility/audience (e.g. private↔public) stored skills */
-  STORED_SKILLS_SHARE: 'stored-skills:share',
   /** Create and modify stored skills */
   STORED_SKILLS_WRITE: 'stored-skills:write',
   /** Delete stored workspaces */
