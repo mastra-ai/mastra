@@ -16916,6 +16916,36 @@ export interface GetObservabilityDiscoveryTags_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /observability/capabilities
+// ============================================================================
+export type GetObservabilityCapabilities_Response = {
+  /** Constructor name of the connected observability storage adapter, or null when no observability storage is configured */
+  storeProvider: string | null;
+  /** Observability HTTP endpoints supported by the current server configuration. Considers installed @mastra/core features, installed @mastra/observability features, and the methods implemented by the connected observability storage adapter. */
+  endpoints: {
+    /** HTTP method for the endpoint */
+    method: string;
+    /** HTTP path for the endpoint (relative to the server base, e.g. /observability/traces) */
+    path: string;
+  }[];
+};
+
+export type GetObservabilityCapabilities_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityCapabilities_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetObservabilityCapabilities_Request;
+  response: GetObservabilityCapabilities_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /logs/transports
 // ============================================================================
 export type GetLogsTransports_Response = {
@@ -76895,6 +76925,7 @@ export interface RouteTypes {
   'GET /observability/discovery/service-names': GetObservabilityDiscoveryServiceNames_RouteContract;
   'GET /observability/discovery/environments': GetObservabilityDiscoveryEnvironments_RouteContract;
   'GET /observability/discovery/tags': GetObservabilityDiscoveryTags_RouteContract;
+  'GET /observability/capabilities': GetObservabilityCapabilities_RouteContract;
   'GET /logs/transports': GetLogsTransports_RouteContract;
   'GET /logs': GetLogs_RouteContract;
   'GET /logs/:runId': GetLogsRunId_RouteContract;
@@ -77435,6 +77466,9 @@ export interface Client {
   };
   '/observability/branches': {
     GET: GetObservabilityBranches_RouteContract;
+  };
+  '/observability/capabilities': {
+    GET: GetObservabilityCapabilities_RouteContract;
   };
   '/observability/discovery/entity-names': {
     GET: GetObservabilityDiscoveryEntityNames_RouteContract;

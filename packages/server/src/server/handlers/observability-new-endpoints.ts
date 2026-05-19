@@ -64,7 +64,12 @@ import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { getObservabilityStore, NEW_ROUTE_DEFS } from './observability-shared';
+import {
+  getObservabilityStore,
+  getSupportedObservabilityEndpoints,
+  NEW_ROUTE_DEFS,
+  tryGetObservabilityStore,
+} from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
 function createNewRoute<
@@ -410,6 +415,53 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   },
 });
 
+// ============================================================================
+// Capabilities Route
+// ============================================================================
+
+const observabilityEndpointSchema = z.object({
+  method: z.string().describe('HTTP method for the endpoint'),
+  path: z.string().describe('HTTP path for the endpoint (relative to the server base, e.g. /observability/traces)'),
+});
+
+const observabilityCapabilitiesResponseSchema = z.object({
+  storeProvider: z
+    .string()
+    .nullable()
+    .describe(
+      'Constructor name of the connected observability storage adapter, or null when no observability storage is configured',
+    ),
+  endpoints: z
+    .array(observabilityEndpointSchema)
+    .describe(
+      'Observability HTTP endpoints supported by the current server configuration. Considers installed @mastra/core features, installed @mastra/observability features, and the methods implemented by the connected observability storage adapter.',
+    ),
+});
+
+// Defined via createRoute (not createNewRoute) so it remains callable on older
+// @mastra/core versions that lack the `observability:v1.13.2` feature flag --
+// otherwise the UI couldn't ask "is the new API supported?" without already
+// knowing the answer.
+export const GET_CAPABILITIES = createRoute({
+  ...NEW_ROUTE_DEFS.GET_CAPABILITIES,
+  responseType: 'json',
+  responseSchema: observabilityCapabilitiesResponseSchema,
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    try {
+      const store = await tryGetObservabilityStore(mastra);
+      const endpoints = await getSupportedObservabilityEndpoints(mastra);
+      return {
+        storeProvider: store ? store.constructor.name : null,
+        endpoints,
+      };
+    } catch (error) {
+      return handleError(error, "Error calling: 'get observability capabilities'");
+    }
+  },
+});
+
 export const NEW_ROUTES = {
   LIST_LOGS,
   LIST_SCORES,
@@ -437,4 +489,5 @@ export const NEW_ROUTES = {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 };

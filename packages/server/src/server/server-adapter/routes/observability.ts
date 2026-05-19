@@ -37,6 +37,7 @@ import {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 } from '../../handlers/observability-new-endpoints';
 
 export const OBSERVABILITY_ROUTES = [
@@ -51,7 +52,7 @@ export const OBSERVABILITY_ROUTES = [
   GET_TRACE_TRAJECTORY_ROUTE,
   SCORE_TRACES_ROUTE,
   LIST_SCORES_BY_SPAN_ROUTE,
-  // New (17 routes)
+  // New
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,
@@ -78,4 +79,5 @@ export const OBSERVABILITY_ROUTES = [
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 ] as const;

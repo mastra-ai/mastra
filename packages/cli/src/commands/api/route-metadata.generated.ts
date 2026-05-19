@@ -2348,6 +2348,19 @@ export const API_ROUTE_METADATA = {
       "listProperty": "tags"
     }
   },
+  "GET /observability/capabilities": {
+    "method": "GET",
+    "path": "/observability/capabilities",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "endpoints"
+    }
+  },
   "GET /logs/transports": {
     "method": "GET",
     "path": "/logs/transports",

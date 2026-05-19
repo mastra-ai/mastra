@@ -10,6 +10,7 @@ import type {
 } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { OBSERVABILITY_ROUTES } from '../server-adapter/routes/observability';
 import * as errorHandler from './error';
 import {
   LIST_TRACES_ROUTE,
@@ -23,6 +24,7 @@ import {
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
 import { NEW_ROUTES } from './observability-new-endpoints';
+import { OBSERVABILITY_ENDPOINT_REQUIREMENTS_FOR_TESTS } from './observability-shared';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
@@ -2780,6 +2782,134 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
+    });
+  });
+
+  describe('GET_CAPABILITIES_ROUTE', () => {
+    const matches = (endpoints: Array<{ method: string; path: string }>, method: string, path: string) =>
+      endpoints.some(e => e.method === method && e.path === path);
+
+    it('reports only the endpoints whose backing storage methods the adapter overrides', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+
+      class PartialStore extends ObservabilityStorage {
+        override async getEntityNames() {
+          return { names: [] };
+        }
+        override async getEntityTypes() {
+          return { entityTypes: [] };
+        }
+        override async getServiceNames() {
+          return { serviceNames: [] };
+        }
+        override async listTraces() {
+          return { traces: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } };
+        }
+      }
+
+      const partialStore = new PartialStore();
+      const storage = createMockStorage(
+        partialStore as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      const mastra = createMockMastra(storage);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.storeProvider).toBe('PartialStore');
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/entity-names')).toBe(true);
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/entity-types')).toBe(true);
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/service-names')).toBe(true);
+      expect(matches(result.endpoints, 'GET', '/observability/traces')).toBe(true);
+      // Endpoints backed by methods the subclass did not override should not appear.
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/tags')).toBe(false);
+      expect(matches(result.endpoints, 'GET', '/observability/discovery/environments')).toBe(false);
+      expect(matches(result.endpoints, 'POST', '/observability/metrics/aggregate')).toBe(false);
+      // Capabilities endpoint itself is never listed.
+      expect(matches(result.endpoints, 'GET', '/observability/capabilities')).toBe(false);
+    });
+
+    it('treats getStructure and getTraceLight as aliases for the light-trace endpoint', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+
+      class StructureOnly extends ObservabilityStorage {
+        override async getStructure() {
+          return null;
+        }
+      }
+
+      class TraceLightOnly extends ObservabilityStorage {
+        override async getTraceLight() {
+          return null;
+        }
+      }
+
+      for (const Ctor of [StructureOnly, TraceLightOnly]) {
+        const storage = createMockStorage(
+          new Ctor() as unknown as ReturnType<typeof createMockObservabilityStore>,
+          mockScoresStore,
+        );
+        const mastra = createMockMastra(storage);
+        const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+          ...createTestServerContext({ mastra }),
+        });
+        expect(matches(result.endpoints, 'GET', '/observability/traces/:traceId/light')).toBe(true);
+      }
+    });
+
+    it('returns no observability storage endpoints when no observability store is configured', async () => {
+      const storage: Partial<MastraCompositeStore> = {
+        getStore: vi.fn(() => Promise.resolve(undefined)) as MastraCompositeStore['getStore'],
+      };
+      const mastra = createMockMastra(storage);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.storeProvider).toBeNull();
+      // No observability storage + no scores storage => no endpoints supported.
+      expect(result.endpoints).toEqual([]);
+    });
+
+    it('returns no endpoints when no storage is configured at all', async () => {
+      const mastra = createMockMastra(undefined);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.storeProvider).toBeNull();
+      expect(result.endpoints).toEqual([]);
+    });
+
+    it('includes the legacy scores-by-span endpoint when the scores store implements it', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class EmptyStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new EmptyStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      const mastra = createMockMastra(storage);
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(matches(result.endpoints, 'GET', '/observability/traces/:traceId/:spanId/scores')).toBe(true);
+    });
+
+    it('lists every registered observability route in the requirements table', () => {
+      // The capabilities endpoint itself is intentionally excluded -- callers
+      // hit it before they know what's supported, so listing it would be
+      // redundant.
+      const expected = OBSERVABILITY_ROUTES.map(r => `${r.method} ${r.path}`).filter(
+        key => key !== 'GET /observability/capabilities',
+      );
+      const declared = OBSERVABILITY_ENDPOINT_REQUIREMENTS_FOR_TESTS.map(r => `${r.method} ${r.path}`);
+      expect(new Set(declared)).toEqual(new Set(expected));
     });
   });
 });
