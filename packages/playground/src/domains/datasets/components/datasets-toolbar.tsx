@@ -1,4 +1,4 @@
-import { Button, ButtonsGroup, ButtonWithTooltip, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
 import { Plus, XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS, DATASET_TARGET_OPTIONS } from './datasets-list/helpers';
 
@@ -85,14 +85,9 @@ export function DatasetsToolbar({
         )}
       </ButtonsGroup>
       {onCreateClick && (
-        <ButtonWithTooltip
-          onClick={onCreateClick}
-          tooltipContent={createTooltip}
-          variant="primary"
-          className="ml-auto shrink-0"
-        >
+        <Button onClick={onCreateClick} tooltip={createTooltip} variant="primary" className="ml-auto shrink-0">
           <Plus />
-        </ButtonWithTooltip>
+        </Button>
       )}
     </div>
   );
