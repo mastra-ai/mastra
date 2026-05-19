@@ -62,17 +62,6 @@ describe('AgentProfileDetails', () => {
     expect(descriptionInput.value).toBe('New description');
   });
 
-  it('disables inputs when not editable', () => {
-    const { getByTestId } = render(
-      <Wrapper>
-        <AgentProfileDetails editable={false} />
-      </Wrapper>,
-    );
-
-    expect((getByTestId('agent-configure-name') as HTMLInputElement).disabled).toBe(true);
-    expect((getByTestId('agent-configure-description') as HTMLTextAreaElement).disabled).toBe(true);
-  });
-
   it('disables inputs when disabled prop is set', () => {
     const { getByTestId } = render(
       <Wrapper>

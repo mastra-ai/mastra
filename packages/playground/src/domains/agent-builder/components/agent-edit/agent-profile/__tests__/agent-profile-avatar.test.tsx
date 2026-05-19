@@ -70,15 +70,4 @@ describe('AgentProfileAvatar', () => {
     expect(queryByTestId('agent-configure-avatar-trigger')).toBeNull();
     expect(getByTestId('agent-configure-avatar-display')).not.toBeNull();
   });
-
-  it('hides the upload trigger when not editable', () => {
-    const { getByTestId, queryByTestId } = render(
-      <Wrapper>
-        <AgentProfileAvatar editable={false} />
-      </Wrapper>,
-    );
-
-    expect(queryByTestId('agent-configure-avatar-trigger')).toBeNull();
-    expect(getByTestId('agent-configure-avatar-display')).not.toBeNull();
-  });
 });

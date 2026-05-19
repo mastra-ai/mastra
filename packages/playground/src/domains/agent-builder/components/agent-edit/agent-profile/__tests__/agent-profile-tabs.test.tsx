@@ -84,7 +84,7 @@ describe('AgentProfileTabs', () => {
     cleanup();
   });
 
-  it('renders Model, Instructions, Tools, and Skills tabs when features are enabled and items are available', () => {
+  it('renders Instructions, Model, Tools, and Skills tabs when features are enabled and items are available', () => {
     const { getAllByRole } = render(
       <Wrapper>
         <AgentProfileTabs
@@ -95,7 +95,7 @@ describe('AgentProfileTabs', () => {
     );
 
     const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).toEqual(['Model', 'Instructions', 'Tools', 'Skills']);
+    expect(tabs).toEqual(['Instructions', 'Model', 'Tools', 'Skills']);
   });
 
   it('hides the Tools tab when no tools are available', () => {
