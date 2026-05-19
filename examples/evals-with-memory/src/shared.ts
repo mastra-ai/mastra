@@ -99,7 +99,7 @@ export type AgentBundle = {
  * triggered the original "threadId is required" complaint.
  */
 export function buildAgent(opts: { observationalMemory?: boolean } = {}): AgentBundle {
-  const { dir, url, cleanup } = makeTmpDb('evals-with-memory');
+  const { url, cleanup } = makeTmpDb('evals-with-memory');
   const storage = new LibSQLStore({ id: `evals-with-memory-${Date.now()}`, url });
 
   const memory = new Memory({
@@ -149,7 +149,6 @@ export function buildAgent(opts: { observationalMemory?: boolean } = {}): AgentB
       } catch {
         void 0;
       }
-      void dir;
     },
   };
 }
