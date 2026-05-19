@@ -17,15 +17,6 @@ const TypeToEmoji = {
 
 type CalloutType = keyof typeof TypeToEmoji
 
-const defaultTitles: Record<CalloutType, string> = {
-  note: 'note',
-  danger: 'danger',
-  info: 'info',
-  warning: 'warning',
-  tip: 'tip',
-  experimental: 'experimental',
-}
-
 const classes: Record<CalloutType, string> = {
   note: cn(
     'bg-green-100/50 dark:bg-green-900/30',
@@ -68,17 +59,12 @@ function AdmonitionContainer({
 }
 
 function AdmonitionIconType({ title, type }: Pick<Props, 'title' | 'type'>) {
-  // Docusaurus may pass a mismatched default title for custom admonition keywords
-  // (e.g. title="info" for :::experimental). Use the type name as title when the
-  // passed title is a different built-in type name, preserving explicit custom titles.
-  const builtinTitles = new Set(['note', 'tip', 'info', 'warning', 'danger'])
-  const displayTitle = title && builtinTitles.has(title) && title !== type ? (defaultTitles[type] ?? type) : title
   return (
     <div className="flex items-center gap-1.5">
       <span className="size-3 shrink-0">{TypeToEmoji[type]}</span>
-      {displayTitle ? (
+      {title ? (
         <span className="font-mono text-sm font-bold tracking-tight capitalize" data-testid="admonition-title">
-          {displayTitle}
+          {title}
         </span>
       ) : null}
     </div>
