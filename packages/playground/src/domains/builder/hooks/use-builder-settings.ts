@@ -38,15 +38,15 @@ export const useIsBuilderEnabled = () => {
 const INACTIVE_POLICY: BuilderModelPolicy = { active: false };
 
 /**
- * Returns the server-derived `BuilderModelPolicy`.
+ * Returns the server-derived `BuilderModelPolicy` for the builder surface
+ * specifically. Reads the legacy `/editor/builder/settings` response, so it
+ * applies regardless of which UI surface is rendering it.
  *
- * Thin selector — the server is the single owner of policy derivation. Callers
- * that need to know whether the model picker is visible, what's allowed, or
- * what the admin's default is should consume this hook directly.
- *
- * Defaults to `{ active: false }` while loading or when the server didn't
- * include a `modelPolicy` field (older servers / OSS builds), so consumers
- * can rely on `policy.active === false` as the "no admin policy" guard.
+ * @deprecated Use {@link useModelPolicy} from `@/domains/llm` instead — it
+ * reads the surface-scoped policy from the enclosing `<ModelPolicyProvider>`
+ * so the editor and composer don't accidentally inherit builder restrictions.
+ * This hook is preserved for in-flight callers and will be removed once all
+ * consumers have migrated.
  */
 export const useBuilderModelPolicy = (): BuilderModelPolicy => {
   const { data } = useBuilderSettings();
