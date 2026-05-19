@@ -4,7 +4,7 @@ import { TooltipProvider } from '../Tooltip';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'cta', 'outline', 'ghost', 'link'];
+const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'outline', 'ghost'];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
