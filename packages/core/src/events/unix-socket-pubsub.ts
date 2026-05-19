@@ -201,28 +201,48 @@ export class UnixSocketPubSub extends PubSub {
       this.#isBroker = false;
     }
 
+    this.#throwIfClosed();
     await mkdir(dirname(this.socketPath), { recursive: true });
+    this.#throwIfClosed();
 
     try {
       await this.#listen();
+      this.#throwIfClosed();
       this.#isBroker = true;
       return;
     } catch (error) {
+      if (this.#closed) {
+        await this.close();
+        throw new Error('UnixSocketPubSub is closed');
+      }
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== 'EADDRINUSE') throw error;
     }
 
     try {
       await this.#connectClient();
+      this.#throwIfClosed();
     } catch (error) {
+      if (this.#closed) {
+        await this.close();
+        throw new Error('UnixSocketPubSub is closed');
+      }
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK') {
         await unlink(this.socketPath).catch(() => {});
+        this.#throwIfClosed();
         await this.#listen();
+        this.#throwIfClosed();
         this.#isBroker = true;
         return;
       }
       throw error;
+    }
+  }
+
+  #throwIfClosed() {
+    if (this.#closed) {
+      throw new Error('UnixSocketPubSub is closed');
     }
   }
 
