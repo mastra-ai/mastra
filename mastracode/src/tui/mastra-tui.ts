@@ -30,6 +30,7 @@ import {
   isNewerVersion,
   runUpdate,
 } from '../utils/update-check.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 
@@ -38,6 +39,7 @@ import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
+import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -131,6 +133,7 @@ export class MastraTUI {
     // Load user preferences
     const savedSettings = loadSettings();
     this.state.quietMode = savedSettings.preferences.quietMode;
+    this.state.quietModeMaxToolPreviewLines = savedSettings.preferences.quietModeMaxToolPreviewLines;
 
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
@@ -240,6 +243,8 @@ export class MastraTUI {
       if (!userInput.trim() && userInput !== ' ') continue;
 
       try {
+        const pendingNewThread = this.state.pendingNewThread;
+
         // Handle slash commands
         if (userInput.startsWith('/')) {
           const handled = await this.handleSlashCommand(userInput);
@@ -268,7 +273,7 @@ export class MastraTUI {
           continue;
         }
 
-        this.sendOptimisticSignal(content, images, optimisticMessageId);
+        this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -345,9 +350,19 @@ export class MastraTUI {
     content: string,
     images: Array<{ data: string; mimeType: string }> | undefined,
     optimisticMessageId: string,
+    pendingNewThread: boolean,
   ): void {
     const send = () => {
       this.clearIdleCounter();
+      this.state.analytics?.capture('mastracode_prompt_submitted', {
+        threadId: this.state.harness.getCurrentThreadId(),
+        resourceId: this.state.harness.getResourceId(),
+        mode: this.state.harness.getCurrentModeId(),
+        hasImages: Boolean(images?.length),
+        isFirstPromptInThread: pendingNewThread,
+        pendingNewThread,
+      });
+
       const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
@@ -529,6 +544,8 @@ export class MastraTUI {
       await this.showOnboarding();
     }
 
+    await this.showQuietModePreferencePromptIfNeeded();
+
     // Check for updates after first render so network latency never blocks startup.
     void this.checkForUpdate().catch(() => {});
 
@@ -616,6 +633,7 @@ export class MastraTUI {
 
     try {
       await dispatchEvent(event, this.getEventContext(), this.state);
+      this.captureHarnessAnalytics(event);
 
       if (event.type === 'thread_created') {
         await this.syncThreadActivePackMetadata(event.thread);
@@ -637,6 +655,45 @@ export class MastraTUI {
       if (event.type === 'agent_end') {
         this.stopCaffeinate();
       }
+    }
+  }
+
+  private captureHarnessAnalytics(event: HarnessEvent): void {
+    const analytics = this.state.analytics;
+    if (!analytics) {
+      return;
+    }
+
+    if (event.type === 'thread_created') {
+      analytics.capture('mastracode_thread_changed', {
+        action: 'created',
+        threadId: event.thread.id,
+        resourceId: event.thread.resourceId,
+        mode: this.state.harness.getCurrentModeId(),
+        hasTitle: Boolean(event.thread.title),
+      });
+      return;
+    }
+
+    if (event.type === 'thread_changed') {
+      analytics.capture('mastracode_thread_changed', {
+        action: 'switched',
+        threadId: event.threadId,
+        previousThreadId: event.previousThreadId,
+        resourceId: this.state.harness.getResourceId(),
+        mode: this.state.harness.getCurrentModeId(),
+      });
+      return;
+    }
+
+    if (event.type === 'model_changed') {
+      analytics.capture('mastracode_model_changed', {
+        modelId: event.modelId,
+        scope: event.scope,
+        mode: event.modeId ?? this.state.harness.getCurrentModeId(),
+        threadId: this.state.harness.getCurrentThreadId(),
+        resourceId: this.state.harness.getResourceId(),
+      });
     }
   }
 
@@ -837,12 +894,11 @@ export class MastraTUI {
       const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
       const idx = this.state.chatContainer.children.indexOf(component as any);
       if (idx >= 0) {
-        (this.state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        this.state.chatContainer.invalidate();
+        insertChatComponentWithBoundarySpacing(this.state.chatContainer, child, idx);
         return;
       }
     }
-    this.state.chatContainer.addChild(child);
+    insertChatComponentWithBoundarySpacing(this.state.chatContainer, child);
   }
 
   // ===========================================================================
@@ -913,6 +969,7 @@ export class MastraTUI {
       harness: this.state.harness,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
+      analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
@@ -934,6 +991,7 @@ export class MastraTUI {
       showFormattedError: event => showFormattedError(this.state, event),
       updateStatusLine: () => updateStatusLine(this.state),
       notify: (reason, message) => notify(this.state, reason, message),
+      analytics: this.state.analytics,
       handleSlashCommand: input => this.handleSlashCommand(input),
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
@@ -1223,6 +1281,71 @@ export class MastraTUI {
       return ob.version < ONBOARDING_VERSION;
     }
     return true;
+  }
+
+  private applyQuietModePreference(enabled: boolean, previewLineLimit = this.state.quietModeMaxToolPreviewLines): void {
+    const settings = loadSettings();
+    settings.preferences.quietMode = enabled;
+    settings.preferences.quietModeMaxToolPreviewLines = previewLineLimit;
+    settings.onboarding.quietModePreferenceSelected = true;
+    saveSettings(settings);
+
+    this.state.quietMode = enabled;
+    this.state.quietModeMaxToolPreviewLines = previewLineLimit;
+    this.state.taskProgress?.setQuietMode(enabled);
+
+    const tools = this.state.allToolComponents.filter(
+      (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
+    );
+    for (const tool of tools) {
+      tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
+      tool.setQuietPreviewLineLimit?.(previewLineLimit);
+    }
+    this.state.ui.requestRender();
+  }
+
+  private parseQuietPreviewLineAnswer(answer: string | null): number {
+    if (answer === 'None') return 0;
+    const match = answer?.match(/^(\d+)/);
+    return match ? Number(match[1]) : this.state.quietModeMaxToolPreviewLines;
+  }
+
+  async showQuietModePreferencePromptIfNeeded(): Promise<void> {
+    const settings = loadSettings();
+    if (settings.onboarding.quietModePreferenceSelected) return;
+
+    const answer = await askModalQuestion(this.state.ui, {
+      question:
+        'Try compact quiet mode?\n\nQuiet mode keeps tool calls and task progress compact so long sessions are easier to scan.',
+      options: [
+        { label: 'Enable quiet mode', description: 'Use compact rendering by default' },
+        { label: 'Keep classic mode', description: 'Keep the current full rendering' },
+      ],
+      allowCustomResponse: false,
+      selectedOptionLabel: 'Enable quiet mode',
+      overlay: { maxHeight: '50%' },
+    });
+
+    if (answer !== 'Enable quiet mode') {
+      this.applyQuietModePreference(false);
+      return;
+    }
+
+    const previewLineAnswer = await askModalQuestion(this.state.ui, {
+      question: 'How many quiet-mode tool preview lines should be shown?\n\nYou can change this later in /settings.',
+      options: [
+        { label: 'None', description: 'Hide compact tool detail previews' },
+        { label: '1 line', description: 'Show the latest preview line' },
+        { label: '2 lines', description: 'Default' },
+        { label: '4 lines', description: 'Show more streaming detail' },
+        { label: '8 lines', description: 'Show the most detail' },
+      ],
+      allowCustomResponse: false,
+      selectedOptionLabel: '2 lines',
+      overlay: { maxHeight: '50%' },
+    });
+
+    this.applyQuietModePreference(true, this.parseQuietPreviewLineAnswer(previewLineAnswer));
   }
 
   // ===========================================================================

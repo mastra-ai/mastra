@@ -490,6 +490,40 @@ describe('DatadogBridge', () => {
       expect(mockTrace).not.toHaveBeenCalled();
     });
 
+    it('drops empty user messages from MODEL_INFERENCE input annotations', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(
+        createMockSpanOptions({
+          type: SpanType.MODEL_INFERENCE as SpanTypeGeneric,
+        }),
+      )!;
+      const apmSpan = capturedApmSpans[0];
+
+      const span = createMockSpan({
+        id: spanResult.spanId,
+        traceId: spanResult.traceId,
+        type: SpanType.MODEL_INFERENCE,
+        input: [
+          { role: 'user', content: '' },
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: 'Hello' },
+          { role: 'user', content: '   ' },
+        ],
+      });
+
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockAnnotate).toHaveBeenCalledWith(
+        apmSpan,
+        expect.objectContaining({
+          inputData: [
+            { role: 'system', content: 'You are helpful' },
+            { role: 'user', content: 'Hello' },
+          ],
+        }),
+      );
+    });
+
     it('annotates and finishes event spans on span_started', async () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
       const spanResult = bridge.createSpan(createMockSpanOptions())!;
