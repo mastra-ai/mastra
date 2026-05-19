@@ -65,18 +65,62 @@ export interface DiscoveryConfig {
 }
 
 /**
- * In-process dedupe for concurrent background refreshes against the same
- * cache key. Without this, N concurrent stale reads on the same key fire N
- * `refresh()` queries and each writes to the cache table — a classic
- * stampede. The map keys are `"schema:cacheKey"` so multiple schemas using
- * the same key don't share an entry.
+ * In-process dedupe for concurrent refreshes against the same cache key.
+ *
+ * Covers two stampede shapes:
+ *  - cold start: N concurrent first-callers all want the values, but only
+ *    one of them needs to actually run `refresh()` + `upsertCache()`. The
+ *    others await the same promise.
+ *  - stale refresh: N concurrent stale-readers serve the cached values
+ *    immediately and share one background refresh.
+ *
+ * The map keys are `"schema:cacheKey"` so multiple schemas using the same
+ * key don't share an entry. Entries clear themselves via `.finally` after
+ * the refresh settles.
  */
-const inFlightRefreshes = new Map<string, Promise<void>>();
+const inFlightRefreshes = new Map<string, Promise<string[]>>();
+
+function startOrJoinRefresh(
+  dedupeKey: string,
+  cacheKey: string,
+  refresh: () => Promise<string[]>,
+  upsert: (values: string[]) => Promise<void>,
+): Promise<string[]> {
+  const existing = inFlightRefreshes.get(dedupeKey);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const values = await refresh();
+      await upsert(values);
+      return values;
+    } catch (error) {
+      // Surface refresh failures — silently swallowing them would mask real
+      // DB/connectivity issues behind permanently stale data. Use
+      // console.warn since the discovery helpers don't currently take a
+      // logger; the next reader will retry.
+      console.warn(`[observability/v-next] background refresh failed for discovery cache key "${cacheKey}":`, error);
+      throw error;
+    } finally {
+      inFlightRefreshes.delete(dedupeKey);
+    }
+  })();
+
+  inFlightRefreshes.set(dedupeKey, promise);
+  return promise;
+}
 
 /**
  * Read the cache row for `cacheKey` and decide whether to refresh.
- * Always returns the values stored in the cache (which may be stale or empty
- * on first call). The refresh runs in the background.
+ *
+ * Stale-while-revalidate semantics:
+ *  - Fresh cache hit: return the stored values immediately.
+ *  - Stale cache hit: return the cached values immediately AND kick off a
+ *    background refresh (deduped) so the next reader sees fresh data.
+ *    Concurrent stale readers don't await the shared refresh — that's the
+ *    "while-revalidate" half of SWR.
+ *  - Cold miss (no row at all): block on the refresh and return its values.
+ *    Concurrent cold callers share one refresh promise via the dedupe map.
  */
 async function readWithRefresh(
   client: DbClient,
@@ -95,37 +139,28 @@ async function readWithRefresh(
   const refreshedAtMs = row ? new Date(row.refreshedAt).getTime() : 0;
   const stale = !row || Date.now() - refreshedAtMs > ttlSeconds * 1000;
 
-  if (stale) {
-    if (!row) {
-      // Nothing cached: compute synchronously so the first caller gets a result.
-      const values = await refresh();
-      await upsertCache(client, schema, cacheKey, values);
-      return values;
-    }
-    // Cached but stale: kick off a background refresh, but dedupe so
-    // concurrent readers don't all hit the database.
-    const dedupeKey = `${schema}:${cacheKey}`;
-    if (!inFlightRefreshes.has(dedupeKey)) {
-      const promise = refresh()
-        .then(values => upsertCache(client, schema, cacheKey, values))
-        .catch((error: unknown) => {
-          // Surface refresh failures — silently swallowing them would mask
-          // real DB/connectivity issues behind permanently stale data. Use
-          // console.warn since the discovery helpers don't currently take a
-          // logger; the next reader will retry.
-          console.warn(
-            `[observability/v-next] background refresh failed for discovery cache key "${cacheKey}":`,
-            error,
-          );
-        })
-        .finally(() => {
-          inFlightRefreshes.delete(dedupeKey);
-        });
-      inFlightRefreshes.set(dedupeKey, promise);
+  if (!stale) return row!.values;
+
+  const dedupeKey = `${schema}:${cacheKey}`;
+  const refreshing = startOrJoinRefresh(dedupeKey, cacheKey, refresh, values =>
+    upsertCache(client, schema, cacheKey, values),
+  );
+
+  if (!row) {
+    // Cold path: no cached values to serve. Block on (or join) the refresh.
+    try {
+      return await refreshing;
+    } catch {
+      // Already logged inside startOrJoinRefresh; return empty so the caller
+      // gets a defined value instead of throwing.
+      return [];
     }
   }
 
-  return row?.values ?? [];
+  // Stale path: serve the cached values immediately. Suppress the
+  // unhandled-rejection warning since the helper already logs.
+  refreshing.catch(() => {});
+  return row.values;
 }
 
 async function upsertCache(client: DbClient, schema: string, cacheKey: string, values: string[]): Promise<void> {

@@ -111,6 +111,11 @@ export async function ensureNativePartitions(
       const childName = partitionName(table, suffix);
       const child = qualifiedName(schema, childName);
       const parent = qualifiedTable(schema, table);
+      // Postgres requires partition bounds in `FOR VALUES FROM (…) TO (…)`
+      // to be constant expressions at parse time — `$N` placeholders are
+      // resolved at execution and so are rejected here. `partStart` /
+      // `partEnd` are produced by `dayBounds()` (formatted from a JS Date)
+      // and never touch user input, so the template interpolation is safe.
       await client.none(
         `CREATE TABLE IF NOT EXISTS ${child} PARTITION OF ${parent}
          FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,

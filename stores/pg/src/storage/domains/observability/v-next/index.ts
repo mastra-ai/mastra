@@ -157,6 +157,18 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // Initialization
   // -------------------------------------------------------------------------
 
+  /**
+   * Create the signal tables, indexes, and (if Timescale / pg_partman is
+   * present) hypertable / partman registrations.
+   *
+   * Not transactional: each `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF
+   * NOT EXISTS`, and `create_hypertable()` / `create_parent()` runs in its
+   * own implicit transaction. Re-running `init()` after a failure is safe
+   * (every statement is idempotent), but a failure partway through against
+   * Timescale can leave some signal tables as hypertables and others as
+   * plain tables. If that happens, fix the underlying error and call
+   * `init()` again — the partially-converted state is recoverable.
+   */
   async init(): Promise<void> {
     try {
       const explicit = this.#partitioning.mode;

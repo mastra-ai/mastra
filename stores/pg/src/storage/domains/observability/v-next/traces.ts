@@ -621,6 +621,12 @@ async function listBranchesDelta(
  * Head cursor for branches. Like `readTracesStreamHeadCursor`, falls back to
  * the unfiltered branch stream when the filtered set is empty so polling can
  * resume against the whole branch surface.
+ *
+ * The fallback `MAX("cursorId") WHERE "spanType" IN (...)` query has no
+ * time predicate and so scans every branch row ever inserted. That's fine
+ * at the ~100 calls/sec target this adapter is built for; for very large
+ * tables the planner can still serve it from `mastra_span_events_cursor_idx`
+ * via a backward index scan that stops at the first match.
  */
 async function readBranchesStreamHeadCursor(
   client: DbClient,
