@@ -1,11 +1,13 @@
+import { cn } from '@mastra/playground-ui';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
 export interface AgentProfileDetailsProps {
   disabled?: boolean;
+  className?: string;
 }
 
-export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsProps) => {
+export const AgentProfileDetails = ({ disabled = false, className }: AgentProfileDetailsProps) => {
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const draftName = useWatch({ control, name: 'name' }) ?? '';
   const draftDescription = useWatch({ control, name: 'description' }) ?? '';
@@ -20,7 +22,7 @@ export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsPro
   };
 
   return (
-    <div className="flex w-full flex-col items-start gap-0.5">
+    <div className={cn('flex w-full flex-col items-start gap-0.5', className)}>
       <input
         type="text"
         value={draftName}

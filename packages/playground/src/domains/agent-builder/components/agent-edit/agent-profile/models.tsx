@@ -65,7 +65,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
 
   return (
     <div className="h-full">
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 p-4" data-testid="model-card-picker">
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-3" data-testid="model-card-picker">
         <div data-testid="model-card-picker-search" className="shrink-0">
           <Searchbar
             onSearch={setSearch}
@@ -77,7 +77,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
         </div>
 
         {visibleEntries.length === 0 ? (
-          <div className="flex min-h-0 items-center justify-center px-3 py-6">
+          <div className="flex min-h-0 items-center justify-center">
             <Txt variant="ui-sm" className="text-neutral3">
               {search.trim() ? `No models match "${search.trim()}"` : 'No models available'}
             </Txt>
@@ -133,14 +133,14 @@ const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntr
 
   const containerStyle: CSSProperties | undefined = hasAgentColor
     ? {
-        ['--agent-color-fg' as string]: agentColor.foreground,
-        ...(isSelected ? { borderColor: agentColor.foreground } : null),
+        ['--agent-color-bg' as string]: agentColor.background,
+        ...(isSelected ? { borderColor: agentColor.background } : null),
       }
     : undefined;
 
   const checkStyle: CSSProperties | undefined = useAgentColors
     ? {
-        borderColor: agentColor.foreground,
+        borderColor: agentColor.background,
         backgroundColor: agentColor.background,
         color: agentColor.foreground,
       }
@@ -158,7 +158,7 @@ const ModelListEntry = ({ entry, isSelected, disabled, onChange }: ModelListEntr
       className={cn(
         'flex items-center gap-3 rounded-md border bg-surface3 px-3 py-2.5 text-left transition-colors',
         hasAgentColor
-          ? 'focus-visible:!border-[var(--agent-color-fg)] focus-visible:outline-none'
+          ? 'focus-visible:!border-[var(--agent-color-bg)] focus-visible:outline-none'
           : 'hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
         hasAgentColor && 'hover:bg-surface4',
         isSelected

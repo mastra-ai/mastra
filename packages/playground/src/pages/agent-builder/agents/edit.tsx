@@ -166,12 +166,10 @@ const ProfileSlot = () => {
 
   if (step === 'initial') {
     return (
-      <AgentProfile>
-        <AgentProfileInitialStep
-          avatar={<AgentProfileAvatar disabled={isRunning} />}
-          details={<AgentProfileDetails disabled={isRunning} />}
-        />
-      </AgentProfile>
+      <AgentProfileInitialStep
+        avatar={<AgentProfileAvatar disabled={isRunning} />}
+        details={<AgentProfileDetails disabled={isRunning} className="px-24 justify-center items-center text-center" />}
+      />
     );
   }
 
