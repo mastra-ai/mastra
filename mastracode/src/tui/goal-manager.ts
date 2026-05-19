@@ -33,6 +33,8 @@ export interface GoalState {
   maxTurns: number;
   judgeModelId: string;
   startedAt: string;
+  activeStartedAt?: string;
+  activeDurationMs?: number;
 }
 
 export interface GoalJudgeResult {
@@ -109,6 +111,7 @@ export class GoalManager {
    * Set a new goal objective. Resets turn counter.
    */
   setGoal(objective: string, judgeModelId: string, maxTurns: number = DEFAULT_MAX_TURNS): GoalState {
+    const now = new Date().toISOString();
     this.goal = {
       id: randomUUID(),
       objective,
@@ -116,7 +119,9 @@ export class GoalManager {
       turnsUsed: 0,
       maxTurns,
       judgeModelId,
-      startedAt: new Date().toISOString(),
+      startedAt: now,
+      activeStartedAt: now,
+      activeDurationMs: 0,
     };
     return this.goal;
   }
@@ -127,7 +132,13 @@ export class GoalManager {
   loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
     const saved = metadata?.[THREAD_GOAL_KEY] as GoalState | undefined;
     if (saved && saved.objective && saved.status) {
-      this.goal = { ...saved, id: saved.id ?? randomUUID(), startedAt: saved.startedAt ?? new Date().toISOString() };
+      this.goal = {
+        ...saved,
+        id: saved.id ?? randomUUID(),
+        startedAt: saved.startedAt ?? new Date().toISOString(),
+        activeStartedAt: undefined,
+        activeDurationMs: saved.activeDurationMs ?? 0,
+      };
     } else {
       this.goal = null;
     }
@@ -151,6 +162,7 @@ export class GoalManager {
 
   pause(): GoalState | null {
     if (this.goal && this.goal.status === 'active') {
+      this.stopActiveTimer();
       this.goal.status = 'paused';
     }
     return this.goal;
@@ -159,8 +171,24 @@ export class GoalManager {
   resume(): GoalState | null {
     if (this.goal && this.goal.status === 'paused') {
       this.goal.status = 'active';
+      this.startActiveTimer();
     }
     return this.goal;
+  }
+
+  startActiveTimer(): void {
+    if (this.goal?.status === 'active' && !this.goal.activeStartedAt) {
+      this.goal.activeStartedAt = new Date().toISOString();
+    }
+  }
+
+  stopActiveTimer(): void {
+    if (!this.goal?.activeStartedAt) return;
+    const activeStartedMs = Date.parse(this.goal.activeStartedAt);
+    if (Number.isFinite(activeStartedMs)) {
+      this.goal.activeDurationMs = (this.goal.activeDurationMs ?? 0) + Math.max(0, Date.now() - activeStartedMs);
+    }
+    this.goal.activeStartedAt = undefined;
   }
 
   updateJudgeDefaults(judgeModelId: string, maxTurns: number): GoalState | null {
@@ -178,6 +206,7 @@ export class GoalManager {
 
   markDone(): void {
     if (this.goal) {
+      this.stopActiveTimer();
       this.goal.status = 'done';
     }
   }
@@ -201,6 +230,7 @@ export class GoalManager {
     if (!context.lastAssistantContent) {
       // No assistant message to judge — continue anyway (but check budget)
       if (this.goal.turnsUsed >= this.goal.maxTurns) {
+        this.stopActiveTimer();
         this.goal.status = 'paused';
         await this.saveToThread(state);
         return { continuation: null, judgeResult: null };
@@ -226,29 +256,34 @@ export class GoalManager {
       this.goal.turnsUsed++;
     }
     if (result.decision === 'paused') {
+      this.stopActiveTimer();
       this.goal.status = 'paused';
       await this.saveToThread(state);
       return { continuation: null, judgeResult: result };
     }
 
     if (result.decision === 'done') {
+      this.stopActiveTimer();
       this.goal.status = 'done';
       await this.saveToThread(state);
       return { continuation: null, judgeResult: result };
     }
 
     if (result.decision === 'waiting') {
+      this.stopActiveTimer();
       await this.saveToThread(state);
       return { continuation: null, judgeResult: result };
     }
 
     // Budget exhaustion (checked after judging so the last turn can still be marked done)
     if (this.goal.turnsUsed >= this.goal.maxTurns) {
+      this.stopActiveTimer();
       this.goal.status = 'paused';
       await this.saveToThread(state);
       return { continuation: null, judgeResult: result };
     }
 
+    this.startActiveTimer();
     await this.saveToThread(state);
     return { continuation: this.buildContinuationPrompt(result.reason), judgeResult: result };
   }

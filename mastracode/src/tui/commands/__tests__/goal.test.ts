@@ -374,6 +374,8 @@ describe('handleGoalCommand', () => {
   });
 
   it('can activate goal mode without sending a trigger so plan approval can inject through the TUI', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
     const goalManager = new GoalManager();
     const sendMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -392,9 +394,12 @@ describe('handleGoalCommand', () => {
     } as any;
 
     await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', { trigger: 'none' });
+    vi.setSystemTime(new Date('2026-05-15T15:00:00.000Z'));
 
     expect(goalManager.isActive()).toBe(true);
+    expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
     expect(sendMessage).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('updates the current goal when judge defaults change', async () => {

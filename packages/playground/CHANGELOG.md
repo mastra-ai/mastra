@@ -1,5 +1,45 @@
 # @internal/playground
 
+## 1.9.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`6b25032`](https://github.com/mastra-ai/mastra/commit/6b250329fa4795b4d085cba4077c7998893c1d59), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/client-js@1.20.0-alpha.2
+  - @mastra/ai-sdk@1.4.3-alpha.0
+  - @mastra/react@0.4.0-alpha.2
+  - @mastra/playground-ui@29.0.0-alpha.2
+
+## 1.9.4-alpha.1
+
+### Patch Changes
+
+- Added `align` and `stack` variants to `PageLayout.Row`. Use `stack="responsive"` for top bars that should collapse to a vertical stack on narrow viewports, and `align="center"` to vertically center children. Applied the new variants to the Prompts and Workflows top bars so the search field and primary action share a single row on desktop and stack on mobile. ([#16714](https://github.com/mastra-ai/mastra/pull/16714))
+
+  ```tsx
+  <PageLayout.Row align="center" stack="responsive">
+    <ListSearch ... />
+    <Button ...>Create</Button>
+  </PageLayout.Row>
+  ```
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`9692d60`](https://github.com/mastra-ai/mastra/commit/9692d60298e8f629d10de54867642a38955fb708), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`b2ea6b5`](https://github.com/mastra-ai/mastra/commit/b2ea6b57cf21997e2271f5a2dba5ac987f53a181), [`32d0d87`](https://github.com/mastra-ai/mastra/commit/32d0d871b4cfa0328d7c8c044f5c3a85b68c6530), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`a45e18f`](https://github.com/mastra-ai/mastra/commit/a45e18fa35803bd69110bc4bad806befba078ffe), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25), [`b3ff840`](https://github.com/mastra-ai/mastra/commit/b3ff8400173007f318b8308c9013f5a41500b14d)]:
+  - @mastra/core@1.36.0-alpha.1
+  - @mastra/client-js@1.20.0-alpha.1
+  - @mastra/playground-ui@29.0.0-alpha.1
+  - @mastra/react@0.4.0-alpha.1
+
+## 1.9.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+  - @mastra/client-js@1.20.0-alpha.0
+  - @mastra/react@0.4.0-alpha.0
+  - @mastra/playground-ui@29.0.0-alpha.0
+
 ## 1.9.3
 
 ### Patch Changes

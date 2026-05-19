@@ -16,6 +16,7 @@ import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.goalManager.startActiveTimer();
 
   // Refresh git branch so status line reflects the current branch
   const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
@@ -118,6 +119,7 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -151,6 +153,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
 
 export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }

@@ -6,7 +6,7 @@
  *   /goal             Open goal actions
  *   /goal status      Show current goal status
  *   /goal pause       Pause the continuation loop
- *   /goal resume      Resume (resets turn counter)
+ *   /goal resume      Resume without resetting the turn counter
  *   /goal clear       Drop the goal
  *   /judge            Set global judge model and max-attempt defaults
  */
@@ -310,6 +310,10 @@ async function startGoal(
   const goal = goalManager.setGoal(objective, judgeModelId, maxTurns);
 
   state.planStartedGoalId = undefined;
+  if (options.trigger === 'none') {
+    goal.activeStartedAt = undefined;
+    goal.activeDurationMs = 0;
+  }
   if (shouldPersistToCreatedThread) {
     goalManager.persistOnNextThreadCreate();
   }
