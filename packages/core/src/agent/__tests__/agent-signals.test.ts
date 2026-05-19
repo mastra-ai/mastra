@@ -889,66 +889,69 @@ describe('Agent signals', () => {
     senderSubscription.unsubscribe();
   });
 
-  it('broadcasts subscribed thread stream parts across UnixSocketPubSub runtime instances', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-signals-'));
-    const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
-    const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
-    const ownerRuntime = new AgentThreadStreamRuntime();
-    const followerRuntime = new AgentThreadStreamRuntime();
-    const owner = new Agent({
-      id: 'unix-stream-agent',
-      name: 'Unix Stream Owner Agent',
-      instructions: 'Test',
-      model: createTextStreamModel('owner response'),
-    });
-    const follower = new Agent({
-      id: 'unix-stream-agent',
-      name: 'Unix Stream Follower Agent',
-      instructions: 'Test',
-      model: createTextStreamModel('follower response'),
-    });
-    let finishRun!: () => void;
-    const output = {
-      runId: 'unix-run-1',
-      status: 'running',
-      fullStream: (async function* () {
-        yield { type: 'text-delta', runId: 'unix-run-1', payload: { text: 'hello over uds' } };
-        yield { type: 'finish', runId: 'unix-run-1', payload: {} };
-      })(),
-      _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
-    } as any;
+  it.runIf(process.platform !== 'win32')(
+    'broadcasts subscribed thread stream parts across UnixSocketPubSub runtime instances',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-signals-'));
+      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const followerRuntime = new AgentThreadStreamRuntime();
+      const owner = new Agent({
+        id: 'unix-stream-agent',
+        name: 'Unix Stream Owner Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('owner response'),
+      });
+      const follower = new Agent({
+        id: 'unix-stream-agent',
+        name: 'Unix Stream Follower Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('follower response'),
+      });
+      let finishRun!: () => void;
+      const output = {
+        runId: 'unix-run-1',
+        status: 'running',
+        fullStream: (async function* () {
+          yield { type: 'text-delta', runId: 'unix-run-1', payload: { text: 'hello over uds' } };
+          yield { type: 'finish', runId: 'unix-run-1', payload: {} };
+        })(),
+        _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+      } as any;
 
-    try {
-      const ownerSubscription = await ownerRuntime.subscribeToThread(
-        owner,
-        { resourceId: 'unix-resource', threadId: 'unix-thread' },
-        ownerPubSub,
-      );
-      const followerSubscription = await followerRuntime.subscribeToThread(
-        follower,
-        { resourceId: 'unix-resource', threadId: 'unix-thread' },
-        followerPubSub,
-      );
-      const ownerRun = readNextRunWithParts(ownerSubscription.stream[Symbol.asyncIterator]());
-      const followerRun = readNextRunWithParts(followerSubscription.stream[Symbol.asyncIterator]());
+      try {
+        const ownerSubscription = await ownerRuntime.subscribeToThread(
+          owner,
+          { resourceId: 'unix-resource', threadId: 'unix-thread' },
+          ownerPubSub,
+        );
+        const followerSubscription = await followerRuntime.subscribeToThread(
+          follower,
+          { resourceId: 'unix-resource', threadId: 'unix-thread' },
+          followerPubSub,
+        );
+        const ownerRun = readNextRunWithParts(ownerSubscription.stream[Symbol.asyncIterator]());
+        const followerRun = readNextRunWithParts(followerSubscription.stream[Symbol.asyncIterator]());
 
-      ownerRuntime.registerRun(
-        owner,
-        output,
-        { runId: 'unix-run-1', memory: { resource: 'unix-resource', thread: 'unix-thread' } } as any,
-        ownerPubSub,
-      );
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId: 'unix-run-1', memory: { resource: 'unix-resource', thread: 'unix-thread' } } as any,
+          ownerPubSub,
+        );
 
-      await expect(ownerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
-      await expect(followerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
-      finishRun();
-      ownerSubscription.unsubscribe();
-      followerSubscription.unsubscribe();
-    } finally {
-      await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
-      await rm(tempDir, { recursive: true, force: true });
-    }
-  });
+        await expect(ownerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
+        await expect(followerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
+        finishRun();
+        ownerSubscription.unsubscribe();
+        followerSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('supports cross-instance thread subscriptions through an injected PubSub without Mastra', async () => {
     const pubsub = new EventEmitterPubSub();
