@@ -63,12 +63,43 @@ describe('PostgresStoreVNext', () => {
       const store = new PostgresStoreVNext({
         ...TEST_CONFIG,
         id: 'pgvnext-explicit-mode-test',
-        partitioning: { mode: 'native' },
+        observability: { partitioning: { mode: 'native' } },
       });
       try {
         await store.init();
         const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
         expect(observability.partitionMode).toBe('native');
+      } finally {
+        await store.close();
+      }
+    });
+  });
+
+  describe('dual-connection config', () => {
+    it('accepts a separate observability connection string', async () => {
+      const primary = (TEST_CONFIG as { connectionString?: string }).connectionString;
+      const host = (TEST_CONFIG as { host?: string }).host;
+      // Same target intentionally — collision warning is emitted but the
+      // store should still construct + init cleanly so tests of the new
+      // shape don't require a second Postgres instance.
+      const store = new PostgresStoreVNext({
+        ...TEST_CONFIG,
+        id: 'pgvnext-dual-conn',
+        observability: primary
+          ? { connectionString: primary }
+          : host
+            ? {
+                host,
+                port: (TEST_CONFIG as { port?: number }).port,
+                database: (TEST_CONFIG as { database?: string }).database!,
+                user: (TEST_CONFIG as { user?: string }).user!,
+                password: (TEST_CONFIG as { password?: string }).password!,
+              }
+            : {},
+      });
+      try {
+        await store.init();
+        expect(store.stores.observability).toBeInstanceOf(ObservabilityStoragePostgresVNext);
       } finally {
         await store.close();
       }

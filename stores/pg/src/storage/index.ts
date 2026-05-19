@@ -1,3 +1,4 @@
+import type { ConnectionOptions } from 'node:tls';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
@@ -283,23 +284,96 @@ export class PostgresStore extends MastraCompositeStore {
 }
 
 /**
+ * Configuration for the v-next observability connection. Accepts the same
+ * connection shapes as `PostgresStoreConfig` (pool / connectionString /
+ * host+port / Cloud SQL connector) plus the vNext-specific options. When
+ * the connection fields are omitted, the observability domain shares the
+ * primary connection and a warning is logged.
+ */
+export type PostgresStoreVNextObservabilityConfig = (
+  | { pool: Pool }
+  | {
+      connectionString: string;
+      ssl?: ConnectionOptions | boolean;
+      max?: number;
+      idleTimeoutMillis?: number;
+    }
+  | {
+      host: string;
+      port?: number;
+      database: string;
+      user: string;
+      password: string;
+      ssl?: ConnectionOptions | boolean;
+      max?: number;
+      idleTimeoutMillis?: number;
+    }
+  | Record<string, never>
+) & {
+  schemaName?: string;
+  partitioning?: VNextPostgresObservabilityConfig['partitioning'];
+  discovery?: VNextPostgresObservabilityConfig['discovery'];
+};
+
+function observabilityHasConnection(cfg: PostgresStoreVNextObservabilityConfig | undefined): boolean {
+  if (!cfg) return false;
+  return 'pool' in cfg || 'connectionString' in cfg || 'host' in cfg || 'stream' in cfg;
+}
+
+/**
+ * Best-effort detection of two configs pointing at the same Postgres
+ * instance. Catches the common collision cases without over-reaching:
+ * - identical pool references
+ * - identical connectionStrings
+ * - identical (host, port, database) tuples
+ *
+ * Mixed shapes (e.g. connectionString vs host config) return false; we don't
+ * try to parse URLs since false positives are worse than the occasional miss.
+ */
+function isSameConnectionTarget(
+  primary: PostgresStoreConfig,
+  observability: PostgresStoreVNextObservabilityConfig,
+): boolean {
+  if ('pool' in primary && 'pool' in observability) {
+    return primary.pool === observability.pool;
+  }
+  if ('connectionString' in primary && 'connectionString' in observability) {
+    return primary.connectionString === observability.connectionString;
+  }
+  if ('host' in primary && 'host' in observability) {
+    return (
+      primary.host === observability.host &&
+      (primary.port ?? 5432) === ((observability as { port?: number }).port ?? 5432) &&
+      primary.database === observability.database
+    );
+  }
+  return false;
+}
+
+const SHARED_PRIMARY_WARNING =
+  'PostgresStoreVNext: no separate `observability` connection provided. The observability domain ' +
+  'will share your primary Postgres connection. For production workloads, point observability at a ' +
+  'dedicated Postgres instance to avoid degrading your application database performance.';
+
+const COLLISION_WARNING =
+  'PostgresStoreVNext: the `observability` connection appears to point at the same Postgres instance ' +
+  'as the primary store. For production workloads, point observability at a dedicated Postgres ' +
+  'instance to avoid degrading your application database performance.';
+
+/**
  * Postgres storage adapter that uses the v-next observability domain.
  *
- * Equivalent to constructing a `PostgresStore` and overriding the
- * `observability` domain with `ObservabilityStoragePostgresVNext`. Use this
- * in new projects to opt into the v-next observability schema (per-signal
- * partitioned tables, optional TimescaleDB) without wiring the composite
- * manually.
+ * Composes a primary `PostgresStore` (memory / workflows / scores / agents /
+ * etc.) with an `ObservabilityStoragePostgresVNext` for logs, metrics,
+ * scores, feedback, and traces. By default the observability domain uses
+ * the same connection as the primary store; pass an `observability` config
+ * with its own connection details to give observability a dedicated
+ * Postgres instance — strongly recommended for production.
  *
- * IMPORTANT: this adapter is intended for **low-volume production** workloads
- * only. For high-volume agent workloads, use the ClickHouse adapter — Postgres
- * (with or without TimescaleDB) cannot keep up past roughly 1,500 calls/sec
- * sustained on a single primary.
- *
- * For best results, point this at a **dedicated** Postgres instance (not your
- * primary application database) and compose it with your existing
- * `MastraCompositeStore` so your other domains (memory, workflows, scores)
- * stay on their preferred backend.
+ * IMPORTANT: this adapter is intended for **low-volume production**
+ * workloads only. For high-volume agent workloads, use the ClickHouse
+ * adapter — Postgres (with or without TimescaleDB) cannot keep up past
+ * roughly 1,500 calls/sec sustained on a single primary.
  *
  * @example
  * ```typescript
@@ -308,34 +382,109 @@ export class PostgresStore extends MastraCompositeStore {
  *
  * export const mastra = new Mastra({
  *   storage: new PostgresStoreVNext({
- *     id: 'pg-observability',
- *     connectionString: process.env.OBSERVABILITY_PG_URL!,
+ *     id: 'app',
+ *     connectionString: process.env.DATABASE_URL!,
+ *     observability: {
+ *       connectionString: process.env.OBSERVABILITY_DATABASE_URL!,
+ *     },
  *   }),
  * });
  * ```
  */
 export class PostgresStoreVNext extends PostgresStore {
+  #observabilityPool?: Pool;
+  #ownsObservabilityPool = false;
+
   constructor(
     config: PostgresStoreConfig & {
-      partitioning?: VNextPostgresObservabilityConfig['partitioning'];
-      discovery?: VNextPostgresObservabilityConfig['discovery'];
+      /**
+       * Optional dedicated connection for the vNext observability domain.
+       * When omitted, observability shares the primary connection (with a
+       * warning).
+       */
+      observability?: PostgresStoreVNextObservabilityConfig;
     },
   ) {
     super(config);
     this.name = 'PostgresStoreVNext';
 
+    const obsConfig = config.observability;
+    const hasDedicatedConnection = observabilityHasConnection(obsConfig);
+
+    let observabilityClient: DbClient;
+    let observabilitySchema = obsConfig?.schemaName ?? config.schemaName;
+
+    if (!hasDedicatedConnection) {
+      this.logger.warn(SHARED_PRIMARY_WARNING);
+      observabilityClient = this.db;
+    } else {
+      if (isSameConnectionTarget(config, obsConfig as PostgresStoreVNextObservabilityConfig)) {
+        this.logger.warn(COLLISION_WARNING);
+      }
+      const built = this.#createObservabilityClient(obsConfig as PostgresStoreVNextObservabilityConfig);
+      observabilityClient = built.client;
+      this.#observabilityPool = built.pool;
+      this.#ownsObservabilityPool = built.owned;
+    }
+
     const observability = new ObservabilityStoragePostgresVNext({
-      client: this.db,
-      schemaName: config.schemaName,
+      client: observabilityClient,
+      schemaName: observabilitySchema,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
-      partitioning: config.partitioning,
-      discovery: config.discovery,
+      partitioning: obsConfig?.partitioning,
+      discovery: obsConfig?.discovery,
     });
 
     this.stores = {
       ...this.stores,
       observability,
     };
+  }
+
+  #createObservabilityClient(cfg: PostgresStoreVNextObservabilityConfig): {
+    client: DbClient;
+    pool: Pool;
+    owned: boolean;
+  } {
+    if ('pool' in cfg && cfg.pool) {
+      return { client: new PoolAdapter(cfg.pool), pool: cfg.pool, owned: false };
+    }
+    if ('connectionString' in cfg && typeof cfg.connectionString === 'string') {
+      const pool = new Pool({
+        connectionString: cfg.connectionString,
+        ssl: cfg.ssl,
+        max: cfg.max ?? DEFAULT_MAX_CONNECTIONS,
+        idleTimeoutMillis: cfg.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+      });
+      return { client: new PoolAdapter(pool), pool, owned: true };
+    }
+    if ('host' in cfg) {
+      const pool = new Pool({
+        host: cfg.host,
+        port: cfg.port,
+        database: cfg.database,
+        user: cfg.user,
+        password: cfg.password,
+        ssl: cfg.ssl,
+        max: cfg.max ?? DEFAULT_MAX_CONNECTIONS,
+        idleTimeoutMillis: cfg.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+      });
+      return { client: new PoolAdapter(pool), pool, owned: true };
+    }
+    // Cloud SQL connector / pg ClientConfig style — pass through to pg.Pool.
+    const pool = new Pool(cfg as never);
+    return { client: new PoolAdapter(pool), pool, owned: true };
+  }
+
+  /**
+   * Closes both the primary pool (when owned) and the observability pool
+   * (when this store created it).
+   */
+  override async close(): Promise<void> {
+    await super.close();
+    if (this.#ownsObservabilityPool && this.#observabilityPool) {
+      await this.#observabilityPool.end();
+    }
   }
 }
