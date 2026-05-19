@@ -12,7 +12,7 @@ import {
   deleteStoredScorerResponseSchema,
 } from '../schemas/stored-scorers';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
@@ -46,7 +46,7 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
   description: 'Returns a paginated list of all scorer definitions stored in the database',
   tags: ['Stored Scorers'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -59,13 +59,14 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
       }
 
+      const scope = await getStoredResourceScope(mastra, requestContext);
       const result = await scorerStore.listResolved({
         page,
         perPage,
         orderBy,
         status,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
       return result;
@@ -90,7 +91,7 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
     'Returns a specific scorer definition from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Scorers'],
   requiresAuth: true,
-  handler: async ({ mastra, storedScorerId, status }) => {
+  handler: async ({ mastra, storedScorerId, status, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -108,6 +109,7 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
       }
+      assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));
 
       return scorer;
     } catch (error) {
@@ -142,6 +144,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
     scoreRange,
     presetConfig,
     defaultSampling,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -174,7 +177,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
         scorerDefinition: {
           id,
           authorId,
-          metadata,
+          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
           name,
           description,
           type,
@@ -229,6 +232,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
     scoreRange,
     presetConfig,
     defaultSampling,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -247,12 +251,18 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the scorer definition with both metadata-level and config-level fields
       const updatedScorer = await scorerStore.update({
         id: storedScorerId,
         authorId,
-        metadata,
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         type,
@@ -323,7 +333,7 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
   description: 'Deletes a scorer definition from storage by its unique identifier',
   tags: ['Stored Scorers'],
   requiresAuth: true,
-  handler: async ({ mastra, storedScorerId }) => {
+  handler: async ({ mastra, storedScorerId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -341,6 +351,7 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       await scorerStore.delete(storedScorerId);
 

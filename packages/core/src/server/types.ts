@@ -22,7 +22,7 @@ export type ApiRoute =
       openapi?: DescribeRouteOptions;
       cors?: CorsOptions;
       requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
       fga?: RouteFGAConfig;
       /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
       _mastraInternal?: true;
@@ -35,7 +35,7 @@ export type ApiRoute =
       openapi?: DescribeRouteOptions;
       cors?: CorsOptions;
       requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
       fga?: RouteFGAConfig;
       /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
       _mastraInternal?: true;
@@ -175,6 +175,39 @@ export type ValidationErrorHook = (
   error: ZodError,
   context: ValidationErrorContext,
 ) => ValidationErrorResponse | undefined | void;
+
+export type StoredResourceScopeConfig =
+  | boolean
+  | {
+      /**
+       * Metadata key used to persist the resolved stored-resource scope.
+       *
+       * @default 'mastra.resourceId'
+       */
+      metadataKey?: string;
+      /**
+       * Resolve the stored-resource scope for the current request. When omitted,
+       * Mastra uses MASTRA_RESOURCE_ID_KEY from the request context.
+       */
+      resolve?: (context: {
+        requestContext?: RequestContext;
+        user?: unknown;
+      }) => string | undefined | null | Promise<string | undefined | null>;
+      /**
+       * When true, scoped stored-resource routes fail if no scope can be resolved.
+       *
+       * @default true
+       */
+      requireScope?: boolean;
+    };
+
+export type StoredResourcesConfig = {
+  /**
+   * Opt-in tenant/resource scoping for stored resources. When enabled, stored
+   * resource handlers persist and filter a scope value in record metadata.
+   */
+  scope?: StoredResourceScopeConfig;
+};
 
 export type ServerConfig = {
   /**
@@ -360,6 +393,11 @@ export type ServerConfig = {
    * on THIS specific resource).
    */
   fga?: IFGAProvider<any>;
+
+  /**
+   * Stored-resource route and handler behavior.
+   */
+  storedResources?: StoredResourcesConfig;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
