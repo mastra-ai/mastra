@@ -633,6 +633,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/agentcore-runtime-sandbox', label: 'AgentCoreRuntimeSandbox' },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
