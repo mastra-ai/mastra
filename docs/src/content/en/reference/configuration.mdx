@@ -77,7 +77,7 @@ export const mastra = new Mastra({
     type: 'boolean',
     defaultValue: 'false',
     description:
-      'Whether background tasks are enabled. The manager only initializes when this is true and a storage backend is configured.',
+      'Whether the background task manager is available. The manager only initializes when this is true and a storage backend is configured. This is a feature-availability switch — it does not opt any tool into background dispatch. Tools must opt in at the tool or agent layer (see the Background tasks guide).',
   },
   {
     name: 'globalConcurrency',
