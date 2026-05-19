@@ -138,6 +138,8 @@ export interface SerializableDurableOptions {
   maxSteps?: number;
   /** Tool selection strategy */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
+  /** Tool names enabled for this execution */
+  activeTools?: string[];
   /** Temperature for LLM sampling */
   temperature?: number;
   /** Whether to require tool approval globally */
@@ -257,6 +259,8 @@ export interface DurableToolCallInput {
   providerExecuted?: boolean;
   /** Output if provider-executed */
   output?: unknown;
+  /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
+  activeTools?: string[] | null;
 }
 
 /**
