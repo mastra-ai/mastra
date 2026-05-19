@@ -8,9 +8,31 @@ import { PostgresStore, PostgresStoreVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
+/**
+ * The local `TEST_CONFIG` is a host-based primary config (typed as the union
+ * `PostgresStoreConfig`, so we cast for the field reads). For tests we point
+ * `observability` at the same DB instance — the constructor will log the
+ * collision warning, which is fine in tests but exactly the production
+ * anti-pattern callers should avoid.
+ */
+const hostConfig = TEST_CONFIG as {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+};
+const observabilityFromTestConfig: Parameters<typeof PostgresStoreVNext>[0]['observability'] = {
+  host: hostConfig.host,
+  port: hostConfig.port,
+  database: hostConfig.database,
+  user: hostConfig.user,
+  password: hostConfig.password,
+};
+
 describe('PostgresStoreVNext', () => {
   describe('domain wiring', () => {
-    const store = new PostgresStoreVNext(TEST_CONFIG);
+    const store = new PostgresStoreVNext({ ...TEST_CONFIG, observability: observabilityFromTestConfig });
 
     afterAll(async () => {
       await store.close();
@@ -48,7 +70,11 @@ describe('PostgresStoreVNext', () => {
 
   describe('initialization', () => {
     it('runs init() end-to-end without throwing', async () => {
-      const store = new PostgresStoreVNext({ ...TEST_CONFIG, id: 'pgvnext-init-test' });
+      const store = new PostgresStoreVNext({
+        ...TEST_CONFIG,
+        id: 'pgvnext-init-test',
+        observability: observabilityFromTestConfig,
+      });
 
       try {
         await expect(store.init()).resolves.not.toThrow();
@@ -63,43 +89,12 @@ describe('PostgresStoreVNext', () => {
       const store = new PostgresStoreVNext({
         ...TEST_CONFIG,
         id: 'pgvnext-explicit-mode-test',
-        observability: { partitioning: { mode: 'native' } },
+        observability: { ...observabilityFromTestConfig, partitioning: { mode: 'native' } },
       });
       try {
         await store.init();
         const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
         expect(observability.partitionMode).toBe('native');
-      } finally {
-        await store.close();
-      }
-    });
-  });
-
-  describe('dual-connection config', () => {
-    it('accepts a separate observability connection string', async () => {
-      const primary = (TEST_CONFIG as { connectionString?: string }).connectionString;
-      const host = (TEST_CONFIG as { host?: string }).host;
-      // Same target intentionally — collision warning is emitted but the
-      // store should still construct + init cleanly so tests of the new
-      // shape don't require a second Postgres instance.
-      const store = new PostgresStoreVNext({
-        ...TEST_CONFIG,
-        id: 'pgvnext-dual-conn',
-        observability: primary
-          ? { connectionString: primary }
-          : host
-            ? {
-                host,
-                port: (TEST_CONFIG as { port?: number }).port,
-                database: (TEST_CONFIG as { database?: string }).database!,
-                user: (TEST_CONFIG as { user?: string }).user!,
-                password: (TEST_CONFIG as { password?: string }).password!,
-              }
-            : {},
-      });
-      try {
-        await store.init();
-        expect(store.stores.observability).toBeInstanceOf(ObservabilityStoragePostgresVNext);
       } finally {
         await store.close();
       }
@@ -111,7 +106,11 @@ describe('PostgresStoreVNext', () => {
 // updateSpan/batchUpdateSpans get skipped via the insert-only gate while
 // every other listTraces/listLogs/listMetrics/listScores/listFeedback path
 // (including the delta-polling and feedback userId tests) runs end-to-end.
-const sharedSuiteStore = new PostgresStoreVNext({ ...TEST_CONFIG, id: 'pgvnext-shared-suite' });
+const sharedSuiteStore = new PostgresStoreVNext({
+  ...TEST_CONFIG,
+  id: 'pgvnext-shared-suite',
+  observability: observabilityFromTestConfig,
+});
 
 describe('PostgresStoreVNext / shared observability suite', () => {
   beforeAll(async () => {
