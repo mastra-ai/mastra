@@ -144,9 +144,10 @@ async function validateDeclarationRuntimeImports(rootDir, bundledPackages) {
  *
  * @param {string} rootDir
  * @param {Set<string>} bundledPackages
+ * @param {{ validateRuntimeImports?: boolean }} options
  * @returns {Promise<void>}
  */
-export async function generateTypes(rootDir, bundledPackages = new Set()) {
+export async function generateTypes(rootDir, bundledPackages = new Set(), options = {}) {
   try {
     // Use spawn instead of exec to properly inherit stdio
     // Use shell: true for cross-platform compatibility

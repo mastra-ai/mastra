@@ -87,7 +87,10 @@ export abstract class MastraVoice<
   TTools extends ToolsInput = ToolsInput,
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
-> extends MastraBase implements IMastraVoice<TSpeakOptions, TListenOptions, TTools, TEventArgs, TSpeakerMetadata> {
+>
+  extends MastraBase
+  implements IMastraVoice<TSpeakOptions, TListenOptions, TTools, TEventArgs, TSpeakerMetadata>
+{
   protected listeningModel?: BuiltInModelConfig;
   protected speechModel?: BuiltInModelConfig;
   protected speaker?: string;
