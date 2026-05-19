@@ -149,17 +149,24 @@ export class AgentThreadStreamRuntime {
               },
             }) as any,
           )
-        : (async function* () {
-            for await (const part of source) {
-              runtime.#publish(pubsub, key, {
-                type: 'stream-part',
-                runId: output.runId,
-                part,
-                sourceId: runtime.#id,
-              });
-              yield part;
-            }
-          })();
+        : new ReadableStream({
+            async start(controller) {
+              try {
+                for await (const part of source) {
+                  runtime.#publish(pubsub, key, {
+                    type: 'stream-part',
+                    runId: output.runId,
+                    part,
+                    sourceId: runtime.#id,
+                  });
+                  controller.enqueue(part);
+                }
+                controller.close();
+              } catch (error) {
+                controller.error(error);
+              }
+            },
+          });
     Object.defineProperty(output, 'fullStream', {
       configurable: true,
       enumerable: true,
