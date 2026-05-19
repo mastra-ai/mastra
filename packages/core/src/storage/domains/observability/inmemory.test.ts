@@ -721,7 +721,7 @@ describe('ObservabilityInMemory', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getListCapabilities()).toBeUndefined();
+        expect(storage.getFeatures()).toBeUndefined();
 
         const page = await storage.listLogs({});
         expect(page.deltaCursor).toBeUndefined();

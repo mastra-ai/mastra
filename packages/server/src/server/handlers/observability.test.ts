@@ -39,7 +39,7 @@ vi.mock('./error', () => ({
 
 // Mock observability store
 const createMockObservabilityStore = () => ({
-  getListCapabilities: vi.fn(),
+  getFeatures: vi.fn(),
   getTrace: vi.fn(),
   getTraceLight: vi.fn(),
   getSpan: vi.fn(),
@@ -266,9 +266,7 @@ describe('Observability Handlers', () => {
         deltaCursor: null,
       };
 
-      (mockObservabilityStore.getListCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({
-        delta: { metrics: true },
-      });
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue(['delta-polling']);
       (mockObservabilityStore.listMetrics as ReturnType<typeof vi.fn>).mockResolvedValue(deltaResponse);
 
       const result = await LIST_METRICS.handler({
@@ -691,9 +689,7 @@ describe('Observability Handlers', () => {
         deltaCursor: 'cursor-1',
       };
 
-      (mockObservabilityStore.getListCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({
-        delta: { traces: true },
-      });
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue(['delta-polling']);
       (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(deltaResponse);
 
       const result = await LIST_TRACES_ROUTE.handler({
@@ -865,9 +861,7 @@ describe('Observability Handlers', () => {
         deltaCursor: 'cursor-2',
       };
 
-      (mockObservabilityStore.getListCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({
-        delta: { branches: true },
-      });
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue(['delta-polling']);
       (mockObservabilityStore.listBranches as ReturnType<typeof vi.fn>).mockResolvedValue(deltaResponse);
 
       const result = await LIST_BRANCHES_ROUTE.handler({

@@ -130,21 +130,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     this.db = db;
   }
 
-  override getListCapabilities() {
+  override getFeatures() {
     if (!this.deltaPollingFeatureEnabled()) {
       return undefined;
     }
 
-    return {
-      delta: {
-        traces: true,
-        branches: true,
-        logs: true,
-        metrics: true,
-        scores: true,
-        feedback: true,
-      },
-    } as const;
+    return ['delta-polling'] as const;
   }
 
   async dangerouslyClearAll(): Promise<void> {

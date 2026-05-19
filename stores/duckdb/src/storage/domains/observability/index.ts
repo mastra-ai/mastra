@@ -199,21 +199,12 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     };
   }
 
-  override getListCapabilities() {
+  override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
       return undefined;
     }
 
-    return {
-      delta: {
-        traces: true,
-        branches: true,
-        logs: true,
-        metrics: true,
-        scores: true,
-        feedback: true,
-      },
-    } as const;
+    return ['delta-polling'] as const;
   }
 
   // Tracing

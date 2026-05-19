@@ -112,23 +112,14 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     }
 
     it('advertises delta list capabilities when the feature is enabled', () => {
-      expect(storage.getListCapabilities()).toEqual({
-        delta: {
-          traces: true,
-          branches: true,
-          logs: true,
-          metrics: true,
-          scores: true,
-          feedback: true,
-        },
-      });
+      expect(storage.getFeatures()).toEqual(['delta-polling']);
     });
 
     it('hides delta list capabilities when the feature is disabled', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getListCapabilities()).toBeUndefined();
+        expect(storage.getFeatures()).toBeUndefined();
       } finally {
         coreFeatures.add('observability-delta-polling');
       }

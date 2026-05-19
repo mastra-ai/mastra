@@ -27,16 +27,13 @@ export const OBSERVABILITY_LIST_ENDPOINTS = {
 
 export type ObservabilityListEndpoint =
   (typeof OBSERVABILITY_LIST_ENDPOINTS)[keyof typeof OBSERVABILITY_LIST_ENDPOINTS];
+const OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE = 'delta-polling';
 
-type ObservabilityListCapabilities = {
-  delta?: Partial<Record<ObservabilityListEndpoint, true>>;
-};
-
-function getListCapabilities(observabilityStore: ObservabilityStorage): ObservabilityListCapabilities | undefined {
+function getFeatures(observabilityStore: ObservabilityStorage): readonly string[] | undefined {
   const candidate = observabilityStore as ObservabilityStorage & {
-    getListCapabilities?: () => ObservabilityListCapabilities | undefined;
+    getFeatures?: () => readonly string[] | undefined;
   };
-  return candidate.getListCapabilities?.();
+  return candidate.getFeatures?.();
 }
 
 /** Retrieves MastraCompositeStore or throws 500 if unavailable. */
@@ -68,7 +65,7 @@ export function assertObservabilityDeltaSupported(
     });
   }
 
-  if (getListCapabilities(observabilityStore)?.delta?.[endpoint] === true) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE)) {
     return;
   }
 

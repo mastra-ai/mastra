@@ -487,21 +487,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     };
   }
 
-  override getListCapabilities() {
+  override getFeatures() {
     if (!deltaPollingFeatureEnabled() || this.#deltaCursorStrategy === null) {
       return undefined;
     }
 
-    return {
-      delta: {
-        traces: true,
-        branches: true,
-        logs: true,
-        metrics: true,
-        scores: true,
-        feedback: true,
-      },
-    } as const;
+    return ['delta-polling'] as const;
   }
 
   // -------------------------------------------------------------------------

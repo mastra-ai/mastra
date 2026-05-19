@@ -682,7 +682,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       describe('delta polling', () => {
         it('should return only newly listed traces after the cursor', async () => {
-          if (observabilityStorage.getListCapabilities?.()?.delta?.traces !== true) {
+          if (!observabilityStorage.getFeatures?.()?.includes('delta-polling')) {
             return;
           }
 
@@ -984,7 +984,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
     describe('listBranches', () => {
       it('should return only newly listed branches after the cursor', async () => {
-        if (observabilityStorage.getListCapabilities?.()?.delta?.branches !== true) {
+        if (!observabilityStorage.getFeatures?.()?.includes('delta-polling')) {
           return;
         }
 
