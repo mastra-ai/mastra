@@ -137,7 +137,10 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.chatContainer.addChild(new Spacer(1));
   }
   state.userInitiatedAbort = false;
-  state.activeGoalJudge = undefined;
+  if (state.activeGoalJudge) {
+    removeJudgeComponent(state, state.activeGoalJudge.component);
+    state.activeGoalJudge = undefined;
+  }
 
   state.followUpComponents = [];
   state.pendingFollowUpMessages = [];
@@ -161,6 +164,10 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   if (state.streamingComponent) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
+  }
+  if (state.activeGoalJudge) {
+    removeJudgeComponent(state, state.activeGoalJudge.component);
+    state.activeGoalJudge = undefined;
   }
 
   state.followUpComponents = [];

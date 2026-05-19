@@ -364,13 +364,10 @@ describe('MastraTUI queueing', () => {
     await Promise.resolve();
 
     expect(sendSignal).toHaveBeenCalledWith({
-      content: {
-        role: 'user',
-        content: [
-          { type: 'text', text: "what's in this image?" },
-          { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
-        ],
-      },
+      content: [
+        { type: 'text', text: "what's in this image?" },
+        { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
+      ],
     });
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-image-1',
@@ -1006,6 +1003,7 @@ describe('MastraTUI queueing', () => {
       gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
         isActive: vi.fn(() => true),
+        stopActiveTimer: vi.fn(),
         getGoal: vi.fn(() => ({
           id: 'goal-1',
           status: 'active',
