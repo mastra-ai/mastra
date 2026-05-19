@@ -33,7 +33,10 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   };
 
   return (
-    <div className="flex h-[72px] w-[72px] items-center justify-center">
+    <div
+      className="flex h-[72px] w-[72px] items-center justify-center"
+      style={{ viewTransitionName: 'agent-profile-avatar' }}
+    >
       <div className="origin-center scale-150">
         <div className="rounded-full bg-surface3 p-1">
           {interactive ? (

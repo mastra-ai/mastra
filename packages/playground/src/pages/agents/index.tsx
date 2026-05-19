@@ -1,6 +1,5 @@
 import {
   AgentIcon,
-  ButtonWithTooltip,
   ErrorState,
   ListSearch,
   NoDataPageLayout,

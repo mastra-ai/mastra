@@ -4239,6 +4239,9 @@ importers:
       '@posthog/react':
         specifier: ^1.9.0
         version: 1.9.0(@types/react@19.2.14)(posthog-js@1.372.10)(react@19.2.6)
+      '@radix-ui/react-dialog':
+        specifier: ^1.1.15
+        version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-dropdown-menu':
         specifier: ^2.1.16
         version: 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -4269,6 +4272,9 @@ importers:
       lucide-react:
         specifier: ^0.522.0
         version: 0.522.0(react@19.2.6)
+      nanoid:
+        specifier: ^5.1.7
+        version: 5.1.11
       papaparse:
         specifier: ^5.5.3
         version: 5.5.3
@@ -24309,11 +24315,6 @@ packages:
 
   nanoid@5.1.11:
     resolution: {integrity: sha512-v+KEsUv2ps74PaSKv0gHTxTCgMXOIfBEbaqa6w6ISIGC7ZsvHN4N9oJ8d4cmf0n5oTzQz2SLmThbQWhjd/8eKg==}
-    engines: {node: ^18 || >=20}
-    hasBin: true
-
-  nanoid@5.1.6:
-    resolution: {integrity: sha512-c7+7RQ+dMB5dPwwCp4ee1/iV/q2P6aK1mTZcfr1BTuVlyW9hJYiMPybJCcnBlQtuSmTIWNeazm/zqNoZSSElBg==}
     engines: {node: ^18 || >=20}
     hasBin: true
 
@@ -50516,8 +50517,6 @@ snapshots:
 
   nanoid@5.1.11: {}
 
-  nanoid@5.1.6: {}
-
   nanostores@1.1.0: {}
 
   napi-postinstall@0.3.4: {}
@@ -50858,7 +50857,7 @@ snapshots:
 
   openai-realtime-api@1.0.8(bufferutil@4.1.0):
     dependencies:
-      nanoid: 5.1.6
+      nanoid: 5.1.11
       ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil

@@ -5,6 +5,7 @@ import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentProfile,
+  AgentProfileInitialStep,
   AgentProfileAvatar,
   AgentProfileDetails,
   AgentProfileHero,
@@ -20,7 +21,7 @@ import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
-import { WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
+import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
@@ -150,6 +151,7 @@ const ProfileSlot = () => {
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
+  const { step } = useWizard();
 
   const heroActions = (
     <>
@@ -161,6 +163,17 @@ const ProfileSlot = () => {
       {isOwner && <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />}
     </>
   );
+
+  if (step === 'initial') {
+    return (
+      <AgentProfile>
+        <AgentProfileInitialStep
+          avatar={<AgentProfileAvatar disabled={isRunning} />}
+          details={<AgentProfileDetails disabled={isRunning} />}
+        />
+      </AgentProfile>
+    );
+  }
 
   return (
     <AgentProfile>
