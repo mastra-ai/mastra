@@ -106,6 +106,7 @@ import * as logsOps from './logs';
 import * as metricsOps from './metrics';
 import { detectPartman, detectTimescale, setupPartitioning } from './partitioning';
 import type { PartitioningOptions, PartitionMode } from './partitioning';
+import { deltaPollingFeatureEnabled } from './polling';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
@@ -196,6 +197,11 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     supported: ObservabilityStorageStrategy[];
   } {
     return { preferred: 'insert-only', supported: ['insert-only'] };
+  }
+
+  override getFeatures() {
+    if (!deltaPollingFeatureEnabled()) return undefined;
+    return ['delta-polling'] as const;
   }
 
   // -------------------------------------------------------------------------

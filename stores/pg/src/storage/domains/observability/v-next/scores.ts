@@ -37,6 +37,7 @@ import {
   seriesNameFromDimensions,
   shiftRange,
 } from './olap';
+import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 import { buildInsert, SCORE_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
@@ -91,41 +92,118 @@ export async function batchCreateScores(client: DbClient, schema: string, args: 
 // ---------------------------------------------------------------------------
 
 export async function listScores(client: DbClient, schema: string, args: ListScoresArgs): Promise<ListScoresResponse> {
-  const { filters, pagination, orderBy } = listScoresArgsSchema.parse(args);
-  const page = pagination?.page ?? 0;
-  const perPage = pagination?.perPage ?? 10;
-
+  const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
   const table = qualifiedTable(schema, TABLE_SCORE_EVENTS);
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+    return listScoresDelta(client, table, filters, after, limit);
+  }
+
+  return listScoresPage(client, table, filters, pagination.page, pagination.perPage, orderBy.field, orderBy.direction);
+}
+
+async function listScoresPage(
+  client: DbClient,
+  table: string,
+  filters: ListScoresArgs['filters'],
+  page: number,
+  perPage: number,
+  orderField: 'timestamp',
+  orderDir: 'ASC' | 'DESC',
+): Promise<ListScoresResponse> {
   const acc = newFilterAccumulator();
   applyScoreFilters(acc, filters);
-
   const whereClause = whereOrEmpty(acc);
-  const orderField = orderBy?.field ?? 'timestamp';
-  const orderDir = orderBy?.direction ?? 'DESC';
 
   const countRow = await client.oneOrNone<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM ${table} ${whereClause}`,
     acc.params,
   );
   const count = Number(countRow?.count ?? 0);
-  if (count === 0) {
-    return { pagination: { total: 0, page, perPage, hasMore: false }, scores: [] };
+
+  let scores: ScoreRecord[] = [];
+  if (count > 0) {
+    const rows = await client.manyOrNone<Record<string, any>>(
+      `SELECT ${SCORE_SELECT_COLUMNS}
+       FROM ${table}
+       ${whereClause}
+       ORDER BY "${orderField}" ${orderDir}
+       LIMIT $${acc.next++} OFFSET $${acc.next++}`,
+      [...acc.params, perPage, page * perPage],
+    );
+    scores = rows.map(rowToScoreRecord);
   }
+
+  const deltaCursor = deltaPollingFeatureEnabled()
+    ? await readScoresStreamHeadCursor(client, table, filters)
+    : undefined;
+
+  return {
+    pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
+    scores,
+    ...(deltaCursor !== undefined ? { deltaCursor } : {}),
+  };
+}
+
+async function listScoresDelta(
+  client: DbClient,
+  table: string,
+  filters: ListScoresArgs['filters'],
+  after: string | undefined,
+  limit: number,
+): Promise<ListScoresResponse> {
+  if (after === undefined) {
+    const deltaCursor = await readScoresStreamHeadCursor(client, table, filters);
+    return { scores: [], delta: { limit, hasMore: false }, deltaCursor };
+  }
+
+  const afterId = validateCursorId(after);
+  const acc = newFilterAccumulator();
+  applyScoreFilters(acc, filters);
+  acc.conditions.push(`"cursorId" > $${acc.next++}::bigint`);
+  acc.params.push(afterId);
 
   const rows = await client.manyOrNone<Record<string, any>>(
     `SELECT ${SCORE_SELECT_COLUMNS}
      FROM ${table}
-     ${whereClause}
-     ORDER BY "${orderField}" ${orderDir}
-     LIMIT $${acc.next++} OFFSET $${acc.next++}`,
-    [...acc.params, perPage, page * perPage],
+     ${whereOrEmpty(acc)}
+     ORDER BY "cursorId" ASC
+     LIMIT $${acc.next++}`,
+    [...acc.params, limit + 1],
   );
 
-  const scores: ScoreRecord[] = rows.map(rowToScoreRecord);
+  const hasMore = rows.length > limit;
+  const visible = rows.slice(0, limit);
+  const deltaCursor =
+    visible.length > 0
+      ? encodeDeltaCursor(visible[visible.length - 1]!.cursorId)
+      : await readScoresStreamHeadCursor(client, table, filters);
+
   return {
-    pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
-    scores,
+    scores: visible.map(rowToScoreRecord),
+    delta: { limit, hasMore },
+    deltaCursor,
   };
+}
+
+async function readScoresStreamHeadCursor(
+  client: DbClient,
+  table: string,
+  filters: ListScoresArgs['filters'],
+): Promise<string> {
+  const acc = newFilterAccumulator();
+  applyScoreFilters(acc, filters);
+  const filtered = await client.oneOrNone<{ cursorId: string | null }>(
+    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table} ${whereOrEmpty(acc)}`,
+    acc.params,
+  );
+  if (filtered?.cursorId != null) return encodeDeltaCursor(filtered.cursorId);
+
+  const head = await client.oneOrNone<{ cursorId: string | null }>(
+    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table}`,
+  );
+  return encodeDeltaCursor(head?.cursorId);
 }
 
 // ---------------------------------------------------------------------------

@@ -106,6 +106,7 @@ export type TableDDLMode = 'timescale' | 'partitioned';
 function spanEventsTableDDL(schema: string, mode: TableDDLMode): string {
   return `
 CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} (
+  "cursorId"              bigserial NOT NULL,
   "traceId"               text NOT NULL,
   "spanId"                text NOT NULL,
   "parentSpanId"          text,
@@ -160,6 +161,7 @@ ${partitionClause(mode, 'endedAt')}
 function metricEventsTableDDL(schema: string, mode: TableDDLMode): string {
   return `
 CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_METRIC_EVENTS)} (
+  "cursorId"              bigserial NOT NULL,
   "metricId"              text NOT NULL,
   "timestamp"             timestamptz NOT NULL,
   "name"                  text NOT NULL,
@@ -207,6 +209,7 @@ ${partitionClause(mode, 'timestamp')}
 function logEventsTableDDL(schema: string, mode: TableDDLMode): string {
   return `
 CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_LOG_EVENTS)} (
+  "cursorId"              bigserial NOT NULL,
   "logId"                 text NOT NULL,
   "timestamp"             timestamptz NOT NULL,
   "level"                 text NOT NULL,
@@ -249,6 +252,7 @@ ${partitionClause(mode, 'timestamp')}
 function scoreEventsTableDDL(schema: string, mode: TableDDLMode): string {
   return `
 CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_SCORE_EVENTS)} (
+  "cursorId"              bigserial NOT NULL,
   "scoreId"               text NOT NULL,
   "timestamp"             timestamptz NOT NULL,
   "scorerId"              text NOT NULL,
@@ -294,6 +298,7 @@ ${partitionClause(mode, 'timestamp')}
 function feedbackEventsTableDDL(schema: string, mode: TableDDLMode): string {
   return `
 CREATE TABLE IF NOT EXISTS ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)} (
+  "cursorId"              bigserial NOT NULL,
   "feedbackId"            text NOT NULL,
   "timestamp"             timestamptz NOT NULL,
   "feedbackSource"        text NOT NULL,
@@ -429,6 +434,13 @@ function tableIndexes(): IndexSpec[] {
       columns: '("traceId")',
       where: ROOT_SPAN_WHERE,
     },
+    // Delta polling: cursor ordering for the root-span projection used by listTraces.
+    {
+      name: 'mastra_span_events_root_cursor_idx',
+      table: TABLE_SPAN_EVENTS,
+      columns: '("cursorId")',
+      where: ROOT_SPAN_WHERE,
+    },
 
     // metric_events
     { name: 'mastra_metric_events_name_ts_idx', table: TABLE_METRIC_EVENTS, columns: '("name", "timestamp" DESC)' },
@@ -440,6 +452,7 @@ function tableIndexes(): IndexSpec[] {
     { name: 'mastra_metric_events_traceid_idx', table: TABLE_METRIC_EVENTS, columns: '("traceId")' },
     { name: 'mastra_metric_events_labels_gin', table: TABLE_METRIC_EVENTS, columns: '("labels")', using: 'gin' },
     { name: 'mastra_metric_events_tags_gin', table: TABLE_METRIC_EVENTS, columns: '("tags")', using: 'gin' },
+    { name: 'mastra_metric_events_cursor_idx', table: TABLE_METRIC_EVENTS, columns: '("cursorId")' },
 
     // log_events
     { name: 'mastra_log_events_ts_idx', table: TABLE_LOG_EVENTS, columns: '("timestamp" DESC)' },
@@ -451,6 +464,7 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_log_events_tags_gin', table: TABLE_LOG_EVENTS, columns: '("tags")', using: 'gin' },
+    { name: 'mastra_log_events_cursor_idx', table: TABLE_LOG_EVENTS, columns: '("cursorId")' },
 
     // score_events
     { name: 'mastra_score_events_traceid_idx', table: TABLE_SCORE_EVENTS, columns: '("traceId", "timestamp" DESC)' },
@@ -461,6 +475,7 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_score_events_tags_gin', table: TABLE_SCORE_EVENTS, columns: '("tags")', using: 'gin' },
+    { name: 'mastra_score_events_cursor_idx', table: TABLE_SCORE_EVENTS, columns: '("cursorId")' },
 
     // feedback_events
     {
@@ -479,6 +494,7 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_feedback_events_tags_gin', table: TABLE_FEEDBACK_EVENTS, columns: '("tags")', using: 'gin' },
+    { name: 'mastra_feedback_events_cursor_idx', table: TABLE_FEEDBACK_EVENTS, columns: '("cursorId")' },
   ];
 }
 

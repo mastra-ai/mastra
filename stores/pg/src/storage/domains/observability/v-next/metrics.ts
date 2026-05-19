@@ -43,6 +43,7 @@ import {
   seriesNameFromDimensions,
   shiftRange,
 } from './olap';
+import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 import { buildInsert, METRIC_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
@@ -96,41 +97,118 @@ export async function listMetrics(
   schema: string,
   args: ListMetricsArgs,
 ): Promise<ListMetricsResponse> {
-  const { filters, pagination, orderBy } = listMetricsArgsSchema.parse(args);
-  const page = pagination?.page ?? 0;
-  const perPage = pagination?.perPage ?? 10;
-
+  const { mode, filters, pagination, orderBy, after, limit } = listMetricsArgsSchema.parse(args);
   const table = qualifiedTable(schema, TABLE_METRIC_EVENTS);
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+    return listMetricsDelta(client, table, filters, after, limit);
+  }
+
+  return listMetricsPage(client, table, filters, pagination.page, pagination.perPage, orderBy.field, orderBy.direction);
+}
+
+async function listMetricsPage(
+  client: DbClient,
+  table: string,
+  filters: ListMetricsArgs['filters'],
+  page: number,
+  perPage: number,
+  orderField: 'timestamp',
+  orderDir: 'ASC' | 'DESC',
+): Promise<ListMetricsResponse> {
   const acc = newFilterAccumulator();
   applyMetricFilters(acc, filters);
-
   const whereClause = whereOrEmpty(acc);
-  const orderField = orderBy?.field ?? 'timestamp';
-  const orderDir = orderBy?.direction ?? 'DESC';
 
   const countRow = await client.oneOrNone<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM ${table} ${whereClause}`,
     acc.params,
   );
   const count = Number(countRow?.count ?? 0);
-  if (count === 0) {
-    return { pagination: { total: 0, page, perPage, hasMore: false }, metrics: [] };
+
+  let metrics: MetricRecord[] = [];
+  if (count > 0) {
+    const rows = await client.manyOrNone<Record<string, any>>(
+      `SELECT ${METRIC_SELECT_COLUMNS}
+       FROM ${table}
+       ${whereClause}
+       ORDER BY "${orderField}" ${orderDir}
+       LIMIT $${acc.next++} OFFSET $${acc.next++}`,
+      [...acc.params, perPage, page * perPage],
+    );
+    metrics = rows.map(rowToMetricRecord);
   }
+
+  const deltaCursor = deltaPollingFeatureEnabled()
+    ? await readMetricsStreamHeadCursor(client, table, filters)
+    : undefined;
+
+  return {
+    pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
+    metrics,
+    ...(deltaCursor !== undefined ? { deltaCursor } : {}),
+  };
+}
+
+async function listMetricsDelta(
+  client: DbClient,
+  table: string,
+  filters: ListMetricsArgs['filters'],
+  after: string | undefined,
+  limit: number,
+): Promise<ListMetricsResponse> {
+  if (after === undefined) {
+    const deltaCursor = await readMetricsStreamHeadCursor(client, table, filters);
+    return { metrics: [], delta: { limit, hasMore: false }, deltaCursor };
+  }
+
+  const afterId = validateCursorId(after);
+  const acc = newFilterAccumulator();
+  applyMetricFilters(acc, filters);
+  acc.conditions.push(`"cursorId" > $${acc.next++}::bigint`);
+  acc.params.push(afterId);
 
   const rows = await client.manyOrNone<Record<string, any>>(
     `SELECT ${METRIC_SELECT_COLUMNS}
      FROM ${table}
-     ${whereClause}
-     ORDER BY "${orderField}" ${orderDir}
-     LIMIT $${acc.next++} OFFSET $${acc.next++}`,
-    [...acc.params, perPage, page * perPage],
+     ${whereOrEmpty(acc)}
+     ORDER BY "cursorId" ASC
+     LIMIT $${acc.next++}`,
+    [...acc.params, limit + 1],
   );
 
-  const metrics: MetricRecord[] = rows.map(rowToMetricRecord);
+  const hasMore = rows.length > limit;
+  const visible = rows.slice(0, limit);
+  const deltaCursor =
+    visible.length > 0
+      ? encodeDeltaCursor(visible[visible.length - 1]!.cursorId)
+      : await readMetricsStreamHeadCursor(client, table, filters);
+
   return {
-    pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
-    metrics,
+    metrics: visible.map(rowToMetricRecord),
+    delta: { limit, hasMore },
+    deltaCursor,
   };
+}
+
+async function readMetricsStreamHeadCursor(
+  client: DbClient,
+  table: string,
+  filters: ListMetricsArgs['filters'],
+): Promise<string> {
+  const acc = newFilterAccumulator();
+  applyMetricFilters(acc, filters);
+  const filtered = await client.oneOrNone<{ cursorId: string | null }>(
+    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table} ${whereOrEmpty(acc)}`,
+    acc.params,
+  );
+  if (filtered?.cursorId != null) return encodeDeltaCursor(filtered.cursorId);
+
+  const head = await client.oneOrNone<{ cursorId: string | null }>(
+    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table}`,
+  );
+  return encodeDeltaCursor(head?.cursorId);
 }
 
 // ---------------------------------------------------------------------------

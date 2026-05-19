@@ -38,6 +38,7 @@ import {
   seriesNameFromDimensions,
   shiftRange,
 } from './olap';
+import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
@@ -108,41 +109,126 @@ export async function listFeedback(
   schema: string,
   args: ListFeedbackArgs,
 ): Promise<ListFeedbackResponse> {
-  const { filters, pagination, orderBy } = listFeedbackArgsSchema.parse(args);
-  const page = pagination?.page ?? 0;
-  const perPage = pagination?.perPage ?? 10;
-
+  const { mode, filters, pagination, orderBy, after, limit } = listFeedbackArgsSchema.parse(args);
   const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+    return listFeedbackDelta(client, table, filters, after, limit);
+  }
+
+  return listFeedbackPage(
+    client,
+    table,
+    filters,
+    pagination.page,
+    pagination.perPage,
+    orderBy.field,
+    orderBy.direction,
+  );
+}
+
+async function listFeedbackPage(
+  client: DbClient,
+  table: string,
+  filters: ListFeedbackArgs['filters'],
+  page: number,
+  perPage: number,
+  orderField: 'timestamp',
+  orderDir: 'ASC' | 'DESC',
+): Promise<ListFeedbackResponse> {
   const acc = newFilterAccumulator();
   applyFeedbackFilters(acc, filters);
-
   const whereClause = whereOrEmpty(acc);
-  const orderField = orderBy?.field ?? 'timestamp';
-  const orderDir = orderBy?.direction ?? 'DESC';
 
   const countRow = await client.oneOrNone<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM ${table} ${whereClause}`,
     acc.params,
   );
   const count = Number(countRow?.count ?? 0);
-  if (count === 0) {
-    return { pagination: { total: 0, page, perPage, hasMore: false }, feedback: [] };
+
+  let feedback: FeedbackRecord[] = [];
+  if (count > 0) {
+    const rows = await client.manyOrNone<Record<string, any>>(
+      `SELECT ${FEEDBACK_SELECT_COLUMNS}
+       FROM ${table}
+       ${whereClause}
+       ORDER BY "${orderField}" ${orderDir}
+       LIMIT $${acc.next++} OFFSET $${acc.next++}`,
+      [...acc.params, perPage, page * perPage],
+    );
+    feedback = rows.map(rowToFeedbackRecord);
   }
+
+  const deltaCursor = deltaPollingFeatureEnabled()
+    ? await readFeedbackStreamHeadCursor(client, table, filters)
+    : undefined;
+
+  return {
+    pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
+    feedback,
+    ...(deltaCursor !== undefined ? { deltaCursor } : {}),
+  };
+}
+
+async function listFeedbackDelta(
+  client: DbClient,
+  table: string,
+  filters: ListFeedbackArgs['filters'],
+  after: string | undefined,
+  limit: number,
+): Promise<ListFeedbackResponse> {
+  if (after === undefined) {
+    const deltaCursor = await readFeedbackStreamHeadCursor(client, table, filters);
+    return { feedback: [], delta: { limit, hasMore: false }, deltaCursor };
+  }
+
+  const afterId = validateCursorId(after);
+  const acc = newFilterAccumulator();
+  applyFeedbackFilters(acc, filters);
+  acc.conditions.push(`"cursorId" > $${acc.next++}::bigint`);
+  acc.params.push(afterId);
 
   const rows = await client.manyOrNone<Record<string, any>>(
     `SELECT ${FEEDBACK_SELECT_COLUMNS}
      FROM ${table}
-     ${whereClause}
-     ORDER BY "${orderField}" ${orderDir}
-     LIMIT $${acc.next++} OFFSET $${acc.next++}`,
-    [...acc.params, perPage, page * perPage],
+     ${whereOrEmpty(acc)}
+     ORDER BY "cursorId" ASC
+     LIMIT $${acc.next++}`,
+    [...acc.params, limit + 1],
   );
 
-  const feedback: FeedbackRecord[] = rows.map(rowToFeedbackRecord);
+  const hasMore = rows.length > limit;
+  const visible = rows.slice(0, limit);
+  const deltaCursor =
+    visible.length > 0
+      ? encodeDeltaCursor(visible[visible.length - 1]!.cursorId)
+      : await readFeedbackStreamHeadCursor(client, table, filters);
+
   return {
-    pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
-    feedback,
+    feedback: visible.map(rowToFeedbackRecord),
+    delta: { limit, hasMore },
+    deltaCursor,
   };
+}
+
+async function readFeedbackStreamHeadCursor(
+  client: DbClient,
+  table: string,
+  filters: ListFeedbackArgs['filters'],
+): Promise<string> {
+  const acc = newFilterAccumulator();
+  applyFeedbackFilters(acc, filters);
+  const filtered = await client.oneOrNone<{ cursorId: string | null }>(
+    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table} ${whereOrEmpty(acc)}`,
+    acc.params,
+  );
+  if (filtered?.cursorId != null) return encodeDeltaCursor(filtered.cursorId);
+
+  const head = await client.oneOrNone<{ cursorId: string | null }>(
+    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table}`,
+  );
+  return encodeDeltaCursor(head?.cursorId);
 }
 
 // ---------------------------------------------------------------------------

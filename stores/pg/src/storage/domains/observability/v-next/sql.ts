@@ -85,6 +85,7 @@ ON CONFLICT DO NOTHING`;
  * column the row→record converters expect.
  */
 export const SPAN_SELECT_COLUMNS = `
+  "cursorId",
   "traceId", "spanId", "parentSpanId", "experimentId",
   "entityType", "entityId", "entityName", "entityVersionId",
   "parentEntityType", "parentEntityId", "parentEntityName", "parentEntityVersionId",
@@ -98,6 +99,7 @@ export const SPAN_SELECT_COLUMNS = `
 `;
 
 export const SPAN_LIGHT_SELECT_COLUMNS = `
+  "cursorId",
   "traceId", "spanId", "parentSpanId",
   "name", "entityType", "entityId", "entityName",
   "spanType", "error", "isEvent",
@@ -105,6 +107,7 @@ export const SPAN_LIGHT_SELECT_COLUMNS = `
 `;
 
 export const METRIC_SELECT_COLUMNS = `
+  "cursorId",
   "metricId", "timestamp", "name", "value",
   "traceId", "spanId", "experimentId",
   "entityType", "entityId", "entityName", "entityVersionId",
@@ -118,6 +121,7 @@ export const METRIC_SELECT_COLUMNS = `
 `;
 
 export const LOG_SELECT_COLUMNS = `
+  "cursorId",
   "logId", "timestamp", "level", "message",
   "traceId", "spanId", "experimentId",
   "entityType", "entityId", "entityName", "entityVersionId",
@@ -130,6 +134,7 @@ export const LOG_SELECT_COLUMNS = `
 `;
 
 export const SCORE_SELECT_COLUMNS = `
+  "cursorId",
   "scoreId", "timestamp", "scorerId", "scorerVersion", "scoreSource", "score", "reason",
   "traceId", "spanId", "experimentId", "scoreTraceId",
   "entityType", "entityId", "entityName", "entityVersionId",
@@ -142,6 +147,7 @@ export const SCORE_SELECT_COLUMNS = `
 `;
 
 export const FEEDBACK_SELECT_COLUMNS = `
+  "cursorId",
   "feedbackId", "timestamp", "feedbackSource", "feedbackType",
   "valueString", "valueNumber", "comment", "feedbackUserId", "sourceId",
   "traceId", "spanId", "experimentId",
