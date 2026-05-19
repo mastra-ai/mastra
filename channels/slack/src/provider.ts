@@ -1317,16 +1317,22 @@ export class SlackProvider implements ChannelProvider {
       return c.json({ error: 'Invalid signature' }, 401);
     }
 
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(rawBody);
-    } catch {
-      return c.json({ error: 'Malformed JSON body' }, 400);
-    }
-
-    // Handle URL verification challenge
-    if (event.type === 'url_verification') {
-      return c.json({ challenge: event.challenge });
+    // Slack sends JSON for events and form-urlencoded for interactive payloads / slash
+    // commands. Only the JSON event-callback path needs to be peeked here to handle the
+    // url_verification challenge; everything else is forwarded as-is to the adapter's
+    // handleWebhook, which sniffs content-type and routes interactivity, slash commands,
+    // and events itself.
+    const contentType = c.req.header('content-type') || '';
+    if (contentType.includes('application/json')) {
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(rawBody);
+      } catch {
+        return c.json({ error: 'Malformed JSON body' }, 400);
+      }
+      if (event.type === 'url_verification') {
+        return c.json({ challenge: event.challenge });
+      }
     }
 
     // Resolve agent and delegate to AgentChannels
