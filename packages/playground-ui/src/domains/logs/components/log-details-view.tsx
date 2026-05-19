@@ -2,7 +2,7 @@ import { format } from 'date-fns';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { LogRecord } from '../types';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
@@ -48,22 +48,22 @@ export function LogDetailsView({
         </DataDetailsPanel.Heading>
         <ButtonsGroup className="ml-auto shrink-0">
           {onCollapsedChange && (
-            <ButtonWithTooltip
+            <Button
               size="md"
-              tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+              tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
               onClick={() => setCollapsed(!collapsed)}
             >
               {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-            </ButtonWithTooltip>
+            </Button>
           )}
 
           <ButtonsGroup spacing="close">
-            <ButtonWithTooltip size="md" tooltipContent="Previous log" onClick={onPrevious} disabled={!onPrevious}>
+            <Button size="md" tooltip="Previous log" onClick={onPrevious} disabled={!onPrevious}>
               <ArrowUpIcon />
-            </ButtonWithTooltip>
-            <ButtonWithTooltip size="md" tooltipContent="Next log" onClick={onNext} disabled={!onNext}>
+            </Button>
+            <Button size="md" tooltip="Next log" onClick={onNext} disabled={!onNext}>
               <ArrowDownIcon />
-            </ButtonWithTooltip>
+            </Button>
           </ButtonsGroup>
 
           <DataDetailsPanel.CloseButton onClick={onClose} />

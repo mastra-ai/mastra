@@ -256,6 +256,79 @@ describe('FGA Middleware - checkRouteFGA', () => {
     );
   });
 
+  it('should derive built-in FGA metadata for stored resource item and collection routes', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+    requestContext.set('mastra__resourceId', 'team-1');
+
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/stored/agents/:storedAgentId',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { storedAgentId: 'agent-1' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'POST',
+          path: '/stored/skills/:storedSkillId/publish',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { storedSkillId: 'skill-1' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/stored/workspaces',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        {},
+      ),
+    ).resolves.toBeNull();
+
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      1,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-agents', id: 'agent-1' },
+        permission: 'stored-agents:read',
+        context: { resourceId: 'agent-1', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      2,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-skills', id: 'skill-1' },
+        permission: 'stored-skills:publish',
+        context: { resourceId: 'skill-1', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      3,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-workspaces', id: 'team-1' },
+        permission: 'stored-workspaces:read',
+        context: { resourceId: 'team-1', requestContext },
+      },
+    );
+  });
+
   it('should return null when FGA check passes', async () => {
     const fgaProvider = createMockFGAProvider(true);
     const mastra = { getServer: () => ({ fga: fgaProvider }) };

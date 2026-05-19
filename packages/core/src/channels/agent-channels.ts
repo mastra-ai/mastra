@@ -11,7 +11,7 @@ import type { StorageThreadType } from '../memory/types';
 import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
-import type { ApiRoute } from '../server/types';
+import type { ApiRoute, CorsOptions } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 import { getChatModule } from './chat-lazy';
@@ -38,6 +38,10 @@ export type PostableMessage = string | CardElement;
 /** Per-adapter configuration. */
 export interface ChannelAdapterConfig {
   adapter: Adapter;
+  /**
+   * CORS configuration for the generated webhook route for this adapter.
+   */
+  cors?: CorsOptions;
   /**
    * Start a persistent Gateway WebSocket listener for this adapter
    * (default: `true`).
@@ -771,6 +775,7 @@ export class AgentChannels {
         method: 'POST',
         requiresAuth: false,
         _mastraInternal: true,
+        cors: this.adapterConfigs[platform]?.cors,
         createHandler: async () => {
           return async c => {
             // Await initialization to handle serverless cold starts where

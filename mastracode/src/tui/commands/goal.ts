@@ -6,7 +6,7 @@
  *   /goal             Open goal actions
  *   /goal status      Show current goal status
  *   /goal pause       Pause the continuation loop
- *   /goal resume      Resume (resets turn counter)
+ *   /goal resume      Resume without resetting the turn counter
  *   /goal clear       Drop the goal
  *   /judge            Set global judge model and max-attempt defaults
  */
@@ -96,6 +96,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
+    state.planStartedGoalId = undefined;
     await goalManager.saveToThread(state);
     ctx.showInfo('Goal cleared.');
     return;
@@ -307,6 +308,12 @@ async function startGoal(
 
   const shouldPersistToCreatedThread = !state.harness.getCurrentThreadId();
   const goal = goalManager.setGoal(objective, judgeModelId, maxTurns);
+
+  state.planStartedGoalId = undefined;
+  if (options.trigger === 'none') {
+    goal.activeStartedAt = undefined;
+    goal.activeDurationMs = 0;
+  }
   if (shouldPersistToCreatedThread) {
     goalManager.persistOnNextThreadCreate();
   }

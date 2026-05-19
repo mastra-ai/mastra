@@ -124,6 +124,10 @@ const agent = new Agent({
       discord: {
         adapter: createDiscordAdapter(),
         cards: false,
+        cors: {
+          origin: ['https://customer-saas.example'],
+          credentials: true,
+        },
         gateway: false,
       },
       slack: createSlackAdapter(), // Plain adapter uses defaults
@@ -155,6 +159,13 @@ const agent = new Agent({
     defaultValue: 'true',
     description:
       'Render tool calls as interactive rich cards with buttons. Set to `false` to use plain text formatting instead. When disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide based on conversation context.',
+  },
+  {
+    name: 'cors',
+    type: 'CorsOptions',
+    isOptional: true,
+    description:
+      'CORS configuration for this adapter webhook route. Use this for browser-based channel adapters that need cross-origin credentials.',
   },
   {
     name: 'formatToolCall',

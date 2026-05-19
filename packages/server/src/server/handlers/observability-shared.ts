@@ -1,10 +1,40 @@
 import type { Mastra } from '@mastra/core';
+import { coreFeatures } from '@mastra/core/features';
 import type { MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
+import { wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
+import {
+  deltaCursorSchema,
+  deltaLimitSchema,
+  listModeSchema,
+  paginationArgsSchema,
+} from './observability-list-query-schemas';
 
-export const NEW_OBSERVABILITY_UPGRADE_MESSAGE =
-  'New observability endpoints require a newer @mastra/core. Please upgrade.';
+export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
+export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
+  'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
+
+export const OBSERVABILITY_LIST_ENDPOINTS = {
+  traces: 'traces',
+  branches: 'branches',
+  logs: 'logs',
+  metrics: 'metrics',
+  scores: 'scores',
+  feedback: 'feedback',
+} as const;
+
+export type ObservabilityListEndpoint =
+  (typeof OBSERVABILITY_LIST_ENDPOINTS)[keyof typeof OBSERVABILITY_LIST_ENDPOINTS];
+const OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE = 'delta-polling';
+
+function getFeatures(observabilityStore: ObservabilityStorage): readonly string[] | undefined {
+  const candidate = observabilityStore as ObservabilityStorage & {
+    getFeatures?: () => readonly string[] | undefined;
+  };
+  return candidate.getFeatures?.();
+}
 
 /** Retrieves MastraCompositeStore or throws 500 if unavailable. */
 export function getStorage(mastra: Mastra): MastraCompositeStore {
@@ -25,6 +55,25 @@ export async function getObservabilityStore(mastra: Mastra): Promise<Observabili
   return observability;
 }
 
+export function assertObservabilityDeltaSupported(
+  observabilityStore: ObservabilityStorage,
+  endpoint: ObservabilityListEndpoint,
+) {
+  if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
+    throw new HTTPException(501, {
+      message: `${OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE} (endpoint: ${endpoint})`,
+    });
+  }
+
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE)) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: `Delta polling is not supported by the configured observability store for ${endpoint}`,
+  });
+}
+
 export interface RouteDetails {
   method: ServerRoute['method'];
   path: `/${string}`;
@@ -34,6 +83,13 @@ export interface RouteDetails {
 }
 
 export const NEW_ROUTE_DEFS = {
+  LIST_METRICS: {
+    method: 'GET',
+    path: '/observability/metrics',
+    summary: 'List metrics',
+    description: 'Returns a paginated list of metrics with optional filtering and sorting',
+  },
+
   LIST_LOGS: {
     method: 'GET',
     path: '/observability/logs',
@@ -231,3 +287,92 @@ export const NEW_ROUTE_DEFS = {
 
 export type NewRoutesKey = keyof typeof NEW_ROUTE_DEFS;
 export type NewRoutesDefinitions = (typeof NEW_ROUTE_DEFS)[NewRoutesKey];
+
+export function createObservabilityListQuerySchema<
+  TFilter extends z.ZodObject<z.ZodRawShape>,
+  TOrderBy extends z.ZodObject<z.ZodRawShape>,
+>(filterSchema: TFilter, orderBySchema: TOrderBy) {
+  const unwrapDefault = (schema: unknown) => {
+    const zodSchema = schema as z.ZodTypeAny;
+    return zodSchema instanceof z.ZodDefault ? zodSchema.unwrap() : zodSchema;
+  };
+  const paginationShape = paginationArgsSchema.shape as unknown as Record<string, z.ZodTypeAny>;
+  const orderByShape = orderBySchema.shape as unknown as Record<string, z.ZodTypeAny>;
+
+  const pageSchema = unwrapDefault(paginationShape.page);
+  const perPageSchema = unwrapDefault(paginationShape.perPage);
+  const fieldSchema = orderByShape.field ? unwrapDefault(orderByShape.field) : z.never().optional();
+  const directionSchema = orderByShape.direction ? unwrapDefault(orderByShape.direction) : z.never().optional();
+
+  return wrapSchemaForQueryParams(
+    z
+      .object({
+        ...filterSchema.shape,
+        page: pageSchema,
+        perPage: perPageSchema,
+        field: fieldSchema,
+        direction: directionSchema,
+        mode: listModeSchema.optional(),
+        after: deltaCursorSchema.optional(),
+        limit: deltaLimitSchema,
+      })
+      .partial(),
+  ).superRefine((value, ctx) => {
+    const isDelta = value.mode === 'delta';
+    const hasPagination = value.page !== undefined || value.perPage !== undefined;
+    const hasOrderBy = value.field !== undefined || value.direction !== undefined;
+    const hasAfter = value.after !== undefined;
+    const hasLimit = value.limit !== undefined;
+
+    if (isDelta) {
+      if (hasPagination) {
+        if (value.page !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['page'],
+            message: '`page` is not allowed when `mode=delta`',
+          });
+        }
+        if (value.perPage !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['perPage'],
+            message: '`perPage` is not allowed when `mode=delta`',
+          });
+        }
+      }
+      if (hasOrderBy) {
+        if (value.field !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['field'],
+            message: '`field` is not allowed when `mode=delta`',
+          });
+        }
+        if (value.direction !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['direction'],
+            message: '`direction` is not allowed when `mode=delta`',
+          });
+        }
+      }
+      return;
+    }
+
+    if (hasAfter) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['after'],
+        message: '`after` is only allowed when `mode=delta`',
+      });
+    }
+    if (hasLimit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limit'],
+        message: '`limit` is only allowed when `mode=delta`',
+      });
+    }
+  });
+}

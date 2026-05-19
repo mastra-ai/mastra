@@ -1,5 +1,33 @@
 # @mastra/observability
 
+## 1.13.0-alpha.1
+
+### Minor Changes
+
+- `MastraStorageExporter` now notifies custom exporters and connected integrations when it cannot persist observability events, such as unsupported storage or retries being exceeded. This matches the behavior already available on `DefaultExporter`. ([#16755](https://github.com/mastra-ai/mastra/pull/16755))
+
+  Also fixed an issue in both exporters where span updates waiting on their parent span could be silently lost if a later flush in the same cycle failed.
+
+### Patch Changes
+
+- Updated dependencies [[`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021)]:
+  - @mastra/core@1.36.0-alpha.3
+
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Roll up token usage from internal MODEL_GENERATION spans onto the closest exported ancestor span. When `tracingPolicy.internal` filters a model call out of exported traces, its tokens used to disappear from both the trace UI and metrics. Now: ([#16434](https://github.com/mastra-ai/mastra/pull/16434))
+  - The visible ancestor (e.g. `PROCESSOR_RUN`, `AGENT_RUN`) gets an `internalUsage` attribute summing the tokens consumed by its hidden descendants — so a Mastra-owned processor that runs an internal agent (moderation, PII detector, structured output, etc.) shows its aggregate cost on the visible `PROCESSOR_RUN` span.
+  - Token / cost metrics still emit, but are attributed via labels to the visible ancestor instead of the hidden agent.
+
+  No action required — the rollup applies automatically whenever an internal `MODEL_GENERATION` ends inside a non-internal ancestor.
+
+### Patch Changes
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25)]:
+  - @mastra/core@1.36.0-alpha.1
+
 ## 1.12.0
 
 ### Minor Changes
