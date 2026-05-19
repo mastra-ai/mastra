@@ -239,7 +239,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const useUnixSocketPubSub =
     (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
   const signalsPubSub = configuredPubSub ?? (useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined);
-  const crossProcessPubSub = config?.crossProcessPubSub ?? useUnixSocketPubSub;
+  const crossProcessPubSub = config?.crossProcessPubSub ?? (!configuredPubSub && useUnixSocketPubSub);
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
