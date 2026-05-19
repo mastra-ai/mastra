@@ -6526,13 +6526,13 @@ importers:
 
   voice/cloudflare:
     dependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20260418.1
+        version: 4.20260511.1
       cloudflare:
         specifier: ^5.2.0
         version: 5.2.0(encoding@0.1.13)
     devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20260418.1
-        version: 4.20260511.1
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
