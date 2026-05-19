@@ -38,7 +38,7 @@ export const AgentProfileTabs = ({
 
   return (
     <div
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-xl border border-border1 bg-surface3 overflow-hidden"
+      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] border-t border-border1 overflow-hidden"
       data-testid="agent-profile-tabs"
     >
       <Tabs defaultTab="instructions" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">

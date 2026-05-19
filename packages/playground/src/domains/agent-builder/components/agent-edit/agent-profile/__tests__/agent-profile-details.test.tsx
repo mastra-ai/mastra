@@ -72,4 +72,26 @@ describe('AgentProfileDetails', () => {
     expect((getByTestId('agent-configure-name') as HTMLInputElement).disabled).toBe(true);
     expect((getByTestId('agent-configure-description') as HTMLTextAreaElement).disabled).toBe(true);
   });
+
+  it('does not render visible "Name" or "Description" labels', () => {
+    const { queryByText } = render(
+      <Wrapper>
+        <AgentProfileDetails />
+      </Wrapper>,
+    );
+
+    expect(queryByText('Name')).toBeNull();
+    expect(queryByText('Description')).toBeNull();
+  });
+
+  it('renders the name input left-aligned (no text-center)', () => {
+    const { getByTestId } = render(
+      <Wrapper>
+        <AgentProfileDetails />
+      </Wrapper>,
+    );
+
+    expect(getByTestId('agent-configure-name').className).not.toContain('text-center');
+    expect(getByTestId('agent-configure-description').className).not.toContain('text-center');
+  });
 });
