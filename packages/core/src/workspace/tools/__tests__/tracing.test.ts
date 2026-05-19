@@ -1,16 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { startWorkspaceSpan } from '../tracing';
 
+function makeContext() {
+  const end = vi.fn();
+  const createChildSpan = vi.fn(() => ({ end, error: vi.fn() }));
+  const context = {
+    tracing: {
+      currentSpan: { createChildSpan },
+    },
+  } as any;
+  const workspace = { id: 'workspace-1', name: 'Workspace 1' } as any;
+  return { end, createChildSpan, context, workspace };
+}
+
 describe('startWorkspaceSpan', () => {
   it('redacts env-shaped fields and secret-looking keys from span input and output', () => {
-    const end = vi.fn();
-    const createChildSpan = vi.fn(() => ({ end, error: vi.fn() }));
-    const context = {
-      tracing: {
-        currentSpan: { createChildSpan },
-      },
-    } as any;
-    const workspace = { id: 'workspace-1', name: 'Workspace 1' } as any;
+    const { end, createChildSpan, context, workspace } = makeContext();
 
     const span = startWorkspaceSpan(context, workspace, {
       category: 'sandbox',
@@ -65,5 +70,79 @@ describe('startWorkspaceSpan', () => {
       },
       attributes: { success: true },
     });
+  });
+
+  it('normalizes camelCase and uppercase field names before redaction', () => {
+    const { createChildSpan, context, workspace } = makeContext();
+
+    startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'executeCommand',
+      input: {
+        accessToken: 'secret-tok',
+        clientSecret: 'secret-val',
+        processEnv: { HOME: '/home/user' },
+        ENV: { NODE_ENV: 'production' },
+        sessionCookie: 'abc123',
+        safe: 'visible',
+      },
+    });
+
+    expect(createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          accessToken: '[redacted]',
+          clientSecret: '[redacted]',
+          processEnv: { redacted: true, keys: ['HOME'] },
+          ENV: { redacted: true, keys: ['NODE_ENV'] },
+          sessionCookie: '[redacted]',
+          safe: 'visible',
+        },
+      }),
+    );
+  });
+
+  it('handles circular references without stack overflow', () => {
+    const { createChildSpan, context, workspace } = makeContext();
+
+    const circular: Record<string, unknown> = { value: 'kept' };
+    circular.self = circular;
+
+    startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'executeCommand',
+      input: circular,
+    });
+
+    expect(createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          value: 'kept',
+          self: '[redacted:circular]',
+        },
+      }),
+    );
+  });
+
+  it('handles circular references in arrays', () => {
+    const { createChildSpan, context, workspace } = makeContext();
+
+    const obj: Record<string, unknown> = { name: 'test' };
+    const arr = [obj];
+    obj.items = arr;
+
+    startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'executeCommand',
+      input: { data: arr },
+    });
+
+    expect(createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          data: [{ name: 'test', items: '[redacted:circular]' }],
+        },
+      }),
+    );
   });
 });

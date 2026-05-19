@@ -42,9 +42,13 @@ export interface WorkspaceSpanHandle {
   error(err: unknown, attrs?: Partial<WorkspaceActionAttributes>): void;
 }
 
-const ENV_FIELD_NAMES = new Set(['env', 'environment', 'processEnv']);
+const ENV_FIELD_NAMES = new Set(['env', 'environment', 'process_env']);
 const SECRET_FIELD_PATTERN =
-  /(^|_)(api[_-]?key|key|token|secret|password|passwd|pwd|credential|credentials|auth|authorization|cookie|session)(_|$)/i;
+  /(^|[_-])(api[_-]?key|key|token|secret|password|passwd|pwd|credential|credentials|auth|authorization|cookie|session)([_-]|$)/i;
+
+function normalizeFieldName(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === '[object Object]';
@@ -57,9 +61,16 @@ function redactEnv(value: unknown) {
   };
 }
 
-function sanitizeWorkspaceTraceData(value: unknown): unknown {
+function sanitizeWorkspaceTraceData(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (value !== null && typeof value === 'object') {
+    if (seen.has(value as object)) {
+      return '[redacted:circular]';
+    }
+    seen.add(value as object);
+  }
+
   if (Array.isArray(value)) {
-    return value.map(item => sanitizeWorkspaceTraceData(item));
+    return value.map(item => sanitizeWorkspaceTraceData(item, seen));
   }
 
   if (!isPlainObject(value)) {
@@ -68,13 +79,14 @@ function sanitizeWorkspaceTraceData(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => {
-      if (ENV_FIELD_NAMES.has(key)) {
+      const normalized = normalizeFieldName(key);
+      if (ENV_FIELD_NAMES.has(normalized)) {
         return [key, redactEnv(entry)];
       }
-      if (SECRET_FIELD_PATTERN.test(key)) {
+      if (SECRET_FIELD_PATTERN.test(normalized)) {
         return [key, '[redacted]'];
       }
-      return [key, sanitizeWorkspaceTraceData(entry)];
+      return [key, sanitizeWorkspaceTraceData(entry, seen)];
     }),
   );
 }
