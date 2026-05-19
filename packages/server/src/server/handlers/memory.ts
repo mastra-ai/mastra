@@ -1136,7 +1136,10 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           filter,
           includeSystemReminders,
         });
-        return result;
+        return {
+          ...result,
+          uiMessages: result.messages,
+        };
       }
 
       // Fallback to storage (covers stored agents whose memory can't be resolved)
@@ -1165,7 +1168,10 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             include,
             filter,
           });
-          return result;
+          return {
+            ...result,
+            uiMessages: result.messages,
+          };
         }
       }
 
