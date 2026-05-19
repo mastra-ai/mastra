@@ -1,5 +1,355 @@
 # @mastra/core
 
+## 1.36.0-alpha.2
+
+### Minor Changes
+
+- Added support for permission arrays in FGA checks and route configuration. When an array is provided, the user needs **any one** of the listed permissions (logical OR). ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  **Affected types**
+  - `FGACheckParams.permission`
+  - `FGARouteConfig.permission`
+  - `FGARouteInfo.requiresPermission`
+  - `FGADeniedError.permission`
+  - `CheckFGAOptions.permission`
+
+  Single-permission usage continues to work unchanged.
+
+  ```ts
+  // Before — single permission only
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: 'agents:read',
+  });
+
+  // After — single permission or array (ANY-of)
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: ['agents:read', 'agents:execute'],
+  });
+  ```
+
+- Added consistent FGA execution checks across agents, tools, memory, and workflows to prevent unauthenticated executions when FGA is configured. Pass an authenticated user through `requestContext` when invoking protected APIs directly: ([#16651](https://github.com/mastra-ai/mastra/pull/16651))
+
+  ```ts
+  const requestContext = new RequestContext();
+  requestContext.set('user', user);
+
+  await agent.generate('Summarize this thread', {
+    requestContext,
+  });
+  ```
+
+- `publishSkill` now returns the full skill file tree so consumers can persist the UI-facing tree alongside storage blobs without re-walking the source. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+  ```ts
+  import { publishSkill } from '@mastra/core/workspace';
+
+  const result = await publishSkill({ workspace, skillId, source });
+
+  // New: nested tree of folders + files; binary content base64-encoded.
+  for (const node of result.files) {
+    console.log(node.type, node.path);
+  }
+  ```
+
+  Also added two optional capability methods to `IMastraEditor` for server-side gating of builder-aware behavior:
+
+  ```ts
+  interface IMastraEditor {
+    // ...existing members...
+    hasEnabledBuilderConfig?(): boolean;
+    resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+  }
+  ```
+
+  Both methods are optional — existing implementations of `IMastraEditor` continue to work unchanged. Servers that consume them treat `undefined` / missing implementation as "no builder configured."
+
+- `publishSkillFromSource()` (and `collectSkillForPublish()`) now return a `files` field containing the full skill source as a tree of `StorageSkillFileNode` entries with base64-encoded blob content — handy for storing a UI-facing copy of a skill alongside its content-addressable tree: ([#16673](https://github.com/mastra-ai/mastra/pull/16673))
+
+  ```ts
+  const { snapshot, tree, files } = await publishSkillFromSource({ source });
+  // files: StorageSkillFileNode[] — name, mimeType, base64 content per node
+  ```
+
+  Existing callers that only destructure `{ snapshot, tree }` are unaffected; the field is additive.
+
+  Also adds `parseSkillSnapshotFromFiles()` for parsing skill snapshot frontmatter from a flat file list (used by the registry install flow):
+
+  ```ts
+  import { parseSkillSnapshotFromFiles, type SkillSnapshotFile } from '@mastra/core/workspace';
+
+  const files: SkillSnapshotFile[] = [{ path: 'SKILL.md', content: '...' }, ...];
+  const snapshot = parseSkillSnapshotFromFiles(files);
+  ```
+
+### Patch Changes
+
+- Fixed sub-agent streams so nested tool input progress is emitted while tool arguments are still being generated. This lets UIs show delegated agents preparing tool calls before the final tool input is available. Fixes #16422. ([#16553](https://github.com/mastra-ai/mastra/pull/16553))
+
+## 1.36.0-alpha.1
+
+### Minor Changes
+
+- Added route-specific CORS configuration so credentialed cross-origin access can be limited to selected custom routes and channel webhooks. ([#16689](https://github.com/mastra-ai/mastra/pull/16689))
+
+  ```ts
+  registerApiRoute('/customer-webhook', {
+    method: 'POST',
+    cors: {
+      origin: ['https://customer-saas.example'],
+      credentials: true,
+    },
+    handler: async c => c.json({ ok: true }),
+  });
+  ```
+
+  ```ts
+  new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    instructions: '...',
+    model,
+    channels: {
+      adapters: {
+        web: {
+          adapter: createWebAdapter(),
+          cors: {
+            origin: ['https://customer-saas.example'],
+            credentials: true,
+          },
+        },
+      },
+    },
+  });
+  ```
+
+  Use `server.cors` for one global CORS policy across the server:
+
+  ```ts
+  new Mastra({
+    server: {
+      cors: {
+        origin: '*',
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Hide internal workflow spans from Mastra-owned plumbing in exported traces. ([#16631](https://github.com/mastra-ai/mastra/pull/16631))
+
+- Added the `internalUsage?: UsageStats` field to `AIBaseAttributes`, so any span type can carry token usage rolled up from internal descendant spans. Populated automatically by `@mastra/observability` when an internal `MODEL_GENERATION` ends inside a non-internal ancestor. ([#16434](https://github.com/mastra-ai/mastra/pull/16434))
+
+- Fixed Mastra getting stuck after a storage startup failure. Previously, if storage couldn't start up (for example, because the database was briefly unreachable), Mastra would keep returning the same error for every operation until the process was restarted. Now the next storage operation tries to start storage again, so brief outages recover on their own. Storage startup failures are also logged, so the problem is visible even when a later retry succeeds. ([#16427](https://github.com/mastra-ai/mastra/pull/16427))
+
+## 1.36.0-alpha.0
+
+### Minor Changes
+
+- Narrowed `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`. ([#16622](https://github.com/mastra-ai/mastra/pull/16622))
+
+  Fixed two signal-content bugs:
+  - `user-message` signal attributes now reach the LLM
+  - multimodal non-`user-message` signals no longer lose file parts
+
+  Callers that previously passed wrapped message shapes to `agent.sendSignal` should now pass a bare string or a bare parts array.
+
+  Before:
+  `{ type: 'user-message', contents: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }`
+
+  After:
+  `{ type: 'user-message', contents: [{ type: 'text', text: 'hi' }] }`
+
+  Added an optional `providerOptions` field to `agent.sendSignal` that flows through to the resulting prompt turn (as `providerOptions` on the LLM message) and is persisted on the stored signal message (as `content.providerMetadata`).
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5))
+
+- Fixed CompositeAuth incorrectly advertising SSO, session, and user provider capabilities when no inner provider supports them. Studio would show an SSO login button even when no provider had SSO configured, leading to 401 errors on login attempts. The duck-typing check now verifies that interface methods are actual functions rather than just present on the prototype chain. ([#16664](https://github.com/mastra-ai/mastra/pull/16664))
+
+- Exposed `formatSkillActivation(skill)` from `@mastra/core/workspace`. It returns the activation payload — instructions plus references, scripts, and assets listings — that the built-in `skill` tool uses, so callers (e.g. an explicit `/skill/<name>` slash command) can produce the same output without duplicating the formatting logic. ([#16618](https://github.com/mastra-ai/mastra/pull/16618))
+
+  Also preserves the `user-invocable` skill frontmatter field in workspace skill metadata.
+
+  ```ts
+  import { formatSkillActivation } from '@mastra/core/workspace';
+
+  const content = formatSkillActivation(skill);
+  ```
+
+## 1.35.0
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+- Added a favorites storage domain that lets users mark stored agents and skills as favorites, plus `visibility` (`'private' | 'public'`) and `favoriteCount` fields on stored agents and skills so callers can list, filter, and order by favorite state. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+  Existing rows without `visibility` or `favoriteCount` continue to work; the new fields and APIs are opt-in.
+
+  **Example**
+
+  ```ts
+  const favorites = await storage.getStore('favorites');
+
+  await favorites?.favorite({ userId: 'u1', entityType: 'agent', entityId: 'agent-123' });
+
+  const favoritedIds = await favorites?.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+
+  // List agents the user has favorited, surfaced first
+  const { agents } = await storage.getStore('agents').list({
+    pinFavoritedFor: 'u1',
+    favoritedOnly: true,
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7))
+
+- Fixed a workspace PATCH bug in the inmemory workspace adapter: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined`. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Fixed active signals so they stay in the correct order when conversations are reloaded from memory. ([#16623](https://github.com/mastra-ai/mastra/pull/16623))
+
+- Fixed scheduled workflows created from the public @mastra/core/workflows entry point so declared schedules are applied correctly. ([#16637](https://github.com/mastra-ai/mastra/pull/16637))
+
+- Fixed a crash when importing `@mastra/core/workflows/workflow` from tests or apps, which previously failed with `TypeError: Class extends value undefined is not a constructor or null` (caused by a circular ESM import through the `workflows` barrel). ([#16661](https://github.com/mastra-ai/mastra/pull/16661))
+
+## 1.35.0-alpha.3
+
+### Patch Changes
+
+- Fixed active signals so they stay in the correct order when conversations are reloaded from memory. ([#16623](https://github.com/mastra-ai/mastra/pull/16623))
+
+- Fixed a crash when importing `@mastra/core/workflows/workflow` from tests or apps, which previously failed with `TypeError: Class extends value undefined is not a constructor or null` (caused by a circular ESM import through the `workflows` barrel). ([#16661](https://github.com/mastra-ai/mastra/pull/16661))
+
+## 1.35.0-alpha.2
+
+### Minor Changes
+
+- Added a favorites storage domain that lets users mark stored agents and skills as favorites, plus `visibility` (`'private' | 'public'`) and `favoriteCount` fields on stored agents and skills so callers can list, filter, and order by favorite state. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+  Existing rows without `visibility` or `favoriteCount` continue to work; the new fields and APIs are opt-in.
+
+  **Example**
+
+  ```ts
+  const favorites = await storage.getStore('favorites');
+
+  await favorites?.favorite({ userId: 'u1', entityType: 'agent', entityId: 'agent-123' });
+
+  const favoritedIds = await favorites?.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+
+  // List agents the user has favorited, surfaced first
+  const { agents } = await storage.getStore('agents').list({
+    pinFavoritedFor: 'u1',
+    favoritedOnly: true,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a workspace PATCH bug in the inmemory workspace adapter: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined`. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Fixed scheduled workflows created from the public @mastra/core/workflows entry point so declared schedules are applied correctly. ([#16637](https://github.com/mastra-ai/mastra/pull/16637))
+
+## 1.35.0-alpha.1
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
 ## 1.34.1-alpha.0
 
 ### Patch Changes

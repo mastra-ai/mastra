@@ -265,6 +265,10 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   return false;
 }
 
+function unescapeSkillBoundary(text: string): string {
+  return text.replaceAll('&lt;/skill&gt;', '</skill>');
+}
+
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   if (state.messageComponentsById.has(message.id)) {
     return;
@@ -361,6 +365,27 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     const slashComp = new SlashCommandComponent(commandName, commandContent);
     state.allSlashCommandComponents.push(slashComp);
     state.chatContainer.addChild(slashComp);
+    state.ui.requestRender();
+    return;
+  }
+
+  // Check for persisted skill activation tags.
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
+  if (skillMatch) {
+    const commandName = `skill/${skillMatch[1]!}`;
+    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const existingSkillComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSkillComp) {
+      state.messageComponentsById.set(message.id, existingSkillComp);
+      return;
+    }
+
+    const skillComp = new SlashCommandComponent(commandName, skillContent);
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
     state.ui.requestRender();
     return;
   }

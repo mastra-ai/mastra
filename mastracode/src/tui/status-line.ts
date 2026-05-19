@@ -24,6 +24,22 @@ function isGenericTitle(title: string): boolean {
   );
 }
 
+function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number }): string {
+  const activeStartedAt = goal.activeStartedAt ?? (goal.activeDurationMs === undefined ? goal.startedAt : undefined);
+  const startedMs = activeStartedAt ? Date.parse(activeStartedAt) : NaN;
+  const activeRunMs = Number.isFinite(startedMs) ? Math.max(0, Date.now() - startedMs) : 0;
+  const elapsedMinutes = Math.floor(((goal.activeDurationMs ?? 0) + activeRunMs) / 60_000);
+  if (elapsedMinutes < 1) return '<1m';
+
+  const days = Math.floor(elapsedMinutes / 1_440);
+  const hours = Math.floor((elapsedMinutes % 1_440) / 60);
+  const minutes = elapsedMinutes % 60;
+
+  if (days > 0) return hours > 0 ? `${days}days${hours}hr` : `${days}days`;
+  if (hours > 0) return minutes > 0 ? `${hours}hr${minutes}m` : `${hours}hr`;
+  return `${minutes}m`;
+}
+
 /**
  * Update the status line at the bottom of the TUI.
  * Progressively reduces content to fit the terminal width.
@@ -143,9 +159,9 @@ export function updateStatusLine(state: TUIState): void {
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
-  const goalAttempt = goalState ? Math.min(goalState.turnsUsed + 1, goalState.maxTurns) : null;
-  const goalLabel = goalState?.status === 'active' ? `goal attempt ${goalAttempt}/${goalState.maxTurns}` : null;
-  const shortGoalLabel = goalState?.status === 'active' ? `attempt ${goalAttempt}/${goalState.maxTurns}` : null;
+  const goalDuration = goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
+  const goalLabel = goalDuration ? `pursuing goal (${goalDuration})` : null;
+  const shortGoalLabel = goalDuration ? `goal (${goalDuration})` : null;
   // Build progressively shorter directory strings for layout fallback
   // Only show branch when not showing thread title (thread title takes priority)
   const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;

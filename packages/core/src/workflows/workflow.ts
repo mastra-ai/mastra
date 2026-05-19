@@ -3,12 +3,14 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
-import { Agent } from '../agent';
-import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage, SubAgent } from '../agent';
+import { Agent } from '../agent/agent';
+import type { AgentExecutionOptions } from '../agent/agent.types';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
-import type { MessageInput } from '../agent/message-list';
+import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
+import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
+import type { AgentStreamOptions } from '../agent/types';
 import { MastraFGAPermissions } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
@@ -46,8 +48,8 @@ import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { Tool } from '../tools';
-import type { ToolExecutionContext } from '../tools';
+import { Tool } from '../tools/tool';
+import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
@@ -2551,15 +2553,22 @@ export class Workflow<
     const fgaProvider = mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user' as any);
-      if (user) {
-        const { checkFGA } = await import('../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'workflow', id: this.id },
-          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
-        });
-      }
+      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
+      await requireFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.id) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext,
+        context: {
+          resourceId,
+        },
+        metadata: {
+          workflowId: this.id,
+          runId,
+          resourceId,
+        },
+      });
     }
 
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;

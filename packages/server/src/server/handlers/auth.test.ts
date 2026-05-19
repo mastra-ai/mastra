@@ -11,7 +11,13 @@ import { Mastra } from '@mastra/core';
 import type { MastraAuthProvider, MastraServerConfig } from '@mastra/core/server';
 import { describe, it, expect, vi } from 'vitest';
 
-import { GET_AUTH_CAPABILITIES_ROUTE, GET_SSO_LOGIN_ROUTE, GET_SSO_CALLBACK_ROUTE } from './auth';
+import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import {
+  GET_AUTH_CAPABILITIES_ROUTE,
+  GET_ROLE_PERMISSIONS_ROUTE,
+  GET_SSO_LOGIN_ROUTE,
+  GET_SSO_CALLBACK_ROUTE,
+} from './auth';
 import { createTestServerContext } from './test-utils';
 
 // =============================================================================
@@ -291,5 +297,73 @@ describe('GET /auth/capabilities — no auth provider', () => {
     } as any);
 
     expect(result).toEqual({ enabled: false, login: null });
+  });
+});
+
+// =============================================================================
+// GET /auth/roles/:roleId/permissions
+// =============================================================================
+
+describe('GET /auth/roles/:roleId/permissions', () => {
+  function createMastraWithRBAC(rbac: any) {
+    const mockAuth = createMockSSOProvider();
+    const mastra = new Mastra({ logger: false });
+    const originalGetServer = mastra.getServer.bind(mastra);
+    vi.spyOn(mastra, 'getServer').mockImplementation(() => {
+      const server = originalGetServer() || ({} as any);
+      return { ...server, auth: mockAuth, rbac } as any;
+    });
+    return mastra;
+  }
+
+  it('should return permissions for a valid role when caller is admin', async () => {
+    const rbac = {
+      getPermissionsForRole: vi.fn().mockResolvedValue(['*:read', '*:execute']),
+    };
+    const mastra = createMastraWithRBAC(rbac);
+
+    const requestContext = new Map([[MASTRA_USER_PERMISSIONS_KEY, ['*']]]);
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      requestContext,
+      roleId: 'member',
+    };
+
+    const result = (await GET_ROLE_PERMISSIONS_ROUTE.handler(ctx as any)) as any;
+    expect(result).toEqual({ roleId: 'member', permissions: ['*:read', '*:execute'] });
+    expect(rbac.getPermissionsForRole).toHaveBeenCalledWith('member');
+  });
+
+  it('should throw 403 when caller is not admin', async () => {
+    const rbac = {
+      getPermissionsForRole: vi.fn().mockResolvedValue([]),
+    };
+    const mastra = createMastraWithRBAC(rbac);
+
+    const requestContext = new Map([[MASTRA_USER_PERMISSIONS_KEY, ['*:read']]]);
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      requestContext,
+      roleId: 'viewer',
+    };
+
+    await expect(GET_ROLE_PERMISSIONS_ROUTE.handler(ctx as any)).rejects.toThrow('Admin access required');
+    expect(rbac.getPermissionsForRole).not.toHaveBeenCalled();
+  });
+
+  it('should throw 404 when RBAC provider lacks getPermissionsForRole', async () => {
+    const rbac = {}; // No getPermissionsForRole
+    const mastra = createMastraWithRBAC(rbac);
+
+    const requestContext = new Map([[MASTRA_USER_PERMISSIONS_KEY, ['*']]]);
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      requestContext,
+      roleId: 'member',
+    };
+
+    await expect(GET_ROLE_PERMISSIONS_ROUTE.handler(ctx as any)).rejects.toThrow(
+      'RBAC provider does not support role permission resolution',
+    );
   });
 });

@@ -59,6 +59,7 @@ import {
   buildLayout,
   setupAutocomplete,
   loadCustomSlashCommands,
+  refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToHarness,
   updateTerminalTitle,
@@ -304,13 +305,10 @@ export class MastraTUI {
 
   private createUserSignalContent(content: string, images?: Array<{ data: string; mimeType: string }>) {
     return images?.length
-      ? {
-          role: 'user' as const,
-          content: [
-            { type: 'text' as const, text: content },
-            ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
-          ],
-        }
+      ? [
+          { type: 'text' as const, text: content },
+          ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
+        ]
       : content;
   }
 
@@ -466,8 +464,12 @@ export class MastraTUI {
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
-    // Setup autocomplete
+    // Install autocomplete immediately; refresh once the workspace resolves.
     setupAutocomplete(this.state);
+    refreshSkillsAutocomplete(this.state).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[skill autocomplete refresh] ${msg}\n`);
+    });
 
     // Build UI layout
     buildLayout(this.state, () => this.refreshModelAuthStatus());

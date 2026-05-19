@@ -19,6 +19,7 @@ import type { AskQuestionInlineComponent } from './components/ask-question-inlin
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
 import type { IdleCounterComponent } from './components/idle-counter.js';
+import type { JudgeDisplayComponent } from './components/judge-display.js';
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent, OMMarkerData } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
@@ -135,7 +136,7 @@ export interface TUIState {
   hideThinkingBlock: boolean;
   quietMode: boolean;
   /** Active goal judge status-line override while evaluating the last turn. */
-  activeGoalJudge?: { modelId: string };
+  activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
@@ -159,7 +160,8 @@ export interface TUIState {
   pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
-  lastSubmitPlanComponent?: IToolExecutionComponent;
+  lastSubmitPlanComponent?: Component;
+  pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -197,6 +199,7 @@ export interface TUIState {
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  skillCommands: SkillMetadata[];
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
@@ -277,6 +280,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Inline interaction
     lastClearedText: '',
     pendingAskUserComponents: new Map(),
+    pendingSubmitPlanComponents: new Map(),
     pendingInlineQuestions: [],
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
@@ -294,6 +298,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Input
     customSlashCommands: [],
+    skillCommands: [],
     goalSkillCommands: [],
     pendingImages: [],
 

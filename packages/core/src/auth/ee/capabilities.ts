@@ -111,7 +111,7 @@ export function isAuthenticated(
  * Check if an auth provider implements a specific interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
-  return auth !== null && typeof auth === 'object' && method in auth;
+  return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
 /**

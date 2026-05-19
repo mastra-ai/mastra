@@ -65,6 +65,54 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('signal-slash')).toBe(slashComp);
   });
 
+  it('dedupes echoed <skill> activation messages against the optimistic skill component', () => {
+    const state = createState();
+    const skillComp = new SlashCommandComponent('skill/github-triage', 'Review the issue.');
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
+
+    addUserMessage(
+      state,
+      createUserMessage('<skill name="github-triage">\nReview the issue.\n</skill>', 'signal-skill'),
+    );
+
+    expect(state.chatContainer.children).toEqual([skillComp]);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.allSlashCommandComponents).toHaveLength(1);
+    expect(state.messageComponentsById.get('signal-skill')).toBe(skillComp);
+  });
+
+  it('renders a fresh skill component when replaying a persisted <skill> message with no optimistic component', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage('<skill name="github-triage">\nReview the issue.\n</skill>', 'replay-skill'),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(SlashCommandComponent);
+    expect(state.allSlashCommandComponents).toHaveLength(1);
+    expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
+  });
+
+  it('decodes the </skill> boundary token when replaying a persisted <skill> message', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<skill name="github-triage">\nUse <div>, A&B, "quotes". Embedded &lt;/skill&gt; stays out of the way.\n</skill>',
+        'escaped-skill',
+      ),
+    );
+
+    const skillComp = state.chatContainer.children[0] as SlashCommandComponent;
+    expect(
+      skillComp.matches('skill/github-triage', 'Use <div>, A&B, "quotes". Embedded </skill> stays out of the way.'),
+    ).toBe(true);
+  });
+
   it('renders a persisted temporal-gap marker from canonical system reminder content', () => {
     const state = createState();
 

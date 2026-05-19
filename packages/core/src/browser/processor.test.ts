@@ -440,13 +440,11 @@ describe('BrowserContextProcessor', () => {
       expect(textPart.text).toContain('<Results>');
 
       const llmMessage = mastraDBMessageToSignal(addedMessage).toLLMMessage();
-      expect(llmMessage).toEqual([
-        {
-          role: 'user',
-          content:
-            '<system-reminder type="browser-context">Current URL: https://example.com/search?q=foo&amp;bar=1 | Page title: Search &lt;Results&gt; &amp; More</system-reminder>',
-        },
-      ]);
+      expect(llmMessage).toEqual({
+        role: 'user',
+        content:
+          '<system-reminder type="browser-context">Current URL: https://example.com/search?q=foo&amp;bar=1 | Page title: Search &lt;Results&gt; &amp; More</system-reminder>',
+      });
     });
   });
 });

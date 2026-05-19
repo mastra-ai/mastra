@@ -80,8 +80,10 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
+import type { Step } from '../workflows/step';
+import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import type { AnyWorkflow } from '../workflows/workflow';
+import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -100,7 +102,6 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { isCreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -149,6 +150,11 @@ type ProcessorLoadedToolsProvider = {
   getLoadedToolsForRequestContext?: (args: {
     requestContext: RequestContext;
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
+};
+
+type AgentSnapshotMemoryInfo = {
+  threadId?: string;
+  resourceId?: string;
 };
 
 type ProcessorWorkflowChildrenContainer = {
@@ -5341,22 +5347,74 @@ export class Agent<
     return existingSnapshot;
   }
 
+  #getSnapshotMemoryInfo(existingSnapshot: any): AgentSnapshotMemoryInfo | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        return step.suspendPayload?.__streamState?.messageList?.memoryInfo;
+      }
+    }
+
+    return undefined;
+  }
+
+  #getAgentExecutionResourceId({
+    requestContext,
+    memory,
+    snapshotMemoryInfo,
+  }: {
+    requestContext?: RequestContext;
+    memory?: AgentExecutionOptionsBase<any>['memory'];
+    snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+  }): string | undefined {
+    const resourceIdFromContext = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    return resourceIdFromContext || memory?.resource || snapshotMemoryInfo?.resourceId;
+  }
+
+  async #requireAgentExecutionFGA({
+    requestContext,
+    memory,
+    runId,
+    snapshotMemoryInfo,
+  }: {
+    requestContext?: RequestContext;
+    memory?: AgentExecutionOptionsBase<any>['memory'];
+    runId?: string;
+    snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+  }): Promise<void> {
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (!fgaProvider) {
+      return;
+    }
+
+    const user = requestContext?.get('user');
+    const executionResourceId = this.#getAgentExecutionResourceId({ requestContext, memory, snapshotMemoryInfo });
+    const { getAgentFGAResourceId, requireFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
+      permission: MastraFGAPermissions.AGENTS_EXECUTE,
+      requestContext,
+      context: {
+        resourceId: executionResourceId,
+      },
+      metadata: {
+        agentId: this.id,
+        agentName: this.name,
+        runId,
+        executionResourceId,
+      },
+    });
+  }
+
   /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
   async #execute<OUTPUT>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
-    let snapshotMemoryInfo;
-    if (existingSnapshot) {
-      for (const key in existingSnapshot?.context) {
-        const step = existingSnapshot?.context[key];
-        if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-          snapshotMemoryInfo = step.suspendPayload?.__streamState?.messageList?.memoryInfo;
-          break;
-        }
-      }
-    }
+    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
@@ -5413,7 +5471,6 @@ export class Agent<
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
     const threadFromArgs = resolveThreadIdFromArgs({
@@ -5424,7 +5481,11 @@ export class Agent<
       overrideId: threadIdFromContext,
     });
 
-    const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
+    const resourceId = this.#getAgentExecutionResourceId({
+      requestContext,
+      memory: options.memory,
+      snapshotMemoryInfo,
+    });
     const memoryConfig = options.memory?.options;
 
     const llm = (await this.getLLM({
@@ -5574,14 +5635,6 @@ export class Agent<
       llm,
     };
 
-    const initialSignalEchoes =
-      methodType === 'stream'
-        ? (Array.isArray(options.messages) ? options.messages : [options.messages]).filter(isCreatedAgentSignal)
-        : [];
-    const initialSignalEchoesForRun =
-      initialSignalEchoes.length > 0
-        ? [...initialSignalEchoes, ...(options._initialSignalEchoes ?? [])]
-        : options._initialSignalEchoes;
     const toolPayloadTransform =
       normalizeToolPayloadTransformPolicy(options.transform ?? (options as any).toolPayloadProjection) ??
       this.#toolPayloadTransform ??
@@ -5620,7 +5673,6 @@ export class Agent<
           }),
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: this.#getThreadStreamRuntime().drainPendingSignals.bind(this.#getThreadStreamRuntime()),
-      initialSignalEchoes: initialSignalEchoesForRun,
     });
 
     const run = await executionWorkflow.createRun();
@@ -6059,21 +6111,6 @@ export class Agent<
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
 
-    // FGA authorization check
-    const fgaProvider = this.#mastra?.getServer()?.fga;
-    if (fgaProvider) {
-      const user = options?.requestContext?.get('user');
-      if (user) {
-        const { checkFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'agent', id: this.id },
-          permission: MastraFGAPermissions.AGENTS_EXECUTE,
-        });
-      }
-    }
-
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -6081,6 +6118,8 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+
+    await this.#requireAgentExecutionFGA(mergedOptions);
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -6219,21 +6258,6 @@ export class Agent<
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
 
-    // FGA authorization check
-    const streamFgaProvider = this.#mastra?.getServer()?.fga;
-    if (streamFgaProvider) {
-      const user = streamOptions?.requestContext?.get('user');
-      if (user) {
-        const { checkFGA } = await import('../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider: streamFgaProvider,
-          user,
-          resource: { type: 'agent', id: this.id },
-          permission: MastraFGAPermissions.AGENTS_EXECUTE,
-        });
-      }
-    }
-
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -6241,6 +6265,8 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+
+    await this.#requireAgentExecutionFGA(mergedOptions);
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -6518,10 +6544,20 @@ export class Agent<
       requestContext: streamOptions?.requestContext,
     });
 
-    let mergedStreamOptions = deepMerge(
+    const mergedStreamOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+
+    const runId = streamOptions?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedStreamOptions.requestContext,
+      memory: mergedStreamOptions.memory,
+      runId: mergedStreamOptions.runId,
+      snapshotMemoryInfo,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedStreamOptions.requestContext,
@@ -6547,8 +6583,6 @@ export class Agent<
       });
     }
 
-    const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
     await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
@@ -6657,6 +6691,15 @@ export class Agent<
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
 
+    const runId = options?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
+    });
+
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
@@ -6684,9 +6727,6 @@ export class Agent<
         },
       });
     }
-
-    const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
 
     const result = await this.#execute({
       ...mergedOptions,
