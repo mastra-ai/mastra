@@ -6,6 +6,7 @@ import xxhash from 'xxhash-wasm';
 import { omDebug, omError } from '../debug';
 import { stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
+import { createSyntheticMarkerMessage } from '../observational-memory';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
 import { getMaxThreshold } from '../thresholds';
@@ -326,18 +327,20 @@ export abstract class ObservationStrategy {
   // ── Marker persistence ──────────────────────────────────────
 
   /**
-   * Persist a marker to the most recent message with a parts array in storage.
-   * Prefers the last assistant message, but falls back to any role (e.g. the
-   * user message on step 0 of the very first turn, before any assistant
-   * message exists yet) so that lifecycle markers are not silently dropped
-   * when observation fires on step 0.
+   * Persist an OM lifecycle marker to storage on an assistant-role message.
    *
-   * Renderers must ignore data-om-* parts on user messages to avoid mapping
-   * them into user-role tool-call parts that assistant-ui refuses to render.
-   * The Mastra playground does this in convertOmPartsInMastraMessage.
+   * Prefers appending to the most recent existing assistant message (real or
+   * synthetic). If none exists yet — e.g. on step 0 of the very first turn,
+   * before the agent has produced any output — creates a new synthetic
+   * assistant message via {@link createSyntheticMarkerMessage} whose only
+   * purpose is to carry OM marker parts.
    *
-   * Fetches messages directly from the DB so it works even when
-   * no MessageList is available (e.g. async buffering ops).
+   * Marker parts are NEVER attached to user messages: that would mutate the
+   * stored shape of user-authored content and force every consumer to handle
+   * `data-om-*` parts on `role: 'user'`.
+   *
+   * Fetches messages directly from the DB so it works even when no
+   * MessageList is available (e.g. async buffering ops).
    */
   protected async persistMarkerToStorage(
     marker: { type: string; data: unknown },
@@ -352,19 +355,21 @@ export abstract class ObservationStrategy {
       });
       const messages = result?.messages ?? [];
       const hasParts = (m: any) => m?.content?.parts && Array.isArray(m.content.parts);
-      const target =
-        messages.find(msg => msg?.role === 'assistant' && hasParts(msg)) ?? messages.find(msg => hasParts(msg));
-      if (!target) return;
+      const target = messages.find(msg => msg?.role === 'assistant' && hasParts(msg));
+
+      const targetMessage = target ?? createSyntheticMarkerMessage(threadId, resourceId);
 
       const markerData = marker.data as { cycleId?: string } | undefined;
       const alreadyPresent =
         markerData?.cycleId &&
-        target.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+        targetMessage.content.parts.some(
+          (p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId,
+        );
       if (!alreadyPresent) {
-        target.content.parts.push(marker as any);
+        targetMessage.content.parts.push(marker as any);
       }
       await this.messageHistory.persistMessages({
-        messages: [target],
+        messages: [targetMessage],
         threadId,
         resourceId,
       });

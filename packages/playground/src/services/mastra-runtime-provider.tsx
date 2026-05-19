@@ -168,24 +168,11 @@ const convertOmPartsInMastraMessage = (
   // (end, failed, activation, status) are silently dropped — their data is already
   // captured in globalOmParts and merged into the badge at the start position.
   // This ensures badges stay in their original position even after reload.
-  //
-  // Skip OM badge rendering entirely on user messages: data-om-* parts can land
-  // on the user message when observation fires on step 0 of the very first turn
-  // (no assistant message exists yet to attach lifecycle markers to). Converting
-  // them to dynamic-tool here would round-trip through assistant-ui as user-role
-  // tool-call parts, which it refuses to render and throws "Unsupported user
-  // message part type: tool-call". Drop them silently; they remain visible
-  // in-session via the transient stream events that the writer also emits.
-  const isUserMessage = message.role === 'user';
   const convertedParts: any[] = [];
 
   for (const part of message.parts) {
     const cycleId = (part as any).data?.cycleId;
     const partType = part.type as string;
-
-    if (isUserMessage && partType?.startsWith('data-om-')) {
-      continue;
-    }
 
     // Only render badges at start marker positions
     if (partType === 'data-om-observation-start' && cycleId) {
