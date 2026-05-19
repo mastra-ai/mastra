@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { ModelPolicyProvider } from '@/domains/llm';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
 
@@ -16,35 +17,37 @@ function CreateLayoutWrapper() {
   });
 
   return (
-    <MainContentLayout>
-      <RouteHeaderActions owner="cms-agent-create">
-        <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || !canPublish}>
-          {isSubmitting ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Check />
-              </Icon>
-              Create agent
-            </>
-          )}
-        </Button>
-      </RouteHeaderActions>
-      <AgentCmsFormShell
-        form={form}
-        mode="create"
-        isSubmitting={isSubmitting}
-        handlePublish={handlePublish}
-        basePath="/cms/agents/create"
-        currentPath={location.pathname}
-      >
-        <Outlet />
-      </AgentCmsFormShell>
-    </MainContentLayout>
+    <ModelPolicyProvider surface="editor">
+      <MainContentLayout>
+        <RouteHeaderActions owner="cms-agent-create">
+          <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || !canPublish}>
+            {isSubmitting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Check />
+                </Icon>
+                Create agent
+              </>
+            )}
+          </Button>
+        </RouteHeaderActions>
+        <AgentCmsFormShell
+          form={form}
+          mode="create"
+          isSubmitting={isSubmitting}
+          handlePublish={handlePublish}
+          basePath="/cms/agents/create"
+          currentPath={location.pathname}
+        >
+          <Outlet />
+        </AgentCmsFormShell>
+      </MainContentLayout>
+    </ModelPolicyProvider>
   );
 }
 

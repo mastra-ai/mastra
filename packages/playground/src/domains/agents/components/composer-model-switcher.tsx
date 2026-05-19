@@ -5,8 +5,14 @@ import { Lock, TriangleAlert } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
-import { useBuilderModelPolicy } from '@/domains/builder';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import {
+  LLMProviders,
+  LLMModels,
+  useLLMProviders,
+  cleanProviderId,
+  findProviderById,
+  useModelPolicy,
+} from '@/domains/llm';
 
 // Triggers stay transparent; the wrapper owns the shared pill border/background.
 const COMPOSER_TRIGGER_CLASS = [
@@ -25,7 +31,7 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   const { data: agent } = useAgent(agentId);
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const policy = useBuilderModelPolicy();
+  const policy = useModelPolicy();
 
   const defaultProvider = agent?.provider || '';
   const defaultModel = agent?.modelId || '';
@@ -130,7 +136,7 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
 export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) => {
   const { data: agent } = useAgent(agentId);
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const policy = useBuilderModelPolicy();
+  const policy = useModelPolicy();
 
   if (providersLoading || !agent) return null;
 

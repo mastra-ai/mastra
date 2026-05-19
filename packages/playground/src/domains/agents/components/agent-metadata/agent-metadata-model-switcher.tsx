@@ -4,8 +4,14 @@ import { Notice, Button, Spinner } from '@mastra/playground-ui';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
-import { useBuilderModelPolicy } from '@/domains/builder';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import {
+  LLMProviders,
+  LLMModels,
+  useLLMProviders,
+  cleanProviderId,
+  findProviderById,
+  useModelPolicy,
+} from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -33,7 +39,7 @@ export const AgentMetadataModelSwitcher = ({
   const [modelOpen, setModelOpen] = useState(false);
 
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const policy = useBuilderModelPolicy();
+  const policy = useModelPolicy();
 
   const providers = useMemo(() => dataProviders?.providers || [], [dataProviders]);
 

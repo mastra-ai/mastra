@@ -1,4 +1,4 @@
-import type { BuilderModelPolicy, Provider } from '@mastra/client-js';
+import type { ModelPolicy, Provider } from '@mastra/client-js';
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { useMemo } from 'react';
 import type { ModelInfo } from '../../llm/hooks/use-filtered-models';
@@ -8,7 +8,7 @@ import type { ModelInfo } from '../../llm/hooks/use-filtered-models';
  * given policy. Pass-through when `policy.active === false` or `policy.allowed`
  * is unset / empty (mirrors the server-side `isModelAllowed` contract).
  */
-export const useBuilderFilteredProviders = (providers: Provider[], policy: BuilderModelPolicy): Provider[] => {
+export const useBuilderFilteredProviders = (providers: Provider[], policy: ModelPolicy): Provider[] => {
   return useMemo(() => {
     if (!policy.active || !policy.allowed || policy.allowed.length === 0) {
       return providers;
@@ -27,7 +27,7 @@ export const useBuilderFilteredProviders = (providers: Provider[], policy: Build
  * Returns the subset of flattened models allowed by the given policy.
  * Pass-through when `policy.active === false` or `policy.allowed` is unset / empty.
  */
-export const useBuilderFilteredModels = (models: ModelInfo[], policy: BuilderModelPolicy): ModelInfo[] => {
+export const useBuilderFilteredModels = (models: ModelInfo[], policy: ModelPolicy): ModelInfo[] => {
   return useMemo(() => {
     if (!policy.active || !policy.allowed || policy.allowed.length === 0) {
       return models;

@@ -10,6 +10,7 @@ import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-ag
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { ModelPolicyProvider } from '@/domains/llm';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
 
@@ -191,87 +192,89 @@ function EditLayoutWrapper() {
   const isReady = !isLoading && !!agentId && (!!agent || !!codeAgent);
 
   return (
-    <MainContentLayout>
-      {isReady && (
-        <RouteHeaderActions owner="cms-agent-edit">
-          <div className="flex items-center gap-2">
-            {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
-            <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
-              {isSavingDraft ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save />
-                  Save
-                </>
-              )}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handlePublishVersion}
-              disabled={
-                isViewingPreviousVersion
-                  ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
-                  : !hasDraft || isSubmitting || isSavingDraft
-              }
-            >
-              {isSubmitting ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Publishing...
-                </>
-              ) : (
-                <>
-                  <Check />
-                  {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
-                </>
-              )}
-            </Button>
-          </div>
-        </RouteHeaderActions>
-      )}
+    <ModelPolicyProvider surface="editor">
+      <MainContentLayout>
+        {isReady && (
+          <RouteHeaderActions owner="cms-agent-edit">
+            <div className="flex items-center gap-2">
+              {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+              <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
+                {isSavingDraft ? (
+                  <>
+                    <Spinner className="h-4 w-4" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save />
+                    Save
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handlePublishVersion}
+                disabled={
+                  isViewingPreviousVersion
+                    ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
+                    : !hasDraft || isSubmitting || isSavingDraft
+                }
+              >
+                {isSubmitting ? (
+                  <>
+                    <Spinner className="h-4 w-4" />
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <Check />
+                    {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+                  </>
+                )}
+              </Button>
+            </div>
+          </RouteHeaderActions>
+        )}
 
-      {isNotFound ? (
-        <>
-          <div className="flex items-center justify-center h-full text-neutral3">Agent not found</div>
-          <div className="hidden">
-            <EditFormContent
-              agentId={agentId ?? ''}
-              selectedVersionId={selectedVersionId}
-              versionData={versionData}
-              readOnly
-              form={form}
-              handlePublish={handlePublish}
-              handleSaveDraft={handleSaveDraft}
-              isSubmitting={isSubmitting}
-              isSavingDraft={isSavingDraft}
-              onVersionSelect={handleVersionSelect}
-              activeVersionId={activeVersionId}
-              latestVersionId={latestVersion?.id}
-            />
-          </div>
-        </>
-      ) : (
-        <EditFormContent
-          agentId={agentId ?? ''}
-          selectedVersionId={selectedVersionId}
-          versionData={versionData}
-          form={form}
-          handlePublish={handlePublish}
-          handleSaveDraft={handleSaveDraft}
-          isSubmitting={isSubmitting}
-          isSavingDraft={isSavingDraft}
-          onVersionSelect={handleVersionSelect}
-          activeVersionId={activeVersionId}
-          latestVersionId={latestVersion?.id}
-          hideVersionPanel={isCodeAgentOverride && !storedAgent}
-          isCodeAgentOverride={isCodeAgentOverride}
-        />
-      )}
-    </MainContentLayout>
+        {isNotFound ? (
+          <>
+            <div className="flex items-center justify-center h-full text-neutral3">Agent not found</div>
+            <div className="hidden">
+              <EditFormContent
+                agentId={agentId ?? ''}
+                selectedVersionId={selectedVersionId}
+                versionData={versionData}
+                readOnly
+                form={form}
+                handlePublish={handlePublish}
+                handleSaveDraft={handleSaveDraft}
+                isSubmitting={isSubmitting}
+                isSavingDraft={isSavingDraft}
+                onVersionSelect={handleVersionSelect}
+                activeVersionId={activeVersionId}
+                latestVersionId={latestVersion?.id}
+              />
+            </div>
+          </>
+        ) : (
+          <EditFormContent
+            agentId={agentId ?? ''}
+            selectedVersionId={selectedVersionId}
+            versionData={versionData}
+            form={form}
+            handlePublish={handlePublish}
+            handleSaveDraft={handleSaveDraft}
+            isSubmitting={isSubmitting}
+            isSavingDraft={isSavingDraft}
+            onVersionSelect={handleVersionSelect}
+            activeVersionId={activeVersionId}
+            latestVersionId={latestVersion?.id}
+            hideVersionPanel={isCodeAgentOverride && !storedAgent}
+            isCodeAgentOverride={isCodeAgentOverride}
+          />
+        )}
+      </MainContentLayout>
+    </ModelPolicyProvider>
   );
 }
 
