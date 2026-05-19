@@ -747,13 +747,23 @@ export class SlackProvider implements ChannelProvider {
   /**
    * Create AgentChannels for an agent with the Slack adapter.
    * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
+   *
+   * If the agent already has an `AgentChannels` (e.g. the author configured a
+   * Discord adapter directly on `agent.channels`), we preserve its config and
+   * adapters and merge Slack in alongside them. We also call `close()` on the
+   * existing instance first so any persistent thread subscriptions from the
+   * previous instance are torn down before we replace it.
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
     const { adapterConfig } = this.#channelConfig;
     const slackEntry = adapterConfig ? { adapter, ...adapterConfig } : adapter;
+    const existing = agent.getChannels() as AgentChannels | undefined;
+    const existingConfig = existing?.channelConfig;
+    existing?.close();
     const agentChannels = new AgentChannels({
+      ...existingConfig,
       ...this.#forwardedChannelOptions(),
-      adapters: { slack: slackEntry },
+      adapters: { ...existingConfig?.adapters, slack: slackEntry },
       userName: agent.name,
     });
     agent.setChannels(agentChannels);

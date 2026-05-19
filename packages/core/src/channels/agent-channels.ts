@@ -372,6 +372,25 @@ export class AgentChannels {
   private inlineLinkRules: InlineLinkRule[] | undefined;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
+  /**
+   * The original `ChannelConfig` passed to the constructor.
+   *
+   * Useful for rebuilding `AgentChannels` while preserving existing adapters/handlers,
+   * e.g. when a `ChannelProvider` wants to inject its own adapter without clobbering
+   * adapters configured by the agent author:
+   *
+   * @example
+   * ```ts
+   * const existing = agent.getChannels();
+   * existing?.close();
+   * const next = new AgentChannels({
+   *   ...existing?.channelConfig,
+   *   adapters: { ...existing?.channelConfig.adapters, slack: slackAdapter },
+   * });
+   * agent.setChannels(next);
+   * ```
+   */
+  public readonly channelConfig: ChannelConfig;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
   /** Platforms whose routes are managed externally (e.g., by SlackProvider). */
@@ -429,6 +448,7 @@ export class AgentChannels {
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
+    this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
 
