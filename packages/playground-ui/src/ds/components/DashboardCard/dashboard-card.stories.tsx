@@ -3,8 +3,8 @@ import { DashboardCard } from './dashboard-card';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
   { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
-  { token: 'surface2', label: 'surface2 · 14% (main frame)', className: 'bg-surface2' },
-  { token: 'surface3', label: 'surface3 · 17%', className: 'bg-surface3' },
+  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
+  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
   { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
 ];
 
