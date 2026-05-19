@@ -109,9 +109,9 @@ describe('task tool rendering', () => {
     handleToolInputDelta(ctx, 'call-1', '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}');
     handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
 
-    const output = ctx.state.chatContainer.render(100).join('\n');
-    expect(output).toContain('\u001b[91medit');
-    expect(output).toContain('✗');
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('The specified text was not found.');
+    expect(output).toContain('╰── edit ... ✗');
   });
 
   it('regroups quiet tools as streamed args arrive', () => {
