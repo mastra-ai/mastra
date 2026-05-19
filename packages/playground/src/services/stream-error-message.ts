@@ -44,14 +44,26 @@ export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraUIMessag
   let text: string;
   if (typeof errorValue === 'string') {
     text = errorValue;
+  } else if (errorValue instanceof Error) {
+    text = errorValue.message;
   } else if (
     errorValue &&
     typeof errorValue === 'object' &&
     typeof (errorValue as { message?: unknown }).message === 'string'
   ) {
     text = (errorValue as { message: string }).message;
+  } else if (errorValue == null) {
+    text = 'Unknown error';
   } else {
-    text = JSON.stringify(errorValue ?? 'Unknown error');
+    try {
+      text = JSON.stringify(errorValue) ?? String(errorValue);
+    } catch {
+      try {
+        text = String(errorValue);
+      } catch {
+        text = 'Unknown error';
+      }
+    }
   }
   return {
     id: `error-${chunk.runId ?? 'unknown'}-${Date.now()}`,

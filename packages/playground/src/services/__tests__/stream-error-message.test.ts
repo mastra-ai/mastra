@@ -45,4 +45,32 @@ describe('stream error messages', () => {
       }).parts,
     ).toEqual([{ type: 'text', text: 'Readable failure' }]);
   });
+
+  it('falls back safely for missing and unserializable error payloads', () => {
+    expect(buildStreamErrorMessage({ runId: 'run-1' }).parts).toEqual([{ type: 'text', text: 'Unknown error' }]);
+
+    const circularError: Record<string, unknown> = { reason: 'circular' };
+    circularError.self = circularError;
+
+    expect(
+      buildStreamErrorMessage({
+        runId: 'run-1',
+        payload: { error: circularError },
+      }).parts,
+    ).toEqual([{ type: 'text', text: '[object Object]' }]);
+
+    const hostileError: Record<string, unknown> = {
+      toString: () => {
+        throw new Error('Cannot stringify');
+      },
+    };
+    hostileError.self = hostileError;
+
+    expect(
+      buildStreamErrorMessage({
+        runId: 'run-1',
+        payload: { error: hostileError },
+      }).parts,
+    ).toEqual([{ type: 'text', text: 'Unknown error' }]);
+  });
 });
