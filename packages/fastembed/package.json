@@ -20,7 +20,8 @@
   },
   "files": [
     "dist",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE-fastembed"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
