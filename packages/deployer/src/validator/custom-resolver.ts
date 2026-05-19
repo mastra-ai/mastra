@@ -8,6 +8,8 @@ import { isDependencyPartOfPackage } from '../build/utils';
 const STUB_PREFIX = 'mastra-stub:';
 
 let _stubbedExternals: string[] | null = null;
+let _stubbedExternalExports: Record<string, string[]> | null = null;
+
 function getStubbedExternals(): string[] {
   if (_stubbedExternals === null) {
     try {
@@ -17,6 +19,17 @@ function getStubbedExternals(): string[] {
     }
   }
   return _stubbedExternals;
+}
+
+function getStubbedExternalExports(): Record<string, string[]> {
+  if (_stubbedExternalExports === null) {
+    try {
+      _stubbedExternalExports = JSON.parse(process.env.STUBBED_EXTERNAL_EXPORTS || '{}') as Record<string, string[]>;
+    } catch {
+      _stubbedExternalExports = {};
+    }
+  }
+  return _stubbedExternalExports;
 }
 
 const cache = new Map<string, Record<string, string>>();
@@ -105,7 +118,8 @@ export async function resolve(
   const stubbedExternals = getStubbedExternals();
   if (stubbedExternals.length > 0) {
     const isStubbed = stubbedExternals.some(ext => isDependencyPartOfPackage(specifier, ext));
-    if (isStubbed) {
+    const externalExports = getStubbedExternalExports()[specifier] ?? [];
+    if (isStubbed && !externalExports.includes('*')) {
       return { url: `${STUB_PREFIX}${specifier}`, shortCircuit: true };
     }
   }
@@ -131,7 +145,28 @@ export async function load(
   nextLoad: (url: string, context: LoadHookContext) => Promise<{ format: string; source: string }>,
 ) {
   if (url.startsWith(STUB_PREFIX)) {
-    return { format: 'module', source: 'export default {}', shortCircuit: true };
+    const specifier = url.slice(STUB_PREFIX.length);
+    const externalExports = getStubbedExternalExports()[specifier] ?? [];
+    const namedExports = [...new Set(externalExports)].filter(name => name && name !== 'default' && name !== '*');
+    const namedExportSource = namedExports.length
+      ? `export { __mastraStub as ${namedExports.map(name => JSON.stringify(name)).join(', __mastraStub as ')} };`
+      : '';
+
+    return {
+      format: 'module',
+      source: `
+const __mastraStub = new Proxy(function () {
+  return __mastraStub;
+}, {
+  get: (_target, property) => property === 'then' ? undefined : __mastraStub,
+  apply: () => __mastraStub,
+  construct: () => __mastraStub,
+});
+export default __mastraStub;
+${namedExportSource}
+`,
+      shortCircuit: true,
+    };
   }
   return nextLoad(url, context);
 }
