@@ -40,7 +40,17 @@ export type DefaultModelEntry =
   | { kind: 'custom'; provider: string; modelId: string & {} };
 
 /**
- * Admin-controlled model policy for the Agent Builder.
+ * UI surface that consumes a {@link ModelPolicy}.
+ *
+ * Each surface declares which admin policy slot it reads. Today only the
+ * `'builder'` surface has a real policy source; `'editor'` always resolves
+ * to `{ active: false }` until a dedicated `editor.editorAgents.modelPolicy`
+ * slot is added in a future release.
+ */
+export type ModelPolicySurface = 'builder' | 'editor';
+
+/**
+ * Admin-controlled model policy. Returned by the server per UI surface.
  * Owned here; re-exported from `@mastra/core/agent-builder/ee` and the SDK.
  *
  * Invariants (enforced in Phase 4):
@@ -48,12 +58,19 @@ export type DefaultModelEntry =
  * - `active: true` + `pickerVisible: false` (locked) → `default` MUST be set.
  * - When `allowed` is non-empty, `default` (if set) MUST satisfy `isModelAllowed(allowed, default)`.
  */
-export interface BuilderModelPolicy {
+export interface ModelPolicy {
   active: boolean;
   pickerVisible?: boolean;
   allowed?: ProviderModelEntry[];
   default?: DefaultModelEntry;
 }
+
+/**
+ * @deprecated Use {@link ModelPolicy} instead. The builder-specific name is
+ * preserved as an alias for backward compatibility and will be removed in a
+ * future major release.
+ */
+export type BuilderModelPolicy = ModelPolicy;
 
 /**
  * Default values for agents created via the builder.

@@ -1,13 +1,13 @@
-import type { IAgentBuilder, BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from './types';
+import type { IAgentBuilder, ModelPolicy, DefaultModelEntry, ProviderModelEntry } from './types';
 
 /**
- * Inputs for the shared {@link isBuilderModelPolicyActive} predicate.
+ * Inputs for the shared {@link isModelPolicyActive} predicate.
  *
- * Lives separately from {@link BuilderModelPolicy} because we need to ask the
+ * Lives separately from {@link ModelPolicy} because we need to ask the
  * "is the model slice active?" question at config-validation time, *before*
- * a `BuilderModelPolicy` has been built.
+ * a `ModelPolicy` has been built.
  */
-export interface BuilderModelPolicyInputs {
+export interface ModelPolicyInputs {
   /** `AgentBuilderOptions.enabled` (defaulted: missing = `true`). */
   enabled: boolean;
   /** `features.agent.model` — `true` means picker visible. */
@@ -17,6 +17,11 @@ export interface BuilderModelPolicyInputs {
   /** `configuration.agent.models.default`. */
   default?: DefaultModelEntry;
 }
+
+/**
+ * @deprecated Use {@link ModelPolicyInputs} instead.
+ */
+export type BuilderModelPolicyInputs = ModelPolicyInputs;
 
 /**
  * Single source of truth for whether the admin has actually configured a model
@@ -32,7 +37,7 @@ export interface BuilderModelPolicyInputs {
  *
  * If the builder is `enabled: false`, the slice is never active.
  */
-export function isBuilderModelPolicyActive(inputs: BuilderModelPolicyInputs): boolean {
+export function isModelPolicyActive(inputs: ModelPolicyInputs): boolean {
   if (!inputs.enabled) return false;
   if (inputs.pickerVisible) return true;
   if (inputs.allowed !== undefined) return true;
@@ -41,7 +46,12 @@ export function isBuilderModelPolicyActive(inputs: BuilderModelPolicyInputs): bo
 }
 
 /**
- * Pure derivation of the {@link BuilderModelPolicy} from an `IAgentBuilder`.
+ * @deprecated Use {@link isModelPolicyActive} instead.
+ */
+export const isBuilderModelPolicyActive = isModelPolicyActive;
+
+/**
+ * Pure derivation of the {@link ModelPolicy} from an `IAgentBuilder`.
  * No `Mastra` / `IEditor` dependency — server and editor wrappers feed it
  * a builder instance through their own resolution paths.
  *
@@ -53,7 +63,7 @@ export function isBuilderModelPolicyActive(inputs: BuilderModelPolicyInputs): bo
  * In every active case, `allowed` and `default` are passed through verbatim
  * so locked-mode UI still has the data it needs to render the chosen model.
  */
-export function builderToModelPolicy(builder: IAgentBuilder | undefined): BuilderModelPolicy {
+export function builderToModelPolicy(builder: IAgentBuilder | undefined): ModelPolicy {
   if (!builder || !builder.enabled) {
     return { active: false };
   }
@@ -65,7 +75,7 @@ export function builderToModelPolicy(builder: IAgentBuilder | undefined): Builde
   const allowed = models?.allowed;
   const defaultModel = models?.default;
 
-  const active = isBuilderModelPolicyActive({
+  const active = isModelPolicyActive({
     enabled: builder.enabled,
     pickerVisible,
     allowed,
