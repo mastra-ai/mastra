@@ -325,6 +325,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     options: {
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
+      activeTools: execOptions?.activeTools,
       temperature: execOptions?.modelSettings?.temperature,
       requireToolApproval: execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,

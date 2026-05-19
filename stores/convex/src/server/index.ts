@@ -1,3 +1,4 @@
+export { mastraCache } from './cache';
 export { mastraStorage } from './storage';
 export { mastraNativeVectorAction, mastraNativeVectorMutation, mastraNativeVectorQuery } from './native-vector';
 
@@ -14,6 +15,8 @@ export {
   mastraVectorsTable,
   defineMastraNativeVectorTable,
   type MastraNativeVectorTableConfig,
+  mastraCacheTable,
+  mastraCacheListItemsTable,
   mastraDocumentsTable,
   // Table name constants
   TABLE_WORKFLOW_SNAPSHOT,

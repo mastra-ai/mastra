@@ -15,6 +15,9 @@ catalogs:
     '@vitest/ui':
       specifier: 4.1.5
       version: 4.1.5
+    date-fns:
+      specifier: 4.1.0
+      version: 4.1.0
     react:
       specifier: ^19.2.5
       version: 19.2.6
@@ -4261,7 +4264,7 @@ importers:
         specifier: ^12.10.1
         version: 12.10.2(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       date-fns:
-        specifier: ^4.1.0
+        specifier: 'catalog:'
         version: 4.1.0
       lucide-react:
         specifier: ^0.522.0
@@ -4317,6 +4320,9 @@ importers:
       zod:
         specifier: ^3.25.0
         version: 3.25.76
+      zod-v4:
+        specifier: npm:zod@^4.3.6
+        version: zod@4.4.3
       zustand:
         specifier: ^5.0.12
         version: 5.0.13(@types/react@19.2.14)(immer@11.1.8)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
@@ -4363,6 +4369,9 @@ importers:
       eslint-plugin-react-refresh:
         specifier: ^0.5.2
         version: 0.5.2(eslint@10.3.0(jiti@2.6.1))
+      msw:
+        specifier: ^2.6.0
+        version: 2.14.6(@types/node@22.19.15)(typescript@6.0.3)
       react-grab:
         specifier: ^0.1.32
         version: 0.1.33(react@19.2.6)
@@ -4481,7 +4490,7 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       date-fns:
-        specifier: ^4.1.0
+        specifier: 'catalog:'
         version: 4.1.0
       lucide-react:
         specifier: ^0.474.0
@@ -6965,52 +6974,6 @@ importers:
         specifier: 'catalog:'
         version: 4.3.6
 
-  voice/xai-realtime-api:
-    dependencies:
-      '@mastra/schema-compat':
-        specifier: workspace:*
-        version: link:../../packages/schema-compat
-      ws:
-        specifier: ^8.20.0
-        version: 8.20.0(bufferutil@4.1.0)
-    devDependencies:
-      '@internal/lint':
-        specifier: workspace:*
-        version: link:../../packages/_config
-      '@internal/types-builder':
-        specifier: workspace:*
-        version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@types/node':
-        specifier: 22.19.15
-        version: 22.19.15
-      '@types/ws':
-        specifier: ^8.18.1
-        version: 8.18.1
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.5(vitest@4.1.5)
-      '@vitest/ui':
-        specifier: 'catalog:'
-        version: 4.1.5(vitest@4.1.5)
-      eslint:
-        specifier: ^10.2.1
-        version: 10.3.0(jiti@2.6.1)
-      tsup:
-        specifier: ^8.5.1
-        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
-      zod:
-        specifier: 'catalog:'
-        version: 4.3.6
-
   voice/playai:
     dependencies:
       zod:
@@ -7123,6 +7086,52 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+
+  voice/xai-realtime-api:
+    dependencies:
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../../packages/schema-compat
+      ws:
+        specifier: ^8.20.0
+        version: 8.20.0(bufferutil@4.1.0)
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      eslint:
+        specifier: ^10.2.1
+        version: 10.3.0(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
 
   workflows/_test-utils:
     dependencies:
@@ -27599,10 +27608,6 @@ packages:
     resolution: {integrity: sha512-FVDYdxtnj0G6Qm/DhNPSb8Ju59ULcup3tuJxkFb5K8Bv2pUXILbf0xZWU8PX8Ov19OXljbUyveOFwRMwkXzO+A==}
     engines: {node: '>=16'}
 
-  tough-cookie@6.0.0:
-    resolution: {integrity: sha512-kXuRi1mtaKMrsLUxz3sQYvVl37B0Ns6MzfrtV5DvJceE9bPyspOqk9xxv7XbZWcfLWbFmm997vl83qUWVJA64w==}
-    engines: {node: '>=16'}
-
   tough-cookie@6.0.1:
     resolution: {integrity: sha512-LktZQb3IeoUWB9lqR5EWTHgW/VTITCXg4D21M+lvybRVdylLrRMnqaIONLVb5mav8vM19m44HIcGq4qASeu2Qw==}
     engines: {node: '>=16'}
@@ -47012,7 +47017,7 @@ snapshots:
   fetch-cookie@3.2.0:
     dependencies:
       set-cookie-parser: 2.7.2
-      tough-cookie: 6.0.0
+      tough-cookie: 6.0.1
 
   fetch-h2@3.0.2:
     dependencies:
@@ -53494,7 +53499,7 @@ snapshots:
       depd: 2.0.0
       is-promise: 4.0.0
       parseurl: 1.3.3
-      path-to-regexp: 8.3.0
+      path-to-regexp: 8.4.2
     transitivePeerDependencies:
       - supports-color
 
@@ -54727,10 +54732,6 @@ snapshots:
   tough-cookie@5.1.2:
     dependencies:
       tldts: 6.1.86
-
-  tough-cookie@6.0.0:
-    dependencies:
-      tldts: 7.0.19
 
   tough-cookie@6.0.1:
     dependencies:

@@ -29,7 +29,11 @@ export interface FGACheckContext {
    * Optional request context for providers that need additional request-scoped
    * data to derive the authorization resource identifier.
    */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
+  /**
+   * Optional provider-specific metadata about the attempted action.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -38,8 +42,12 @@ export interface FGACheckContext {
 export interface FGACheckParams {
   /** The resource being accessed */
   resource: { type: string; id: string };
-  /** The permission being checked */
-  permission: MastraFGAPermissionInput;
+  /**
+   * The permission(s) being checked.
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (the check passes if any single permission resolves to allow).
+   */
+  permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /** Optional provider-specific context for resource resolution */
   context?: FGACheckContext;
 }
@@ -55,9 +63,12 @@ export interface FGARouteConfig {
   /** Static or dynamic resource ID resolver. */
   resourceId?:
     | string
-    | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
-  /** Permission to check for this route. Falls back to the route permission when omitted. */
-  permission?: MastraFGAPermissionInput;
+    | ((params: Record<string, unknown>, context: { requestContext?: RequestContext<any> }) => string | undefined);
+  /**
+   * Permission(s) to check for this route. Falls back to the route permission when omitted.
+   * When an array is provided, the user needs ANY ONE of the listed permissions.
+   */
+  permission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
 }
 
 /**
@@ -67,7 +78,11 @@ export interface FGARouteInfo {
   path: string;
   method: string;
   requiresAuth?: boolean;
-  requiresPermission?: MastraFGAPermissionInput;
+  /**
+   * Permission(s) required by this route.
+   * When an array is provided, the user needs ANY ONE of the listed permissions.
+   */
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   fga?: FGARouteConfig;
 }
 
@@ -77,7 +92,7 @@ export interface FGARouteInfo {
 export interface FGARouteResolverContext {
   route: FGARouteInfo;
   params: Record<string, unknown>;
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
 }
 
 /**
@@ -234,9 +249,9 @@ export interface FGAListResourcesOptions {
  *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {
- *     agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     workflows: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
+ *     agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     thread: { fgaResourceType: 'user', deriveId: (ctx) => ctx.resourceId ?? ctx.user.userId },
  *   },
  *   permissionMapping: {
  *     [MastraFGAPermissions.AGENTS_READ]: 'read',
