@@ -6,9 +6,12 @@ import {
   agentFeaturesSchema,
   builderSettingsResponseSchema,
   infrastructureStatusResponseSchema,
+  modelPolicyQuerySchema,
+  modelPolicyResponseSchema,
 } from '../schemas/editor-builder';
 import type { AgentFeatures, InfrastructureStatus } from '../schemas/editor-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { resolveModelPolicy } from '../utils/resolve-model-policy';
 import { handleError } from './error';
 
 /**
@@ -319,6 +322,38 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
       return { channels, browser, workspace, registries };
     } catch (error) {
       return handleError(error, 'Error getting infrastructure status');
+    }
+  },
+});
+
+/**
+ * GET /editor/settings/model-policy?surface=builder|editor
+ *
+ * Returns the resolved {@link ModelPolicy} for a given UI surface. Today only
+ * the `builder` surface has a real admin-configurable source; `editor`
+ * always returns `{ active: false }` until a dedicated
+ * `editor.editorAgents.modelPolicy` slot lands.
+ *
+ * Kept separate from `/editor/builder/settings` so editor surfaces don't have
+ * to consume the full builder settings payload (features, picker, etc.) just
+ * to read the model gate.
+ */
+export const GET_EDITOR_MODEL_POLICY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/editor/settings/model-policy',
+  responseType: 'json',
+  queryParamSchema: modelPolicyQuerySchema,
+  responseSchema: modelPolicyResponseSchema,
+  summary: 'Get model policy for a UI surface',
+  description: 'Returns the resolved model policy for the specified UI surface (builder or editor).',
+  tags: ['Editor'],
+  requiresAuth: true,
+  requiresPermission: 'stored-agents:read',
+  handler: async ({ mastra, surface }) => {
+    try {
+      return await resolveModelPolicy({ editor: mastra.getEditor?.(), surface });
+    } catch (error) {
+      return handleError(error, 'Error getting model policy');
     }
   },
 });

@@ -2,7 +2,11 @@ import type { IAgentBuilder } from '@mastra/core/agent-builder/ee';
 import type { IMastraEditor } from '@mastra/core/editor';
 import { describe, it, expect, vi } from 'vitest';
 
-import { GET_EDITOR_BUILDER_SETTINGS_ROUTE, GET_INFRASTRUCTURE_STATUS_ROUTE } from './editor-builder';
+import {
+  GET_EDITOR_BUILDER_SETTINGS_ROUTE,
+  GET_EDITOR_MODEL_POLICY_ROUTE,
+  GET_INFRASTRUCTURE_STATUS_ROUTE,
+} from './editor-builder';
 
 // Minimal mock mastra for handler testing
 const createMockMastra = (
@@ -350,6 +354,68 @@ describe('GET /editor/builder/settings', () => {
     const result = (await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any)) as Record<string, unknown>;
 
     expect('modelPolicyWarnings' in result).toBe(false);
+  });
+});
+
+describe('GET /editor/settings/model-policy', () => {
+  it('returns builder policy when surface=builder and builder is configured', async () => {
+    const mockBuilder: IAgentBuilder = {
+      enabled: true,
+      getFeatures: () => ({ agent: { model: true } }),
+      getConfiguration: () => ({
+        agent: { models: { default: { provider: 'openai', modelId: 'gpt-4o' } } },
+      }),
+    };
+    const mastra = createMockMastra({
+      hasEnabledBuilderConfig: () => true,
+      resolveBuilder: vi.fn().mockResolvedValue(mockBuilder),
+    });
+
+    const result = await GET_EDITOR_MODEL_POLICY_ROUTE.handler({ mastra, surface: 'builder' } as any);
+
+    expect(result).toEqual({
+      active: true,
+      pickerVisible: true,
+      default: { provider: 'openai', modelId: 'gpt-4o' },
+    });
+  });
+
+  it('returns inactive when surface=builder and no editor is configured', async () => {
+    const mastra = createMockMastra();
+    const result = await GET_EDITOR_MODEL_POLICY_ROUTE.handler({ mastra, surface: 'builder' } as any);
+    expect(result).toEqual({ active: false });
+  });
+
+  it('always returns inactive for surface=editor, even with a configured builder', async () => {
+    const resolveBuilder = vi.fn().mockResolvedValue({
+      enabled: true,
+      getFeatures: () => ({ agent: { model: true } }),
+      getConfiguration: () => ({}),
+    });
+    const mastra = createMockMastra({
+      hasEnabledBuilderConfig: () => true,
+      resolveBuilder,
+    });
+
+    const result = await GET_EDITOR_MODEL_POLICY_ROUTE.handler({ mastra, surface: 'editor' } as any);
+
+    expect(result).toEqual({ active: false });
+    expect(resolveBuilder).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /editor/settings/model-policy route metadata', () => {
+  it('has correct path and method', () => {
+    expect(GET_EDITOR_MODEL_POLICY_ROUTE.path).toBe('/editor/settings/model-policy');
+    expect(GET_EDITOR_MODEL_POLICY_ROUTE.method).toBe('GET');
+  });
+
+  it('requires stored-agents:read permission', () => {
+    expect(GET_EDITOR_MODEL_POLICY_ROUTE.requiresPermission).toBe('stored-agents:read');
+  });
+
+  it('requires authentication', () => {
+    expect(GET_EDITOR_MODEL_POLICY_ROUTE.requiresAuth).toBe(true);
   });
 });
 
