@@ -119,18 +119,22 @@ export class UnixSocketPubSub extends PubSub {
     }
 
     const callbacks = this.#callbacks.get(topic) ?? new Set<EventCallback>();
+    const hadCallback = callbacks.has(cb);
+    const wasConnected = Boolean(this.#clientSocket && !this.#clientSocket.destroyed);
     callbacks.add(cb);
     this.#callbacks.set(topic, callbacks);
 
     try {
       await this.#ensureStarted();
-      if (!this.#isBroker) {
+      if (!this.#isBroker && !hadCallback && wasConnected) {
         await this.#sendSubscribeToBroker(topic);
       }
     } catch (error) {
-      callbacks.delete(cb);
-      if (callbacks.size === 0) {
-        this.#callbacks.delete(topic);
+      if (!hadCallback) {
+        callbacks.delete(cb);
+        if (callbacks.size === 0) {
+          this.#callbacks.delete(topic);
+        }
       }
       throw error;
     }

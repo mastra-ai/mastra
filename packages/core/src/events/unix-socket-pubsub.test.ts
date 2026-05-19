@@ -90,7 +90,7 @@ describe('UnixSocketPubSub', () => {
 
   it('rejects subscribe when the broker disconnects before acknowledging', async () => {
     const path = await socketPath();
-    const server = net.createServer(socket => {
+    const server = net.createServer((socket: net.Socket) => {
       socket.once('data', () => socket.destroy());
     });
     await new Promise<void>((resolve, reject) => {
@@ -109,6 +109,48 @@ describe('UnixSocketPubSub', () => {
 
     await pubsub.publish('topic-a', makeEvent({ type: 'after-failed-subscribe' }));
     expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('does not re-send duplicate callback subscriptions to the broker', async () => {
+    const path = await socketPath();
+    let subscribeCount = 0;
+    const sockets = new Set<net.Socket>();
+    const server = net.createServer((socket: net.Socket) => {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.setEncoding('utf8');
+      socket.on('data', (chunk: string) => {
+        for (const line of chunk.split('\n')) {
+          if (!line.trim()) continue;
+          const frame = JSON.parse(line);
+          if (frame.type !== 'subscribe') continue;
+          subscribeCount += 1;
+          socket.write(`${JSON.stringify({ type: 'subscribed', topic: frame.topic })}\n`);
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+    const cb = vi.fn();
+
+    try {
+      await pubsub.subscribe('topic-a', cb);
+      await pubsub.subscribe('topic-a', cb);
+    } finally {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    expect(subscribeCount).toBe(1);
+    await pubsub.publish('topic-a', makeEvent({ type: 'after-duplicate-subscribe' }));
+    expect(cb).toHaveBeenCalledTimes(1);
   });
 
   it('promotes another instance after the broker closes', async () => {
