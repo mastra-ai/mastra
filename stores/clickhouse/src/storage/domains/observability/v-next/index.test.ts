@@ -2927,12 +2927,14 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       // Trigger discovery refresh so helper tables are populated.
       // In production, discovery MVs refresh automatically on a schedule.
       // In tests, we trigger an immediate refresh after inserting data.
-      // Refresh twice: the MV writes via `REFRESH ... TO <pre-created table>`
-      // which uses APPEND semantics, so each refresh re-inserts every distinct
-      // value. Running it twice exercises the duplicate-rows path that reads
-      // must deduplicate.
       await triggerDiscoveryRefresh();
-      await triggerDiscoveryRefresh();
+
+      // Inject duplicate rows directly into the helper tables to model the
+      // intermediate state between an MV refresh and a `ReplacingMergeTree`
+      // background merge. The discovery read paths must dedupe these rows
+      // before returning them to callers — that's what the assertions below
+      // verify.
+      await injectDuplicateDiscoveryRows();
     });
 
     it('getMetricNames returns distinct names', async () => {
@@ -3040,6 +3042,18 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = MergeTree ORDER BY (kind, key1, key2, value)`,
         });
 
+        // Seed refreshable MVs pointing at the legacy helper tables. This
+        // mirrors a real upgrade and proves the reconcile path drops the
+        // pre-existing MVs before recreating the tables — otherwise
+        // ClickHouse would refuse to drop a table that an MV still depends
+        // on, and the recreate would also fail with "view already exists".
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+        });
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+        });
+
         const before = (await (
           await scopedClient.query({
             query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
@@ -3048,6 +3062,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           })
         ).json()) as Array<{ name: string; engine: string }>;
         expect(before.map(r => r.engine)).toEqual(['MergeTree', 'MergeTree']);
+
+        const beforeMvs = (await (
+          await scopedClient.query({
+            query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+            query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string }>;
+        expect(beforeMvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
 
         const migratedStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
         try {
@@ -5402,6 +5425,56 @@ async function triggerDiscoveryRefresh(): Promise<void> {
     await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
     await client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
     await client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Inserts a second copy of every row already in the discovery helper tables.
+ * This models the window between a refreshable MV firing and
+ * `ReplacingMergeTree` collapsing the duplicate parts: identical rows live
+ * in separate parts and a plain `SELECT` returns them all. The discovery
+ * read paths must compensate with their own `SELECT DISTINCT`.
+ *
+ * Also asserts the duplicates are present so a regression in the seeding
+ * step shows up here instead of as a confusing "tests passed for the
+ * wrong reason" later on.
+ */
+async function injectDuplicateDiscoveryRows(): Promise<void> {
+  const { createClient } = await import('@clickhouse/client');
+  const { TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } = await import('./ddl');
+
+  const client = createClient({
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  });
+
+  try {
+    const tables: Array<{ table: string; keys: string }> = [
+      { table: TABLE_DISCOVERY_VALUES, keys: 'kind, key1, value' },
+      { table: TABLE_DISCOVERY_PAIRS, keys: 'kind, key1, key2, value' },
+    ];
+    for (const { table, keys } of tables) {
+      await client.command({ query: `INSERT INTO ${table} SELECT * FROM ${table}` });
+      const partsResult = await client.query({
+        query: `SELECT sum(rows) AS rowsInParts FROM system.parts WHERE database = currentDatabase() AND table = '${table}' AND active`,
+        format: 'JSONEachRow',
+      });
+      const rowsInParts = Number(((await partsResult.json()) as Array<{ rowsInParts: string }>)[0]?.rowsInParts ?? 0);
+      const distinctResult = await client.query({
+        query: `SELECT countDistinct(${keys}) AS distinctRows FROM ${table}`,
+        format: 'JSONEachRow',
+      });
+      const distinctRows = Number(
+        ((await distinctResult.json()) as Array<{ distinctRows: string }>)[0]?.distinctRows ?? 0,
+      );
+      expect(
+        rowsInParts,
+        `expected duplicates in ${table} but got rowsInParts=${rowsInParts}, distinctRows=${distinctRows}`,
+      ).toBeGreaterThan(distinctRows);
+    }
   } finally {
     await client.close();
   }
