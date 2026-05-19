@@ -2574,7 +2574,7 @@ describe('Observer Agent Helpers', () => {
       expect(Array.isArray(capturedPrompt)).toBe(true);
       expect(capturedPrompt).toHaveLength(2);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[0].content).toContain('Also output a <thread-title>');
+      expect(capturedPrompt[0].content).not.toContain('Also output a <thread-title>');
       expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
       expect(capturedPrompt[0].content).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
@@ -4978,11 +4978,10 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(formatted).toContain('Dec 4 2024:');
   });
 
-  it('observer system prompt should require Current Task section', () => {
+  it('observer system prompt should not require extractor metadata sections', () => {
     const systemPrompt = buildObserverSystemPrompt();
 
-    // Check for XML-based current task requirement in the system prompt
-    expect(systemPrompt).toContain('<current-task>');
+    expect(systemPrompt).not.toContain('<current-task>');
     expect(systemPrompt).toContain('MUST use XML tags');
   });
 
@@ -4992,7 +4991,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
 
     // Should include the custom instruction at the end
     expect(systemPrompt).toContain(customInstruction);
-    expect(systemPrompt).toContain('<current-task>');
+    expect(systemPrompt).not.toContain('<current-task>');
   });
 
   it('observer system prompt should work without custom instruction', () => {
@@ -5001,15 +5000,15 @@ describe('Scenario: Information should be preserved through observation cycle', 
 
     // Both should be identical
     expect(systemPrompt).toBe(systemPromptWithUndefined);
-    expect(systemPrompt).toContain('<current-task>');
+    expect(systemPrompt).not.toContain('<current-task>');
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('observer system prompt should include thread title instructions when enabled', () => {
+  it('observer system prompt should not include thread title extraction instructions', () => {
     const systemPrompt = buildObserverSystemPrompt(false, undefined, true);
 
-    expect(systemPrompt).toContain('<thread-title>');
-    expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
+    expect(systemPrompt).not.toContain('<thread-title>');
+    expect(systemPrompt).not.toContain('A short, noun-phrase title for this conversation');
   });
 
   it('multi-thread observer system prompt should include custom instruction', () => {
@@ -5021,11 +5020,11 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('multi-thread observer system prompt should include thread title instructions when enabled', () => {
+  it('multi-thread observer system prompt should not include thread title extraction instructions', () => {
     const systemPrompt = buildObserverSystemPrompt(true, undefined, true);
 
-    expect(systemPrompt).toContain('<thread-title>Feature X implementation</thread-title>');
-    expect(systemPrompt).toContain('current-task, suggested-response, and thread-title');
+    expect(systemPrompt).not.toContain('<thread-title>Feature X implementation</thread-title>');
+    expect(systemPrompt).not.toContain('current-task, suggested-response, and thread-title');
   });
 });
 
@@ -5093,7 +5092,7 @@ Ask about favorite vegetarian dishes
     const systemMessage = capturedPrompt.find((msg: any) => msg.role === 'system');
     expect(systemMessage).toBeDefined();
     expect(systemMessage.content).toContain(customInstruction);
-    expect(systemMessage.content).toContain('<current-task>');
+    expect(systemMessage.content).not.toContain('<current-task>');
   });
 
   it('should include prior current-task and suggested-response in observer user prompt during synchronous observation', async () => {

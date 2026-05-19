@@ -4,6 +4,7 @@ import {
   createObservationStartMarker,
   createObservationEndMarker,
   createExtractedMarker,
+  createExtractionFailedMarker,
   createObservationFailedMarker,
   createBufferingStartMarker,
   createBufferingEndMarker,
@@ -158,6 +159,32 @@ describe('markers', () => {
             activeTopic: { topic: 'billing', confidence: 0.9 },
             status: 'open',
           },
+        },
+      });
+    });
+  });
+
+  describe('createExtractionFailedMarker', () => {
+    it('returns a data-om-extraction-failed part with failure details', () => {
+      const marker = createExtractionFailedMarker({
+        cycleId: 'cycle-1',
+        operationType: 'observation',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        recordId: 'rec-1',
+        error: 'Structured output validation failed',
+      });
+
+      expect(marker).toEqual({
+        type: 'data-om-extraction-failed',
+        data: {
+          cycleId: 'cycle-1',
+          operationType: 'observation',
+          failedAt: '2025-06-15T12:00:00.000Z',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          recordId: 'rec-1',
+          error: 'Structured output validation failed',
         },
       });
     });

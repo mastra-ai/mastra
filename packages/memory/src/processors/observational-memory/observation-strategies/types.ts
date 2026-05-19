@@ -4,6 +4,7 @@ import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/process
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import type { ObservationExtractionSession } from '../extraction-runner';
 import type { ObserveHooks } from '../types';
 
 /** Parameters for running an observation via a strategy. */
@@ -34,6 +35,8 @@ export interface ObserverOutput {
   threadTitle?: string;
   /** User-defined extracted values, keyed by extractor slug. */
   extractedValues?: Record<string, unknown>;
+  /** Ephemeral observer conversation used for structured extraction follow-up. */
+  extractionSession?: ObservationExtractionSession;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 }
 
@@ -61,6 +64,7 @@ export interface ProcessedObservation {
     observedMessages?: MastraDBMessage[];
     activeObservations?: string;
     newObservations?: string;
+    extractionSession?: ObservationExtractionSession;
   }>;
   observedMessages?: MastraDBMessage[];
   activeObservations?: string;
@@ -70,4 +74,6 @@ export interface ProcessedObservation {
   threadTitle?: string;
   /** User-defined extracted values (non-built-in slugs), keyed by slug. */
   extractedValues?: Record<string, unknown>;
+  /** Ephemeral observer conversation used for structured extraction follow-up. */
+  extractionSession?: ObservationExtractionSession;
 }

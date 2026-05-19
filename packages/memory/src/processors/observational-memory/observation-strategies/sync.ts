@@ -124,6 +124,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
+      resourceId: this.opts.resourceId,
       priorCurrentTask: omMeta?.currentTask,
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
@@ -181,6 +182,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
       extractedValues: filterExtractedValuesForStorage(output.extractedValues, this.deps.additionalExtractors),
+      extractionSession: output.extractionSession,
     };
   }
 
@@ -242,15 +244,6 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
     const actualTokensObserved = await this.tokenCounter.countMessagesAsync(this.opts.messages);
-    await this.emitExtractedMarker({
-      cycleId,
-      operationType: 'observation',
-      threadId: this.opts.threadId,
-      resourceId: this.opts.resourceId,
-      recordId: this.opts.record.id,
-      extractedValues: processed.extractedValues,
-    });
-
     if (this.lastMessage?.id) {
       const endMarker = createObservationEndMarker({
         cycleId,

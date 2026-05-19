@@ -80,6 +80,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
+      resourceId: this.opts.resourceId,
       additionalExtractors: this.deps.additionalExtractors,
       priorExtractedValues,
     });
@@ -128,6 +129,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
       extractedValues: filterExtractedValuesForStorage(output.extractedValues, this.deps.additionalExtractors),
+      extractionSession: output.extractionSession,
     };
   }
 
@@ -202,15 +204,6 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const updatedChunks = getBufferedChunks(updatedRecord);
     const totalBufferedTokens =
       updatedChunks.reduce((sum, c) => sum + (c.tokenCount ?? 0), 0) || processed.observationTokens;
-
-    await this.emitExtractedMarker({
-      cycleId: this.cycleId,
-      operationType: 'observation',
-      threadId,
-      resourceId: record.resourceId ?? undefined,
-      recordId: record.id,
-      extractedValues: processed.extractedValues,
-    });
 
     const endMarker = createBufferingEndMarker({
       cycleId: this.cycleId,

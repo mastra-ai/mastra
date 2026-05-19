@@ -15,58 +15,35 @@ describe('reflector extractor support', () => {
     }),
   ];
 
-  it('includes configured extractor output sections in the system prompt', () => {
+  it('does not include extractor output sections in the reflector system prompt', () => {
     const prompt = buildReflectorSystemPrompt(undefined, extractors);
 
-    expect(prompt).toContain('<active-topic>');
-    expect(prompt).toContain('Output JSON like {"topic":"billing"}.');
+    expect(prompt).not.toContain('<active-topic>');
+    expect(prompt).not.toContain('Output JSON like {"topic":"billing"}.');
   });
 
-  it('still asks for extractor sections when continuation hints are skipped', () => {
+  it('does not ask for extractor sections when continuation hints are skipped', () => {
     const prompt = buildReflectorPrompt('Date: today\n* fact', undefined, undefined, true, extractors);
 
-    expect(prompt).toContain('Only output <observations> and <active-topic>');
-    expect(prompt).not.toContain('Only output <observations>.');
+    expect(prompt).toContain('Only output <observations>.');
+    expect(prompt).not.toContain('<active-topic>');
   });
 
-  it('parses typed extracted values and strips extractor sections from observations', () => {
-    const output = [
-      '<observations>',
-      'Date: today',
-      '* User discussed billing.',
-      '<active-topic>',
-      '{"topic":"billing"}',
-      '</active-topic>',
-      '</observations>',
-      '<active-topic>',
-      '{"topic":"billing"}',
-      '</active-topic>',
-    ].join('\n');
-
-    const result = parseReflectorOutput(output, undefined, extractors);
-
-    expect(result.extractedValues).toEqual({ 'active-topic': { topic: 'billing' } });
-    expect(result.observations).toContain('* User discussed billing.');
-    expect(result.observations).not.toContain('<active-topic>');
-  });
-
-  it('skips invalid extracted values without failing reflection parsing', () => {
-    const onParseError = vi.fn();
+  it('ignores extractor sections when parsing reflection output', () => {
     const output = [
       '<observations>',
       'Date: today',
       '* User discussed billing.',
       '</observations>',
       '<active-topic>',
-      '{"topic":123}',
+      '{"topic":"billing"}',
       '</active-topic>',
     ].join('\n');
 
-    const result = parseReflectorOutput(output, undefined, extractors, onParseError);
+    const result = parseReflectorOutput(output, undefined, extractors, vi.fn());
 
     expect(result.extractedValues).toBeUndefined();
     expect(result.observations).toContain('* User discussed billing.');
-    expect(onParseError).toHaveBeenCalledTimes(1);
   });
 
   it('persists normalized reflected extracted values to thread metadata and invokes hooks', async () => {

@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import type { ObservationExtractionSession } from '../extraction-runner';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -54,6 +55,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       suggestedContinuation?: string;
       threadTitle?: string;
       extractedValues?: Record<string, unknown>;
+      extractionSession?: ObservationExtractionSession;
     }
   >();
   private totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -66,6 +68,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       suggestedContinuation?: string;
       threadTitle?: string;
       extractedValues?: Record<string, unknown>;
+      extractionSession?: ObservationExtractionSession;
     };
   }> = [];
   private priorMetadataByThread = new Map<
@@ -290,6 +293,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.observabilityContext,
           undefined,
           this.deps.additionalExtractors,
+          this.opts.resourceId,
         );
       }),
     );
@@ -354,6 +358,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         observedMessages: threadMessages,
         activeObservations: existingObservations,
         newObservations: result.observations,
+        extractionSession: result.extractionSession,
       });
 
       const isFirstThread = index === 0;
@@ -463,18 +468,6 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
     for (const obsResult of this.observationResults) {
       const { threadId, threadMessages, result } = obsResult;
-      const extractedValues = processed.threadMetadataUpdates?.find(
-        update => update.threadId === threadId,
-      )?.extractedValues;
-      await this.emitExtractedMarker({
-        cycleId,
-        operationType: 'observation',
-        threadId,
-        resourceId: this.opts.resourceId,
-        recordId: this.opts.record.id,
-        extractedValues,
-      });
-
       const lastMessage = threadMessages[threadMessages.length - 1];
       if (lastMessage?.id) {
         const tokensObserved =

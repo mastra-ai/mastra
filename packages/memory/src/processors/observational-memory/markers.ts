@@ -4,6 +4,7 @@ import type {
   DataOmBufferingFailedPart,
   DataOmBufferingStartPart,
   DataOmExtractedPart,
+  DataOmExtractionFailedPart,
   DataOmObservationEndPart,
   DataOmObservationFailedPart,
   DataOmObservationStartPart,
@@ -61,6 +62,29 @@ export function createExtractedMarker(params: {
       threadId: params.threadId,
       resourceId: params.resourceId,
       extractedValues: params.extractedValues,
+    },
+  };
+}
+
+export function createExtractionFailedMarker(params: {
+  cycleId: string;
+  operationType: 'observation' | 'reflection';
+  threadId: string;
+  resourceId?: string;
+  recordId?: string;
+  error: string;
+  failedAt?: string;
+}): DataOmExtractionFailedPart {
+  return {
+    type: 'data-om-extraction-failed',
+    data: {
+      cycleId: params.cycleId,
+      operationType: params.operationType,
+      failedAt: params.failedAt ?? new Date().toISOString(),
+      recordId: params.recordId,
+      threadId: params.threadId,
+      resourceId: params.resourceId,
+      error: params.error,
     },
   };
 }

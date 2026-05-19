@@ -520,6 +520,32 @@ export interface DataOmExtractedPart {
   };
 }
 
+export interface DataOmExtractionFailedPart {
+  type: 'data-om-extraction-failed';
+  data: {
+    /** Unique ID for this extraction cycle */
+    cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When extraction failed */
+    failedAt: string;
+
+    /** Error message */
+    error: string;
+
+    /** The OM record ID */
+    recordId?: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** Resource ID for the thread */
+    resourceId?: string;
+  };
+}
+
 export interface DataOmObservationFailedPart {
   type: 'data-om-observation-failed';
   data: {
@@ -821,6 +847,7 @@ export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
   | DataOmExtractedPart
+  | DataOmExtractionFailedPart
   | DataOmObservationFailedPart
   | DataOmStatusPart
   | DataOmThreadUpdatePart;

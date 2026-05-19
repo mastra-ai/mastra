@@ -1,10 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
+import type { ObservationExtractionSession } from './extraction-runner';
 import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import {
@@ -95,11 +98,20 @@ export class ObserverRunner {
         additionalExtractors,
       ),
       model,
+      memory: new MockMemory({ options: { lastMessages: 20 } }),
     });
     if (this.mastra) {
       agent.__registerMastra(this.mastra);
     }
     return agent;
+  }
+
+  private createExtractionSession(agent: Agent, resourceId?: string): ObservationExtractionSession {
+    return {
+      agent,
+      threadId: `om-observer-${randomUUID()}`,
+      resourceId: resourceId ?? 'observational-memory',
+    };
   }
 
   private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
@@ -124,6 +136,7 @@ export class ObserverRunner {
       skipContinuationHints?: boolean;
       requestContext?: RequestContext;
       observabilityContext?: ObservabilityContext;
+      resourceId?: string;
       priorCurrentTask?: string;
       priorSuggestedResponse?: string;
       priorThreadTitle?: string;
@@ -138,12 +151,14 @@ export class ObserverRunner {
     suggestedContinuation?: string;
     threadTitle?: string;
     extractedValues?: Record<string, unknown>;
+    extractionSession?: ObservationExtractionSession;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const additionalExtractors = options?.additionalExtractors ?? [];
     const agent = this.createAgent(resolvedModel.model, false, additionalExtractors);
+    const extractionSession = this.createExtractionSession(agent, options?.resourceId);
 
     const observerMessages = [
       {
@@ -183,6 +198,7 @@ export class ObserverRunner {
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
                 const streamResult = await agent.stream(observerMessages, {
+                  memory: { thread: extractionSession.threadId, resource: extractionSession.resourceId },
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
@@ -243,6 +259,7 @@ export class ObserverRunner {
       suggestedContinuation: parsed.suggestedContinuation,
       threadTitle: parsed.threadTitle,
       extractedValues: parsed.extractedValues,
+      extractionSession,
       usage: usage
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
@@ -270,6 +287,7 @@ export class ObserverRunner {
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
     additionalExtractors: ReadonlyArray<Extractor<any>> = [],
+    resourceId?: string,
   ): Promise<{
     results: Map<
       string,
@@ -279,6 +297,7 @@ export class ObserverRunner {
         suggestedContinuation?: string;
         threadTitle?: string;
         extractedValues?: Record<string, unknown>;
+        extractionSession?: ObservationExtractionSession;
       }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -289,6 +308,7 @@ export class ObserverRunner {
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model, true, additionalExtractors);
+    const extractionSession = this.createExtractionSession(agent, resourceId);
 
     const observerMessages = [
       {
@@ -336,6 +356,7 @@ export class ObserverRunner {
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
                 const streamResult = await agent.stream(observerMessages, {
+                  memory: { thread: extractionSession.threadId, resource: extractionSession.resourceId },
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
@@ -398,6 +419,7 @@ export class ObserverRunner {
         suggestedContinuation?: string;
         threadTitle?: string;
         extractedValues?: Record<string, unknown>;
+        extractionSession?: ObservationExtractionSession;
       }
     >();
     for (const [threadId, threadResult] of parsed.threads) {
@@ -407,6 +429,7 @@ export class ObserverRunner {
         suggestedContinuation: threadResult.suggestedContinuation,
         threadTitle: threadResult.threadTitle,
         extractedValues: threadResult.extractedValues,
+        extractionSession,
       });
     }
 

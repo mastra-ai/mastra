@@ -97,6 +97,7 @@ type OmCycleParts = {
   bufferingFailed?: any;
   activation?: any;
   extracted?: any;
+  extractionFailed?: any;
 };
 
 /**
@@ -117,6 +118,7 @@ const indexOmPartsByCycleId = (parts: any[], target: Map<string, OmCycleParts>) 
       'data-om-buffering-failed': 'bufferingFailed',
       'data-om-activation': 'activation',
       'data-om-extracted': 'extracted',
+      'data-om-extraction-failed': 'extractionFailed',
     };
 
     const key = typeToKey[part.type];
@@ -270,6 +272,28 @@ const convertOmPartsInMastraMessage = (
             },
         state: isLoading ? 'input-available' : 'output-available',
       });
+    } else if ((partType === 'data-om-extracted' || partType === 'data-om-extraction-failed') && cycleId) {
+      const cycle = globalOmParts.get(cycleId);
+      if (!cycle?.start && !cycle?.bufferingStart) {
+        const markerData = (part as any).data || {};
+        const isFailed = partType === 'data-om-extraction-failed';
+        const mergedData = {
+          ...markerData,
+          _state: isFailed ? 'extraction-failed' : 'extracted',
+        };
+
+        convertedParts.push({
+          type: 'dynamic-tool',
+          toolCallId: `om-extraction-${cycleId}`,
+          toolName: OM_TOOL_NAME,
+          input: mergedData,
+          output: {
+            status: isFailed ? 'extraction-failed' : 'extracted',
+            omData: mergedData,
+          },
+          state: 'output-available',
+        });
+      }
     } else if (partType?.startsWith('data-om-')) {
       // Silently skip all other OM parts (end, failed, activation, status).
       // Their data is already in globalOmParts and merged into the start-position badge.

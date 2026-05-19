@@ -30,7 +30,8 @@ export interface OmMarkerData {
     | 'buffering-complete'
     | 'buffering-failed'
     | 'activated'
-    | 'extracted';
+    | 'extracted'
+    | 'extraction-failed';
   // Activation-specific fields
   chunksActivated?: number;
   tokensActivated?: number;
@@ -57,6 +58,8 @@ export interface ObservationMarkerBadgeProps {
 }
 
 export type ExtractedValuesBadgeProps = ObservationMarkerBadgeProps;
+
+export type ExtractionFailedBadgeProps = ObservationMarkerBadgeProps;
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "234")
@@ -129,6 +132,22 @@ export const ExtractedValuesBadge = ({ args, result, metadata }: ExtractedValues
   );
 };
 
+export const ExtractionFailedBadge = ({ args, result, metadata }: ExtractionFailedBadgeProps) => {
+  const resultOmData = result && typeof result === 'object' ? (result as { omData?: OmMarkerData }).omData : undefined;
+  const omData = (resultOmData || metadata?.omData || args) as OmMarkerData;
+  const label = omData.operationType === 'reflection' ? 'Reflection extraction failed' : 'Extraction failed';
+
+  return (
+    <div className="mb-3" data-testid="om-extraction-failed-marker">
+      <div className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-red-500/20 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-600">
+        <XCircle className="h-3 w-3 shrink-0" />
+        <span className="shrink-0">{label}</span>
+        {omData.error && <span className="max-w-80 truncate text-[10px] opacity-80">{omData.error}</span>}
+      </div>
+    </div>
+  );
+};
+
 /**
  * Renders an inline badge for OM observation markers.
  * These are converted from data-om-* parts to tool-call format for assistant-ui compatibility.
@@ -161,6 +180,7 @@ export const ObservationMarkerBadge = ({ toolName, args, result, metadata }: Obs
   const isBufferingFailed = state === 'buffering-failed';
   const isActivated = state === 'activated';
   const isExtracted = state === 'extracted';
+  const isExtractionFailed = state === 'extraction-failed';
   const isReflection = omData.operationType === 'reflection';
 
   // Failed reflections should be expanded by default to draw attention to the error
@@ -191,6 +211,10 @@ export const ObservationMarkerBadge = ({ toolName, args, result, metadata }: Obs
 
   if (isExtracted) {
     return <ExtractedValuesBadge toolName={toolName} args={args} result={result} metadata={metadata} />;
+  }
+
+  if (isExtractionFailed) {
+    return <ExtractionFailedBadge toolName={toolName} args={args} result={result} metadata={metadata} />;
   }
 
   // Render based on marker type

@@ -188,6 +188,8 @@ function parseActivationTTL(
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
+import { ExtractionCoordinator } from './extraction-coordinator';
+import { ExtractionRunner } from './extraction-runner';
 import { Extractor, isBuiltInExtractorSlug, validateExtractorList, BUILT_IN_EXTRACTOR_SLUGS } from './extractor';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
@@ -291,6 +293,12 @@ export class ObservationalMemory {
 
   /** Observer agent runner — handles LLM calls for extracting observations. */
   readonly observer: ObserverRunner;
+
+  /** Structured extraction runner — handles post-observation typed extraction. */
+  readonly extractor: ExtractionRunner;
+
+  /** Queues post-observation extraction work without blocking persistence. */
+  readonly extractionCoordinator: ExtractionCoordinator;
 
   /** Reflector agent runner — handles LLM calls for compressing observations. */
   readonly reflector: ReflectorRunner;
@@ -580,6 +588,15 @@ export class ObservationalMemory {
       mastra: config.mastra,
     });
 
+    this.extractor = new ExtractionRunner({
+      observationConfig: this.observationConfig,
+      resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
+      tokenCounter: this.tokenCounter,
+      mastra: config.mastra,
+    });
+
+    this.extractionCoordinator = new ExtractionCoordinator();
+
     this.buffering = new BufferingCoordinator({
       observationConfig: this.observationConfig,
       reflectionConfig: this.reflectionConfig,
@@ -598,6 +615,8 @@ export class ObservationalMemory {
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
+      extractor: this.extractor,
+      extractionCoordinator: this.extractionCoordinator,
       extractors: this.reflectorExtractors,
       mastra: config.mastra,
     });
@@ -613,6 +632,7 @@ export class ObservationalMemory {
   __registerMastra(mastra: Mastra): void {
     this.mastra = mastra;
     this.observer.__registerMastra(mastra);
+    this.extractor.__registerMastra(mastra);
     this.reflector.__registerMastra(mastra);
   }
 
@@ -3696,6 +3716,16 @@ ${formattedMessages}
    */
   getObserverAdditionalExtractors(): ReadonlyArray<Extractor<any>> {
     return [...this.observerAdditionalExtractors];
+  }
+
+  /** @internal */
+  getExtractionRunner(): ExtractionRunner {
+    return this.extractor;
+  }
+
+  /** @internal */
+  getExtractionCoordinator(): ExtractionCoordinator {
+    return this.extractionCoordinator;
   }
 
   /**

@@ -1,9 +1,11 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockMemory } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
+import { ExtractionRunner } from '../extraction-runner';
 import {
   BUILT_IN_EXTRACTOR_SLUGS,
   Extractor,
@@ -58,6 +60,128 @@ const reflectorHookContext = {
     newObservations: 'Date: today\n* Reflected observation',
   },
 };
+
+function textStream(text: string) {
+  return convertArrayToReadableStream([
+    { type: 'stream-start' as const, warnings: [] },
+    { type: 'response-metadata' as const, id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+    { type: 'text-start' as const, id: 'text-1' },
+    { type: 'text-delta' as const, id: 'text-1', delta: text },
+    { type: 'text-end' as const, id: 'text-1' },
+    {
+      type: 'finish' as const,
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    },
+  ]);
+}
+
+describe('ExtractionRunner', () => {
+  it('runs structured extraction through the stream path', async () => {
+    const runner = new ExtractionRunner({
+      observationConfig: { model: 'test-model' } as any,
+      resolveModel: () => ({
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('structured extraction should use stream');
+          },
+          doStream: async () => ({
+            stream: textStream(JSON.stringify({ values: { 'active-topic': { topic: 'billing' } } })),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        }) as any,
+      }),
+      tokenCounter: { countMessages: vi.fn(() => 1) } as any,
+    });
+
+    const result = await runner.call(
+      {
+        cycleId: 'cycle-1',
+        threadId: 'thread-1',
+        observedMessages,
+        activeObservations: 'Date: yesterday\n* Prior billing discussion',
+        newObservations: 'Date: today\n* User asked another billing question',
+      },
+      [
+        new Extractor({
+          name: 'active-topic',
+          instructions: 'Extract the active topic.',
+          schema: z.object({ topic: z.string() }),
+        }),
+      ],
+    );
+
+    expect(result.extractedValues).toEqual({ 'active-topic': { topic: 'billing' } });
+  });
+
+  it('runs extraction as a follow-up turn on the observer session when provided', async () => {
+    const prompts: unknown[] = [];
+    let callCount = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        callCount += 1;
+        return {
+          stream: textStream(
+            callCount === 1
+              ? 'Date: today\n* Observed billing question'
+              : JSON.stringify({ values: { 'active-topic': { topic: 'billing' } } }),
+          ),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    }) as any;
+    const agent = new Agent({
+      id: 'observer-follow-up-test',
+      name: 'Observer Follow-up Test',
+      instructions: 'Observe, then extract.',
+      model,
+      memory: new MockMemory({ options: { lastMessages: 20 } }),
+    });
+    const extractionSession = { agent, threadId: 'observer-thread', resourceId: 'resource-1' };
+
+    const observerTurn = await agent.stream(
+      [{ role: 'user', content: 'Observer prompt with source message history' }],
+      {
+        memory: { thread: extractionSession.threadId, resource: extractionSession.resourceId },
+      },
+    );
+    await observerTurn.getFullOutput();
+
+    const runner = new ExtractionRunner({
+      observationConfig: { model: 'test-model' } as any,
+      resolveModel: () => ({ model }),
+      tokenCounter: { countMessages: vi.fn(() => 1) } as any,
+    });
+
+    const result = await runner.call(
+      {
+        cycleId: 'cycle-1',
+        threadId: 'thread-1',
+        observedMessages,
+        activeObservations: 'Date: yesterday\n* Prior billing discussion',
+        newObservations: 'Date: today\n* User asked another billing question',
+        extractionSession,
+      },
+      [
+        new Extractor({
+          name: 'active-topic',
+          instructions: 'Extract the active topic.',
+          schema: z.object({ topic: z.string() }),
+        }),
+      ],
+    );
+
+    expect(result.extractedValues).toEqual({ 'active-topic': { topic: 'billing' } });
+    expect(prompts).toHaveLength(2);
+    const followUpPrompt = JSON.stringify(prompts[1]);
+    expect(followUpPrompt).toContain('Observer prompt with source message history');
+    expect(followUpPrompt).toContain('Observed billing question');
+    expect(followUpPrompt).toContain('Now run the Observational Memory extraction pass');
+  });
+});
 
 describe('Extractor public API', () => {
   describe('slugifyExtractorName', () => {
