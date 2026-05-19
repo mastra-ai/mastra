@@ -133,6 +133,46 @@ describe('MastraTUI queueing', () => {
     expect(resolution).toEqual({ resolved: false, value: undefined });
   });
 
+  it('runs slash commands immediately instead of queuing while the harness is running', async () => {
+    const editor = {
+      onSubmit: undefined as ((text: string) => void) | undefined,
+      addToHistory: vi.fn(),
+      setText: vi.fn(),
+    };
+    const state = {
+      editor,
+      harness: { isRunning: vi.fn(() => true) },
+      pendingSlashCommands: [],
+      pendingQueuedActions: [],
+      pendingFollowUpMessages: [],
+      pendingImages: [],
+      ui: { requestRender: vi.fn() },
+      chatContainer: {},
+      followUpComponents: [],
+    };
+
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: typeof state;
+      getUserInput: () => Promise<string>;
+      queueFollowUpMessage: (text: string) => void;
+      signalMessage: (text: string) => void;
+      handleSlashCommand: (input: string) => Promise<boolean>;
+    };
+    tui.state = state;
+    tui.queueFollowUpMessage = vi.fn();
+    tui.signalMessage = vi.fn();
+    tui.handleSlashCommand = vi.fn().mockResolvedValue(true);
+
+    tui.getUserInput();
+    editor.onSubmit?.('/help');
+
+    expect(editor.addToHistory).toHaveBeenCalledWith('/help');
+    expect(editor.setText).toHaveBeenCalledWith('');
+    expect(tui.handleSlashCommand).toHaveBeenCalledWith('/help');
+    expect(tui.queueFollowUpMessage).not.toHaveBeenCalled();
+    expect(tui.signalMessage).not.toHaveBeenCalled();
+  });
+
   it('blocks editor submissions while the goal judge is evaluating', async () => {
     const editor = {
       onSubmit: undefined as ((text: string) => void) | undefined,
