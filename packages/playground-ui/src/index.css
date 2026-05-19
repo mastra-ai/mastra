@@ -53,10 +53,8 @@
 
   --error: oklch(0.637 0.237 25.331);
   --overlay: oklch(0% 0 0deg / 75%);
-  --border1: oklch(100% 0 0deg / 6%);
-  --border2: oklch(100% 0 0deg / 10%);
-  --border-subtle: oklch(100% 0 0deg / 7%);
-  --border-strong: oklch(100% 0 0deg / 11%);
+  --border1: oklch(100% 0 0deg / 7%);
+  --border2: oklch(100% 0 0deg / 11%);
   --surface-overlay-soft: oklch(100% 0 0deg / 4%);
   --surface-overlay-strong: oklch(100% 0 0deg / 7%);
   --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
@@ -119,8 +117,6 @@ html.light {
   --overlay: oklch(20.8% 0 0deg / 45%);
   --border1: oklch(20.8% 0 0deg / 10%);
   --border2: oklch(20.8% 0 0deg / 16%);
-  --border-subtle: oklch(20.8% 0 0deg / 10%);
-  --border-strong: oklch(20.8% 0 0deg / 16%);
   --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
   --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
   --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
@@ -344,8 +340,6 @@ html.light {
   --color-overlay: var(--overlay);
   --color-border1: var(--border1);
   --color-border2: var(--border2);
-  --color-border-subtle: var(--border-subtle);
-  --color-border-strong: var(--border-strong);
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
 

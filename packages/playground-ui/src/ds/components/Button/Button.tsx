@@ -30,7 +30,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-surface3 border border-border-strong hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
+          'bg-surface3 border border-border2 hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
         primary:
           'bg-neutral6 border border-transparent hover:bg-neutral6/90 active:bg-neutral6/80 text-surface1 font-medium',
         ghost:

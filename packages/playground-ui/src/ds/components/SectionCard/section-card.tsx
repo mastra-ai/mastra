@@ -33,7 +33,7 @@ export function SectionCard({
       className={cn(
         'overflow-hidden rounded-2xl border',
         fillHeight && 'flex h-full flex-col',
-        danger ? 'border-accent2/25' : 'border-border-subtle',
+        danger ? 'border-accent2/25' : 'border-border1',
         className,
       )}
     >
