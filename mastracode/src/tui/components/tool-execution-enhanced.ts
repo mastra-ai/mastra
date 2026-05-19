@@ -45,7 +45,9 @@ const CODE_HIGHLIGHT_THEME: HighlightTheme = {
   name: chalk.hex('#c084fc'),
 };
 
-const COMPACT_TOOL_ARGS_BG = '#111827';
+const COMPACT_TOOL_COLOR = mastra.orange;
+const COMPACT_TOOL_ARGS_BG = '#0f0f0f';
+const QUIET_TOOL_RAIL = '#5f4530';
 
 const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
   default: chalk.hex('#b4b4bd'),
@@ -416,13 +418,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     );
 
     return wrapped.map(line => {
-      const linePrefix = `  ${theme.fg('toolBorderSuccess', '│')} `;
+      const linePrefix = `  ${chalk.hex(QUIET_TOOL_RAIL)('│')} `;
       return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
     });
   }
 
   private getQuietCodePreviewLines(preview: string, maxLineWidth: number): string[] {
-    const linePrefix = `  ${theme.fg('toolBorderSuccess', '│')} `;
+    const linePrefix = `  ${chalk.hex(QUIET_TOOL_RAIL)('│')} `;
     return this.highlightQuietCodePreview(preview)
       .split('\n')
       .slice(-this.quietPreviewLineLimit)
@@ -438,7 +440,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private getQuietPreviewCapLine(): string {
-    return `  ${theme.fg('toolBorderSuccess', '╰──')}`;
+    return `  ${chalk.hex(QUIET_TOOL_RAIL)('╰──')}`;
+  }
+
+  private getQuietPreviewSpacerLine(): string {
+    return `  ${chalk.hex(QUIET_TOOL_RAIL)('│')}`;
   }
 
   private shouldCloseQuietPreview(): boolean {
@@ -501,8 +507,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
     if (detailLines.length === 0) return [firstLine];
-    if (!this.shouldCloseQuietPreview()) return [firstLine, ...detailLines];
-    return [firstLine, ...detailLines, this.getQuietPreviewCapLine()];
+    const previewLines = this.shouldCloseQuietPreview() ? [...detailLines, this.getQuietPreviewCapLine()] : detailLines;
+    if (this.compactToolHasFollowingContinuation) previewLines.push(this.getQuietPreviewSpacerLine());
+    return [firstLine, ...previewLines];
   }
 
   private getCompactStatusIndicator(): string {
@@ -510,9 +517,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private formatCompactToolHeader(toolLabel: string, toolLabelColor: CompactToolLabelColor, summary: string): string {
-    const color = this.isErrorResult() ? mastra.red : toolLabelColor === 'error' ? mastra.red : mastra.orange;
-    const label = chalk.bgHex(color).hex('#000000').bold(` ${toolLabel} `);
-    const args = summary ? this.formatCompactSummaryBadge(` ${summary}`) : '';
+    const color = this.isErrorResult() ? mastra.red : toolLabelColor === 'error' ? mastra.red : COMPACT_TOOL_COLOR;
+    const leftHalf = chalk.hex(color)('▐');
+    const rightHalf = summary ? chalk.hex(color).bgHex(COMPACT_TOOL_ARGS_BG)('▌') : chalk.hex(color)('▌');
+    const label = `${leftHalf}${chalk.bgHex(color).hex('#000000').bold(toolLabel)}${rightHalf}`;
+    const args = summary ? this.formatCompactSummaryBadge(summary) : '';
     const trail = summary ? chalk.hex(COMPACT_TOOL_ARGS_BG)('▌') : '';
     return `${label}${args}${trail}`;
   }
@@ -644,10 +653,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const linePrefix = lineMatch?.[0] ?? '';
     const separator = linePrefix ? '' : ' ';
     const hasFollowing = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview();
+    const hasPreview = this.hasQuietStreamingPreview();
     const branch = hasFollowing
-      ? `${chalk.hex(mastra.orange)('●')}${theme.fg('toolBorderSuccess', `─${separator}${linePrefix}`)}`
-      : theme.fg('toolBorderSuccess', `╰─${separator}${linePrefix}`);
-    const continuationSummary = summary.slice(linePrefix.length);
+      ? `${hasPreview ? chalk.hex(mastra.orange)('●') : chalk.hex(QUIET_TOOL_RAIL)('├')}${chalk.hex(QUIET_TOOL_RAIL)(`─${separator}${linePrefix}`)}`
+      : chalk.hex(QUIET_TOOL_RAIL)(`╰─${separator}${linePrefix}`);
+    const continuationSummary = ` ${summary.slice(linePrefix.length)}`;
     const trail = continuationSummary ? chalk.hex(COMPACT_TOOL_ARGS_BG)('▌') : '';
     return `${branch}${this.formatCompactSummaryBadge(continuationSummary)}${trail}`;
   }
