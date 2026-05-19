@@ -46,8 +46,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const overrideCrumbs = useRouteHeaderCrumbsOverride();
   const pageHeading = getRouteHeaderHeading(overrideCrumbs ?? handleCrumbs);
   // Optimistic: render chrome by default so cold loads don't jump.
-  // Only hide once auth has resolved AND confirms the user is unauthed with auth enabled
-  // (matches the original UX of hiding chrome around the inline login form).
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = !shouldHideSidebar;
 
