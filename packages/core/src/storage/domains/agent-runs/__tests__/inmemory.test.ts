@@ -209,7 +209,7 @@ describe('InMemoryAgentRunsStorage', () => {
 
     // These stream-style event names are representative UI payloads, not a
     // canonical stream taxonomy. The stream package owns that vocabulary.
-    it('stores a realistic support copilot event timeline', async () => {
+    it('stores a realistic support assistant event timeline', async () => {
       await storage.appendEvents([
         makeEvent({ type: 'run-start', data: { input: 'Investigate invoice inv_123' } }),
         makeEvent({ type: 'text-start', data: { id: 'text-1' } }),
