@@ -484,6 +484,189 @@ describe('Session.message() — default path', () => {
     expect(storage.writes).not.toContain('failed');
   });
 
+  it('fails stream admission startup when post-dispatch pending evidence cannot be persisted', async () => {
+    class PostDispatchPendingEvidenceFailingStorage extends InMemoryHarness {
+      readonly writes: any[] = [];
+      pendingAttempts = 0;
+
+      override async writeMessageResultEvidence(record: any): Promise<{ created: boolean }> {
+        this.writes.push(record);
+        if (record.admissionId === 'stream-pending-failure' && record.status === 'pending') {
+          this.pendingAttempts++;
+          if (this.pendingAttempts === 2) {
+            throw new Error('post-dispatch pending evidence unavailable');
+          }
+        }
+        return super.writeMessageResultEvidence(record);
+      }
+    }
+    const agent = new LiveStreamFakeAgent('default');
+    const storage = new PostDispatchPendingEvidenceFailingStorage({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    try {
+      await expect(
+        session.message({ content: 'go', admissionId: 'stream-pending-failure', stream: true }),
+      ).rejects.toThrow('post-dispatch pending evidence unavailable');
+
+      expect(agent.calls[0]!.options.abortSignal.aborted).toBe(true);
+      await nextTick();
+      const failedWrite = storage.writes.find(record => record.status === 'failed');
+      expect(failedWrite).toBeDefined();
+      expect(failedWrite).toMatchObject({
+        admissionId: 'stream-pending-failure',
+        status: 'failed',
+      });
+      await expect(
+        storage.loadMessageResultEvidence({
+          harnessName: (session as any)._record.harnessName,
+          sessionId: session.id,
+          resourceId: session.resourceId,
+          threadId: session.threadId,
+          signalId: failedWrite.signalId,
+        }),
+      ).resolves.toMatchObject({
+        admissionId: 'stream-pending-failure',
+        status: 'failed',
+      });
+
+      agent.releaseStream?.();
+      await nextTick();
+      await nextTick();
+
+      expect(failedWrite).toBeDefined();
+      await expect(
+        storage.loadMessageResultEvidence({
+          harnessName: (session as any)._record.harnessName,
+          sessionId: session.id,
+          resourceId: session.resourceId,
+          threadId: session.threadId,
+          signalId: failedWrite.signalId,
+        }),
+      ).resolves.toMatchObject({
+        admissionId: 'stream-pending-failure',
+        status: 'failed',
+      });
+      await expect(
+        session.message({ content: 'go', admissionId: 'stream-pending-failure', stream: true }),
+      ).rejects.toMatchObject({
+        name: 'HarnessValidationError',
+        message: expect.stringContaining('duplicate stream is no longer live'),
+      });
+      expect(agent.calls).toHaveLength(1);
+    } finally {
+      agent.releaseStream?.();
+      await nextTick();
+    }
+  });
+
+  it('does not wait for failed evidence persistence before rejecting stream admission startup', async () => {
+    let releaseFailedWrite!: () => void;
+    let resolveFailedWriteStarted!: () => void;
+    let resolveFailedWriteFinished!: () => void;
+    let failedSignalId!: string;
+    const failedWriteStarted = new Promise<void>(resolve => {
+      resolveFailedWriteStarted = resolve;
+    });
+    const failedWriteFinished = new Promise<void>(resolve => {
+      resolveFailedWriteFinished = resolve;
+    });
+    const failedWriteCanFinish = new Promise<void>(resolve => {
+      releaseFailedWrite = resolve;
+    });
+    class StallingFailedEvidenceStorage extends InMemoryHarness {
+      pendingAttempts = 0;
+
+      override async writeMessageResultEvidence(record: any): Promise<{ created: boolean }> {
+        if (record.admissionId === 'stream-pending-stalled-failure' && record.status === 'pending') {
+          this.pendingAttempts++;
+          if (this.pendingAttempts === 2) {
+            throw new Error('post-dispatch pending evidence unavailable');
+          }
+        }
+        if (record.admissionId === 'stream-pending-stalled-failure' && record.status === 'failed') {
+          failedSignalId = record.signalId;
+          resolveFailedWriteStarted();
+          await failedWriteCanFinish;
+          const result = await super.writeMessageResultEvidence(record);
+          resolveFailedWriteFinished();
+          return result;
+        }
+        return super.writeMessageResultEvidence(record);
+      }
+    }
+    const agent = new LiveStreamFakeAgent('default');
+    const storage = new StallingFailedEvidenceStorage({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    let outcome: { ok: true } | { ok: false; err: unknown } | undefined;
+    const outcomePromise = session
+      .message({ content: 'go', admissionId: 'stream-pending-stalled-failure', stream: true })
+      .then(() => ({ ok: true as const }))
+      .catch(err => ({ ok: false as const, err }));
+    void outcomePromise.then(value => {
+      outcome = value;
+    });
+
+    try {
+      await failedWriteStarted;
+      await nextTick();
+
+      expect(outcome).toBeDefined();
+      expect(outcome!.ok).toBe(false);
+      if (!outcome!.ok) {
+        expect(outcome!.err).toMatchObject({ message: 'post-dispatch pending evidence unavailable' });
+      }
+      expect(agent.calls[0]!.options.abortSignal.aborted).toBe(true);
+
+      await expect(
+        session.message({ content: 'go', admissionId: 'stream-pending-stalled-failure', stream: true }),
+      ).rejects.toMatchObject({
+        name: 'HarnessValidationError',
+        message: expect.stringContaining('duplicate stream is no longer live'),
+      });
+      expect(agent.calls).toHaveLength(1);
+
+      releaseFailedWrite();
+      await failedWriteFinished;
+      await expect(
+        storage.loadMessageResultEvidence({
+          harnessName: (session as any)._record.harnessName,
+          sessionId: session.id,
+          resourceId: session.resourceId,
+          threadId: session.threadId,
+          signalId: failedSignalId,
+        }),
+      ).resolves.toMatchObject({
+        admissionId: 'stream-pending-stalled-failure',
+        status: 'failed',
+      });
+      await expect(
+        session.message({ content: 'go', admissionId: 'stream-pending-stalled-failure', stream: true }),
+      ).rejects.toMatchObject({
+        name: 'HarnessValidationError',
+        message: expect.stringContaining('duplicate stream is no longer live'),
+      });
+      expect(agent.calls).toHaveLength(1);
+    } finally {
+      agent.releaseStream?.();
+      if (typeof releaseFailedWrite === 'function') releaseFailedWrite();
+      await nextTick();
+    }
+  });
+
   it('deduplicates concurrent exact admissionId retries before dispatching a second signal', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
@@ -604,6 +787,39 @@ describe('Session.message() — default path', () => {
       message: expect.stringContaining('duplicate stream is no longer live'),
     });
     expect(waitForRunOutput).not.toHaveBeenCalled();
+  });
+
+  it('keeps the original startup failure when a later run watcher failure arrives', async () => {
+    const { harness } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const startupError = new Error('post-dispatch pending evidence unavailable');
+    const watcherError = new Error('Agent thread run id "startup-failed-run" has been aborted');
+
+    (session as any)._rememberCompletedRun('startup-failed-run', { ok: false, err: startupError });
+    (session as any)._rememberCompletedRun('startup-failed-run', { ok: false, err: watcherError });
+
+    await expect(
+      (session as any)._returnDuplicateMessageResult(
+        { status: 'pending', signalId: 'startup-failed-signal', runId: 'startup-failed-run' },
+        { content: 'hi' },
+      ),
+    ).rejects.toBe(startupError);
+  });
+
+  it('keeps the completed result when a later run watcher failure arrives', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const watcherError = new Error('Agent thread run id "completed-run" has been aborted');
+
+    (session as any)._rememberCompletedRun('completed-run', { ok: true, full: agent.fullOutput });
+    (session as any)._rememberCompletedRun('completed-run', { ok: false, err: watcherError });
+
+    await expect(
+      (session as any)._returnDuplicateMessageResult(
+        { status: 'pending', signalId: 'completed-signal', runId: 'completed-run' },
+        { content: 'hi' },
+      ),
+    ).resolves.toBe(agent.fullOutput);
   });
 
   it('does not return retained completed output for duplicate stream retries', async () => {
