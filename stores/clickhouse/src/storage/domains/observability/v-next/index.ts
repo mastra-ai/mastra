@@ -118,7 +118,7 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import { checkSignalTablesMigrationStatus, isReplacingMergeTreeEngine, migrateSignalTables } from './migration';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
@@ -247,8 +247,6 @@ async function filterAppliedRetention(
  * will still run and leave any existing tables untouched.
  */
 async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void> {
-  const EXPECTED_ENGINE = 'ReplacingMergeTree';
-
   let engines: Map<string, string>;
   try {
     const result = await client.query({
@@ -267,9 +265,13 @@ async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void>
     { table: TABLE_DISCOVERY_PAIRS, mv: MV_DISCOVERY_PAIRS },
   ];
 
+  // ClickHouse Cloud rewrites `ReplacingMergeTree` to `SharedReplacingMergeTree`
+  // and self-managed replicated clusters rewrite it to `ReplicatedReplacingMergeTree`.
+  // `isReplacingMergeTreeEngine` accepts all three so we don't churn the helper
+  // tables on every init for those deployments.
   for (const { table, mv } of targets) {
     const engine = engines.get(table);
-    if (!engine || engine === EXPECTED_ENGINE) continue;
+    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
     await client.command({ query: `DROP VIEW IF EXISTS ${mv}` });
     await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
   }
