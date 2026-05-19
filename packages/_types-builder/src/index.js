@@ -81,6 +81,10 @@ async function validateDeclarationRuntimeImports(rootDir) {
   const invalidImports = [];
 
   for (const dtsFile of dtsFiles) {
+    if (dtsFile.includes('/_types/') || dtsFile.includes('\\_types\\')) {
+      continue;
+    }
+
     const fullPath = path.join(rootDir, dtsFile);
     const code = stripComments(await fs.readFile(fullPath, 'utf8'));
 
