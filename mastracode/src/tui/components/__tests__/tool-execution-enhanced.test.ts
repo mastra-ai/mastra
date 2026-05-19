@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { theme } from '../../theme.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
 const ui = { requestRender() {} } as any;
@@ -21,7 +22,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const output = component.render(100).join('\n');
     const visible = stripAnsi(output);
     expect(output).toContain('view');
-    expect(output).toContain('src/example.ts:10-14');
+    expect(output).toContain('src/example.ts');
+    expect(output).toContain(theme.fg('dim', ':10-14'));
     expect(output).not.toContain('path=');
     expect(output).not.toContain('✓');
     expect(output).not.toContain('╭──');
@@ -178,7 +180,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const lines = component.render(100);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('view');
-    expect(lines[0]).toContain('src/example.ts:10-14');
+    expect(stripAnsi(lines[0]!)).toContain('src/example.ts:10-14');
     expect(lines[0]).not.toContain('⟶');
   });
 
@@ -257,7 +259,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     const output = component.render(100).join('\n');
     expect(output).toContain('edit');
-    expect(output).toContain('src/example.ts:42-44');
+    expect(output).toContain('src/example.ts');
+    expect(output).toContain(theme.fg('dim', ':42-44'));
     expect(stripAnsi(output)).toContain('new');
     expect(stripAnsi(output)).not.toContain('old →');
     expect(output).not.toContain('old_string=');

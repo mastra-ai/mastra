@@ -454,7 +454,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const summary = this.compactToolContinuation ? this.getCompactContinuationSummary() : this.getCompactToolSummary();
     const firstLine = this.compactToolContinuation
       ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
-      : `${theme.bold(theme.fg(toolLabelColor, toolLabel))}${summary ? ` ${theme.fg('text', summary)}` : ''}${status}`;
+      : `${theme.bold(theme.fg(toolLabelColor, toolLabel))}${summary ? ` ${this.formatCompactSummaryText(summary)}` : ''}${status}`;
 
     const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
     if (detailLines.length === 0) return [firstLine];
@@ -582,7 +582,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const separator = linePrefix ? '' : ' ';
     const connector = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview() ? '├' : '╰';
     const branch = `${connector}─${separator}${linePrefix}`;
-    return `${theme.bold(theme.fg('toolBorderSuccess', branch))}${theme.fg('text', summary.slice(linePrefix.length))}`;
+    return `${theme.bold(theme.fg('toolBorderSuccess', branch))}${this.formatCompactSummaryText(summary.slice(linePrefix.length))}`;
+  }
+
+  private formatCompactSummaryText(summary: string): string {
+    const rangeMatch = summary.match(/(:\d+(?:-\d+)?)$/);
+    if (!rangeMatch?.[1]) return theme.fg('text', summary);
+
+    const rangeStart = summary.length - rangeMatch[1].length;
+    return `${theme.fg('text', summary.slice(0, rangeStart))}${theme.fg('dim', rangeMatch[1])}`;
   }
 
   private getCompactContinuationSummary(): string {
