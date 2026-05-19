@@ -120,6 +120,7 @@
       "commitMessageTopic": "e2e-tests",
       "matchFileNames": ["e2e-tests/**/package.json"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "ignoreDeps": ["date-fns"],
       "dependencyDashboardApproval": false,
       "automerge": true
     },
