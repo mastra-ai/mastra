@@ -1,0 +1,20 @@
+{
+  "name": "mastra-docs-pdf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Renders the Mastra documentation into a single printable PDF.",
+  "bin": {
+    "mastra-docs-pdf": "./index.mjs"
+  },
+  "scripts": {
+    "build": "node index.mjs"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "highlight.js": "^11.10.0",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.2.0",
+    "puppeteer": "^23.11.1"
+  }
+}

@@ -1,0 +1,259 @@
+/*
+ * Minimal stylesheet for per-chapter PDFs intended as RAG source documents.
+ * Optimized for clean text extraction rather than visual polish:
+ *   - single-column, linear reading order
+ *   - no cover, TOC, page counters, or decorative chrome
+ *   - no background colors that could confuse OCR fallbacks
+ *   - code blocks stay monospace with visible fences; no syntax coloring
+ *   - admonitions collapse to a bold label + plain body
+ */
+
+@page {
+  size: A4;
+  margin: 18mm 20mm 18mm 20mm;
+}
+
+html,
+body {
+  background: #ffffff;
+  color: #000000;
+  font-family: 'Times New Roman', 'Liberation Serif', Georgia, serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ---------- Chapter header ---------- */
+
+.chapter-title {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 22pt;
+  font-weight: 700;
+  margin: 0 0 1.5mm 0;
+  line-height: 1.15;
+}
+
+.chapter-kicker {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 9pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #555555;
+  margin: 0 0 8mm 0;
+}
+
+/* A thin rule under the header + between major sections keeps the
+   reading rhythm without colored ornament. */
+.chapter-divider {
+  border: none;
+  border-top: 0.5pt solid #bbbbbb;
+  margin: 6mm 0;
+}
+
+/* Per-doc boundary inside a chapter. */
+.doc-header {
+  margin: 8mm 0 2mm 0;
+}
+
+.doc-header h2 {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 15pt;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+  page-break-after: avoid;
+}
+
+.doc-header .doc-description {
+  font-size: 10.5pt;
+  font-style: italic;
+  color: #444444;
+  margin-top: 1mm;
+}
+
+/* ---------- Body ---------- */
+
+article {
+  margin: 0 0 4mm 0;
+}
+
+article h1 {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 13pt;
+  font-weight: 700;
+  margin: 6mm 0 2mm 0;
+  page-break-after: avoid;
+}
+
+article h2 {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 12pt;
+  font-weight: 700;
+  margin: 5mm 0 1.5mm 0;
+  page-break-after: avoid;
+}
+
+article h3,
+article h4,
+article h5,
+article h6 {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 11pt;
+  font-weight: 700;
+  margin: 4mm 0 1.2mm 0;
+  page-break-after: avoid;
+}
+
+article p {
+  margin: 0 0 2.5mm 0;
+  orphans: 2;
+  widows: 2;
+}
+
+article ul,
+article ol {
+  margin: 0 0 3mm 0;
+  padding-left: 6mm;
+}
+
+article li {
+  margin: 0.4mm 0;
+}
+
+article a {
+  color: #000000;
+  text-decoration: underline;
+}
+
+article hr {
+  border: none;
+  border-top: 0.5pt solid #bbbbbb;
+  margin: 5mm 0;
+}
+
+article blockquote {
+  border-left: 2pt solid #999999;
+  margin: 3mm 0;
+  padding: 0 0 0 3mm;
+  color: #333333;
+  font-style: italic;
+}
+
+/* ---------- Code ---------- */
+
+article code {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9.8pt;
+  background: #f2f2f2;
+  padding: 0 2pt;
+}
+
+article pre {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9.2pt;
+  line-height: 1.4;
+  background: #f5f5f5;
+  border: 0.5pt solid #cccccc;
+  padding: 2mm 3mm;
+  margin: 2.5mm 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  page-break-inside: avoid;
+}
+
+article pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Keep the filename chip simple and monochrome. */
+.code-block {
+  margin: 2.5mm 0;
+  page-break-inside: avoid;
+}
+
+.code-block-title {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 8.5pt;
+  color: #555555;
+  padding: 0 0 0.5mm 1mm;
+}
+
+/* Drop every highlight.js color so code extracts as plain text. */
+.hljs,
+.hljs * {
+  color: inherit !important;
+  font-style: normal !important;
+  font-weight: inherit !important;
+  background: transparent !important;
+}
+
+/* ---------- Tables ---------- */
+
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2.5mm 0;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+
+article th,
+article td {
+  border: 0.5pt solid #888888;
+  padding: 1.3mm 2mm;
+  vertical-align: top;
+  text-align: left;
+}
+
+article th {
+  background: #eeeeee;
+  font-weight: 700;
+}
+
+/* ---------- Admonitions ---------- */
+
+.admonition {
+  border-left: 2pt solid #888888;
+  padding: 0.5mm 3mm;
+  margin: 3mm 0;
+  page-break-inside: avoid;
+}
+
+.admonition p {
+  margin: 0 0 2mm 0;
+}
+
+.admonition p:last-child {
+  margin-bottom: 0;
+}
+
+.admonition strong {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+/* ---------- Steps ---------- */
+
+.step-label {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 10pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #333333;
+  margin: 5mm 0 1.5mm 0;
+  padding-top: 2mm;
+  border-top: 0.5pt solid #cccccc;
+  page-break-after: avoid;
+}
+
+.step-label:first-of-type {
+  padding-top: 0;
+  border-top: none;
+  margin-top: 2mm;
+}

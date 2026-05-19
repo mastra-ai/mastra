@@ -1,0 +1,6 @@
+node_modules/
+mastra-docs.pdf
+mastra-docs.html
+debug.html
+chapters/
+*.log
