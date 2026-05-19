@@ -9,19 +9,48 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
+import type { Theme as HighlightTheme } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
+import type {
+  CompactToolLabelColor,
+  IToolExecutionComponent,
+  QuietToolDisplayMode,
+  ToolResult,
+} from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 
 export type { ToolResult };
+
+const CODE_HIGHLIGHT_THEME: HighlightTheme = {
+  default: text => theme.fg('toolArgs', text),
+  keyword: chalk.hex('#c084fc'),
+  built_in: chalk.hex('#93c5fd'),
+  type: chalk.hex('#93c5fd'),
+  literal: chalk.hex('#fca5a5'),
+  number: chalk.hex('#fbbf24'),
+  string: chalk.hex('#86efac'),
+  regexp: chalk.hex('#fca5a5'),
+  title: chalk.hex('#93c5fd'),
+  function: chalk.hex('#93c5fd'),
+  params: chalk.hex('#d4d4d8'),
+  comment: chalk.hex('#71717a'),
+  meta: chalk.hex('#a1a1aa'),
+  attr: chalk.hex('#fbbf24'),
+  variable: chalk.hex('#d4d4d8'),
+  tag: chalk.hex('#c084fc'),
+  name: chalk.hex('#c084fc'),
+};
 
 export interface ToolExecutionOptions {
   showImages?: boolean;
   autoCollapse?: boolean;
   collapsedByDefault?: boolean;
+  quietDisplayMode?: QuietToolDisplayMode;
+  quietPreviewLineLimit?: number;
 }
 /**
  * Convert absolute path to tilde notation if it's in home directory
@@ -115,6 +144,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
+  private quietDisplayMode: QuietToolDisplayMode;
+  private quietPreviewLineLimit: number;
+  private compactToolContinuation = false;
+  private compactToolHasFollowingContinuation = false;
+  private compactToolPreviousSummary: string | undefined;
+  private compactToolGroupLabelColor: CompactToolLabelColor | undefined;
 
   constructor(toolName: string, args: unknown, options: ToolExecutionOptions = {}, ui: TUI) {
     super();
@@ -127,17 +162,23 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       ...options,
     };
     this.expanded = !this.options.collapsedByDefault;
+    this.quietDisplayMode = this.options.quietDisplayMode ?? 'normal';
+    this.quietPreviewLineLimit = this.options.quietPreviewLineLimit ?? 2;
 
     // Content box - left indent for chat history alignment, no background
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
-    this.addChild(new Spacer(2));
+    this.updateTrailingSpacer();
 
     this.rebuild();
   }
 
-  updateArgs(args: unknown): void {
+  updateArgs(args: unknown, rebuild = true): void {
     this.args = args;
+    if (rebuild) this.rebuild();
+  }
+
+  refresh(): void {
     this.rebuild();
   }
 
@@ -169,6 +210,56 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.rebuild();
   }
 
+  setQuietModeDisplay(mode: QuietToolDisplayMode): void {
+    this.quietDisplayMode = mode;
+    this.updateTrailingSpacer();
+    this.rebuild();
+  }
+
+  setQuietPreviewLineLimit(limit: number): void {
+    const normalizedLimit = Number.isFinite(limit) ? limit : 2;
+    this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
+    this.rebuild();
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    if (this.quietDisplayMode === 'quiet') {
+      return this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 'quiet-shell-tool' : 'quiet-compact-tool';
+    }
+    return 'normal-tool';
+  }
+
+  getCompactToolGroupKey(): string | undefined {
+    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    return this.getCompactToolLabel();
+  }
+
+  getCompactToolGroupSummary(): string | undefined {
+    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    return this.getCompactToolSummary();
+  }
+
+  hasQuietStreamingPreview(): boolean {
+    return this.quietDisplayMode === 'quiet' && this.quietPreviewLineLimit > 0 && this.getQuietActivePreview() !== '';
+  }
+
+  setCompactToolContinuation(continuation: boolean, previousSummary?: string): void {
+    if (this.compactToolContinuation === continuation && this.compactToolPreviousSummary === previousSummary) return;
+    this.compactToolContinuation = continuation;
+    this.compactToolPreviousSummary = previousSummary;
+    this.rebuild();
+  }
+
+  setCompactToolHasFollowingContinuation(hasFollowingContinuation: boolean): void {
+    if (this.compactToolHasFollowingContinuation === hasFollowingContinuation) return;
+    this.compactToolHasFollowingContinuation = hasFollowingContinuation;
+    this.rebuild();
+  }
+
+  isComplete(): boolean {
+    return !this.isPartial;
+  }
+
   toggleExpanded(): void {
     this.setExpanded(!this.expanded);
   }
@@ -184,6 +275,38 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.contentBox.setBgFn((text: string) => text);
   }
 
+  private updateTrailingSpacer(): void {
+    const trailingSpacerHeight = 0;
+    const desiredChildren = trailingSpacerHeight > 0 ? 2 : 1;
+    while (this.children.length > desiredChildren) {
+      this.children.pop();
+    }
+    if (this.children.length < desiredChildren) {
+      this.addChild(new Spacer(trailingSpacerHeight));
+    }
+  }
+
+  private getCollapsedLineLimit(defaultLimit: number): number {
+    return defaultLimit;
+  }
+
+  private shouldShowLeadingPadding(): boolean {
+    return this.quietDisplayMode === 'normal';
+  }
+
+  private addLeadingPadding(): void {
+    if (this.shouldShowLeadingPadding()) {
+      this.contentBox.addChild(new Text('', 0, 0));
+    }
+  }
+
+  private limitQuietShellLines(lines: string[]): string[] {
+    if (this.quietDisplayMode !== 'quiet' || lines.length <= 8) {
+      return lines;
+    }
+    return lines.slice(-8);
+  }
+
   /**
    * Full clear-and-rebuild. Called when:
    * - args change (updateArgs)
@@ -194,6 +317,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private rebuild(): void {
     this.updateBgColor();
     this.contentBox.clear();
+
+    if (
+      this.quietDisplayMode === 'quiet' &&
+      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
+      !(this.result && !this.isPartial && this.isErrorResult())
+    ) {
+      this.renderCompactTool();
+      return;
+    }
 
     switch (this.toolName) {
       case MC_TOOLS.VIEW:
@@ -228,6 +360,421 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
           this.renderGenericToolEnhanced();
         }
     }
+  }
+
+  private renderCompactTool(): void {
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - BOX_INDENT * 2 - 2;
+    const lines = this.getCompactToolSummaryLines();
+
+    for (const line of lines) {
+      this.contentBox.addChild(new Text(truncateAnsi(line, maxLineWidth), 0, 0));
+    }
+  }
+
+  private getQuietPreviewLines(maxLineWidth: number): string[] {
+    if (
+      this.quietDisplayMode !== 'quiet' ||
+      this.toolName === MC_TOOLS.EXECUTE_COMMAND ||
+      this.quietPreviewLineLimit <= 0
+    )
+      return [];
+
+    const preview = this.getQuietActivePreview();
+    if (!preview) return [];
+
+    const firstLineWidth = Math.max(10, maxLineWidth - 4);
+    const continuationWidth = Math.max(10, maxLineWidth - 4);
+    const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
+      -this.quietPreviewLineLimit,
+    );
+
+    return wrapped.map(line => {
+      const linePrefix = `  ${theme.bold(theme.fg('toolBorderSuccess', '│'))} `;
+      return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
+    });
+  }
+
+  private getQuietPreviewCapLine(): string {
+    return `  ${theme.bold(theme.fg('toolBorderSuccess', '╰──'))}`;
+  }
+
+  private shouldCloseQuietPreview(): boolean {
+    return !this.compactToolHasFollowingContinuation;
+  }
+
+  private formatQuietActivePreview(preview: string): string {
+    if (
+      this.toolName === MC_TOOLS.VIEW ||
+      this.toolName === MC_TOOLS.WRITE_FILE ||
+      this.toolName === MC_TOOLS.STRING_REPLACE_LSP
+    ) {
+      return this.highlightQuietCodePreview(preview);
+    }
+
+    if (this.toolName === MC_TOOLS.FIND_FILES || this.toolName === MC_TOOLS.SEARCH_CONTENT) {
+      return theme.fg('toolArgs', preview);
+    }
+
+    return theme.fg('text', preview);
+  }
+
+  private highlightQuietCodePreview(preview: string): string {
+    const path = this.getFirstStringArg('path');
+    try {
+      return highlight(preview, {
+        language: getLanguageFromPath(path),
+        ignoreIllegals: true,
+        theme: CODE_HIGHLIGHT_THEME,
+      });
+    } catch {
+      return theme.fg('toolArgs', preview);
+    }
+  }
+
+  private wrapPreviewLines(preview: string, firstLineWidth: number, continuationWidth: number): string[] {
+    const lines: string[] = [];
+    let width = firstLineWidth;
+
+    for (const sourceLine of preview.split('\n')) {
+      if (sourceLine.length === 0) {
+        if (lines.length > 0) width = continuationWidth;
+        continue;
+      }
+
+      let remaining = sourceLine;
+      while (remaining.length > width) {
+        lines.push(remaining.slice(0, width));
+        remaining = remaining.slice(width);
+        width = continuationWidth;
+      }
+
+      lines.push(remaining);
+      width = continuationWidth;
+    }
+
+    return lines;
+  }
+
+  private getCompactToolSummaryLines(): string[] {
+    const status = this.getCompactStatusIndicator();
+    const toolLabel = this.getCompactToolLabel();
+    const toolLabelColor = this.getCompactToolLabelColor();
+    const summary = this.compactToolContinuation ? this.getCompactContinuationSummary() : this.getCompactToolSummary();
+    const firstLine = this.compactToolContinuation
+      ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
+      : `${theme.bold(theme.fg(toolLabelColor, toolLabel))}${summary ? ` ${this.formatCompactSummaryText(summary)}` : ''}${status}`;
+
+    const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
+    if (detailLines.length === 0) return [firstLine];
+    if (!this.shouldCloseQuietPreview()) return [firstLine, ...detailLines];
+    return [firstLine, ...detailLines, this.getQuietPreviewCapLine()];
+  }
+
+  private getCompactStatusIndicator(): string {
+    return this.isErrorResult() ? theme.fg('error', ' ✗') : '';
+  }
+
+  getCompactToolLabelColor(): CompactToolLabelColor {
+    if (this.compactToolGroupLabelColor) return this.compactToolGroupLabelColor;
+    return this.getOwnCompactToolLabelColor();
+  }
+
+  setCompactToolGroupLabelColor(color: CompactToolLabelColor | undefined): void {
+    if (this.compactToolGroupLabelColor === color) return;
+    this.compactToolGroupLabelColor = color;
+    this.rebuild();
+  }
+
+  getOwnCompactToolLabelColor(): CompactToolLabelColor {
+    return this.isErrorResult() ? 'error' : 'toolTitle';
+  }
+
+  private isErrorResult(): boolean {
+    if (this.result?.isError) return true;
+    if (!this.result) return false;
+
+    const output = this.getFormattedOutput();
+    if (this.toolName === MC_TOOLS.STRING_REPLACE_LSP && /specified text was not found/i.test(output)) return true;
+    return false;
+  }
+
+  private getQuietActivePreview(): string {
+    switch (this.toolName) {
+      case MC_TOOLS.VIEW:
+        return this.formatQuietViewPreview();
+      case MC_TOOLS.FIND_FILES:
+        return this.formatQuietListPreview();
+      case 'skill':
+        return '';
+      case MC_TOOLS.STRING_REPLACE_LSP:
+        return this.formatQuietEditPreview();
+      case MC_TOOLS.WRITE_FILE:
+        return this.getMultilinePreview('content', Number.POSITIVE_INFINITY, false);
+      case MC_TOOLS.SEARCH_CONTENT:
+        return this.formatSearchDetail();
+      case MC_TOOLS.LSP_INSPECT:
+        return this.getFirstLineArg('match', 80);
+      default: {
+        const preview =
+          this.formatArgsPreview(1, 120).join(' ').replace(/\s+/g, ' ').trim() ||
+          this.stripAnsi(this.formatArgsSummary()).trim();
+        return preview === this.getCompactToolSummary() ? '' : preview;
+      }
+    }
+  }
+
+  private formatQuietEditPreview(): string {
+    return (
+      this.getMultilinePreview('new_str', Number.POSITIVE_INFINITY, false) ||
+      this.getMultilinePreview('new_string', Number.POSITIVE_INFINITY, false)
+    );
+  }
+
+  private formatQuietViewPreview(): string {
+    if (!this.result) return '';
+
+    const output = this.getFormattedOutput();
+    if (!output || !this.looksLikeViewOutput(output)) return '';
+
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const viewRange = argsObj?.view_range as [number, number] | undefined;
+    const startLine = viewRange?.[0] ?? (argsObj?.offset as number | undefined) ?? 1;
+    return getPlainCodeFromViewOutput(output, startLine);
+  }
+
+  private formatQuietListPreview(): string {
+    if (!this.result) return '';
+
+    const entries = this.getListResultEntries();
+    if (entries.length === 0) return '';
+
+    return entries.slice(0, 2).join('\n');
+  }
+
+  private getListResultEntries(): string[] {
+    return this.getFormattedOutput()
+      .split('\n')
+      .map(line => line.trimEnd())
+      .filter(line => line.trim() !== '' && line.trim() !== '.');
+  }
+
+  private looksLikeViewOutput(output: string): boolean {
+    return output.split('\n').some(line => /^\s*\d+[\t→]/.test(line));
+  }
+
+  private getMultilinePreview(key: string, maxLength = 80, includeLineCount = true): string {
+    const value = this.getFirstStringArg(key);
+    if (!value) return '';
+
+    const lines = value.split('\n');
+    const previewText = includeLineCount ? (lines[0] ?? '') : value.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
+    const truncated =
+      Number.isFinite(maxLength) && previewText.length > maxLength
+        ? `${previewText.slice(0, maxLength)}…`
+        : previewText;
+    return includeLineCount && lines.length > 1 ? `${truncated} (${lines.length} lines)` : truncated;
+  }
+
+  private stripAnsi(value: string): string {
+    return value.replace(/\x1b\[[0-9;]*m/g, '');
+  }
+
+  private getCompactContinuationIndent(): string {
+    return '  ';
+  }
+
+  private formatCompactContinuationLine(summary: string): string {
+    const lineMatch = summary.match(/^─+/);
+    const linePrefix = lineMatch?.[0] ?? '';
+    const separator = linePrefix ? '' : ' ';
+    const connector = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview() ? '├' : '╰';
+    const branch = `${connector}─${separator}${linePrefix}`;
+    return `${theme.bold(theme.fg('toolBorderSuccess', branch))}${this.formatCompactSummaryText(summary.slice(linePrefix.length))}`;
+  }
+
+  private formatCompactSummaryText(summary: string): string {
+    const rangeMatch = summary.match(/(:\d+(?:-\d+)?)$/);
+    if (!rangeMatch?.[1]) return theme.fg('text', summary);
+
+    const rangeStart = summary.length - rangeMatch[1].length;
+    return `${theme.fg('text', summary.slice(0, rangeStart))}${theme.fg('dim', rangeMatch[1])}`;
+  }
+
+  private getCompactContinuationSummary(): string {
+    const summary = this.getCompactToolSummary();
+    const previousSummary = this.compactToolPreviousSummary;
+    if (!previousSummary) return this.isComplete() ? summary : '';
+
+    const sharedPrefixLength = this.getSharedPrefixLength(previousSummary, summary);
+    if (sharedPrefixLength === 0) return summary;
+
+    return `${this.formatSharedPrefixPlaceholder(summary, sharedPrefixLength)}${summary.slice(sharedPrefixLength)}`;
+  }
+
+  private getImmediateDirnameStart(summary: string): number | undefined {
+    const pathEnd = summary.indexOf(':');
+    const path = pathEnd >= 0 ? summary.slice(0, pathEnd) : summary;
+    const filenameSlashIndex = path.lastIndexOf('/');
+    if (filenameSlashIndex < 0) return undefined;
+    const dirnameSlashIndex = path.lastIndexOf('/', filenameSlashIndex - 1);
+    return dirnameSlashIndex >= 0 ? dirnameSlashIndex : filenameSlashIndex;
+  }
+
+  private formatSharedPrefixPlaceholder(summary: string, sharedPrefixLength: number): string {
+    if (sharedPrefixLength <= 0) return '';
+    if (summary[sharedPrefixLength - 1] === '/') {
+      return `${'─'.repeat(sharedPrefixLength)}/`;
+    }
+    return '─'.repeat(sharedPrefixLength + 1);
+  }
+
+  private getSharedPrefixLength(a: string, b: string): number {
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) {
+      i++;
+    }
+
+    const pathEnd = b.indexOf(':');
+    const path = pathEnd >= 0 ? b.slice(0, pathEnd) : b;
+    const sharedPathLength = Math.min(i, path.length);
+    if (sharedPathLength === 0) return 0;
+
+    const matchingSegmentBoundary = path.lastIndexOf('/', sharedPathLength - 1);
+    const currentSegmentStart = path.lastIndexOf('/', Math.max(0, sharedPathLength - 1));
+
+    if (i === b.length && i === a.length) {
+      return this.getImmediateDirnameStart(b) ?? b.length;
+    }
+
+    if (i === b.length || i === a.length) {
+      return b.length;
+    }
+
+    if (i < b.length && i < a.length) {
+      const visiblePathStart = this.getImmediateDirnameStart(b) ?? currentSegmentStart;
+      if (currentSegmentStart < 0) return 0;
+      return Math.min(currentSegmentStart, visiblePathStart);
+    }
+
+    return matchingSegmentBoundary >= 0 ? matchingSegmentBoundary + 1 : 0;
+  }
+
+  private getCompactToolSummary(): string {
+    switch (this.toolName) {
+      case MC_TOOLS.VIEW:
+        return this.formatPathWithRange();
+      case MC_TOOLS.STRING_REPLACE_LSP:
+        return this.formatEditSummary();
+      case MC_TOOLS.WRITE_FILE:
+        return this.getFirstStringArg('path');
+      case MC_TOOLS.FIND_FILES:
+        return this.formatListSummary();
+      case MC_TOOLS.DELETE_FILE:
+      case MC_TOOLS.FILE_STAT:
+      case MC_TOOLS.MKDIR:
+        return this.getFirstStringArg('path');
+      case MC_TOOLS.SEARCH_CONTENT:
+        return this.formatSearchSummary();
+      case MC_TOOLS.LSP_INSPECT:
+        return this.formatPathWithRange();
+      case MC_TOOLS.GET_PROCESS_OUTPUT:
+      case MC_TOOLS.KILL_PROCESS:
+        return this.getFirstStringArg('pid');
+      case 'skill':
+        return this.getFirstStringArg('name');
+      default:
+        return this.formatArgsSummary().trim();
+    }
+  }
+
+  private getCompactToolLabel(): string {
+    switch (this.toolName) {
+      case MC_TOOLS.EXECUTE_COMMAND:
+        return '$';
+      case MC_TOOLS.STRING_REPLACE_LSP:
+        return 'edit';
+      case MC_TOOLS.WRITE_FILE:
+        return 'write';
+      case MC_TOOLS.FIND_FILES:
+        return 'list';
+      case MC_TOOLS.SEARCH_CONTENT:
+        return 'grep';
+      default:
+        return this.toolName;
+    }
+  }
+
+  private formatPathWithRange(): string {
+    const rawPath = this.getFirstStringArg('path');
+    if (!rawPath) return '';
+
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const viewRange = argsObj?.view_range as [number, number] | undefined;
+    const offset = typeof argsObj?.offset === 'number' ? argsObj.offset : undefined;
+    const limit = typeof argsObj?.limit === 'number' ? argsObj.limit : undefined;
+    const line = typeof argsObj?.line === 'number' ? argsObj.line : undefined;
+    const start = viewRange?.[0] ?? offset ?? line;
+    const end = viewRange?.[1] ?? (offset !== undefined && limit !== undefined ? offset + limit - 1 : line);
+    const path = rawPath;
+
+    if (start === undefined) return path;
+    return end !== undefined && end !== start ? `${path}:${start}-${end}` : `${path}:${start}`;
+  }
+
+  private formatEditSummary(): string {
+    const path = this.getFirstStringArg('path');
+    if (!path) return '';
+
+    const output = this.getFormattedOutput();
+    const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = output.match(new RegExp(`Replaced \\d+ occurrences? in ${escapedPath} \\(lines ([^)]+)\\)`));
+    return match?.[1] ? `${path}:${match[1]}` : path;
+  }
+
+  private formatListSummary(): string {
+    const target = this.getFirstStringArg('path') || this.getFirstStringArg('pattern');
+    const resultCount = this.result ? this.getListResultEntries().length : undefined;
+    if (resultCount === undefined) return target;
+    return `${target} (${resultCount} ${resultCount === 1 ? 'result' : 'results'})`;
+  }
+
+  private formatSearchSummary(): string {
+    return this.getFirstStringArg('path');
+  }
+
+  private formatSearchDetail(): string {
+    const pattern = this.getFirstStringArg('pattern');
+    if (!pattern) return '';
+
+    const resultCount = this.getSearchResultCount();
+    return resultCount === undefined ? pattern : `${pattern} (${resultCount} results)`;
+  }
+
+  private getSearchResultCount(): number | undefined {
+    if (!this.result) return undefined;
+
+    const output = this.getFormattedOutput();
+    const explicitMatch = output.match(/(\d+)\s+(?:matches|results)/i);
+    if (explicitMatch?.[1]) return Number(explicitMatch[1]);
+
+    const matchLines = output
+      .split('\n')
+      .filter(line => /:\d+:/.test(line) || /^\s*(?:\.|\/|[\w.-]+\/).+:\d+/.test(line));
+    return matchLines.length > 0 ? matchLines.length : undefined;
+  }
+
+  private getFirstStringArg(key: string): string {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const value = argsObj?.[key];
+    return typeof value === 'string' ? value : '';
+  }
+
+  private getFirstLineArg(key: string, maxLength: number): string {
+    const value = this.getFirstStringArg(key);
+    if (!value) return '';
+    const firstLine = value.split('\n')[0] ?? '';
+    return firstLine.length > maxLength ? `${firstLine.slice(0, maxLength)}…` : firstLine;
   }
 
   private renderViewToolEnhanced(): void {
@@ -280,7 +827,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
 
     // Empty line padding above
-    this.contentBox.addChild(new Text('', 0, 0));
+    this.addLeadingPadding();
 
     // Top border
     this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -294,7 +841,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       let lines = highlighted.split('\n');
 
       // Limit lines when collapsed
-      const collapsedLines = 20;
+      const collapsedLines = this.getCollapsedLineLimit(20);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
@@ -381,7 +928,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       if (maxStreamLines && lines.length > maxStreamLines) {
         lines = lines.slice(-maxStreamLines);
       }
-      renderBorderedShell(status, lines);
+      renderBorderedShell(status, this.limitQuietShellLines(lines));
       return;
     }
 
@@ -406,7 +953,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (this.result.isError) {
       const status = theme.fg('error', ' ✗');
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, prepareOutputLines(output));
+      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
     }
 
@@ -418,14 +965,16 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (looksLikeError) {
       const status = theme.fg('error', ' ✗');
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, prepareOutputLines(output));
+      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
     }
 
     // Success - use bordered box with checkmark
     const status = theme.fg('success', ' ✓');
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    renderBorderedShell(status, prepareOutputLines(output));
+    {
+      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
+    }
   }
 
   private renderProcessToolEnhanced(): void {
@@ -475,7 +1024,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const status = this.result.isError ? theme.fg('error', ' ✗') : theme.fg('success', ' ✓');
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    renderBorderedProcess(status, prepareOutputLines(output));
+    {
+      renderBorderedProcess(status, prepareOutputLines(output));
+    }
   }
 
   private renderEditToolEnhanced(): void {
@@ -501,13 +1052,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
         const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
 
-        this.contentBox.addChild(new Text('', 0, 0));
+        this.addLeadingPadding();
         this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
         const { lines: diffLines } = this.generateDiffLines(String(oldStr), String(newStr));
 
         // While streaming, show the tail so new content scrolls in at the bottom
-        const collapsedLines = 15;
+        const collapsedLines = this.getCollapsedLineLimit(15);
         const totalLines = diffLines.length;
         const hasMore = !this.expanded && totalLines > collapsedLines + 1;
         let linesToShow = diffLines;
@@ -559,7 +1110,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
 
     // Empty line padding above
-    this.contentBox.addChild(new Text('', 0, 0));
+    this.addLeadingPadding();
 
     // Top border
     this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -571,7 +1122,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const { lines: diffLines, firstChangeIndex } = this.generateDiffLines(String(finalOldStr), String(finalNewStr));
 
       // Limit lines when collapsed, windowed around first change
-      const collapsedLines = 15;
+      const collapsedLines = this.getCollapsedLineLimit(15);
       const totalLines = diffLines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
@@ -772,13 +1323,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
       const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
-      this.contentBox.addChild(new Text('', 0, 0));
+      this.addLeadingPadding();
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
       const highlighted = highlightCode(content, fullPath);
       let lines = highlighted.split('\n');
 
-      const collapsedLines = 20;
+      const collapsedLines = this.getCollapsedLineLimit(20);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
       let skippedAbove = 0;
@@ -818,7 +1369,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
-    this.contentBox.addChild(new Text('', 0, 0));
+    this.addLeadingPadding();
     this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
     if (this.result.isError) {
@@ -834,7 +1385,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const highlighted = highlightCode(content, fullPath);
       let lines = highlighted.split('\n');
 
-      const collapsedLines = 20;
+      const collapsedLines = this.getCollapsedLineLimit(20);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
       let skippedAbove = 0;
@@ -889,7 +1440,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         lines = lines.slice(0, -1);
       }
 
-      const collapsedLines = 15;
+      const collapsedLines = this.getCollapsedLineLimit(15);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
       let skippedAbove = 0;
@@ -1202,7 +1753,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
-      this.contentBox.addChild(new Text('', 0, 0));
+      this.addLeadingPadding();
 
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -1210,7 +1761,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       let lines = output.split('\n');
 
       // Limit lines when collapsed
-      const collapsedLines = 10;
+      const collapsedLines = this.getCollapsedLineLimit(10);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
@@ -1337,13 +1888,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
-      this.contentBox.addChild(new Text('', 0, 0));
+      this.addLeadingPadding();
 
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
       let lines = output.split('\n');
-      const collapsedLines = 10;
+      const collapsedLines = this.getCollapsedLineLimit(10);
       const totalLines = lines.length;
       const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
@@ -1464,7 +2015,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private getStatusIndicator(): string {
     return this.isPartial
       ? theme.fg('muted', ' ⋯')
-      : this.result?.isError
+      : this.isErrorResult()
         ? theme.fg('error', ' ✗')
         : theme.fg('success', ' ✓');
   }
@@ -1609,8 +2160,8 @@ function getLanguageFromPath(path: string): string | undefined {
   return ext ? langMap[ext] : undefined;
 }
 
-/** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
-function highlightCode(content: string, path: string, startLine?: number): string {
+/** Strip line number formatting (cat -n or workspace →) from view-style output */
+function getPlainCodeFromViewOutput(content: string, startLine?: number): string {
   let lines = content.split('\n').map(line => line.trimEnd());
   // Remove known headers:
   // - "[Truncated N tokens]" from token truncation
@@ -1647,14 +2198,20 @@ function highlightCode(content: string, path: string, startLine?: number): strin
     codeLines.pop();
   }
 
-  // Apply syntax highlighting
+  return codeLines.join('\n');
+}
+
+/** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
+function highlightCode(content: string, path: string, startLine?: number): string {
+  const code = getPlainCodeFromViewOutput(content, startLine);
   try {
-    return highlight(codeLines.join('\n'), {
+    return highlight(code, {
       language: getLanguageFromPath(path),
       ignoreIllegals: true,
+      theme: CODE_HIGHLIGHT_THEME,
     });
   } catch {
-    return codeLines.join('\n');
+    return code;
   }
 }
 /** Parse a `Name: message\n  at ...` error string into an Error object.
