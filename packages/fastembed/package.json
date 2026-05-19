@@ -35,7 +35,8 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "test": "vitest run"
+    "test": "vitest run --project 'unit:packages/fastembed' --passWithNoTests",
+    "test:models": "vitest run --project 'models:packages/fastembed'"
   },
   "dependencies": {
     "@anush008/tokenizers": "^0.6.0",
