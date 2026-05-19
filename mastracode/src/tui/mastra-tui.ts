@@ -39,6 +39,7 @@ import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
+import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -521,6 +522,8 @@ export class MastraTUI {
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
+
+    await this.showQuietModePreferencePromptIfNeeded();
 
     // Check for updates after first render so network latency never blocks startup.
     void this.checkForUpdate().catch(() => {});
@@ -1172,6 +1175,70 @@ export class MastraTUI {
       return ob.version < ONBOARDING_VERSION;
     }
     return true;
+  }
+
+  private applyQuietModePreference(enabled: boolean, previewLineLimit = this.state.quietModeMaxToolPreviewLines): void {
+    const settings = loadSettings();
+    settings.preferences.quietMode = enabled;
+    settings.preferences.quietModeMaxToolPreviewLines = previewLineLimit;
+    settings.onboarding.quietModePreferenceSelected = true;
+    saveSettings(settings);
+
+    this.state.quietMode = enabled;
+    this.state.quietModeMaxToolPreviewLines = previewLineLimit;
+    this.state.taskProgress?.setQuietMode(enabled);
+
+    const tools = this.state.allToolComponents.filter(
+      (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
+    );
+    for (const tool of tools) {
+      tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
+      tool.setQuietPreviewLineLimit?.(previewLineLimit);
+    }
+    this.state.ui.requestRender();
+  }
+
+  private parseQuietPreviewLineAnswer(answer: string | null): number {
+    if (answer === 'None') return 0;
+    const match = answer?.match(/^(\d+)/);
+    return match ? Number(match[1]) : this.state.quietModeMaxToolPreviewLines;
+  }
+
+  async showQuietModePreferencePromptIfNeeded(): Promise<void> {
+    const settings = loadSettings();
+    if (settings.onboarding.quietModePreferenceSelected) return;
+
+    const answer = await askModalQuestion(this.state.ui, {
+      question: 'Try compact quiet mode?\n\nQuiet mode keeps tool calls and task progress compact so long sessions are easier to scan.',
+      options: [
+        { label: 'Enable quiet mode', description: 'Use compact rendering by default' },
+        { label: 'Keep classic mode', description: 'Keep the current full rendering' },
+      ],
+      allowCustomResponse: false,
+      selectedOptionLabel: 'Enable quiet mode',
+      overlay: { maxHeight: '50%' },
+    });
+
+    if (answer !== 'Enable quiet mode') {
+      this.applyQuietModePreference(false);
+      return;
+    }
+
+    const previewLineAnswer = await askModalQuestion(this.state.ui, {
+      question: 'How many quiet-mode tool preview lines should be shown?\n\nYou can change this later in /settings.',
+      options: [
+        { label: 'None', description: 'Hide compact tool detail previews' },
+        { label: '1 line', description: 'Show the latest preview line' },
+        { label: '2 lines', description: 'Default' },
+        { label: '4 lines', description: 'Show more streaming detail' },
+        { label: '8 lines', description: 'Show the most detail' },
+      ],
+      allowCustomResponse: false,
+      selectedOptionLabel: '2 lines',
+      overlay: { maxHeight: '50%' },
+    });
+
+    this.applyQuietModePreference(true, this.parseQuietPreviewLineAnswer(previewLineAnswer));
   }
 
   // ===========================================================================

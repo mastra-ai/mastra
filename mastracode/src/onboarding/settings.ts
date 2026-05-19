@@ -119,6 +119,7 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
+    quietModePreferenceSelected: boolean;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -234,6 +235,7 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
+    quietModePreferenceSelected: true,
   },
   models: {
     activeModelPackId: null,
@@ -291,6 +293,26 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     quietModeMaxToolPreviewLines: Math.max(0, Math.floor(maxPreviewLines)),
   };
+}
+
+function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
+  return Boolean(
+    rawOnboarding &&
+      typeof rawOnboarding === 'object' &&
+      Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
+  );
+}
+
+function applyQuietModePreferenceRollout(settings: GlobalSettings, rawOnboarding: unknown): void {
+  if (hasQuietModePreferenceSelected(rawOnboarding)) return;
+  settings.onboarding.quietModePreferenceSelected = settings.preferences.quietMode === true;
+}
+
+function getNewInstallDefaults(): GlobalSettings {
+  const settings = structuredClone(DEFAULTS);
+  settings.preferences.quietMode = true;
+  settings.onboarding.quietModePreferenceSelected = true;
+  return settings;
 }
 
 export function getSettingsPath(): string {
@@ -480,6 +502,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         observability: parseObservabilitySettings(raw.observability),
       };
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
     }
@@ -574,7 +597,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return structuredClone(DEFAULTS);
+  if (!existsSync(filePath)) return getNewInstallDefaults();
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
@@ -602,6 +625,10 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 
     // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
+    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
+      settingsChanged = true;
+    }
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;

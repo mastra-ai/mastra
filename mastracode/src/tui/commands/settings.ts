@@ -59,6 +59,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       onQuietModeChange: enabled => {
         const current = loadSettings();
         current.preferences.quietMode = enabled;
+        current.onboarding.quietModePreferenceSelected = true;
         saveSettings(current);
         ctx.state.quietMode = enabled;
         ctx.state.taskProgress?.setQuietMode(enabled);

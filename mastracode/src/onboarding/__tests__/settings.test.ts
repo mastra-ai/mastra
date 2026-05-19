@@ -24,6 +24,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       version: 0,
       modePackId: null,
       omPackId: null,
+      quietModePreferenceSelected: true,
     },
     models: {
       activeModelPackId: 'anthropic',
@@ -117,6 +118,52 @@ describe('customProviders parsing/persistence', () => {
 
       writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: -4 }, storage: {} }), 'utf-8');
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(0);
+    });
+  });
+
+  it('defaults new installs to quiet mode with the preference selected', () => {
+    withTempSettingsFile(filePath => {
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    });
+  });
+
+  it('marks existing classic users as needing the quiet mode preference prompt', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: false }, storage: {} }), 'utf-8');
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(false);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(false);
+    });
+  });
+
+  it('does not prompt existing users who already enabled quiet mode', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: true }, storage: {} }), 'utf-8');
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    });
+  });
+
+  it('preserves existing quiet mode preference selections', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: { quietModePreferenceSelected: true }, models: {}, preferences: { quietMode: false }, storage: {} }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(false);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
     });
   });
 
