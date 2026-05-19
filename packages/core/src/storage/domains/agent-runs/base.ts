@@ -1,25 +1,17 @@
+import type { PaginationInfo } from '../../types';
 import { StorageDomain } from '../base';
 
 /** Current lifecycle state of an agent run. */
-export type AgentRunStatus = 'created' | 'running' | 'suspended' | 'finished' | 'error' | 'cancelled';
+export type AgentRunStatus = 'created' | 'running' | 'suspended' | 'completed' | 'failed' | 'canceled';
 
 /**
- * Storage-owned lifecycle events.
+ * Event type stored for a run.
  *
- * Stream chunk names such as `text-delta`, `tool-call`, `file`, or
- * `background-task-completed` can also be stored in `AgentRunEvent.type`, but
- * the stream package remains the source of truth for that vocabulary.
+ * This storage domain intentionally does not own the event taxonomy. Runtime
+ * stream chunks, durable execution events, or adapter-specific semantic events
+ * can be persisted here, but their source package remains the source of truth.
  */
-export type AgentRunLifecycleEventType =
-  | 'run-start'
-  | 'run-finish'
-  | 'run-error'
-  | 'run-suspended'
-  | 'run-resumed'
-  | 'approval-required'
-  | 'approval-resolved';
-
-export type AgentRunEventType = AgentRunLifecycleEventType | (string & {});
+export type AgentRunEventType = string & {};
 
 /** Structured error summary stored on the run aggregate. */
 export type AgentRunError = {
@@ -32,7 +24,7 @@ export type AgentRunError = {
 export type AgentRunToolCall = {
   toolCallId: string;
   toolName: string;
-  status: 'pending' | 'running' | 'awaiting-approval' | 'suspended';
+  status: 'pending' | 'running' | 'awaiting-approval' | 'suspended' | (string & {});
   args?: unknown;
   createdAt?: Date;
   updatedAt?: Date;
@@ -84,6 +76,9 @@ export type AgentRunUpdate = Partial<
   >
 >;
 
+/** Input for creating a run aggregate. Projection fields are storage-managed. */
+export type AgentRunCreateInput = Omit<AgentRun, 'lastEventIndex' | 'eventCount'>;
+
 /** Append-only event row for a run. */
 export type AgentRunEvent = {
   runId: string;
@@ -98,8 +93,9 @@ export type AgentRunEvent = {
 };
 
 /** Event write payload. Storage assigns the next per-run index when omitted. */
-export type AgentRunEventInput = Omit<AgentRunEvent, 'index'> & {
+export type AgentRunEventInput = Omit<AgentRunEvent, 'index' | 'createdAt'> & {
   index?: number;
+  createdAt?: Date;
 };
 
 /** Filter and pagination options for listing agent runs. */
@@ -116,20 +112,17 @@ export type AgentRunListFilter = {
   orderBy?: 'createdAt' | 'updatedAt' | 'startedAt' | 'finishedAt';
   orderDirection?: 'asc' | 'desc';
   page?: number;
-  perPage?: number;
+  perPage?: number | false;
 };
 
-export type AgentRunListResult = {
+export type AgentRunListResult = PaginationInfo & {
   runs: AgentRun[];
-  total: number;
 };
 
 /** Options for tailing a run's ordered event log. */
 export type AgentRunEventListOptions = {
   /** Return events with index greater than this value. */
   afterIndex?: number;
-  /** Return events with index greater than or equal to this value. */
-  fromIndex?: number;
   /** Return events with index less than or equal to this value. */
   toIndex?: number;
   limit?: number;
@@ -147,7 +140,7 @@ export type AgentRunDeleteFilter = {
   resourceId?: string | null;
   status?: AgentRunStatus | AgentRunStatus[];
   beforeDate?: Date;
-  dateFilterBy?: 'createdAt' | 'updatedAt' | 'finishedAt';
+  dateFilterBy?: 'createdAt' | 'updatedAt' | 'startedAt' | 'finishedAt';
 };
 
 /**
@@ -165,7 +158,7 @@ export abstract class AgentRunsStorage extends StorageDomain {
   }
 
   /** Insert a new run aggregate. Throws if a run with the same runId already exists. */
-  abstract createRun(run: AgentRun): Promise<AgentRun>;
+  abstract createRun(run: AgentRunCreateInput): Promise<AgentRun>;
 
   /**
    * Partially update a run aggregate. Throws if the run does not exist.

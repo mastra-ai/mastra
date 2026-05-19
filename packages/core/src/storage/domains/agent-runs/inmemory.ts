@@ -1,6 +1,8 @@
+import { calculatePagination, normalizePerPage } from '../../base';
 import type { InMemoryDB } from '../inmemory-db';
 import type {
   AgentRun,
+  AgentRunCreateInput,
   AgentRunDeleteFilter,
   AgentRunEvent,
   AgentRunEventInput,
@@ -46,6 +48,12 @@ function maxDate(dates: Date[]): Date | undefined {
   return new Date(Math.max(...dates.map(date => date.getTime())));
 }
 
+function assertValidPage(page: number): void {
+  if (page < 0) {
+    throw new Error('page must be >= 0');
+  }
+}
+
 export class InMemoryAgentRunsStorage extends AgentRunsStorage {
   private db: InMemoryDB;
 
@@ -59,12 +67,16 @@ export class InMemoryAgentRunsStorage extends AgentRunsStorage {
     this.db.agentRunEvents.clear();
   }
 
-  async createRun(run: AgentRun): Promise<AgentRun> {
+  async createRun(run: AgentRunCreateInput): Promise<AgentRun> {
     if (this.db.agentRuns.has(run.runId)) {
       throw new Error(`Agent run already exists: ${run.runId}`);
     }
 
-    const stored = cloneRun(run);
+    const stored = cloneRun({
+      ...run,
+      lastEventIndex: null,
+      eventCount: 0,
+    });
     this.db.agentRuns.set(run.runId, stored);
     return cloneRun(stored);
   }
@@ -75,7 +87,8 @@ export class InMemoryAgentRunsStorage extends AgentRunsStorage {
       throw new Error(`Agent run not found: ${runId}`);
     }
 
-    const updated = cloneRun({ ...existing, ...update, runId });
+    const updatedAt = maxDate([existing.updatedAt, update.updatedAt ?? new Date()]) ?? existing.updatedAt;
+    const updated = cloneRun({ ...existing, ...update, runId, updatedAt });
     this.db.agentRuns.set(runId, updated);
     return cloneRun(updated);
   }
@@ -86,6 +99,10 @@ export class InMemoryAgentRunsStorage extends AgentRunsStorage {
   }
 
   async listRuns(filter: AgentRunListFilter = {}): Promise<AgentRunListResult> {
+    const { page = 0, perPage: perPageInput } = filter;
+    assertValidPage(page);
+    const perPage = normalizePerPage(perPageInput, 100);
+
     let runs = Array.from(this.db.agentRuns.values());
 
     if (filter.agentId) {
@@ -117,14 +134,16 @@ export class InMemoryAgentRunsStorage extends AgentRunsStorage {
     });
 
     const total = runs.length;
-    if (filter.page != null && filter.perPage != null) {
-      const start = filter.page * filter.perPage;
-      runs = runs.slice(start, start + filter.perPage);
-    } else if (filter.perPage != null) {
-      runs = runs.slice(0, filter.perPage);
-    }
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const paginatedRuns = runs.slice(offset, offset + perPage);
 
-    return { runs: runs.map(cloneRun), total };
+    return {
+      runs: paginatedRuns.map(cloneRun),
+      total,
+      page,
+      perPage: perPageForResponse,
+      hasMore: offset + perPage < total,
+    };
   }
 
   async appendEvent(event: AgentRunEventInput): Promise<AgentRunEvent> {
@@ -150,13 +169,16 @@ export class InMemoryAgentRunsStorage extends AgentRunsStorage {
     const storedEvents: AgentRunEvent[] = [];
     for (const event of events) {
       const index = event.index ?? nextIndex;
+      if (index !== nextIndex) {
+        throw new Error(`Agent run event index must be contiguous for run ${runId}: expected ${nextIndex}, received ${index}`);
+      }
       if (usedIndexes.has(index)) {
         throw new Error(`Agent run event already exists for run ${runId} at index ${index}`);
       }
 
       usedIndexes.add(index);
       nextIndex = Math.max(nextIndex, index + 1);
-      storedEvents.push(cloneEvent({ ...event, index }));
+      storedEvents.push(cloneEvent({ ...event, index, createdAt: event.createdAt ?? new Date() }));
     }
 
     const allEvents = [...existing, ...storedEvents].sort((a, b) => a.index - b.index);
@@ -178,9 +200,6 @@ export class InMemoryAgentRunsStorage extends AgentRunsStorage {
 
     if (opts.afterIndex != null) {
       events = events.filter(event => event.index > opts.afterIndex!);
-    }
-    if (opts.fromIndex != null) {
-      events = events.filter(event => event.index >= opts.fromIndex!);
     }
     if (opts.toIndex != null) {
       events = events.filter(event => event.index <= opts.toIndex!);

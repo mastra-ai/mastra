@@ -1,6 +1,7 @@
 export {
   AgentRunsStorage,
   type AgentRun,
+  type AgentRunCreateInput,
   type AgentRunDeleteFilter,
   type AgentRunError,
   type AgentRunEvent,
@@ -8,7 +9,6 @@ export {
   type AgentRunEventListOptions,
   type AgentRunEventListResult,
   type AgentRunEventType,
-  type AgentRunLifecycleEventType,
   type AgentRunListFilter,
   type AgentRunListResult,
   type AgentRunStatus,

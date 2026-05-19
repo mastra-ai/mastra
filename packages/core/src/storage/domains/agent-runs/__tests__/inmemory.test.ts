@@ -17,6 +17,8 @@ function makeRun(overrides: Partial<AgentRun> = {}): AgentRun {
     finishedAt: null,
     error: null,
     finalMessageId: null,
+    lastEventIndex: null,
+    eventCount: 0,
     ...overrides,
   };
 }
@@ -60,7 +62,7 @@ describe('InMemoryAgentRunsStorage', () => {
       await storage.createRun(makeRun({ metadata: { nested: { value: 'original' } } }));
 
       const run = await storage.getRun('run-1');
-      run!.status = 'finished';
+      run!.status = 'completed';
       (run!.metadata!.nested as { value: string }).value = 'mutated';
 
       const stored = await storage.getRun('run-1');
@@ -128,7 +130,7 @@ describe('InMemoryAgentRunsStorage', () => {
           runId: 'run-2',
           agentId: 'agent-1',
           threadId: 'thread-2',
-          status: 'finished',
+          status: 'completed',
           updatedAt: new Date('2026-01-01T00:00:02.000Z'),
         }),
       );
@@ -136,7 +138,7 @@ describe('InMemoryAgentRunsStorage', () => {
         makeRun({
           runId: 'run-3',
           agentId: 'agent-2',
-          status: 'error',
+          status: 'failed',
           updatedAt: new Date('2026-01-01T00:00:03.000Z'),
         }),
       );
@@ -145,12 +147,21 @@ describe('InMemoryAgentRunsStorage', () => {
       expect(byAgent.total).toBe(2);
       expect(byAgent.runs.map(run => run.runId)).toEqual(['run-2', 'run-1']);
 
-      const active = await storage.listRuns({ status: ['running', 'error'] });
+      const active = await storage.listRuns({ status: ['running', 'failed'] });
       expect(active.runs.map(run => run.runId)).toEqual(['run-3', 'run-1']);
 
       const secondPage = await storage.listRuns({ orderDirection: 'asc', perPage: 1, page: 1 });
       expect(secondPage.total).toBe(3);
+      expect(secondPage.page).toBe(1);
+      expect(secondPage.perPage).toBe(1);
+      expect(secondPage.hasMore).toBe(true);
       expect(secondPage.runs.map(run => run.runId)).toEqual(['run-2']);
+
+      const allRuns = await storage.listRuns({ perPage: false });
+      expect(allRuns.total).toBe(3);
+      expect(allRuns.perPage).toBe(false);
+      expect(allRuns.hasMore).toBe(false);
+      expect(allRuns.runs).toHaveLength(3);
     });
 
     it('does not match runs missing the selected lifecycle date in date filters', async () => {
@@ -158,7 +169,7 @@ describe('InMemoryAgentRunsStorage', () => {
       await storage.createRun(
         makeRun({
           runId: 'finished',
-          status: 'finished',
+          status: 'completed',
           finishedAt: new Date('2026-01-01T00:00:05.000Z'),
         }),
       );
@@ -189,7 +200,7 @@ describe('InMemoryAgentRunsStorage', () => {
     });
 
     it('assigns monotonic indexes when appending events', async () => {
-      const first = await storage.appendEvent(makeEvent({ type: 'run-start' }));
+      const first = await storage.appendEvent(makeEvent({ type: 'start' }));
       const next = await storage.appendEvents([
         makeEvent({ type: 'step-start' }),
         makeEvent({ type: 'tool-call', data: { toolName: 'lookup' } }),
@@ -199,7 +210,7 @@ describe('InMemoryAgentRunsStorage', () => {
       expect(next.map(event => event.index)).toEqual([1, 2]);
 
       const listed = await storage.listEvents('run-1');
-      expect(listed.events.map(event => event.type)).toEqual(['run-start', 'step-start', 'tool-call']);
+      expect(listed.events.map(event => event.type)).toEqual(['start', 'step-start', 'tool-call']);
 
       const run = await storage.getRun('run-1');
       expect(run?.lastEventIndex).toBe(2);
@@ -211,7 +222,7 @@ describe('InMemoryAgentRunsStorage', () => {
     // canonical stream taxonomy. The stream package owns that vocabulary.
     it('stores a realistic support assistant event timeline', async () => {
       await storage.appendEvents([
-        makeEvent({ type: 'run-start', data: { input: 'Investigate invoice inv_123' } }),
+        makeEvent({ type: 'start', data: { input: 'Investigate invoice inv_123' } }),
         makeEvent({ type: 'text-start', data: { id: 'text-1' } }),
         makeEvent({
           type: 'text-delta',
@@ -231,7 +242,7 @@ describe('InMemoryAgentRunsStorage', () => {
           type: 'tool-call-approval',
           data: { toolCallId: 'call-2', toolName: 'issueRefund', args: { amount: 42_00 } },
         }),
-        makeEvent({ type: 'suspended', data: { reason: 'approval-required', toolCallId: 'call-2' } }),
+        makeEvent({ type: 'tool-call-suspended', data: { reason: 'approval-required', toolCallId: 'call-2' } }),
       ]);
 
       await storage.updateRun('run-1', {
@@ -251,7 +262,7 @@ describe('InMemoryAgentRunsStorage', () => {
         'tool-call',
         'tool-result',
         'tool-call-approval',
-        'suspended',
+        'tool-call-suspended',
       ]);
 
       const run = await storage.getRun('run-1');
@@ -263,7 +274,7 @@ describe('InMemoryAgentRunsStorage', () => {
 
     it('stores Mastra background task and resumed run events', async () => {
       await storage.appendEvents([
-        makeEvent({ type: 'run-start' }),
+        makeEvent({ type: 'start' }),
         makeEvent({ type: 'background-task-started', data: { taskId: 'task-1', toolName: 'crawlDocs' } }),
         makeEvent({ type: 'background-task-progress', data: { taskId: 'task-1', progress: 0.5 } }),
         makeEvent({
@@ -272,17 +283,17 @@ describe('InMemoryAgentRunsStorage', () => {
         }),
         makeEvent({ type: 'background-task-resumed', data: { taskId: 'task-1' } }),
         makeEvent({ type: 'background-task-completed', data: { taskId: 'task-1', output: { pages: 12 } } }),
-        makeEvent({ type: 'resumed', data: { taskId: 'task-1' } }),
+        makeEvent({ type: 'start', data: { taskId: 'task-1', resumed: true } }),
         makeEvent({ type: 'finish', data: { finishReason: 'stop', finalMessageId: 'msg-1' } }),
       ]);
 
       await storage.updateRun('run-1', {
-        status: 'finished',
+        status: 'completed',
         finishedAt: new Date('2026-01-01T00:00:10.000Z'),
         finalMessageId: 'msg-1',
       });
 
-      const backgroundEvents = await storage.listEvents('run-1', { fromIndex: 1, toIndex: 5 });
+      const backgroundEvents = await storage.listEvents('run-1', { afterIndex: 0, toIndex: 5 });
       expect(backgroundEvents.events.map(event => event.type)).toEqual([
         'background-task-started',
         'background-task-progress',
@@ -292,7 +303,7 @@ describe('InMemoryAgentRunsStorage', () => {
       ]);
 
       const run = await storage.getRun('run-1');
-      expect(run?.status).toBe('finished');
+      expect(run?.status).toBe('completed');
       expect(run?.finalMessageId).toBe('msg-1');
       expect(run?.lastEventIndex).toBe(7);
     });
@@ -324,13 +335,13 @@ describe('InMemoryAgentRunsStorage', () => {
 
     it('supports explicit indexes and tails after an index', async () => {
       await storage.appendEvents([
-        makeEvent({ type: 'run-start', index: 5 }),
+        makeEvent({ type: 'start', index: 0 }),
         makeEvent({ type: 'step-start' }),
         makeEvent({ type: 'finish' }),
       ]);
 
-      const listed = await storage.listEvents('run-1', { afterIndex: 5 });
-      expect(listed.events.map(event => event.index)).toEqual([6, 7]);
+      const listed = await storage.listEvents('run-1', { afterIndex: 0 });
+      expect(listed.events.map(event => event.index)).toEqual([1, 2]);
     });
 
     it('does not move aggregate updatedAt backwards when appending older events', async () => {
@@ -344,26 +355,26 @@ describe('InMemoryAgentRunsStorage', () => {
     });
 
     it('throws on duplicate event indexes without partial writes', async () => {
-      await storage.appendEvent(makeEvent({ index: 1 }));
+      await storage.appendEvent(makeEvent({ index: 0 }));
 
       await expect(
         storage.appendEvents([makeEvent({ index: 2, type: 'step-start' }), makeEvent({ index: 1, type: 'finish' })]),
-      ).rejects.toThrow('Agent run event already exists');
+      ).rejects.toThrow('Agent run event index must be contiguous');
 
       const listed = await storage.listEvents('run-1');
-      expect(listed.events.map(event => event.index)).toEqual([1]);
+      expect(listed.events.map(event => event.index)).toEqual([0]);
     });
 
     it('lists events by range, limit, and descending order', async () => {
       await storage.appendEvents([
-        makeEvent({ type: 'run-start' }),
+        makeEvent({ type: 'start' }),
         makeEvent({ type: 'step-start' }),
         makeEvent({ type: 'step-finish' }),
         makeEvent({ type: 'finish' }),
       ]);
 
       const listed = await storage.listEvents('run-1', {
-        fromIndex: 1,
+        afterIndex: 0,
         toIndex: 3,
         limit: 2,
         orderDirection: 'desc',
@@ -393,14 +404,14 @@ describe('InMemoryAgentRunsStorage', () => {
       await storage.createRun(
         makeRun({
           runId: 'old-finished',
-          status: 'finished',
+          status: 'completed',
           finishedAt: new Date('2026-01-01T00:00:00.000Z'),
         }),
       );
       await storage.createRun(
         makeRun({
           runId: 'new-finished',
-          status: 'finished',
+          status: 'completed',
           finishedAt: new Date('2026-01-02T00:00:00.000Z'),
         }),
       );
@@ -408,7 +419,7 @@ describe('InMemoryAgentRunsStorage', () => {
       await storage.appendEvent(makeEvent({ runId: 'old-finished' }));
 
       const deleted = await storage.deleteRuns({
-        status: 'finished',
+        status: 'completed',
         dateFilterBy: 'finishedAt',
         beforeDate: new Date('2026-01-02T00:00:00.000Z'),
       });
@@ -424,7 +435,7 @@ describe('InMemoryAgentRunsStorage', () => {
       await storage.createRun(
         makeRun({
           runId: 'finished',
-          status: 'finished',
+          status: 'completed',
           finishedAt: new Date('2026-01-01T00:00:00.000Z'),
         }),
       );
