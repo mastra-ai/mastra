@@ -1694,7 +1694,7 @@ importers:
         version: 0.1.7
       posthog-node:
         specifier: ^5.28.3
-        version: 5.33.4(rxjs@7.8.1)
+        version: 5.33.4(rxjs@7.8.2)
       strip-ansi:
         specifier: ^7.2.0
         version: 7.2.0
