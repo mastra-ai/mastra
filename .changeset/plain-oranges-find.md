@@ -2,7 +2,7 @@
 '@mastra/playground-ui': patch
 ---
 
-The Traces list now updates live. Previously users had to manually refresh to see new traces — now they appear in the list as they're created, with a brief highlight to draw attention. Status changes on already-visible rows (running → success / error) also propagate without intervention, and returning to the tab after being idle re-syncs from a fresh cursor.
+The Traces list now updates live via delta polling. Previously the list was refetched every 10 seconds, replacing the whole page with no signal about what changed; now new traces appear within a few seconds of being created, with a brief highlight to draw attention. Status changes on already-visible rows (running → success / error) also propagate without intervention, and returning to the tab after being idle re-syncs from a fresh cursor.
 
 **New `useTraces` return fields**
 
@@ -31,7 +31,7 @@ Omitted fields fall through to the defaults (delta poll every 5s, idle reset aft
 
 **TracesListView**
 
-New optional `recentlyAddedKeys?: Set<string>` prop. Rows whose `traceId:spanId` is in the set get the `animate-row-highlight` class — a 1s fade-out from `var(--surface4)` to transparent, added to `index.css`.
+New optional `recentlyAddedKeys?: Set<string>` prop. Rows whose `traceId:spanId` is in the set get the `animate-row-highlight` class — a brief fade-out to transparent, added to `index.css`.
 
 **Compatibility**
 
