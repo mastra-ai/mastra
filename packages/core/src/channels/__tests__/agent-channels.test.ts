@@ -281,11 +281,14 @@ describe('AgentChannels', () => {
         consumer: Promise.resolve(),
       });
 
+      (agentChannels as any).pendingApprovalCards.set('run-1', { channel: 'C', ts: '123' });
+
       agentChannels.close();
 
       expect(unsubscribeA).toHaveBeenCalledTimes(1);
       expect(unsubscribeB).toHaveBeenCalledTimes(1);
       expect((agentChannels as any).threadSubscriptions.size).toBe(0);
+      expect((agentChannels as any).pendingApprovalCards.size).toBe(0);
     });
 
     it('is safe to call without any subscriptions', () => {
