@@ -339,6 +339,34 @@ describe('formatOutput', () => {
       ]);
     });
 
+    it('wraps JSON array and primitive tool-call arguments for Datadog', () => {
+      const result = formatOutput(
+        {
+          text: '',
+          toolCalls: [
+            { toolCallId: 'call-1', toolName: 'list', args: '[1,2,3]' },
+            { toolCallId: 'call-2', toolName: 'literal', args: '"string"' },
+          ],
+        },
+        SpanType.MODEL_GENERATION,
+      );
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { name: 'list', arguments: { value: '[1,2,3]' }, toolId: 'call-1', type: 'function' },
+            { name: 'literal', arguments: { value: '"string"' }, toolId: 'call-2', type: 'function' },
+          ],
+        },
+      ]);
+    });
+
+    it('normalizes null message content to an empty string', () => {
+      const result = formatOutput([{ role: 'assistant', content: null }], SpanType.MODEL_GENERATION);
+      expect(result).toEqual([{ role: 'assistant', content: '' }]);
+    });
+
     it('uses object payload when text is empty and an object result is present', () => {
       const result = formatOutput({ text: '', object: { ok: true } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'assistant', content: '{"ok":true}' }]);

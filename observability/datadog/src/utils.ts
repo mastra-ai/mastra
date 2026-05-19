@@ -175,7 +175,7 @@ function toDatadogMessages(
   return messages.map(m => {
     const message: DatadogMessage = {
       role: m.role,
-      content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
+      content: m.content == null ? '' : typeof m.content === 'string' ? m.content : safeStringify(m.content),
     };
     if (m.toolCalls) {
       message.toolCalls = m.toolCalls;
@@ -189,7 +189,7 @@ function parseToolArguments(args: unknown): Record<string, any> | undefined {
   if (typeof args === 'string') {
     try {
       const parsed = JSON.parse(args);
-      if (parsed && typeof parsed === 'object') {
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         return parsed;
       }
     } catch {
@@ -198,7 +198,7 @@ function parseToolArguments(args: unknown): Record<string, any> | undefined {
     }
     return { value: args };
   }
-  if (typeof args === 'object') return args as Record<string, any>;
+  if (typeof args === 'object' && !Array.isArray(args)) return args as Record<string, any>;
   return { value: args };
 }
 
