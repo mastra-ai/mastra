@@ -15,6 +15,9 @@ catalogs:
     '@vitest/ui':
       specifier: 4.1.5
       version: 4.1.5
+    date-fns:
+      specifier: 4.1.0
+      version: 4.1.0
     react:
       specifier: ^19.2.5
       version: 19.2.6
@@ -4264,7 +4267,7 @@ importers:
         specifier: ^12.10.1
         version: 12.10.2(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       date-fns:
-        specifier: ^4.1.0
+        specifier: 'catalog:'
         version: 4.1.0
       lucide-react:
         specifier: ^0.522.0
@@ -4484,7 +4487,7 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       date-fns:
-        specifier: ^4.1.0
+        specifier: 'catalog:'
         version: 4.1.0
       lucide-react:
         specifier: ^0.474.0

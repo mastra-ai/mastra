@@ -1,5 +1,5 @@
 import { Slot } from '@radix-ui/react-slot';
-import { CircleAlertIcon } from 'lucide-react';
+import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebar } from './main-sidebar-context';
@@ -15,7 +15,6 @@ export type NavLink = {
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
-  isExperimental?: boolean;
   /** @deprecated Sidebar nav items now render flush; this option is accepted but ignored. */
   indent?: boolean;
 };
@@ -103,26 +102,16 @@ export function MainSidebarNavLink({
         {link.icon}
         <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
         {children}
-        {link.isExperimental && !isCollapsed && !needsTooltip && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <CircleAlertIcon className="ml-auto stroke-accent5" />
-            </TooltipTrigger>
-            <TooltipContent side="right" align="center" className="ml-4">
-              Experimental Feature
-            </TooltipContent>
-          </Tooltip>
-        )}
       </Link>
     );
   }
 
   return (
     <li {...props} className={cn('flex relative min-w-0', className)}>
-      {link && needsTooltip && interactiveEl ? (
+      {link && needsTooltip && React.isValidElement(interactiveEl) ? (
         <Tooltip>
-          <TooltipTrigger asChild>{interactiveEl}</TooltipTrigger>
-          <TooltipContent side="right" align="center" className="ml-4">
+          <TooltipTrigger render={interactiveEl} />
+          <TooltipContent side="right" align="center" sideOffset={16}>
             {link.tooltipMsg ? (isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg) : link.name}
           </TooltipContent>
         </Tooltip>
