@@ -127,7 +127,43 @@ The resolver must return a sandbox that is ready to use, either already started 
 
 With a static sandbox, the workspace inspects the instance to decide which tools to register. With a resolver, the workspace assumes full capabilities and registers `execute_command` (with `background` support), `get_process_output`, and `kill_process`. If the resolved sandbox does not implement a capability, the runtime throws a clear `SandboxFeatureNotSupportedError`.
 
-For background commands, return the same sandbox for follow-up calls that share a request scope, tenant, or user. `get_process_output` and `kill_process` read from the process manager on the resolved sandbox, so a fresh sandbox instance may not know about a process started by an earlier tool call.
+### Background process continuity
+
+Background processes can outlive a single tool call, so `get_process_output` and `kill_process` must reach the same sandbox that started the process. By default, a resolved sandbox is cached per request. For continuity across follow-up requests, such as a later conversation turn, set `sandboxCacheKey` to a stable identifier. The resolved sandbox is then cached by that key instead of by request:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+  sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+})
+```
+
+Without a `sandboxCacheKey`, the resolver must return the same sandbox itself for follow-up calls that share a tenant, user, or session.
+
+### Workspace instructions
+
+Workspace instructions describe the environment in the agent's system message. With a resolver, the workspace does not call the resolver to build these instructions. It emits stable placeholder text, so constructing the prompt never provisions a caller-owned sandbox and the system message stays consistent across requests, which keeps prompt caching effective.
+
+To include concrete per-request sandbox details, set `instructions.dynamicSandbox` to `'resolve'`:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+  instructions: { dynamicSandbox: 'resolve' },
+})
+```
+
+`'resolve'` calls the resolver on every request, which may provision the sandbox and makes the system message request-specific. Pass a function instead to return custom text from `requestContext` without resolving the sandbox:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+  instructions: {
+    dynamicSandbox: ({ requestContext }) =>
+      `Sandbox scoped to tenant ${requestContext.get('tenant-id')}.`,
+  },
+})
+```
 
 ## Agent tools
 

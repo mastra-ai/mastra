@@ -63,6 +63,21 @@ const workspace = new Workspace({
     isOptional: true,
   },
   {
+    name: 'instructions.dynamicSandbox',
+    type: "'placeholder' | 'resolve' | (({ requestContext }) => string)",
+    description:
+      "Controls how a resolver-backed `sandbox` contributes to workspace instructions. `'placeholder'` (default) emits stable text without calling the resolver. `'resolve'` calls the resolver and uses the sandbox's own instructions. A function returns custom text without resolving. Has no effect on a static sandbox.",
+    isOptional: true,
+    defaultValue: "'placeholder'",
+  },
+  {
+    name: 'sandboxCacheKey',
+    type: '({ requestContext }) => string | undefined',
+    description:
+      'Stable cache key for a resolver-backed `sandbox`. When set, resolved sandboxes are memoized per key instead of per `RequestContext` instance, so background-process tools reach the same sandbox across follow-up requests. Has no effect on a static sandbox.',
+    isOptional: true,
+  },
+  {
     name: 'bm25',
     type: 'boolean | BM25Config',
     description: 'Enable BM25 keyword search. Pass true for defaults or a config object.',

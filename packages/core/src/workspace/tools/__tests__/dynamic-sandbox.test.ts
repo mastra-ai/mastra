@@ -248,12 +248,15 @@ describe('dynamic sandbox tools', () => {
   });
 
   it('should call the resolver exactly once per request across instructions and tool calls', async () => {
+    // With dynamicSandbox: 'resolve', building instructions resolves the sandbox
+    // too — the per-request cache must share that one resolver call with the tools.
     let resolverCalls = 0;
     const workspace = new Workspace({
       sandbox: () => {
         resolverCalls++;
         return new LocalSandbox({ workingDirectory: tempDir });
       },
+      instructions: { dynamicSandbox: 'resolve' },
     });
     const tools = await createWorkspaceTools(workspace);
     const requestContext = new RequestContext([['user-id', 'alice']]);

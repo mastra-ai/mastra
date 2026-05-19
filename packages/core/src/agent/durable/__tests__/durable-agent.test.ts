@@ -242,6 +242,7 @@ describe('DurableAgent', () => {
             workingDirectory: '/tmp',
             instructions: () => `workspace marker ${requestContext.get('tenant')}`,
           }),
+        instructions: { dynamicSandbox: 'resolve' },
       });
       const baseAgent = new Agent({
         id: 'workspace-instructions-agent',

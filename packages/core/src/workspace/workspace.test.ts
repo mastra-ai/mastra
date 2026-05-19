@@ -2480,12 +2480,29 @@ Line 3 conclusion`;
       expect(resolverCalls).toBe(0);
     });
 
-    it('should resolve sandbox instructions asynchronously from requestContext', async () => {
+    it('should not call the sandbox resolver to build instructions by default', async () => {
+      // Default 'placeholder' — building the prompt must not provision a sandbox.
+      let resolverCalls = 0;
+      const workspace = new Workspace({
+        sandbox: () => {
+          resolverCalls++;
+          return new LocalSandbox({ workingDirectory: tempDir });
+        },
+      });
+
+      const instructions = await workspace.getInstructionsAsync({ requestContext: new RequestContext() });
+
+      expect(resolverCalls).toBe(0);
+      expect(instructions).toContain('Dynamic sandbox configured');
+    });
+
+    it('should resolve concrete sandbox instructions when dynamicSandbox is "resolve"', async () => {
       const workspace = new Workspace({
         sandbox: ({ requestContext }) => {
           const role = requestContext.get('role') as string;
           return new LocalSandbox({ workingDirectory: path.join(tempDir, role) });
         },
+        instructions: { dynamicSandbox: 'resolve' },
       });
 
       const adminInstructions = await workspace.getInstructionsAsync({
@@ -2497,6 +2514,26 @@ Line 3 conclusion`;
 
       expect(adminInstructions).toContain(path.join(tempDir, 'admin'));
       expect(userInstructions).toContain(path.join(tempDir, 'user'));
+    });
+
+    it('should use a custom dynamicSandbox instructions function without resolving', async () => {
+      let resolverCalls = 0;
+      const workspace = new Workspace({
+        sandbox: () => {
+          resolverCalls++;
+          return new LocalSandbox({ workingDirectory: tempDir });
+        },
+        instructions: {
+          dynamicSandbox: ({ requestContext }) => `Sandbox for tenant ${requestContext.get('tenant')}`,
+        },
+      });
+
+      const instructions = await workspace.getInstructionsAsync({
+        requestContext: new RequestContext([['tenant', 'acme']]),
+      });
+
+      expect(resolverCalls).toBe(0);
+      expect(instructions).toContain('Sandbox for tenant acme');
     });
 
     it('should forward the synthesized requestContext to provider instruction hooks', async () => {
@@ -2513,11 +2550,33 @@ Line 3 conclusion`;
               return 'sandbox instructions';
             },
           }),
+        instructions: { dynamicSandbox: 'resolve' },
       });
 
       await workspace.getInstructionsAsync();
 
       expect(seenContext).toBeInstanceOf(RequestContext);
+    });
+
+    it('should memoize resolved sandboxes by sandboxCacheKey across RequestContext instances', async () => {
+      let resolverCalls = 0;
+      const workspace = new Workspace({
+        sandbox: () => {
+          resolverCalls++;
+          return new LocalSandbox({ workingDirectory: tempDir });
+        },
+        sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string | undefined,
+      });
+
+      // Two distinct RequestContext objects, same logical thread id → one sandbox.
+      const first = await workspace.resolveSandbox({ requestContext: new RequestContext([['thread-id', 't1']]) });
+      const second = await workspace.resolveSandbox({ requestContext: new RequestContext([['thread-id', 't1']]) });
+      // A different thread id resolves its own sandbox.
+      const other = await workspace.resolveSandbox({ requestContext: new RequestContext([['thread-id', 't2']]) });
+
+      expect(resolverCalls).toBe(2);
+      expect(first).toBe(second);
+      expect(other).not.toBe(first);
     });
   });
 

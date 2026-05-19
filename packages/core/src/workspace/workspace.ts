@@ -56,6 +56,15 @@ import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
+/**
+ * Stable instruction text used for a resolver-backed sandbox when
+ * `instructions.dynamicSandbox` is `'placeholder'` (the default). Emitting this
+ * instead of resolving keeps prompt construction from provisioning a sandbox
+ * and keeps the system message cache-friendly.
+ */
+const DYNAMIC_SANDBOX_INSTRUCTIONS =
+  'Dynamic sandbox configured. Shell commands execute in a request-scoped sandbox resolved at tool execution time.';
+
 // =============================================================================
 // Workspace Configuration
 // =============================================================================
@@ -77,6 +86,32 @@ export type WorkspaceFilesystemResolver = (context: {
 export type WorkspaceSandboxResolver = (context: {
   requestContext: RequestContext;
 }) => WorkspaceSandbox | Promise<WorkspaceSandbox>;
+
+/**
+ * Controls how a resolver-backed sandbox contributes to workspace instructions
+ * (the text injected into the agent's system message).
+ *
+ * - `'placeholder'` (default) — emit stable text without calling the resolver,
+ *   so building the prompt never provisions a caller-owned sandbox and the
+ *   system message stays stable for prompt caching.
+ * - `'resolve'` — call the resolver and use the concrete sandbox's instructions
+ *   (accepts the eager-provisioning and per-request prompt trade-offs).
+ * - A function — return custom instruction text from `requestContext` without
+ *   resolving (or provisioning) the sandbox.
+ */
+export type DynamicSandboxInstructions =
+  | 'placeholder'
+  | 'resolve'
+  | ((context: { requestContext: RequestContext }) => string);
+
+/**
+ * Produces a stable cache key for a resolver-backed sandbox from request context.
+ * When set, resolved sandboxes are memoized per key (e.g. a thread or tenant id)
+ * rather than per RequestContext instance — so background processes stay
+ * reachable across follow-up calls that carry a different RequestContext object.
+ * Return `undefined` to fall back to per-RequestContext memoization.
+ */
+export type WorkspaceSandboxCacheKey = (context: { requestContext: RequestContext }) => string | undefined;
 
 /**
  * Configuration for creating a Workspace.
@@ -121,6 +156,49 @@ export interface WorkspaceConfig<
    * Extend MastraSandbox for automatic logger integration (static instances only).
    */
   sandbox?: TSandbox | WorkspaceSandboxResolver;
+
+  /**
+   * Controls how a resolver-backed `sandbox` contributes to workspace instructions
+   * (the text injected into the agent's system message).
+   *
+   * Defaults to `dynamicSandbox: 'placeholder'` — building the prompt emits stable
+   * text and never calls the resolver, so it cannot provision a caller-owned
+   * sandbox and the system message stays cache-friendly. Set `'resolve'` (or a
+   * function) to opt into concrete per-request sandbox instructions.
+   *
+   * Has no effect on a static sandbox instance.
+   *
+   * @example
+   * ```typescript
+   * new Workspace({
+   *   sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+   *   instructions: { dynamicSandbox: 'resolve' },
+   * });
+   * ```
+   */
+  instructions?: {
+    dynamicSandbox?: DynamicSandboxInstructions;
+  };
+
+  /**
+   * Stable cache key for a resolver-backed `sandbox`. When set, resolved sandboxes
+   * are memoized per key instead of per RequestContext instance — so
+   * `execute_command({ background: true })`, `get_process_output`, and
+   * `kill_process` reach the same sandbox even across follow-up calls that carry
+   * a different RequestContext object.
+   *
+   * Has no effect on a static sandbox instance.
+   *
+   * @example
+   * ```typescript
+   * new Workspace({
+   *   sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+   *   sandboxCacheKey: ({ requestContext }) =>
+   *     (requestContext.get('threadId') ?? requestContext.get('tenantId')) as string | undefined,
+   * });
+   * ```
+   */
+  sandboxCacheKey?: WorkspaceSandboxCacheKey;
 
   /**
    * Mount multiple filesystems at different paths.
@@ -497,6 +575,11 @@ export class Workspace<
   // Per-request memoization so one resolver call serves both instructions and tool execution.
   private readonly _filesystemRequestCache = new WeakMap<RequestContext, Promise<WorkspaceFilesystem>>();
   private readonly _sandboxRequestCache = new WeakMap<RequestContext, Promise<WorkspaceSandbox>>();
+  // Stable-key memoization for resolver-backed sandboxes — keeps background-process
+  // continuity correct across follow-up calls that carry a different RequestContext.
+  private readonly _sandboxKeyCache = new Map<string, Promise<WorkspaceSandbox>>();
+  private readonly _sandboxCacheKey?: WorkspaceSandboxCacheKey;
+  private readonly _dynamicSandboxInstructions: DynamicSandboxInstructions;
   private readonly _browser?: MastraBrowser;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
@@ -517,6 +600,8 @@ export class Workspace<
     } else {
       this._sandbox = config.sandbox;
     }
+    this._sandboxCacheKey = config.sandboxCacheKey;
+    this._dynamicSandboxInstructions = config.instructions?.dynamicSandbox ?? 'placeholder';
 
     // Setup mounts - creates CompositeFilesystem and informs sandbox
     if (config.mounts && Object.keys(config.mounts).length > 0) {
@@ -782,9 +867,26 @@ export class Workspace<
    * When a resolver function is configured, calls it with the provided requestContext.
    * When a static sandbox is configured, returns it directly.
    * Returns undefined if no sandbox is configured.
+   *
+   * Resolver results are memoized: by `sandboxCacheKey` when configured (stable
+   * across RequestContext instances, so background processes stay reachable on
+   * follow-up calls), otherwise per RequestContext instance.
    */
   async resolveSandbox({ requestContext }: { requestContext: RequestContext }): Promise<WorkspaceSandbox | undefined> {
     if (!this._sandboxResolver) return this._sandbox;
+
+    // Stable logical key (e.g. thread/tenant id) — survives across RequestContext
+    // instances so a background process started earlier stays reachable.
+    const cacheKey = this._sandboxCacheKey?.({ requestContext });
+    if (cacheKey != null) {
+      let keyed = this._sandboxKeyCache.get(cacheKey);
+      if (!keyed) {
+        keyed = Promise.resolve(this._sandboxResolver({ requestContext }));
+        this._sandboxKeyCache.set(cacheKey, keyed);
+      }
+      return keyed;
+    }
+
     let pending = this._sandboxRequestCache.get(requestContext);
     if (!pending) {
       pending = Promise.resolve(this._sandboxResolver({ requestContext }));
@@ -1335,17 +1437,34 @@ export class Workspace<
   /**
    * Get human-readable instructions describing the workspace environment.
    *
-   * Resolves dynamic providers with requestContext so request-scoped
-   * filesystem and sandbox instructions match the providers used by tools.
+   * Resolves a dynamic filesystem with requestContext so request-scoped
+   * instructions match the providers used by tools. A resolver-backed sandbox
+   * is *not* resolved here by default — see `instructions.dynamicSandbox` — so
+   * building the prompt never provisions a caller-owned sandbox.
    */
   async getInstructionsAsync(opts?: { requestContext?: RequestContext }): Promise<string> {
     const requestContext = opts?.requestContext ?? new RequestContext();
     const filesystem = this._filesystemResolver ? await this.resolveFilesystem({ requestContext }) : this._fs;
-    const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
 
     // Forward the resolved requestContext so provider getInstructions hooks see
     // the same context used to resolve them, even when the caller didn't pass one.
-    return this.getInstructionsForProviders(filesystem, sandbox, { ...opts, requestContext });
+    const resolvedOpts = { ...opts, requestContext };
+
+    // Resolver-backed sandbox: by default emit stable placeholder text instead of
+    // calling the resolver. Resolving here could provision a caller-owned sandbox
+    // just to build the prompt, and concrete instructions make the system message
+    // request-specific (worse prompt caching). Opt in with instructions.dynamicSandbox.
+    if (this._sandboxResolver && this._dynamicSandboxInstructions !== 'resolve') {
+      const sandboxText =
+        typeof this._dynamicSandboxInstructions === 'function'
+          ? this._dynamicSandboxInstructions({ requestContext })
+          : DYNAMIC_SANDBOX_INSTRUCTIONS;
+      const fsText = this.getInstructionsForProviders(filesystem, undefined, resolvedOpts);
+      return [sandboxText, fsText].filter(Boolean).join('\n\n');
+    }
+
+    const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
+    return this.getInstructionsForProviders(filesystem, sandbox, resolvedOpts);
   }
 
   /**
