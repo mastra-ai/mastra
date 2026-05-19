@@ -35,12 +35,16 @@ import type {
   ChannelOutboxEnqueueOptions,
   ChannelOutboxItem,
   ChannelProviderDeliveryReceipt,
+  AgentSignalResultStatus,
+  OperationAdmissionTombstone,
+  QueueAdmissionReceipt,
 } from '../../storage/domains/harness';
 import {
   HarnessStorageAttachmentInUseError,
   HarnessStorageChannelOutboxClaimConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
+  HarnessStorageSessionEventReplayUnsupportedError,
   HarnessStorageSessionNotFoundError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageThreadDeleteFenceUnsupportedError,
@@ -893,7 +897,9 @@ export class Harness {
   }
 
   channels = {
-    enqueueOutbox: async (opts: ChannelOutboxEnqueueOptions): Promise<{
+    enqueueOutbox: async (
+      opts: ChannelOutboxEnqueueOptions,
+    ): Promise<{
       outboxItemId: string;
       duplicate: boolean;
       conflict: boolean;
@@ -907,19 +913,18 @@ export class Harness {
           `must match channel binding platform "${binding.platform}"`,
         );
       }
-      const plan =
-        (await config.adapter.resolveDeliveryPlan?.(opts, {
-          harnessName: this._harnessName,
-          channelId: binding.channelId,
-          providerId: binding.providerId,
-          platform: binding.platform,
-          provider,
-          binding,
-        })) ?? {
-          operationKind: opts.operationKind,
-          operationName: opts.operationName,
-          deliverySemantics: this._resolveChannelDeliverySemantics(opts, config),
-        };
+      const plan = (await config.adapter.resolveDeliveryPlan?.(opts, {
+        harnessName: this._harnessName,
+        channelId: binding.channelId,
+        providerId: binding.providerId,
+        platform: binding.platform,
+        provider,
+        binding,
+      })) ?? {
+        operationKind: opts.operationKind,
+        operationName: opts.operationName,
+        deliverySemantics: this._resolveChannelDeliverySemantics(opts, config),
+      };
       const now = Date.now();
       return storage.enqueueChannelOutbox({
         id: `outbox-${randomUUID()}`,
@@ -1151,9 +1156,10 @@ export class Harness {
     };
   }
 
-  private _channelRuntimeForDispatch(
-    item: ChannelOutboxItem,
-  ): { binding?: HarnessChannelBinding; config?: HarnessChannelConfig } {
+  private _channelRuntimeForDispatch(item: ChannelOutboxItem): {
+    binding?: HarnessChannelBinding;
+    config?: HarnessChannelConfig;
+  } {
     const binding = this.getChannelBinding(item.channelId);
     const config = this._channelRegistry.getConfig(item.channelId);
     if (!binding || !config) return {};
@@ -1524,17 +1530,25 @@ export class Harness {
       leaseExpiresAt: lease.expiresAt,
       version: lease.version,
     };
-    return this._publish(storage, record);
+    return this._publish(storage, record, await this._eventReplaySeedFor(storage, record));
   }
 
-  private _publish(storage: HarnessStorage, record: SessionRecord): Session {
-    return this._adoptSession(storage, record, { emitCreated: true, kickQueueDrain: true });
+  private _publish(
+    storage: HarnessStorage,
+    record: SessionRecord,
+    eventReplaySeed?: { epoch: string; nextSequence: number },
+  ): Session {
+    return this._adoptSession(storage, record, { emitCreated: true, kickQueueDrain: true, eventReplaySeed });
   }
 
   private _adoptSession(
     storage: HarnessStorage,
     record: SessionRecord,
-    opts: { emitCreated: boolean; kickQueueDrain: boolean },
+    opts: {
+      emitCreated: boolean;
+      kickQueueDrain: boolean;
+      eventReplaySeed?: { epoch: string; nextSequence: number };
+    },
   ): Session {
     // Workspace provider validation (§2.7). If the stored record carries a
     // workspace state blob, the configured provider must match. Mismatch is
@@ -1559,6 +1573,7 @@ export class Harness {
       ownerId: this.ownerId,
       record,
       leaseExpiresAt: record.leaseExpiresAt ?? Date.now() + this._leaseTtlMs,
+      eventReplaySeed: opts.eventReplaySeed,
     });
     if (workspaceLost) session._markWorkspaceLost();
     this._hasAdoptedSessions = true;
@@ -1602,6 +1617,25 @@ export class Harness {
     }
 
     return session;
+  }
+
+  private async _eventReplaySeedFor(
+    storage: HarnessStorage,
+    record: SessionRecord,
+  ): Promise<{ epoch: string; nextSequence: number } | undefined> {
+    try {
+      const state = await storage.getSessionEventReplayState({
+        harnessName: record.harnessName,
+        sessionId: record.id,
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+      });
+      if (!state) return undefined;
+      return { epoch: state.epoch, nextSequence: state.newestSequence + 1 };
+    } catch (err) {
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) return undefined;
+      throw new HarnessStorageError(record.id, 'load event replay state', err);
+    }
   }
 
   private async _acquireLease(storage: HarnessStorage, harnessName: string, sessionId: string) {
@@ -1844,7 +1878,11 @@ export class Harness {
       version: lease.version,
     };
     if ((leasedRecord.pendingQueue?.length ?? 0) > 0) {
-      const recovered = this._adoptSession(storage, leasedRecord, { emitCreated: false, kickQueueDrain: false });
+      const recovered = this._adoptSession(storage, leasedRecord, {
+        emitCreated: false,
+        kickQueueDrain: false,
+        eventReplaySeed: await this._eventReplaySeedFor(storage, leasedRecord),
+      });
       return {
         record: recovered.getRecord(),
         depth,
@@ -1993,6 +2031,24 @@ export class Harness {
     session: Session | undefined,
     closedLiveSessions?: Map<string, Session>,
   ): Promise<void> {
+    let eventPersistenceError: unknown;
+    if (session) {
+      closedLiveSessions?.set(record.id, session);
+      session._markClosed(record);
+      // Emit session_closed BEFORE we tear down the per-session bridge so
+      // harness-level subscribers see the lifecycle event for this session.
+      // The session's own emitter is still wired and will publish to the
+      // bridge before the unsubscribe lands.
+      session._emit({ type: 'session_closed', reason: 'requested' });
+      try {
+        await session._flushEventPersistence();
+      } catch (err) {
+        eventPersistenceError = err;
+      }
+    } else {
+      this._emitter.emit({ type: 'session_closed', reason: 'requested' }, { sessionId: record.id });
+    }
+
     try {
       await storage.releaseSessionLease({
         harnessName: record.harnessName,
@@ -2013,19 +2069,7 @@ export class Harness {
         await this._workspaceRegistry.releasePerResource({ resourceId: record.resourceId });
       }
     } catch {
-      // Best-effort — registry surfaces errors via workspace_error events.
-    }
-
-    if (session) {
-      closedLiveSessions?.set(record.id, session);
-      session._markClosed(record);
-      // Emit session_closed BEFORE we tear down the per-session bridge so
-      // harness-level subscribers see the lifecycle event for this session.
-      // The session's own emitter is still wired and will publish to the
-      // bridge before the unsubscribe lands.
-      session._emit({ type: 'session_closed', reason: 'requested' });
-    } else {
-      this._emitter.emit({ type: 'session_closed', reason: 'requested' }, { sessionId: record.id });
+      // Best-effort — registry surfaces errors via workspace_error event.
     }
 
     const bridge = this._sessionEventBridges.get(record.id);
@@ -2034,6 +2078,10 @@ export class Harness {
       this._sessionEventBridges.delete(record.id);
     }
     this._liveSessions.delete(record.id);
+
+    if (eventPersistenceError !== undefined) {
+      throw new HarnessStorageError(record.id, 'flush', eventPersistenceError);
+    }
   }
 
   private async _forceDeleteSessionRecord(
@@ -2225,6 +2273,39 @@ export class Harness {
     return stored;
   }
 
+  async lookupMessageResult(opts: {
+    sessionId: string;
+    resourceId: string;
+    signalId: string;
+  }): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null> {
+    const storage = this._requireStorage('lookupMessageResult()');
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
+    if (!stored || stored.resourceId !== opts.resourceId) return null;
+    return storage.loadMessageResultEvidence({
+      harnessName: stored.harnessName,
+      sessionId: stored.id,
+      resourceId: stored.resourceId,
+      threadId: stored.threadId,
+      signalId: opts.signalId,
+    });
+  }
+
+  async lookupQueueResult(opts: {
+    sessionId: string;
+    resourceId: string;
+    queuedItemId: string;
+  }): Promise<QueueAdmissionReceipt | OperationAdmissionTombstone | null> {
+    const storage = this._requireStorage('lookupQueueResult()');
+    const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
+    if (!stored || stored.resourceId !== opts.resourceId) return null;
+    return storage.loadQueueResultEvidence({
+      harnessName: stored.harnessName,
+      sessionId: stored.id,
+      resourceId: stored.resourceId,
+      queuedItemId: opts.queuedItemId,
+    });
+  }
+
   /**
    * Drain in-flight work and release every held lease. After `shutdown`,
    * `session()` rejects. Idempotent.
@@ -2251,7 +2332,18 @@ export class Harness {
     // Release every held lease. We keep the records active in storage —
     // shutdown is not a close.
     const sessions = Array.from(this._liveSessions.values());
+    let eventPersistenceError: { sessionId: string; error: unknown } | undefined;
     for (const session of sessions) {
+      // Surface eviction to harness-level subscribers BEFORE we tear down
+      // the bridge so the event still propagates, and persist it before lease
+      // handoff so a fast new owner resumes from the correct event sequence.
+      session._emit({ type: 'session_evicted', reason: 'shutdown' });
+      try {
+        await session._flushEventPersistence();
+      } catch (err) {
+        eventPersistenceError ??= { sessionId: session.id, error: err };
+      }
+
       try {
         await storage.releaseSessionLease({
           harnessName: session.getRecord().harnessName,
@@ -2261,10 +2353,6 @@ export class Harness {
       } catch {
         // Best-effort: leases TTL out anyway.
       }
-
-      // Surface eviction to harness-level subscribers BEFORE we tear down
-      // the bridge so the event still propagates.
-      session._emit({ type: 'session_evicted', reason: 'shutdown' });
 
       const bridge = this._sessionEventBridges.get(session.id);
       if (bridge) {
@@ -2281,6 +2369,9 @@ export class Harness {
       // Best-effort: errors surface through the workspace_error event.
     }
     this._untrackBoundStorage();
+    if (eventPersistenceError !== undefined) {
+      throw new HarnessStorageError(eventPersistenceError.sessionId, 'flush', eventPersistenceError.error);
+    }
   }
 
   // -------------------------------------------------------------------------

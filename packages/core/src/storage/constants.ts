@@ -50,6 +50,7 @@ export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
 export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
 export const TABLE_HARNESS_MESSAGE_RESULTS = 'mastra_harness_message_results';
 export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
+export const TABLE_HARNESS_SESSION_EVENTS = 'mastra_harness_session_events';
 export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_fences';
 export const TABLE_HARNESS_CHANNEL_INBOX = 'mastra_harness_channel_inbox';
 export const TABLE_HARNESS_CHANNEL_ACTION_TOKENS = 'mastra_harness_channel_action_tokens';
@@ -96,6 +97,7 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES
   | typeof TABLE_HARNESS_MESSAGE_RESULTS
   | typeof TABLE_HARNESS_OPERATION_TOMBSTONES
+  | typeof TABLE_HARNESS_SESSION_EVENTS
   | typeof TABLE_HARNESS_THREAD_DELETE_FENCES
   | typeof TABLE_HARNESS_CHANNEL_INBOX
   | typeof TABLE_HARNESS_CHANNEL_ACTION_TOKENS
@@ -746,6 +748,18 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     compacted_at: { type: 'bigint', nullable: false },
     expires_at: { type: 'bigint', nullable: false },
   },
+  [TABLE_HARNESS_SESSION_EVENTS]: {
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    event_id: { type: 'text', nullable: false },
+    epoch: { type: 'text', nullable: false },
+    sequence: { type: 'bigint', nullable: false },
+    event: { type: 'jsonb', nullable: false },
+    emitted_at: { type: 'bigint', nullable: false },
+    stored_at: { type: 'bigint', nullable: false },
+  },
   [TABLE_HARNESS_THREAD_DELETE_FENCES]: {
     thread_id: { type: 'text', nullable: false, primaryKey: true },
     owner_id: { type: 'text', nullable: false },
@@ -944,6 +958,10 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
+  },
+  [TABLE_HARNESS_SESSION_EVENTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_EVENTS],
+    compositePrimaryKey: ['harness_name', 'session_id', 'epoch', 'sequence'],
   },
   [TABLE_HARNESS_THREAD_DELETE_FENCES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],

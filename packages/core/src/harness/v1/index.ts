@@ -49,6 +49,8 @@ export type {
   WorkspaceStatusChangedEvent,
 } from './events';
 
+export { HARNESS_EVENT_ID_PREFIX, formatHarnessEventId, parseHarnessEventId } from './events';
+
 export {
   HarnessAttachmentUnavailableError,
   HarnessConfigError,

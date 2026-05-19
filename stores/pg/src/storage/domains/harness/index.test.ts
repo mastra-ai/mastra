@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { createSampleSessionRecord } from '@internal/storage-test-utils';
-import { HarnessStorageThreadDeleteFenceConflictError } from '@mastra/core/storage';
+import { HarnessStorageThreadDeleteFenceConflictError, TABLE_HARNESS_SESSION_EVENTS } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { exportSchemas, PostgresStore } from '../..';
@@ -32,7 +32,9 @@ describe('HarnessPG', () => {
     expect(ddl).toContain('mastra_harness_attachments');
     expect(ddl).toContain('mastra_harness_channel_inbox');
     expect(ddl).toContain('mastra_harness_wakeups');
+    expect(ddl).toContain(TABLE_HARNESS_SESSION_EVENTS);
     expect(ddl).toContain('idx_harness_sessions_active_key');
+    expect(ddl).toContain('idx_harness_session_events_replay');
     expect(ddl).toContain('idx_harness_channel_outbox_idempotency');
 
     const indexes = await store.db.manyOrNone<{ indexname: string }>(
@@ -45,6 +47,7 @@ describe('HarnessPG', () => {
           'idx_harness_sessions_active_key',
           'idx_harness_channel_inbox_idempotency',
           'idx_harness_channel_outbox_idempotency',
+          'idx_harness_session_events_replay',
           'idx_harness_wakeups_idempotency',
         ],
       ],
@@ -52,6 +55,7 @@ describe('HarnessPG', () => {
     expect(indexes.map(row => row.indexname)).toEqual([
       'idx_harness_channel_inbox_idempotency',
       'idx_harness_channel_outbox_idempotency',
+      'idx_harness_session_events_replay',
       'idx_harness_sessions_active_key',
       'idx_harness_wakeups_idempotency',
     ]);

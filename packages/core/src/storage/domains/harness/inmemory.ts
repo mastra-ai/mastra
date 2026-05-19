@@ -42,6 +42,8 @@ import type {
   CreateOrLoadHarnessWakeupItemResult,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
+  HarnessSessionEventRecord,
+  HarnessSessionEventReplayState,
   HarnessWakeupClaimStatus,
   HarnessWakeupItem,
   ListActiveSessionsByThreadInput,
@@ -424,6 +426,11 @@ export class InMemoryHarness extends HarnessStorage {
       resourceId,
       threadId,
     });
+    for (const [key, event] of this.db.harnessSessionEvents) {
+      if (event.harnessName === namespace && event.sessionId === sessionId) {
+        this.db.harnessSessionEvents.delete(key);
+      }
+    }
     const refPrefix = `${namespace}\u0000${sessionId}\u0000`;
     for (const key of this.db.harnessAttachmentReferences.keys()) {
       if (key.startsWith(refPrefix)) {
@@ -943,6 +950,87 @@ export class InMemoryHarness extends HarnessStorage {
         this.db.harnessOperationTombstones.delete(key);
       }
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Session event replay
+  // -------------------------------------------------------------------------
+
+  async appendSessionEvent(record: HarnessSessionEventRecord): Promise<void> {
+    const namespaced = { ...record, harnessName: resolveHarnessName(record.harnessName, this.harnessName) };
+    const session = this.db.harnessSessions.get(sessionKey(namespaced.harnessName, namespaced.sessionId));
+    if (!session || session.resourceId !== namespaced.resourceId || session.threadId !== namespaced.threadId) {
+      return;
+    }
+    const key = sessionEventKey(namespaced);
+    if (!this.db.harnessSessionEvents.has(key)) {
+      this.db.harnessSessionEvents.set(key, cloneJson(namespaced));
+    }
+  }
+
+  async getSessionEventReplayState({
+    harnessName,
+    sessionId,
+    resourceId,
+    threadId,
+  }: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+  }): Promise<HarnessSessionEventReplayState | null> {
+    const namespace = resolveHarnessName(harnessName, this.harnessName);
+    const rows = Array.from(this.db.harnessSessionEvents.values()).filter(
+      event =>
+        event.harnessName === namespace &&
+        event.sessionId === sessionId &&
+        event.resourceId === resourceId &&
+        event.threadId === threadId,
+    );
+    const epochs = new Set(rows.map(event => event.epoch));
+    if (epochs.size !== 1) return null;
+    const [epoch] = epochs;
+    let state: HarnessSessionEventReplayState = {
+      epoch: epoch!,
+      oldestSequence: Number.POSITIVE_INFINITY,
+      newestSequence: Number.NEGATIVE_INFINITY,
+    };
+    for (const event of rows) {
+      state.oldestSequence = Math.min(state.oldestSequence, event.sequence);
+      state.newestSequence = Math.max(state.newestSequence, event.sequence);
+    }
+    return state;
+  }
+
+  async listSessionEvents({
+    harnessName,
+    sessionId,
+    resourceId,
+    threadId,
+    epoch,
+    afterSequence,
+    limit,
+  }: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+    epoch: string;
+    afterSequence: number;
+    limit: number;
+  }): Promise<HarnessSessionEventRecord[]> {
+    const namespace = resolveHarnessName(harnessName, this.harnessName);
+    const rows = Array.from(this.db.harnessSessionEvents.values()).filter(
+      event =>
+        event.harnessName === namespace &&
+        event.sessionId === sessionId &&
+        event.resourceId === resourceId &&
+        event.threadId === threadId &&
+        event.epoch === epoch &&
+        event.sequence > afterSequence,
+    );
+    rows.sort((a, b) => a.sequence - b.sequence);
+    return rows.slice(0, limit).map(row => cloneJson(row));
   }
 
   // -------------------------------------------------------------------------
@@ -2004,6 +2092,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessAttachmentReferences.clear();
     this.db.harnessMessageResultEvidence.clear();
     this.db.harnessOperationTombstones.clear();
+    this.db.harnessSessionEvents.clear();
     this.db.harnessChannelInbox.clear();
     this.db.harnessChannelActionTokens.clear();
     this.db.harnessChannelActionReceipts.clear();
@@ -2046,6 +2135,12 @@ function tombstoneKey(record: OperationAdmissionTombstone): string {
 
 function messageEvidenceKey(harnessName: string, sessionId: string, signalId: string): string {
   return `${harnessName}\u0000${sessionId}\u0000${signalId}`;
+}
+
+function sessionEventKey(
+  record: Pick<HarnessSessionEventRecord, 'harnessName' | 'sessionId' | 'epoch' | 'sequence'>,
+): string {
+  return `${record.harnessName}\u0000${record.sessionId}\u0000${record.epoch}\u0000${record.sequence}`;
 }
 
 function channelInboxKey(_harnessName: string, inboxItemId: string): string {
@@ -2325,8 +2420,7 @@ function assertLegalHarnessWakeupUpdate(current: HarnessWakeupItem, next: Harnes
 }
 
 function assertValidHarnessWakeupState(record: HarnessWakeupItem, currentStatus?: HarnessWakeupItem['status']): void {
-  const hasClaimMetadata =
-    record.claimId != null || record.claimExpiresAt != null || record.claimedAt != null;
+  const hasClaimMetadata = record.claimId != null || record.claimExpiresAt != null || record.claimedAt != null;
   const hasQueueMetadata = record.queuedItemId != null || record.queuedAt != null;
   const hasCompletedMetadata = record.completedAt != null || record.result !== undefined;
   const hasFailedMetadata = record.failedAt != null || record.lastError != null;
@@ -2372,7 +2466,10 @@ function assertValidHarnessWakeupState(record: HarnessWakeupItem, currentStatus?
       'claimed wakeups require claimId, claimExpiresAt, and claimedAt',
     );
   }
-  if (record.status === 'claimed' && (hasQueueMetadata || hasCompletedMetadata || hasFailedMetadata || hasDeadMetadata)) {
+  if (
+    record.status === 'claimed' &&
+    (hasQueueMetadata || hasCompletedMetadata || hasFailedMetadata || hasDeadMetadata)
+  ) {
     throw new HarnessStorageWakeupTransitionError(
       record.id,
       currentStatus,

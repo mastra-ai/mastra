@@ -12,7 +12,10 @@ import {
   CREATE_HARNESS_SESSION_ROUTE,
   DELETE_HARNESS_GOAL_ROUTE,
   GET_HARNESS_GOAL_ROUTE,
+  GET_HARNESS_MESSAGE_RESULT_ROUTE,
+  GET_HARNESS_QUEUE_RESULT_ROUTE,
   GET_HARNESS_SESSION_ROUTE,
+  GET_HARNESS_SESSION_EVENTS_ROUTE,
   GET_HARNESS_STATE_ROUTE,
   LIST_HARNESS_SESSIONS_ROUTE,
   PATCH_HARNESS_MODE_ROUTE,
@@ -85,6 +88,24 @@ function makeParams(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
+function makeEvent(overrides: Record<string, unknown> = {}) {
+  return {
+    type: 'app.event',
+    id: 'harness-v1:epoch-1:1',
+    timestamp: 1000,
+    sessionId: 'session-1',
+    payload: { ok: true },
+    ...overrides,
+  } as any;
+}
+
+async function readStreamChunk(response: Response): Promise<string> {
+  const reader = response.body!.getReader();
+  const result = await reader.read();
+  await reader.cancel();
+  return new TextDecoder().decode(result.value);
+}
+
 async function expectHarnessHttpError(promise: Promise<unknown>, status: number, code: string) {
   try {
     await promise;
@@ -105,6 +126,9 @@ describe('Harness server routes', () => {
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_SESSION_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_MESSAGE_ROUTE);
     expect(HARNESS_ROUTES).toContain(POST_HARNESS_QUEUE_ROUTE);
+    expect(HARNESS_ROUTES).toContain(GET_HARNESS_MESSAGE_RESULT_ROUTE);
+    expect(HARNESS_ROUTES).toContain(GET_HARNESS_QUEUE_RESULT_ROUTE);
+    expect(HARNESS_ROUTES).toContain(GET_HARNESS_SESSION_EVENTS_ROUTE);
     expect(HARNESS_ROUTES).toContain(GET_HARNESS_STATE_ROUTE);
     expect(HARNESS_ROUTES).toContain(PATCH_HARNESS_STATE_ROUTE);
     expect(HARNESS_ROUTES).toContain(PATCH_HARNESS_MODE_ROUTE);
@@ -127,6 +151,15 @@ describe('Harness server routes', () => {
     expect(POST_HARNESS_MESSAGE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(POST_HARNESS_QUEUE_ROUTE.requiresAuth).toBe(true);
     expect(POST_HARNESS_QUEUE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(GET_HARNESS_MESSAGE_RESULT_ROUTE.requiresAuth).toBe(true);
+    expect(GET_HARNESS_MESSAGE_RESULT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(GET_HARNESS_QUEUE_RESULT_ROUTE.requiresAuth).toBe(true);
+    expect(GET_HARNESS_QUEUE_RESULT_ROUTE.harnessAuth).toEqual({ clientRoute: true });
+    expect(GET_HARNESS_SESSION_EVENTS_ROUTE.requiresAuth).toBe(true);
+    expect(GET_HARNESS_SESSION_EVENTS_ROUTE.harnessAuth).toEqual({
+      clientRoute: true,
+      allowSseSubscriptionToken: true,
+    });
     expect(PATCH_HARNESS_STATE_ROUTE.requiresAuth).toBe(true);
     expect(PATCH_HARNESS_STATE_ROUTE.harnessAuth).toEqual({ clientRoute: true });
     expect(RESPOND_HARNESS_INBOX_ROUTE.requiresAuth).toBe(true);
@@ -673,6 +706,371 @@ describe('Harness server routes', () => {
       400,
       'harness.attachment_unavailable',
     );
+  });
+
+  it('looks up message operation results without re-admitting work', async () => {
+    const harness = {
+      lookupMessageResult: vi.fn(async () => ({
+        status: 'completed',
+        runId: 'run-1',
+        result: { text: 'done' },
+      })),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const result = await GET_HARNESS_MESSAGE_RESULT_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'query-code',
+        sessionId: 'query-session',
+        signalId: 'query-signal',
+        requestPathParams: { name: 'code', sessionId: 'session-1', signalId: 'signal-1' },
+      }),
+    );
+
+    expect(harness.lookupMessageResult).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      signalId: 'signal-1',
+    });
+    expect(result).toEqual({
+      status: 'completed',
+      source: 'message',
+      runId: 'run-1',
+      result: { text: 'done' },
+    });
+  });
+
+  it('maps missing and failed message operation evidence', async () => {
+    const harness = {
+      lookupMessageResult: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          status: 'failed',
+          runId: 'run-2',
+          error: { code: 'agent.failed', message: 'agent failed' },
+        }),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expect(
+      GET_HARNESS_MESSAGE_RESULT_ROUTE.handler(
+        makeParams({ mastra, name: 'code', sessionId: 'session-1', signalId: 'missing' }),
+      ),
+    ).resolves.toEqual({ status: 'not_found', source: 'message' });
+    await expect(
+      GET_HARNESS_MESSAGE_RESULT_ROUTE.handler(
+        makeParams({ mastra, name: 'code', sessionId: 'session-1', signalId: 'failed' }),
+      ),
+    ).resolves.toEqual({
+      status: 'failed',
+      source: 'message',
+      runId: 'run-2',
+      error: { code: 'agent.failed', message: 'agent failed' },
+    });
+  });
+
+  it('looks up queued work summaries including pending and expired states', async () => {
+    const harness = {
+      lookupQueueResult: vi
+        .fn()
+        .mockResolvedValueOnce({ status: 'queued', queuedItemId: 'queue-1', runId: 'run-queue' })
+        .mockResolvedValueOnce({ kind: 'queue', queuedItemId: 'queue-1', expiresAt: 2000 }),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expect(
+      GET_HARNESS_QUEUE_RESULT_ROUTE.handler(
+        makeParams({ mastra, name: 'code', sessionId: 'session-1', queuedItemId: 'queue-1' }),
+      ),
+    ).resolves.toEqual({ status: 'pending', source: 'queue', runId: 'run-queue' });
+    await expect(
+      GET_HARNESS_QUEUE_RESULT_ROUTE.handler(
+        makeParams({ mastra, name: 'code', sessionId: 'session-1', queuedItemId: 'queue-1' }),
+      ),
+    ).resolves.toEqual({ status: 'expired', source: 'queue', expiredAt: 2000 });
+  });
+
+  it('streams live Harness session events and cleans up on disconnect', async () => {
+    let listener: ((event: any) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const session = {
+      subscribe: vi.fn((next: (event: any) => void) => {
+        listener = next;
+        return unsubscribe;
+      }),
+      getEventReplayState: vi.fn(),
+      listEventsAfter: vi.fn(),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({ mastra, name: 'code', sessionId: 'session-1' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    const reader = response.body!.getReader();
+    listener?.(makeEvent());
+    const chunk = await reader.read();
+    await reader.cancel();
+    const text = new TextDecoder().decode(chunk.value);
+    expect(text).toContain('id: harness-v1:epoch-1:1');
+    expect(text).toContain('event: app.event');
+    expect(text).toContain('"payload":{"ok":true}');
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('serializes live Harness SSE events with the replay-safe JSON projection', async () => {
+    class Box {
+      constructor(readonly value: string) {}
+    }
+    let listener: ((event: any) => void) | undefined;
+    const session = {
+      subscribe: vi.fn((next: (event: any) => void) => {
+        listener = next;
+        return vi.fn();
+      }),
+      getEventReplayState: vi.fn(),
+      listEventsAfter: vi.fn(),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({ mastra, name: 'code', sessionId: 'session-1' }),
+    );
+
+    const reader = response.body!.getReader();
+    listener?.(
+      makeEvent({
+        type: 'tool_end',
+        toolCallId: 'tc1',
+        isError: true,
+        result: {
+          error: new Error('lookup failed'),
+          at: new Date('2026-05-19T00:00:00.000Z'),
+          boxed: new Box('ok'),
+          omitted: undefined,
+        },
+      }),
+    );
+    const chunk = await reader.read();
+    await reader.cancel();
+    const text = new TextDecoder().decode(chunk.value);
+    const data = JSON.parse(
+      text
+        .split('\n')
+        .find(line => line.startsWith('data: '))!
+        .slice('data: '.length),
+    );
+    expect(text).toContain('event: tool_end');
+    expect(data.result).toEqual({
+      error: { name: 'Error', code: 'Error', message: 'lookup failed' },
+      at: '2026-05-19T00:00:00.000Z',
+      boxed: { value: 'ok' },
+    });
+  });
+
+  it('replays missed events from Last-Event-ID without duplicating queued live events', async () => {
+    let listener: ((event: any) => void) | undefined;
+    const session = {
+      subscribe: vi.fn((next: (event: any) => void) => {
+        listener = next;
+        return vi.fn();
+      }),
+      getEventReplayState: vi.fn(async () => ({
+        epoch: 'epoch-1',
+        oldestSequence: 1,
+        newestSequence: 2,
+      })),
+      listEventsAfter: vi.fn(async () => [
+        { sequence: 2, event: makeEvent({ id: 'harness-v1:epoch-1:2', payload: { replay: true } }) },
+      ]),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        getHeader: (header: string) => (header === 'last-event-id' ? 'harness-v1:epoch-1:1' : undefined),
+      }),
+    );
+    listener?.(makeEvent({ id: 'harness-v1:epoch-1:2', payload: { replay: true } }));
+    const text = await readStreamChunk(response);
+
+    expect(session.getEventReplayState).toHaveBeenCalled();
+    expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1, limit: 1000 });
+    expect(text).toContain('id: harness-v1:epoch-1:2');
+    expect(text).toContain('"replay":true');
+    expect(text.match(/id: harness-v1:epoch-1:2/g)).toHaveLength(1);
+  });
+
+  it('pages replay through contiguous durable backlogs larger than one fetch', async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, index) => {
+      const sequence = index + 2;
+      return { sequence, event: makeEvent({ id: `harness-v1:epoch-1:${sequence}` }) };
+    });
+    const secondPage = [{ sequence: 1002, event: makeEvent({ id: 'harness-v1:epoch-1:1002' }) }];
+    const session = {
+      subscribe: vi.fn(() => vi.fn()),
+      getEventReplayState: vi.fn(async () => ({
+        epoch: 'epoch-1',
+        oldestSequence: 1,
+        newestSequence: 1002,
+      })),
+      listEventsAfter: vi.fn(async ({ afterSequence }: { afterSequence: number }) =>
+        afterSequence === 1 ? firstPage : secondPage,
+      ),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        getHeader: (header: string) => (header === 'last-event-id' ? 'harness-v1:epoch-1:1' : undefined),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1, limit: 1000 });
+    expect(session.listEventsAfter).toHaveBeenCalledWith({ epoch: 'epoch-1', afterSequence: 1001, limit: 1000 });
+  });
+
+  it('rejects malformed Last-Event-ID values before opening the live stream', async () => {
+    const session = {
+      subscribe: vi.fn(),
+      getEventReplayState: vi.fn(),
+      listEventsAfter: vi.fn(),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+        makeParams({
+          mastra,
+          name: 'code',
+          sessionId: 'session-1',
+          getHeader: (header: string) => (header === 'last-event-id' ? 'bad-id' : undefined),
+        }),
+      ),
+      400,
+      'harness.validation',
+    );
+    expect(harness.session).not.toHaveBeenCalled();
+  });
+
+  it('returns a deterministic 412 for stale epochs and unreplayable gaps', async () => {
+    const unsubscribe = vi.fn();
+    const session = {
+      subscribe: vi.fn(() => unsubscribe),
+      getEventReplayState: vi.fn(async () => ({
+        epoch: 'epoch-2',
+        oldestSequence: 5,
+        newestSequence: 8,
+      })),
+      listEventsAfter: vi.fn(),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        getHeader: (header: string) => (header === 'last-event-id' ? 'harness-v1:epoch-1:1' : undefined),
+      }),
+    );
+
+    expect(response.status).toBe(412);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'harness.event_replay_unavailable',
+      details: {
+        reason: 'stale_epoch',
+        recovery: {
+          snapshot: 'GET /harness/:name/sessions/:sessionId',
+        },
+      },
+    });
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 412 when replay rows do not cover a contiguous range through the newest durable event', async () => {
+    const session = {
+      subscribe: vi.fn(() => vi.fn()),
+      getEventReplayState: vi.fn(async () => ({
+        epoch: 'epoch-1',
+        oldestSequence: 1,
+        newestSequence: 4,
+      })),
+      listEventsAfter: vi.fn(async () => [
+        { sequence: 2, event: makeEvent({ id: 'harness-v1:epoch-1:2' }) },
+        { sequence: 4, event: makeEvent({ id: 'harness-v1:epoch-1:4' }) },
+      ]),
+    };
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord()),
+      session: vi.fn(async () => session),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    const response = await GET_HARNESS_SESSION_EVENTS_ROUTE.handler(
+      makeParams({
+        mastra,
+        name: 'code',
+        sessionId: 'session-1',
+        getHeader: (header: string) => (header === 'last-event-id' ? 'harness-v1:epoch-1:1' : undefined),
+      }),
+    );
+
+    expect(response.status).toBe(412);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'harness.event_replay_unavailable',
+      details: { reason: 'unreplayable_gap' },
+    });
+  });
+
+  it('denies event streams for sessions outside the authenticated resource', async () => {
+    const harness = {
+      loadSession: vi.fn(async () => makeRecord({ resourceId: 'other-resource' })),
+      session: vi.fn(),
+    };
+    const mastra = { getHarness: vi.fn(() => harness) };
+
+    await expectHarnessHttpError(
+      GET_HARNESS_SESSION_EVENTS_ROUTE.handler(makeParams({ mastra, name: 'code', sessionId: 'session-1' })),
+      404,
+      'harness.session_not_found',
+    );
+    expect(harness.session).not.toHaveBeenCalled();
   });
 
   it('patches session state only when If-Match matches the stored version', async () => {

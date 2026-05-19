@@ -20,6 +20,7 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { buildFakeOutput } from './__test-utils__/fake-output';
 
+import { parseHarnessEventId } from './events';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
 
@@ -188,11 +189,56 @@ describe('Session.subscribe()', () => {
     await session.message({ content: 'hi' });
 
     expect(events.length).toBeGreaterThan(1);
-    const epochs = new Set(events.map(e => e.id.split('-').slice(0, 5).join('-')));
+    const parsed = events.map(e => parseHarnessEventId(e.id));
+    expect(events.every(e => e.id.startsWith('harness-v1:'))).toBe(true);
+    const epochs = new Set(parsed.map(e => e.epoch));
     expect(epochs.size).toBe(1);
-    const seqs = events.map(e => Number(e.id.split('-').slice(-1)[0]));
+    const seqs = parsed.map(e => e.sequence);
     for (let i = 1; i < seqs.length; i += 1) {
       expect(seqs[i]).toBeGreaterThan(seqs[i - 1]!);
+    }
+  });
+
+  it('resumes the durable event epoch and sequence when a session is rehydrated', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'hi' });
+    await session._flushEventPersistence();
+    await harness.shutdown();
+    await session._flushEventPersistence();
+
+    const state = await storage.getSessionEventReplayState({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    expect(state).not.toBeNull();
+
+    const resumed = new Harness({
+      agents: { default: agent } as any,
+      modes: [
+        { id: 'default', agentId: 'default' },
+        { id: 'other', agentId: 'default' },
+      ],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    try {
+      const hydrated = await resumed.session({ resourceId: session.resourceId, threadId: session.threadId });
+      const events: HarnessEvent[] = [];
+      hydrated.subscribe(e => {
+        events.push(e);
+      });
+
+      await hydrated.message({ content: 'again' });
+
+      expect(events.length).toBeGreaterThan(0);
+      const first = parseHarnessEventId(events[0]!.id);
+      expect(first.epoch).toBe(state!.epoch);
+      expect(first.sequence).toBeGreaterThan(state!.newestSequence);
+    } finally {
+      await resumed.shutdown();
     }
   });
 });
@@ -254,6 +300,108 @@ describe('Session events — fullStream drain', () => {
     const end = events.find(e => e.type === 'tool_end');
     expect(start).toMatchObject({ type: 'tool_start', toolCallId: 'tc1', toolName: 'lookup' });
     expect(end).toMatchObject({ type: 'tool_end', toolCallId: 'tc1', isError: false });
+  });
+
+  it('persists tool error events without poisoning event replay', async () => {
+    const { harness, agent, storage } = setup();
+    agent.chunks = [
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'lookup', args: { q: 'mastra' } },
+        runId: 'fake-run',
+      },
+      {
+        type: 'tool-error',
+        payload: { toolCallId: 'tc1', error: new Error('lookup failed') },
+        runId: 'fake-run',
+      },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'hi' });
+
+    await expect(session._flushEventPersistence()).resolves.toBeUndefined();
+    const state = await storage.getSessionEventReplayState({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    expect(state).not.toBeNull();
+    const rows = await storage.listSessionEvents({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+      epoch: state!.epoch,
+      afterSequence: 0,
+      limit: 100,
+    });
+    expect(rows.map(row => row.event).find((event: any) => event.type === 'tool_end')).toMatchObject({
+      type: 'tool_end',
+      toolCallId: 'tc1',
+      isError: true,
+      result: { name: 'Error', code: 'Error', message: 'lookup failed' },
+    });
+  });
+
+  it('persists repeated object references and undefined event fields without poisoning replay', async () => {
+    const { harness, agent, storage } = setup();
+    class Box {
+      constructor(readonly value: string) {}
+    }
+    const shared = { ok: true };
+    agent.chunks = [
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'lookup', args: { q: 'mastra' } },
+        runId: 'fake-run',
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          result: {
+            first: shared,
+            second: shared,
+            at: new Date('2026-05-19T00:00:00.000Z'),
+            boxed: new Box('ok'),
+            omitted: undefined,
+          },
+        },
+        runId: 'fake-run',
+      },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({ content: 'hi' });
+
+    await expect(session._flushEventPersistence()).resolves.toBeUndefined();
+    const state = await storage.getSessionEventReplayState({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    expect(state).not.toBeNull();
+    const rows = await storage.listSessionEvents({
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+      epoch: state!.epoch,
+      afterSequence: 0,
+      limit: 100,
+    });
+    const toolEnd = rows.map(row => row.event).find((event: any) => event.type === 'tool_end') as any;
+    expect(toolEnd).toMatchObject({
+      type: 'tool_end',
+      toolCallId: 'tc1',
+      isError: false,
+      result: {
+        first: { ok: true },
+        second: { ok: true },
+        at: '2026-05-19T00:00:00.000Z',
+        boxed: { value: 'ok' },
+      },
+    });
+    expect(toolEnd.result).not.toHaveProperty('omitted');
   });
 
   it('bridges a data-task-updated writer chunk into a task_updated event', async () => {

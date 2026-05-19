@@ -34,6 +34,14 @@ export const harnessInboxPathParams = harnessSessionPathParams.extend({
   itemId: z.string().min(1).describe('Pending inbox item id'),
 });
 
+export const harnessMessageResultPathParams = harnessSessionPathParams.extend({
+  signalId: z.string().min(1).describe('Message signal id'),
+});
+
+export const harnessQueueResultPathParams = harnessSessionPathParams.extend({
+  queuedItemId: z.string().min(1).describe('Queued item id'),
+});
+
 export const listHarnessSessionsQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -213,6 +221,31 @@ export const harnessQueueAdmissionResponseSchema = z.object({
   queuedItemId: z.string(),
   duplicate: z.boolean(),
 });
+
+const operationResultBaseSchema = z.object({
+  status: z.enum(['pending', 'completed', 'failed', 'expired', 'not_found']),
+  source: z.enum(['message', 'queue']),
+});
+
+export const harnessOperationResultResponseSchema = z.discriminatedUnion('status', [
+  operationResultBaseSchema.extend({ status: z.literal('pending'), runId: z.string().optional() }),
+  operationResultBaseSchema.extend({
+    status: z.literal('completed'),
+    runId: z.string().optional(),
+    result: z.unknown(),
+  }),
+  operationResultBaseSchema.extend({
+    status: z.literal('failed'),
+    runId: z.string().optional(),
+    error: z.object({ code: z.string(), message: z.string() }),
+  }),
+  operationResultBaseSchema.extend({
+    status: z.literal('expired'),
+    runId: z.string().optional(),
+    expiredAt: z.number().optional(),
+  }),
+  operationResultBaseSchema.extend({ status: z.literal('not_found') }),
+]);
 
 export const harnessStatePatchSchema = jsonRecordSchema;
 

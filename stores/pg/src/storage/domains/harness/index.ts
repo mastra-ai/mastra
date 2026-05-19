@@ -29,6 +29,7 @@ import {
   TABLE_HARNESS_CHANNEL_OUTBOX,
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
+  TABLE_HARNESS_SESSION_EVENTS,
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_HARNESS_WAKEUPS,
@@ -55,6 +56,8 @@ import type {
   CreateOrLoadHarnessWakeupItemResult,
   DeleteSessionOptions,
   HarnessWakeupItem,
+  HarnessSessionEventRecord,
+  HarnessSessionEventReplayState,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -93,6 +96,7 @@ const HARNESS_TABLE_NAMES = [
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
+  TABLE_HARNESS_SESSION_EVENTS,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_HARNESS_CHANNEL_INBOX,
   TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
@@ -243,6 +247,11 @@ function harnessIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
       where: '"closed_at" IS NULL',
     },
     {
+      name: `${schemaPrefix}idx_harness_session_events_replay`,
+      table: TABLE_HARNESS_SESSION_EVENTS,
+      columns: ['harness_name', 'session_id', 'resource_id', 'thread_id', 'epoch', 'sequence'],
+    },
+    {
       name: `${schemaPrefix}idx_harness_channel_inbox_idempotency`,
       table: TABLE_HARNESS_CHANNEL_INBOX,
       columns: ['harness_name', 'channel_id', 'idempotency_key'],
@@ -348,6 +357,7 @@ export class HarnessPG extends HarnessStorage {
   #schema: string;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
+  #sessionEventsReady: Promise<void> | undefined;
   #compactionLocks = new Map<string, Promise<void>>();
   #channelInboxIndexesReady: Promise<void> | undefined;
   #channelActionIndexesReady: Promise<void> | undefined;
@@ -361,6 +371,7 @@ export class HarnessPG extends HarnessStorage {
     TABLE_HARNESS_ATTACHMENT_REFERENCES,
     TABLE_HARNESS_MESSAGE_RESULTS,
     TABLE_HARNESS_OPERATION_TOMBSTONES,
+    TABLE_HARNESS_SESSION_EVENTS,
     TABLE_HARNESS_THREAD_DELETE_FENCES,
     TABLE_HARNESS_CHANNEL_INBOX,
     TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
@@ -427,6 +438,7 @@ export class HarnessPG extends HarnessStorage {
       compositePrimaryKey: attachmentRefsConfig?.compositePrimaryKey,
     });
     await this.#ensureMessageResultsTable();
+    await this.#ensureSessionEventsTable();
     const tombstonesConfig = TABLE_CONFIGS[TABLE_HARNESS_OPERATION_TOMBSTONES];
     await this.#db.createTable({
       tableName: TABLE_HARNESS_OPERATION_TOMBSTONES,
@@ -514,6 +526,7 @@ export class HarnessPG extends HarnessStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#ensureMessageResultsTable();
     await this.#ensureOperationTombstonesTable();
+    await this.#ensureSessionEventsTable();
     await this.#ensureThreadDeleteFencesTable();
     await this.#ensureChannelInboxTable();
     await this.#ensureChannelActionTables();
@@ -524,6 +537,7 @@ export class HarnessPG extends HarnessStorage {
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSION_EVENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_INBOX}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}`);
@@ -1117,6 +1131,8 @@ export class HarnessPG extends HarnessStorage {
 
   async deleteSessions({ sessions }: { sessions: DeleteSessionOptions[] }): Promise<void> {
     await this.#ensureMessageResultsTable();
+    await this.#ensureOperationTombstonesTable();
+    await this.#ensureSessionEventsTable();
     const tx = await this.#client.transaction('write');
     const deleteCandidates = new Map<
       string,
@@ -1173,6 +1189,11 @@ export class HarnessPG extends HarnessStorage {
           sql: `DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}
                 WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?`,
           args: [namespace, sessionId, resourceId, threadId],
+        });
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_HARNESS_SESSION_EVENTS}
+                WHERE harness_name = ? AND session_id = ?`,
+          args: [namespace, sessionId],
         });
         await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
@@ -1702,6 +1723,112 @@ export class HarnessPG extends HarnessStorage {
     });
     const row = result.rows[0];
     return row ? rowToTombstone(row as Record<string, unknown>) : null;
+  }
+
+  async appendSessionEvent(record: HarnessSessionEventRecord): Promise<void> {
+    const namespace = this.#resolveHarnessName(record.harnessName);
+    await this.#ensureSessionEventsTable();
+    await this.#client.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_SESSION_EVENTS}
+            (harness_name, session_id, resource_id, thread_id, event_id, epoch, sequence, event, emitted_at, stored_at)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            FROM ${TABLE_HARNESS_SESSIONS}
+            WHERE harness_name = ? AND id = ? AND resource_id = ? AND thread_id = ?
+            FOR KEY SHARE
+            ON CONFLICT (harness_name, session_id, epoch, sequence) DO NOTHING`,
+      args: [
+        namespace,
+        record.sessionId,
+        record.resourceId,
+        record.threadId,
+        record.eventId,
+        record.epoch,
+        record.sequence,
+        JSON.stringify(record.event),
+        record.emittedAt,
+        record.storedAt,
+        namespace,
+        record.sessionId,
+        record.resourceId,
+        record.threadId,
+      ],
+    });
+  }
+
+  async getSessionEventReplayState({
+    harnessName,
+    sessionId,
+    resourceId,
+    threadId,
+  }: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+  }): Promise<HarnessSessionEventReplayState | null> {
+    const namespace = this.#resolveHarnessName(harnessName);
+    await this.#ensureSessionEventsTable();
+    const bounds = await this.#client.execute({
+      sql: `SELECT
+              oldest.epoch AS oldest_epoch,
+              oldest.sequence AS oldest_sequence,
+              newest.epoch AS newest_epoch,
+              newest.sequence AS newest_sequence
+            FROM (
+              SELECT epoch, sequence
+              FROM ${TABLE_HARNESS_SESSION_EVENTS}
+              WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?
+              ORDER BY epoch ASC, sequence ASC
+              LIMIT 1
+            ) AS oldest
+            CROSS JOIN (
+              SELECT epoch, sequence
+              FROM ${TABLE_HARNESS_SESSION_EVENTS}
+              WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?
+              ORDER BY epoch DESC, sequence DESC
+              LIMIT 1
+            ) AS newest`,
+      args: [namespace, sessionId, resourceId, threadId, namespace, sessionId, resourceId, threadId],
+    });
+    const row = bounds.rows[0];
+    if (!row || row.oldest_epoch == null || row.newest_epoch == null) return null;
+    if (row.oldest_sequence == null || row.newest_sequence == null) return null;
+    if (String(row.oldest_epoch) !== String(row.newest_epoch)) return null;
+
+    return {
+      epoch: String(row.newest_epoch),
+      oldestSequence: Number(row.oldest_sequence),
+      newestSequence: Number(row.newest_sequence),
+    };
+  }
+
+  async listSessionEvents({
+    harnessName,
+    sessionId,
+    resourceId,
+    threadId,
+    epoch,
+    afterSequence,
+    limit,
+  }: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+    epoch: string;
+    afterSequence: number;
+    limit: number;
+  }): Promise<HarnessSessionEventRecord[]> {
+    const namespace = this.#resolveHarnessName(harnessName);
+    await this.#ensureSessionEventsTable();
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_SESSION_EVENTS}
+            WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ? AND epoch = ? AND sequence > ?
+            ORDER BY sequence ASC
+            LIMIT ?`,
+      args: [namespace, sessionId, resourceId, threadId, epoch, afterSequence, limit],
+    });
+    return result.rows.map(row => rowToSessionEvent(row as Record<string, unknown>));
   }
 
   async resolveOperationAdmissionEvidence({
@@ -3429,6 +3556,25 @@ export class HarnessPG extends HarnessStorage {
     });
   }
 
+  async #ensureSessionEventsTable(): Promise<void> {
+    if (this.#sessionEventsReady !== undefined) {
+      return this.#sessionEventsReady;
+    }
+    this.#sessionEventsReady = (async () => {
+      const eventConfig = TABLE_CONFIGS[TABLE_HARNESS_SESSION_EVENTS];
+      await this.#db.createTable({
+        tableName: TABLE_HARNESS_SESSION_EVENTS,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_EVENTS],
+        compositePrimaryKey: eventConfig?.compositePrimaryKey,
+      });
+      await this.#createDefaultIndexes(['idx_harness_session_events_replay']);
+    })().catch(error => {
+      this.#sessionEventsReady = undefined;
+      throw error;
+    });
+    return this.#sessionEventsReady;
+  }
+
   async #ensureThreadDeleteFencesTable(): Promise<void> {
     const threadDeleteFencesConfig = TABLE_CONFIGS[TABLE_HARNESS_THREAD_DELETE_FENCES];
     await this.#db.createTable({
@@ -4434,6 +4580,21 @@ function rowToTombstone(row: Record<string, unknown>): OperationAdmissionTombsto
     terminalAt: Number(row.terminal_at),
     compactedAt: Number(row.compacted_at),
     expiresAt: Number(row.expires_at),
+  };
+}
+
+function rowToSessionEvent(row: Record<string, unknown>): HarnessSessionEventRecord {
+  return {
+    harnessName: String(row.harness_name),
+    sessionId: String(row.session_id),
+    resourceId: String(row.resource_id),
+    threadId: String(row.thread_id),
+    eventId: String(row.event_id),
+    epoch: String(row.epoch),
+    sequence: Number(row.sequence),
+    event: parseJson(row.event) as JsonValue,
+    emittedAt: Number(row.emitted_at),
+    storedAt: Number(row.stored_at),
   };
 }
 

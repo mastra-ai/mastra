@@ -35,7 +35,10 @@ import type { AgentThreadSubscription, ToolsInput } from '../../agent/types';
 import { ModelRouterLanguageModel } from '../../llm/model/router';
 import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../../processors';
 import { RequestContext } from '../../request-context';
-import { HarnessStorageAdmissionConflictError } from '../../storage/domains/harness';
+import {
+  HarnessStorageAdmissionConflictError,
+  HarnessStorageSessionEventReplayUnsupportedError,
+} from '../../storage/domains/harness';
 import type {
   GoalJudgeDecision,
   GoalState,
@@ -79,7 +82,7 @@ import {
   HarnessValidationError,
   HarnessWorkspaceLostError,
 } from './errors';
-import { EventEmitter } from './events';
+import { EventEmitter, parseHarnessEventId, projectHarnessPublicError, snapshotHarnessEventForJson } from './events';
 import type {
   EmitInput,
   HarnessEvent,
@@ -405,6 +408,8 @@ export interface SessionInternals {
   record: SessionRecord;
   /** Lease TTL the Harness acquired the lease for. */
   leaseExpiresAt: number;
+  /** Durable event replay cursor seed from the previous live owner, if any. */
+  eventReplaySeed?: { epoch: string; nextSequence: number };
 }
 
 export class Session {
@@ -558,6 +563,8 @@ export class Session {
     { ok: true; full: FullOutput<unknown> } | { ok: false; err: unknown }
   >();
   private readonly _messageAdmissionStarts = new Map<string, MessageAdmissionStart>();
+  private _eventPersistenceTail: Promise<void> = Promise.resolve();
+  private _eventPersistenceError: unknown;
 
   /** @internal — constructed by the Harness, not directly. */
   constructor(internals: SessionInternals) {
@@ -577,7 +584,14 @@ export class Session {
     this._harness = internals.harness;
     this._storage = internals.storage;
     this._ownerId = internals.ownerId;
-    this._emitter = new EventEmitter({ sessionId: this.id });
+    this._emitter = new EventEmitter(
+      { sessionId: this.id },
+      {
+        onEvent: event => this._enqueueSessionEventPersistence(event),
+        epoch: internals.eventReplaySeed?.epoch,
+        nextSequence: internals.eventReplaySeed?.nextSequence,
+      },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -597,9 +611,122 @@ export class Session {
     return this._emitter.subscribe(listener);
   }
 
+  async lookupMessageResult(signalId: string): Promise<AgentSignalResultStatus | OperationAdmissionTombstone | null> {
+    this._assertLive('lookupMessageResult()');
+    if (signalId.length === 0) {
+      throw new HarnessValidationError('lookupMessageResult().signalId', 'signalId must be a non-empty string');
+    }
+    const record = this.getRecord();
+    return this._storage.loadMessageResultEvidence({
+      harnessName: record.harnessName,
+      sessionId: record.id,
+      resourceId: record.resourceId,
+      threadId: record.threadId,
+      signalId,
+    });
+  }
+
+  async lookupQueueResult(queuedItemId: string): Promise<QueueAdmissionReceipt | OperationAdmissionTombstone | null> {
+    this._assertLive('lookupQueueResult()');
+    if (queuedItemId.length === 0) {
+      throw new HarnessValidationError('lookupQueueResult().queuedItemId', 'queuedItemId must be a non-empty string');
+    }
+    const record = this.getRecord();
+    return this._storage.loadQueueResultEvidence({
+      harnessName: record.harnessName,
+      sessionId: record.id,
+      resourceId: record.resourceId,
+      queuedItemId,
+    });
+  }
+
+  async getEventReplayState() {
+    this._assertLive('getEventReplayState()');
+    await this._flushEventPersistence();
+    const record = this.getRecord();
+    return this._storage.getSessionEventReplayState({
+      harnessName: record.harnessName,
+      sessionId: record.id,
+      resourceId: record.resourceId,
+      threadId: record.threadId,
+    });
+  }
+
+  async listEventsAfter(opts: { epoch: string; afterSequence: number; limit: number }) {
+    this._assertLive('listEventsAfter()');
+    if (opts.epoch.length === 0) {
+      throw new HarnessValidationError('listEventsAfter().epoch', 'epoch must be a non-empty string');
+    }
+    if (!Number.isSafeInteger(opts.afterSequence) || opts.afterSequence < 0) {
+      throw new HarnessValidationError(
+        'listEventsAfter().afterSequence',
+        'afterSequence must be a non-negative safe integer',
+      );
+    }
+    if (!Number.isSafeInteger(opts.limit) || opts.limit < 1) {
+      throw new HarnessValidationError('listEventsAfter().limit', 'limit must be a positive safe integer');
+    }
+    await this._flushEventPersistence();
+    const record = this.getRecord();
+    return this._storage.listSessionEvents({
+      harnessName: record.harnessName,
+      sessionId: record.id,
+      resourceId: record.resourceId,
+      threadId: record.threadId,
+      epoch: opts.epoch,
+      afterSequence: opts.afterSequence,
+      limit: opts.limit,
+    });
+  }
+
   /** @internal — used by the Harness to publish events on this session's emitter. */
   _emit(event: EmitInput): HarnessEvent {
     return this._emitter.emit(event);
+  }
+
+  /** @internal — waits for prior event ledger writes before replay decisions. */
+  async _flushEventPersistence(): Promise<void> {
+    await this._eventPersistenceTail;
+    if (this._eventPersistenceError !== undefined) {
+      throw this._eventPersistenceError;
+    }
+  }
+
+  private _enqueueSessionEventPersistence(event: HarnessEvent): void {
+    if (this._eventPersistenceError !== undefined) return;
+    let parsed: ReturnType<typeof parseHarnessEventId>;
+    let storedEvent: JsonValue;
+    try {
+      parsed = parseHarnessEventId(event.id);
+      storedEvent = snapshotHarnessEventForJson(event);
+    } catch (err) {
+      this._eventPersistenceError = err;
+      console.error('[harness/v1] session event serialization failed:', err);
+      return;
+    }
+    const record = this._record;
+    const task = this._eventPersistenceTail
+      .catch(() => undefined)
+      .then(async () => {
+        if (this._eventPersistenceError !== undefined) return;
+        await this._storage.appendSessionEvent({
+          harnessName: record.harnessName,
+          sessionId: record.id,
+          resourceId: record.resourceId,
+          threadId: record.threadId,
+          eventId: event.id,
+          epoch: parsed.epoch,
+          sequence: parsed.sequence,
+          event: storedEvent,
+          emittedAt: event.timestamp,
+          storedAt: Date.now(),
+        });
+      });
+    this._eventPersistenceTail = task.catch(err => {
+      if (err instanceof HarnessStorageSessionEventReplayUnsupportedError) return;
+      this._eventPersistenceError = err;
+      console.error('[harness/v1] session event persistence failed:', err);
+    });
   }
 
   /**
@@ -2584,7 +2711,10 @@ export class Session {
       throw new HarnessConfigError('admitMessage()', 'admitMessage only accepts default message options');
     }
     if (opts.additionalTools !== undefined) {
-      throw new HarnessValidationError('admitMessage().admissionId', 'admissionId cannot be combined with additionalTools');
+      throw new HarnessValidationError(
+        'admitMessage().admissionId',
+        'admissionId cannot be combined with additionalTools',
+      );
     }
 
     const effectiveModeId = opts.mode ?? this._record.modeId;
@@ -3598,17 +3728,14 @@ export class Session {
     opts?: SetStateOptions,
   ): Promise<void> {
     this._assertLive('setState()');
-    await this._flushUpdate(
-      prev => {
-        const current = (prev.state ?? {}) as TState;
-        const next =
-          typeof updatesOrUpdater === 'function'
-            ? (updatesOrUpdater as (prev: TState) => TState)(current)
-            : ({ ...(current as object), ...(updatesOrUpdater as object) } as TState);
-        return { ...prev, state: next };
-      },
-      opts,
-    );
+    await this._flushUpdate(prev => {
+      const current = (prev.state ?? {}) as TState;
+      const next =
+        typeof updatesOrUpdater === 'function'
+          ? (updatesOrUpdater as (prev: TState) => TState)(current)
+          : ({ ...(current as object), ...(updatesOrUpdater as object) } as TState);
+      return { ...prev, state: next };
+    }, opts);
   }
 
   // -------------------------------------------------------------------------
@@ -5286,7 +5413,7 @@ export class Session {
   /**
    * Admit a queued turn without awaiting its eventual AgentResult. This is the
    * remote-route counterpart to `queue(...)`; SDK promises settle from
-   * session events or PF-363 result lookup routes.
+   * session events or result lookup routes.
    */
   async admitQueue(opts: QueueOptions): Promise<QueueAdmissionResult> {
     if (opts.admissionId === undefined || opts.admissionId.length === 0) {
@@ -6873,13 +7000,6 @@ function canonicalJson(value: JsonValue): string {
     .sort()
     .map(key => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`)
     .join(',')}}`;
-}
-
-function projectHarnessPublicError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: (err as { code?: string }).code ?? err.name ?? 'harness.message_failed', message: err.message };
-  }
-  return { code: 'harness.message_failed', message: String(err) };
 }
 
 function publicErrorProjectionToError(error: { code: string; message: string }): Error {

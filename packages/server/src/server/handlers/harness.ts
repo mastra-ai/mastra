@@ -1,3 +1,4 @@
+import { parseHarnessEventId } from '@mastra/core/harness/v1';
 import type {
   GoalOptions,
   GoalState,
@@ -7,6 +8,7 @@ import type {
   SessionDisplayState,
   SessionGrants,
   SessionRecord,
+  HarnessEvent,
 } from '@mastra/core/harness/v1';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ValidationErrorHook } from '@mastra/core/server';
@@ -25,6 +27,7 @@ import {
   harnessInboxResponseResultSchema,
   harnessMessageAdmissionBodySchema,
   harnessMessageAdmissionResponseSchema,
+  harnessMessageResultPathParams,
   harnessModePatchSchema,
   harnessModeResponseSchema,
   harnessModelPatchSchema,
@@ -34,6 +37,8 @@ import {
   harnessPermissionsResponseSchema,
   harnessQueueAdmissionBodySchema,
   harnessQueueAdmissionResponseSchema,
+  harnessQueueResultPathParams,
+  harnessOperationResultResponseSchema,
   harnessSessionPathParams,
   harnessSessionSnapshotSchema,
   harnessStatePatchSchema,
@@ -184,6 +189,13 @@ type HarnessLike = {
     resumeGoal(): Promise<GoalState | undefined>;
     clearGoal(): Promise<void>;
     listMessages(opts?: { limit?: number }): Promise<HarnessMessage[]>;
+    subscribe(listener: (event: HarnessEvent) => void): () => void;
+    getEventReplayState(): Promise<{ epoch: string; oldestSequence: number; newestSequence: number } | null>;
+    listEventsAfter(opts: {
+      epoch: string;
+      afterSequence: number;
+      limit: number;
+    }): Promise<Array<{ event: HarnessEvent; sequence: number }>>;
   }>;
   listSessions(opts: {
     resourceId: string;
@@ -208,6 +220,8 @@ type HarnessLike = {
     >
   >;
   loadSession(opts: { sessionId: string; includeClosed?: boolean }): Promise<SessionRecord | null>;
+  lookupMessageResult(opts: { sessionId: string; resourceId: string; signalId: string }): Promise<unknown>;
+  lookupQueueResult(opts: { sessionId: string; resourceId: string; queuedItemId: string }): Promise<unknown>;
   closeSession(opts: { sessionId: string; resourceId?: string }): Promise<void>;
   ownerId?: string;
 };
@@ -223,6 +237,12 @@ type CreateHarnessSessionBody = {
 };
 type MessageAdmissionBody = Parameters<HarnessSessionLike['admitMessage']>[0];
 type QueueAdmissionBody = Parameters<HarnessSessionLike['admitQueue']>[0];
+type OperationLookupResponse =
+  | { status: 'pending'; source: 'message' | 'queue'; runId?: string }
+  | { status: 'completed'; source: 'message' | 'queue'; runId?: string; result: unknown }
+  | { status: 'failed'; source: 'message' | 'queue'; runId?: string; error: { code: string; message: string } }
+  | { status: 'expired'; source: 'message' | 'queue'; runId?: string; expiredAt?: number }
+  | { status: 'not_found'; source: 'message' | 'queue' };
 
 type MemoryThreadLike = { resourceId?: string | null };
 
@@ -260,6 +280,104 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
       ...Object.fromEntries(new Headers(init?.headers).entries()),
     },
   });
+}
+
+function preconditionFailedResponse(details: Record<string, unknown>): Response {
+  return jsonResponse(
+    toHarnessErrorBody(
+      'harness.event_replay_unavailable',
+      'Harness event replay cursor cannot be served; recover through session snapshot and result lookup routes',
+      {
+        ...details,
+        recovery: {
+          snapshot: 'GET /harness/:name/sessions/:sessionId',
+          messageResult: 'GET /harness/:name/sessions/:sessionId/message-results/:signalId',
+          queueResult: 'GET /harness/:name/sessions/:sessionId/queue/:queuedItemId/result',
+        },
+      },
+      true,
+    ),
+    { status: 412 },
+  );
+}
+
+function encodeHarnessSseEvent(event: HarnessEvent): Uint8Array {
+  const data = JSON.stringify(event, harnessSseJsonReplacer);
+  return new TextEncoder().encode(`id: ${event.id}\nevent: ${event.type}\ndata: ${data}\n\n`);
+}
+
+function harnessSseJsonReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      code: (value as { code?: string }).code ?? value.name ?? 'harness.message_failed',
+      message: value.message,
+    };
+  }
+  return value;
+}
+
+function projectOperationLookup(source: 'message' | 'queue', evidence: unknown): OperationLookupResponse {
+  if (!evidence || typeof evidence !== 'object') return { status: 'not_found', source };
+  const record = evidence as Record<string, unknown>;
+  if (typeof record.expiresAt === 'number') {
+    return {
+      status: 'expired',
+      source,
+      ...(typeof record.runId === 'string' ? { runId: record.runId } : {}),
+      expiredAt: record.expiresAt,
+    };
+  }
+  if (source === 'message') {
+    if (record.status === 'pending') {
+      return { status: 'pending', source, ...(typeof record.runId === 'string' ? { runId: record.runId } : {}) };
+    }
+    if (record.status === 'completed') {
+      return {
+        status: 'completed',
+        source,
+        ...(typeof record.runId === 'string' ? { runId: record.runId } : {}),
+        result: record.result,
+      };
+    }
+    if (record.status === 'failed') {
+      const error = record.error && typeof record.error === 'object' ? (record.error as Record<string, unknown>) : {};
+      return {
+        status: 'failed',
+        source,
+        ...(typeof record.runId === 'string' ? { runId: record.runId } : {}),
+        error: {
+          code: typeof error.code === 'string' ? error.code : 'harness.operation_failed',
+          message: typeof error.message === 'string' ? error.message : 'Harness operation failed',
+        },
+      };
+    }
+    return { status: 'not_found', source };
+  }
+  if (record.status === 'queued' || record.status === 'admitting' || record.status === 'accepted') {
+    return { status: 'pending', source, ...(typeof record.runId === 'string' ? { runId: record.runId } : {}) };
+  }
+  if (record.status === 'completed') {
+    return {
+      status: 'completed',
+      source,
+      ...(typeof record.runId === 'string' ? { runId: record.runId } : {}),
+      result: record.result,
+    };
+  }
+  if (record.status === 'failed' || record.status === 'admission_failed' || record.status === 'dead') {
+    const error = record.error && typeof record.error === 'object' ? (record.error as Record<string, unknown>) : {};
+    return {
+      status: 'failed',
+      source,
+      ...(typeof record.runId === 'string' ? { runId: record.runId } : {}),
+      error: {
+        code: typeof error.code === 'string' ? error.code : 'harness.operation_failed',
+        message: typeof error.message === 'string' ? error.message : 'Harness operation failed',
+      },
+    };
+  }
+  return { status: 'not_found', source };
 }
 
 function parseStrongIfMatch(value: string | undefined): number {
@@ -583,6 +701,9 @@ function mapHarnessError(error: unknown): never {
       reason: harnessErrorString(error, 'reason'),
     });
   }
+  if (name === 'HarnessStorageSessionEventReplayUnsupportedError') {
+    throwHarnessHttpError(501, 'harness.event_replay_unsupported', message, undefined, false);
+  }
   if (name === 'HarnessQueueFullError') {
     throwHarnessHttpError(429, 'harness.queue_full', message, {
       sessionId: harnessErrorString(error, 'sessionId'),
@@ -619,13 +740,19 @@ function mapHarnessError(error: unknown): never {
     });
   }
   if (name === 'HarnessSessionNotFoundError') {
-    throwHarnessHttpError(404, 'harness.session_not_found', message, { sessionId: harnessErrorString(error, 'sessionId') });
+    throwHarnessHttpError(404, 'harness.session_not_found', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+    });
   }
   if (name === 'HarnessSessionClosedError') {
-    throwHarnessHttpError(404, 'harness.session_closed', message, { sessionId: harnessErrorString(error, 'sessionId') });
+    throwHarnessHttpError(404, 'harness.session_closed', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+    });
   }
   if (name === 'HarnessSessionDeletedError') {
-    throwHarnessHttpError(404, 'harness.session_deleted', message, { sessionId: harnessErrorString(error, 'sessionId') });
+    throwHarnessHttpError(404, 'harness.session_deleted', message, {
+      sessionId: harnessErrorString(error, 'sessionId'),
+    });
   }
   if (name === 'HarnessSessionClosingError') {
     throwHarnessHttpError(409, 'harness.session_closing', message, {
@@ -940,13 +1067,7 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
   summary: 'Create or resolve a Harness session',
   description: 'Creates or resolves a resource-scoped Harness session for the authenticated caller.',
   tags: ['Harness'],
-  handler: async ({
-    mastra,
-    requestContext,
-    name,
-    requestBody,
-    requestPathParams,
-  }) => {
+  handler: async ({ mastra, requestContext, name, requestBody, requestPathParams }) => {
     try {
       const pathName = stringPathParam(requestPathParams, name, 'name');
       const body =
@@ -1115,6 +1236,243 @@ export const POST_HARNESS_QUEUE_ROUTE = createRoute({
   },
 });
 
+export const GET_HARNESS_MESSAGE_RESULT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:name/sessions/:sessionId/message-results/:signalId',
+  responseType: 'json',
+  pathParamSchema: harnessMessageResultPathParams,
+  responseSchema: harnessOperationResultResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Lookup Harness message result',
+  description: 'Reads non-admitting message operation result evidence for reconnect recovery.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, signalId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const pathSignalId = stringPathParam(requestPathParams, signalId, 'signalId');
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      return projectOperationLookup(
+        'message',
+        await harness.lookupMessageResult({ sessionId: pathSessionId, resourceId, signalId: pathSignalId }),
+      );
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const GET_HARNESS_QUEUE_RESULT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:name/sessions/:sessionId/queue/:queuedItemId/result',
+  responseType: 'json',
+  pathParamSchema: harnessQueueResultPathParams,
+  responseSchema: harnessOperationResultResponseSchema,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Lookup Harness queue result',
+  description: 'Reads non-admitting queue operation result evidence for reconnect recovery.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, queuedItemId, requestPathParams }) => {
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const pathQueuedItemId = stringPathParam(requestPathParams, queuedItemId, 'queuedItemId');
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      return projectOperationLookup(
+        'queue',
+        await harness.lookupQueueResult({ sessionId: pathSessionId, resourceId, queuedItemId: pathQueuedItemId }),
+      );
+    } catch (error) {
+      return mapHarnessError(error);
+    }
+  },
+});
+
+export const GET_HARNESS_SESSION_EVENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:name/sessions/:sessionId/events',
+  responseType: 'datastream-response',
+  pathParamSchema: harnessSessionPathParams,
+  requiresAuth: true,
+  harnessAuth: { clientRoute: true, allowSseSubscriptionToken: true },
+  onValidationError: harnessValidationErrorHook,
+  summary: 'Stream Harness session events',
+  description: 'Streams typed Harness session events with Last-Event-ID replay and 412 recovery.',
+  tags: ['Harness'],
+  handler: async ({ mastra, requestContext, name, sessionId, getHeader, abortSignal, requestPathParams }) => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const { pathName, pathSessionId } = harnessSessionPathIdentity(requestPathParams, name, sessionId);
+      const resourceId = getAuthResourceId(requestContext);
+      const harness = resolveHarness(mastra as unknown as { getHarness(name: string): HarnessLike }, pathName);
+      const stored = await harness.loadSession({ sessionId: pathSessionId, includeClosed: true });
+      if (!stored || stored.resourceId !== resourceId) {
+        throwSessionNotFound(pathSessionId);
+      }
+      if (stored.closedAt !== undefined) throwSessionClosed(pathSessionId);
+      if (stored.closingAt !== undefined) throwSessionClosingFromRecord(stored);
+
+      const lastEventId = getHeader?.('last-event-id');
+      const parsed = lastEventId ? parseHarnessEventId(lastEventId) : undefined;
+      const session = await harness.session({ sessionId: pathSessionId, resourceId });
+      const liveQueue: HarnessEvent[] = [];
+      const replayedEventIds = new Set<string>();
+      let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+      let replaying = parsed !== undefined;
+      let closed = false;
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        unsubscribe?.();
+        unsubscribe = undefined;
+      };
+      unsubscribe = session.subscribe(event => {
+        if (closed) return;
+        if (!controller || replaying) {
+          liveQueue.push(event);
+          return;
+        }
+        if (replayedEventIds.has(event.id)) return;
+        try {
+          controller.enqueue(encodeHarnessSseEvent(event));
+        } catch {
+          cleanup();
+        }
+      });
+
+      let replayState:
+        | {
+            epoch: string;
+            oldestSequence: number;
+            newestSequence: number;
+          }
+        | null
+        | undefined;
+      if (parsed) {
+        replayState = await session.getEventReplayState();
+        if (
+          !replayState ||
+          replayState.epoch !== parsed.epoch ||
+          parsed.sequence < replayState.oldestSequence - 1 ||
+          parsed.sequence > replayState.newestSequence
+        ) {
+          cleanup();
+          return preconditionFailedResponse({
+            reason: !replayState || replayState.epoch !== parsed.epoch ? 'stale_epoch' : 'unreplayable_gap',
+            lastEventId,
+            sessionId: pathSessionId,
+          });
+        }
+
+        let afterSequence = parsed.sequence;
+        let expectedSequence = parsed.sequence + 1;
+        while (expectedSequence <= replayState.newestSequence) {
+          if (abortSignal?.aborted) {
+            cleanup();
+            return new Response(null, { status: 204 });
+          }
+          const page = (
+            await session.listEventsAfter({
+              epoch: parsed.epoch,
+              afterSequence,
+              limit: 1000,
+            })
+          ).filter(row => row.sequence <= replayState!.newestSequence);
+          if (page.length === 0) {
+            cleanup();
+            return preconditionFailedResponse({ reason: 'unreplayable_gap', lastEventId, sessionId: pathSessionId });
+          }
+          for (const row of page) {
+            if (row.sequence !== expectedSequence) {
+              cleanup();
+              return preconditionFailedResponse({ reason: 'unreplayable_gap', lastEventId, sessionId: pathSessionId });
+            }
+            afterSequence = row.sequence;
+            expectedSequence += 1;
+          }
+        }
+      }
+
+      const stream = new ReadableStream<Uint8Array>({
+        async start(streamController) {
+          controller = streamController;
+          const abortCleanup = () => {
+            cleanup();
+            try {
+              streamController.close();
+            } catch {}
+          };
+          abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+          if (abortSignal?.aborted) {
+            abortCleanup();
+            return;
+          }
+
+          try {
+            if (parsed && replayState) {
+              let afterSequence = parsed.sequence;
+              let expectedSequence = parsed.sequence + 1;
+              while (expectedSequence <= replayState.newestSequence) {
+                if (abortSignal?.aborted || closed) return;
+                const page = (
+                  await session.listEventsAfter({
+                    epoch: parsed.epoch,
+                    afterSequence,
+                    limit: 1000,
+                  })
+                ).filter(row => row.sequence <= replayState!.newestSequence);
+                if (page.length === 0) {
+                  cleanup();
+                  streamController.error(new Error('Harness event replay gap appeared after preflight'));
+                  return;
+                }
+                for (const row of page) {
+                  if (row.sequence !== expectedSequence) {
+                    cleanup();
+                    streamController.error(new Error('Harness event replay gap appeared after preflight'));
+                    return;
+                  }
+                  replayedEventIds.add(row.event.id);
+                  streamController.enqueue(encodeHarnessSseEvent(row.event));
+                  afterSequence = row.sequence;
+                  expectedSequence += 1;
+                }
+              }
+            }
+            replaying = false;
+            for (const event of liveQueue.splice(0)) {
+              if (replayedEventIds.has(event.id)) continue;
+              streamController.enqueue(encodeHarnessSseEvent(event));
+            }
+          } catch (error) {
+            cleanup();
+            streamController.error(error);
+          }
+        },
+        cancel() {
+          cleanup();
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache, no-transform',
+          connection: 'keep-alive',
+        },
+      });
+    } catch (error) {
+      unsubscribe?.();
+      return mapHarnessError(error);
+    }
+  },
+});
+
 export const GET_HARNESS_STATE_ROUTE = createRoute({
   method: 'GET',
   path: '/harness/:name/sessions/:sessionId/state',
@@ -1259,16 +1617,22 @@ export const PATCH_HARNESS_PERMISSIONS_ROUTE = createRoute({
       const session = await harness.session({ sessionId: pathSessionId, resourceId });
       switch (body.action) {
         case 'grantCategory':
-          await session.permissions.grantCategory({ category: requiredStringField(body, 'category', 'Permissions patch') });
+          await session.permissions.grantCategory({
+            category: requiredStringField(body, 'category', 'Permissions patch'),
+          });
           break;
         case 'grantTool':
           await session.permissions.grantTool({ toolName: requiredStringField(body, 'toolName', 'Permissions patch') });
           break;
         case 'revokeCategory':
-          await session.permissions.revokeCategory({ category: requiredStringField(body, 'category', 'Permissions patch') });
+          await session.permissions.revokeCategory({
+            category: requiredStringField(body, 'category', 'Permissions patch'),
+          });
           break;
         case 'revokeTool':
-          await session.permissions.revokeTool({ toolName: requiredStringField(body, 'toolName', 'Permissions patch') });
+          await session.permissions.revokeTool({
+            toolName: requiredStringField(body, 'toolName', 'Permissions patch'),
+          });
           break;
         case 'setPolicy': {
           const policy = requiredPermissionPolicy(body, 'Permissions patch');

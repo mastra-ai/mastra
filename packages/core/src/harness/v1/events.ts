@@ -6,19 +6,24 @@
  * a fully-stamped event with `id`, `timestamp`, and (where relevant)
  * `sessionId`.
  *
- * IDs are scoped to an emitter: `<epoch>-<seq>`. The epoch is regenerated
+ * IDs are scoped to an emitter: `harness-v1:<epoch>:<seq>`. The epoch is regenerated
  * whenever the emitter is constructed (i.e. process start, eviction +
  * rehydration), so SSE clients can detect a regenerated emitter and reset
  * their replay cursor (§10.5).
  *
- * Subscribers see only events emitted after `subscribe()` returns; there is
- * no automatic backfill. Callers that need history go through
- * `listMessages()` or the in-memory replay buffer (M5).
+ * Subscribers see only events emitted after `subscribe()` returns. Remote
+ * callers that need history replay query the durable session event ledger.
  */
 
 import { randomUUID } from 'node:crypto';
 
-import type { GoalJudgeDecision, GoalState, PendingResume, SessionRecord } from '../../storage/domains/harness';
+import type {
+  GoalJudgeDecision,
+  GoalState,
+  JsonValue,
+  PendingResume,
+  SessionRecord,
+} from '../../storage/domains/harness';
 import type { TaskItem } from '../../tools/builtin/shared';
 
 import { HarnessEventSerializationError, HarnessValidationError } from './errors';
@@ -41,7 +46,7 @@ import type { PermissionPolicy, ToolCategory } from './types';
  * origin (§10.6).
  */
 export interface HarnessEventBase {
-  /** Monotonic-within-emitter id formatted as `<epoch>-<seq>`. */
+  /** Monotonic-within-emitter id formatted as `harness-v1:<epoch>:<seq>`. */
   id: string;
   timestamp: number;
   sessionId?: string;
@@ -575,6 +580,69 @@ export type HarnessEvent =
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
 export type HarnessEventUnsubscribe = () => void;
 
+export const HARNESS_EVENT_ID_PREFIX = 'harness-v1';
+
+export interface ParsedHarnessEventId {
+  epoch: string;
+  sequence: number;
+}
+
+export function formatHarnessEventId(epoch: string, sequence: number): string {
+  if (epoch.length === 0 || epoch.includes(':')) {
+    throw new HarnessValidationError('eventId.epoch', 'epoch must be non-empty and must not contain ":"');
+  }
+  if (!Number.isSafeInteger(sequence) || sequence < 0) {
+    throw new HarnessValidationError('eventId.sequence', 'sequence must be a non-negative safe integer');
+  }
+  return `${HARNESS_EVENT_ID_PREFIX}:${epoch}:${sequence}`;
+}
+
+export function parseHarnessEventId(eventId: string): ParsedHarnessEventId {
+  const parts = eventId.split(':');
+  if (parts.length !== 3 || parts[0] !== HARNESS_EVENT_ID_PREFIX || parts[1] === '' || parts[2] === '') {
+    throw new HarnessValidationError('lastEventId', 'expected event id grammar harness-v1:<epoch>:<seq>');
+  }
+  const sequenceText = parts[2]!;
+  if (!/^(0|[1-9][0-9]*)$/.test(sequenceText)) {
+    throw new HarnessValidationError('lastEventId', 'event id sequence must be an unsigned decimal integer');
+  }
+  const sequence = Number(sequenceText);
+  if (!Number.isSafeInteger(sequence)) {
+    throw new HarnessValidationError('lastEventId', 'event id sequence must be within JavaScript safe integer range');
+  }
+  return { epoch: parts[1]!, sequence };
+}
+
+export function snapshotHarnessEventForJson(value: unknown, path = 'event'): JsonValue {
+  try {
+    const encoded = JSON.stringify(value, harnessEventJsonReplacer);
+    if (encoded === undefined) {
+      throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+    }
+    return JSON.parse(encoded) as JsonValue;
+  } catch (err) {
+    if (err instanceof HarnessValidationError) throw err;
+    throw new HarnessValidationError(path, 'must be JSON-serializable for event replay');
+  }
+}
+
+export function projectHarnessPublicError(err: unknown): { code: string; message: string } {
+  if (err instanceof Error) {
+    return { code: (err as { code?: string }).code ?? err.name ?? 'harness.message_failed', message: err.message };
+  }
+  return { code: 'harness.message_failed', message: String(err) };
+}
+
+function harnessEventJsonReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      ...projectHarnessPublicError(value),
+    };
+  }
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // Emitter.
 // ---------------------------------------------------------------------------
@@ -606,18 +674,27 @@ export interface EmitterScope {
  * isolated (logged to console) so a buggy subscriber cannot disrupt the
  * producer or other listeners.
  *
- * Event IDs are formatted `<epoch>-<seq>`; the epoch is a per-emitter UUID
- * regenerated on every construction. Clients that have buffered an `id`
- * from a previous epoch and rejoin can detect mismatch and reset.
+ * Event IDs are formatted `harness-v1:<epoch>:<seq>`; the epoch is a
+ * per-emitter UUID regenerated on every construction. Clients that have
+ * buffered an `id` from a previous epoch and rejoin can detect mismatch and
+ * reset.
  */
 export class EventEmitter {
   private readonly listeners: HarnessEventListener[] = [];
-  private readonly epoch: string = randomUUID();
-  private seq = 0;
+  private readonly epoch: string;
+  private seq: number;
   private readonly scope: EmitterScope;
+  private readonly onEvent?: HarnessEventListener;
 
-  constructor(scope: EmitterScope = {}) {
+  constructor(
+    scope: EmitterScope = {},
+    opts: { onEvent?: HarnessEventListener; epoch?: string; nextSequence?: number } = {},
+  ) {
     this.scope = scope;
+    this.onEvent = opts.onEvent;
+    this.epoch = opts.epoch ?? randomUUID();
+    this.seq = opts.nextSequence ?? 0;
+    formatHarnessEventId(this.epoch, this.seq);
   }
 
   subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
@@ -632,7 +709,7 @@ export class EventEmitter {
     const sessionId = overrides?.sessionId ?? this.scope.sessionId;
     const stamped = {
       ...event,
-      id: `${this.epoch}-${this.seq++}`,
+      id: formatHarnessEventId(this.epoch, this.seq++),
       timestamp: Date.now(),
       ...(sessionId !== undefined && { sessionId }),
     } as HarnessEvent;
@@ -660,6 +737,16 @@ export class EventEmitter {
   }
 
   private dispatch(event: HarnessEvent): void {
+    if (this.onEvent) {
+      try {
+        const result = this.onEvent(event);
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch(err => console.error('[harness/v1] event persistence rejected:', err));
+        }
+      } catch (err) {
+        console.error('[harness/v1] event persistence threw:', err);
+      }
+    }
     for (const listener of this.listeners) {
       try {
         const result = listener(event);

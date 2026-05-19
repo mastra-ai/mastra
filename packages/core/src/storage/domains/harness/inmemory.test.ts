@@ -304,6 +304,122 @@ describe('InMemoryHarness admission storage contract', () => {
     });
   });
 
+  it('persists session events for replay by epoch and sequence and refuses ambiguous epochs', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ harnessName: 'default' }), { ownerId: 'h-1', ifVersion: 0 });
+
+    await storage.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:epoch:1',
+      epoch: 'epoch',
+      sequence: 1,
+      event: { type: 'app.event', id: 'harness-v1:epoch:1', timestamp: 1000 },
+      emittedAt: 1000,
+      storedAt: 1000,
+    });
+    await storage.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:epoch:2',
+      epoch: 'epoch',
+      sequence: 2,
+      event: { type: 'app.event', id: 'harness-v1:epoch:2', timestamp: 1001 },
+      emittedAt: 1001,
+      storedAt: 1001,
+    });
+
+    await expect(
+      storage.getSessionEventReplayState({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+      }),
+    ).resolves.toEqual({ epoch: 'epoch', oldestSequence: 1, newestSequence: 2 });
+    await expect(
+      storage.listSessionEvents({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        epoch: 'epoch',
+        afterSequence: 1,
+        limit: 10,
+      }),
+    ).resolves.toMatchObject([{ eventId: 'harness-v1:epoch:2', sequence: 2 }]);
+
+    await storage.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:other:0',
+      epoch: 'other',
+      sequence: 0,
+      event: { type: 'app.event', id: 'harness-v1:other:0', timestamp: 900 },
+      emittedAt: 900,
+      storedAt: 2000,
+    });
+    await expect(
+      storage.getSessionEventReplayState({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('hard-deletes all session event replay rows for the session id', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.saveSession(sampleSession({ harnessName: 'default' }), { ownerId: 'h-1', ifVersion: 0 });
+    await storage.appendSessionEvent({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      eventId: 'harness-v1:epoch:1',
+      epoch: 'epoch',
+      sequence: 1,
+      event: { type: 'app.event', id: 'harness-v1:epoch:1', timestamp: 1000 },
+      emittedAt: 1000,
+      storedAt: 1000,
+    });
+
+    const active = await storage.loadSession({ sessionId: 'session-1' });
+    if (!active) throw new Error('expected session');
+    await storage.saveSession(
+      { ...active, threadId: 'thread-2', closedAt: 2000, lastActivityAt: 2000 },
+      { ownerId: 'h-1', ifVersion: active.version },
+    );
+    const closed = await storage.loadSession({ sessionId: 'session-1' });
+    if (!closed) throw new Error('expected session');
+
+    await storage.deleteSession({
+      sessionId: 'session-1',
+      ifVersion: closed.version,
+      expectedResourceId: closed.resourceId,
+      expectedThreadId: closed.threadId,
+      expectedParentSessionId: closed.parentSessionId ?? null,
+      expectedCreatedAt: closed.createdAt,
+      requireClosed: true,
+    });
+
+    await expect(
+      storage.getSessionEventReplayState({
+        harnessName: 'default',
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+      }),
+    ).resolves.toBeNull();
+  });
+
   it('lists sessions by exact resource/thread and can include closed records', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
     await storage.saveSession(
@@ -1522,8 +1638,12 @@ describe('InMemoryHarness channel outbox ledger', () => {
 
   it('claims at most the oldest due row for one binding while allowing different bindings', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
-    await storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-1', idempotencyKey: 'key-1', createdAt: 1000 }));
-    await storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-2', idempotencyKey: 'key-2', createdAt: 1001 }));
+    await storage.enqueueChannelOutbox(
+      sampleChannelOutbox({ id: 'outbox-1', idempotencyKey: 'key-1', createdAt: 1000 }),
+    );
+    await storage.enqueueChannelOutbox(
+      sampleChannelOutbox({ id: 'outbox-2', idempotencyKey: 'key-2', createdAt: 1001 }),
+    );
     await storage.enqueueChannelOutbox(
       sampleChannelOutbox({
         id: 'outbox-3',
@@ -1549,7 +1669,9 @@ describe('InMemoryHarness channel outbox ledger', () => {
 
   it('does not starve due rows for other bindings behind one blocked binding', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
-    await storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-1', idempotencyKey: 'key-1', createdAt: 1000 }));
+    await storage.enqueueChannelOutbox(
+      sampleChannelOutbox({ id: 'outbox-1', idempotencyKey: 'key-1', createdAt: 1000 }),
+    );
     await storage.claimChannelOutbox({
       harnessName: 'default',
       claimId: 'blocked-binding-claim',
@@ -1650,7 +1772,12 @@ describe('InMemoryHarness channel outbox ledger', () => {
       });
 
       await expect(
-        storage.renewChannelOutboxClaim({ outboxItemId: 'outbox-1', claimId: 'other', now: now + 100, claimTtlMs: 5000 }),
+        storage.renewChannelOutboxClaim({
+          outboxItemId: 'outbox-1',
+          claimId: 'other',
+          now: now + 100,
+          claimTtlMs: 5000,
+        }),
       ).rejects.toBeInstanceOf(HarnessStorageChannelOutboxClaimConflictError);
       await expect(
         storage.renewChannelOutboxClaim({

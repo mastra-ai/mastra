@@ -21,6 +21,8 @@ import type {
   DeleteSessionOptions,
   EnqueueChannelOutboxResult,
   HarnessRowErrorCode,
+  HarnessSessionEventRecord,
+  HarnessSessionEventReplayState,
   HarnessWakeupClaimStatus,
   HarnessWakeupInitialClaim,
   HarnessWakeupItem,
@@ -186,6 +188,14 @@ export class HarnessStorageThreadDeleteFenceUnsupportedError extends Error {
   readonly code = 'harness.storage.thread_delete_fence_unsupported' as const;
   constructor() {
     super('HarnessStorage.withThreadDeleteFence must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageSessionEventReplayUnsupportedError extends Error {
+  readonly name = 'HarnessStorageSessionEventReplayUnsupportedError';
+  readonly code = 'harness.storage.session_event_replay_unsupported' as const;
+  constructor() {
+    super('HarnessStorage session event replay must be implemented by this storage adapter');
   }
 }
 
@@ -650,6 +660,35 @@ export abstract class HarnessStorage extends StorageDomain {
     threadId?: string;
     signalId?: string;
   }): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // Session event replay
+  // -------------------------------------------------------------------------
+
+  async appendSessionEvent(_record: HarnessSessionEventRecord): Promise<void> {
+    throw new HarnessStorageSessionEventReplayUnsupportedError();
+  }
+
+  async getSessionEventReplayState(_opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+  }): Promise<HarnessSessionEventReplayState | null> {
+    throw new HarnessStorageSessionEventReplayUnsupportedError();
+  }
+
+  async listSessionEvents(_opts: {
+    harnessName?: string;
+    sessionId: string;
+    resourceId: string;
+    threadId: string;
+    epoch: string;
+    afterSequence: number;
+    limit: number;
+  }): Promise<HarnessSessionEventRecord[]> {
+    throw new HarnessStorageSessionEventReplayUnsupportedError();
+  }
 
   // -------------------------------------------------------------------------
   // Channel inbox ledger

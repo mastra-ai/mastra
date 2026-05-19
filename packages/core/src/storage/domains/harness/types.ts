@@ -425,6 +425,25 @@ export interface QueueAdmissionReceipt {
   updatedAt: number;
 }
 
+export interface HarnessSessionEventRecord {
+  harnessName: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  eventId: string;
+  epoch: string;
+  sequence: number;
+  event: JsonValue;
+  emittedAt: number;
+  storedAt: number;
+}
+
+export interface HarnessSessionEventReplayState {
+  epoch: string;
+  oldestSequence: number;
+  newestSequence: number;
+}
+
 export interface InboxResponseReceipt {
   responseId: string;
   responseHash: string;

@@ -204,6 +204,8 @@ describe('Session — surface area (M1)', () => {
     expect([...proto].sort()).toEqual(
       [
         'abort',
+        'admitMessage',
+        'admitQueue',
         'close',
         'isRunning',
         'isBusy',
@@ -217,6 +219,7 @@ describe('Session — surface area (M1)', () => {
         'injectSystemReminder',
         'getCurrentMode',
         'switchMode',
+        'getEventReplayState',
         'getState',
         'setState',
         'getDisplayState',
@@ -232,6 +235,9 @@ describe('Session — surface area (M1)', () => {
         'respondToQuestion',
         'respondToPlanApproval',
         'subscribe',
+        'listEventsAfter',
+        'lookupMessageResult',
+        'lookupQueueResult',
         // Getters land in the prototype as own names too.
         'lastActivityAt',
         'lifecycleState',
