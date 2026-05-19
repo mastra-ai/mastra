@@ -393,8 +393,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   } as any);
                 }
 
-                const chunkPayloadMeta = (chunk as { payload?: { providerMetadata?: Record<string, unknown> } })?.payload
-                  ?.providerMetadata;
+                const chunkPayloadMeta = (chunk as { payload?: { providerMetadata?: Record<string, unknown> } })
+                  ?.payload?.providerMetadata;
                 if (chunkPayloadMeta !== undefined) {
                   pendingProviderMetadata = chunkPayloadMeta;
                 }
