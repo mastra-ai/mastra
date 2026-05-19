@@ -11,7 +11,7 @@ import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
-import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
+import { BOX_INDENT, getTermWidth, theme, mastra, tintHex } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
@@ -47,7 +47,12 @@ const CODE_HIGHLIGHT_THEME: HighlightTheme = {
 
 const COMPACT_TOOL_COLOR = mastra.orange;
 const COMPACT_TOOL_ARGS_BG = '#0f0f0f';
-const QUIET_TOOL_RAIL = '#5f4530';
+const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
+
+function normalizeHexColor(color: string | undefined): string | undefined {
+  if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
+  return color;
+}
 
 const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
   default: chalk.hex('#b4b4bd'),
@@ -75,6 +80,7 @@ export interface ToolExecutionOptions {
   collapsedByDefault?: boolean;
   quietDisplayMode?: QuietToolDisplayMode;
   quietPreviewLineLimit?: number;
+  compactToolModeColor?: string;
 }
 /**
  * Convert absolute path to tilde notation if it's in home directory
@@ -174,6 +180,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private compactToolHasFollowingContinuation = false;
   private compactToolPreviousSummary: string | undefined;
   private compactToolGroupLabelColor: CompactToolLabelColor | undefined;
+  private compactToolModeColor: string | undefined;
 
   constructor(toolName: string, args: unknown, options: ToolExecutionOptions = {}, ui: TUI) {
     super();
@@ -188,6 +195,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.expanded = !this.options.collapsedByDefault;
     this.quietDisplayMode = this.options.quietDisplayMode ?? 'normal';
     this.quietPreviewLineLimit = this.options.quietPreviewLineLimit ?? 2;
+    this.compactToolModeColor = normalizeHexColor(this.options.compactToolModeColor);
 
     // Content box - left indent for chat history alignment, no background
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
@@ -244,6 +252,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const normalizedLimit = Number.isFinite(limit) ? limit : 2;
     this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
     this.rebuild();
+  }
+
+  setCompactToolModeColor(color: string | undefined): void {
+    const nextColor = normalizeHexColor(color);
+    if (this.compactToolModeColor === nextColor) return;
+    this.compactToolModeColor = nextColor;
+    if (this.quietDisplayMode === 'quiet') this.rebuild();
   }
 
   getChatSpacingKind(): ChatSpacingKind {
@@ -418,13 +433,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     );
 
     return wrapped.map(line => {
-      const linePrefix = `  ${chalk.hex(QUIET_TOOL_RAIL)('│')} `;
+      const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
       return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
     });
   }
 
   private getQuietCodePreviewLines(preview: string, maxLineWidth: number): string[] {
-    const linePrefix = `  ${chalk.hex(QUIET_TOOL_RAIL)('│')} `;
+    const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
     return this.highlightQuietCodePreview(preview)
       .split('\n')
       .slice(-this.quietPreviewLineLimit)
@@ -440,11 +455,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private getQuietPreviewCapLine(): string {
-    return `  ${chalk.hex(QUIET_TOOL_RAIL)('╰──')}`;
+    return `  ${chalk.hex(this.getQuietToolRailColor())('╰──')}`;
   }
 
   private getQuietPreviewSpacerLine(): string {
-    return `  ${chalk.hex(QUIET_TOOL_RAIL)('│')}`;
+    return `  ${chalk.hex(this.getQuietToolRailColor())('│')}`;
   }
 
   private shouldCloseQuietPreview(): boolean {
@@ -517,13 +532,35 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private formatCompactToolHeader(toolLabel: string, toolLabelColor: CompactToolLabelColor, summary: string): string {
-    const color = this.isErrorResult() ? mastra.red : toolLabelColor === 'error' ? mastra.red : COMPACT_TOOL_COLOR;
+    const color = this.getCompactToolAccentColor(toolLabelColor);
+    const argsBg = this.getCompactToolArgsBg(toolLabelColor);
+    const argsColor = this.getCompactToolArgsColor(toolLabelColor);
     const leftHalf = chalk.hex(color)('▐');
-    const rightHalf = summary ? chalk.hex(color).bgHex(COMPACT_TOOL_ARGS_BG)('▌') : chalk.hex(color)('▌');
+    const rightHalf = summary ? chalk.hex(color).bgHex(argsBg)('▌') : chalk.hex(color)('▌');
     const label = `${leftHalf}${chalk.bgHex(color).hex('#000000').bold(toolLabel)}${rightHalf}`;
-    const args = summary ? this.formatCompactSummaryBadge(summary) : '';
-    const trail = summary ? chalk.hex(COMPACT_TOOL_ARGS_BG)('▌') : '';
+    const args = summary ? this.formatCompactSummaryBadge(summary, argsBg, argsColor) : '';
+    const trail = summary ? chalk.hex(argsBg)('▌') : '';
     return `${label}${args}${trail}`;
+  }
+
+  private getCompactToolAccentColor(toolLabelColor: CompactToolLabelColor): string {
+    if (this.isErrorResult() || toolLabelColor === 'error') return mastra.red;
+    return this.compactToolModeColor ?? COMPACT_TOOL_COLOR;
+  }
+
+  private getCompactToolArgsBg(toolLabelColor: CompactToolLabelColor): string {
+    if (this.isErrorResult() || toolLabelColor === 'error') return tintHex(mastra.red, 0.15);
+    return COMPACT_TOOL_ARGS_BG;
+  }
+
+  private getCompactToolArgsColor(toolLabelColor: CompactToolLabelColor): string | undefined {
+    if (this.isErrorResult() || toolLabelColor === 'error') return undefined;
+    return this.compactToolModeColor ?? COMPACT_TOOL_COLOR;
+  }
+
+  private getQuietToolRailColor(): string {
+    if (this.isErrorResult()) return tintHex(mastra.red, 0.35);
+    return this.compactToolModeColor ? tintHex(this.compactToolModeColor, 0.35) : QUIET_TOOL_RAIL;
   }
 
   getCompactToolLabelColor(): CompactToolLabelColor {
@@ -654,20 +691,26 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const separator = linePrefix ? '' : ' ';
     const hasFollowing = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview();
     const hasPreview = this.hasQuietStreamingPreview();
+    const toolLabelColor = this.getCompactToolLabelColor();
+    const color = this.getCompactToolAccentColor(toolLabelColor);
+    const argsBg = this.getCompactToolArgsBg(toolLabelColor);
+    const argsColor = this.getCompactToolArgsColor(toolLabelColor);
+    const railColor = this.getQuietToolRailColor();
     const branch = hasFollowing
-      ? `${hasPreview ? chalk.hex(mastra.orange)('●') : chalk.hex(QUIET_TOOL_RAIL)('├')}${chalk.hex(QUIET_TOOL_RAIL)(`─${separator}${linePrefix}`)}`
-      : chalk.hex(QUIET_TOOL_RAIL)(`╰─${separator}${linePrefix}`);
+      ? `${hasPreview ? chalk.hex(color)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
+      : chalk.hex(railColor)(`╰─${separator}${linePrefix}`);
     const continuationSummary = ` ${summary.slice(linePrefix.length)}`;
-    const trail = continuationSummary ? chalk.hex(COMPACT_TOOL_ARGS_BG)('▌') : '';
-    return `${branch}${this.formatCompactSummaryBadge(continuationSummary)}${trail}`;
+    const trail = continuationSummary ? chalk.hex(argsBg)('▌') : '';
+    return `${branch}${this.formatCompactSummaryBadge(continuationSummary, argsBg, argsColor)}${trail}`;
   }
 
-  private formatCompactSummaryBadge(summary: string): string {
+  private formatCompactSummaryBadge(summary: string, argsBg: string, argsColor?: string): string {
+    const styleText = (text: string) => (argsColor ? chalk.hex(argsColor)(text) : theme.fg('text', text));
     const rangeMatch = summary.match(/(:\d+(?:-\d+)?)$/);
-    if (!rangeMatch?.[1]) return chalk.bgHex(COMPACT_TOOL_ARGS_BG)(theme.fg('text', summary));
+    if (!rangeMatch?.[1]) return chalk.bgHex(argsBg)(styleText(summary));
 
     const rangeStart = summary.length - rangeMatch[1].length;
-    return `${chalk.bgHex(COMPACT_TOOL_ARGS_BG)(theme.fg('text', summary.slice(0, rangeStart)))}${chalk.bgHex(COMPACT_TOOL_ARGS_BG)(theme.fg('dim', rangeMatch[1]))}`;
+    return `${chalk.bgHex(argsBg)(styleText(summary.slice(0, rangeStart)))}${chalk.bgHex(argsBg)(theme.fg('dim', rangeMatch[1]))}`;
   }
 
   private getCompactContinuationSummary(): string {

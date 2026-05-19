@@ -31,6 +31,10 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
+function getCurrentModeColor(state: TUIState): string | undefined {
+  return state.harness.getCurrentMode?.()?.color;
+}
+
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
 // =============================================================================
@@ -711,6 +715,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           if (!replacedWithInline) {
             if (state.quietMode) {
+              toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
               toolComponent.setQuietModeDisplay('quiet');
               toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
             }

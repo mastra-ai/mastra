@@ -7,12 +7,17 @@ import { showModalOverlay } from '../overlay.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
+function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
+  return ctx.state.harness.getCurrentMode?.()?.color;
+}
+
 function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
   const tools = ctx.state.allToolComponents.filter(
     (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
   );
 
   tools.forEach(tool => {
+    tool.setCompactToolModeColor?.(getCurrentModeColor(ctx));
     tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
     tool.setQuietPreviewLineLimit?.(previewLineLimit);
   });
