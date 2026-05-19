@@ -237,6 +237,8 @@ export type CodeEditorProps = {
   lineNumbers?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
+  /** Enable line wrapping (default: false for json, true for markdown) */
+  lineWrapping?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
@@ -254,6 +256,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       autoFocus,
       lineNumbers = true,
       editable,
+      lineWrapping: lineWrappingProp,
       ...props
     },
     ref,
@@ -268,6 +271,10 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
         exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }));
+      }
+
+      const shouldWrap = lineWrappingProp ?? language === 'markdown';
+      if (shouldWrap) {
         exts.push(EditorView.lineWrapping);
       }
 
@@ -284,7 +291,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable]);
+    }, [language, highlightVariables, schema, editable, lineWrappingProp]);
 
     return (
       <div
