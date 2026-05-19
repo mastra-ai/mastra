@@ -56,10 +56,10 @@ test.describe('Observability', () => {
 
     await expect(page.getByRole('heading', { name: 'Traces', level: 1 })).toBeVisible();
 
-    // Filter controls should be visible
+    // Filter controls should be visible. Toolbar shape varies across alpha
+    // versions ("Show subtraces" switch vs "Top-level traces only" button,
+    // etc.), so only assert the stable Add Filter button.
     await expect(page.getByRole('button', { name: 'Add Filter' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /top-level traces only/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /group traces by thread/i })).toBeVisible();
 
     // At least one trace entry should exist (seeded by the tests above)
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
