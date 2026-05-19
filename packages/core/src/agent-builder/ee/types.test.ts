@@ -21,7 +21,7 @@ describe('AgentBuilderOptions', () => {
           skills: true,
           memory: false,
           variables: true,
-          stars: true,
+          favorites: true,
         },
       },
       configuration: {
@@ -47,19 +47,19 @@ describe('AgentFeatures', () => {
       skills: true,
       memory: true,
       variables: true,
-      stars: true,
+      favorites: true,
     };
     expect(features.tools).toBe(true);
-    expect(features.stars).toBe(true);
+    expect(features.favorites).toBe(true);
   });
 
-  it('stars accepts true | false | undefined', () => {
-    const enabled: AgentFeatures = { stars: true };
-    const disabled: AgentFeatures = { stars: false };
+  it('favorites accepts true | false | undefined', () => {
+    const enabled: AgentFeatures = { favorites: true };
+    const disabled: AgentFeatures = { favorites: false };
     const omitted: AgentFeatures = {};
-    expect(enabled.stars).toBe(true);
-    expect(disabled.stars).toBe(false);
-    expect(omitted.stars).toBeUndefined();
+    expect(enabled.favorites).toBe(true);
+    expect(disabled.favorites).toBe(false);
+    expect(omitted.favorites).toBeUndefined();
   });
 });
 
@@ -93,10 +93,13 @@ describe('resolveAgentFeatures (default-on semantics)', () => {
   });
 
   it('explicit false overrides the default-on for any feature', () => {
-    const resolved = resolveAgentFeatures({ tools: false, model: false, stars: false }, { hasBrowserConfig: false });
+    const resolved = resolveAgentFeatures(
+      { tools: false, model: false, favorites: false },
+      { hasBrowserConfig: false },
+    );
     expect(resolved.tools).toBe(false);
     expect(resolved.model).toBe(false);
-    expect(resolved.stars).toBe(false);
+    expect(resolved.favorites).toBe(false);
     // siblings remain default-on
     expect(resolved.memory).toBe(true);
     expect(resolved.workflows).toBe(true);

@@ -159,8 +159,8 @@ export interface AgentFeatures {
   skills?: boolean;
   memory?: boolean;
   variables?: boolean;
-  /** Star (favorite) agents and skills with per-user state and aggregate counts. */
-  stars?: boolean;
+  /** Favorite agents and skills with per-user state and aggregate counts. */
+  favorites?: boolean;
   avatarUpload?: boolean;
   /**
    * Allow end-users to enable browser access for their agents.
@@ -191,7 +191,7 @@ export const BUILDER_FEATURE_DEFAULTS: Required<Omit<AgentFeatures, 'browser'>> 
   skills: true,
   memory: true,
   variables: true,
-  stars: true,
+  favorites: true,
   avatarUpload: true,
   model: true,
 };
@@ -247,7 +247,7 @@ export function resolveAgentFeatures(
     skills: pick('skills'),
     memory: pick('memory'),
     variables: pick('variables'),
-    stars: pick('stars'),
+    favorites: pick('favorites'),
     avatarUpload: pick('avatarUpload'),
     model: pick('model'),
     browser: resolveBrowser(),
