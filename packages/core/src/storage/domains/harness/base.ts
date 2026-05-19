@@ -8,6 +8,8 @@ import type {
   ChannelActionInitialClaim,
   ChannelActionReceipt,
   ChannelActionToken,
+  ChannelOutboxItem,
+  ChannelProviderDeliveryReceipt,
   ChannelInboxInitialClaim,
   ChannelInboxItem,
   CreateOrLoadChannelActionReceiptResult,
@@ -16,6 +18,8 @@ import type {
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
+  EnqueueChannelOutboxResult,
+  HarnessRowErrorCode,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -240,6 +244,32 @@ export class HarnessStorageChannelActionReceiptTransitionError extends Error {
   ) {
     super(
       `Channel action receipt "${receiptId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
+    );
+  }
+}
+
+export class HarnessStorageChannelOutboxClaimConflictError extends Error {
+  readonly name = 'HarnessStorageChannelOutboxClaimConflictError';
+  readonly code = 'harness.storage.channel_outbox_claim_conflict' as const;
+  constructor(
+    public readonly outboxItemId: string,
+    public readonly claimId?: string,
+  ) {
+    super(`Channel outbox item "${outboxItemId}" is not held by claim "${claimId ?? '<none>'}"`);
+  }
+}
+
+export class HarnessStorageChannelOutboxTransitionError extends Error {
+  readonly name = 'HarnessStorageChannelOutboxTransitionError';
+  readonly code = 'harness.storage.channel_outbox_transition_invalid' as const;
+  constructor(
+    public readonly outboxItemId: string,
+    public readonly fromStatus: ChannelOutboxItem['status'] | undefined,
+    public readonly toStatus: ChannelOutboxItem['status'],
+    reason: string,
+  ) {
+    super(
+      `Channel outbox item "${outboxItemId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
     );
   }
 }
@@ -711,6 +741,57 @@ export abstract class HarnessStorage extends StorageDomain {
   }): Promise<{ claimExpiresAt: number; storageNow: number }>;
 
   abstract updateChannelActionReceipt(record: ChannelActionReceipt, opts: { claimId: string }): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // Channel outbox ledger
+  // -------------------------------------------------------------------------
+
+  /**
+   * Atomic enqueue-or-load for provider-visible outbound effects. The unique
+   * idempotency identity is `(harnessName, bindingId, idempotencyKey)`.
+   * Exact duplicates must keep the first row; same-key rows with different
+   * payload hash, operation identity, or delivery semantics return
+   * `conflict: true` before any provider-visible side effect can run.
+   */
+  abstract enqueueChannelOutbox(record: ChannelOutboxItem): Promise<EnqueueChannelOutboxResult>;
+
+  /**
+   * Claims due pending/failed/expired-claimed rows for dispatch. Implementors
+   * must enforce per-binding head-of-line ordering: a later non-terminal row
+   * for one binding must not be claimed while an earlier non-terminal row for
+   * the same binding remains unsettled.
+   */
+  abstract claimChannelOutbox(opts: {
+    harnessName: string;
+    channelId?: string;
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<ChannelOutboxItem[]>;
+
+  abstract renewChannelOutboxClaim(opts: {
+    outboxItemId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }>;
+
+  abstract markChannelOutboxSent(opts: {
+    outboxItemId: string;
+    claimId: string;
+    sentAt?: number;
+    providerMessageId?: string;
+    providerReceipt?: ChannelProviderDeliveryReceipt;
+  }): Promise<void>;
+
+  abstract markChannelOutboxFailed(opts: {
+    outboxItemId: string;
+    claimId: string;
+    retryAt?: number;
+    dead?: boolean;
+    error: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
+  }): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Test-only

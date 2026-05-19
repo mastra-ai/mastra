@@ -457,6 +457,7 @@ export type HarnessRowErrorCode =
   | 'override_conflict'
   | 'channel_binding_closed'
   | 'channel_payload_conflict'
+  | 'delivery_operation_unavailable'
   | 'provider_payload_invalid'
   | 'worker_unavailable'
   | 'unknown';
@@ -628,6 +629,97 @@ export interface CreateOrLoadChannelActionReceiptResult {
   duplicate: boolean;
   conflict: boolean;
   claimed: boolean;
+}
+
+export type ChannelDeliverySemantics =
+  | 'native-idempotency'
+  | 'client-message-id'
+  | 'lookup-reconcile'
+  | 'at-least-once';
+
+export type ChannelOutboxKind =
+  | 'assistant-message'
+  | 'message-edit'
+  | 'inbox-prompt'
+  | 'inbox-resolution'
+  | 'status'
+  | 'tool-result'
+  | 'reaction'
+  | 'custom';
+
+export type ChannelOutboxOperationKind =
+  | 'message-create'
+  | 'message-edit'
+  | 'reaction-add'
+  | 'reaction-remove'
+  | 'file-upload'
+  | 'custom';
+
+export interface ChannelOutboxSource {
+  kind: 'session-event' | 'pending-resume' | 'queue' | 'wakeup' | 'operator' | 'custom';
+  id?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface ChannelOutboxTarget {
+  platform: string;
+  externalTenantId?: string;
+  externalChannelId?: string;
+  externalThreadId: string;
+  externalMessageId?: string;
+}
+
+export interface ChannelProviderDeliveryReceipt {
+  providerMessageId?: string;
+  providerThreadId?: string;
+  deliveryId?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface ChannelOutboxEnqueueOptions {
+  channelId: string;
+  idempotencyKey: string;
+  resourceId: string;
+  threadId: string;
+  sessionId?: string;
+  owningSessionId?: string;
+  source?: ChannelOutboxSource;
+  target: ChannelOutboxTarget;
+  kind: ChannelOutboxKind;
+  operationKind: ChannelOutboxOperationKind;
+  operationName?: string;
+  payload: JsonValue;
+  payloadHash?: string;
+  deliverySemantics?: ChannelDeliverySemantics;
+}
+
+export interface ChannelOutboxItem extends Omit<ChannelOutboxEnqueueOptions, 'payloadHash' | 'deliverySemantics'> {
+  id: string;
+  harnessName: string;
+  providerId: string;
+  bindingId: string;
+  bindingGeneration: number;
+  payloadHash: string;
+  deliverySemantics: ChannelDeliverySemantics;
+  status: 'pending' | 'claimed' | 'sent' | 'failed' | 'dead';
+  attempts: number;
+  claimId?: string;
+  claimExpiresAt?: number;
+  nextAttemptAt?: number;
+  sentAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  providerMessageId?: string;
+  providerReceipt?: ChannelProviderDeliveryReceipt;
+  lastError?: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EnqueueChannelOutboxResult {
+  outboxItemId: string;
+  duplicate: boolean;
+  conflict: boolean;
 }
 
 export interface OperationAdmissionTombstone {

@@ -54,6 +54,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_harness_channel_inbox: new Map(),
       mastra_harness_channel_action_tokens: new Map(),
       mastra_harness_channel_action_receipts: new Map(),
+      mastra_harness_channel_outbox: new Map(),
     };
   }
 

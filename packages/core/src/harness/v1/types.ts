@@ -21,6 +21,11 @@ import type {
   AttachmentObjectPointer,
   AttachmentRendererDescriptor,
   AttachmentSource,
+  ChannelDeliverySemantics,
+  ChannelOutboxEnqueueOptions,
+  ChannelOutboxItem,
+  ChannelOutboxOperationKind,
+  ChannelProviderDeliveryReceipt,
   HarnessAttachmentKind,
   HarnessPrimitiveType,
   HarnessStorage,
@@ -167,14 +172,6 @@ export type ChannelConversationKind = 'dm' | 'group-dm' | 'channel' | 'thread';
 export type ChannelIngressTrigger = 'message' | 'mention' | 'subscribed-message' | 'command';
 export type ChannelIngressDelivery = 'message' | 'queue';
 export type ChannelBindingMode = 'per-user-resource' | 'shared-resource' | 'thread-resource' | 'custom';
-export type ChannelDeliverySemantics = 'native-idempotency' | 'client-message-id' | 'lookup-reconcile' | 'at-least-once';
-export type ChannelOutboxOperationKind =
-  | 'message-create'
-  | 'message-edit'
-  | 'reaction-add'
-  | 'reaction-remove'
-  | 'file-upload'
-  | 'custom';
 
 export interface HarnessChannelTransportRequest {
   method: string;
@@ -231,29 +228,6 @@ export interface ChannelIngressContext extends ChannelIngressEnvelope {
   providerId: string;
 }
 
-export interface ChannelOutboxEnqueueOptions {
-  bindingId: string;
-  operationKind: ChannelOutboxOperationKind;
-  operationName?: string;
-  payload: JsonValue;
-}
-
-export interface ChannelProviderDeliveryReceipt {
-  id: string;
-  metadata?: Record<string, JsonValue>;
-}
-
-export interface ChannelOutboxItem extends ChannelOutboxEnqueueOptions {
-  id: string;
-  harnessName: string;
-  channelId: string;
-  providerId: string;
-  platform: string;
-  deliverySemantics: ChannelDeliverySemantics;
-  attempt: number;
-  createdAt: number;
-}
-
 export interface HarnessChannelDeliveryContext extends Omit<HarnessChannelRouteContext, 'route'> {
   binding: HarnessChannelBinding;
 }
@@ -262,6 +236,27 @@ export interface ChannelOutboxDeliveryPlan {
   operationKind: ChannelOutboxOperationKind;
   operationName?: string;
   deliverySemantics: ChannelDeliverySemantics;
+}
+
+export interface ChannelOutboxDispatchOptions {
+  channelId?: string;
+  limit?: number;
+  claimId?: string;
+  now?: number;
+  claimTtlMs?: number;
+}
+
+export interface ChannelOutboxDispatchResult {
+  claimed: number;
+  sent: number;
+  failed: number;
+  dead: number;
+  items: Array<{
+    outboxItemId: string;
+    status: Extract<ChannelOutboxItem['status'], 'sent' | 'failed' | 'dead'>;
+    providerMessageId?: string;
+    error?: { code: string; message: string };
+  }>;
 }
 
 export interface HarnessChannelAdapter {

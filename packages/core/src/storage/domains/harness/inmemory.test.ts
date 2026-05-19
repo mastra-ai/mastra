@@ -7,12 +7,14 @@ import {
   HarnessStorageChannelActionReceiptTransitionError,
   HarnessStorageChannelInboxClaimConflictError,
   HarnessStorageChannelInboxTransitionError,
+  HarnessStorageChannelOutboxClaimConflictError,
+  HarnessStorageChannelOutboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
 } from './base';
 import { InMemoryHarness } from './inmemory';
-import type { ChannelActionReceipt, ChannelActionToken, ChannelInboxItem, SessionRecord } from './types';
+import type { ChannelActionReceipt, ChannelActionToken, ChannelInboxItem, ChannelOutboxItem, SessionRecord } from './types';
 
 describe('InMemoryHarness admission storage contract', () => {
   it('creates or returns one active session for a namespace/resource/thread key', async () => {
@@ -1111,6 +1113,313 @@ describe('InMemoryHarness channel action ledger', () => {
   });
 });
 
+describe('InMemoryHarness channel outbox ledger', () => {
+  it('dedupes exact outbound projections and flags same-key delivery conflicts', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await expect(storage.enqueueChannelOutbox(sampleChannelOutbox())).resolves.toEqual({
+      outboxItemId: 'outbox-1',
+      duplicate: false,
+      conflict: false,
+    });
+    await expect(storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-retry' }))).resolves.toEqual({
+      outboxItemId: 'outbox-1',
+      duplicate: true,
+      conflict: false,
+    });
+    await expect(
+      storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-conflict', payloadHash: 'payload-hash-2' })),
+    ).resolves.toEqual({
+      outboxItemId: 'outbox-1',
+      duplicate: true,
+      conflict: true,
+    });
+    await expect(
+      storage.enqueueChannelOutbox(
+        sampleChannelOutbox({
+          id: 'outbox-target-conflict',
+          target: {
+            platform: 'slack',
+            externalTenantId: 'tenant-1',
+            externalChannelId: 'channel-1',
+            externalThreadId: 'different-thread',
+          },
+        }),
+      ),
+    ).resolves.toEqual({
+      outboxItemId: 'outbox-1',
+      duplicate: true,
+      conflict: true,
+    });
+  });
+
+  it('claims at most the oldest due row for one binding while allowing different bindings', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-1', idempotencyKey: 'key-1', createdAt: 1000 }));
+    await storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-2', idempotencyKey: 'key-2', createdAt: 1001 }));
+    await storage.enqueueChannelOutbox(
+      sampleChannelOutbox({
+        id: 'outbox-3',
+        bindingId: 'binding-2',
+        idempotencyKey: 'key-3',
+        createdAt: 1002,
+      }),
+    );
+
+    await expect(
+      storage.claimChannelOutbox({
+        harnessName: 'default',
+        claimId: 'claim-1',
+        limit: 10,
+        now: 2000,
+        claimTtlMs: 5000,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'outbox-1', claimId: 'claim-1', status: 'claimed' }),
+      expect.objectContaining({ id: 'outbox-3', claimId: 'claim-1', status: 'claimed' }),
+    ]);
+  });
+
+  it('does not starve due rows for other bindings behind one blocked binding', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.enqueueChannelOutbox(sampleChannelOutbox({ id: 'outbox-1', idempotencyKey: 'key-1', createdAt: 1000 }));
+    await storage.claimChannelOutbox({
+      harnessName: 'default',
+      claimId: 'blocked-binding-claim',
+      limit: 1,
+      now: 2000,
+      claimTtlMs: 5000,
+    });
+    for (let i = 2; i <= 6; i += 1) {
+      await storage.enqueueChannelOutbox(
+        sampleChannelOutbox({ id: `outbox-${i}`, idempotencyKey: `key-${i}`, createdAt: 1000 + i }),
+      );
+    }
+    await storage.enqueueChannelOutbox(
+      sampleChannelOutbox({
+        id: 'outbox-other-binding',
+        bindingId: 'binding-2',
+        idempotencyKey: 'key-other',
+        createdAt: 2000,
+      }),
+    );
+
+    await expect(
+      storage.claimChannelOutbox({
+        harnessName: 'default',
+        claimId: 'other-binding-claim',
+        limit: 1,
+        now: 2500,
+        claimTtlMs: 5000,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'outbox-other-binding', claimId: 'other-binding-claim', status: 'claimed' }),
+    ]);
+  });
+
+  it('reclaims retryable outbox rows after claim expiry and respects retry backoff', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(6000);
+    try {
+      await storage.enqueueChannelOutbox(sampleChannelOutbox());
+      await storage.claimChannelOutbox({
+        harnessName: 'default',
+        claimId: 'first',
+        limit: 1,
+        now: 6000,
+        claimTtlMs: 1000,
+      });
+      await storage.markChannelOutboxFailed({
+        outboxItemId: 'outbox-1',
+        claimId: 'first',
+        retryAt: 7000,
+        error: { code: 'worker_unavailable', message: 'provider timeout' },
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+    await expect(
+      storage.claimChannelOutbox({
+        harnessName: 'default',
+        claimId: 'early',
+        limit: 10,
+        now: 6500,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([]);
+    const retried = await storage.claimChannelOutbox({
+      harnessName: 'default',
+      claimId: 'retry',
+      limit: 10,
+      now: 7000,
+      claimTtlMs: 1000,
+    });
+    expect(retried).toEqual([
+      expect.objectContaining({
+        id: 'outbox-1',
+        status: 'claimed',
+        attempts: 2,
+        claimId: 'retry',
+        claimExpiresAt: 8000,
+      }),
+    ]);
+    expect(retried[0]?.nextAttemptAt).toBeUndefined();
+    expect(retried[0]?.failedAt).toBeUndefined();
+    expect(retried[0]?.lastError).toBeUndefined();
+  });
+
+  it('guards sent and failed transitions by the active outbox claim', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const now = 10_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      await storage.enqueueChannelOutbox(sampleChannelOutbox());
+      await storage.claimChannelOutbox({
+        harnessName: 'default',
+        claimId: 'claim-1',
+        limit: 1,
+        now,
+        claimTtlMs: 5000,
+      });
+
+      await expect(
+        storage.renewChannelOutboxClaim({ outboxItemId: 'outbox-1', claimId: 'other', now: now + 100, claimTtlMs: 5000 }),
+      ).rejects.toBeInstanceOf(HarnessStorageChannelOutboxClaimConflictError);
+      await expect(
+        storage.renewChannelOutboxClaim({
+          outboxItemId: 'outbox-1',
+          claimId: 'claim-1',
+          now: now + 100,
+          claimTtlMs: 5000,
+        }),
+      ).resolves.toEqual({ claimExpiresAt: now + 5100, storageNow: now + 100 });
+
+      await storage.markChannelOutboxSent({
+        outboxItemId: 'outbox-1',
+        claimId: 'claim-1',
+        sentAt: now + 200,
+        providerMessageId: 'provider-message-1',
+        providerReceipt: { providerMessageId: 'provider-message-1', deliveryId: 'delivery-1' },
+      });
+      await expect(
+        storage.markChannelOutboxFailed({
+          outboxItemId: 'outbox-1',
+          claimId: 'claim-1',
+          error: { code: 'unknown', message: 'too late' },
+        }),
+      ).rejects.toBeInstanceOf(HarnessStorageChannelOutboxClaimConflictError);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('records retryable and terminal outbox delivery failures as durable evidence', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const now = 20_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      await storage.enqueueChannelOutbox(sampleChannelOutbox());
+      await storage.claimChannelOutbox({
+        harnessName: 'default',
+        claimId: 'claim-1',
+        limit: 1,
+        now,
+        claimTtlMs: 5000,
+      });
+      await storage.markChannelOutboxFailed({
+        outboxItemId: 'outbox-1',
+        claimId: 'claim-1',
+        retryAt: now + 1000,
+        error: { code: 'worker_unavailable', message: 'provider timeout' },
+      });
+
+      await expect(
+        storage.claimChannelOutbox({
+          harnessName: 'default',
+          claimId: 'claim-2',
+          limit: 1,
+          now: now + 1000,
+          claimTtlMs: 5000,
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          id: 'outbox-1',
+          status: 'claimed',
+          attempts: 2,
+          nextAttemptAt: undefined,
+          failedAt: undefined,
+          lastError: undefined,
+        }),
+      ]);
+
+      await storage.markChannelOutboxFailed({
+        outboxItemId: 'outbox-1',
+        claimId: 'claim-2',
+        dead: true,
+        error: { code: 'provider_payload_invalid', message: 'bad payload' },
+      });
+      await expect(
+        storage.claimChannelOutbox({
+          harnessName: 'default',
+          claimId: 'claim-3',
+          limit: 1,
+          now: now + 2000,
+          claimTtlMs: 5000,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('treats non-retryable outbox delivery failures as terminal', async () => {
+    const db = new InMemoryDB();
+    const storage = new InMemoryHarness({ db });
+    const now = 30_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      await storage.enqueueChannelOutbox(sampleChannelOutbox());
+      await storage.claimChannelOutbox({
+        harnessName: 'default',
+        claimId: 'claim-1',
+        limit: 1,
+        now,
+        claimTtlMs: 5000,
+      });
+      await storage.markChannelOutboxFailed({
+        outboxItemId: 'outbox-1',
+        claimId: 'claim-1',
+        retryAt: now + 1000,
+        error: { code: 'provider_payload_invalid', message: 'bad payload', retryable: false },
+      });
+
+      await expect(
+        storage.claimChannelOutbox({
+          harnessName: 'default',
+          claimId: 'claim-2',
+          limit: 1,
+          now: now + 1000,
+          claimTtlMs: 5000,
+        }),
+      ).resolves.toEqual([]);
+      expect([...db.harnessChannelOutbox.values()][0]).toMatchObject({
+        status: 'dead',
+        deadAt: now,
+        nextAttemptAt: undefined,
+        lastError: { retryable: false },
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('validates new outbox rows before insert', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await expect(
+      storage.enqueueChannelOutbox(sampleChannelOutbox({ status: 'sent', sentAt: 1001 })),
+    ).rejects.toBeInstanceOf(HarnessStorageChannelOutboxTransitionError);
+  });
+});
+
 function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     harnessName: 'default',
@@ -1214,6 +1523,38 @@ function sampleChannelActionReceipt(overrides: Partial<ChannelActionReceipt> = {
     attempts: 0,
     createdAt: 1100,
     updatedAt: 1100,
+    ...overrides,
+  };
+}
+
+function sampleChannelOutbox(overrides: Partial<ChannelOutboxItem> = {}): ChannelOutboxItem {
+  return {
+    id: 'outbox-1',
+    harnessName: 'default',
+    channelId: 'support',
+    providerId: 'slack',
+    bindingId: 'binding-1',
+    bindingGeneration: 1,
+    idempotencyKey: 'outbox-key-1',
+    payloadHash: 'payload-hash-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    sessionId: 'session-1',
+    owningSessionId: 'session-1',
+    target: {
+      platform: 'slack',
+      externalTenantId: 'tenant-1',
+      externalChannelId: 'channel-1',
+      externalThreadId: 'thread-ext-1',
+    },
+    kind: 'assistant-message',
+    operationKind: 'message-create',
+    payload: { text: 'hello' },
+    deliverySemantics: 'native-idempotency',
+    status: 'pending',
+    attempts: 0,
+    createdAt: 1000,
+    updatedAt: 1000,
     ...overrides,
   };
 }

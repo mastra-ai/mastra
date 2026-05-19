@@ -27,6 +27,7 @@ import type {
   ChannelActionReceipt,
   ChannelActionToken,
   ChannelInboxItem,
+  ChannelOutboxItem,
   OperationAdmissionTombstone,
   SessionRecord,
 } from './harness/types';
@@ -104,6 +105,7 @@ export class InMemoryDB {
   readonly harnessChannelInbox = new Map<string, ChannelInboxItem>();
   readonly harnessChannelActionTokens = new Map<string, ChannelActionToken>();
   readonly harnessChannelActionReceipts = new Map<string, ChannelActionReceipt>();
+  readonly harnessChannelOutbox = new Map<string, ChannelOutboxItem>();
   readonly harnessThreadDeleteFences = new Map<
     string,
     { threadId: string; ownerId: string; leaseId: string; createdAt: number; expiresAt: number }
@@ -156,6 +158,7 @@ export class InMemoryDB {
     this.harnessChannelInbox.clear();
     this.harnessChannelActionTokens.clear();
     this.harnessChannelActionReceipts.clear();
+    this.harnessChannelOutbox.clear();
     this.harnessThreadDeleteFences.clear();
   }
 }

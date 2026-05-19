@@ -9,12 +9,13 @@
  * the resolver/lifecycle paths don't dispatch model calls.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
 import type { ChannelProvider } from '../../channels';
 import { Mastra } from '../../mastra';
+import type { ChannelOutboxEnqueueOptions } from '../../storage/domains/harness';
 import {
   HarnessStorage,
   HarnessStorageDeleteGuardConflictError,
@@ -33,6 +34,7 @@ import {
   HarnessSessionDeletedError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
+  HarnessValidationError,
 } from './errors';
 import { Harness } from './harness';
 import type { HarnessChannelConfig } from './types';
@@ -98,6 +100,27 @@ function makeHarnessChannelConfig(overrides: Partial<HarnessChannelConfig> = {})
         mode: 'shared-resource',
       }),
     },
+    ...overrides,
+  };
+}
+
+function channelOutboxInput(overrides: Partial<ChannelOutboxEnqueueOptions> = {}): ChannelOutboxEnqueueOptions {
+  return {
+    channelId: 'support',
+    idempotencyKey: 'outbox-key-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    sessionId: 'session-1',
+    owningSessionId: 'session-1',
+    target: {
+      platform: 'slack',
+      externalTenantId: 'tenant-1',
+      externalChannelId: 'channel-1',
+      externalThreadId: 'thread-ext-1',
+    },
+    kind: 'assistant-message',
+    operationKind: 'message-create',
+    payload: { text: 'hello' },
     ...overrides,
   };
 }
@@ -406,6 +429,351 @@ describe('Harness v1 — construction', () => {
     expect(mastra.getChannels()).toEqual({});
     expect(mastra.getChannelProvider('slack')).toBeDefined();
     expect(harness.listChannelBindings()).toHaveLength(1);
+  });
+
+  it('enqueues durable channel outbox rows before dispatching through the adapter', async () => {
+    const storage = makeStorage();
+    const delivered: string[] = [];
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+      channels: {
+        support: makeHarnessChannelConfig({
+          bindingId: 'support-binding',
+          adapter: {
+            deliverySemantics: 'native-idempotency',
+            deliver: async item => {
+              delivered.push(item.idempotencyKey);
+              return { providerMessageId: 'provider-message-1', providerReceipt: { deliveryId: 'delivery-1' } };
+            },
+          },
+        }),
+      },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+
+    await expect(harness.channels.enqueueOutbox(channelOutboxInput())).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+    });
+    await expect(harness.channels.enqueueOutbox(channelOutboxInput())).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+    });
+    await expect(
+      harness.channels.enqueueOutbox(channelOutboxInput({ payload: { text: 'different' } })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+    });
+    await expect(
+      harness.channels.enqueueOutbox(
+        channelOutboxInput({
+          idempotencyKey: 'outbox-key-wrong-platform',
+          target: {
+            platform: 'discord',
+            externalTenantId: 'tenant-1',
+            externalChannelId: 'channel-1',
+            externalThreadId: 'thread-ext-1',
+          },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(HarnessValidationError);
+
+    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-1' })).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      dead: 0,
+      items: [{ outboxItemId: expect.any(String), status: 'sent', providerMessageId: 'provider-message-1' }],
+    });
+    expect(delivered).toEqual(['outbox-key-1']);
+  });
+
+  it('uses lookup reconciliation before retrying lookup-reconcile outbox rows', async () => {
+    const storage = makeStorage();
+    let deliverCalls = 0;
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+      channels: {
+        support: makeHarnessChannelConfig({
+          outbox: { retryBackoffMs: () => 0, maxAttempts: 2 },
+          adapter: {
+            deliverySemantics: 'lookup-reconcile',
+            reconcileDelivery: async () => ({
+              delivered: true,
+              providerMessageId: 'provider-message-recovered',
+              providerReceipt: { deliveryId: 'delivery-recovered' },
+            }),
+            deliver: async () => {
+              deliverCalls += 1;
+              throw new Error('delivery outcome unknown');
+            },
+          },
+        }),
+      },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+
+    await harness.channels.enqueueOutbox(channelOutboxInput({ deliverySemantics: 'lookup-reconcile' }));
+
+    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-lookup-1' })).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      dead: 0,
+      items: [
+        {
+          outboxItemId: expect.any(String),
+          status: 'failed',
+          error: { code: 'unknown', message: 'delivery outcome unknown' },
+        },
+      ],
+    });
+    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-lookup-2' })).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      dead: 0,
+      items: [
+        { outboxItemId: expect.any(String), status: 'sent', providerMessageId: 'provider-message-recovered' },
+      ],
+    });
+    expect(deliverCalls).toBe(1);
+  });
+
+  it('renews the outbox claim while provider delivery is in flight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    try {
+      const storage = makeStorage();
+      let deliverStarted = false;
+      let resolveDelivery!: () => void;
+      const delivery = new Promise<{ providerMessageId: string }>(resolve => {
+        resolveDelivery = () => resolve({ providerMessageId: 'provider-slow' });
+      });
+      const harness = new Harness({
+        modes: [{ id: 'default', agentId: 'default' }],
+        defaultModeId: 'default',
+        sessions: { storage },
+        channels: {
+          support: makeHarnessChannelConfig({
+            outbox: { claimRenewMs: 25 },
+            adapter: {
+              deliver: async () => {
+                deliverStarted = true;
+                return delivery;
+              },
+            },
+          }),
+        },
+      });
+      new Mastra({
+        agents: { default: makeAgent() },
+        storage: new InMemoryStore(),
+        channels: { slack: makeChannelProvider('slack') },
+        harnesses: { primary: harness },
+      });
+
+      await harness.channels.enqueueOutbox(channelOutboxInput());
+      const firstDispatch = harness.channels.dispatchOutbox({
+        channelId: 'support',
+        claimId: 'claim-slow-1',
+        claimTtlMs: 100,
+      });
+      for (let i = 0; i < 5 && !deliverStarted; i += 1) {
+        await Promise.resolve();
+      }
+      expect(deliverStarted).toBe(true);
+      await vi.advanceTimersByTimeAsync(250);
+
+      await expect(
+        harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-slow-2', claimTtlMs: 100 }),
+      ).resolves.toMatchObject({ claimed: 0, sent: 0, failed: 0, dead: 0 });
+
+      resolveDelivery();
+      await expect(firstDispatch).resolves.toMatchObject({ claimed: 1, sent: 1, failed: 0, dead: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('records terminal provider failures on outbox dispatch', async () => {
+    const storage = makeStorage();
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+      channels: {
+        support: makeHarnessChannelConfig({
+          outbox: { maxAttempts: 1 },
+          adapter: {
+            deliver: async () => {
+              throw new Error('provider rejected payload');
+            },
+          },
+        }),
+      },
+    });
+    new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      channels: { slack: makeChannelProvider('slack') },
+      harnesses: { primary: harness },
+    });
+
+    await harness.channels.enqueueOutbox(channelOutboxInput());
+
+    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-dead' })).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 0,
+      dead: 1,
+      items: [
+        {
+          outboxItemId: expect.any(String),
+          status: 'dead',
+          error: { code: 'unknown', message: 'provider rejected payload' },
+        },
+      ],
+    });
+  });
+
+  it('uses the dispatch clock for retryable outbox failure backoff', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    try {
+      const storage = makeStorage();
+      const harness = new Harness({
+        modes: [{ id: 'default', agentId: 'default' }],
+        defaultModeId: 'default',
+        sessions: { storage },
+        channels: {
+          support: makeHarnessChannelConfig({
+            outbox: { maxAttempts: 3, retryBackoffMs: () => 5_000 },
+            adapter: {
+              deliver: async () => {
+                throw new Error('provider temporarily unavailable');
+              },
+            },
+          }),
+        },
+      });
+      new Mastra({
+        agents: { default: makeAgent() },
+        storage: new InMemoryStore(),
+        channels: { slack: makeChannelProvider('slack') },
+        harnesses: { primary: harness },
+      });
+
+      await harness.channels.enqueueOutbox(channelOutboxInput());
+
+      await expect(
+        harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-clock-1', now: 100_000 }),
+      ).resolves.toMatchObject({
+        claimed: 1,
+        sent: 0,
+        failed: 1,
+        dead: 0,
+      });
+      await expect(
+        harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-clock-early', now: 104_999 }),
+      ).resolves.toMatchObject({
+        claimed: 0,
+        sent: 0,
+        failed: 0,
+        dead: 0,
+      });
+      await expect(
+        harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-clock-2', now: 105_000 }),
+      ).resolves.toMatchObject({
+        claimed: 1,
+        sent: 0,
+        failed: 1,
+        dead: 0,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('backs off from failure time for delayed outbox delivery failures', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    try {
+      const storage = makeStorage();
+      let deliverCalls = 0;
+      const harness = new Harness({
+        modes: [{ id: 'default', agentId: 'default' }],
+        defaultModeId: 'default',
+        sessions: { storage },
+        channels: {
+          support: makeHarnessChannelConfig({
+            outbox: { maxAttempts: 3, retryBackoffMs: () => 5_000 },
+            adapter: {
+              deliver: async () => {
+                deliverCalls += 1;
+                if (deliverCalls === 1) {
+                  await new Promise(resolve => setTimeout(resolve, 10_000));
+                  throw new Error('delayed provider failure');
+                }
+                throw new Error('provider still unavailable');
+              },
+            },
+          }),
+        },
+      });
+      new Mastra({
+        agents: { default: makeAgent() },
+        storage: new InMemoryStore(),
+        channels: { slack: makeChannelProvider('slack') },
+        harnesses: { primary: harness },
+      });
+
+      await harness.channels.enqueueOutbox(channelOutboxInput());
+      const firstDispatch = harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-delayed-1' });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(firstDispatch).resolves.toMatchObject({
+        claimed: 1,
+        sent: 0,
+        failed: 1,
+        dead: 0,
+      });
+      expect(deliverCalls).toBe(1);
+
+      await expect(
+        harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-delayed-early', now: 14_999 }),
+      ).resolves.toMatchObject({
+        claimed: 0,
+        sent: 0,
+        failed: 0,
+        dead: 0,
+      });
+      await expect(
+        harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-delayed-2', now: 15_000 }),
+      ).resolves.toMatchObject({
+        claimed: 1,
+        sent: 0,
+        failed: 1,
+        dead: 0,
+      });
+      expect(deliverCalls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throws HarnessConfigError for unknown agentId on a mode', () => {

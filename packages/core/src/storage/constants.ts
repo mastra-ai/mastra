@@ -54,6 +54,7 @@ export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_
 export const TABLE_HARNESS_CHANNEL_INBOX = 'mastra_harness_channel_inbox';
 export const TABLE_HARNESS_CHANNEL_ACTION_TOKENS = 'mastra_harness_channel_action_tokens';
 export const TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS = 'mastra_harness_channel_action_receipts';
+export const TABLE_HARNESS_CHANNEL_OUTBOX = 'mastra_harness_channel_outbox';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -97,7 +98,8 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_THREAD_DELETE_FENCES
   | typeof TABLE_HARNESS_CHANNEL_INBOX
   | typeof TABLE_HARNESS_CHANNEL_ACTION_TOKENS
-  | typeof TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS;
+  | typeof TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS
+  | typeof TABLE_HARNESS_CHANNEL_OUTBOX;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -843,6 +845,40 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     created_at: { type: 'bigint', nullable: false },
     updated_at: { type: 'bigint', nullable: false },
   },
+  [TABLE_HARNESS_CHANNEL_OUTBOX]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    channel_id: { type: 'text', nullable: false },
+    provider_id: { type: 'text', nullable: false },
+    binding_id: { type: 'text', nullable: false },
+    binding_generation: { type: 'integer', nullable: false },
+    idempotency_key: { type: 'text', nullable: false },
+    payload_hash: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: true },
+    owning_session_id: { type: 'text', nullable: true },
+    source: { type: 'jsonb', nullable: true },
+    target: { type: 'jsonb', nullable: false },
+    kind: { type: 'text', nullable: false },
+    operation_kind: { type: 'text', nullable: false },
+    operation_name: { type: 'text', nullable: true },
+    payload: { type: 'jsonb', nullable: false },
+    delivery_semantics: { type: 'text', nullable: false },
+    status: { type: 'text', nullable: false },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    sent_at: { type: 'bigint', nullable: true },
+    failed_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+    provider_message_id: { type: 'text', nullable: true },
+    provider_receipt: { type: 'jsonb', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
 };
 
 /**
@@ -881,6 +917,9 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS],
+  },
+  [TABLE_HARNESS_CHANNEL_OUTBOX]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_OUTBOX],
   },
 };
 

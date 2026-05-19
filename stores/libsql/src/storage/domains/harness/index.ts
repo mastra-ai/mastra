@@ -11,6 +11,8 @@ import {
   HarnessStorageChannelActionTokenConflictError,
   HarnessStorageChannelInboxClaimConflictError,
   HarnessStorageChannelInboxTransitionError,
+  HarnessStorageChannelOutboxClaimConflictError,
+  HarnessStorageChannelOutboxTransitionError,
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
@@ -23,6 +25,7 @@ import {
   TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
   TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
   TABLE_HARNESS_CHANNEL_INBOX,
+  TABLE_HARNESS_CHANNEL_OUTBOX,
   TABLE_HARNESS_MESSAGE_RESULTS,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_SESSIONS,
@@ -40,6 +43,8 @@ import type {
   ChannelActionReceipt,
   ChannelActionToken,
   ChannelInboxItem,
+  ChannelOutboxItem,
+  ChannelProviderDeliveryReceipt,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
   CreateOrLoadChannelActionReceiptResult,
@@ -92,6 +97,7 @@ export class HarnessLibSQL extends HarnessStorage {
   #compactionLocks = new Map<string, Promise<void>>();
   #channelInboxIndexesReady: Promise<void> | undefined;
   #channelActionIndexesReady: Promise<void> | undefined;
+  #channelOutboxIndexesReady: Promise<void> | undefined;
   #localThreadDeleteFences = new Map<string, { ownerId: string; leaseId: string; ttlMs: number }>();
 
   constructor(config: LibSQLDomainConfig) {
@@ -140,6 +146,7 @@ export class HarnessLibSQL extends HarnessStorage {
     });
     await this.#ensureChannelInboxTable();
     await this.#ensureChannelActionTables();
+    await this.#ensureChannelOutboxTable();
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_SESSIONS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
@@ -213,6 +220,7 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#ensureThreadDeleteFencesTable();
     await this.#ensureChannelInboxTable();
     await this.#ensureChannelActionTables();
+    await this.#ensureChannelOutboxTable();
     this.#localThreadDeleteFences.clear();
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}`);
@@ -221,6 +229,7 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_INBOX}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_ACTION_TOKENS}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_OUTBOX}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSIONS}`);
   }
@@ -2502,6 +2511,224 @@ export class HarnessLibSQL extends HarnessStorage {
     }
   }
 
+  async enqueueChannelOutbox(record: ChannelOutboxItem): Promise<{
+    outboxItemId: string;
+    duplicate: boolean;
+    conflict: boolean;
+  }> {
+    await this.#ensureChannelOutboxTable();
+    const item: ChannelOutboxItem = { ...record, harnessName: this.#resolveHarnessName(record.harnessName) };
+    assertValidChannelOutboxState(item);
+    const cols = channelOutboxColumnValues(item);
+    try {
+      await this.#client.execute({
+        sql: `INSERT INTO ${TABLE_HARNESS_CHANNEL_OUTBOX}
+              (${cols.names.join(', ')})
+              VALUES (${cols.names.map(() => '?').join(', ')})`,
+        args: cols.values,
+      });
+      return { outboxItemId: item.id, duplicate: false, conflict: false };
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+    }
+
+    const existing = await this.#loadChannelOutboxByIdempotencyKey({
+      harnessName: item.harnessName,
+      bindingId: item.bindingId,
+      idempotencyKey: item.idempotencyKey,
+    });
+    if (existing) {
+      return {
+        outboxItemId: existing.id,
+        duplicate: true,
+        conflict: !channelOutboxItemsEquivalentForEnqueue(existing, item),
+      };
+    }
+    const existingById = await this.#loadChannelOutboxItemById(item.id);
+    if (existingById) {
+      throw new HarnessStorageChannelOutboxTransitionError(
+        item.id,
+        existingById.status,
+        item.status,
+        'id is already owned by another outbox item',
+      );
+    }
+    throw new HarnessStorageChannelOutboxTransitionError(
+      item.id,
+      undefined,
+      item.status,
+      'unique constraint conflict could not be resolved after enqueue',
+    );
+  }
+
+  async claimChannelOutbox(opts: {
+    harnessName: string;
+    channelId?: string;
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<ChannelOutboxItem[]> {
+    await this.#ensureChannelOutboxTable();
+    if (opts.limit <= 0) return [];
+    const namespace = this.#resolveHarnessName(opts.harnessName);
+    const filters = [
+      'candidate.harness_name = ?',
+      "candidate.status IN ('pending', 'failed', 'claimed')",
+      '(candidate.claim_id IS NULL OR candidate.claim_expires_at IS NULL OR candidate.claim_expires_at <= ?)',
+      '(candidate.next_attempt_at IS NULL OR candidate.next_attempt_at <= ?)',
+      `NOT EXISTS (
+        SELECT 1 FROM ${TABLE_HARNESS_CHANNEL_OUTBOX} AS earlier
+        WHERE earlier.harness_name = candidate.harness_name
+          AND earlier.binding_id = candidate.binding_id
+          AND earlier.id != candidate.id
+          AND earlier.status NOT IN ('sent', 'dead')
+          AND (earlier.created_at < candidate.created_at
+            OR (earlier.created_at = candidate.created_at AND earlier.id < candidate.id))
+      )`,
+    ];
+    const args: (string | number)[] = [namespace, opts.now, opts.now];
+    if (opts.channelId !== undefined) {
+      filters.splice(1, 0, 'candidate.channel_id = ?');
+      args.splice(1, 0, opts.channelId);
+    }
+    const candidates = await this.#client.execute({
+      sql: `SELECT candidate.id FROM ${TABLE_HARNESS_CHANNEL_OUTBOX} AS candidate
+            WHERE ${filters.join(' AND ')}
+            ORDER BY candidate.created_at ASC, candidate.id ASC
+            LIMIT ?`,
+      args: [...args, opts.limit],
+    });
+    const claimed: ChannelOutboxItem[] = [];
+    for (const row of candidates.rows) {
+      if (claimed.length >= opts.limit) break;
+      const id = String(row.id);
+      const item = await this.#loadChannelOutboxItemById(id, namespace);
+      if (!item || !isChannelOutboxClaimable(item, opts.now)) continue;
+      if (await this.#hasEarlierUnsettledChannelOutboxItem(item)) continue;
+      const update = await this.#client.execute({
+        sql: `UPDATE ${TABLE_HARNESS_CHANNEL_OUTBOX}
+              SET status = 'claimed', attempts = attempts + 1, claim_id = ?, claim_expires_at = ?,
+                  next_attempt_at = NULL, failed_at = NULL, last_error = NULL, updated_at = ?
+              WHERE harness_name = ? AND id = ?
+                AND status IN ('pending', 'failed', 'claimed')
+                AND (claim_id IS NULL OR claim_expires_at IS NULL OR claim_expires_at <= ?)
+                AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                AND NOT EXISTS (
+                  SELECT 1 FROM ${TABLE_HARNESS_CHANNEL_OUTBOX} AS earlier
+                  WHERE earlier.harness_name = ${TABLE_HARNESS_CHANNEL_OUTBOX}.harness_name
+                    AND earlier.binding_id = ${TABLE_HARNESS_CHANNEL_OUTBOX}.binding_id
+                    AND earlier.id != ${TABLE_HARNESS_CHANNEL_OUTBOX}.id
+                    AND earlier.status NOT IN ('sent', 'dead')
+                    AND (
+                      earlier.created_at < ${TABLE_HARNESS_CHANNEL_OUTBOX}.created_at
+                      OR (
+                        earlier.created_at = ${TABLE_HARNESS_CHANNEL_OUTBOX}.created_at
+                        AND earlier.id < ${TABLE_HARNESS_CHANNEL_OUTBOX}.id
+                      )
+                    )
+                )`,
+        args: [opts.claimId, opts.now + opts.claimTtlMs, opts.now, namespace, id, opts.now, opts.now],
+      });
+      if (update.rowsAffected === 0) continue;
+      const claimedItem = await this.#loadChannelOutboxItemById(id, namespace);
+      if (claimedItem) claimed.push(claimedItem);
+    }
+    return claimed;
+  }
+
+  async renewChannelOutboxClaim(opts: {
+    outboxItemId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    await this.#ensureChannelOutboxTable();
+    const claimExpiresAt = opts.now + opts.claimTtlMs;
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_OUTBOX}
+            SET claim_expires_at = ?, updated_at = ?
+            WHERE id = ? AND status = 'claimed' AND claim_id = ? AND claim_expires_at IS NOT NULL AND claim_expires_at > ?`,
+      args: [claimExpiresAt, opts.now, opts.outboxItemId, opts.claimId, opts.now],
+    });
+    if (result.rowsAffected === 0) {
+      throw new HarnessStorageChannelOutboxClaimConflictError(opts.outboxItemId, opts.claimId);
+    }
+    return { claimExpiresAt, storageNow: opts.now };
+  }
+
+  async markChannelOutboxSent(opts: {
+    outboxItemId: string;
+    claimId: string;
+    sentAt?: number;
+    providerMessageId?: string;
+    providerReceipt?: ChannelProviderDeliveryReceipt;
+  }): Promise<void> {
+    await this.#ensureChannelOutboxTable();
+    const current = await this.#claimedChannelOutboxItem(opts.outboxItemId, opts.claimId);
+    const storageNow = Date.now();
+    const next: ChannelOutboxItem = {
+      ...current,
+      status: 'sent',
+      claimId: undefined,
+      claimExpiresAt: undefined,
+      nextAttemptAt: undefined,
+      failedAt: undefined,
+      deadAt: undefined,
+      lastError: undefined,
+      sentAt: opts.sentAt ?? storageNow,
+      providerMessageId: opts.providerMessageId,
+      providerReceipt: opts.providerReceipt,
+      updatedAt: storageNow,
+    };
+    assertLegalChannelOutboxUpdate(current, next);
+    const cols = channelOutboxColumnValues(next);
+    const update = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_OUTBOX}
+            SET ${cols.names.map(name => `${name} = ?`).join(', ')}
+            WHERE id = ? AND status = 'claimed' AND claim_id = ? AND claim_expires_at IS NOT NULL AND claim_expires_at > ?`,
+      args: [...cols.values, opts.outboxItemId, opts.claimId, storageNow],
+    });
+    if (update.rowsAffected === 0) {
+      throw new HarnessStorageChannelOutboxClaimConflictError(opts.outboxItemId, opts.claimId);
+    }
+  }
+
+  async markChannelOutboxFailed(opts: {
+    outboxItemId: string;
+    claimId: string;
+    retryAt?: number;
+    dead?: boolean;
+    error: NonNullable<ChannelOutboxItem['lastError']>;
+  }): Promise<void> {
+    await this.#ensureChannelOutboxTable();
+    const current = await this.#claimedChannelOutboxItem(opts.outboxItemId, opts.claimId);
+    const storageNow = Date.now();
+    const terminal = opts.dead === true || opts.error.retryable === false;
+    const next: ChannelOutboxItem = {
+      ...current,
+      status: terminal ? 'dead' : 'failed',
+      claimId: undefined,
+      claimExpiresAt: undefined,
+      nextAttemptAt: terminal ? undefined : opts.retryAt,
+      failedAt: terminal ? current.failedAt : storageNow,
+      deadAt: terminal ? storageNow : undefined,
+      lastError: { ...opts.error, retryable: terminal ? false : (opts.error.retryable ?? true) },
+      updatedAt: storageNow,
+    };
+    assertLegalChannelOutboxUpdate(current, next);
+    const cols = channelOutboxColumnValues(next);
+    const update = await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_CHANNEL_OUTBOX}
+            SET ${cols.names.map(name => `${name} = ?`).join(', ')}
+            WHERE id = ? AND status = 'claimed' AND claim_id = ? AND claim_expires_at IS NOT NULL AND claim_expires_at > ?`,
+      args: [...cols.values, opts.outboxItemId, opts.claimId, storageNow],
+    });
+    if (update.rowsAffected === 0) {
+      throw new HarnessStorageChannelOutboxClaimConflictError(opts.outboxItemId, opts.claimId);
+    }
+  }
+
   async #loadChannelInboxItemById(id: string, harnessName?: string): Promise<ChannelInboxItem | null> {
     const conditions = ['id = ?'];
     const args: string[] = [id];
@@ -2517,6 +2744,75 @@ export class HarnessLibSQL extends HarnessStorage {
     });
     const row = result.rows[0];
     return row ? rowToChannelInboxItem(row as Record<string, unknown>) : null;
+  }
+
+  async #loadChannelOutboxItemById(id: string, harnessName?: string): Promise<ChannelOutboxItem | null> {
+    const conditions = ['id = ?'];
+    const args: string[] = [id];
+    if (harnessName !== undefined) {
+      conditions.unshift('harness_name = ?');
+      args.unshift(this.#resolveHarnessName(harnessName));
+    }
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_OUTBOX}
+            WHERE ${conditions.join(' AND ')}
+            LIMIT 1`,
+      args,
+    });
+    const row = result.rows[0];
+    return row ? rowToChannelOutboxItem(row as Record<string, unknown>) : null;
+  }
+
+  async #loadChannelOutboxByIdempotencyKey(opts: {
+    harnessName: string;
+    bindingId: string;
+    idempotencyKey: string;
+  }): Promise<ChannelOutboxItem | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_CHANNEL_OUTBOX}
+            WHERE harness_name = ? AND binding_id = ? AND idempotency_key = ?
+            LIMIT 1`,
+      args: [this.#resolveHarnessName(opts.harnessName), opts.bindingId, opts.idempotencyKey],
+    });
+    const row = result.rows[0];
+    return row ? rowToChannelOutboxItem(row as Record<string, unknown>) : null;
+  }
+
+  async #hasEarlierUnsettledChannelOutboxItem(candidate: ChannelOutboxItem): Promise<boolean> {
+    const result = await this.#client.execute({
+      sql: `SELECT id FROM ${TABLE_HARNESS_CHANNEL_OUTBOX}
+            WHERE harness_name = ?
+              AND binding_id = ?
+              AND id != ?
+              AND status NOT IN ('sent', 'dead')
+              AND (created_at < ? OR (created_at = ? AND id < ?))
+            ORDER BY created_at ASC, id ASC
+            LIMIT 1`,
+      args: [
+        candidate.harnessName,
+        candidate.bindingId,
+        candidate.id,
+        candidate.createdAt,
+        candidate.createdAt,
+        candidate.id,
+      ],
+    });
+    return result.rows.length > 0;
+  }
+
+  async #claimedChannelOutboxItem(outboxItemId: string, claimId: string): Promise<ChannelOutboxItem> {
+    const current = await this.#loadChannelOutboxItemById(outboxItemId);
+    const storageNow = Date.now();
+    if (
+      !current ||
+      current.status !== 'claimed' ||
+      current.claimId !== claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= storageNow
+    ) {
+      throw new HarnessStorageChannelOutboxClaimConflictError(outboxItemId, claimId);
+    }
+    return current;
   }
 
   async #backfillHarnessNamespace(): Promise<void> {
@@ -2661,6 +2957,45 @@ export class HarnessLibSQL extends HarnessStorage {
     await this.#client.execute({
       sql: `CREATE INDEX IF NOT EXISTS idx_harness_channel_action_receipts_claim
             ON "${TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS}" ("harness_name", "channel_id", "status", "next_attempt_at", "claim_expires_at", "created_at")`,
+      args: [],
+    });
+  }
+
+  async #ensureChannelOutboxTable(): Promise<void> {
+    const outboxConfig = TABLE_CONFIGS[TABLE_HARNESS_CHANNEL_OUTBOX];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_CHANNEL_OUTBOX,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_CHANNEL_OUTBOX],
+      compositePrimaryKey: outboxConfig?.compositePrimaryKey,
+    });
+    await this.#ensureChannelOutboxIndexes();
+  }
+
+  async #ensureChannelOutboxIndexes(): Promise<void> {
+    if (this.#channelOutboxIndexesReady !== undefined) {
+      return this.#channelOutboxIndexesReady;
+    }
+    this.#channelOutboxIndexesReady = this.#createChannelOutboxIndexes().catch(error => {
+      this.#channelOutboxIndexesReady = undefined;
+      throw error;
+    });
+    return this.#channelOutboxIndexesReady;
+  }
+
+  async #createChannelOutboxIndexes(): Promise<void> {
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_harness_channel_outbox_idempotency
+            ON "${TABLE_HARNESS_CHANNEL_OUTBOX}" ("harness_name", "binding_id", "idempotency_key")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_channel_outbox_claim
+            ON "${TABLE_HARNESS_CHANNEL_OUTBOX}" ("harness_name", "channel_id", "status", "next_attempt_at", "claim_expires_at", "created_at", "id")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_harness_channel_outbox_binding_order
+            ON "${TABLE_HARNESS_CHANNEL_OUTBOX}" ("harness_name", "binding_id", "status", "created_at", "id")`,
       args: [],
     });
   }
@@ -3184,6 +3519,116 @@ function rowToChannelActionReceipt(row: Record<string, unknown>): ChannelActionR
   };
 }
 
+const CHANNEL_OUTBOX_COLUMN_NAMES = [
+  'id',
+  'harness_name',
+  'channel_id',
+  'provider_id',
+  'binding_id',
+  'binding_generation',
+  'idempotency_key',
+  'payload_hash',
+  'resource_id',
+  'thread_id',
+  'session_id',
+  'owning_session_id',
+  'source',
+  'target',
+  'kind',
+  'operation_kind',
+  'operation_name',
+  'payload',
+  'delivery_semantics',
+  'status',
+  'attempts',
+  'claim_id',
+  'claim_expires_at',
+  'next_attempt_at',
+  'sent_at',
+  'failed_at',
+  'dead_at',
+  'provider_message_id',
+  'provider_receipt',
+  'last_error',
+  'created_at',
+  'updated_at',
+] as const;
+
+function channelOutboxColumnValues(record: ChannelOutboxItem): { names: string[]; values: any[] } {
+  const values = [
+    record.id,
+    record.harnessName,
+    record.channelId,
+    record.providerId,
+    record.bindingId,
+    record.bindingGeneration,
+    record.idempotencyKey,
+    record.payloadHash,
+    record.resourceId,
+    record.threadId,
+    record.sessionId ?? null,
+    record.owningSessionId ?? null,
+    record.source ? JSON.stringify(record.source) : null,
+    JSON.stringify(record.target),
+    record.kind,
+    record.operationKind,
+    record.operationName ?? null,
+    JSON.stringify(record.payload),
+    record.deliverySemantics,
+    record.status,
+    record.attempts,
+    record.claimId ?? null,
+    record.claimExpiresAt ?? null,
+    record.nextAttemptAt ?? null,
+    record.sentAt ?? null,
+    record.failedAt ?? null,
+    record.deadAt ?? null,
+    record.providerMessageId ?? null,
+    record.providerReceipt ? JSON.stringify(record.providerReceipt) : null,
+    record.lastError ? JSON.stringify(record.lastError) : null,
+    record.createdAt,
+    record.updatedAt,
+  ];
+  return { names: [...CHANNEL_OUTBOX_COLUMN_NAMES], values };
+}
+
+function rowToChannelOutboxItem(row: Record<string, unknown>): ChannelOutboxItem {
+  return {
+    id: String(row.id),
+    harnessName: String(row.harness_name),
+    channelId: String(row.channel_id),
+    providerId: String(row.provider_id),
+    bindingId: String(row.binding_id),
+    bindingGeneration: Number(row.binding_generation),
+    idempotencyKey: String(row.idempotency_key),
+    payloadHash: String(row.payload_hash),
+    resourceId: String(row.resource_id),
+    threadId: String(row.thread_id),
+    sessionId: row.session_id == null ? undefined : String(row.session_id),
+    owningSessionId: row.owning_session_id == null ? undefined : String(row.owning_session_id),
+    source: parseJson(row.source) ?? undefined,
+    target: parseJson(row.target),
+    kind: String(row.kind) as ChannelOutboxItem['kind'],
+    operationKind: String(row.operation_kind) as ChannelOutboxItem['operationKind'],
+    operationName: row.operation_name == null ? undefined : String(row.operation_name),
+    payload: parseJson(row.payload),
+    deliverySemantics: String(row.delivery_semantics) as ChannelOutboxItem['deliverySemantics'],
+    status: String(row.status) as ChannelOutboxItem['status'],
+    attempts: Number(row.attempts),
+    claimId: row.claim_id == null ? undefined : String(row.claim_id),
+    claimExpiresAt: row.claim_expires_at == null ? undefined : Number(row.claim_expires_at),
+    nextAttemptAt: row.next_attempt_at == null ? undefined : Number(row.next_attempt_at),
+    sentAt: row.sent_at == null ? undefined : Number(row.sent_at),
+    failedAt: row.failed_at == null ? undefined : Number(row.failed_at),
+    deadAt: row.dead_at == null ? undefined : Number(row.dead_at),
+    providerMessageId: row.provider_message_id == null ? undefined : String(row.provider_message_id),
+    providerReceipt: parseJson(row.provider_receipt) ?? undefined,
+    lastError: parseJson(row.last_error) ?? undefined,
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+}
+
 function rowToSession(row: Record<string, unknown>): SessionRecord {
   return {
     harnessName: String(row.harness_name ?? 'default'),
@@ -3457,6 +3902,10 @@ function isTerminalChannelActionReceiptStatus(status: ChannelActionReceipt['stat
   return status === 'applied' || status === 'conflict' || status === 'dead';
 }
 
+function isTerminalChannelOutboxStatus(status: ChannelOutboxItem['status']): boolean {
+  return status === 'sent' || status === 'dead';
+}
+
 function isChannelInboxClaimable(item: ChannelInboxItem, now: number): boolean {
   if (isTerminalChannelInboxStatus(item.status)) return false;
   if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
@@ -3467,6 +3916,12 @@ function isChannelActionReceiptClaimable(receipt: ChannelActionReceipt, now: num
   if (isTerminalChannelActionReceiptStatus(receipt.status)) return false;
   if (receipt.nextAttemptAt !== undefined && receipt.nextAttemptAt > now) return false;
   return receipt.claimId === undefined || receipt.claimExpiresAt === undefined || receipt.claimExpiresAt <= now;
+}
+
+function isChannelOutboxClaimable(item: ChannelOutboxItem, now: number): boolean {
+  if (item.status !== 'pending' && item.status !== 'failed' && item.status !== 'claimed') return false;
+  if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
+  return item.claimId === undefined || item.claimExpiresAt === undefined || item.claimExpiresAt <= now;
 }
 
 function assertLegalChannelInboxUpdate(current: ChannelInboxItem, next: ChannelInboxItem): void {
@@ -3678,6 +4133,135 @@ function assertValidChannelActionReceiptState(
   }
 }
 
+function assertLegalChannelOutboxUpdate(current: ChannelOutboxItem, next: ChannelOutboxItem): void {
+  const immutableMismatch =
+    current.id !== next.id ||
+    current.harnessName !== next.harnessName ||
+    current.channelId !== next.channelId ||
+    current.providerId !== next.providerId ||
+    current.bindingId !== next.bindingId ||
+    current.bindingGeneration !== next.bindingGeneration ||
+    current.idempotencyKey !== next.idempotencyKey ||
+    current.payloadHash !== next.payloadHash ||
+    current.resourceId !== next.resourceId ||
+    current.threadId !== next.threadId ||
+    current.sessionId !== next.sessionId ||
+    current.owningSessionId !== next.owningSessionId ||
+    stableJsonString(current.source) !== stableJsonString(next.source) ||
+    stableJsonString(current.target) !== stableJsonString(next.target) ||
+    current.kind !== next.kind ||
+    current.operationKind !== next.operationKind ||
+    current.operationName !== next.operationName ||
+    stableJsonString(current.payload) !== stableJsonString(next.payload) ||
+    current.deliverySemantics !== next.deliverySemantics ||
+    current.createdAt !== next.createdAt;
+  if (immutableMismatch) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'immutable delivery identity fields cannot change',
+    );
+  }
+  const allowed =
+    current.status === next.status ||
+    ((current.status === 'pending' || current.status === 'failed' || current.status === 'claimed') &&
+      (next.status === 'claimed' || next.status === 'failed' || next.status === 'sent' || next.status === 'dead'));
+  if (!allowed || isTerminalChannelOutboxStatus(current.status)) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'transition is not legal for channel outbox state machine',
+    );
+  }
+  assertValidChannelOutboxState(next, current.status);
+}
+
+function assertValidChannelOutboxState(record: ChannelOutboxItem, currentStatus?: ChannelOutboxItem['status']): void {
+  const validStatus =
+    record.status === 'pending' ||
+    record.status === 'claimed' ||
+    record.status === 'sent' ||
+    record.status === 'failed' ||
+    record.status === 'dead';
+  if (!validStatus) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'status is not a known channel outbox state',
+    );
+  }
+  if (currentStatus === undefined && record.status !== 'pending') {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'new outbox rows must start pending',
+    );
+  }
+  if (record.status === 'pending' && record.attempts !== 0) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'new pending rows must start with zero attempts',
+    );
+  }
+  if (
+    record.status === 'pending' &&
+    (record.claimId !== undefined ||
+      record.claimExpiresAt !== undefined ||
+      record.nextAttemptAt !== undefined ||
+      record.sentAt !== undefined ||
+      record.failedAt !== undefined ||
+      record.deadAt !== undefined ||
+      record.providerMessageId !== undefined ||
+      record.providerReceipt !== undefined ||
+      record.lastError !== undefined)
+  ) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'pending rows must not include claim, retry, terminal, provider, or error metadata',
+    );
+  }
+  if (record.status === 'claimed' && (!record.claimId || record.claimExpiresAt == null)) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'claimed rows require claimId and claimExpiresAt',
+    );
+  }
+  if (record.status === 'sent' && record.sentAt == null) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'sent rows require sentAt',
+    );
+  }
+  if (record.status === 'failed' && (record.failedAt == null || record.lastError == null)) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'failed rows require failedAt and lastError',
+    );
+  }
+  if (record.status === 'dead' && (record.deadAt == null || record.lastError == null)) {
+    throw new HarnessStorageChannelOutboxTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'dead rows require deadAt and lastError',
+    );
+  }
+}
+
 function channelInboxItemsEqual(a: ChannelInboxItem, b: ChannelInboxItem): boolean {
   const aValues = channelInboxComparableValues(a);
   const bValues = channelInboxComparableValues(b);
@@ -3730,6 +4314,29 @@ function channelActionReceiptsEqual(a: ChannelActionReceipt, b: ChannelActionRec
   const aValues = channelActionReceiptComparableValues(a);
   const bValues = channelActionReceiptComparableValues(b);
   return aValues.length === bValues.length && aValues.every((value, index) => Object.is(value, bValues[index]));
+}
+
+function channelOutboxItemsEquivalentForEnqueue(a: ChannelOutboxItem, b: ChannelOutboxItem): boolean {
+  return (
+    a.harnessName === b.harnessName &&
+    a.channelId === b.channelId &&
+    a.providerId === b.providerId &&
+    a.bindingId === b.bindingId &&
+    a.bindingGeneration === b.bindingGeneration &&
+    a.idempotencyKey === b.idempotencyKey &&
+    a.resourceId === b.resourceId &&
+    a.threadId === b.threadId &&
+    a.sessionId === b.sessionId &&
+    a.owningSessionId === b.owningSessionId &&
+    stableJsonString(a.source) === stableJsonString(b.source) &&
+    stableJsonString(a.target) === stableJsonString(b.target) &&
+    a.kind === b.kind &&
+    a.payloadHash === b.payloadHash &&
+    stableJsonString(a.payload) === stableJsonString(b.payload) &&
+    a.operationKind === b.operationKind &&
+    a.operationName === b.operationName &&
+    a.deliverySemantics === b.deliverySemantics
+  );
 }
 
 function channelActionReceiptComparableValues(record: ChannelActionReceipt): unknown[] {

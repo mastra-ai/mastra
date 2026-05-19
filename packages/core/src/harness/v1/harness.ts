@@ -18,7 +18,7 @@
  * recovery live in follow-up Harness v1 lanes.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
@@ -31,9 +31,14 @@ import type {
   HarnessStorage,
   AttachmentSemanticMetadata,
   JsonValue,
+  HarnessRowErrorCode,
+  ChannelOutboxEnqueueOptions,
+  ChannelOutboxItem,
+  ChannelProviderDeliveryReceipt,
 } from '../../storage/domains/harness';
 import {
   HarnessStorageAttachmentInUseError,
+  HarnessStorageChannelOutboxClaimConflictError,
   HarnessStorageLeaseConflictError,
   HarnessStorageParentSessionUnavailableError,
   HarnessStorageSessionNotFoundError,
@@ -68,7 +73,10 @@ import type {
   AttachmentDeleteOptions,
   AttachmentRef,
   AttachmentUploadOptions,
+  ChannelOutboxDispatchOptions,
+  ChannelOutboxDispatchResult,
   HarnessChannelBinding,
+  HarnessChannelConfig,
   HarnessConfig,
   HarnessMode,
   HarnessSkill,
@@ -104,6 +112,9 @@ const MAX_CLOSE_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_SUBAGENT_MAX_DEPTH = 1;
 const DEFAULT_GOAL_MAX_TURNS = 50;
 const DEFAULT_PERMISSION_POLICY: PermissionPolicy = 'ask';
+const DEFAULT_CHANNEL_OUTBOX_CLAIM_TTL_MS = 30_000;
+const DEFAULT_CHANNEL_OUTBOX_BATCH_SIZE = 10;
+const DEFAULT_CHANNEL_OUTBOX_MAX_ATTEMPTS = 3;
 
 type CloseTreeNode = {
   record: SessionRecord;
@@ -879,6 +890,316 @@ export class Harness {
   getChannelBinding(channelId: string): HarnessChannelBinding | undefined {
     void this.mastra;
     return this._channelRegistry.get(channelId);
+  }
+
+  channels = {
+    enqueueOutbox: async (opts: ChannelOutboxEnqueueOptions): Promise<{
+      outboxItemId: string;
+      duplicate: boolean;
+      conflict: boolean;
+    }> => {
+      const storage = this._requireStorage('channels.enqueueOutbox()');
+      const { binding, config } = this._requireChannelRuntime(opts.channelId);
+      const provider = this._requireChannelProvider(binding);
+      if (opts.target.platform !== binding.platform) {
+        throw new HarnessValidationError(
+          'channels.enqueueOutbox().target.platform',
+          `must match channel binding platform "${binding.platform}"`,
+        );
+      }
+      const plan =
+        (await config.adapter.resolveDeliveryPlan?.(opts, {
+          harnessName: this._harnessName,
+          channelId: binding.channelId,
+          providerId: binding.providerId,
+          platform: binding.platform,
+          provider,
+          binding,
+        })) ?? {
+          operationKind: opts.operationKind,
+          operationName: opts.operationName,
+          deliverySemantics: this._resolveChannelDeliverySemantics(opts, config),
+        };
+      const now = Date.now();
+      return storage.enqueueChannelOutbox({
+        id: `outbox-${randomUUID()}`,
+        harnessName: this._harnessName,
+        channelId: binding.channelId,
+        providerId: binding.providerId,
+        bindingId: binding.bindingId,
+        bindingGeneration: 1,
+        idempotencyKey: opts.idempotencyKey,
+        payloadHash: opts.payloadHash ?? sha256CanonicalJson(opts.payload),
+        resourceId: opts.resourceId,
+        threadId: opts.threadId,
+        ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+        ...(opts.owningSessionId !== undefined ? { owningSessionId: opts.owningSessionId } : {}),
+        ...(opts.source !== undefined ? { source: opts.source } : {}),
+        target: opts.target,
+        kind: opts.kind,
+        operationKind: plan.operationKind,
+        ...(plan.operationName !== undefined ? { operationName: plan.operationName } : {}),
+        payload: opts.payload,
+        deliverySemantics: plan.deliverySemantics,
+        status: 'pending',
+        attempts: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+    },
+
+    dispatchOutbox: async (opts: ChannelOutboxDispatchOptions = {}): Promise<ChannelOutboxDispatchResult> => {
+      const storage = this._requireStorage('channels.dispatchOutbox()');
+      const claimId = opts.claimId ?? `outbox-claim-${randomUUID()}`;
+      const claimed = await storage.claimChannelOutbox({
+        harnessName: this._harnessName,
+        ...(opts.channelId !== undefined ? { channelId: opts.channelId } : {}),
+        claimId,
+        limit: opts.limit ?? this._channelOutboxBatchSize(opts.channelId),
+        now: opts.now ?? Date.now(),
+        claimTtlMs: opts.claimTtlMs ?? this._channelOutboxClaimTtlMs(opts.channelId),
+      });
+      const result: ChannelOutboxDispatchResult = { claimed: claimed.length, sent: 0, failed: 0, dead: 0, items: [] };
+      const itemResults = await Promise.allSettled(
+        claimed.map(item => this._dispatchClaimedChannelOutboxItem(storage, item, claimId, opts)),
+      );
+      for (const [index, settled] of itemResults.entries()) {
+        const itemResult =
+          settled.status === 'fulfilled'
+            ? settled.value
+            : ({
+                outboxItemId: claimed[index]!.id,
+                status: 'failed',
+                error: {
+                  code: 'unknown',
+                  message: settled.reason instanceof Error ? settled.reason.message : 'channel outbox dispatch failed',
+                },
+              } satisfies ChannelOutboxDispatchResult['items'][number]);
+        if (itemResult.status === 'sent') result.sent += 1;
+        if (itemResult.status === 'failed') result.failed += 1;
+        if (itemResult.status === 'dead') result.dead += 1;
+        result.items.push(itemResult);
+      }
+      return result;
+    },
+  };
+
+  private _requireChannelRuntime(channelId: string): { binding: HarnessChannelBinding; config: HarnessChannelConfig } {
+    const binding = this.getChannelBinding(channelId);
+    const config = this._channelRegistry.getConfig(channelId);
+    if (!binding || !config) {
+      throw new HarnessConfigError(`channels["${channelId}"]`, 'is not registered on this harness');
+    }
+    return { binding, config };
+  }
+
+  private _requireChannelProvider(binding: HarnessChannelBinding) {
+    const provider = this.mastra.getChannelProvider(binding.providerId);
+    if (!provider || provider.id !== binding.platform) {
+      throw new HarnessConfigError(
+        `channels["${binding.channelId}"].providerId`,
+        `provider "${binding.providerId}" is unavailable or no longer matches platform "${binding.platform}"`,
+      );
+    }
+    return provider;
+  }
+
+  private _resolveChannelDeliverySemantics(
+    opts: ChannelOutboxEnqueueOptions,
+    config: HarnessChannelConfig,
+  ): NonNullable<ChannelOutboxEnqueueOptions['deliverySemantics']> {
+    return (
+      opts.deliverySemantics ??
+      config.adapter.deliverySemanticsByOperation?.[opts.operationKind] ??
+      config.adapter.deliverySemantics ??
+      'at-least-once'
+    );
+  }
+
+  private _channelOutboxClaimTtlMs(channelId: string | undefined): number {
+    if (channelId === undefined) return DEFAULT_CHANNEL_OUTBOX_CLAIM_TTL_MS;
+    return this._channelRegistry.getConfig(channelId)?.outbox?.claimTtlMs ?? DEFAULT_CHANNEL_OUTBOX_CLAIM_TTL_MS;
+  }
+
+  private _channelOutboxBatchSize(channelId: string | undefined): number {
+    if (channelId === undefined) return DEFAULT_CHANNEL_OUTBOX_BATCH_SIZE;
+    return this._channelRegistry.getConfig(channelId)?.outbox?.batchSize ?? DEFAULT_CHANNEL_OUTBOX_BATCH_SIZE;
+  }
+
+  private async _dispatchClaimedChannelOutboxItem(
+    storage: HarnessStorage,
+    item: ChannelOutboxItem,
+    claimId: string,
+    opts: ChannelOutboxDispatchOptions,
+  ): Promise<ChannelOutboxDispatchResult['items'][number]> {
+    const { binding, config } = this._channelRuntimeForDispatch(item);
+    const maxAttempts = config?.outbox?.maxAttempts ?? DEFAULT_CHANNEL_OUTBOX_MAX_ATTEMPTS;
+    const claimTtlMs = opts.claimTtlMs ?? config?.outbox?.claimTtlMs ?? DEFAULT_CHANNEL_OUTBOX_CLAIM_TTL_MS;
+    const claimRenewMs = config?.outbox?.claimRenewMs ?? Math.max(1, Math.floor(claimTtlMs / 2));
+    const markFailure = async (code: HarnessRowErrorCode, message: string, retryable = true) => {
+      const dead = !retryable || item.attempts >= maxAttempts;
+      const retryBaseNow = opts.now ?? Date.now();
+      try {
+        await storage.markChannelOutboxFailed({
+          outboxItemId: item.id,
+          claimId,
+          dead,
+          ...(!dead ? { retryAt: retryBaseNow + this._channelOutboxRetryBackoffMs(config, item.attempts) } : {}),
+          error: { code, message, retryable: !dead },
+        });
+      } catch (err) {
+        if (!(err instanceof HarnessStorageChannelOutboxClaimConflictError)) throw err;
+        return {
+          outboxItemId: item.id,
+          status: 'failed' as const,
+          error: { code, message: `${message}; claim was lost before failure could be recorded` },
+        };
+      }
+      return {
+        outboxItemId: item.id,
+        status: dead ? ('dead' as const) : ('failed' as const),
+        error: { code, message },
+      };
+    };
+
+    if (!binding || !config || binding.providerId !== item.providerId || item.bindingGeneration !== 1) {
+      return markFailure('delivery_operation_unavailable', 'channel binding is unavailable for outbox delivery');
+    }
+
+    const provider = this.mastra.getChannelProvider(binding.providerId);
+    if (!provider || provider.id !== binding.platform) {
+      return markFailure('delivery_operation_unavailable', 'channel provider is unavailable for outbox delivery');
+    }
+
+    const ctx = {
+      harnessName: this._harnessName,
+      channelId: binding.channelId,
+      providerId: binding.providerId,
+      platform: binding.platform,
+      provider,
+      binding,
+    };
+
+    let providerMessageId: string | undefined;
+    let providerReceipt: ChannelProviderDeliveryReceipt | undefined;
+    let deliveryConfirmed = false;
+    try {
+      await storage.renewChannelOutboxClaim({
+        outboxItemId: item.id,
+        claimId,
+        now: Date.now(),
+        claimTtlMs,
+      });
+
+      if (item.deliverySemantics === 'lookup-reconcile' && item.attempts > 1) {
+        if (!config.adapter.reconcileDelivery) {
+          return markFailure(
+            'delivery_operation_unavailable',
+            'channel adapter cannot reconcile lookup-reconcile outbox delivery',
+          );
+        }
+        const reconciliation = await this._withChannelOutboxClaimHeartbeat(
+          storage,
+          item,
+          claimId,
+          claimTtlMs,
+          claimRenewMs,
+          () => config.adapter.reconcileDelivery!(item, ctx),
+        );
+        if (reconciliation.delivered) {
+          providerMessageId = reconciliation.providerMessageId ?? reconciliation.providerReceipt?.providerMessageId;
+          providerReceipt = reconciliation.providerReceipt;
+          deliveryConfirmed = true;
+        }
+      }
+
+      if (!deliveryConfirmed) {
+        const delivery = await this._withChannelOutboxClaimHeartbeat(
+          storage,
+          item,
+          claimId,
+          claimTtlMs,
+          claimRenewMs,
+          () => config.adapter.deliver(item, ctx),
+        );
+        providerMessageId = delivery.providerMessageId ?? delivery.providerReceipt?.providerMessageId;
+        providerReceipt = delivery.providerReceipt;
+        deliveryConfirmed = true;
+      }
+    } catch (err) {
+      return markFailure('unknown', err instanceof Error ? err.message : 'channel outbox delivery failed');
+    }
+    try {
+      await storage.markChannelOutboxSent({
+        outboxItemId: item.id,
+        claimId,
+        ...(providerMessageId !== undefined ? { providerMessageId } : {}),
+        ...(providerReceipt !== undefined ? { providerReceipt } : {}),
+      });
+    } catch (err) {
+      if (!(err instanceof HarnessStorageChannelOutboxClaimConflictError)) throw err;
+      return {
+        outboxItemId: item.id,
+        status: 'failed',
+        error: { code: 'unknown', message: 'channel outbox claim was lost before sent delivery could be recorded' },
+      };
+    }
+    return {
+      outboxItemId: item.id,
+      status: 'sent',
+      ...(providerMessageId !== undefined ? { providerMessageId } : {}),
+    };
+  }
+
+  private _channelRuntimeForDispatch(
+    item: ChannelOutboxItem,
+  ): { binding?: HarnessChannelBinding; config?: HarnessChannelConfig } {
+    const binding = this.getChannelBinding(item.channelId);
+    const config = this._channelRegistry.getConfig(item.channelId);
+    if (!binding || !config) return {};
+    if (binding.bindingId !== item.bindingId) return {};
+    return { binding, config };
+  }
+
+  private _channelOutboxRetryBackoffMs(config: HarnessChannelConfig | undefined, attempt: number): number {
+    return config?.outbox?.retryBackoffMs?.(attempt) ?? Math.min(60_000, 1000 * 2 ** Math.max(0, attempt - 1));
+  }
+
+  private async _withChannelOutboxClaimHeartbeat<T>(
+    storage: HarnessStorage,
+    item: ChannelOutboxItem,
+    claimId: string,
+    claimTtlMs: number,
+    claimRenewMs: number,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    let heartbeatError: unknown;
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const renew = async () => {
+      try {
+        await storage.renewChannelOutboxClaim({
+          outboxItemId: item.id,
+          claimId,
+          now: Date.now(),
+          claimTtlMs,
+        });
+        heartbeatError = undefined;
+      } catch (err) {
+        heartbeatError = err;
+        if (interval !== undefined) clearInterval(interval);
+      }
+    };
+    interval = setInterval(() => {
+      void renew();
+    }, claimRenewMs);
+    interval.unref?.();
+    try {
+      const result = await operation();
+      if (heartbeatError) throw heartbeatError;
+      return result;
+    } finally {
+      if (interval !== undefined) clearInterval(interval);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -2824,4 +3145,19 @@ function emptySessionGrants(): SessionGrants {
 
 function zeroTokenUsage(): TokenUsage {
   return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+}
+
+function sha256CanonicalJson(value: JsonValue): string {
+  return createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex');
+}
+
+function canonicalJson(value: JsonValue): string {
+  if (value === null) return 'null';
+  if (typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  return `{${Object.keys(value)
+    .sort()
+    .map(key => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`)
+    .join(',')}}`;
 }

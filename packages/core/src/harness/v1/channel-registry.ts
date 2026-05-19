@@ -161,6 +161,10 @@ export class HarnessChannelRegistry {
     return binding ? { ...binding } : undefined;
   }
 
+  getConfig(channelId: string): HarnessChannelConfig | undefined {
+    return this.pending.get(channelId)?.config;
+  }
+
   private resolveProviderPlatform(provider: ChannelProvider, registration: PendingChannelRegistration): string {
     const platform = provider.id;
     if (typeof platform !== 'string' || platform.length === 0) {

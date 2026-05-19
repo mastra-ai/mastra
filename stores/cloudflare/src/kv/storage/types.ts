@@ -41,6 +41,9 @@ import type {
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_THREAD_DELETE_FENCES,
   TABLE_HARNESS_CHANNEL_INBOX,
+  TABLE_HARNESS_CHANNEL_ACTION_TOKENS,
+  TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS,
+  TABLE_HARNESS_CHANNEL_OUTBOX,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -192,6 +195,9 @@ export type RecordTypes = {
   [TABLE_HARNESS_MESSAGE_RESULTS]: Record<string, any>;
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: Record<string, any>;
   [TABLE_HARNESS_THREAD_DELETE_FENCES]: Record<string, any>;
+  [TABLE_HARNESS_CHANNEL_ACTION_TOKENS]: Record<string, any>;
+  [TABLE_HARNESS_CHANNEL_ACTION_RECEIPTS]: Record<string, any>;
+  [TABLE_HARNESS_CHANNEL_OUTBOX]: Record<string, any>;
 };
 
 export type ListOptions = {
