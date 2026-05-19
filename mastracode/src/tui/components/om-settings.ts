@@ -324,7 +324,7 @@ export class OMSettingsComponent extends Box implements Focusable {
         label: 'Observe attachments',
         description:
           'Forward image and file attachments to the Observer LLM. ' +
-          'Turn off when using a text-only observer model — placeholder text is preserved either way',
+          'Turn off if your observer model is text-only',
         currentValue: config.observeAttachments ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new BooleanSubmenu(
