@@ -249,7 +249,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
-      // Throws 404 if the caller isn't the owner, admin, `agents:read[:<id>]`
+      // Throws 404 if the caller isn't the owner, admin, `stored-agents:read[:<id>]`
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 

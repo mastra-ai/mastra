@@ -1,5 +1,4 @@
 import { Slot } from '@radix-ui/react-slot';
-import { CircleAlertIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
@@ -16,7 +15,6 @@ export type NavLink = {
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
-  isExperimental?: boolean;
   /** @deprecated Sidebar nav items now render flush; this option is accepted but ignored. */
   indent?: boolean;
 };
@@ -104,14 +102,6 @@ export function MainSidebarNavLink({
         {link.icon}
         <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
         {children}
-        {link.isExperimental && !isCollapsed && !needsTooltip && (
-          <Tooltip>
-            <TooltipTrigger render={<CircleAlertIcon className="ml-auto stroke-accent5" />} />
-            <TooltipContent side="right" align="center" sideOffset={16}>
-              Experimental Feature
-            </TooltipContent>
-          </Tooltip>
-        )}
       </Link>
     );
   }
