@@ -1,5 +1,200 @@
 # mastra
 
+## 1.9.4-alpha.2
+
+### Patch Changes
+
+- Bumped the `@mastra/core` peer dependency floor from `>=1.32.0-0` to `>=1.34.0-0`. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+- Fixed several issues with the studio playground's browser-stream connection: ([#16668](https://github.com/mastra-ai/mastra/pull/16668))
+  - Studio no longer opens a browser-stream connection for agents that don't have any browser tools, so there are no more failed connection attempts or sidebar flicker on regular agent chats.
+  - Agents that do have browser tools now wait until a session actually exists before connecting, so opening a chat no longer triggers reconnect storms when no browser activity is happening yet.
+  - The screencast viewer no longer makes the rest of the chat UI re-render on every incoming frame, so scrolling, sidebars, and status indicators stay smooth while a browser session is live.
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`6b25032`](https://github.com/mastra-ai/mastra/commit/6b250329fa4795b4d085cba4077c7998893c1d59), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/deployer@1.36.0-alpha.2
+
+## 1.9.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25)]:
+  - @mastra/core@1.36.0-alpha.1
+  - @mastra/deployer@1.36.0-alpha.1
+
+## 1.9.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+  - @mastra/deployer@1.36.0-alpha.0
+
+## 1.9.3
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0
+  - @mastra/deployer@1.35.0
+
+## 1.9.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0-alpha.3
+  - @mastra/deployer@1.35.0-alpha.3
+
+## 1.9.3-alpha.2
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+- Updated dependencies [[`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04)]:
+  - @mastra/core@1.35.0-alpha.2
+  - @mastra/deployer@1.35.0-alpha.2
+
+## 1.9.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2)]:
+  - @mastra/core@1.35.0-alpha.1
+  - @mastra/deployer@1.35.0-alpha.1
+
+## 1.9.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7)]:
+  - @mastra/core@1.34.1-alpha.0
+  - @mastra/deployer@1.34.1-alpha.0
+
+## 1.9.2
+
+### Patch Changes
+
+- Observability API commands now target the hosted Mastra Platform Observability API by default and can infer credentials from project environment variables, project metadata, or the CLI login token. ([#16563](https://github.com/mastra-ai/mastra/pull/16563))
+
+  `mastra api trace get <traceId>` now fetches lightweight trace details by default, `--verbose` fetches the full trace payload, and `mastra api trace span <traceId> <spanId>` fetches one full span after identifying it from the lightweight trace.
+
+- Update observability trace listing so `mastra api trace list` uses lightweight trace rows by default and supports `--verbose` to fetch the full root span payloads. ([#16608](https://github.com/mastra-ai/mastra/pull/16608))
+
+- Track Mastra Observability choices in CLI telemetry. ([#16524](https://github.com/mastra-ai/mastra/pull/16524))
+
+- Added named `mastra api metric` commands for querying hosted observability metrics, including aggregate, breakdown, timeseries, percentiles, metric name discovery, and metric label discovery. ([#16563](https://github.com/mastra-ai/mastra/pull/16563))
+
+- Fixed `mastra studio deploy --project <name>` and `mastra server deploy --project <name>` so that passing a project name now works as documented. ([#16569](https://github.com/mastra-ai/mastra/pull/16569))
+
+  **What changed**
+  - The `--project` flag now matches projects by name, in addition to id and slug.
+  - When no project matches, the CLI creates a new project (after a confirmation prompt, or immediately with `--yes`).
+
+  **Why**
+
+  Previously, passing a name that didn't match an existing slug or id silently wrote the raw string into `.mastra-project.json` as the project ID. The deploy then failed against a project ID that does not exist, and `.mastra-project.json` had to be hand-edited before retrying.
+
+  ```bash
+  # Before: silently wrote { projectId: 'my-app' } and failed
+  mastra server deploy --project my-app --yes
+
+  # After: matches an existing project named 'my-app', or creates it
+  mastra server deploy --project my-app --yes
+  ```
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0
+  - @mastra/deployer@1.34.0
+
+## 1.9.2-alpha.3
+
+### Patch Changes
+
+- Update observability trace listing so `mastra api trace list` uses lightweight trace rows by default and supports `--verbose` to fetch the full root span payloads. ([#16608](https://github.com/mastra-ai/mastra/pull/16608))
+
+- Track Mastra Observability choices in CLI telemetry. ([#16524](https://github.com/mastra-ai/mastra/pull/16524))
+
+- Fixed `mastra studio deploy --project <name>` and `mastra server deploy --project <name>` so that passing a project name now works as documented. ([#16569](https://github.com/mastra-ai/mastra/pull/16569))
+
+  **What changed**
+  - The `--project` flag now matches projects by name, in addition to id and slug.
+  - When no project matches, the CLI creates a new project (after a confirmation prompt, or immediately with `--yes`).
+
+  **Why**
+
+  Previously, passing a name that didn't match an existing slug or id silently wrote the raw string into `.mastra-project.json` as the project ID. The deploy then failed against a project ID that does not exist, and `.mastra-project.json` had to be hand-edited before retrying.
+
+  ```bash
+  # Before: silently wrote { projectId: 'my-app' } and failed
+  mastra server deploy --project my-app --yes
+
+  # After: matches an existing project named 'my-app', or creates it
+  mastra server deploy --project my-app --yes
+  ```
+
+- Updated dependencies [[`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804)]:
+  - @mastra/core@1.34.0-alpha.3
+  - @mastra/deployer@1.34.0-alpha.3
+
+## 1.9.2-alpha.2
+
+### Patch Changes
+
+- Observability API commands now target the hosted Mastra Platform Observability API by default and can infer credentials from project environment variables, project metadata, or the CLI login token. ([#16563](https://github.com/mastra-ai/mastra/pull/16563))
+
+  `mastra api trace get <traceId>` now fetches lightweight trace details by default, `--verbose` fetches the full trace payload, and `mastra api trace span <traceId> <spanId>` fetches one full span after identifying it from the lightweight trace.
+
+- Added named `mastra api metric` commands for querying hosted observability metrics, including aggregate, breakdown, timeseries, percentiles, metric name discovery, and metric label discovery. ([#16563](https://github.com/mastra-ai/mastra/pull/16563))
+
+- Updated dependencies [[`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2)]:
+  - @mastra/core@1.34.0-alpha.2
+  - @mastra/deployer@1.34.0-alpha.2
+
+## 1.9.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0-alpha.1
+  - @mastra/deployer@1.34.0-alpha.1
+
+## 1.9.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6)]:
+  - @mastra/core@1.34.0-alpha.0
+  - @mastra/deployer@1.34.0-alpha.0
+
+## 1.9.1
+
+### Patch Changes
+
+- Re-prompt the Mastra Observability question when the browser sign-in flow fails or is cancelled in `mastra init` / `create-mastra`, instead of leaving the CLI stuck. Picking "No" on the retry is a clean way to continue without observability. ([#16538](https://github.com/mastra-ai/mastra/pull/16538))
+
+- Make the playground/Studio chat runtime opt into the agent-signals streaming path (`sendSignal` + `subscribeToThread`) via the `MASTRA_AGENT_SIGNALS` environment variable. When unset (the default), Studio falls back to the existing `streamUntilIdle` route — this restores the pre-signals behavior while issues with tool approvals and dropped signal/UI messages are fixed. ([#16551](https://github.com/mastra-ai/mastra/pull/16551))
+
+- Updated dependencies [[`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1), [`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb), [`fd1d852`](https://github.com/mastra-ai/mastra/commit/fd1d85248ccf197d138ebfed2f71a25319102919)]:
+  - @mastra/core@1.33.1
+  - @mastra/deployer@1.33.1
+
+## 1.9.1-alpha.1
+
+### Patch Changes
+
+- Re-prompt the Mastra Observability question when the browser sign-in flow fails or is cancelled in `mastra init` / `create-mastra`, instead of leaving the CLI stuck. Picking "No" on the retry is a clean way to continue without observability. ([#16538](https://github.com/mastra-ai/mastra/pull/16538))
+
+- Make the playground/Studio chat runtime opt into the agent-signals streaming path (`sendSignal` + `subscribeToThread`) via the `MASTRA_AGENT_SIGNALS` environment variable. When unset (the default), Studio falls back to the existing `streamUntilIdle` route — this restores the pre-signals behavior while issues with tool approvals and dropped signal/UI messages are fixed. ([#16551](https://github.com/mastra-ai/mastra/pull/16551))
+
+- Updated dependencies [[`3e63fca`](https://github.com/mastra-ai/mastra/commit/3e63fca7aa41269b2a9518effdd09b8ab8f1ff04), [`bc386e0`](https://github.com/mastra-ai/mastra/commit/bc386e08249dd30f3e66cf59de0c151a8dc26afb), [`fd1d852`](https://github.com/mastra-ai/mastra/commit/fd1d85248ccf197d138ebfed2f71a25319102919)]:
+  - @mastra/core@1.33.1-alpha.1
+  - @mastra/deployer@1.33.1-alpha.1
+
 ## 1.9.1-alpha.0
 
 ### Patch Changes

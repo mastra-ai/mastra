@@ -1,11 +1,17 @@
 ---
-title: "Response caching | Agents"
+title: "Response Caching | Agents"
 description: "Cache identical agent calls to skip the LLM, return responses instantly, and avoid duplicate spend."
 packages:
   - "@mastra/core"
 ---
 
-# Response caching
+# Response Caching
+
+:::experimental
+
+This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
 
 Response caching skips the LLM call and replays a previously cached response when an agent receives an identical request. Use it to reduce latency and avoid paying for repeated calls.
 

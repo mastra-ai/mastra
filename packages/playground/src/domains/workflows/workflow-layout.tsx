@@ -1,5 +1,5 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { Header, HeaderTitle, MainContentLayout, MainContentContent, Skeleton, Txt } from '@mastra/playground-ui';
+import { Skeleton, Txt } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 import { WorkflowHeader } from './workflow-header';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
@@ -18,32 +18,19 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   if (!workflowId) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Skeleton className="h-6 w-[200px]" />
-          </HeaderTitle>
-        </Header>
-        <MainContentContent isCentered={true}>
-          <div className="flex flex-col items-center justify-center h-full">
-            <Txt variant="ui-md" className="text-neutral6 text-center">
-              No workflow ID provided
-            </Txt>
-          </div>
-        </MainContentContent>
-      </MainContentLayout>
+      <div className="flex h-full flex-col items-center justify-center">
+        <Txt variant="ui-md" className="text-neutral6 text-center">
+          No workflow ID provided
+        </Txt>
+      </div>
     );
   }
 
   if (isWorkflowLoading) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Skeleton className="h-6 w-[200px]" />
-          </HeaderTitle>
-        </Header>
-      </MainContentLayout>
+      <div className="h-full p-4">
+        <Skeleton className="h-full" />
+      </div>
     );
   }
 
@@ -66,8 +53,8 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
       <SchemaRequestContextProvider>
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-          <MainContentLayout>
-            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
+          <div className="h-full min-h-0">
+            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
             <WorkflowLayoutUI
               workflowId={workflowId!}
               leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
@@ -75,7 +62,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
             >
               {children}
             </WorkflowLayoutUI>
-          </MainContentLayout>
+          </div>
         </WorkflowRunProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>

@@ -3,11 +3,14 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
-import { Agent } from '../agent';
-import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from '../agent';
+import { Agent } from '../agent/agent';
+import type { AgentExecutionOptions } from '../agent/agent.types';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
-import type { MessageInput } from '../agent/message-list';
+import type { MastraDBMessage, MessageInput } from '../agent/message-list';
+import { isAgentCompatible } from '../agent/subagent';
+import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
+import type { AgentStreamOptions } from '../agent/types';
 import { MastraFGAPermissions } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
@@ -45,8 +48,8 @@ import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { Tool } from '../tools';
-import type { ToolExecutionContext } from '../tools';
+import { Tool } from '../tools/tool';
+import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
@@ -138,10 +141,6 @@ export function mapVariable(config: any): any {
 // Type Guards
 // ============================================
 
-function isAgent<TStepId extends string>(input: unknown): input is Agent<TStepId, any> {
-  return input instanceof Agent;
-}
-
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
   return input instanceof Tool;
 }
@@ -230,7 +229,7 @@ export function createStep<
  * Creates a step from an agent (defaults to { text: string } output)
  */
 export function createStep<TStepId extends string>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
     structuredOutput?: never;
     retries?: number;
@@ -242,7 +241,7 @@ export function createStep<TStepId extends string>(
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
     structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
@@ -330,7 +329,7 @@ export function createStep<
 export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
   // Type assertions are needed because each branch returns a different Step type,
   // but the overloads ensure type safety for consumers
-  if (isAgent(params)) {
+  if (isAgentCompatible(params)) {
     return createStepFromAgent(params, agentOrToolOptions);
   }
 
@@ -380,7 +379,7 @@ function createStepFromParams<
   // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
   // but we need it to match the inferred generic types. The public overloads ensure
   // type safety for consumers.
-  return {
+  const step = {
     id: params.id,
     description: params.description,
     inputSchema: params.inputSchema ? toStandardSchema(params.inputSchema) : params.inputSchema,
@@ -402,10 +401,33 @@ function createStepFromParams<
       DefaultEngineType
     >['execute'],
   };
+
+  const paramsWithChildren = params as StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema
+  > & {
+    steps?: Record<string, unknown> | unknown[];
+    children?: Record<string, unknown> | unknown[];
+    stepGraph?: unknown[];
+  };
+
+  if (paramsWithChildren.steps || paramsWithChildren.children || paramsWithChildren.stepGraph) {
+    Object.assign(step, {
+      steps: paramsWithChildren.steps,
+      children: paramsWithChildren.children,
+      stepGraph: paramsWithChildren.stepGraph,
+    });
+  }
+
+  return step;
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
-  params: Agent<TStepId, any>,
+  params: SubAgent<TStepId, any> | Agent<TStepId, any, any>,
   agentOrToolOptions?: AgentStepOptions<TStepOutput> & {
     structuredOutput?: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
@@ -477,42 +499,35 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       let stream: ReadableStream<any>;
 
-      if ((await params.getModel()).specificationVersion === 'v1') {
+      const handleFinish = (result: any) => {
+        const resultWithObject = result as typeof result & { object?: unknown };
+        if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+          structuredResult = resultWithObject.object;
+        }
+        streamPromise.resolve(result.text);
+        void agentOptions?.onFinish?.(result);
+      };
+
+      if ((await params.getModel()).specificationVersion === 'v1' && typeof params.streamLegacy === 'function') {
         const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
           ...observabilityContext,
-          onFinish: result => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
+          onFinish: handleFinish,
           abortSignal,
         });
         stream = fullStream as any;
       } else {
-        // @ts-expect-error - TODO: fix this
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
           ...observabilityContext,
-          onFinish: result => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
+          onFinish: handleFinish,
           abortSignal,
         });
 
-        stream = modelOutput.fullStream;
+        void modelOutput.text.then(streamPromise.resolve, streamPromise.reject);
+        stream = modelOutput.fullStream as ReadableStream<ChunkType>;
       }
 
       let tripwireChunk: any = null;
@@ -577,7 +592,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         text: string;
       };
     },
-    component: params.component,
+    component: 'AGENT',
   };
 }
 
@@ -645,6 +660,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   DefaultEngineType
 > {
+  type ProcessorLoadedToolsProvider = {
+    getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
+  };
+
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -702,7 +721,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   // but TypeScript type inference has issues with the complex discriminated union types.
   // We use type assertions here since toStandardSchema returns the schema directly
   // when it already implements StandardSchemaWithJSON.
-  return {
+  const step = {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
@@ -1434,6 +1453,14 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     DefaultEngineType
   >;
+
+  const toolProvider = processor as ProcessorLoadedToolsProvider;
+  if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+    (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+      toolProvider.getLoadedToolsForRequestContext.bind(processor);
+  }
+
+  return step;
 }
 
 export function cloneStep<TStepId extends string>(
@@ -2526,15 +2553,22 @@ export class Workflow<
     const fgaProvider = mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user' as any);
-      if (user) {
-        const { checkFGA } = await import('../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'workflow', id: this.id },
-          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
-        });
-      }
+      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
+      await requireFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.id) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext,
+        context: {
+          resourceId,
+        },
+        metadata: {
+          workflowId: this.id,
+          runId,
+          resourceId,
+        },
+      });
     }
 
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;

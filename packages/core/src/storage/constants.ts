@@ -25,6 +25,7 @@ export const TABLE_WORKSPACE_VERSIONS = 'mastra_workspace_versions';
 export const TABLE_SKILLS = 'mastra_skills';
 export const TABLE_SKILL_VERSIONS = 'mastra_skill_versions';
 export const TABLE_SKILL_BLOBS = 'mastra_skill_blobs';
+export const TABLE_FAVORITES = 'mastra_favorites';
 
 // Dataset tables
 export const TABLE_DATASETS = 'mastra_datasets';
@@ -74,6 +75,7 @@ export type TABLE_NAMES =
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
   | typeof TABLE_BACKGROUND_TASKS
+  | typeof TABLE_FAVORITES
   | typeof TABLE_SCHEDULES
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
@@ -149,7 +151,9 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft' or 'published'
   activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
   authorId: { type: 'text', nullable: true }, // Author identifier for multi-tenant filtering
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  favoriteCount: { type: 'integer', nullable: true }, // Denormalised count of favorites for this agent
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -177,6 +181,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   workspace: { type: 'jsonb', nullable: true },
   skills: { type: 'jsonb', nullable: true },
   skillsFormat: { type: 'text', nullable: true },
+  browser: { type: 'jsonb', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
@@ -320,8 +325,17 @@ export const SKILLS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to skill_versions.id
   authorId: { type: 'text', nullable: true },
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
+  favoriteCount: { type: 'integer', nullable: true }, // Denormalised count of favorites for this skill
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const FAVORITES_SCHEMA: Record<string, StorageColumn> = {
+  userId: { type: 'text', nullable: false },
+  entityType: { type: 'text', nullable: false }, // 'agent' | 'skill'
+  entityId: { type: 'text', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
@@ -337,6 +351,7 @@ export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   references: { type: 'jsonb', nullable: true },
   scripts: { type: 'jsonb', nullable: true },
   assets: { type: 'jsonb', nullable: true },
+  files: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   tree: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },
@@ -555,6 +570,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
+  [TABLE_FAVORITES]: FAVORITES_SCHEMA,
   [TABLE_BACKGROUND_TASKS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     tool_call_id: { type: 'text', nullable: false },
@@ -628,6 +644,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  */
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
+  [TABLE_FAVORITES]: { columns: FAVORITES_SCHEMA, compositePrimaryKey: ['userId', 'entityType', 'entityId'] },
 };
 
 /**

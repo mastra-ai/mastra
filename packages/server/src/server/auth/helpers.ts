@@ -4,9 +4,19 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_AUTH_TOKEN_KEY } from '../constants';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+  MASTRA_AUTH_TOKEN_KEY,
+} from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
+
+// Re-export request-context key constants so custom middleware can read namespaced
+// auth state without importing internal paths.
+export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
 
 /**
  * Check if a route is a registered custom route that requires authentication.
@@ -269,6 +279,8 @@ export interface AuthMiddlewareContext {
   rawRequest: unknown;
   token: string | null;
   buildAuthorizeContext: () => unknown;
+  /** When true, force authentication even if the path matches a public pattern. */
+  requiresAuth?: boolean;
 }
 
 export type AuthResult =
@@ -321,7 +333,18 @@ export function supportsSessionRefresh(
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
  */
 export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
-  const { path, method, getHeader, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
+  const {
+    path,
+    method,
+    getHeader,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest,
+    token,
+    requiresAuth,
+  } = ctx;
 
   // ── Skip checks (evaluated once) ──
 
@@ -337,7 +360,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     return pass;
   }
 
-  if (canAccessPublicly(path, method, authConfig)) {
+  // When a route explicitly requires auth (requiresAuth: true), skip the
+  // public-path bypass so the user is still authenticated and permissions
+  // are injected into the request context.
+  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
     return pass;
   }
 
@@ -402,6 +428,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
     }
 
+    requestContext.set(MASTRA_USER_KEY, user);
+    // Backward-compat: also write the legacy `'user'` key so existing
+    // middleware and integrations that read `requestContext.get('user')`
+    // (including built-in FGA route enforcement, memory handlers, and the
+    // documented public surface) keep working. New code should prefer
+    // `MASTRA_USER_KEY` to avoid collisions with caller-supplied keys.
     requestContext.set('user', user);
 
     // Store the raw auth token so downstream code (e.g., editor MCP client
@@ -449,9 +481,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
         } else {
           const permissions = await rbacProvider.getPermissions(user as EEUser);
+          requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+          // Backward-compat alias for callers reading the legacy key.
           requestContext.set('userPermissions', permissions);
 
           const roles = await rbacProvider.getRoles(user as EEUser);
+          requestContext.set(MASTRA_USER_ROLES_KEY, roles);
+          // Backward-compat alias for callers reading the legacy key.
           requestContext.set('userRoles', roles);
         }
       }

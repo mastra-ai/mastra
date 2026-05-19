@@ -1,5 +1,749 @@
 # @mastra/core
 
+## 1.36.0-alpha.2
+
+### Minor Changes
+
+- Added support for permission arrays in FGA checks and route configuration. When an array is provided, the user needs **any one** of the listed permissions (logical OR). ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  **Affected types**
+  - `FGACheckParams.permission`
+  - `FGARouteConfig.permission`
+  - `FGARouteInfo.requiresPermission`
+  - `FGADeniedError.permission`
+  - `CheckFGAOptions.permission`
+
+  Single-permission usage continues to work unchanged.
+
+  ```ts
+  // Before — single permission only
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: 'agents:read',
+  });
+
+  // After — single permission or array (ANY-of)
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: ['agents:read', 'agents:execute'],
+  });
+  ```
+
+- Added consistent FGA execution checks across agents, tools, memory, and workflows to prevent unauthenticated executions when FGA is configured. Pass an authenticated user through `requestContext` when invoking protected APIs directly: ([#16651](https://github.com/mastra-ai/mastra/pull/16651))
+
+  ```ts
+  const requestContext = new RequestContext();
+  requestContext.set('user', user);
+
+  await agent.generate('Summarize this thread', {
+    requestContext,
+  });
+  ```
+
+- `publishSkill` now returns the full skill file tree so consumers can persist the UI-facing tree alongside storage blobs without re-walking the source. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+  ```ts
+  import { publishSkill } from '@mastra/core/workspace';
+
+  const result = await publishSkill({ workspace, skillId, source });
+
+  // New: nested tree of folders + files; binary content base64-encoded.
+  for (const node of result.files) {
+    console.log(node.type, node.path);
+  }
+  ```
+
+  Also added two optional capability methods to `IMastraEditor` for server-side gating of builder-aware behavior:
+
+  ```ts
+  interface IMastraEditor {
+    // ...existing members...
+    hasEnabledBuilderConfig?(): boolean;
+    resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+  }
+  ```
+
+  Both methods are optional — existing implementations of `IMastraEditor` continue to work unchanged. Servers that consume them treat `undefined` / missing implementation as "no builder configured."
+
+- `publishSkillFromSource()` (and `collectSkillForPublish()`) now return a `files` field containing the full skill source as a tree of `StorageSkillFileNode` entries with base64-encoded blob content — handy for storing a UI-facing copy of a skill alongside its content-addressable tree: ([#16673](https://github.com/mastra-ai/mastra/pull/16673))
+
+  ```ts
+  const { snapshot, tree, files } = await publishSkillFromSource({ source });
+  // files: StorageSkillFileNode[] — name, mimeType, base64 content per node
+  ```
+
+  Existing callers that only destructure `{ snapshot, tree }` are unaffected; the field is additive.
+
+  Also adds `parseSkillSnapshotFromFiles()` for parsing skill snapshot frontmatter from a flat file list (used by the registry install flow):
+
+  ```ts
+  import { parseSkillSnapshotFromFiles, type SkillSnapshotFile } from '@mastra/core/workspace';
+
+  const files: SkillSnapshotFile[] = [{ path: 'SKILL.md', content: '...' }, ...];
+  const snapshot = parseSkillSnapshotFromFiles(files);
+  ```
+
+### Patch Changes
+
+- Fixed sub-agent streams so nested tool input progress is emitted while tool arguments are still being generated. This lets UIs show delegated agents preparing tool calls before the final tool input is available. Fixes #16422. ([#16553](https://github.com/mastra-ai/mastra/pull/16553))
+
+## 1.36.0-alpha.1
+
+### Minor Changes
+
+- Added route-specific CORS configuration so credentialed cross-origin access can be limited to selected custom routes and channel webhooks. ([#16689](https://github.com/mastra-ai/mastra/pull/16689))
+
+  ```ts
+  registerApiRoute('/customer-webhook', {
+    method: 'POST',
+    cors: {
+      origin: ['https://customer-saas.example'],
+      credentials: true,
+    },
+    handler: async c => c.json({ ok: true }),
+  });
+  ```
+
+  ```ts
+  new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    instructions: '...',
+    model,
+    channels: {
+      adapters: {
+        web: {
+          adapter: createWebAdapter(),
+          cors: {
+            origin: ['https://customer-saas.example'],
+            credentials: true,
+          },
+        },
+      },
+    },
+  });
+  ```
+
+  Use `server.cors` for one global CORS policy across the server:
+
+  ```ts
+  new Mastra({
+    server: {
+      cors: {
+        origin: '*',
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Hide internal workflow spans from Mastra-owned plumbing in exported traces. ([#16631](https://github.com/mastra-ai/mastra/pull/16631))
+
+- Added the `internalUsage?: UsageStats` field to `AIBaseAttributes`, so any span type can carry token usage rolled up from internal descendant spans. Populated automatically by `@mastra/observability` when an internal `MODEL_GENERATION` ends inside a non-internal ancestor. ([#16434](https://github.com/mastra-ai/mastra/pull/16434))
+
+- Fixed Mastra getting stuck after a storage startup failure. Previously, if storage couldn't start up (for example, because the database was briefly unreachable), Mastra would keep returning the same error for every operation until the process was restarted. Now the next storage operation tries to start storage again, so brief outages recover on their own. Storage startup failures are also logged, so the problem is visible even when a later retry succeeds. ([#16427](https://github.com/mastra-ai/mastra/pull/16427))
+
+## 1.36.0-alpha.0
+
+### Minor Changes
+
+- Narrowed `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`. ([#16622](https://github.com/mastra-ai/mastra/pull/16622))
+
+  Fixed two signal-content bugs:
+  - `user-message` signal attributes now reach the LLM
+  - multimodal non-`user-message` signals no longer lose file parts
+
+  Callers that previously passed wrapped message shapes to `agent.sendSignal` should now pass a bare string or a bare parts array.
+
+  Before:
+  `{ type: 'user-message', contents: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }`
+
+  After:
+  `{ type: 'user-message', contents: [{ type: 'text', text: 'hi' }] }`
+
+  Added an optional `providerOptions` field to `agent.sendSignal` that flows through to the resulting prompt turn (as `providerOptions` on the LLM message) and is persisted on the stored signal message (as `content.providerMetadata`).
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5))
+
+- Fixed CompositeAuth incorrectly advertising SSO, session, and user provider capabilities when no inner provider supports them. Studio would show an SSO login button even when no provider had SSO configured, leading to 401 errors on login attempts. The duck-typing check now verifies that interface methods are actual functions rather than just present on the prototype chain. ([#16664](https://github.com/mastra-ai/mastra/pull/16664))
+
+- Exposed `formatSkillActivation(skill)` from `@mastra/core/workspace`. It returns the activation payload — instructions plus references, scripts, and assets listings — that the built-in `skill` tool uses, so callers (e.g. an explicit `/skill/<name>` slash command) can produce the same output without duplicating the formatting logic. ([#16618](https://github.com/mastra-ai/mastra/pull/16618))
+
+  Also preserves the `user-invocable` skill frontmatter field in workspace skill metadata.
+
+  ```ts
+  import { formatSkillActivation } from '@mastra/core/workspace';
+
+  const content = formatSkillActivation(skill);
+  ```
+
+## 1.35.0
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+- Added a favorites storage domain that lets users mark stored agents and skills as favorites, plus `visibility` (`'private' | 'public'`) and `favoriteCount` fields on stored agents and skills so callers can list, filter, and order by favorite state. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+  Existing rows without `visibility` or `favoriteCount` continue to work; the new fields and APIs are opt-in.
+
+  **Example**
+
+  ```ts
+  const favorites = await storage.getStore('favorites');
+
+  await favorites?.favorite({ userId: 'u1', entityType: 'agent', entityId: 'agent-123' });
+
+  const favoritedIds = await favorites?.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+
+  // List agents the user has favorited, surfaced first
+  const { agents } = await storage.getStore('agents').list({
+    pinFavoritedFor: 'u1',
+    favoritedOnly: true,
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7))
+
+- Fixed a workspace PATCH bug in the inmemory workspace adapter: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined`. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Fixed active signals so they stay in the correct order when conversations are reloaded from memory. ([#16623](https://github.com/mastra-ai/mastra/pull/16623))
+
+- Fixed scheduled workflows created from the public @mastra/core/workflows entry point so declared schedules are applied correctly. ([#16637](https://github.com/mastra-ai/mastra/pull/16637))
+
+- Fixed a crash when importing `@mastra/core/workflows/workflow` from tests or apps, which previously failed with `TypeError: Class extends value undefined is not a constructor or null` (caused by a circular ESM import through the `workflows` barrel). ([#16661](https://github.com/mastra-ai/mastra/pull/16661))
+
+## 1.35.0-alpha.3
+
+### Patch Changes
+
+- Fixed active signals so they stay in the correct order when conversations are reloaded from memory. ([#16623](https://github.com/mastra-ai/mastra/pull/16623))
+
+- Fixed a crash when importing `@mastra/core/workflows/workflow` from tests or apps, which previously failed with `TypeError: Class extends value undefined is not a constructor or null` (caused by a circular ESM import through the `workflows` barrel). ([#16661](https://github.com/mastra-ai/mastra/pull/16661))
+
+## 1.35.0-alpha.2
+
+### Minor Changes
+
+- Added a favorites storage domain that lets users mark stored agents and skills as favorites, plus `visibility` (`'private' | 'public'`) and `favoriteCount` fields on stored agents and skills so callers can list, filter, and order by favorite state. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+  Existing rows without `visibility` or `favoriteCount` continue to work; the new fields and APIs are opt-in.
+
+  **Example**
+
+  ```ts
+  const favorites = await storage.getStore('favorites');
+
+  await favorites?.favorite({ userId: 'u1', entityType: 'agent', entityId: 'agent-123' });
+
+  const favoritedIds = await favorites?.listFavoritedIds({ userId: 'u1', entityType: 'agent' });
+
+  // List agents the user has favorited, surfaced first
+  const { agents } = await storage.getStore('agents').list({
+    pinFavoritedFor: 'u1',
+    favoritedOnly: true,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a workspace PATCH bug in the inmemory workspace adapter: omitted config fields in a PATCH no longer overwrite previously-persisted values with `undefined`. ([#16580](https://github.com/mastra-ai/mastra/pull/16580))
+
+- Fixed scheduled workflows created from the public @mastra/core/workflows entry point so declared schedules are applied correctly. ([#16637](https://github.com/mastra-ai/mastra/pull/16637))
+
+## 1.35.0-alpha.1
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+## 1.34.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7))
+
+## 1.34.0
+
+### Minor Changes
+
+- You can now run ACP-compatible coding agents as Mastra tools or lightweight subagents. ACP agents support incremental response streaming and can be used anywhere Mastra accepts a `SubAgent`, including supervisor delegation and workflow steps. ([#16423](https://github.com/mastra-ai/mastra/pull/16423))
+
+  ```ts
+  import { createACPTool, AcpAgent } from '@mastra/acp';
+
+  export const codingTool = createACPTool({
+    id: 'coding-agent',
+    command: 'my-acp-agent',
+  });
+
+  export const codingAgent = new AcpAgent({
+    id: 'coding-agent',
+    command: 'my-acp-agent',
+  });
+  ```
+
+  You can also wire an `AcpAgent` into a supervisor or workflow as a `SubAgent`-compatible implementation:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  export const supervisor = new Agent({
+    name: 'supervisor',
+    instructions: 'Delegate coding tasks to the ACP agent.',
+    model,
+    agents: {
+      codingAgent,
+    },
+  });
+  ```
+
+  Workflows and the Inngest workflow adapter now recognize `SubAgent`-compatible implementations when creating agent-backed workflow steps.
+
+- Added optional `metadata` to code-defined agents. Pass a `metadata` record to `new Agent({...})`, read it back with `agent.getMetadata()`, and clients can filter on it from the existing `/agents` and `/agents/:agentId` responses without encoding the data into IDs or names. ([#16603](https://github.com/mastra-ai/mastra/pull/16603))
+
+  Metadata supports the same `DynamicArgument` form as other agent config fields, so it can also be resolved per request from the request context.
+
+  Stored agents loaded via the editor also expose their metadata through `agent.getMetadata()`, so clients can filter these agents as well. Cloning a runtime agent via `editor.agent.clone()` now carries the source agent's metadata over to the stored clone when the caller does not provide one explicitly.
+
+  ```ts
+  // Static
+  const supportAgent = new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    instructions: 'You help customers with support requests.',
+    model: 'openai/gpt-5',
+    metadata: { type: 'support' },
+  });
+
+  supportAgent.getMetadata(); // { type: 'support' }
+
+  // Dynamic
+  const tenantAgent = new Agent({
+    id: 'tenant-agent',
+    name: 'Tenant Agent',
+    instructions: 'You help customers with tenant-specific tasks.',
+    model: 'openai/gpt-5',
+    metadata: ({ requestContext }) => ({
+      type: 'support',
+      tenant: requestContext.get('tenant'),
+    }),
+  });
+
+  await tenantAgent.getMetadata({ requestContext }); // { type: 'support', tenant: 'acme' }
+  ```
+
+- Added an opt-in foundation for building agent-builder admin policies and role-aware capabilities, available under two new entry points. ([#16578](https://github.com/mastra-ai/mastra/pull/16578))
+
+  **`@mastra/core/agent-builder/ee`**
+
+  Exposes types, validators, and picker utilities for working with model allowlists and admin model policies on stored agents — for example normalizing model candidates, choosing a default from a configured allowlist, and producing typed errors when a request violates policy.
+
+  **`@mastra/core/auth/ee`**
+
+  Adds optional methods on `IRBACProvider` for listing available roles and resolving the permissions for a given role:
+
+  ```ts
+  interface IRBACProvider {
+    // existing methods...
+    getAvailableRoles?(): Promise<RoleDescriptor[]>;
+    getPermissionsForRole?(role: string): Promise<PermissionDescriptor[]>;
+  }
+  ```
+
+  Static defaults, an expanded permissions catalog, and a capabilities helper that surfaces `availableRoles` to clients when the provider supports it are also included. Providers that do not implement the new methods continue to work unchanged.
+
+  Also adds a `StorageBrowserRef` shape to `@mastra/core/storage` for referencing a configured headless browser on stored agents.
+
+- Improved how the workspace `read_file` tool returns files to the model. Reads now branch on file type: ([#16570](https://github.com/mastra-ai/mastra/pull/16570))
+  1. **Media files** (default: `image/png`, `image/jpeg`, `image/webp`, `application/pdf`) are surfaced as native file/image parts the model can directly view, instead of being dumped as base64 text. Capped at 10 MiB by default so large media don't get base64-encoded into context and persisted in storage — configurable via `maxMediaBytes`.
+  2. **Text-readable files** (anything `text/*`, common code/config mime types, or unknown extensions) are returned as text content as before.
+  3. **Unsupported binaries** (e.g. `image/png` when `mediaTypes` is disabled, `application/zip`, oversized media, etc.) now return a short metadata description (`path`, size, mime type) instead of dumping useless base64 into the conversation. Pass an explicit `encoding` to opt back into the raw base64/hex dump.
+
+  The set of mime types treated as native media parts and the inline size cap are configurable per workspace:
+
+  ```ts
+  import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+  const workspace = new Workspace({
+    filesystem,
+    tools: {
+      [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+        // Broaden to any image (e.g. SVG, BMP, HEIC) — may fail on some providers
+        mediaTypes: ['image/*', 'application/pdf'],
+
+        // Raise the inline-media cap to 25 MiB
+        maxMediaBytes: 25 * 1024 * 1024,
+
+        // Or a custom predicate
+        // mediaTypes: (mime) => mime.startsWith('image/'),
+
+        // Or disable media parts entirely
+        // mediaTypes: false,
+      },
+    },
+  });
+  ```
+
+  The default `mediaTypes` is intentionally the cross-provider-safe intersection — formats universally supported across Anthropic, OpenAI, and Gemini.
+
+- Changed background process output retention. ([#16574](https://github.com/mastra-ai/mastra/pull/16574))
+
+  **Before:** Spawned process handles retained all stdout and stderr, which could grow without bound for long-running background processes.
+
+  **After:** Spawned process handles now retain the latest 1 MiB of stdout and stderr per stream by default. Pass `maxRetainedBytes` to `processes.spawn()` to customize the limit, use `0` to disable retained polling output, or use `Infinity` to keep the previous retain-all behavior.
+
+  ```ts
+  const handle = await sandbox.processes.spawn('npm run dev', {
+    maxRetainedBytes: 512 * 1024,
+  });
+  ```
+
+  Streaming callbacks and reader streams still receive every chunk in full. Handles also expose truncation and dropped-byte counters so callers can detect when `stdout`, `stderr`, or `wait()` results only include retained output.
+
+  The built-in `executeCommand()` implementation still retains full output by default; pass `maxRetainedBytes` there only when you want bounded command results.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e))
+
+- Improved background-task observability. ([#16590](https://github.com/mastra-ai/mastra/pull/16590))
+
+  Retry attempts now appear as separate workflow steps in run history and event traces, making retry progression easier to debug. No public API changes.
+
+- Fixed approval resume for tools loaded by processor workflows. ([#16365](https://github.com/mastra-ai/mastra/pull/16365))
+
+- Fixed durable agents that could drop object-form system instructions when provider options like `cacheControl` were used. These instructions are now preserved so provider-specific options are respected. ([#16599](https://github.com/mastra-ai/mastra/pull/16599))
+
+- Fixed approval resume for tools loaded with ToolSearchProcessor. ([#16365](https://github.com/mastra-ai/mastra/pull/16365))
+
+- Fixed listMessages perPage=0 behavior in the in-memory store to match other adapters. ([#16602](https://github.com/mastra-ai/mastra/pull/16602))
+
+- **Fixed** non-deterministic ordering of cross-thread semantic recall messages. ([#16600](https://github.com/mastra-ai/mastra/pull/16600))
+
+  When messages recalled from other threads shared the same timestamp, they were rendered into the system prompt in whatever order the vector query returned them — driven by similarity scores that can vary between equivalent runs. This made any test or evaluation that snapshots prompt output (or hashes the outbound LLM request) flaky.
+
+  Recalled cross-thread messages are now sorted by createdAt, then threadId, then role (user → assistant → tool → system), then id before formatting, so the same set of recalled messages always produces the same prompt.
+
+- Expose `GET /observability/traces/light` and storage support for fetching paginated trace-list rows without span payload data. ([#16608](https://github.com/mastra-ai/mastra/pull/16608))
+
+- `GET /api/observability/discovery/metric-names` and `GET /api/observability/discovery/metric-label-values` now accept `limit` as a URL query parameter without pre-parsing. Previously, passing `?limit=10` was rejected as a validation error; callers can now use these endpoints directly from HTTP clients, consistent with other query endpoints (e.g. pagination). ([#16489](https://github.com/mastra-ai/mastra/pull/16489))
+
+- Fixed agent signals so standalone agents coordinate thread streams through a shared runtime. ([#16581](https://github.com/mastra-ai/mastra/pull/16581))
+
+## 1.34.0-alpha.3
+
+### Minor Changes
+
+- Added optional `metadata` to code-defined agents. Pass a `metadata` record to `new Agent({...})`, read it back with `agent.getMetadata()`, and clients can filter on it from the existing `/agents` and `/agents/:agentId` responses without encoding the data into IDs or names. ([#16603](https://github.com/mastra-ai/mastra/pull/16603))
+
+  Metadata supports the same `DynamicArgument` form as other agent config fields, so it can also be resolved per request from the request context.
+
+  Stored agents loaded via the editor also expose their metadata through `agent.getMetadata()`, so clients can filter these agents as well. Cloning a runtime agent via `editor.agent.clone()` now carries the source agent's metadata over to the stored clone when the caller does not provide one explicitly.
+
+  ```ts
+  // Static
+  const supportAgent = new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    instructions: 'You help customers with support requests.',
+    model: 'openai/gpt-5',
+    metadata: { type: 'support' },
+  });
+
+  supportAgent.getMetadata(); // { type: 'support' }
+
+  // Dynamic
+  const tenantAgent = new Agent({
+    id: 'tenant-agent',
+    name: 'Tenant Agent',
+    instructions: 'You help customers with tenant-specific tasks.',
+    model: 'openai/gpt-5',
+    metadata: ({ requestContext }) => ({
+      type: 'support',
+      tenant: requestContext.get('tenant'),
+    }),
+  });
+
+  await tenantAgent.getMetadata({ requestContext }); // { type: 'support', tenant: 'acme' }
+  ```
+
+- Added an opt-in foundation for building agent-builder admin policies and role-aware capabilities, available under two new entry points. ([#16578](https://github.com/mastra-ai/mastra/pull/16578))
+
+  **`@mastra/core/agent-builder/ee`**
+
+  Exposes types, validators, and picker utilities for working with model allowlists and admin model policies on stored agents — for example normalizing model candidates, choosing a default from a configured allowlist, and producing typed errors when a request violates policy.
+
+  **`@mastra/core/auth/ee`**
+
+  Adds optional methods on `IRBACProvider` for listing available roles and resolving the permissions for a given role:
+
+  ```ts
+  interface IRBACProvider {
+    // existing methods...
+    getAvailableRoles?(): Promise<RoleDescriptor[]>;
+    getPermissionsForRole?(role: string): Promise<PermissionDescriptor[]>;
+  }
+  ```
+
+  Static defaults, an expanded permissions catalog, and a capabilities helper that surfaces `availableRoles` to clients when the provider supports it are also included. Providers that do not implement the new methods continue to work unchanged.
+
+  Also adds a `StorageBrowserRef` shape to `@mastra/core/storage` for referencing a configured headless browser on stored agents.
+
+### Patch Changes
+
+- Fixed approval resume for tools loaded by processor workflows. ([#16365](https://github.com/mastra-ai/mastra/pull/16365))
+
+- Fixed approval resume for tools loaded with ToolSearchProcessor. ([#16365](https://github.com/mastra-ai/mastra/pull/16365))
+
+- Expose `GET /observability/traces/light` and storage support for fetching paginated trace-list rows without span payload data. ([#16608](https://github.com/mastra-ai/mastra/pull/16608))
+
+- `GET /api/observability/discovery/metric-names` and `GET /api/observability/discovery/metric-label-values` now accept `limit` as a URL query parameter without pre-parsing. Previously, passing `?limit=10` was rejected as a validation error; callers can now use these endpoints directly from HTTP clients, consistent with other query endpoints (e.g. pagination). ([#16489](https://github.com/mastra-ai/mastra/pull/16489))
+
+## 1.34.0-alpha.2
+
+### Patch Changes
+
+- Fixed listMessages perPage=0 behavior in the in-memory store to match other adapters. ([#16602](https://github.com/mastra-ai/mastra/pull/16602))
+
+## 1.34.0-alpha.1
+
+### Minor Changes
+
+- Changed background process output retention. ([#16574](https://github.com/mastra-ai/mastra/pull/16574))
+
+  **Before:** Spawned process handles retained all stdout and stderr, which could grow without bound for long-running background processes.
+
+  **After:** Spawned process handles now retain the latest 1 MiB of stdout and stderr per stream by default. Pass `maxRetainedBytes` to `processes.spawn()` to customize the limit, use `0` to disable retained polling output, or use `Infinity` to keep the previous retain-all behavior.
+
+  ```ts
+  const handle = await sandbox.processes.spawn('npm run dev', {
+    maxRetainedBytes: 512 * 1024,
+  });
+  ```
+
+  Streaming callbacks and reader streams still receive every chunk in full. Handles also expose truncation and dropped-byte counters so callers can detect when `stdout`, `stderr`, or `wait()` results only include retained output.
+
+  The built-in `executeCommand()` implementation still retains full output by default; pass `maxRetainedBytes` there only when you want bounded command results.
+
+### Patch Changes
+
+- Improved background-task observability. ([#16590](https://github.com/mastra-ai/mastra/pull/16590))
+
+  Retry attempts now appear as separate workflow steps in run history and event traces, making retry progression easier to debug. No public API changes.
+
+- Fixed durable agents that could drop object-form system instructions when provider options like `cacheControl` were used. These instructions are now preserved so provider-specific options are respected. ([#16599](https://github.com/mastra-ai/mastra/pull/16599))
+
+- **Fixed** non-deterministic ordering of cross-thread semantic recall messages. ([#16600](https://github.com/mastra-ai/mastra/pull/16600))
+
+  When messages recalled from other threads shared the same timestamp, they were rendered into the system prompt in whatever order the vector query returned them — driven by similarity scores that can vary between equivalent runs. This made any test or evaluation that snapshots prompt output (or hashes the outbound LLM request) flaky.
+
+  Recalled cross-thread messages are now sorted by createdAt, then threadId, then role (user → assistant → tool → system), then id before formatting, so the same set of recalled messages always produces the same prompt.
+
+- Fixed agent signals so standalone agents coordinate thread streams through a shared runtime. ([#16581](https://github.com/mastra-ai/mastra/pull/16581))
+
+## 1.34.0-alpha.0
+
+### Minor Changes
+
+- You can now run ACP-compatible coding agents as Mastra tools or lightweight subagents. ACP agents support incremental response streaming and can be used anywhere Mastra accepts a `SubAgent`, including supervisor delegation and workflow steps. ([#16423](https://github.com/mastra-ai/mastra/pull/16423))
+
+  ```ts
+  import { createACPTool, AcpAgent } from '@mastra/acp';
+
+  export const codingTool = createACPTool({
+    id: 'coding-agent',
+    command: 'my-acp-agent',
+  });
+
+  export const codingAgent = new AcpAgent({
+    id: 'coding-agent',
+    command: 'my-acp-agent',
+  });
+  ```
+
+  You can also wire an `AcpAgent` into a supervisor or workflow as a `SubAgent`-compatible implementation:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  export const supervisor = new Agent({
+    name: 'supervisor',
+    instructions: 'Delegate coding tasks to the ACP agent.',
+    model,
+    agents: {
+      codingAgent,
+    },
+  });
+  ```
+
+  Workflows and the Inngest workflow adapter now recognize `SubAgent`-compatible implementations when creating agent-backed workflow steps.
+
+- Improved how the workspace `read_file` tool returns files to the model. Reads now branch on file type: ([#16570](https://github.com/mastra-ai/mastra/pull/16570))
+  1. **Media files** (default: `image/png`, `image/jpeg`, `image/webp`, `application/pdf`) are surfaced as native file/image parts the model can directly view, instead of being dumped as base64 text. Capped at 10 MiB by default so large media don't get base64-encoded into context and persisted in storage — configurable via `maxMediaBytes`.
+  2. **Text-readable files** (anything `text/*`, common code/config mime types, or unknown extensions) are returned as text content as before.
+  3. **Unsupported binaries** (e.g. `image/png` when `mediaTypes` is disabled, `application/zip`, oversized media, etc.) now return a short metadata description (`path`, size, mime type) instead of dumping useless base64 into the conversation. Pass an explicit `encoding` to opt back into the raw base64/hex dump.
+
+  The set of mime types treated as native media parts and the inline size cap are configurable per workspace:
+
+  ```ts
+  import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+  const workspace = new Workspace({
+    filesystem,
+    tools: {
+      [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+        // Broaden to any image (e.g. SVG, BMP, HEIC) — may fail on some providers
+        mediaTypes: ['image/*', 'application/pdf'],
+
+        // Raise the inline-media cap to 25 MiB
+        maxMediaBytes: 25 * 1024 * 1024,
+
+        // Or a custom predicate
+        // mediaTypes: (mime) => mime.startsWith('image/'),
+
+        // Or disable media parts entirely
+        // mediaTypes: false,
+      },
+    },
+  });
+  ```
+
+  The default `mediaTypes` is intentionally the cross-provider-safe intersection — formats universally supported across Anthropic, OpenAI, and Gemini.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e))
+
+## 1.33.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`6ba46dc`](https://github.com/mastra-ai/mastra/commit/6ba46dc1ac04af635d0f59377d7384ca6af44cd1))
+
+- Fixed a bug where clicking Approve on a plan from `/plan` mode would show the system reminder twice and sometimes hang instead of starting build execution. Approving now reliably triggers the build agent with a single reminder. ([#16521](https://github.com/mastra-ai/mastra/pull/16521))
+
+- **Added** ([#16520](https://github.com/mastra-ai/mastra/pull/16520))
+  You can now call `run.restart()` for evented workflows to continue execution from the latest persisted run state.
+
+  ```ts
+  const run = workflow.createRun();
+  await run.start({ inputData: { jobId: 'job-123' } });
+
+  // Later, restart the same run from the last active step
+  await run.restart();
+  ```
+
+## 1.33.1-alpha.1
+
+### Patch Changes
+
+- Fixed a bug where clicking Approve on a plan from `/plan` mode would show the system reminder twice and sometimes hang instead of starting build execution. Approving now reliably triggers the build agent with a single reminder. ([#16521](https://github.com/mastra-ai/mastra/pull/16521))
+
+- **Added** ([#16520](https://github.com/mastra-ai/mastra/pull/16520))
+  You can now call `run.restart()` for evented workflows to continue execution from the latest persisted run state.
+
+  ```ts
+  const run = workflow.createRun();
+  await run.start({ inputData: { jobId: 'job-123' } });
+
+  // Later, restart the same run from the last active step
+  await run.restart();
+  ```
+
 ## 1.33.1-alpha.0
 
 ### Patch Changes

@@ -121,6 +121,23 @@ export class AgentThreadStreamRuntime {
     return this.abortRun(activeRunId);
   }
 
+  /** @internal */
+  resetForTests() {
+    this.#preparedRunsById.forEach(preparedRun => {
+      preparedRun.abortController.abort();
+      preparedRun.cleanup();
+    });
+    this.#threadRunsById.clear();
+    this.#threadKeysByRunId.clear();
+    this.#activeThreadRunIds.clear();
+    this.#threadRunSubscribers.clear();
+    this.#pendingSignalsByThread.clear();
+    this.#pendingIdleSignalsByThread.clear();
+    this.#watchedThreadRunIds.clear();
+    this.#preparedRunsById.clear();
+    this.#abortedRunIds.clear();
+  }
+
   #cleanupPreparedRun(runId: string) {
     this.#preparedRunsById.get(runId)?.cleanup();
     this.#preparedRunsById.delete(runId);
@@ -372,7 +389,7 @@ export class AgentThreadStreamRuntime {
     signalInput: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
   ): SendAgentSignalResult {
-    const signal = createSignal(signalInput);
+    const signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -502,3 +519,5 @@ export class AgentThreadStreamRuntime {
     return { accepted: true, runId, signal };
   }
 }
+
+export const agentThreadStreamRuntime = new AgentThreadStreamRuntime();

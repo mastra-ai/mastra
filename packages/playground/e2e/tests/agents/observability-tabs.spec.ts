@@ -1,4 +1,4 @@
-import { test, expect, Page, Route } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 
 /**
@@ -40,24 +40,29 @@ async function mockSystemPackages(page: Page, observabilityEnabled: boolean) {
   });
 }
 
-async function fulfillEmptyObservabilityPage(route: Route) {
-  const url = new URL(route.request().url());
-  let payload: { branches: [] } | { spans: [] };
-  if (url.pathname.endsWith('/branches')) {
-    payload = { branches: [] };
-  } else if (url.pathname.endsWith('/traces')) {
-    payload = { spans: [] };
-  } else {
-    throw new Error(`Unexpected observability endpoint: ${url.pathname}`);
-  }
-
-  await route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
-      ...payload,
-      pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
-    }),
+async function mockTraceLists(page: Page, onRequest?: (url: URL) => void) {
+  // The Traces page can request either branches or traces depending on list mode.
+  await page.route('**/api/observability/branches?**', async route => {
+    onRequest?.(new URL(route.request().url()));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        branches: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
+  await page.route('**/api/observability/traces?**', async route => {
+    onRequest?.(new URL(route.request().url()));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
   });
 }
 
@@ -65,10 +70,7 @@ test('requests agent traces when runtime observability is available without pack
   await mockSystemPackages(page, true);
 
   const observabilityUrls: URL[] = [];
-  await page.route(/\/api\/observability\/(traces|branches)\?/, async route => {
-    observabilityUrls.push(new URL(route.request().url()));
-    await fulfillEmptyObservabilityPage(route);
-  });
+  await mockTraceLists(page, url => observabilityUrls.push(url));
 
   await page.goto('/agents/weather-agent/chat/new');
   await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
@@ -102,10 +104,7 @@ test('agent traces tab pre-fills the agent filter as URL params on first visit',
   await mockSystemPackages(page, true);
 
   const observabilityUrls: URL[] = [];
-  await page.route(/\/api\/observability\/(traces|branches)\?/, async route => {
-    observabilityUrls.push(new URL(route.request().url()));
-    await fulfillEmptyObservabilityPage(route);
-  });
+  await mockTraceLists(page, url => observabilityUrls.push(url));
 
   await page.goto('/agents/weather-agent/traces');
 
@@ -126,9 +125,7 @@ test('agent traces tab pre-fills the agent filter as URL params on first visit',
 test('agent traces tab locks the scope filter pills and hides them from the creator dropdown', async ({ page }) => {
   await mockSystemPackages(page, true);
 
-  await page.route(/\/api\/observability\/(traces|branches)\?/, async route => {
-    await fulfillEmptyObservabilityPage(route);
-  });
+  await mockTraceLists(page);
 
   await page.goto('/agents/weather-agent/traces');
 
@@ -161,9 +158,7 @@ test('saved filters in an agent-scoped traces tab do not leak to other agents or
   // silent and only surfaces when two users blame each other for "ghost"
   // filters.
   await mockSystemPackages(page, true);
-  await page.route(/\/api\/observability\/(traces|branches)\?/, async route => {
-    await fulfillEmptyObservabilityPage(route);
-  });
+  await mockTraceLists(page);
 
   // Land on a page first so we have an origin to seed localStorage against.
   await page.goto('/observability');
@@ -190,9 +185,7 @@ test('saved filters in an agent-scoped traces tab do not leak to other agents or
 test('global /observability traces page keeps the filter pills editable', async ({ page }) => {
   await mockSystemPackages(page, true);
 
-  await page.route(/\/api\/observability\/(traces|branches)\?/, async route => {
-    await fulfillEmptyObservabilityPage(route);
-  });
+  await mockTraceLists(page);
 
   await page.goto('/observability');
 
