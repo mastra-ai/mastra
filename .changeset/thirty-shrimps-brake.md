@@ -14,4 +14,4 @@ Migrated the Slider component to base-ui with a refined neutral visual design.
 
 **API compatibility**
 
-The public API is preserved. `onValueChange` and `onValueCommitted` are wrapped so consumers always receive `number[]`, even though base-ui returns `number | number[]` internally. Existing call sites like `<Slider value={[temperature]} onValueChange={value => value[0]}` continue to work without changes.
+The public API is preserved. `onValueChange` and `onValueCommitted` are wrapped so consumers always receive `number[]`, even though base-ui returns `number | number[]` internally. Existing call sites like `<Slider value={[temperature]} onValueChange={value => setTemperature(value[0])} />` continue to work without changes.
