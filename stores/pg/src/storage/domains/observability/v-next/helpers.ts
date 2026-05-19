@@ -430,18 +430,17 @@ export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
   const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';
-  const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
+  // userId (app user, via commonContextToRow) and feedbackUserId (evaluator)
+  // are distinct fields on FeedbackRecord. Legacy `FeedbackInput.userId` →
+  // `feedbackUserId` aliasing is handled by `normalizeLegacyFeedbackActor`
+  // at the schema layer, so the helper writes each through unchanged.
   return {
     ...commonContextToRow(feedback),
-    // Legacy: the `userId` column also stores the feedback actor when
-    // `feedbackUserId` is the canonical input. Override commonContextToRow's
-    // userId so the row uses the resolved actor.
-    userId: feedbackUserId,
     feedbackId: feedback.feedbackId,
     timestamp: toIsoOrDate(feedback.timestamp),
     traceId: feedback.traceId ?? null,
     spanId: feedback.spanId ?? null,
-    feedbackUserId,
+    feedbackUserId: feedback.feedbackUserId ?? null,
     sourceId: feedback.sourceId ?? null,
     feedbackSource,
     feedbackType: feedback.feedbackType,
@@ -457,7 +456,6 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
 export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const hasNumber = row.valueNumber != null;
   const feedbackSource = nullableString(row.feedbackSource);
-  const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
     ...rowToCommonContext(row),
     feedbackId: row.feedbackId,
@@ -465,7 +463,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     // Legacy schema types traceId as required string even though the column is nullable.
     traceId: nullableString(row.traceId) as FeedbackRecord['traceId'],
     spanId: nullableString(row.spanId),
-    feedbackUserId,
+    feedbackUserId: nullableString(row.feedbackUserId),
     sourceId: nullableString(row.sourceId),
     feedbackSource,
     feedbackType: row.feedbackType,
