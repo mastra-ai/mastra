@@ -46,6 +46,13 @@ export class MessageMerger {
     // Don't merge into sealed messages (e.g., messages that have been observed)
     if (MessageMerger.isSealed(latestMessage)) return false;
 
+    if (
+      (latestMessage.content?.metadata as { mastra?: { responseBoundary?: boolean } } | undefined)?.mastra
+        ?.responseBoundary
+    ) {
+      return false;
+    }
+
     // Don't merge completion result message (network uses completionResult, supervisor uses isTaskCompleteResult)
     if (
       incomingMessage.content.metadata?.completionResult ||
@@ -104,9 +111,10 @@ export class MessageMerger {
     for (const [index, part] of incomingMessage.content.parts.entries()) {
       // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
       if (part.type === 'tool-invocation') {
+        if (!part.toolInvocation) continue;
         const existingCallPart = [...latestMessage.content.parts]
           .reverse()
-          .find(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId);
+          .find(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === part.toolInvocation.toolCallId);
 
         const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
 

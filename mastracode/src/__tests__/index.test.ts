@@ -26,6 +26,12 @@ const agentConstructorMock = vi.fn();
 
 const harnessConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const harnessSubscribeMock = vi.fn();
+const harnessGetCurrentThreadIdMock = vi.fn();
+const harnessListThreadsMock = vi.fn();
+const harnessSetStateMock = vi.fn();
+const harnessSetThreadSettingMock = vi.fn();
+let harnessStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
   return {
@@ -45,6 +51,8 @@ function createMockSettings() {
       reflectorModelOverride: null,
       omObservationThreshold: null,
       omReflectionThreshold: null,
+      omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
     },
     preferences: {
@@ -80,7 +88,24 @@ vi.mock('@mastra/core/harness', () => ({
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }
-    subscribe() {}
+    subscribe(eventHandler: unknown) {
+      harnessSubscribeMock(eventHandler);
+    }
+    getCurrentThreadId() {
+      return harnessGetCurrentThreadIdMock();
+    }
+    getState() {
+      return harnessStateMock;
+    }
+    listThreads(options: unknown) {
+      return harnessListThreadsMock(options);
+    }
+    setState(state: unknown) {
+      return harnessSetStateMock(state);
+    }
+    setThreadSetting(setting: unknown) {
+      return harnessSetThreadSettingMock(setting);
+    }
   },
   taskWriteTool: {},
   taskCheckTool: {},
@@ -181,6 +206,10 @@ vi.mock('./providers/openai-codex.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
+vi.mock('./providers/github-copilot.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
 vi.mock('./tools/index.js', () => ({
   defaultTools: {},
 }));
@@ -209,7 +238,7 @@ vi.mock('./utils/project.js', () => ({
   getResourceIdOverride: vi.fn(() => undefined),
 }));
 
-const createStorageMock = vi.fn(() => ({ storage: {} }));
+const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
 const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('./utils/storage-factory.js', () => ({
@@ -234,6 +263,16 @@ describe('createMastraCode', () => {
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
+    harnessSubscribeMock.mockReset();
+    harnessGetCurrentThreadIdMock.mockReset();
+    harnessGetCurrentThreadIdMock.mockReturnValue(undefined);
+    harnessListThreadsMock.mockReset();
+    harnessListThreadsMock.mockResolvedValue([]);
+    harnessSetStateMock.mockReset();
+    harnessSetStateMock.mockResolvedValue(undefined);
+    harnessSetThreadSettingMock.mockReset();
+    harnessSetThreadSettingMock.mockResolvedValue(undefined);
+    harnessStateMock = { cavemanObservations: false };
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
@@ -252,12 +291,19 @@ describe('createMastraCode', () => {
     expect(gatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
   }, 10_000);
 
-  it('forces a gateway sync after loading stored API keys', async () => {
+  it('starts gateway sync in the background after loading stored API keys', async () => {
+    let resolveSync: (() => void) | undefined;
+    gatewayRegistrySyncGateways.mockReturnValue(
+      new Promise<void>(resolve => {
+        resolveSync = resolve;
+      }),
+    );
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode();
+    await expect(createMastraCode()).resolves.toBeTruthy();
 
     expect(gatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
+    resolveSync?.();
   });
 
   it('always configures dynamic local memory at startup', async () => {
@@ -268,6 +314,64 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('rejects cross-process PubSub mode without a PubSub instance', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode({ crossProcessPubSub: true })).rejects.toThrow(
+      'crossProcessPubSub requires a pubsub instance',
+    );
+  });
+
+  it('restores the current thread caveman observation setting at startup', async () => {
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
+  });
+
+  it('restores an explicit false caveman observation setting at startup', async () => {
+    harnessStateMock = { cavemanObservations: true };
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: false } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
+  });
+
+  it('seeds observeAttachments from persisted global setting at startup', async () => {
+    const settings = createMockSettings();
+    (settings.models as { omObserveAttachments: boolean | null }).omObserveAttachments = false;
+    loadSettingsMock.mockReturnValue(settings);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessCall?.initialState?.observeAttachments).toBe(false);
+  });
+
+  it('omits observeAttachments from initial state when global setting is null', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessCall?.initialState).not.toHaveProperty('observeAttachments');
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {

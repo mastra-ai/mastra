@@ -325,13 +325,27 @@ export class MemoryPG extends MemoryStorage {
     };
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
+      let query = `SELECT * FROM ${tableName} WHERE id = $1`;
+      let params: any[] = [threadId];
+
+      if (resourceId !== undefined) {
+        query += ` AND "resourceId" = $2`;
+        params.push(resourceId);
+      }
+
       const thread = await this.#db.client.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        `SELECT * FROM ${tableName} WHERE id = $1`,
-        [threadId],
+        query,
+        params,
       );
 
       if (!thread) {

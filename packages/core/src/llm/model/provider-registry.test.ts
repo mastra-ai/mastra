@@ -773,7 +773,7 @@ describe('Corrupted JSON recovery', () => {
     originalRmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('should delete corrupted JSON file and log warning', async () => {
+  it('should delete corrupted JSON file silently without logging', async () => {
     const tempDir = path.join(os.tmpdir(), `mastra-corrupted-json-delete-test-${Date.now()}`);
     const distDir = path.join(tempDir, 'dist');
     originalMkdirSync(distDir, { recursive: true });
@@ -823,6 +823,10 @@ describe('Corrupted JSON recovery', () => {
     } catch {
       // May throw if static registry also has issues in test environment
     }
+
+    // The corruption is auto-recoverable (next gateway sync rewrites the file),
+    // so we should not log a warning that worries users.
+    expect(warnSpy).not.toHaveBeenCalled();
 
     // Clean up mocks
     readFileSyncSpy.mockRestore();

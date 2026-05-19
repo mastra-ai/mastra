@@ -30,7 +30,7 @@ const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.T
           formElementSizes[size],
           'rounded-lg border border-border1 bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
           'outline-none transition-colors duration-normal ease-out-custom',
-          'hover:bg-surface3 hover:text-neutral6 hover:border-border2',
+          'hover:bg-surface3 hover:text-neutral6 hover:border-border2 active:bg-surface4',
           'focus:outline-none focus-visible:outline-none focus-visible:border-border2',
           'data-[state=open]:bg-surface3 data-[state=open]:text-neutral6 data-[state=open]:border-border2',
           'data-[placeholder]:text-neutral3',

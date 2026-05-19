@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import type { ResponsesStreamEvent } from '../types';
 
 global.fetch = vi.fn();
 
@@ -615,6 +616,61 @@ describe('Responses Resource', () => {
           arguments: '{"city":"Lagos"}',
           status: 'completed',
         },
+      },
+    ]);
+  });
+
+  it('preserves streamed function-call argument events', async () => {
+    mockSseResponse([
+      {
+        type: 'response.function_call_arguments.delta',
+        sequence_number: 1,
+        output_index: 0,
+        item_id: 'call_123',
+        delta: '{"city":',
+      },
+      {
+        type: 'response.function_call_arguments.done',
+        sequence_number: 2,
+        output_index: 0,
+        item_id: 'call_123',
+        name: 'weather',
+        arguments: '{"city":"Lagos"}',
+      },
+    ]);
+
+    const stream = await client.responses.create({
+      model: 'openai/gpt-5',
+      agent_id: 'support-agent',
+      input: 'Use the weather tool',
+      stream: true,
+    });
+
+    const events: ResponsesStreamEvent[] = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+
+    const doneEvent = events.find(
+      (event): event is Extract<ResponsesStreamEvent, { type: 'response.function_call_arguments.done' }> =>
+        event.type === 'response.function_call_arguments.done',
+    );
+    expect(doneEvent?.arguments).toBe('{"city":"Lagos"}');
+    expect(events).toEqual([
+      {
+        type: 'response.function_call_arguments.delta',
+        sequence_number: 1,
+        output_index: 0,
+        item_id: 'call_123',
+        delta: '{"city":',
+      },
+      {
+        type: 'response.function_call_arguments.done',
+        sequence_number: 2,
+        output_index: 0,
+        item_id: 'call_123',
+        name: 'weather',
+        arguments: '{"city":"Lagos"}',
       },
     ]);
   });

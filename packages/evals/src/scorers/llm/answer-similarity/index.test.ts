@@ -1,9 +1,12 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { createLLMMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { TestCase } from '../../utils';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createAnswerSimilarityScorer } from '.';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 interface AnswerSimilarityTestCase extends TestCase {
   groundTruth: string;

@@ -136,6 +136,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => c.req.header(name),
+      });
 
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
@@ -516,7 +520,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
             if (permissionError) {
@@ -633,7 +637,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
             if (permissionError) {
               return c.json(

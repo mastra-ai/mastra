@@ -1,4 +1,10 @@
 import { RequestContext } from '@mastra/core/request-context';
+import {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  isReservedRequestContextKey,
+  isStudioClientTypeHeader,
+} from '@mastra/server/server-adapter';
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import type { Request, Response } from 'express';
@@ -82,6 +88,7 @@ export class RequestContextService {
       }
     }
 
+    this.applyRequestMetadata(context);
     return context;
   }
 
@@ -112,7 +119,14 @@ export class RequestContextService {
    */
   private mergeContext(context: RequestContext, values: Record<string, unknown>): void {
     for (const [key, value] of Object.entries(values)) {
+      if (isReservedRequestContextKey(key)) continue;
       context.set(key, value);
+    }
+  }
+
+  private applyRequestMetadata(context: RequestContext): void {
+    if (isStudioClientTypeHeader(this.request.get(MASTRA_CLIENT_TYPE_HEADER))) {
+      context.set(MASTRA_IS_STUDIO_KEY, true);
     }
   }
 

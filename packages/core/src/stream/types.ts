@@ -936,6 +936,7 @@ export type TypedChunkType<OUTPUT = undefined> =
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
+export type StreamChunkType<OUTPUT = undefined> = ChunkType<OUTPUT> | DataChunkType;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
@@ -953,6 +954,16 @@ export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
+
+export type PendingToolCall = {
+  toolCallId: string;
+  toolName: string;
+  argsText: string;
+  state: 'input-streaming' | 'input-available';
+  providerExecuted?: boolean;
+  providerMetadata?: ProviderMetadata;
+  dynamic?: boolean;
+};
 
 export type ExecuteStreamModelManager<T> = (
   callback: (modelConfig: ModelManagerModelConfig, isLastModel: boolean) => Promise<T>,
@@ -1048,6 +1059,7 @@ export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools
 export type LLMStepResult<OUTPUT = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
+  pendingToolCalls?: PendingToolCall[];
   toolResults: ToolResultChunk[];
   dynamicToolCalls: ToolCallChunk[];
   dynamicToolResults: ToolResultChunk[];

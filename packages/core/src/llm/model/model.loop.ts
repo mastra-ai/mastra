@@ -77,6 +77,10 @@ export class MastraLLMVNext extends MastraBase {
     return this.#firstModel.model;
   }
 
+  getProviderOptions() {
+    return this.#firstModel.providerOptions;
+  }
+
   convertToMessages(messages: string | string[] | ModelMessage[]): ModelMessage[] {
     if (Array.isArray(messages)) {
       return messages.map(m => {
@@ -183,7 +187,9 @@ export class MastraLLMVNext extends MastraBase {
       });
     }
 
-    // Create model span tracker that will be shared across all LLM execution steps
+    // Create model span tracker that will be shared across all LLM execution steps.
+    // The agentic loop calls setInferenceContext + startInference per-step so the
+    // MODEL_INFERENCE span reflects the post-processor tool set / parameters.
     const modelSpanTracker = modelSpan?.createTracker();
 
     try {
