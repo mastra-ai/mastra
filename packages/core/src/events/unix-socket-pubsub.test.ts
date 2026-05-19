@@ -1,4 +1,5 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -66,6 +67,25 @@ describe('UnixSocketPubSub', () => {
       expect(secondCb).toHaveBeenCalledTimes(1);
     });
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
+  });
+
+  it('rejects subscribe when the broker disconnects before acknowledging', async () => {
+    const path = await socketPath();
+    const server = net.createServer(socket => {
+      socket.once('data', () => socket.destroy());
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    try {
+      await expect(pubsub.subscribe('topic-a', vi.fn())).rejects.toThrow('broker connection closed');
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
   });
 
   it('promotes another instance after the broker closes', async () => {

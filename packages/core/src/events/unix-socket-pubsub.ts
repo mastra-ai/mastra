@@ -21,6 +21,11 @@ type BrokerClient = {
   subscriptions: Set<string>;
 };
 
+type SubscribeWaiter = {
+  resolve: () => void;
+  reject: (error: Error) => void;
+};
+
 function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error) => {
@@ -77,7 +82,7 @@ export class UnixSocketPubSub extends PubSub {
   #closed = false;
   #starting?: Promise<void>;
   #callbacks = new Map<string, Set<EventCallback>>();
-  #subscribeWaiters = new Map<string, Array<() => void>>();
+  #subscribeWaiters = new Map<string, SubscribeWaiter[]>();
   #brokerClients = new Map<net.Socket, BrokerClient>();
   #pendingWrites: Promise<void>[] = [];
 
@@ -146,6 +151,7 @@ export class UnixSocketPubSub extends PubSub {
 
     this.#clientSocket?.destroy();
     this.#clientSocket = undefined;
+    this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub is closed'));
 
     for (const client of this.#brokerClients.values()) {
       client.socket.destroy();
@@ -245,6 +251,11 @@ export class UnixSocketPubSub extends PubSub {
         readFrames(socket, frame => this.#handleServerFrame(frame));
         socket.on('close', () => {
           if (this.#clientSocket === socket) this.#clientSocket = undefined;
+          this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub broker connection closed'));
+        });
+        socket.on('error', error => {
+          if (this.#clientSocket === socket) this.#clientSocket = undefined;
+          this.#rejectSubscribeWaiters(error);
         });
         void this.#resubscribeClient().then(resolve, reject);
       };
@@ -261,13 +272,34 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async #sendSubscribeToBroker(topic: string): Promise<void> {
-    const subscribed = new Promise<void>(resolve => {
+    const subscribed = new Promise<void>((resolve, reject) => {
       const waiters = this.#subscribeWaiters.get(topic) ?? [];
-      waiters.push(resolve);
+      waiters.push({ resolve, reject });
       this.#subscribeWaiters.set(topic, waiters);
     });
-    await this.#sendToBroker({ type: 'subscribe', topic });
+    try {
+      await this.#sendToBroker({ type: 'subscribe', topic });
+    } catch (error) {
+      this.#settleSubscribeWaiters(topic, error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
     await subscribed;
+  }
+
+  #settleSubscribeWaiters(topic: string, error?: Error) {
+    const waiters = this.#subscribeWaiters.get(topic);
+    this.#subscribeWaiters.delete(topic);
+    if (error) {
+      waiters?.forEach(waiter => waiter.reject(error));
+      return;
+    }
+    waiters?.forEach(waiter => waiter.resolve());
+  }
+
+  #rejectSubscribeWaiters(error: Error) {
+    for (const topic of this.#subscribeWaiters.keys()) {
+      this.#settleSubscribeWaiters(topic, error);
+    }
   }
 
   #handleBrokerClient(socket: net.Socket) {
@@ -290,9 +322,7 @@ export class UnixSocketPubSub extends PubSub {
 
   #handleServerFrame(frame: ServerFrame) {
     if (frame.type === 'subscribed') {
-      const waiters = this.#subscribeWaiters.get(frame.topic);
-      this.#subscribeWaiters.delete(frame.topic);
-      waiters?.forEach(resolve => resolve());
+      this.#settleSubscribeWaiters(frame.topic);
       return;
     }
     if (frame.type !== 'event') return;
