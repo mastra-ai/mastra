@@ -2515,6 +2515,9 @@ importers:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.25
         version: 3.0.25(zod@3.25.76)
+      '@ai-sdk/ui-utils':
+        specifier: ^1.2.11
+        version: 1.2.11(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2524,6 +2527,12 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.57.7
         version: 7.58.7(@types/node@22.19.15)
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@standard-schema/spec':
+        specifier: ^1.1.0
+        version: 1.1.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -2539,6 +2548,12 @@ importers:
       eslint:
         specifier: ^10.2.1
         version: 10.3.0(jiti@2.6.1)
+      eventsource-parser:
+        specifier: ^3.0.6
+        version: 3.0.8
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
@@ -3534,9 +3549,15 @@ importers:
       '@babel/traverse':
         specifier: ^7.29.0
         version: 7.29.0
+      '@hono/node-server':
+        specifier: ^1.19.11
+        version: 1.19.14(hono@4.12.18)
       '@hono/node-ws':
         specifier: ^1.3.0
         version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.18))(bufferutil@4.1.0)(hono@4.12.18)
+      '@mastra/hono':
+        specifier: workspace:*
+        version: link:../../server-adapters/hono
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -3607,9 +3628,6 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0(bufferutil@4.1.0)
     devDependencies:
-      '@hono/node-server':
-        specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.18)
       '@hono/standard-validator':
         specifier: ^0.2.2
         version: 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.18)
@@ -3628,9 +3646,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@mastra/hono':
-        specifier: workspace:*
-        version: link:../../server-adapters/hono
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
@@ -4713,6 +4728,15 @@ importers:
 
   packages/schema-compat:
     dependencies:
+      '@standard-schema/spec':
+        specifier: ^1.1.0
+        version: 1.1.0
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
       json-schema-to-zod:
         specifier: ^2.7.0
         version: 2.7.0
@@ -4756,12 +4780,6 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
-      '@standard-schema/spec':
-        specifier: ^1.1.0
-        version: 1.1.0
-      '@types/json-schema':
-        specifier: ^7.0.15
-        version: 7.0.15
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -4771,9 +4789,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.5(vitest@4.1.5)
-      ajv:
-        specifier: ^8.18.0
-        version: 8.18.0
       arktype:
         specifier: ^2.2.0
         version: 2.2.0
@@ -4801,6 +4816,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       hono:
         specifier: ^4.12.8
         version: 4.12.18
@@ -4832,9 +4850,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@mastra/schema-compat':
-        specifier: workspace:*
-        version: link:../schema-compat
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5504,6 +5519,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
 
   stores/cloudflare:
     dependencies:
@@ -29292,7 +29310,7 @@ snapshots:
   '@ai-sdk/provider-utils@2.1.10(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 1.0.9
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
     optionalDependencies:
@@ -29316,7 +29334,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.1
       '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       zod: 4.3.6
     optional: true
 
@@ -36013,7 +36031,7 @@ snapshots:
       cors: 2.8.6
       cross-spawn: 7.0.6
       eventsource: 3.0.7
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       express: 5.2.1
       express-rate-limit: 8.5.1(express@5.2.1)
       hono: 4.12.18
@@ -36037,7 +36055,7 @@ snapshots:
       cors: 2.8.6
       cross-spawn: 7.0.6
       eventsource: 3.0.7
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
       express: 5.2.1
       express-rate-limit: 8.5.1(express@5.2.1)
       hono: 4.12.18
@@ -46717,7 +46735,7 @@ snapshots:
 
   eventsource@3.0.7:
     dependencies:
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.0.8
 
   execa@5.1.1:
     dependencies:

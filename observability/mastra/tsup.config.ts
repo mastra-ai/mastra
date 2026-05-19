@@ -16,7 +16,7 @@ export default defineConfig({
   },
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set());
 
     const srcData = path.join(process.cwd(), 'src', 'metrics', DATA_FILE_NAME);
     const distMetricsDir = path.join(process.cwd(), 'dist', 'metrics');
