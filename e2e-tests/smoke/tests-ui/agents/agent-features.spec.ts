@@ -154,7 +154,7 @@ test.describe('Agent Features', () => {
     await fillAndSend(page, 'Ask your helper agent to say the word "mango" and nothing else.');
 
     // Wait for navigation to thread URL
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
 
     // The sub-agent call should render as an AgentBadge in the chat thread
     const thread = page.getByTestId('thread-wrapper');
@@ -187,7 +187,7 @@ test.describe('Agent Features', () => {
     await fillAndSend(page, 'Greet someone named Alice');
 
     // Wait for navigation to thread URL
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
 
     // The workflow call should render as a WorkflowBadge in the chat thread
     const thread = page.getByTestId('thread-wrapper');

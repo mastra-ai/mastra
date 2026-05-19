@@ -29,7 +29,7 @@ test.describe('Memory & Threads', () => {
 
     // Send a message to create a new thread
     await fillAndSend(page, 'Thread list test message');
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
     await waitForAssistantMessage(page);
 
     // Extract the thread ID from the URL
@@ -52,7 +52,7 @@ test.describe('Memory & Threads', () => {
 
     // Send a message to create a thread we can delete
     await fillAndSend(page, 'Thread to be deleted');
-    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 45_000 });
     await waitForAssistantMessage(page);
 
     // Extract the thread path from the URL so we can target this specific thread

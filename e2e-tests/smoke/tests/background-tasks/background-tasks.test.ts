@@ -1,28 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { fetchApi, fetchJson } from '../utils.js';
 
-describe('background tasks — list', () => {
-  it('GET /background-tasks returns the paginated tasks envelope with the seeded task', async () => {
+// NOTE: The smoke fixture intentionally does NOT enable `backgroundTasks` on
+// the Mastra instance. When enabled, the BackgroundTaskManager injects a
+// system prompt that teaches the LLM to opt tool calls into background mode,
+// which breaks deterministic agent tool-use tests. The route handler still
+// responds with an empty envelope when no manager is attached.
+describe('background tasks — empty state shape', () => {
+  it('GET /background-tasks returns the paginated tasks envelope when disabled', async () => {
     const { status, data } = await fetchJson<any>('/api/background-tasks');
     expect(status).toBe(200);
     expect(Array.isArray(data.tasks)).toBe(true);
-    expect(typeof data.total).toBe('number');
-    expect(data.total).toBe(data.tasks.length);
-
-    const seeded = data.tasks.find((t: any) => t.id === 'seed-background-task');
-    expect(seeded).toBeDefined();
-    expect(seeded.status).toBe('completed');
-    expect(seeded.toolName).toBe('calculator');
-    expect(seeded.agentId).toBe('test-agent');
-    expect(seeded.result).toEqual({ value: 3 });
-  });
-
-  it('GET /background-tasks/:id returns the seeded task by id', async () => {
-    const { status, data } = await fetchJson<any>('/api/background-tasks/seed-background-task');
-    expect(status).toBe(200);
-    expect(data.id).toBe('seed-background-task');
-    expect(data.status).toBe('completed');
-    expect(data.toolName).toBe('calculator');
+    expect(data.tasks.length).toBe(0);
+    expect(data.total).toBe(0);
   });
 
   it('GET /background-tasks/:id returns a structured 404 for an unknown id', async () => {
