@@ -170,4 +170,24 @@ describe('dynamic filesystem tools', () => {
       },
     });
   });
+
+  it('should resolve the dynamic filesystem for the lsp_inspect tool', async () => {
+    // lsp_inspect reads workspace.filesystem (resolveAbsolutePath); it must
+    // declare a filesystem target so the resolver runs for dynamic filesystems.
+    let resolverCalls = 0;
+    const workspace = new Workspace({
+      filesystem: () => {
+        resolverCalls++;
+        return new LocalFilesystem({ basePath: tempDir });
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+      { path: 'file.ts', match: 'const x<<<' },
+      { requestContext: new RequestContext() },
+    );
+
+    expect(resolverCalls).toBe(1);
+  });
 });

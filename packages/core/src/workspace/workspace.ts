@@ -1365,10 +1365,9 @@ export class Workspace<
   private getPathContextForProviders(
     filesystem: WorkspaceFilesystem | undefined,
     sandbox: WorkspaceSandbox | undefined,
-    opts?: { requestContext?: RequestContext },
   ): PathContext {
-    const fsInstructions = filesystem?.getInstructions?.(opts);
-    const sandboxInstructions = sandbox?.getInstructions?.(opts);
+    const fsInstructions = filesystem?.getInstructions?.();
+    const sandboxInstructions = sandbox?.getInstructions?.();
 
     return {
       filesystem: filesystem
