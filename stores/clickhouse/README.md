@@ -68,6 +68,15 @@ type ClickhouseConfig = {
   url: string; // Clickhouse HTTP interface URL
   username: string; // Database username
   password: string; // Database password
+  engine?:
+    | { type: 'default' }
+    | {
+        type: 'replicated';
+        cluster?: string; // Mastra emits ON CLUSTER DDL when set
+        externallyManagedDDL?: true; // declare DDL fan-out is handled out-of-band
+        zooPath?: string; // defaults to /clickhouse/tables/{shard}/{database}/{table}
+        replica?: string; // defaults to {replica}
+      };
 };
 ```
 
@@ -85,10 +94,27 @@ type ClickhouseConfig = {
 
 ### Table Engines
 
-The store uses different table engines for different types of data:
+By default the store uses different MergeTree variants for different types of data:
 
 - `MergeTree()`: Used for messages, traces, and evals
 - `ReplacingMergeTree()`: Used for threads and workflow snapshots
+
+#### Replicated (multi-replica) clusters
+
+For multi-replica ClickHouse clusters set `engine: { type: 'replicated', ... }`. Mastra emits
+`Replicated*MergeTree` engines so writes replicate via ClickHouse Keeper instead of staying
+on whichever node received the insert (which causes split-brain reads behind a load
+balancer). Pass exactly one of:
+
+- `cluster: '<name>'` — Mastra adds `ON CLUSTER '<name>'` to every `CREATE` / `ALTER`
+  so new tables land on every replica from a single connection.
+- `externallyManagedDDL: true` — your deploy pipeline (Terraform, dbt, ansible, …) is
+  responsible for running every `CREATE` / `ALTER` on every replica. Mastra emits
+  replicated engines but never `ON CLUSTER`.
+
+Mastra refuses to migrate between engine modes. If pre-existing tables disagree with the
+configured mode, init aborts on startup with an explicit error — drop the tables (data
+loss) or change the config to match.
 
 ## Storage Methods
 

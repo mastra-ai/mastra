@@ -3,6 +3,7 @@ import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { ClickhouseTableEngineConfig } from './db/engine';
 import { BackgroundTasksStorageClickhouse } from './domains/background-tasks';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
@@ -21,6 +22,7 @@ export {
   WorkflowsStorageClickhouse,
 };
 export type { ClickhouseDomainConfig } from './db';
+export type { ClickhouseTableEngineConfig } from './db/engine';
 
 type IntervalUnit =
   | 'NANOSECOND'
@@ -96,6 +98,16 @@ type ClickhouseCredentialsConfig = Omit<ClickHouseClientConfigOptions, 'url' | '
 export type ClickhouseConfig = {
   id: string;
   ttl?: ClickhouseTtlConfig;
+  /**
+   * Optional table engine configuration for ClickHouse-managed tables. Set
+   * `{ type: 'replicated', cluster: '<name>' }` (or `externallyManagedDDL: true`)
+   * to deploy against a multi-replica ClickHouse cluster. See
+   * {@link ClickhouseTableEngineConfig}. Defaults to plain MergeTree engines.
+   *
+   * Mastra refuses to migrate between engine modes — if a configured mode
+   * does not match the engine family of pre-existing tables, init aborts.
+   */
+  engine?: ClickhouseTableEngineConfig;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -199,7 +211,7 @@ export class ClickhouseStore extends MastraCompositeStore {
       }
 
       // Extract Mastra-specific config, pass rest to ClickHouse client
-      const { id, ttl, disableInit, clickhouse_settings, ...clientOptions } = config;
+      const { id, ttl, disableInit, engine: _engine, clickhouse_settings, ...clientOptions } = config;
 
       // Create client with all provided options
       this.db = createClient({
@@ -216,7 +228,7 @@ export class ClickhouseStore extends MastraCompositeStore {
 
     this.ttl = config.ttl;
 
-    const domainConfig = { client: this.db, ttl: this.ttl };
+    const domainConfig = { client: this.db, ttl: this.ttl, engine: config.engine };
     const workflows = new WorkflowsStorageClickhouse(domainConfig);
     const scores = new ScoresStorageClickhouse(domainConfig);
     const memory = new MemoryStorageClickhouse(domainConfig);
@@ -325,7 +337,7 @@ export class ClickhouseStoreVNext extends ClickhouseStore {
 
     // Replace the legacy observability domain set up by ClickhouseStore with the
     // vNext implementation. Both share the same underlying client.
-    const observability = new ObservabilityStorageClickhouseVNext({ client: this.db });
+    const observability = new ObservabilityStorageClickhouseVNext({ client: this.db, engine: config.engine });
 
     this.stores = {
       ...this.stores,

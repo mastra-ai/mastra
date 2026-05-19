@@ -15,7 +15,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  ALL_MIGRATIONS,
+  buildAllMigrations,
   buildAllMvDDL,
   buildAllTableDDL,
   buildRetentionDDL,
@@ -23,6 +23,10 @@ import {
   parseTtlExpression,
 } from './ddl';
 import { ObservabilityStorageClickhouseVNext } from '.';
+
+// Convenience for tests that don't care about engine mode.
+const TEST_DEFAULT_ENGINE = { type: 'default' as const };
+const ALL_MIGRATIONS = buildAllMigrations(TEST_DEFAULT_ENGINE);
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -638,8 +642,14 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('builds serial-backed delta DDL when explicitly requested', () => {
-      const serialDdl = [...buildAllTableDDL(), ...buildAllMvDDL('serial')].join('\n');
-      const fallbackDdl = [...buildAllTableDDL(), ...buildAllMvDDL('fallback')].join('\n');
+      const serialDdl = [
+        ...buildAllTableDDL(TEST_DEFAULT_ENGINE),
+        ...buildAllMvDDL('serial', TEST_DEFAULT_ENGINE),
+      ].join('\n');
+      const fallbackDdl = [
+        ...buildAllTableDDL(TEST_DEFAULT_ENGINE),
+        ...buildAllMvDDL('fallback', TEST_DEFAULT_ENGINE),
+      ].join('\n');
 
       expect(serialDdl).toContain(`generateSerialID('mastra_log_events_delta_cursor')`);
       expect(serialDdl).toContain(`generateSerialID('mastra_trace_roots_delta_cursor')`);
@@ -4976,11 +4986,11 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     // --- Unit tests for buildRetentionDDL ---
 
     it('buildRetentionDDL generates no statements when config is empty', () => {
-      expect(buildRetentionDDL({})).toEqual([]);
+      expect(buildRetentionDDL({}, TEST_DEFAULT_ENGINE)).toEqual([]);
     });
 
     it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
-      const stmts = buildRetentionDDL({ tracing: 30 });
+      const stmts = buildRetentionDDL({ tracing: 30 }, TEST_DEFAULT_ENGINE);
       expect(stmts).toHaveLength(3);
       expect(stmts[0]).toBe('ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[1]).toBe('ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY');
@@ -4988,7 +4998,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
-      const stmts = buildRetentionDDL({ logs: 7, metrics: 14, scores: 90, feedback: 60 });
+      const stmts = buildRetentionDDL({ logs: 7, metrics: 14, scores: 90, feedback: 60 }, TEST_DEFAULT_ENGINE);
       expect(stmts).toHaveLength(4);
       expect(stmts).toContain('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_metric_events MODIFY TTL timestamp + INTERVAL 14 DAY');
@@ -4997,19 +5007,22 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('buildRetentionDDL skips zero, negative, and non-numeric values', () => {
-      const stmts = buildRetentionDDL({
-        tracing: 0,
-        logs: -5,
-        metrics: NaN,
-        scores: undefined,
-        feedback: 10,
-      } as any);
+      const stmts = buildRetentionDDL(
+        {
+          tracing: 0,
+          logs: -5,
+          metrics: NaN,
+          scores: undefined,
+          feedback: 10,
+        } as any,
+        TEST_DEFAULT_ENGINE,
+      );
       expect(stmts).toHaveLength(1);
       expect(stmts[0]).toBe('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY');
     });
 
     it('buildRetentionDDL floors fractional days', () => {
-      const stmts = buildRetentionDDL({ logs: 7.9 });
+      const stmts = buildRetentionDDL({ logs: 7.9 }, TEST_DEFAULT_ENGINE);
       expect(stmts).toHaveLength(1);
       expect(stmts[0]).toBe('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
     });
@@ -5018,8 +5031,8 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     it('buildRetentionEntries returns structured entries whose sql matches buildRetentionDDL', () => {
       const config = { tracing: 30, logs: 7, metrics: 14 };
-      const entries = buildRetentionEntries(config);
-      const ddl = buildRetentionDDL(config);
+      const entries = buildRetentionEntries(config, TEST_DEFAULT_ENGINE);
+      const ddl = buildRetentionDDL(config, TEST_DEFAULT_ENGINE);
       expect(entries).toHaveLength(ddl.length);
       expect(entries.map(e => e.sql)).toEqual(ddl);
       for (const entry of entries) {

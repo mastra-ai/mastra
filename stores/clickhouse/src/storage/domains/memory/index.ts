@@ -22,6 +22,8 @@ import {
 } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
+import type { ClickhouseTableEngineConfig } from '../../db/engine';
+import { assertEngineFamilyMatches } from '../../db/engine';
 import { transformRow, transformRows } from '../../db/utils';
 
 /**
@@ -57,14 +59,17 @@ function parseMetadata(metadata: unknown): Record<string, unknown> {
 export class MemoryStorageClickhouse extends MemoryStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
+  #engine: ClickhouseTableEngineConfig;
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, engine } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#engine = engine;
+    this.#db = new ClickhouseDB({ client, ttl, engine });
   }
 
   async init(): Promise<void> {
+    await assertEngineFamilyMatches(this.client, [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES], this.#engine);
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });

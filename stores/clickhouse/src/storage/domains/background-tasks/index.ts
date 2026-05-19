@@ -9,6 +9,8 @@ import type {
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
+import type { ClickhouseTableEngineConfig } from '../../db/engine';
+import { assertEngineFamilyMatches } from '../../db/engine';
 
 function serializeJson(v: unknown): any {
   if (typeof v === 'object' && v != null) return JSON.stringify(v);
@@ -66,15 +68,18 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
+  #engine: ClickhouseTableEngineConfig;
 
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, engine } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#engine = engine;
+    this.#db = new ClickhouseDB({ client, ttl, engine });
   }
 
   async init(): Promise<void> {
+    await assertEngineFamilyMatches(this.client, [TABLE_BACKGROUND_TASKS], this.#engine);
     await this.#db.createTable({ tableName: TABLE_BACKGROUND_TASKS, schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS] });
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,

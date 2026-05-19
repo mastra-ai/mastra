@@ -208,10 +208,84 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
     isOptional: true,
     defaultValue: 'false',
   },
+  {
+    name: 'engine',
+    type: 'ClickhouseTableEngineConfig',
+    description:
+      'Optional table engine configuration. Set `{ type: "replicated", cluster: "..." }` for multi-replica ClickHouse clusters; otherwise omit. See [Replicated table engines](#replicated-table-engines).',
+    isOptional: true,
+    defaultValue: '{ type: "default" }',
+  },
 ]}
 />
 
 `ClickhouseStore` also accepts every option from `ClickHouseClientConfigOptions` (such as `database`, `request_timeout`, `compression`, `keep_alive`, and `max_open_connections`).
+
+## Replicated table engines
+
+By default Mastra emits plain `MergeTree` and `ReplacingMergeTree` engines. On a multi-replica ClickHouse cluster behind a load balancer, plain engines do not replicate data across nodes — each replica receives its own slice of writes, and reads return whichever slice the load balancer happened to route to.
+
+Set `engine: { type: "replicated", ... }` to emit `ReplicatedMergeTree` and `ReplicatedReplacingMergeTree` engines so writes replicate via ClickHouse Keeper. Pass exactly one of `cluster` or `externallyManagedDDL`:
+
+```typescript title="src/mastra/index.ts"
+import { ClickhouseStoreVNext } from '@mastra/clickhouse'
+
+export const storage = new ClickhouseStoreVNext({
+  id: 'clickhouse-storage',
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+  engine: {
+    type: 'replicated',
+    cluster: 'production_cluster',
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"default" | "replicated"',
+    description:
+      '`"default"` keeps plain MergeTree engines (single-node or ClickHouse Cloud). `"replicated"` switches to `Replicated*MergeTree`.',
+    isOptional: false,
+  },
+  {
+    name: 'cluster',
+    type: 'string',
+    description:
+      'Required when `type: "replicated"` and `externallyManagedDDL` is not set. Mastra adds `ON CLUSTER \'<cluster>\'` to every CREATE / ALTER so DDL fans out across the named cluster.',
+    isOptional: true,
+  },
+  {
+    name: 'externallyManagedDDL',
+    type: 'true',
+    description:
+      'Required when `type: "replicated"` and `cluster` is not set. Declares that your deploy pipeline runs every CREATE / ALTER on every replica; Mastra emits replicated engines but never `ON CLUSTER`.',
+    isOptional: true,
+  },
+  {
+    name: 'zooPath',
+    type: 'string',
+    description:
+      'Keeper path used by `Replicated*MergeTree` engines. The `{table}` placeholder is substituted by Mastra; `{shard}` and `{database}` are server-side ClickHouse macros and are passed through unchanged.',
+    isOptional: true,
+    defaultValue: '/clickhouse/tables/{shard}/{database}/{table}',
+  },
+  {
+    name: 'replica',
+    type: 'string',
+    description: 'Replica name passed to `Replicated*MergeTree`. Server-side macros are passed through unchanged.',
+    isOptional: true,
+    defaultValue: '{replica}',
+  },
+]}
+/>
+
+:::warning
+Mastra refuses to migrate between engine modes. If pre-existing tables disagree with the configured mode, init aborts on startup with an explicit error. To switch modes, drop the affected tables (data loss) and let Mastra recreate them, or change the config to match the existing engine family.
+:::
 
 ### Observability domain options
 

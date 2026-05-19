@@ -148,7 +148,7 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
   });
 
   it('is a no-op when signal tables do not exist', async () => {
-    await expect(migrateSignalTables(client)).resolves.not.toThrow();
+    await expect(migrateSignalTables(client, { type: 'default' })).resolves.not.toThrow();
     expect(await getEngine(client, TABLE_LOG_EVENTS)).toBeNull();
   });
 
@@ -169,7 +169,7 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
       format: 'JSONEachRow',
     });
 
-    await migrateSignalTables(client);
+    await migrateSignalTables(client, { type: 'default' });
 
     expect(await getEngine(client, TABLE_LOG_EVENTS)).toBe('ReplacingMergeTree');
 
@@ -217,7 +217,7 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
       format: 'JSONEachRow',
     });
 
-    await migrateSignalTables(client);
+    await migrateSignalTables(client, { type: 'default' });
 
     const result = await client.query({
       query: `SELECT logId, message FROM ${TABLE_LOG_EVENTS} ORDER BY timestamp`,
@@ -236,14 +236,14 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
       format: 'JSONEachRow',
     });
 
-    await migrateSignalTables(client);
+    await migrateSignalTables(client, { type: 'default' });
     const first = (await (
       await client.query({ query: `SELECT metricId FROM ${TABLE_METRIC_EVENTS}`, format: 'JSONEachRow' })
     ).json()) as Array<{ metricId: string }>;
     expect(first).toHaveLength(1);
     expect(first[0]!.metricId).toMatch(UUID_RE);
 
-    await migrateSignalTables(client);
+    await migrateSignalTables(client, { type: 'default' });
     const second = (await (
       await client.query({ query: `SELECT metricId FROM ${TABLE_METRIC_EVENTS}`, format: 'JSONEachRow' })
     ).json()) as Array<{ metricId: string }>;
@@ -291,7 +291,7 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
       format: 'JSONEachRow',
     });
 
-    await migrateSignalTables(client);
+    await migrateSignalTables(client, { type: 'default' });
 
     const existing = (await (
       await client.query({ query: `SELECT logId FROM ${TABLE_LOG_EVENTS}`, format: 'JSONEachRow' })
@@ -325,7 +325,9 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
       format: 'JSONEachRow',
     });
 
-    await expect(migrateSignalTables(clientThatFailsOnInsert(client))).rejects.toBeInstanceOf(MastraError);
+    await expect(migrateSignalTables(clientThatFailsOnInsert(client), { type: 'default' })).rejects.toBeInstanceOf(
+      MastraError,
+    );
 
     // Original table must be restored with its data intact and still in legacy (MergeTree) shape.
     expect(await getEngine(client, TABLE_LOG_EVENTS)).toBe('MergeTree');

@@ -88,14 +88,16 @@ import type {
 
 import { resolveClickhouseConfig } from '../../../db';
 import type { ClickhouseDomainConfig } from '../../../db';
+import type { ClickhouseTableEngineConfig } from '../../../db/engine';
+import { assertEngineFamilyMatches } from '../../../db/engine';
 
 import {
-  BASE_MV_DDL,
-  BASE_TABLE_DDL,
+  buildBaseMvDDL,
+  buildBaseTableDDL,
   buildAllTableDDL,
   buildAllMvDDL,
-  ALL_MIGRATIONS,
-  DISCOVERY_MV_DDL,
+  buildAllMigrations,
+  buildDiscoveryMvDDL,
   ALL_TABLE_NAMES,
   DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
@@ -331,14 +333,16 @@ async function detectExistingDeltaCursorStrategy(
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
+  readonly #engine: ClickhouseTableEngineConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
     super();
-    const { client } = resolveClickhouseConfig(config);
+    const { client, engine } = resolveClickhouseConfig(config);
     this.#client = client;
     this.#retention = config.retention;
+    this.#engine = engine;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
   }
 
@@ -347,6 +351,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   async init(): Promise<void> {
+    // Refuse to start if pre-existing tables disagree with the configured engine
+    // family. Mastra does not migrate between engine modes — see engine.ts.
+    await assertEngineFamilyMatches(this.#client, ALL_TABLE_NAMES, this.#engine);
+
     const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
     if (migrationStatus.needsMigration) {
       throw new MastraError({
@@ -378,8 +386,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // Core tables + incremental MVs (must succeed)
       const coreDdl =
         this.#deltaCursorStrategy === null
-          ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
-          : [...buildAllTableDDL(), ...buildAllMvDDL(this.#deltaCursorStrategy)];
+          ? [...buildBaseTableDDL(this.#engine), ...buildBaseMvDDL(this.#engine)]
+          : [...buildAllTableDDL(this.#engine), ...buildAllMvDDL(this.#deltaCursorStrategy, this.#engine)];
       for (const ddl of coreDdl) {
         await this.#client.command({ query: ddl });
       }
@@ -389,7 +397,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // MergeTree, every issued ALTER bumps the table's metadata version
       // even when `IF NOT EXISTS` is a no-op, causing replica-lag retry
       // errors on every boot when multiple replicas/pods race.
-      const pendingMigrations = await filterAppliedMigrations(this.#client, ALL_MIGRATIONS);
+      const pendingMigrations = await filterAppliedMigrations(this.#client, buildAllMigrations(this.#engine));
       for (const migration of pendingMigrations) {
         await this.#client.command({ query: migration.sql });
       }
@@ -399,7 +407,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // metadata version unconditionally, so re-issuing it on every boot is the
       // primary source of replica-catch-up races in deployments with retention.
       if (this.#retention) {
-        const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
+        const pendingRetention = await filterAppliedRetention(
+          this.#client,
+          buildRetentionEntries(this.#retention, this.#engine),
+        );
         for (const entry of pendingRetention) {
           await this.#client.command({ query: entry.sql });
         }
@@ -424,7 +435,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     // Per design: "bootstrap failure should not fail the base observability adapter;
     // discovery methods should continue returning empty results until a later refresh succeeds."
     try {
-      for (const ddl of DISCOVERY_MV_DDL) {
+      for (const ddl of buildDiscoveryMvDDL(this.#engine)) {
         await this.#client.command({ query: ddl });
       }
       // Trigger an immediate refresh so discovery data is available right away
@@ -463,7 +474,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       };
     }
 
-    await migrateSignalTables(this.#client, this.logger);
+    await migrateSignalTables(this.#client, this.#engine, this.logger);
 
     return {
       success: true,

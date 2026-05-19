@@ -15,18 +15,23 @@ import {
 import type { StoragePagination } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
+import type { ClickhouseTableEngineConfig } from '../../db/engine';
+import { assertEngineFamilyMatches } from '../../db/engine';
 
 export class ScoresStorageClickhouse extends ScoresStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
+  #engine: ClickhouseTableEngineConfig;
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, engine } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#engine = engine;
+    this.#db = new ClickhouseDB({ client, ttl, engine });
   }
 
   async init(): Promise<void> {
+    await assertEngineFamilyMatches(this.client, [TABLE_SCORERS], this.#engine);
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
   }
 

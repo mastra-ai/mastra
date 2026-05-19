@@ -16,16 +16,20 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
+import type { ClickhouseTableEngineConfig } from '../../db/engine';
+import { assertEngineFamilyMatches } from '../../db/engine';
 import { TABLE_ENGINES } from '../../db/utils';
 
 export class WorkflowsStorageClickhouse extends WorkflowsStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
+  #engine: ClickhouseTableEngineConfig;
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, engine } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#engine = engine;
+    this.#db = new ClickhouseDB({ client, ttl, engine });
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -35,6 +39,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
   }
 
   async init(): Promise<void> {
+    await assertEngineFamilyMatches(this.client, [TABLE_WORKFLOW_SNAPSHOT], this.#engine);
     const schema = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT];
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema });
     // Add resourceId column for backwards compatibility

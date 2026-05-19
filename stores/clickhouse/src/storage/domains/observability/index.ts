@@ -29,20 +29,26 @@ import type {
 } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
+import type { ClickhouseTableEngineConfig } from '../../db/engine';
+import { assertEngineFamilyMatches } from '../../db/engine';
 import { TABLE_ENGINES, transformRows } from '../../db/utils';
 
 export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
+  #engine: ClickhouseTableEngineConfig;
 
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, engine } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#engine = engine;
+    this.#db = new ClickhouseDB({ client, ttl, engine });
   }
 
   async init(): Promise<void> {
+    await assertEngineFamilyMatches(this.client, [TABLE_SPANS], this.#engine);
+
     // Check if migration is needed (table exists with old sorting key)
     const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
 

@@ -31,6 +31,7 @@ import {
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
 } from '@mastra/core/storage';
+import type { ClickhouseTableEngineConfig } from './engine';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
@@ -99,6 +100,12 @@ export type ClickhouseConfig = {
   url: string;
   username: string;
   password: string;
+  /**
+   * Optional table engine configuration. Defaults to plain `MergeTree` /
+   * `ReplacingMergeTree`. Set to `{ type: 'replicated', ... }` for
+   * multi-replica ClickHouse clusters. See {@link ClickhouseTableEngineConfig}.
+   */
+  engine?: ClickhouseTableEngineConfig;
   ttl?: {
     [TableKey in TABLE_NAMES]?: {
       row?: { interval: number; unit: IntervalUnit; ttlKey?: string };

@@ -3,20 +3,21 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { createStorageErrorId } from '@mastra/core/storage';
 
+import type { ClickhouseTableEngineConfig } from '../../../db/engine';
 import {
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
-  METRIC_EVENTS_DDL,
-  LOG_EVENTS_DDL,
-  SCORE_EVENTS_DDL,
-  FEEDBACK_EVENTS_DDL,
+  buildMetricEventsDDL,
+  buildLogEventsDDL,
+  buildScoreEventsDDL,
+  buildFeedbackEventsDDL,
 } from './ddl';
 
 interface SignalMigration {
   table: string;
-  createDDL: string;
+  buildCreateDDL: (engine: ClickhouseTableEngineConfig) => string;
   idColumn: string;
 }
 
@@ -32,10 +33,10 @@ export interface SignalMigrationStatus {
 }
 
 const SIGNAL_MIGRATIONS: SignalMigration[] = [
-  { table: TABLE_METRIC_EVENTS, createDDL: METRIC_EVENTS_DDL, idColumn: 'metricId' },
-  { table: TABLE_LOG_EVENTS, createDDL: LOG_EVENTS_DDL, idColumn: 'logId' },
-  { table: TABLE_SCORE_EVENTS, createDDL: SCORE_EVENTS_DDL, idColumn: 'scoreId' },
-  { table: TABLE_FEEDBACK_EVENTS, createDDL: FEEDBACK_EVENTS_DDL, idColumn: 'feedbackId' },
+  { table: TABLE_METRIC_EVENTS, buildCreateDDL: buildMetricEventsDDL, idColumn: 'metricId' },
+  { table: TABLE_LOG_EVENTS, buildCreateDDL: buildLogEventsDDL, idColumn: 'logId' },
+  { table: TABLE_SCORE_EVENTS, buildCreateDDL: buildScoreEventsDDL, idColumn: 'scoreId' },
+  { table: TABLE_FEEDBACK_EVENTS, buildCreateDDL: buildFeedbackEventsDDL, idColumn: 'feedbackId' },
 ];
 
 // ClickHouse Cloud silently rewrites `ReplacingMergeTree` to `SharedReplacingMergeTree`,
@@ -106,18 +107,60 @@ export async function checkSignalTablesMigrationStatus(client: ClickHouseClient)
  * Copy-and-swap: create temp → INSERT…SELECT (generating IDs) → EXCHANGE temp with live
  * → drop old data. EXCHANGE swaps the two table names atomically, so concurrent
  * writers never observe a missing table.
+ *
+ * NOT supported when `engine.type === 'replicated'`: the rename/copy/exchange
+ * sequence runs against a single ClickHouse node, which would diverge replicas.
+ * In that case this throws a `MastraError` and the operator must recreate the
+ * tables on every replica out-of-band.
  */
-export async function migrateSignalTables(client: ClickHouseClient, logger?: IMastraLogger): Promise<void> {
-  for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
-    const engine = await getTableEngine(client, table);
-    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
+export async function migrateSignalTables(
+  client: ClickHouseClient,
+  engine: ClickhouseTableEngineConfig,
+  logger?: IMastraLogger,
+): Promise<void> {
+  if (engine.type === 'replicated') {
+    const tablesNeedingMigration: string[] = [];
+    for (const { table } of SIGNAL_MIGRATIONS) {
+      const currentEngine = await getTableEngine(client, table);
+      if (currentEngine && !isReplacingMergeTreeEngine(currentEngine)) {
+        tablesNeedingMigration.push(`${table} (${currentEngine})`);
+      }
+    }
+    if (tablesNeedingMigration.length === 0) return;
+    throw new MastraError({
+      id: createStorageErrorId('CLICKHOUSE', 'MIGRATE_SIGNAL_TABLES', 'REPLICATED_NOT_SUPPORTED'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text:
+        `\n` +
+        `===========================================================================\n` +
+        `MIGRATION NOT SUPPORTED IN REPLICATED MODE\n` +
+        `===========================================================================\n` +
+        `\n` +
+        `The signal-table migration relies on CREATE / INSERT…SELECT / EXCHANGE TABLES /\n` +
+        `DROP against a single ClickHouse node. Running it on a replicated cluster\n` +
+        `would diverge replicas.\n` +
+        `\n` +
+        `Tables still on the legacy schema:\n${tablesNeedingMigration.map(t => `  - ${t}`).join('\n')}\n` +
+        `\n` +
+        `To fix this, recreate the affected tables manually with the signal-ID schema\n` +
+        `on every replica before re-enabling replicated mode, or run the migration once\n` +
+        `with engine='default' and re-enable replicated mode afterwards.\n` +
+        `===========================================================================\n`,
+      details: { tables: tablesNeedingMigration.join(', ') },
+    });
+  }
 
-    logger?.info?.(`Migrating ${table} from ${engine} to ReplacingMergeTree with ${idColumn} column`);
+  for (const { table, buildCreateDDL, idColumn } of SIGNAL_MIGRATIONS) {
+    const currentEngine = await getTableEngine(client, table);
+    if (!currentEngine || isReplacingMergeTreeEngine(currentEngine)) continue;
+
+    logger?.info?.(`Migrating ${table} from ${currentEngine} to ReplacingMergeTree with ${idColumn} column`);
 
     const temp = `${table}_migrating_${Date.now()}`;
 
     try {
-      await client.command({ query: buildTemporaryTableDDL(createDDL, table, temp) });
+      await client.command({ query: buildTemporaryTableDDL(buildCreateDDL(engine), table, temp) });
 
       const newColumns = await getTableColumns(client, temp);
       const currentColumns = new Set(await getTableColumns(client, table));

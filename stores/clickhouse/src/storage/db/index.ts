@@ -11,6 +11,8 @@ import {
   getDefaultValue,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { ClickhouseTableEngineConfig } from './engine';
+import { buildEngineClause, onClusterClause, validateEngineConfig } from './engine';
 import type { ClickhouseConfig } from './utils';
 import { TABLE_ENGINES, transformRow } from './utils';
 
@@ -28,6 +30,7 @@ export type ClickhouseDomainConfig = ClickhouseDomainClientConfig | ClickhouseDo
 export interface ClickhouseDomainClientConfig {
   client: ClickHouseClient;
   ttl?: ClickhouseConfig['ttl'];
+  engine?: ClickhouseTableEngineConfig;
 }
 
 /**
@@ -38,19 +41,24 @@ export interface ClickhouseDomainRestConfig {
   username: string;
   password: string;
   ttl?: ClickhouseConfig['ttl'];
+  engine?: ClickhouseTableEngineConfig;
 }
 
 /**
- * Resolves ClickhouseDomainConfig to a ClickHouse client and ttl config.
- * Handles creating a new client if config is provided.
+ * Resolves ClickhouseDomainConfig to a ClickHouse client, ttl, and engine
+ * config. Engine config is validated here so all downstream consumers see a
+ * normalized value.
  */
 export function resolveClickhouseConfig(config: ClickhouseDomainConfig): {
   client: ClickHouseClient;
   ttl?: ClickhouseConfig['ttl'];
+  engine: ClickhouseTableEngineConfig;
 } {
+  const engine = validateEngineConfig(config.engine);
+
   // Existing client
   if ('client' in config) {
-    return { client: config.client, ttl: config.ttl };
+    return { client: config.client, ttl: config.ttl, engine };
   }
 
   // Config to create new client
@@ -66,22 +74,49 @@ export function resolveClickhouseConfig(config: ClickhouseDomainConfig): {
     },
   });
 
-  return { client, ttl: config.ttl };
+  return { client, ttl: config.ttl, engine };
 }
 
 export class ClickhouseDB extends MastraBase {
   protected ttl: ClickhouseConfig['ttl'];
   protected client: ClickHouseClient;
+  protected engine: ClickhouseTableEngineConfig;
 
   /** Cache of actual table columns: tableName -> Promise<Set<columnName>> (stores in-flight promise to coalesce concurrent calls) */
   private tableColumnsCache = new Map<string, Promise<Set<string>>>();
 
-  constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
+  constructor({
+    client,
+    ttl,
+    engine,
+  }: {
+    client: ClickHouseClient;
+    ttl: ClickhouseConfig['ttl'];
+    engine?: ClickhouseTableEngineConfig;
+  }) {
     super({
       name: 'CLICKHOUSE_DB',
     });
     this.ttl = ttl;
     this.client = client;
+    this.engine = validateEngineConfig(engine);
+  }
+
+  /**
+   * Returns the `ENGINE = …` right-hand side for a Mastra-owned table,
+   * accounting for the configured engine mode.
+   */
+  protected tableEngine(tableName: TABLE_NAMES): string {
+    return buildEngineClause(tableName, TABLE_ENGINES[tableName] ?? 'MergeTree()', this.engine);
+  }
+
+  /**
+   * Returns the ` ON CLUSTER 'name'` fragment (leading space, no trailing
+   * space) for placement immediately after a table name in DDL, or an empty
+   * string when no cluster fan-out is configured.
+   */
+  protected onCluster(): string {
+    return onClusterClause(this.engine);
   }
 
   /**
@@ -293,6 +328,30 @@ export class ClickhouseDB extends MastraBase {
       return false;
     }
 
+    if (this.engine.type === 'replicated') {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'MIGRATE_SPANS_SORTING_KEY', 'REPLICATED_NOT_SUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text:
+          `\n` +
+          `===========================================================================\n` +
+          `MIGRATION NOT SUPPORTED IN REPLICATED MODE\n` +
+          `===========================================================================\n` +
+          `\n` +
+          `The spans-sorting-key migration relies on RENAME / INSERT…SELECT / DROP\n` +
+          `against a single ClickHouse node. Running it on a replicated cluster\n` +
+          `would leave replicas in an inconsistent state.\n` +
+          `\n` +
+          `To fix this, recreate the spans table manually with the new sorting key\n` +
+          `(traceId, spanId) on every replica before re-enabling replicated mode,\n` +
+          `or run the migration once with engine='default' and re-enable replicated\n` +
+          `mode afterwards.\n` +
+          `===========================================================================\n`,
+        details: { tableName, currentSortingKey },
+      });
+    }
+
     this.logger?.info?.(`Migrating spans table from sorting key "${currentSortingKey}" to "(traceId, spanId)"`);
 
     const backupTableName = `${tableName}_backup_${Date.now()}`;
@@ -329,10 +388,10 @@ export class ClickhouseDB extends MastraBase {
         .join(',\n');
 
       const createSql = `
-        CREATE TABLE ${tableName} (
+        CREATE TABLE ${tableName}${this.onCluster()} (
           ${columns}
         )
-        ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
+        ENGINE = ${this.tableEngine(tableName)}
         PRIMARY KEY (traceId, spanId)
         ORDER BY (traceId, spanId)
         ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
@@ -484,10 +543,10 @@ export class ClickhouseDB extends MastraBase {
 
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         sql = `
-            CREATE TABLE IF NOT EXISTS ${tableName} (
+            CREATE TABLE IF NOT EXISTS ${tableName}${this.onCluster()} (
               ${['id String'].concat(columns)}
             )
-            ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
+            ENGINE = ${this.tableEngine(tableName)}
             PRIMARY KEY (createdAt, run_id, workflow_name)
             ORDER BY (createdAt, run_id, workflow_name)
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
@@ -499,10 +558,10 @@ export class ClickhouseDB extends MastraBase {
         // rows with the same traceId+spanId combination. The engine uses updatedAt as the
         // version column to keep the row with the highest updatedAt during deduplication.
         sql = `
-            CREATE TABLE IF NOT EXISTS ${tableName} (
+            CREATE TABLE IF NOT EXISTS ${tableName}${this.onCluster()} (
               ${columns}
             )
-            ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
+            ENGINE = ${this.tableEngine(tableName)}
             PRIMARY KEY (traceId, spanId)
             ORDER BY (traceId, spanId)
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
@@ -510,10 +569,10 @@ export class ClickhouseDB extends MastraBase {
           `;
       } else {
         sql = `
-            CREATE TABLE IF NOT EXISTS ${tableName} (
+            CREATE TABLE IF NOT EXISTS ${tableName}${this.onCluster()} (
               ${columns}
             )
-            ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
+            ENGINE = ${this.tableEngine(tableName)}
             PRIMARY KEY (createdAt, ${'id'})
             ORDER BY (createdAt, ${'id'})
             ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
@@ -575,7 +634,7 @@ export class ClickhouseDB extends MastraBase {
           const defaultValue = columnDef.nullable === false ? getDefaultValue(columnDef.type) : '';
           // Use backticks or double quotes as needed for identifiers
           const alterSql =
-            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
+            `ALTER TABLE ${tableName}${this.onCluster()} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
 
           await this.client.query({
             query: alterSql,
