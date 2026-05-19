@@ -18,6 +18,7 @@ export type AuthProviderType =
   | 'workos'
   | 'cloud'
   | 'composite'
+  | 'auth0'
   | 'auth0-okta'
   | 'okta'
   | 'studio';
