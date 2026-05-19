@@ -341,6 +341,7 @@ export class Harness<TState = {}> {
       this.#internalMastra = new Mastra({
         logger: false,
         storage: this.config.storage,
+        ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
@@ -373,28 +374,11 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, workspace, and browser to mode agents (after workspace init)
-    const workspaceForAgents = this.workspaceFn ?? this.workspace;
-    const browserForAgents = this.browserFn ?? this.browser;
+    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
     for (const mode of this.config.modes) {
       const agent = typeof mode.agent === 'function' ? null : mode.agent;
       if (!agent) continue;
-
-      const alreadyHasMastra = !!agent.getMastraInstance();
-
-      if (this.config.memory && !agent.hasOwnMemory()) {
-        agent.__setMemory(this.config.memory);
-      }
-      if (workspaceForAgents && !agent.hasOwnWorkspace()) {
-        agent.__setWorkspace(workspaceForAgents);
-      }
-      if (browserForAgents && !agent.hasOwnBrowser()) {
-        agent.setBrowser(browserForAgents as MastraBrowser);
-      }
-
-      if (this.#internalMastra && !alreadyHasMastra) {
-        this.#internalMastra.addAgent(agent);
-      }
+      this.propagateRuntimeServicesToAgent(agent);
     }
 
     this.startHeartbeats();
@@ -415,6 +399,7 @@ export class Harness<TState = {}> {
     await this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
+    await this.ensureCurrentAgentThreadSubscription();
 
     return mostRecent;
   }
@@ -572,6 +557,7 @@ export class Harness<TState = {}> {
     }
 
     this.emit({ type: 'mode_changed', modeId, previousModeId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   /**
@@ -597,15 +583,38 @@ export class Harness<TState = {}> {
     return null;
   }
 
+  private propagateRuntimeServicesToAgent(agent: Agent): Agent {
+    const alreadyHasMastra = !!agent.getMastraInstance();
+    const workspaceForAgents = this.workspaceFn ?? this.workspace;
+    const browserForAgents = this.browserFn ?? this.browser;
+
+    if (this.config.memory && !agent.hasOwnMemory()) {
+      agent.__setMemory(this.config.memory);
+    }
+    if (workspaceForAgents && !agent.hasOwnWorkspace()) {
+      agent.__setWorkspace(workspaceForAgents);
+    }
+    if (browserForAgents && !agent.hasOwnBrowser()) {
+      agent.setBrowser(browserForAgents as MastraBrowser);
+    }
+    if (this.config.pubsub && !agent.hasOwnPubSub()) {
+      agent.__setPubSub(this.config.pubsub);
+    }
+
+    if (this.#internalMastra && !alreadyHasMastra) {
+      this.#internalMastra.addAgent(agent);
+    }
+
+    return agent;
+  }
+
   /**
    * Get the agent for the current mode.
    */
   private getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    if (typeof mode.agent === 'function') {
-      return mode.agent(this.state);
-    }
-    return mode.agent;
+    const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
+    return this.propagateRuntimeServicesToAgent(agent);
   }
 
   /**
@@ -924,6 +933,7 @@ export class Harness<TState = {}> {
 
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return thread;
   }
@@ -1039,6 +1049,7 @@ export class Harness<TState = {}> {
     await this.loadThreadMetadata();
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread: clonedThread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return clonedThread;
   }
@@ -1069,6 +1080,7 @@ export class Harness<TState = {}> {
     await this.loadThreadMetadata();
 
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   async listThreads(options?: {
@@ -1567,6 +1579,11 @@ export class Harness<TState = {}> {
     this.agentThreadSubscription = subscription;
     this.agentThreadSubscriptionKey = key;
     void this.processSubscribedThreadStream(subscription);
+  }
+
+  private async ensureCurrentAgentThreadSubscription(): Promise<void> {
+    if (!this.currentThreadId) return;
+    await this.ensureAgentThreadSubscription(this.getCurrentAgent(), this.currentThreadId);
   }
 
   private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
