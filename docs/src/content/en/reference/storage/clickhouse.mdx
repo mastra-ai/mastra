@@ -69,7 +69,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`MastraStorageExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/tracing/exporters/mastra-storage#tracing-strategies) for details.
+`MastraStorageExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/integrations/exporters/mastra-storage#tracing-strategies) for details.
 
 ### Observability with the legacy domain
 
@@ -319,11 +319,11 @@ ClickHouse is the recommended backend for production observability:
 - **Insert-only strategy**: `MastraStorageExporter` writes completed spans in batches without per-span updates, which is the highest-throughput strategy available.
 - **Columnar compression**: Span attributes and log payloads compress well compared to the same data in row-oriented databases.
 
-For the full strategy matrix and production guidance, see the [`MastraStorageExporter` reference](/docs/observability/tracing/exporters/mastra-storage#storage-provider-support).
+For the full strategy matrix and production guidance, see the [`MastraStorageExporter` reference](/docs/observability/integrations/exporters/mastra-storage#storage-provider-support).
 
 ## Related
 
 - [Storage overview](/reference/storage/overview)
 - [Composite storage](/reference/storage/composite)
-- [`MastraStorageExporter`](/docs/observability/tracing/exporters/mastra-storage)
+- [`MastraStorageExporter`](/docs/observability/integrations/exporters/mastra-storage)
 - [Observability overview](/docs/observability/overview)
