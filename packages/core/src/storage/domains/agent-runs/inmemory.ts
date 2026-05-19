@@ -170,7 +170,9 @@ export class InMemoryAgentRunsStorage extends AgentRunsStorage {
     for (const event of events) {
       const index = event.index ?? nextIndex;
       if (index !== nextIndex) {
-        throw new Error(`Agent run event index must be contiguous for run ${runId}: expected ${nextIndex}, received ${index}`);
+        throw new Error(
+          `Agent run event index must be contiguous for run ${runId}: expected ${nextIndex}, received ${index}`,
+        );
       }
       if (usedIndexes.has(index)) {
         throw new Error(`Agent run event already exists for run ${runId} at index ${index}`);
