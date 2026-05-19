@@ -12,6 +12,8 @@ export default defineConfig({
   },
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/voice']));
+    await generateTypes(process.cwd(), new Set(['@internal/core', '@internal/voice']), {
+      validateRuntimeImports: true,
+    });
   },
 });

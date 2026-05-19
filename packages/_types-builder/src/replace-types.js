@@ -1,8 +1,8 @@
 // Typescript tooling really sucks so we are going to do some transfomrations ourselves
 import { createReadStream } from 'fs';
-import { readFile, mkdir, copyFile } from 'node:fs/promises';
+import { readFile, mkdir, copyFile, stat } from 'node:fs/promises';
 import { Writable } from 'node:stream';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, resolve, extname } from 'node:path';
 import { Project, SyntaxKind } from 'ts-morph';
 import { getPackageInfo } from 'local-pkg';
 import { pathToFileURL } from 'node:url';
@@ -40,14 +40,164 @@ async function getPackageRootPath(packageName, parentPath) {
   return rootPath;
 }
 
+async function pathExists(file) {
+  try {
+    await stat(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getModuleSpecifiers(sourceFile) {
+  const moduleSpecifiers = [];
+
+  sourceFile.getStatements().forEach(statement => {
+    if (statement.getKind() === SyntaxKind.ImportDeclaration) {
+      moduleSpecifiers.push(/** @type {import('ts-morph').ImportDeclaration} */ (statement).getModuleSpecifier());
+    }
+
+    if (statement.getKind() === SyntaxKind.ExportDeclaration) {
+      const moduleSpecifier = /** @type {import('ts-morph').ExportDeclaration} */ (statement).getModuleSpecifier();
+      if (moduleSpecifier) {
+        moduleSpecifiers.push(moduleSpecifier);
+      }
+    }
+  });
+
+  sourceFile.getDescendantsOfKind(SyntaxKind.ImportType).forEach(importType => {
+    const arg = importType.getArgument();
+    if (arg.getKind() === SyntaxKind.LiteralType) {
+      moduleSpecifiers.push(/** @type {import('ts-morph').LiteralTypeNode} */ (arg).getLiteral());
+    }
+  });
+
+  return moduleSpecifiers;
+}
+
+async function resolveRelativeDeclaration(moduleSpecifier, fromFile) {
+  if (!(moduleSpecifier.startsWith('./') || moduleSpecifier.startsWith('../'))) {
+    return null;
+  }
+
+  const resolvedSpecifier = resolve(dirname(fromFile), moduleSpecifier);
+  const candidates = [];
+
+  if (moduleSpecifier.endsWith('.d.ts') || moduleSpecifier.endsWith('.d.cts') || moduleSpecifier.endsWith('.d.mts')) {
+    candidates.push(resolvedSpecifier);
+  } else if (moduleSpecifier.endsWith('.js') || moduleSpecifier.endsWith('.mjs') || moduleSpecifier.endsWith('.cjs')) {
+    candidates.push(resolvedSpecifier.replace(/\.(mjs|cjs|js)$/, '.d.ts'));
+    candidates.push(resolvedSpecifier.replace(/\.(mjs|cjs|js)$/, '.d.mts'));
+    candidates.push(resolvedSpecifier.replace(/\.(mjs|cjs|js)$/, '.d.cts'));
+  } else if (extname(moduleSpecifier)) {
+    candidates.push(resolvedSpecifier);
+  } else {
+    candidates.push(`${resolvedSpecifier}.d.ts`);
+    candidates.push(`${resolvedSpecifier}.d.mts`);
+    candidates.push(`${resolvedSpecifier}.d.cts`);
+    candidates.push(join(resolvedSpecifier, 'index.d.ts'));
+    candidates.push(join(resolvedSpecifier, 'index.d.mts'));
+    candidates.push(join(resolvedSpecifier, 'index.d.cts'));
+  }
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+async function copyDeclarationGraph(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, visited) {
+  const normalizedSourceFilePath = resolve(sourceFilePath);
+  if (visited.has(normalizedSourceFilePath)) {
+    return;
+  }
+
+  visited.add(normalizedSourceFilePath);
+
+  const destFilePath = join(destRootDir, relative(sourceRootDir, sourceFilePath));
+  await mkdir(dirname(destFilePath), { recursive: true });
+  await copyFile(sourceFilePath, destFilePath);
+
+  await replaceBundledReferences(destFilePath, rootDir, bundledPackages, visited);
+
+  const Program = new Project();
+  const sourceFile = Program.addSourceFileAtPath(sourceFilePath);
+
+  for (const moduleSpecifier of getModuleSpecifiers(sourceFile)) {
+    const referencedFile = await resolveRelativeDeclaration(moduleSpecifier.getLiteralValue(), sourceFilePath);
+    if (referencedFile && resolve(referencedFile).startsWith(resolve(sourceRootDir))) {
+      await copyDeclarationGraph(referencedFile, sourceRootDir, destRootDir, rootDir, bundledPackages, visited);
+    }
+  }
+}
+
+async function replaceBundledReferences(file, rootDir, bundledPackages, visited) {
+  const normalizedBundledPackages = Array.from(bundledPackages).map(pkg => pkg.replace('*', ''));
+  const importsToReplace = new Set();
+
+  const Program = new Project();
+  const sourceFile = Program.addSourceFileAtPath(file);
+
+  for (const moduleSpecifier of getModuleSpecifiers(sourceFile)) {
+    const hasExternal = normalizedBundledPackages.some(pkg => moduleSpecifier.getLiteralValue().includes(pkg));
+
+    if (hasExternal) {
+      importsToReplace.add(moduleSpecifier);
+    }
+  }
+
+  if (importsToReplace.size === 0) {
+    return;
+  }
+
+  const fileDirname = dirname(file);
+  const typesDestDir = join(rootDir, 'dist', '_types');
+
+  for (const moduleSpecifier of importsToReplace) {
+    const pkgName = await getPackageName(moduleSpecifier.getLiteralValue());
+    const pkgRootPath = await getPackageRootPath(pkgName, file);
+    if (!pkgRootPath) {
+      continue;
+    }
+
+    const pkgJson = JSON.parse(await readFile(join(pkgRootPath, 'package.json'), 'utf8'));
+    const typesFiles = resolveExports(pkgJson, moduleSpecifier.getLiteralValue(), {
+      conditions: ['types'],
+    });
+
+    if (typesFiles.length === 0) {
+      continue;
+    }
+
+    const typesFile = typesFiles[0];
+    const sourceTypesPath = join(pkgRootPath, typesFile);
+    const destTypesRoot = join(typesDestDir, pkgName.replace('/', '_'));
+    const destTypesPath = join(destTypesRoot, typesFile);
+
+    await copyDeclarationGraph(sourceTypesPath, pkgRootPath, destTypesRoot, rootDir, bundledPackages, visited);
+
+    let relativeImport = relative(fileDirname, destTypesPath);
+    if (!relativeImport.startsWith('.')) {
+      relativeImport = './' + relativeImport;
+    }
+
+    moduleSpecifier.setLiteralValue(relativeImport.replace(/\.d\.(ts|mts|cts)$/, '.js'));
+  }
+
+  await sourceFile.save();
+}
+
 export async function replaceTypes(file, rootDir, bundledPackages) {
   const normalizedBundledPackages = Array.from(bundledPackages).map(pkg => pkg.replace('*', ''));
-  const shouldRunEmbed = await new Promise((resolve, reject) => {
+  const shouldRunEmbed = await new Promise(resolve => {
     let found = false;
 
     createReadStream(file).pipe(
       new Writable({
-        write(chunk, encoding, callback) {
+        write(chunk, _encoding, callback) {
           const hasExternal = normalizedBundledPackages.some(pkg => chunk.includes(pkg));
           if (hasExternal) {
             found = true;
@@ -69,84 +219,5 @@ export async function replaceTypes(file, rootDir, bundledPackages) {
     return;
   }
 
-  const importsToReplace = new Set();
-
-  const Program = new Project();
-  const sourceFile = Program.addSourceFileAtPath(file);
-  // Collect top-level import declarations: import { Foo } from "@internal/ai-sdk-v5"
-  // and export declarations: export { Foo } from "@internal/ai-sdk-v5"
-  sourceFile.getStatements().forEach(statement => {
-    if (statement.getKind() === SyntaxKind.ImportDeclaration) {
-      const importDeclaration = /** @type {import('ts-morph').ImportDeclaration} */ (statement);
-      const moduleSpecifier = importDeclaration.getModuleSpecifier();
-
-      const hasExternal = normalizedBundledPackages.some(pkg => moduleSpecifier.getLiteralValue().includes(pkg));
-
-      if (hasExternal) {
-        importsToReplace.add(moduleSpecifier);
-      }
-    }
-
-    if (statement.getKind() === SyntaxKind.ExportDeclaration) {
-      const exportDeclaration = /** @type {import('ts-morph').ExportDeclaration} */ (statement);
-      const moduleSpecifier = exportDeclaration.getModuleSpecifier();
-
-      if (moduleSpecifier) {
-        const hasExternal = normalizedBundledPackages.some(pkg => moduleSpecifier.getLiteralValue().includes(pkg));
-
-        if (hasExternal) {
-          importsToReplace.add(moduleSpecifier);
-        }
-      }
-    }
-  });
-
-  // Collect inline import type expressions: import("@internal/ai-sdk-v5").UIMessage
-  sourceFile.getDescendantsOfKind(SyntaxKind.ImportType).forEach(importType => {
-    const arg = importType.getArgument();
-    if (arg.getKind() === SyntaxKind.LiteralType) {
-      const literal = /** @type {import('ts-morph').LiteralTypeNode} */ (arg).getLiteral();
-      const value = literal.getLiteralValue();
-      const hasExternal = normalizedBundledPackages.some(pkg => value.includes(pkg));
-      if (hasExternal) {
-        importsToReplace.add(literal);
-      }
-    }
-  });
-
-  if (importsToReplace.size > 0) {
-    const fileDirname = dirname(file);
-    const typesDestDir = join(rootDir, 'dist', '_types');
-
-    for (const moduleSpecifier of importsToReplace) {
-      const pkgName = await getPackageName(moduleSpecifier.getLiteralValue());
-      const pkgRootPath = await getPackageRootPath(pkgName, file);
-      if (pkgRootPath) {
-        const pkgJson = JSON.parse(await readFile(join(pkgRootPath, 'package.json'), 'utf8'));
-        const typesFiles = resolveExports(pkgJson, moduleSpecifier.getLiteralValue(), {
-          conditions: ['types'],
-        });
-        if (typesFiles.length > 0) {
-          const typesFile = typesFiles[0];
-          const sourceTypesPath = join(pkgRootPath, typesFile);
-          const destTypesPath = join(typesDestDir, pkgName.replace('/', '_'), typesFile);
-
-          // Create the destination directory and copy the types file
-          await mkdir(dirname(destTypesPath), { recursive: true });
-          await copyFile(sourceTypesPath, destTypesPath);
-
-          // Calculate relative import path from the current file to the copied types file
-          let relativeImport = relative(fileDirname, destTypesPath);
-          if (!relativeImport.startsWith('.')) {
-            relativeImport = './' + relativeImport;
-          }
-
-          // Replace the module specifier with the new relative import
-          moduleSpecifier.setLiteralValue(relativeImport.replace('.d.ts', '.js'));
-        }
-      }
-    }
-
-    await sourceFile.save();
-  }
+  await replaceBundledReferences(file, rootDir, bundledPackages, new Set());
 }
