@@ -1,7 +1,10 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DuckDBConnection } from '../../db/index';
+import { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import type { ObservabilityStorageDuckDB } from './index';
@@ -129,6 +132,41 @@ describe('ObservabilityStorageDuckDB', () => {
     expect(db.executeBatch).toHaveBeenCalledTimes(1);
     expect(db.executeBatch).toHaveBeenCalledWith([...ALL_DDL, ...ALL_MIGRATIONS]);
     expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it('keeps cursor ids out of DuckDB column defaults', () => {
+    const schemaStatements = [...ALL_DDL, ...ALL_MIGRATIONS].join('\n');
+
+    expect(schemaStatements).not.toContain('cursorId BIGINT DEFAULT');
+    expect(schemaStatements).not.toContain('ALTER COLUMN cursorId SET DEFAULT');
+  });
+
+  it('reopens a file database after cursor sequence migrations and explicit cursor writes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-duckdb-observability-'));
+    const dbPath = join(dir, 'observability.duckdb');
+    let db: DuckDBConnection | undefined;
+
+    try {
+      db = new DuckDBConnection({ path: dbPath });
+      await db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
+      await db.execute(`
+        INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent)
+        VALUES ('span.started', '2026-05-19T00:00:00.000Z'::TIMESTAMP, nextval('span_events_cursor_id_seq'), 'trace-reopen', 'span-reopen', 'root', 'agent_run', false)
+      `);
+      await db.close();
+      db = undefined;
+
+      db = new DuckDBConnection({ path: dbPath });
+      await db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
+      const rows = await db.query<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM span_events WHERE traceId = 'trace-reopen'`,
+      );
+
+      expect(rows).toEqual([{ count: 1 }]);
+    } finally {
+      await db?.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   // ==========================================================================

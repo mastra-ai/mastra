@@ -251,7 +251,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
   const feedbackUserId = f.feedbackUserId ?? f.userId ?? null;
   await db.execute(
     `INSERT INTO feedback_events (
-      feedbackId, timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
@@ -259,6 +259,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
      VALUES (${[
        v(f.feedbackId),
        v(f.timestamp),
+       "nextval('feedback_events_cursor_id_seq')",
        v(f.traceId),
        v(f.spanId ?? null),
        v(f.experimentId ?? null),
@@ -309,6 +310,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
     return `(${[
       v(legacyFeedback.feedbackId),
       v(legacyFeedback.timestamp),
+      "nextval('feedback_events_cursor_id_seq')",
       v(legacyFeedback.traceId),
       v(legacyFeedback.spanId ?? null),
       v(legacyFeedback.experimentId ?? null),
@@ -348,7 +350,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
 
   await db.execute(
     `INSERT INTO feedback_events (
-      feedbackId, timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
