@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.9.4-alpha.4
+
+### Patch Changes
+
+- Fixed Save as Dataset Item dialog showing stale data when trace details load asynchronously. The form now updates input, ground truth, and expected trajectory fields once trace data resolves, while preserving any edits the user already made before that data arrived. ([#16779](https://github.com/mastra-ai/mastra/pull/16779))
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`e8dc4c2`](https://github.com/mastra-ai/mastra/commit/e8dc4c2829438a7557befc7d02b7ae316034f3d6)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/playground-ui@29.0.0-alpha.4
+  - @mastra/client-js@1.20.0-alpha.4
+  - @mastra/react@0.4.0-alpha.4
+
 ## 1.9.4-alpha.3
 
 ### Patch Changes

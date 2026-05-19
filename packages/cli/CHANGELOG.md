@@ -1,5 +1,15 @@
 # mastra
 
+## 1.9.4-alpha.4
+
+### Patch Changes
+
+- Added '(use a separate terminal)' hint to the npm run build command in the generated AGENTS.md to prevent the dev server from being interrupted during builds ([#16776](https://github.com/mastra-ai/mastra/pull/16776))
+
+- Updated dependencies [[`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284)]:
+  - @mastra/core@1.36.0-alpha.4
+  - @mastra/deployer@1.36.0-alpha.4
+
 ## 1.9.4-alpha.3
 
 ### Patch Changes
