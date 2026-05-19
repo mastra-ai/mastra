@@ -33,7 +33,15 @@
     "schedule": ["before 6am on wednesday"],
     "automerge": true
   },
-  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**", "e2e-tests/**/template/package.json"],
+  "ignorePaths": [
+    "docs/**",
+    "explorations/**",
+    ".github/scripts",
+    "templates/**",
+    "**/examples/**",
+    "**/_examples/**",
+    "e2e-tests/**/template/package.json"
+  ],
   "packageRules": [
     {
       "matchDepTypes": ["engines"],
