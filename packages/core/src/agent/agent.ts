@@ -32,6 +32,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -3190,6 +3191,7 @@ export class Agent<
       outputWriter?: OutputWriter;
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
+      providerOptions?: ProviderOptions;
     },
   ): Promise<{
     messageList: MessageList;
@@ -3214,6 +3216,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      providerOptions,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
@@ -3230,6 +3233,10 @@ export class Agent<
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
+        const processInputProviderOptions =
+          llm instanceof MastraLLMVNext
+            ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
+            : providerOptions;
         const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
@@ -3240,6 +3247,7 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
+          providerOptions: processInputProviderOptions,
           retryCount: 0,
         });
         if (result.tools) {
