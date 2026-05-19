@@ -77,12 +77,16 @@ const EditPageBody = () => {
     excludeAgentId: agentId,
   });
 
-  const onModeToggle = isOwner
+  const handleModeToggle = isOwner
     ? () => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })
     : undefined;
 
   return (
-    <EditPageProvider storedAgent={storedAgent!} availableAgentTools={availableAgentTools} onModeToggle={onModeToggle}>
+    <EditPageProvider
+      storedAgent={storedAgent!}
+      availableAgentTools={availableAgentTools}
+      onModeToggle={handleModeToggle}
+    >
       <AgentBuilderEditLayout topBar={<EditTopBarSlot />} chat={<ConversationPanelChat />} profile={<ProfileSlot />} />
     </EditPageProvider>
   );
@@ -91,6 +95,7 @@ const EditPageBody = () => {
 const EditTopBarSlot = () => {
   const { autosave, onModeToggle, canPublishToChannel, agentId, isOwner } = useEditPage();
   const isRunning = useStreamRunning();
+
   return (
     <EditTopBar
       isLoading={false}
@@ -116,6 +121,7 @@ const VisibilitySelectSlot = () => {
   const { agentId } = useEditPage();
   const { data: capabilities } = useAuthCapabilities();
   if (!capabilities?.enabled) return null;
+
   return <VisibilitySelect agentId={agentId} />;
 };
 
@@ -124,6 +130,7 @@ const DeleteAgentSlot = () => {
   const isRunning = useStreamRunning();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
+
   return <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />;
 };
 
@@ -133,6 +140,7 @@ const MobileMenuSlot = () => {
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
+
   return (
     <AgentBuilderMobileMenu
       agentId={agentId}
@@ -148,6 +156,7 @@ const MobileMenuSlot = () => {
 const ProfileSlot = () => {
   const { availableAgentTools, availableSkills } = useEditPage();
   const isRunning = useStreamRunning();
+
   return (
     <AgentProfile>
       <AgentProfileHero>

@@ -34,7 +34,6 @@ export const AgentProfileTabs = ({
   const skillsTabEnabled = features.skills && availableSkills.length > 0;
 
   const tabContentClassName = 'h-full min-h-0';
-
   const isEditable = !disabled;
 
   return (
