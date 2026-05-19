@@ -4191,7 +4191,6 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                console.dir({ resumeData, suspendedToolRunId, agentId }, { depth: null });
                 const streamResult = resumeData
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
@@ -5671,14 +5670,24 @@ export class Agent<
     await effectiveMastra.startWorkers();
     // Register as internal so the evented engine's event processor can resolve
     // `execution-workflow` by id via __hasInternalWorkflow/getWorkflowById.
-    // __registerInternalWorkflow also calls __registerMastra under the hood.
+    // First call (no runId) wires `workflow.mastra` so `createRun` has the pubsub
+    // it needs; second call (with run.runId) scopes the registration so concurrent
+    // or nested agent invocations don't clobber each other in the global id-keyed
+    // registry. __registerInternalWorkflow also calls __registerMastra under the hood.
     effectiveMastra.__registerInternalWorkflow(executionWorkflow as any);
 
     const run = await executionWorkflow.createRun();
-    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    const result = await run.start({ ...observabilityContext });
+    effectiveMastra.__registerInternalWorkflow(executionWorkflow as any, run.runId);
 
-    return result;
+    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+    try {
+      const result = await run.start({ ...observabilityContext });
+      return result;
+    } finally {
+      // Prepare-stream is single-shot per #execute call — no resume path that
+      // would need the registration to outlive this scope, so always unregister.
+      effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, run.runId);
+    }
   }
 
   /**
@@ -6565,7 +6574,6 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    console.log(`calling resume stream for agentId: ${this.id}, resumeData: ${JSON.stringify(resumeData, null, 2)}`);
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -6607,10 +6615,6 @@ export class Agent<
     );
     const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
-    );
-
-    console.log(
-      `resuming stream for runId: ${runId}, agentId: ${this.id}, resumeData: ${JSON.stringify(resumeData, null, 2)}`,
     );
 
     const result = await this.#execute({

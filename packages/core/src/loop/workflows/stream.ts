@@ -196,8 +196,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       if (rest.mastra) {
         // Register as internal so the evented engine's event processor can
         // resolve `agentic-loop` by id via __hasInternalWorkflow/getWorkflowById.
+        // Scope by runId so concurrent/nested agent invocations (parent + sub-agent
+        // each owning their own agentic-loop instance with distinct controller and
+        // agentId closures) don't clobber each other in the global id-keyed registry.
         // __registerInternalWorkflow also calls __registerMastra under the hood.
-        rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow as any);
+        rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow as any, runId);
       }
 
       const initialData = {
@@ -241,8 +244,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         requestContext.set('__mastra_requireToolApproval', true);
       }
 
-      console.dir({ resumeData: resumeContext?.resumeData, runId, agentId }, { depth: null });
-
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
@@ -276,6 +277,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (executionResult.status !== 'suspended') {
           await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+          // Drop the runId-scoped registration on terminal states. Suspend is
+          // not terminal — the registry entry stays so a later resume on the
+          // same runId continues to resolve to this instance until the resume
+          // path re-registers a fresh one.
+          rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }
 
         safeClose(controller);
@@ -283,6 +289,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+      rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
 
       // Always emit finish chunk, even for abort (tripwire) cases
       // This ensures the stream properly completes and all promises are resolved

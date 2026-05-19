@@ -1952,6 +1952,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             [step.step.id]: [executionPath[0]!],
           };
 
+          let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
           for (let i = 0; i < iterationResults.length; i++) {
             const iterResult = iterationResults[i];
             if (iterResult && typeof iterResult === 'object' && iterResult.status === 'suspended') {
@@ -1959,10 +1960,18 @@ export class WorkflowEventProcessor extends EventProcessor {
               if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
                 Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
               }
+              if (firstSuspendedIterationPayload === undefined) {
+                firstSuspendedIterationPayload = iterResult.suspendPayload;
+              }
             }
           }
 
-          // Create the aggregated foreach step suspend result
+          // Create the aggregated foreach step suspend result.
+          // Preserve non-__workflow_meta keys (e.g. __streamState stashed by the agent loop's
+          // tool-call-step) from a suspended iteration so callers reading the step-level
+          // suspendPayload still see that state. The agent-loop snapshot reader only inspects
+          // step.suspendPayload, not the nested per-iteration payloads, so without this spread
+          // __streamState would be lost on resume.
           const foreachSuspendResult = {
             status: 'suspended' as const,
             output: iterationResults,
@@ -1970,6 +1979,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             suspendedAt: Date.now(),
             startedAt: foreachResult.startedAt,
             suspendPayload: {
+              ...firstSuspendedIterationPayload,
               __workflow_meta: {
                 path: executionPath,
                 resumeLabels: collectedResumeLabels,
@@ -2480,8 +2490,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     let workflow;
-    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId)) {
-      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId);
+    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId, workflowData.runId)) {
+      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId, workflowData.runId);
     } else if (workflowData.parentWorkflow) {
       workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
     } else {

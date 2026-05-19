@@ -2765,52 +2765,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                   "warnings": [],
                 },
-                DefaultStepResult {
-                  "content": [],
-                  "finishReason": undefined,
-                  "providerMetadata": undefined,
-                  "request": {},
-                  "response": {
-                    "headers": {
-                      "call": "2",
-                    },
-                    "id": "id-1",
-                    "messages": [
-                      {
-                        "content": [
-                          {
-                            "providerOptions": {
-                              "mastra": {
-                                "createdAt": 1704067200000,
-                              },
-                            },
-                            "text": "Hello, world!",
-                            "type": "text",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                    ],
-                    "modelId": "mock-model-id",
-                    "timestamp": 1970-01-01T00:00:01.000Z,
-                  },
-                  "tripwire": undefined,
-                  "usage": {
-                    "cachedInputTokens": 3,
-                    "inputTokens": 3,
-                    "outputTokens": 10,
-                    "raw": {
-                      "cachedInputTokens": 3,
-                      "inputTokens": 3,
-                      "outputTokens": 10,
-                      "reasoningTokens": 10,
-                      "totalTokens": 23,
-                    },
-                    "reasoningTokens": 10,
-                    "totalTokens": 23,
-                  },
-                  "warnings": [],
-                },
               ],
             },
             {

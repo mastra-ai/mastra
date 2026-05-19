@@ -176,7 +176,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(name).toBe('Dero Israel');
       }, 500000);
 
-      it.only('should call findUserTool with requireToolApproval on sub-agent', async () => {
+      it('should call findUserTool with requireToolApproval on sub-agent', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
           description: 'This is a test tool that returns the name and email',
@@ -224,7 +224,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         }
         expect(toolCallId).toBeTruthy();
         if (toolCallId) {
-          console.log(`approving tool call ${toolCallId}, runId: ${stream.runId}`);
           const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
           for await (const _chunk of resumeStream.fullStream) {
           }

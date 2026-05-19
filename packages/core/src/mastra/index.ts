@@ -2301,19 +2301,43 @@ export class Mastra<
     return workflow;
   }
 
-  __registerInternalWorkflow(workflow: Workflow) {
+  /**
+   * Register a workflow under an internal-only registry. When `runId` is supplied,
+   * the workflow is *also* stored at `${id}:${runId}` so concurrent or nested
+   * invocations that share a workflow id (e.g. parent and sub-agent both registering
+   * their `agentic-loop`) don't clobber each other — the evented engine's dispatch
+   * and `getNestedWorkflow` look up by runId first to get the right closure-bound
+   * instance.
+   */
+  __registerInternalWorkflow(workflow: Workflow, runId?: string) {
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
     });
     this.#internalMastraWorkflows[workflow.id] = workflow;
+    if (runId) {
+      this.#internalMastraWorkflows[`${workflow.id}:${runId}`] = workflow;
+    }
   }
 
-  __hasInternalWorkflow(id: string): boolean {
+  /**
+   * Remove a runId-scoped registration. The unscoped `${id}` entry is left intact
+   * so single-instance callers (background tasks, score-traces) continue to resolve.
+   */
+  __unregisterInternalWorkflow(id: string, runId: string) {
+    delete this.#internalMastraWorkflows[`${id}:${runId}`];
+  }
+
+  __hasInternalWorkflow(id: string, runId?: string): boolean {
+    if (runId && this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
   }
 
-  __getInternalWorkflow(id: string): Workflow {
+  __getInternalWorkflow(id: string, runId?: string): Workflow {
+    if (runId) {
+      const scoped = this.#internalMastraWorkflows[`${id}:${runId}`];
+      if (scoped) return scoped;
+    }
     const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
     if (!workflow) {
       throw new MastraError({
