@@ -282,17 +282,15 @@ export async function handlePlanApproval(
         state.activeInlinePlanApproval = undefined;
         await approvePlan(ctx, planId, title, plan);
 
-        // Hand off to the normal `/goal` flow. `startGoal` (default
-        // `trigger: 'send'`) sets + persists the goal, then fires the
-        // canonical structured goal-reminder via `harness.sendSignal` —
-        // identical to typing `/goal <objective>` by hand. No second
-        // reminder is sent; the goal judge in `handleAgentEnd` keeps the
-        // agent driving toward the goal after its first response.
-        //
-        // `approvePlan` already waited for the aborted plan-mode run to
-        // idle, so this signal starts a fresh build-mode run.
+        // `approvePlan` waits for plan mode to idle before `startGoal` sends
+        // the canonical goal reminder, so this starts a fresh build-mode run.
         const objective = formatPlanGoalObjective(title, plan);
         await ctx.startGoal(objective, 'Goal cancelled.');
+
+        const goal = state.goalManager.getGoal();
+        if (goal?.id) {
+          state.planStartedGoalId = goal.id;
+        }
 
         resolve();
       },
