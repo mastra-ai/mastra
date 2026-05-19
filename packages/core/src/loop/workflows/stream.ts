@@ -10,6 +10,7 @@ import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import { createTimeoutAbortSignal } from '../timeout';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
@@ -34,13 +35,27 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
     start: async controller => {
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
       const requestContext = rest.requestContext ?? new RequestContext();
+      const totalTimeoutSignal = createTimeoutAbortSignal({
+        parentSignal: rest.options?.abortSignal,
+        timeoutMs: modelSettings?.timeout?.totalMs,
+        timeoutType: 'total',
+      });
+      const loopOptions = {
+        ...(rest.options ?? {}),
+        abortSignal: totalTimeoutSignal.signal,
+      };
+      const restWithTimeoutSignal = {
+        ...rest,
+        options: loopOptions,
+      };
 
       // Create a ProcessorRunner for data-* chunks so they go through output processors
-      const hasOutputProcessors = rest.outputProcessors && rest.outputProcessors.length > 0;
+      const hasOutputProcessors =
+        restWithTimeoutSignal.outputProcessors && restWithTimeoutSignal.outputProcessors.length > 0;
       const dataChunkProcessorRunner = hasOutputProcessors
         ? new ProcessorRunner({
-            outputProcessors: rest.outputProcessors,
-            logger: rest.logger || new ConsoleLogger({ level: 'error' }),
+            outputProcessors: restWithTimeoutSignal.outputProcessors,
+            logger: restWithTimeoutSignal.logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
           })
         : undefined;
@@ -69,7 +84,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               processorId,
             } = await dataChunkProcessorRunner.processPart(
               chunk,
-              (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
+              (restWithTimeoutSignal.processorStates ?? dataChunkProcessorStates!) as Map<
+                string,
+                ProcessorState<OUTPUT>
+              >,
               undefined, // observabilityContext
               requestContext,
               messageList,
@@ -190,11 +208,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         agentId,
         requireToolApproval,
         toolCallConcurrency,
-        ...rest,
+        ...restWithTimeoutSignal,
       });
 
-      if (rest.mastra) {
-        agenticLoopWorkflow.__registerMastra(rest.mastra);
+      if (restWithTimeoutSignal.mastra) {
+        agenticLoopWorkflow.__registerMastra(restWithTimeoutSignal.mastra);
       }
 
       const initialData = {
@@ -238,18 +256,49 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         requestContext.set('__mastra_requireToolApproval', true);
       }
 
-      const executionResult = resumeContext
-        ? await run.resume({
-            resumeData: resumeContext.resumeData,
-            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
-            requestContext,
-            label: toolCallId,
-          })
-        : await run.start({
-            inputData: initialData,
-            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
-            requestContext,
-          });
+      let executionResult;
+      try {
+        const executionPromise = resumeContext
+          ? run.resume({
+              resumeData: resumeContext.resumeData,
+              ...createObservabilityContext(restWithTimeoutSignal.modelSpanTracker?.getTracingContext()),
+              requestContext,
+              label: toolCallId,
+            })
+          : run.start({
+              inputData: initialData,
+              ...createObservabilityContext(restWithTimeoutSignal.modelSpanTracker?.getTracingContext()),
+              requestContext,
+            });
+
+        if (totalTimeoutSignal.timeoutPromise) {
+          executionPromise.catch(() => {});
+          executionResult = await Promise.race([executionPromise, totalTimeoutSignal.timeoutPromise]);
+        } else {
+          executionResult = await executionPromise;
+        }
+      } catch (error) {
+        const normalizedError = getErrorFromUnknown(error, {
+          fallbackMessage: 'Unknown error in agent workflow stream',
+        });
+
+        safeEnqueue(controller, {
+          type: 'error',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { error: normalizedError },
+        });
+
+        if (restWithTimeoutSignal.options?.onError) {
+          await restWithTimeoutSignal.options?.onError?.({ error: normalizedError });
+        }
+
+        await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        safeClose(controller);
+        return;
+      } finally {
+        totalTimeoutSignal.cleanup();
+      }
 
       if (executionResult.status !== 'success') {
         if (executionResult.status === 'failed') {
@@ -264,8 +313,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             payload: { error },
           });
 
-          if (rest.options?.onError) {
-            await rest.options?.onError?.({ error });
+          if (restWithTimeoutSignal.options?.onError) {
+            await restWithTimeoutSignal.options?.onError?.({ error });
           }
         }
 

@@ -2,13 +2,14 @@ import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
-import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -692,7 +693,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             toolChoice?: ToolChoice<TOOLS> | undefined;
             activeTools?: (keyof TOOLS)[] | undefined;
             providerOptions?: SharedProviderOptions | undefined;
-            modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
+            modelSettings?: MastraModelSettings | undefined;
             structuredOutput?: StructuredOutputOptions<OUTPUT>;
             workspace?: Workspace;
           } = {
