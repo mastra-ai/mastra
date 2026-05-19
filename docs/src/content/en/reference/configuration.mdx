@@ -269,6 +269,87 @@ export const mastra = new Mastra({
 })
 ```
 
+### harness
+
+**Type:** `Harness`
+
+Registers a single Harness v1 instance on the Mastra instance as the `default`
+harness. The harness uses the parent Mastra instance's agents and storage, and
+can be retrieved with `mastra.getHarness()`.
+
+Use `harnesses` instead when you need multiple named harnesses. The `harness`
+option cannot be combined with `harnesses.default`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { Harness } from '@mastra/core/harness/v1'
+import { LibSQLStore } from '@mastra/libsql'
+
+const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You help users',
+  model: 'openai/gpt-5.4',
+})
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+})
+
+const harness = new Harness({
+  modes: [{ id: 'default', agentId: 'assistant' }],
+  defaultModeId: 'default',
+})
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  storage,
+  harness,
+})
+```
+
+### harnesses
+
+**Type:** `Record<string, Harness>`
+
+Registers named Harness v1 instances on the Mastra instance. Each harness uses
+the parent Mastra instance's agents and storage, and can be retrieved with
+`mastra.getHarness(name)`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { Harness } from '@mastra/core/harness/v1'
+import { LibSQLStore } from '@mastra/libsql'
+
+const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You help users',
+  model: 'openai/gpt-5.4',
+})
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+})
+
+const supportHarness = new Harness({
+  modes: [{ id: 'default', agentId: 'assistant' }],
+  defaultModeId: 'default',
+})
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  storage,
+  harnesses: {
+    support: supportHarness,
+  },
+})
+```
+
 ### idGenerator
 
 **Type:** `(context?: IdGeneratorContext) => string`\

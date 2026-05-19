@@ -14,6 +14,8 @@ import { z } from 'zod';
 
 import { Agent } from '../../agent';
 import type { ChannelProvider } from '../../channels';
+import { PubSub } from '../../events';
+import type { Event, EventCallback, SubscribeOptions } from '../../events';
 import { Mastra } from '../../mastra';
 import type { ChannelOutboxEnqueueOptions } from '../../storage/domains/harness';
 import {
@@ -24,6 +26,7 @@ import {
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
+import { MastraWorker } from '../../worker';
 
 import { extractSignalContents, MockAgent } from './__test-utils__';
 import type { HarnessSessionDeleteBlockedError } from './errors';
@@ -156,6 +159,111 @@ class BlockingGenerateMockAgent extends MockAgent {
   }
 }
 
+class RecordingStopWorker extends MastraWorker {
+  readonly name: string;
+  registerCalls = 0;
+  stopCalls = 0;
+
+  constructor(
+    name: string,
+    private readonly failure?: Error,
+  ) {
+    super();
+    this.name = name;
+  }
+
+  override __registerMastra(mastra: Mastra): void {
+    this.registerCalls += 1;
+    super.__registerMastra(mastra);
+  }
+
+  async start(): Promise<void> {}
+
+  async stop(): Promise<void> {
+    this.stopCalls += 1;
+    if (this.failure) throw this.failure;
+  }
+
+  get isRunning(): boolean {
+    return true;
+  }
+}
+
+class FailingCleanupPubSub extends PubSub {
+  readonly unsubscribeCalls: string[] = [];
+  flushCalls = 0;
+
+  constructor(
+    private readonly unsubscribeFailures: Record<string, unknown>,
+    private readonly flushFailure?: unknown,
+  ) {
+    super();
+  }
+
+  override get supportedModes(): ReadonlyArray<'push'> {
+    return ['push'];
+  }
+
+  async publish(_topic: string, _event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {}
+
+  async subscribe(_topic: string, _cb: EventCallback, _options?: SubscribeOptions): Promise<void> {}
+
+  async unsubscribe(topic: string, _cb: EventCallback): Promise<void> {
+    this.unsubscribeCalls.push(topic);
+    if (Object.prototype.hasOwnProperty.call(this.unsubscribeFailures, topic)) {
+      throw this.unsubscribeFailures[topic];
+    }
+  }
+
+  async flush(): Promise<void> {
+    this.flushCalls += 1;
+    if (this.flushFailure) throw this.flushFailure;
+  }
+}
+
+class DeferredSubscribePubSub extends PubSub {
+  readonly publishCalls: string[] = [];
+  readonly subscribeCalls: string[] = [];
+  readonly unsubscribeCalls: string[] = [];
+
+  private resolveFirstSubscribeStarted!: () => void;
+  private resolveSubscribeGate!: () => void;
+  private readonly firstSubscribeStarted = new Promise<void>(resolve => {
+    this.resolveFirstSubscribeStarted = resolve;
+  });
+  private readonly subscribeGate = new Promise<void>(resolve => {
+    this.resolveSubscribeGate = resolve;
+  });
+
+  override get supportedModes(): ReadonlyArray<'pull' | 'push'> {
+    return ['pull', 'push'];
+  }
+
+  async publish(topic: string, _event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+    this.publishCalls.push(topic);
+  }
+
+  async subscribe(topic: string, _cb: EventCallback, _options?: SubscribeOptions): Promise<void> {
+    this.subscribeCalls.push(topic);
+    this.resolveFirstSubscribeStarted();
+    await this.subscribeGate;
+  }
+
+  async unsubscribe(topic: string, _cb: EventCallback): Promise<void> {
+    this.unsubscribeCalls.push(topic);
+  }
+
+  async flush(): Promise<void> {}
+
+  waitForFirstSubscribe(): Promise<void> {
+    return this.firstSubscribeStarted;
+  }
+
+  releaseSubscribes(): void {
+    this.resolveSubscribeGate();
+  }
+}
+
 function makeHarness(overrides?: Partial<ConstructorParameters<typeof Harness>[0]>) {
   const { sessions: overrideSessions, ...restOverrides } = overrides ?? {};
   const storage = overrideSessions?.storage ?? makeStorage();
@@ -175,6 +283,354 @@ function makeHarness(overrides?: Partial<ConstructorParameters<typeof Harness>[0
 describe('Harness v1 — construction', () => {
   it('accepts a valid config', () => {
     expect(() => makeHarness()).not.toThrow();
+  });
+
+  it('registers single-harness Mastra sugar under the default key', async () => {
+    const storage = new InMemoryStore();
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage,
+      harness,
+    });
+
+    expect(mastra.getHarness()).toBe(harness);
+    expect(mastra.getHarness('default')).toBe(harness);
+    expect(mastra.getHarnesses()).toEqual({ default: harness });
+
+    const session = await harness.session({ threadId: 'default-thread', resourceId: 'r1' });
+    expect(session.getRecord().harnessName).toBe('default');
+  });
+
+  it('rejects duplicate default harness registration between sugar and explicit map', () => {
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const worker = new RecordingStopWorker('side-effect-check');
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      trackException: vi.fn(),
+      warn: vi.fn(),
+    };
+
+    expect(
+      () =>
+        new Mastra({
+          agents: { default: makeAgent() },
+          storage: new InMemoryStore(),
+          logger: logger as any,
+          workers: [worker],
+          harness,
+          harnesses: { default: harness },
+        }),
+    ).toThrow(/config\.harnesses\.default/);
+    expect(worker.registerCalls).toBe(0);
+    expect(logger.trackException).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores nullish explicit default harness entries when using single-harness sugar', () => {
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      harness,
+      harnesses: { default: undefined },
+    });
+
+    expect(mastra.getHarness()).toBe(harness);
+  });
+
+  it('shuts down registered harnesses during Mastra shutdown', async () => {
+    const alpha = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const beta = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const alphaShutdown = vi.spyOn(alpha, 'shutdown');
+    const betaShutdown = vi.spyOn(beta, 'shutdown');
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      harnesses: { alpha, beta },
+    });
+
+    await mastra.shutdown();
+
+    expect(alphaShutdown).toHaveBeenCalledTimes(1);
+    expect(betaShutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs harness shutdown failures, continues shutting down other harnesses, and throws the first failure', async () => {
+    const failure = new Error('shutdown failed');
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      trackException: vi.fn(),
+      warn: vi.fn(),
+    };
+    const alpha = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const beta = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const alphaShutdown = vi.spyOn(alpha, 'shutdown').mockRejectedValueOnce(failure);
+    const betaShutdown = vi.spyOn(beta, 'shutdown');
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      logger: logger as any,
+      harnesses: { alpha, beta },
+    });
+
+    await expect(mastra.shutdown()).rejects.toBe(failure);
+
+    expect(alphaShutdown).toHaveBeenCalledTimes(1);
+    expect(betaShutdown).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith('Failed to shutdown harness "alpha"', failure);
+  });
+
+  it('propagates falsy cleanup rejection reasons after best-effort shutdown', async () => {
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      trackException: vi.fn(),
+      warn: vi.fn(),
+    };
+    const pubsub = new FailingCleanupPubSub({
+      workflows: undefined,
+    });
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      logger: logger as any,
+      pubsub,
+      workers: false,
+    });
+
+    await mastra.startWorkers();
+    await expect(mastra.stopWorkers()).rejects.toBeUndefined();
+
+    expect(pubsub.unsubscribeCalls).toEqual(['workflows']);
+    expect(logger.error).toHaveBeenCalledWith('Failed to unsubscribe workflow push subscription', undefined);
+  });
+
+  it('keeps stopping workers and shuts down harnesses when one worker fails', async () => {
+    const failure = new Error('worker stop failed');
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      trackException: vi.fn(),
+      warn: vi.fn(),
+    };
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const harnessShutdown = vi.spyOn(harness, 'shutdown');
+    const first = new RecordingStopWorker('first');
+    const failing = new RecordingStopWorker('failing', failure);
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      logger: logger as any,
+      workers: [first, failing],
+      harness,
+    });
+
+    await expect(mastra.shutdown()).rejects.toBe(failure);
+
+    expect(failing.stopCalls).toBe(1);
+    expect(first.stopCalls).toBe(1);
+    expect(harnessShutdown).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith('Failed to stop worker "failing"', failure);
+    expect(logger.error).toHaveBeenCalledWith('Failed to stop workers', failure);
+  });
+
+  it('does not mask worker stop failures when observability shutdown also fails', async () => {
+    const workerFailure = new Error('worker stop failed');
+    const observabilityFailure = new Error('observability shutdown failed');
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      trackException: vi.fn(),
+      warn: vi.fn(),
+    };
+    const worker = new RecordingStopWorker('failing', workerFailure);
+    const observability = {
+      shutdown: vi.fn().mockRejectedValue(observabilityFailure),
+      setMastraContext: vi.fn(),
+      setLogger: vi.fn(),
+      getSelectedInstance: vi.fn(),
+      registerInstance: vi.fn(),
+      getInstance: vi.fn(),
+      getDefaultInstance: vi.fn(),
+      listInstances: vi.fn(() => new Map()),
+      unregisterInstance: vi.fn(),
+      hasInstance: vi.fn(),
+      setConfigSelector: vi.fn(),
+      clear: vi.fn(),
+    };
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      logger: logger as any,
+      workers: [worker],
+      observability: observability as any,
+    });
+
+    await expect(mastra.shutdown()).rejects.toBe(workerFailure);
+
+    expect(worker.stopCalls).toBe(1);
+    expect(observability.shutdown).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith('Failed to stop workers', workerFailure);
+    expect(logger.error).toHaveBeenCalledWith('Failed to shutdown observability', observabilityFailure);
+  });
+
+  it('shuts down Mastra-owned background task manager and still shuts down harnesses after failure', async () => {
+    const backgroundFailure = new Error('background task shutdown failed');
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      trackException: vi.fn(),
+      warn: vi.fn(),
+    };
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    const harnessShutdown = vi.spyOn(harness, 'shutdown');
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      logger: logger as any,
+      backgroundTasks: { enabled: true },
+      workers: [],
+      harness,
+    });
+    const backgroundTaskManager = mastra.backgroundTaskManager!;
+    const backgroundShutdown = vi.spyOn(backgroundTaskManager, 'shutdown').mockRejectedValueOnce(backgroundFailure);
+
+    await expect(mastra.shutdown()).rejects.toBe(backgroundFailure);
+
+    expect(backgroundShutdown).toHaveBeenCalledTimes(1);
+    expect(harnessShutdown).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith('Failed to shutdown background task manager', backgroundFailure);
+
+    backgroundShutdown.mockRestore();
+    await backgroundTaskManager.shutdown();
+  });
+
+  it('waits for Mastra-owned background task init before shutdown cleanup', async () => {
+    const pubsub = new DeferredSubscribePubSub();
+    const storage = new InMemoryStore();
+    const bgStore = await storage.getStore('backgroundTasks');
+    await bgStore!.createTask({
+      id: 'pending-during-shutdown',
+      status: 'pending',
+      toolName: 'test-tool',
+      toolCallId: 'tool-call-1',
+      args: {},
+      agentId: 'default',
+      runId: 'run-1',
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 5000,
+      createdAt: new Date(),
+    });
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage,
+      logger: false,
+      pubsub,
+      backgroundTasks: { enabled: true },
+      workers: [],
+    });
+
+    await pubsub.waitForFirstSubscribe();
+    const shutdown = mastra.shutdown();
+    await Promise.resolve();
+
+    expect(pubsub.unsubscribeCalls).toEqual([]);
+
+    pubsub.releaseSubscribes();
+    await shutdown;
+
+    expect(pubsub.subscribeCalls).toEqual(['background-tasks', 'background-tasks-result']);
+    expect(pubsub.unsubscribeCalls).toEqual(['background-tasks', 'background-tasks-result']);
+    expect(pubsub.publishCalls).toEqual([]);
+  });
+
+  it('keeps cleanup subscriptions that fail during worker stop', async () => {
+    const pushFailure = new Error('push unsubscribe failed');
+    const eventFailure = new Error('event unsubscribe failed');
+    const flushFailure = new Error('flush failed');
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      trackException: vi.fn(),
+      warn: vi.fn(),
+    };
+    const pubsub = new FailingCleanupPubSub(
+      {
+        workflows: pushFailure,
+        updates: eventFailure,
+      },
+      flushFailure,
+    );
+
+    const mastra = new Mastra({
+      agents: { default: makeAgent() },
+      storage: new InMemoryStore(),
+      logger: logger as any,
+      pubsub,
+      events: {
+        updates: async () => {},
+      },
+      workers: false,
+    });
+
+    await mastra.startWorkers();
+    await expect(mastra.stopWorkers()).rejects.toBe(pushFailure);
+
+    expect(pubsub.unsubscribeCalls).toEqual(['workflows', 'updates']);
+    expect(pubsub.flushCalls).toBe(1);
+    expect(logger.error).toHaveBeenCalledWith('Failed to unsubscribe workflow push subscription', pushFailure);
+    expect(logger.error).toHaveBeenCalledWith('Failed to unsubscribe event listener for topic "updates"', eventFailure);
+    expect(logger.error).toHaveBeenCalledWith('Failed to flush pubsub during worker shutdown', flushFailure);
+
+    await expect(mastra.stopWorkers()).rejects.toBe(pushFailure);
+
+    expect(pubsub.unsubscribeCalls).toEqual(['workflows', 'updates', 'workflows', 'updates']);
+    expect(pubsub.flushCalls).toBe(2);
   });
 
   it('registers harness channel bindings with stable durable identity', () => {
@@ -530,28 +986,30 @@ describe('Harness v1 — construction', () => {
 
     await harness.channels.enqueueOutbox(channelOutboxInput({ deliverySemantics: 'lookup-reconcile' }));
 
-    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-lookup-1' })).resolves.toEqual({
-      claimed: 1,
-      sent: 0,
-      failed: 1,
-      dead: 0,
-      items: [
-        {
-          outboxItemId: expect.any(String),
-          status: 'failed',
-          error: { code: 'unknown', message: 'delivery outcome unknown' },
-        },
-      ],
-    });
-    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-lookup-2' })).resolves.toEqual({
-      claimed: 1,
-      sent: 1,
-      failed: 0,
-      dead: 0,
-      items: [
-        { outboxItemId: expect.any(String), status: 'sent', providerMessageId: 'provider-message-recovered' },
-      ],
-    });
+    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-lookup-1' })).resolves.toEqual(
+      {
+        claimed: 1,
+        sent: 0,
+        failed: 1,
+        dead: 0,
+        items: [
+          {
+            outboxItemId: expect.any(String),
+            status: 'failed',
+            error: { code: 'unknown', message: 'delivery outcome unknown' },
+          },
+        ],
+      },
+    );
+    await expect(harness.channels.dispatchOutbox({ channelId: 'support', claimId: 'claim-lookup-2' })).resolves.toEqual(
+      {
+        claimed: 1,
+        sent: 1,
+        failed: 0,
+        dead: 0,
+        items: [{ outboxItemId: expect.any(String), status: 'sent', providerMessageId: 'provider-message-recovered' }],
+      },
+    );
     expect(deliverCalls).toBe(1);
   });
 

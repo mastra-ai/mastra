@@ -112,6 +112,20 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
       'Deployment environment name (e.g. `production`, `staging`, `development`). When set, automatically attached to all observability signals so they can be filtered by environment without passing `tracingOptions.metadata.environment` on each call. Falls back to `process.env.NODE_ENV` when unset; left undefined if neither is set. Per-call `tracingOptions.metadata.environment` always takes precedence.',
   },
   {
+    name: 'harness',
+    type: 'Harness',
+    isOptional: true,
+    description:
+      'Harness v1 instance to register as the default harness. It can be retrieved with `mastra.getHarness()`.',
+  },
+  {
+    name: 'harnesses',
+    type: 'Record<string, Harness>',
+    isOptional: true,
+    description:
+      'Named Harness v1 instances to register on this Mastra. Use `mastra.getHarness(name)` to retrieve a named harness.',
+  },
+  {
     name: 'deployer',
     type: 'MastraDeployer',
     isOptional: true,

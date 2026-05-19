@@ -264,7 +264,10 @@ export interface HarnessChannelAdapter {
     request: HarnessChannelTransportRequest,
     ctx: HarnessChannelRouteContext,
   ): Promise<ChannelIngressEnvelope>;
-  verifyAction?(request: HarnessChannelTransportRequest, ctx: HarnessChannelRouteContext): Promise<ChannelActionEnvelope>;
+  verifyAction?(
+    request: HarnessChannelTransportRequest,
+    ctx: HarnessChannelRouteContext,
+  ): Promise<ChannelActionEnvelope>;
   deliverySemantics?: ChannelDeliverySemantics;
   deliverySemanticsByOperation?: Partial<Record<ChannelOutboxOperationKind, ChannelDeliverySemantics>>;
   resolveDeliveryPlan?(
@@ -434,7 +437,9 @@ export interface UseSkillOptions {
  *
  *   1. **Registered on a Mastra instance.** The Harness is created with no
  *      `mastra` / `agents` / `storage` of its own and is then registered as
- *      a child of a `Mastra` instance (`new Mastra({ harnesses: { ... } })`).
+ *      a child of a `Mastra` instance (`new Mastra({ harness })` for a
+ *      default harness, or `new Mastra({ harnesses: { ... } })` for named
+ *      harnesses).
  *      The parent calls `harness.__registerMastra(mastra, name)` and the
  *      harness reads agents and storage from there.
  *
@@ -459,9 +464,9 @@ export type HarnessConfig = HarnessConfigCommon &
          * exclusive with top-level `agents` / `storage`.
          *
          * Prefer omitting this field when you want the parent `Mastra` to own
-         * registration (`new Mastra({ harnesses })`). A harness that is already
-         * bound to the same `Mastra` may still be registered there under a
-         * configured harness name.
+         * registration (`new Mastra({ harness })` or `new Mastra({ harnesses })`).
+         * A harness that is already bound to the same `Mastra` may still be
+         * registered there under a configured harness name.
          */
         mastra: Mastra;
         agents?: never;
@@ -664,7 +669,8 @@ export interface HarnessConfigCommon {
    * Harness channel bridge configuration (§9.3 / §14). Each record binds a
    * harness-local `channelId` to a registered Mastra `ChannelProvider`.
    * When set, construct with a parent `mastra` or register the harness through
-   * `new Mastra({ channels, harnesses })` so provider bindings exist.
+   * `new Mastra({ channels, harness })` / `new Mastra({ channels, harnesses })`
+   * so provider bindings exist.
    *
    * PF-369 validates identity only. Later channel PRs consume these bindings
    * to mount ingress/action routes and durable inbox/outbox workers.

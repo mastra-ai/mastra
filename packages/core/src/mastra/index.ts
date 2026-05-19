@@ -467,6 +467,16 @@ export interface Config<
   environment?: string;
 
   /**
+   * Harness v1 instance registered on this Mastra. The harness is bound
+   * to this Mastra during construction so its modes can resolve agents and
+   * its sessions persist via the harness-storage domain.
+   *
+   * Use `harness` for the common single-harness case. It is registered under
+   * the `default` key and can be retrieved with `mastra.getHarness()`.
+   */
+  harness?: HarnessV1;
+
+  /**
    * Harness v1 instances registered on this Mastra. Each harness is bound
    * to this Mastra during construction so its modes can resolve agents and
    * its sessions persist via the harness-storage domain.
@@ -927,6 +937,24 @@ export class Mastra<
       TChannels
     >,
   ) {
+    const configuredHarnesses = config?.harnesses ? { ...config.harnesses } : {};
+    if (config?.harness != null) {
+      if (configuredHarnesses.default != null) {
+        const error = new MastraError({
+          id: 'MASTRA_HARNESS_DEFAULT_DUPLICATE',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: 'Cannot register config.harness when config.harnesses.default is also set',
+          details: { status: 400, name: 'default' },
+        });
+        if (config.logger !== false && config.logger != null) {
+          config.logger.trackException(error);
+        }
+        throw error;
+      }
+      configuredHarnesses.default = config.harness;
+    }
+
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
     // can correlate logs to the active span. Must happen before any agent runs.
     initContextStorage();
@@ -1240,8 +1268,8 @@ export class Mastra<
     // Harnesses bind to this Mastra after agents are registered so that
     // mode->agent validation succeeds. Each harness is single-bound; calling
     // __registerMastra a second time with a different parent throws.
-    if (config?.harnesses) {
-      for (const [key, harness] of Object.entries(config.harnesses)) {
+    if (Object.keys(configuredHarnesses).length > 0) {
+      for (const [key, harness] of Object.entries(configuredHarnesses)) {
         if (harness == null) continue;
         harness.__registerMastra(this, key);
         this.#harnesses[key] = harness;
@@ -2337,7 +2365,8 @@ export class Mastra<
    * Look up a Harness v1 instance registered on this Mastra.
    *
    * @param name - The key the harness was registered under in the
-   *   `harnesses` config map.
+   *   `harnesses` config map. Defaults to `default` for `config.harness`
+   *   single-harness sugar.
    * @returns The harness instance.
    * @throws If no harness is registered under the given name.
    *
@@ -2347,7 +2376,7 @@ export class Mastra<
    * const session = await code.session({ threadId, resourceId });
    * ```
    */
-  public getHarness(name: string): HarnessV1 {
+  public getHarness(name = 'default'): HarnessV1 {
     const harness = this.#harnesses[name];
     if (!harness) {
       const error = new MastraError({
@@ -4132,28 +4161,62 @@ export class Mastra<
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
+    let stopError: unknown;
+    let hasStopError = false;
+    const recordStopError = (message: string, error: unknown) => {
+      if (!hasStopError) {
+        stopError = error;
+        hasStopError = true;
+      }
+      this.#logger?.error(message, error);
+    };
+
     // Stop registered workers in reverse order
     for (const worker of [...this.#workers].reverse()) {
       if (worker.isRunning) {
-        await worker.stop();
+        try {
+          await worker.stop();
+        } catch (error) {
+          recordStopError(`Failed to stop worker "${worker.name}"`, error);
+        }
       }
     }
 
     // Tear down the in-process push subscription wired during startWorkers().
     if (this.#pushSubscription) {
-      await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
-      this.#pushSubscription = undefined;
+      try {
+        await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
+        this.#pushSubscription = undefined;
+      } catch (error) {
+        recordStopError('Failed to unsubscribe workflow push subscription', error);
+      }
     }
 
     // Unsubscribe only the (topic, listener) pairs we actually registered in
     // startWorkers() — keeps stopWorkers() symmetric with startWorkers() and
     // avoids unsubscribing listeners that startWorkers never owned.
+    const remainingUserEventSubscriptions: Array<{
+      topic: string;
+      cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+    }> = [];
     for (const { topic, cb } of this.#userEventSubscriptions) {
-      await this.#pubsub.unsubscribe(topic, cb);
+      try {
+        await this.#pubsub.unsubscribe(topic, cb);
+      } catch (error) {
+        remainingUserEventSubscriptions.push({ topic, cb });
+        recordStopError(`Failed to unsubscribe event listener for topic "${topic}"`, error);
+      }
     }
-    this.#userEventSubscriptions = [];
+    this.#userEventSubscriptions = remainingUserEventSubscriptions;
 
-    await this.#pubsub.flush();
+    try {
+      await this.#pubsub.flush();
+    } catch (error) {
+      recordStopError('Failed to flush pubsub during worker shutdown', error);
+    }
+    if (hasStopError) {
+      throw stopError;
+    }
   }
 
   /**
@@ -4428,9 +4491,62 @@ export class Mastra<
         this.#logger?.error('Failed to stop workflow scheduler', error);
       }
     }
-    await this.stopWorkers();
+    let stopWorkersError: unknown;
+    let hasStopWorkersError = false;
+    try {
+      await this.stopWorkers();
+    } catch (error) {
+      stopWorkersError = error;
+      hasStopWorkersError = true;
+      this.#logger?.error('Failed to stop workers', error);
+    }
+    let backgroundTaskShutdownError: unknown;
+    let hasBackgroundTaskShutdownError = false;
+    if (this.#backgroundTaskManager) {
+      try {
+        await this.#backgroundTaskManager.shutdown();
+      } catch (error) {
+        backgroundTaskShutdownError = error;
+        hasBackgroundTaskShutdownError = true;
+        this.#logger?.error('Failed to shutdown background task manager', error);
+      }
+    }
+    let harnessShutdownError: unknown;
+    let hasHarnessShutdownError = false;
+    const harnessShutdowns = Object.entries(this.#harnesses).map(async ([key, harness]) => {
+      try {
+        await harness.shutdown();
+      } catch (error) {
+        if (!hasHarnessShutdownError) {
+          harnessShutdownError = error;
+          hasHarnessShutdownError = true;
+        }
+        this.#logger?.error(`Failed to shutdown harness "${key}"`, error);
+      }
+    });
+    await Promise.all(harnessShutdowns);
     // Shutdown observability registry, exporters, etc...
-    await this.#observability.shutdown();
+    let observabilityShutdownError: unknown;
+    let hasObservabilityShutdownError = false;
+    try {
+      await this.#observability.shutdown();
+    } catch (error) {
+      observabilityShutdownError = error;
+      hasObservabilityShutdownError = true;
+      this.#logger?.error('Failed to shutdown observability', error);
+    }
+    if (hasStopWorkersError) {
+      throw stopWorkersError;
+    }
+    if (hasBackgroundTaskShutdownError) {
+      throw backgroundTaskShutdownError;
+    }
+    if (hasHarnessShutdownError) {
+      throw harnessShutdownError;
+    }
+    if (hasObservabilityShutdownError) {
+      throw observabilityShutdownError;
+    }
 
     this.#logger?.info('Mastra shutdown completed');
   }

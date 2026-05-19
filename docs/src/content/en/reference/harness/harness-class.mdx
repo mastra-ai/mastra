@@ -49,6 +49,47 @@ await harness.selectOrCreateThread()
 await harness.sendMessage({ content: 'Hello!' })
 ```
 
+## Mastra registration
+
+Harness v1 instances can be registered on a `Mastra` instance so they use the
+parent's agents and storage. Use `harness` for the common single-harness case;
+Mastra registers it as the `default` harness and `mastra.getHarness()` returns
+that instance.
+
+```typescript
+import { Harness } from '@mastra/core/harness/v1'
+import { Mastra } from '@mastra/core/mastra'
+
+const harness = new Harness({
+  modes: [{ id: 'default', agentId: 'assistant' }],
+  defaultModeId: 'default',
+})
+
+const mastra = new Mastra({
+  agents: { assistant },
+  storage,
+  harness,
+})
+
+const defaultHarness = mastra.getHarness()
+```
+
+Use `harnesses` when an app needs multiple named harnesses. The `harness`
+shortcut and `harnesses.default` are mutually exclusive.
+
+```typescript
+const mastra = new Mastra({
+  agents: { assistant },
+  storage,
+  harnesses: {
+    support: supportHarness,
+    research: researchHarness,
+  },
+})
+
+const support = mastra.getHarness('support')
+```
+
 ## Constructor parameters
 
 <PropertiesTable
