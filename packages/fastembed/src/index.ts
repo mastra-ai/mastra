@@ -7,7 +7,10 @@ import type { EmbeddingModelV3 } from '@internal/ai-v6';
 import type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { customProvider as customProviderV3 } from '@internal/ai-v6';
-import { FlagEmbedding, EmbeddingModel } from 'fastembed';
+import { FlagEmbedding, EmbeddingModel } from './fastembed.js';
+
+export { EmbeddingModel, FlagEmbedding, SparseTextEmbedding, SparseEmbeddingModel, ExecutionProvider } from './fastembed.js';
+export type { SparseVector, InitOptions, InitSparseOptions } from './fastembed.js';
 
 export type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 export type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
@@ -25,9 +28,8 @@ async function getModelCachePath() {
  */
 export async function warmup() {
   const cacheDir = await getModelCachePath();
-  const retrieve = (FlagEmbedding as any).retrieveModel.bind(FlagEmbedding);
-  await retrieve(EmbeddingModel.BGESmallENV15, cacheDir, false);
-  await retrieve(EmbeddingModel.BGEBaseENV15, cacheDir, false);
+  await FlagEmbedding.retrieveModel(EmbeddingModel.BGESmallENV15, cacheDir, false);
+  await FlagEmbedding.retrieveModel(EmbeddingModel.BGEBaseENV15, cacheDir, false);
 }
 
 // Shared function to generate embeddings using fastembed
