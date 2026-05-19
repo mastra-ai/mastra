@@ -131,4 +131,54 @@ describe('BaseResource', () => {
     // Assert: Verify request succeeded using global fetch
     expect(result).toEqual({ success: true });
   });
+
+  it('should accept Headers instances from client options', async () => {
+    server.on('request', req => {
+      requestCount++;
+      expect(req.headers['x-client-header']).toBe('from-headers-instance');
+    });
+
+    const headersResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 0,
+      headers: new Headers({
+        'X-Client-Header': 'from-headers-instance',
+      }),
+    });
+
+    server.on('request', (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+    });
+
+    const result = await headersResource.request('/test');
+    expect(result).toEqual({ success: true });
+    expect(requestCount).toBe(1);
+  });
+
+  it('should accept tuple-array request headers and merge them with client headers', async () => {
+    server.on('request', req => {
+      requestCount++;
+      expect(req.headers['x-client-header']).toBe('client-header');
+      expect(req.headers['x-request-header']).toBe('request-header');
+    });
+
+    const tupleResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 0,
+      headers: [['X-Client-Header', 'client-header']],
+    });
+
+    server.on('request', (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+    });
+
+    const result = await tupleResource.request('/test', {
+      headers: [['X-Request-Header', 'request-header']],
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(requestCount).toBe(1);
+  });
 });

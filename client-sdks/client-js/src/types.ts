@@ -53,6 +53,7 @@ import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Body, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+export type ClientHeaders = HeadersInit;
 
 type OptionalizeUndefined<T> = T extends Date
   ? Date
@@ -99,7 +100,7 @@ export interface ClientOptions {
   /** Maximum backoff time in milliseconds between retries */
   maxBackoffMs?: number;
   /** Custom headers to include with requests */
-  headers?: Record<string, string>;
+  headers?: ClientHeaders;
   /** Abort signal for request */
   abortSignal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
@@ -135,7 +136,7 @@ export interface SubscribeAgentThreadParams {
 
 export interface RequestOptions {
   method?: string;
-  headers?: Record<string, string>;
+  headers?: ClientHeaders;
   body?: any;
   stream?: boolean;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */

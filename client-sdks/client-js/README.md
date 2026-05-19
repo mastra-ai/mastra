@@ -40,9 +40,11 @@ const client = new MastraClient({
     retries?: number;          // Number of retry attempts (default: 3)
     backoffMs?: number;        // Initial backoff time in ms (default: 300)
     maxBackoffMs?: number;     // Maximum backoff time in ms (default: 5000)
-    headers?: Record<string, string>; // Custom headers
+    headers?: HeadersInit;     // Custom headers
 });
 ```
+
+`headers` accepts any standard fetch `HeadersInit` shape, including plain objects, arrays of header tuples, and `Headers` instances.
 
 ## Available Methods
 
