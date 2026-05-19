@@ -1,7 +1,7 @@
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Searchbar, Skeleton, Txt, cn } from '@mastra/playground-ui';
 import { Check, LockIcon, TriangleAlertIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
@@ -42,7 +42,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const { data, isLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
 
-  const allProviders = toProviders((data?.providers as ListProvider[]) || []);
+  const allProviders = useMemo(() => toProviders((data?.providers as ListProvider[]) || []), [data]);
   const filteredProviders = useBuilderFilteredProviders(allProviders, policy);
   const allModels = useAllModels(filteredProviders);
 
