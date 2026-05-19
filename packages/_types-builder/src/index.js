@@ -7,7 +7,8 @@ import { statSync } from 'fs';
 import { replaceTypes } from './replace-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
-const importSpecifierRegex = /(?:import|export)\s+(?:type\s+)?(?:[^'\"]*?\s+from\s+)?['\"]([^'\"]+)['\"]|import\(\s*['\"]([^'\"]+)['\"]\s*\)/gm;
+const importSpecifierRegex =
+  /(?:import|export)\s+(?:type\s+)?(?:[^'\"]*?\s+from\s+)?['\"]([^'\"]+)['\"]|import\(\s*['\"]([^'\"]+)['\"]\s*\)/gm;
 const nodeBuiltinModules = new Set([...builtinModules, ...builtinModules.map(moduleName => `node:${moduleName}`)]);
 
 function isNodeBuiltinModuleSpecifier(moduleSpecifier) {
@@ -43,7 +44,11 @@ function stripComments(code) {
 }
 
 function getPackageName(moduleSpecifier) {
-  if (moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/') || isNodeBuiltinModuleSpecifier(moduleSpecifier)) {
+  if (
+    moduleSpecifier.startsWith('.') ||
+    moduleSpecifier.startsWith('/') ||
+    isNodeBuiltinModuleSpecifier(moduleSpecifier)
+  ) {
     return null;
   }
 
