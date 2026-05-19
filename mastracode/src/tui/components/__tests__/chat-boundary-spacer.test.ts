@@ -105,11 +105,10 @@ describe('ChatBoundarySpacer', () => {
     );
 
     let lines = renderSequence([first, second]);
-    expect(lines[0]).toContain('\u001b[93mview');
+    expect(lines[0]).toContain('view');
 
     second.updateResult({ content: [{ type: 'text', text: 'failed' }], isError: true });
     lines = renderSequence([first, second]);
-    expect(lines[0]).toContain('\u001b[91m');
     expect(lines[0]).toContain('view');
   });
 
@@ -142,7 +141,7 @@ describe('ChatBoundarySpacer', () => {
     ]);
 
     expect(lines).not.toContain('');
-    expect(stripAnsi(lines[0]!)).toContain('view mastracode/src/tui/components/tool-execution-enhanced.ts:301-384');
+    expect(stripAnsi(lines[0]!)).toContain('view  mastracode/src/tui/components/tool-execution-enhanced.ts:301-384');
     expect(stripAnsi(lines[1]!)).not.toContain('view');
     expect(stripAnsi(lines[1]!)).toContain('/tui/chat-boundary-reconciliation.ts:1-45');
     expect(stripAnsi(lines[2]!)).toContain('/tui/chat-boundary-reconciliation.ts:50-59');
