@@ -1153,6 +1153,10 @@ ${workingMemory}`;
                 message_id: message.id,
                 thread_id: message.threadId,
                 resource_id: message.resourceId,
+                role: message.role,
+                content: textForEmbedding,
+                created_at:
+                  message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
               })),
             });
           }),
@@ -1991,7 +1995,13 @@ Notes:
 
     const embeddingData: Array<{
       embeddings: number[][];
-      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      metadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      >;
     }> = [];
     let dimension: number | undefined;
 
@@ -2025,6 +2035,9 @@ Notes:
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
+            role: message.role,
+            content: textForEmbedding,
+            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
           })),
         });
       }),
@@ -2034,11 +2047,13 @@ Notes:
       const { indexName } = await this.createEmbeddingIndex(dimension);
 
       const allVectors: number[][] = [];
-      const allMetadata: Array<{
-        message_id: string;
-        thread_id: string | undefined;
-        resource_id: string | undefined;
-      }> = [];
+      const allMetadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      > = [];
 
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
@@ -2117,7 +2132,13 @@ Notes:
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
           embeddings: number[][];
-          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+          metadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          >;
         }> = [];
         let dimension: number | undefined;
 
@@ -2170,6 +2191,12 @@ Notes:
                   message_id: message.id,
                   thread_id: existingMessage.threadId,
                   resource_id: existingMessage.resourceId,
+                  role: existingMessage.role,
+                  content: textForEmbedding,
+                  created_at:
+                    existingMessage.createdAt instanceof Date
+                      ? existingMessage.createdAt.toISOString()
+                      : String(existingMessage.createdAt),
                 })),
               });
               messageIdsWithNewEmbeddings.add(message.id);
@@ -2216,11 +2243,13 @@ Notes:
 
           // Flatten all embeddings and metadata into single arrays
           const allVectors: number[][] = [];
-          const allMetadata: Array<{
-            message_id: string;
-            thread_id: string | undefined;
-            resource_id: string | undefined;
-          }> = [];
+          const allMetadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          > = [];
 
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
@@ -2582,7 +2611,13 @@ Notes:
 
     const embeddingData: Array<{
       embeddings: number[][];
-      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      metadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      >;
     }> = [];
     let dimension: number | undefined;
 
@@ -2618,6 +2653,9 @@ Notes:
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
+            role: message.role,
+            content: textForEmbedding,
+            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
           })),
         });
       }),
@@ -2629,11 +2667,13 @@ Notes:
 
       // Flatten all embeddings and metadata into single arrays
       const allVectors: number[][] = [];
-      const allMetadata: Array<{
-        message_id: string;
-        thread_id: string | undefined;
-        resource_id: string | undefined;
-      }> = [];
+      const allMetadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      > = [];
 
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
