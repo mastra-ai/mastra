@@ -1,5 +1,13 @@
 # @mastra/memory
 
+## 1.18.3-alpha.0
+
+### Patch Changes
+
+- feat(memory): start background buffering of unobserved messages when agent goes idle ([#16694](https://github.com/mastra-ai/mastra/pull/16694))
+
+  In OM buffering mode, when the agent goes idle (turn.end()), any unobserved messages are now buffered in the background via a fire-and-forget buffer() call. This ensures observations are computed proactively rather than waiting for the next turn's step.prepare().
+
 ## 1.18.2
 
 ### Patch Changes

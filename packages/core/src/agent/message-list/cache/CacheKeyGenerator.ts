@@ -55,6 +55,7 @@ export class CacheKeyGenerator {
       cacheKey = appendResponseProviderItemKeys(cacheKey, (part as any).providerMetadata);
     }
     if (part.type === 'tool-invocation') {
+      if (!part.toolInvocation) return cacheKey;
       cacheKey += part.toolInvocation.toolCallId;
       cacheKey += part.toolInvocation.state;
     }

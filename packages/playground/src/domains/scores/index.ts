@@ -5,7 +5,6 @@ export * from './components/score-as-item-dialog';
 export * from './components/scores-tools';
 export * from './components/scorer-combobox';
 export * from './components/scores-over-time-card';
-export * from './components/scorers-table/scorers-table';
 export * from './components/scorers-list/scorers-list';
 export * from './components/scorers-list/no-scorers-info';
 export { ScorersToolbar, type ScorersToolbarProps } from './components/scorers-list/scorers-toolbar';

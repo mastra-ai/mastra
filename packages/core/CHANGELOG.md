@@ -1,5 +1,225 @@
 # @mastra/core
 
+## 1.36.0-alpha.3
+
+### Minor Changes
+
+- Added the `EditorFavorite*` types and an optional `favorites` namespace on `IMastraEditor` so editor implementations can expose favoriting of stored agents and skills. ([#16749](https://github.com/mastra-ai/mastra/pull/16749))
+
+  ```ts
+  import type {
+    IMastraEditor,
+    IEditorFavoritesNamespace,
+    EditorFavoriteTargetInput,
+    EditorFavoriteToggleResult,
+  } from '@mastra/core/editor';
+
+  interface IMastraEditor {
+    // ...existing members...
+    favorites?: IEditorFavoritesNamespace;
+  }
+  ```
+
+  The `favorites` field is optional — existing implementations of `IMastraEditor` continue to work unchanged. `@mastra/editor` ships a default `EditorFavoritesNamespace` that wires this up against the storage `favorites` domain.
+
+  Also renamed `AgentFeatures.stars` to `AgentFeatures.favorites` in `@mastra/core/agent-builder/ee` so the feature flag aligns with the storage column (`favoriteCount`), HTTP routes (`/favorite`), and the editor `favorites` namespace. The field had no functional consumers, so this is a name-only change.
+
+- Added delta polling support for observability list APIs in core, DuckDB, and ClickHouse. ([#16632](https://github.com/mastra-ai/mastra/pull/16632))
+
+### Patch Changes
+
+- Fixed durable agents to honor activeTools when streaming. ([#16646](https://github.com/mastra-ai/mastra/pull/16646))
+
+- Fixed infinite recursion in `RequestContext.toJSON()` when multiple ([#16686](https://github.com/mastra-ai/mastra/pull/16686))
+  `RequestContext` instances reference each other through stored values.
+  Previously, serializing such cross-context cycles would cause a CPU hang.
+  Cyclic references are now detected and omitted from the serialized output,
+  consistent with how circular references within a single context are handled.
+
+- Fixed crash in CacheKeyGenerator.fromAIV4Part when a tool-invocation part has undefined toolInvocation. This can happen when observational memory seals a partially-streamed assistant message. Also guarded MessageMerger against the same condition. ([#16773](https://github.com/mastra-ai/mastra/pull/16773))
+
+- Restore MastraCode local command execution to inherit parent environment variables while redacting env-shaped and secret-looking workspace trace data. ([#16691](https://github.com/mastra-ai/mastra/pull/16691))
+
+## 1.36.0-alpha.2
+
+### Minor Changes
+
+- Added support for permission arrays in FGA checks and route configuration. When an array is provided, the user needs **any one** of the listed permissions (logical OR). ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  **Affected types**
+  - `FGACheckParams.permission`
+  - `FGARouteConfig.permission`
+  - `FGARouteInfo.requiresPermission`
+  - `FGADeniedError.permission`
+  - `CheckFGAOptions.permission`
+
+  Single-permission usage continues to work unchanged.
+
+  ```ts
+  // Before — single permission only
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: 'agents:read',
+  });
+
+  // After — single permission or array (ANY-of)
+  await fga.check({
+    resource: { type: 'agent', id: 'abc' },
+    permission: ['agents:read', 'agents:execute'],
+  });
+  ```
+
+- Added consistent FGA execution checks across agents, tools, memory, and workflows to prevent unauthenticated executions when FGA is configured. Pass an authenticated user through `requestContext` when invoking protected APIs directly: ([#16651](https://github.com/mastra-ai/mastra/pull/16651))
+
+  ```ts
+  const requestContext = new RequestContext();
+  requestContext.set('user', user);
+
+  await agent.generate('Summarize this thread', {
+    requestContext,
+  });
+  ```
+
+- `publishSkill` now returns the full skill file tree so consumers can persist the UI-facing tree alongside storage blobs without re-walking the source. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+  ```ts
+  import { publishSkill } from '@mastra/core/workspace';
+
+  const result = await publishSkill({ workspace, skillId, source });
+
+  // New: nested tree of folders + files; binary content base64-encoded.
+  for (const node of result.files) {
+    console.log(node.type, node.path);
+  }
+  ```
+
+  Also added two optional capability methods to `IMastraEditor` for server-side gating of builder-aware behavior:
+
+  ```ts
+  interface IMastraEditor {
+    // ...existing members...
+    hasEnabledBuilderConfig?(): boolean;
+    resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+  }
+  ```
+
+  Both methods are optional — existing implementations of `IMastraEditor` continue to work unchanged. Servers that consume them treat `undefined` / missing implementation as "no builder configured."
+
+- `publishSkillFromSource()` (and `collectSkillForPublish()`) now return a `files` field containing the full skill source as a tree of `StorageSkillFileNode` entries with base64-encoded blob content — handy for storing a UI-facing copy of a skill alongside its content-addressable tree: ([#16673](https://github.com/mastra-ai/mastra/pull/16673))
+
+  ```ts
+  const { snapshot, tree, files } = await publishSkillFromSource({ source });
+  // files: StorageSkillFileNode[] — name, mimeType, base64 content per node
+  ```
+
+  Existing callers that only destructure `{ snapshot, tree }` are unaffected; the field is additive.
+
+  Also adds `parseSkillSnapshotFromFiles()` for parsing skill snapshot frontmatter from a flat file list (used by the registry install flow):
+
+  ```ts
+  import { parseSkillSnapshotFromFiles, type SkillSnapshotFile } from '@mastra/core/workspace';
+
+  const files: SkillSnapshotFile[] = [{ path: 'SKILL.md', content: '...' }, ...];
+  const snapshot = parseSkillSnapshotFromFiles(files);
+  ```
+
+### Patch Changes
+
+- Fixed sub-agent streams so nested tool input progress is emitted while tool arguments are still being generated. This lets UIs show delegated agents preparing tool calls before the final tool input is available. Fixes #16422. ([#16553](https://github.com/mastra-ai/mastra/pull/16553))
+
+## 1.36.0-alpha.1
+
+### Minor Changes
+
+- Added route-specific CORS configuration so credentialed cross-origin access can be limited to selected custom routes and channel webhooks. ([#16689](https://github.com/mastra-ai/mastra/pull/16689))
+
+  ```ts
+  registerApiRoute('/customer-webhook', {
+    method: 'POST',
+    cors: {
+      origin: ['https://customer-saas.example'],
+      credentials: true,
+    },
+    handler: async c => c.json({ ok: true }),
+  });
+  ```
+
+  ```ts
+  new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    instructions: '...',
+    model,
+    channels: {
+      adapters: {
+        web: {
+          adapter: createWebAdapter(),
+          cors: {
+            origin: ['https://customer-saas.example'],
+            credentials: true,
+          },
+        },
+      },
+    },
+  });
+  ```
+
+  Use `server.cors` for one global CORS policy across the server:
+
+  ```ts
+  new Mastra({
+    server: {
+      cors: {
+        origin: '*',
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Hide internal workflow spans from Mastra-owned plumbing in exported traces. ([#16631](https://github.com/mastra-ai/mastra/pull/16631))
+
+- Added the `internalUsage?: UsageStats` field to `AIBaseAttributes`, so any span type can carry token usage rolled up from internal descendant spans. Populated automatically by `@mastra/observability` when an internal `MODEL_GENERATION` ends inside a non-internal ancestor. ([#16434](https://github.com/mastra-ai/mastra/pull/16434))
+
+- Fixed Mastra getting stuck after a storage startup failure. Previously, if storage couldn't start up (for example, because the database was briefly unreachable), Mastra would keep returning the same error for every operation until the process was restarted. Now the next storage operation tries to start storage again, so brief outages recover on their own. Storage startup failures are also logged, so the problem is visible even when a later retry succeeds. ([#16427](https://github.com/mastra-ai/mastra/pull/16427))
+
+## 1.36.0-alpha.0
+
+### Minor Changes
+
+- Narrowed `AgentSignalContents` from `BaseMessageListInput` to `string | (TextPart | FilePart)[]`. ([#16622](https://github.com/mastra-ai/mastra/pull/16622))
+
+  Fixed two signal-content bugs:
+  - `user-message` signal attributes now reach the LLM
+  - multimodal non-`user-message` signals no longer lose file parts
+
+  Callers that previously passed wrapped message shapes to `agent.sendSignal` should now pass a bare string or a bare parts array.
+
+  Before:
+  `{ type: 'user-message', contents: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }`
+
+  After:
+  `{ type: 'user-message', contents: [{ type: 'text', text: 'hi' }] }`
+
+  Added an optional `providerOptions` field to `agent.sendSignal` that flows through to the resulting prompt turn (as `providerOptions` on the LLM message) and is persisted on the stored signal message (as `content.providerMetadata`).
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5))
+
+- Fixed CompositeAuth incorrectly advertising SSO, session, and user provider capabilities when no inner provider supports them. Studio would show an SSO login button even when no provider had SSO configured, leading to 401 errors on login attempts. The duck-typing check now verifies that interface methods are actual functions rather than just present on the prototype chain. ([#16664](https://github.com/mastra-ai/mastra/pull/16664))
+
+- Exposed `formatSkillActivation(skill)` from `@mastra/core/workspace`. It returns the activation payload — instructions plus references, scripts, and assets listings — that the built-in `skill` tool uses, so callers (e.g. an explicit `/skill/<name>` slash command) can produce the same output without duplicating the formatting logic. ([#16618](https://github.com/mastra-ai/mastra/pull/16618))
+
+  Also preserves the `user-invocable` skill frontmatter field in workspace skill metadata.
+
+  ```ts
+  import { formatSkillActivation } from '@mastra/core/workspace';
+
+  const content = formatSkillActivation(skill);
+  ```
+
 ## 1.35.0
 
 ### Minor Changes
