@@ -3,29 +3,26 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
 export interface InstructionsProps {
-  /** Whether the user can edit the system prompt. */
   editable?: boolean;
-  /** Fallback prompt to display when not editable. */
   fallbackPrompt?: string;
-  /** Disables interaction (e.g. while a stream is running). */
-  disabled?: boolean;
 }
 
-export const Instructions = ({ editable = true, fallbackPrompt, disabled = false }: InstructionsProps) => {
+export const Instructions = ({ editable = true, fallbackPrompt }: InstructionsProps) => {
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const draftInstructions = useWatch({ control, name: 'instructions' }) ?? '';
-
-  const isEditable = editable && !disabled;
   const displayedPrompt = editable ? draftInstructions : (fallbackPrompt ?? draftInstructions);
+
+  const handleChange = (value: string) => {
+    if (!editable) return;
+    setValue('instructions', value, { shouldDirty: true });
+  };
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] px-2 py-2">
       <CodeEditor
         data-testid="system-prompt-dialog-input"
         value={displayedPrompt}
-        onChange={value => {
-          if (isEditable) setValue('instructions', value, { shouldDirty: true });
-        }}
+        onChange={handleChange}
         language="markdown"
         editable={editable}
         placeholder="You are a helpful assistant that…"

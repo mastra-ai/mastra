@@ -59,7 +59,7 @@ export const AgentProfileTabs = ({
       value: 'instructions',
       label: 'Instructions',
       enabled: true,
-      render: () => <Instructions editable={editable} disabled={disabled} fallbackPrompt={fallbackInstructions} />,
+      render: () => <Instructions editable={editable && !disabled} fallbackPrompt={fallbackInstructions} />,
     },
     {
       value: 'tools',
