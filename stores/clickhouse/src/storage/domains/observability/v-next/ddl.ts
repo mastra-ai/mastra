@@ -900,13 +900,18 @@ FROM (
 // discovery_values — refreshable helper
 // ---------------------------------------------------------------------------
 
+// ReplacingMergeTree with ORDER BY covering every column: the refreshable MV
+// below writes via `REFRESH EVERY ... TO <pre-created table>`, which in
+// ClickHouse appends a fresh copy of its result set on each refresh. Pairing
+// the helper table with ReplacingMergeTree lets background merges collapse
+// the identical rows so on-disk size tracks actual cardinality.
 export const DISCOVERY_VALUES_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_VALUES} (
   kind               LowCardinality(String),
   key1               String,
   value              String
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 ORDER BY (kind, key1, value)
 `;
 
@@ -914,6 +919,7 @@ ORDER BY (kind, key1, value)
 // discovery_pairs — refreshable helper
 // ---------------------------------------------------------------------------
 
+// ReplacingMergeTree for the same reason as DISCOVERY_VALUES_DDL above.
 export const DISCOVERY_PAIRS_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_PAIRS} (
   kind               LowCardinality(String),
@@ -921,7 +927,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_PAIRS} (
   key2               String,
   value              String
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 ORDER BY (kind, key1, key2, value)
 `;
 

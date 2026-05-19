@@ -20,7 +20,11 @@ import {
   buildAllTableDDL,
   buildRetentionDDL,
   buildRetentionEntries,
+  MV_DISCOVERY_PAIRS,
+  MV_DISCOVERY_VALUES,
   parseTtlExpression,
+  TABLE_DISCOVERY_PAIRS,
+  TABLE_DISCOVERY_VALUES,
 } from './ddl';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
@@ -2923,6 +2927,11 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       // Trigger discovery refresh so helper tables are populated.
       // In production, discovery MVs refresh automatically on a schedule.
       // In tests, we trigger an immediate refresh after inserting data.
+      // Refresh twice: the MV writes via `REFRESH ... TO <pre-created table>`
+      // which uses APPEND semantics, so each refresh re-inserts every distinct
+      // value. Running it twice exercises the duplicate-rows path that reads
+      // must deduplicate.
+      await triggerDiscoveryRefresh();
       await triggerDiscoveryRefresh();
     });
 
@@ -2930,18 +2939,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const result = await storage.getMetricNames({});
       expect(result.names).toContain('mastra_agent_duration_ms');
       expect(result.names).toContain('mastra_tool_calls_started');
+      expect(result.names).toEqual([...new Set(result.names)]);
     });
 
     it('getMetricNames filters by prefix', async () => {
       const result = await storage.getMetricNames({ prefix: 'mastra_agent' });
       expect(result.names).toContain('mastra_agent_duration_ms');
       expect(result.names).not.toContain('mastra_tool_calls_started');
+      expect(result.names).toEqual([...new Set(result.names)]);
     });
 
     it('getMetricLabelKeys returns label keys', async () => {
       const result = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
       expect(result.keys).toContain('agent');
       expect(result.keys).toContain('status');
+      expect(result.keys).toEqual([...new Set(result.keys)]);
     });
 
     it('getMetricLabelValues returns values for a label key', async () => {
@@ -2950,6 +2962,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         labelKey: 'status',
       });
       expect(result.values).toContain('ok');
+      expect(result.values).toEqual([...new Set(result.values)]);
     });
 
     it('getEntityTypes returns distinct entity types', async () => {
@@ -2957,17 +2970,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.entityTypes).toContain('agent');
       expect(result.entityTypes).toContain('tool');
       expect(result.entityTypes).toContain('input_processor');
+      expect(result.entityTypes).toEqual([...new Set(result.entityTypes)]);
     });
 
     it('getEntityNames returns entity names', async () => {
       const result = await storage.getEntityNames({ entityType: EntityType.AGENT });
       expect(result.names).toContain('weatherAgent');
+      expect(result.names).toEqual([...new Set(result.names)]);
 
       const toolNames = await storage.getEntityNames({ entityType: EntityType.TOOL });
       expect(toolNames.names).toContain('metricTool');
+      expect(toolNames.names).toEqual([...new Set(toolNames.names)]);
 
       const processorNames = await storage.getEntityNames({ entityType: EntityType.INPUT_PROCESSOR });
       expect(processorNames.names).toContain('logProcessor');
+      expect(processorNames.names).toEqual([...new Set(processorNames.names)]);
     });
 
     it('getServiceNames returns service names', async () => {
@@ -2975,6 +2992,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.serviceNames).toContain('my-service');
       expect(result.serviceNames).toContain('metric-service');
       expect(result.serviceNames).toContain('log-service');
+      expect(result.serviceNames).toEqual([...new Set(result.serviceNames)]);
     });
 
     it('getEnvironments returns environments', async () => {
@@ -2982,6 +3000,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.environments).toContain('production');
       expect(result.environments).toContain('metric-env');
       expect(result.environments).toContain('log-env');
+      expect(result.environments).toEqual([...new Set(result.environments)]);
     });
 
     it('getTags returns distinct tags', async () => {
@@ -2990,6 +3009,75 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.tags).toContain('experiment');
       expect(result.tags).toContain('metric-tag');
       expect(result.tags).toContain('log-tag');
+      expect(result.tags).toEqual([...new Set(result.tags)]);
+    });
+
+    it('init() reconciles pre-existing MergeTree discovery tables to ReplacingMergeTree', async () => {
+      // Simulates an upgrade from an older deployment that created the
+      // discovery helper tables as MergeTree. init() should drop the MV
+      // and table, then recreate both with the current ReplacingMergeTree
+      // engine — preserving the discovery refresh behavior end-to-end.
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `mig_discovery_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_VALUES} (kind LowCardinality(String), key1 String, value String) ENGINE = MergeTree ORDER BY (kind, key1, value)`,
+        });
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = MergeTree ORDER BY (kind, key1, key2, value)`,
+        });
+
+        const before = (await (
+          await scopedClient.query({
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
+            query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; engine: string }>;
+        expect(before.map(r => r.engine)).toEqual(['MergeTree', 'MergeTree']);
+
+        const migratedStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        try {
+          await migratedStorage.init();
+
+          const after = (await (
+            await scopedClient.query({
+              query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
+              query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string; engine: string }>;
+          expect(after.map(r => r.engine)).toEqual(['ReplacingMergeTree', 'ReplacingMergeTree']);
+
+          const mvs = (await (
+            await scopedClient.query({
+              query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+              query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string }>;
+          expect(mvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+        } finally {
+          await migratedStorage.dangerouslyClearAll();
+        }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
     });
   });
 
