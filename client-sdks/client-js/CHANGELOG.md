@@ -1,5 +1,53 @@
 # @mastra/client-js
 
+## 1.20.0-alpha.2
+
+### Minor Changes
+
+- Added `agent.browserSession(threadId?)` and `agent.closeBrowser(threadId?)` to the `Agent` resource, plus a `GetAgentBrowserSessionResponse` type. ([#16668](https://github.com/mastra-ai/mastra/pull/16668))
+
+  `browserSession` probes the server's browser session state before opening a screencast WebSocket, so the connection is only made when the server has screencast support installed and an active session exists for the thread. `closeBrowser` ends the agent's browser session (or a single thread's session if `threadId` is passed). Both methods go through the configured client `baseUrl` and `apiPrefix`, so they work with servers mounted under a non-default API prefix.
+
+  ```ts
+  const probe = await client.getAgent('my-agent').browserSession(threadId);
+  if (probe.screencastAvailable && probe.hasSession) {
+    // safe to open the screencast WebSocket
+  }
+
+  await client.getAgent('my-agent').closeBrowser(threadId);
+  ```
+
+- Added typed client-side resources for the stored-entity HTTP surface so you no longer have to hand-roll `fetch` calls. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+
+  // List/get with favorite metadata
+  const { items } = await client.storedAgents.list({ page: 1, perPage: 20 });
+  const agent = await client.storedAgents.get(items[0].id);
+  console.log(agent.favoriteCount, agent.isFavorited);
+
+  // Favorite toggle
+  await client.storedAgents.favorite(agent.id);
+  await client.storedAgents.unfavorite(agent.id);
+
+  // Versioning + publish
+  const draft = await client.storedSkills.create({
+    /* ... */
+  });
+  const published = await client.storedSkills.publish(draft.id);
+  await client.storedSkills.restore(draft.id, { version: 1 });
+  ```
+
+  Also regenerated `route-types.generated.ts` to cover the new editor-builder introspection routes (`/editor/builder/settings`, `/editor/builder/infrastructure`) and the external skill-registry endpoints under `/editor/builder/registries` (list, search, popular, preview, install).
+
+### Patch Changes
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+
 ## 1.20.0-alpha.1
 
 ### Patch Changes
