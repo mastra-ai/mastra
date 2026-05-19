@@ -72,6 +72,23 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
     expect(editorInitSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('only init()s a shared parent once when used as both default and editor', async () => {
+    // Defensive: if the same instance is passed as both `default` and
+    // `editor`, dedupe by identity so we don't double-init it.
+    const shared = new InMemoryStore({ id: 'shared-inner' });
+    const sharedInitSpy = vi.spyOn(shared, 'init');
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-shared',
+      default: shared,
+      editor: shared,
+    });
+
+    await composite.init();
+
+    expect(sharedInitSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("treats the inner store's init() as authoritative (failure surfaces)", async () => {
     // If the composite bypasses the inner's init(), a thrown error from the
     // inner's init() would never surface. We must see it.

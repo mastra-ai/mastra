@@ -364,11 +364,12 @@ export class MastraCompositeStore extends MastraBase {
 
   async #runInit(): Promise<boolean> {
     // 1. Delegate to parent stores. Each parent owns its own init contract
-    //    (setup, migrations, sequencing, coalescing).
-    const parentTasks: Promise<void>[] = [];
-    if (this.parentDefault) parentTasks.push(this.parentDefault.init());
-    if (this.parentEditor) parentTasks.push(this.parentEditor.init());
-    await Promise.all(parentTasks);
+    //    (setup, migrations, sequencing, coalescing). Dedupe by identity so
+    //    a store passed as both `default` and `editor` only gets init()'d once.
+    const uniqueParents = new Set<MastraCompositeStore>();
+    if (this.parentDefault) uniqueParents.add(this.parentDefault);
+    if (this.parentEditor) uniqueParents.add(this.parentEditor);
+    await Promise.all([...uniqueParents].map(parent => parent.init()));
 
     // 2. Build a set of domain instances the parents already initialized so
     //    we don't init them a second time below.
