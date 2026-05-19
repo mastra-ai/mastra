@@ -101,7 +101,7 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 
 | Lifecycle point | Permission checked | Resource |
 | - | - | - |
-| Agent execution (`generate`, `stream`) | `agents:execute` | `{ type: 'agent', id: agentId }` |
+| Agent execution (`generate`, `stream`, `streamUntilIdle`, `resumeGenerate`, `resumeStream`, `resumeStreamUntilIdle`) | `agents:execute` | `{ type: 'agent', id: agentId }` |
 | Workflow execution | `workflows:execute` | `{ type: 'workflow', id: workflowId }` |
 | Tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` |
 | Thread/memory access | `memory:read`, `memory:write`, `memory:delete` | `{ type: 'thread', id: threadId }` |
@@ -109,6 +109,8 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | HTTP routes (opt-in) | Configured per route | Configured per route |
 
 All checks are **no-ops when FGA is not configured**, maintaining backward compatibility.
+
+When FGA is configured, agent execution fails closed unless the effective `requestContext` contains a `user`. For direct SDK calls, pass the authenticated user in `requestContext`. For server routes, ensure your auth middleware populates the request context before calling `generate()`, `stream()`, `streamUntilIdle()`, or resume APIs. Calls without a user throw before the model is invoked or a persisted resume snapshot is loaded.
 
 ## Custom FGA provider
 

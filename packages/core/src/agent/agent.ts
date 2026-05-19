@@ -137,14 +137,18 @@ export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
 const SKIP_AGENT_EXECUTION_PREFLIGHT = Symbol('skipAgentExecutionPreflight');
 
-type ResumeStreamInternalOptions = AgentExecutionOptionsBase<any> & {
-  structuredOutput?: PublicStructuredOutputOptions<any>;
-  toolCallId?: string;
-  model?: DynamicArgument<MastraModelConfig>;
-  _pubsub: PubSub;
+type AgentExecutionPreflightOptions = {
   [SKIP_AGENT_EXECUTION_PREFLIGHT]?: true;
   [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]?: AgentExecutionOptions<any>;
 };
+
+type ResumeStreamInternalOptions = AgentExecutionOptionsBase<any> &
+  AgentExecutionPreflightOptions & {
+    structuredOutput?: PublicStructuredOutputOptions<any>;
+    toolCallId?: string;
+    model?: DynamicArgument<MastraModelConfig>;
+    _pubsub: PubSub;
+  };
 
 type ModelFallbacks = {
   id: string;
@@ -918,28 +922,31 @@ export class Agent<
   /**
    * Enforces the request-context and FGA boundary shared by fresh and resumed agent execution.
    */
-  async #assertAgentExecutionPreflight(
-    requestContext?: RequestContext,
-    { requireFgaUser = false }: { requireFgaUser?: boolean } = {},
-  ) {
-    await this.#validateRequestContext(requestContext);
-
+  async #assertAgentExecutionPreflight(requestContext?: RequestContext) {
     const fgaProvider = this.#mastra?.getServer()?.fga;
-    if (!fgaProvider) return;
+    if (fgaProvider) {
+      const user = requestContext?.get('user');
+      const { checkFGA, FGADeniedError } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+      if (!user) {
+        throw new FGADeniedError(
+          { id: 'unknown' },
+          { type: 'agent', id: this.id },
+          MastraFGAPermissions.AGENTS_EXECUTE,
+        );
+      }
 
-    const user = requestContext?.get('user');
-    if (!user && !requireFgaUser) return;
+      await this.#validateRequestContext(requestContext);
 
-    const { checkFGA, FGADeniedError } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
-    if (!user) {
-      throw new FGADeniedError({ id: 'unknown' }, { type: 'agent', id: this.id }, MastraFGAPermissions.AGENTS_EXECUTE);
+      await checkFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'agent', id: this.id },
+        permission: MastraFGAPermissions.AGENTS_EXECUTE,
+      });
+      return;
     }
-    await checkFGA({
-      fgaProvider,
-      user,
-      resource: { type: 'agent', id: this.id },
-      permission: MastraFGAPermissions.AGENTS_EXECUTE,
-    });
+
+    await this.#validateRequestContext(requestContext);
   }
 
   /**
@@ -6622,9 +6629,15 @@ export class Agent<
     const callerProvidedRunId = Boolean(streamOptionsBase.runId);
     const requestContextToUse = streamOptionsBase.requestContext;
     const hasExecutionPreflight = Boolean(this.#requestContextSchema) || Boolean(this.#mastra?.getServer()?.fga);
+    const skipExecutionPreflight = Boolean(
+      (streamOptionsBase as AgentExecutionPreflightOptions)[SKIP_AGENT_EXECUTION_PREFLIGHT],
+    );
+    const preflightedDefaultOptions = (streamOptionsBase as AgentExecutionPreflightOptions)[
+      STREAM_UNTIL_IDLE_DEFAULT_OPTIONS
+    ] as AgentExecutionOptions<OUTPUT> | undefined;
     const needsDefaultRequestContextPreflight = !requestContextToUse && hasExecutionPreflight;
     const staticDefaultOptions =
-      needsDefaultRequestContextPreflight && typeof this.#defaultOptions !== 'function'
+      !skipExecutionPreflight && needsDefaultRequestContextPreflight && typeof this.#defaultOptions !== 'function'
         ? (this.#defaultOptions as unknown as AgentExecutionOptions<OUTPUT>)
         : undefined;
     const streamOptionsWithRunId = {
@@ -6654,7 +6667,10 @@ export class Agent<
       trackedThreadStreamPubSubTarget = { runId: streamOptionsWithRunId.runId };
     }
     let preparedOptionsWithPubSub: (AgentExecutionOptionsBase<any> & { runId?: string; _pubsub: PubSub }) | undefined;
-    let preflightedRequestContext: RequestContext | undefined;
+    let preflightedRequestContext: RequestContext | undefined = skipExecutionPreflight
+      ? preflightedDefaultOptions?.requestContext ?? requestContextToUse
+      : undefined;
+    let hasPreflightedRequestContext = skipExecutionPreflight;
     const reserveAdmittedRun = () => {
       if (ownsReservation || !canReserveBeforeDefaults) return;
       releaseReservedRun = agentThreadStreamRuntime.reserveRun(
@@ -6674,16 +6690,19 @@ export class Agent<
     };
 
     try {
-      if (requestContextToUse) {
+      if (!skipExecutionPreflight && requestContextToUse) {
         await this.#assertAgentExecutionPreflight(requestContextToUse);
         preflightedRequestContext = requestContextToUse;
+        hasPreflightedRequestContext = true;
         reserveAdmittedRun();
-      } else if (staticDefaultOptions) {
+      } else if (!skipExecutionPreflight && staticDefaultOptions) {
         await this.#assertAgentExecutionPreflight(staticDefaultOptions.requestContext);
         preflightedRequestContext = staticDefaultOptions.requestContext;
+        hasPreflightedRequestContext = true;
         reserveAdmittedRun();
       }
       const defaultOptions =
+        preflightedDefaultOptions ??
         staticDefaultOptions ??
         (await this.getDefaultOptions({
           requestContext: requestContextToUse,
@@ -6694,7 +6713,10 @@ export class Agent<
       ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
       if (requestContextToUse) {
         mergedOptions.requestContext = requestContextToUse;
-      } else if (mergedOptions.requestContext !== preflightedRequestContext) {
+      } else if (
+        hasExecutionPreflight &&
+        (!hasPreflightedRequestContext || mergedOptions.requestContext !== preflightedRequestContext)
+      ) {
         await this.#assertAgentExecutionPreflight(mergedOptions.requestContext);
       }
 
@@ -7012,7 +7034,27 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT>> {
     const pubsub =
       (streamOptions as { _pubsub?: PubSub } | undefined)?._pubsub ?? this.getPubSub() ?? defaultAgentThreadPubSub;
-    const streamOptionsWithPubSub = { ...(streamOptions ?? {}), _pubsub: pubsub };
+    let streamOptionsWithPubSub: Record<string | symbol, any> & { maxIdleMs?: number; _pubsub: PubSub } = {
+      ...(streamOptions ?? {}),
+      _pubsub: pubsub,
+    };
+    if (streamOptionsWithPubSub.requestContext) {
+      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext);
+      streamOptionsWithPubSub = {
+        ...streamOptionsWithPubSub,
+        [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
+      };
+    } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
+      const defaultOptions = await this.getDefaultOptions({
+        requestContext: streamOptionsWithPubSub.requestContext,
+      });
+      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
+      streamOptionsWithPubSub = {
+        ...streamOptionsWithPubSub,
+        [STREAM_UNTIL_IDLE_DEFAULT_OPTIONS]: defaultOptions,
+        [SKIP_AGENT_EXECUTION_PREFLIGHT]: true,
+      };
+    }
     return runStreamUntilIdle<OUTPUT>(this, messages, streamOptionsWithPubSub, {
       activeStreams: this.#activeStreamUntilIdle,
       bgManager: this.#mastra?.backgroundTaskManager,
@@ -7094,12 +7136,12 @@ export class Agent<
     };
     if (streamOptionsWithPubSub.requestContext) {
       // Preflight before idle-wrapper setup, which can resolve defaults and memory before delegating to resumeStream().
-      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext, { requireFgaUser: true });
+      await this.#assertAgentExecutionPreflight(streamOptionsWithPubSub.requestContext);
     } else {
       const defaultOptions = await this.getDefaultOptions({
         requestContext: streamOptionsWithPubSub.requestContext,
       });
-      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, { requireFgaUser: true });
+      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
       streamOptionsWithPubSub = {
         ...streamOptionsWithPubSub,
         _pubsub: pubsub,
@@ -7174,12 +7216,12 @@ export class Agent<
     if (!streamOptionsWithPubSub?.[SKIP_AGENT_EXECUTION_PREFLIGHT]) {
       if (requestContextToUse) {
         // Keep explicit-context resume preflight before snapshot loading/reservation so denied callers cannot touch persisted runs.
-        await this.#assertAgentExecutionPreflight(requestContextToUse, { requireFgaUser: true });
+        await this.#assertAgentExecutionPreflight(requestContextToUse);
       } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
         defaultOptions = (await this.getDefaultOptions({
           requestContext: requestContextToUse,
         })) as AgentExecutionOptions<TOutput>;
-        await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, { requireFgaUser: true });
+        await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
       }
     }
     const { resourceId: runResourceId, snapshot: existingSnapshot } = await this.#loadAgenticLoopSnapshotOrThrow({
@@ -7202,7 +7244,7 @@ export class Agent<
       !preflightedDefaultOptions &&
       (this.#requestContextSchema || this.#mastra?.getServer()?.fga)
     ) {
-      await this.#assertAgentExecutionPreflight(ownershipOptions.requestContext, { requireFgaUser: true });
+      await this.#assertAgentExecutionPreflight(ownershipOptions.requestContext);
     }
     this.#assertAgenticLoopResumeOwnership({
       method: 'resumeStream',
@@ -7531,12 +7573,12 @@ export class Agent<
     let defaultOptions: AgentExecutionOptions<TOutput> | undefined;
     if (requestContextToUse) {
       // Keep explicit-context resume preflight before snapshot loading/model resolution so denied callers cannot touch persisted runs.
-      await this.#assertAgentExecutionPreflight(requestContextToUse, { requireFgaUser: true });
+      await this.#assertAgentExecutionPreflight(requestContextToUse);
     } else if (this.#requestContextSchema || this.#mastra?.getServer()?.fga) {
       defaultOptions = (await this.getDefaultOptions({
         requestContext: requestContextToUse,
       })) as AgentExecutionOptions<TOutput>;
-      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext, { requireFgaUser: true });
+      await this.#assertAgentExecutionPreflight(defaultOptions.requestContext);
     }
 
     const runId = options?.runId ?? '';
