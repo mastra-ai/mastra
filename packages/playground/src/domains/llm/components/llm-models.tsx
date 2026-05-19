@@ -3,7 +3,8 @@ import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
 import { useLLMProviders } from '../hooks/use-llm-providers';
-import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/builder';
+import { useModelPolicy } from '../hooks/use-model-policy';
+import { useBuilderFilteredModels } from '@/domains/builder';
 
 export interface LLMModelsProps {
   value: string;
@@ -33,8 +34,8 @@ export const LLMModels = ({
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const providers = dataProviders?.providers || [];
 
-  // Get all models flattened, then drop any disallowed by admin policy
-  const policy = useBuilderModelPolicy();
+  // Get all models flattened, then drop any disallowed by surface-scoped policy
+  const policy = useModelPolicy();
   const allModels = useAllModels(providers);
   const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
 

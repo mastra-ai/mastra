@@ -4,9 +4,10 @@ import { Info } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
+import { useModelPolicy } from '../hooks/use-model-policy';
 import { cleanProviderId, findProviderById } from '../utils';
 import { ProviderLogo } from './provider-logo';
-import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
+import { useBuilderFilteredProviders } from '@/domains/builder';
 
 export interface LLMProvidersProps {
   value: string;
@@ -34,9 +35,9 @@ export const LLMProviders = ({
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const allProviders = dataProviders?.providers || [];
 
-  // Apply admin model policy first (drops disallowed providers entirely),
+  // Apply surface-scoped model policy first (drops disallowed providers entirely),
   // then sort: connected -> popular -> alphabetical
-  const policy = useBuilderModelPolicy();
+  const policy = useModelPolicy();
   const providers = useBuilderFilteredProviders(allProviders, policy);
   const sortedProviders = useFilteredProviders(providers, '', false);
 
