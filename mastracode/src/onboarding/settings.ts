@@ -285,7 +285,8 @@ function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
 }
 
 function parseQuietModeMaxToolPreviewLines(value: unknown): number {
-  const rawValue = typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
+  const rawValue =
+    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
   return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
 }
 

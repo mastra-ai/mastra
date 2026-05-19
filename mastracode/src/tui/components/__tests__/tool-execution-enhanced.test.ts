@@ -5,7 +5,10 @@ import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-e
 const ui = { requestRender() {} } as any;
 
 function stripAnsi(text: string): string {
-  return text.replace(/\u001b\[[0-9;]*m/g, '').replace(/\u001b\]8;;[^\u0007]*\u0007/g, '').replace(/\u001b\]8;;\u0007/g, '');
+  return text
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .replace(/\u001b\]8;;[^\u0007]*\u0007/g, '')
+    .replace(/\u001b\]8;;\u0007/g, '');
 }
 
 describe('ToolExecutionComponentEnhanced quiet display', () => {
