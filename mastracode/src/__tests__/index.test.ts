@@ -329,7 +329,9 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as { pubsub?: unknown; threadLock?: unknown } | undefined;
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
     expect(harnessConfig?.pubsub).toBe(pubsub);
     expect(harnessConfig?.threadLock).toBeDefined();
   });
@@ -340,7 +342,9 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as { pubsub?: unknown; threadLock?: unknown } | undefined;
+    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
     expect(harnessConfig?.pubsub).toBe(pubsub);
     expect(harnessConfig?.threadLock).toBeUndefined();
   });
