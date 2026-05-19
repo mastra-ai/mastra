@@ -33,7 +33,7 @@
     "schedule": ["before 6am on wednesday"],
     "automerge": true
   },
-  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**"],
+  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**", "e2e-tests/**/template/package.json"],
   "packageRules": [
     {
       "matchDepTypes": ["engines"],
@@ -120,7 +120,6 @@
       "commitMessageTopic": "e2e-tests",
       "matchFileNames": ["e2e-tests/**/package.json"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "ignoreDeps": ["date-fns"],
       "dependencyDashboardApproval": false,
       "automerge": true
     },
