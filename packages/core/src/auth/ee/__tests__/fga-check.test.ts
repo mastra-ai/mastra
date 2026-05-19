@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
-import { checkFGA, FGADeniedError } from '../fga-check';
+import { checkFGA, FGADeniedError, requireFGA } from '../fga-check';
 import type { IFGAProvider } from '../interfaces/fga';
 import { MastraFGAPermissions } from '../interfaces/permissions.generated';
 
@@ -59,6 +59,21 @@ describe('checkFGA', () => {
         permission: MastraFGAPermissions.AGENTS_EXECUTE,
       }),
     ).rejects.toThrow(FGADeniedError);
+  });
+
+  it('should fail closed when FGA is configured and no user is available', async () => {
+    const provider = createMockFGAProvider(true);
+
+    await expect(
+      requireFGA({
+        fgaProvider: provider,
+        user: undefined,
+        resource: { type: 'agent', id: 'agent-1' },
+        permission: MastraFGAPermissions.AGENTS_EXECUTE,
+      }),
+    ).rejects.toThrow('authenticated user is required');
+
+    expect(provider.require).not.toHaveBeenCalled();
   });
 
   it('should pass user and permission to provider', async () => {
