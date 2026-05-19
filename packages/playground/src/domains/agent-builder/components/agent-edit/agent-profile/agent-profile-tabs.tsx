@@ -65,7 +65,7 @@ export const AgentProfileTabs = ({
       value: 'tools',
       label: 'Tools',
       enabled: toolsTabEnabled,
-      render: () => <Tools availableAgentTools={availableAgentTools} editable={editable} disabled={disabled} />,
+      render: () => <Tools availableAgentTools={availableAgentTools} editable={editable && !disabled} />,
     },
     {
       value: 'skills',

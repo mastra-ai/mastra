@@ -1,6 +1,6 @@
+import { CodeEditor } from '@mastra/playground-ui';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
-import { InstructionsDetail } from '../details/instructions-detail';
 
 export interface InstructionsProps {
   /** Whether the user can edit the system prompt. */
@@ -19,12 +19,19 @@ export const Instructions = ({ editable = true, fallbackPrompt, disabled = false
   const displayedPrompt = editable ? draftInstructions : (fallbackPrompt ?? draftInstructions);
 
   return (
-    <InstructionsDetail
-      prompt={displayedPrompt}
-      onChange={value => {
-        if (isEditable) setValue('instructions', value, { shouldDirty: true });
-      }}
-      editable={isEditable}
-    />
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] px-2 py-2">
+      <CodeEditor
+        data-testid="system-prompt-dialog-input"
+        value={displayedPrompt}
+        onChange={value => {
+          if (isEditable) setValue('instructions', value, { shouldDirty: true });
+        }}
+        language="markdown"
+        editable={editable}
+        placeholder="You are a helpful assistant that…"
+        showCopyButton={false}
+        className="min-h-0 w-full border-0 bg-transparent p-0 rounded-none [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-y-auto"
+      />
+    </div>
   );
 };
