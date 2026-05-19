@@ -71,6 +71,10 @@ export function SaveAsDatasetItemDialog({
         setGroundTruth(initialGroundTruth);
         inputSeededRef.current = true;
       } else {
+        // Clear any text retained from a previous open so the user isn't shown stale
+        // values while the real data is still being fetched.
+        setInput('');
+        setGroundTruth('');
         inputSeededRef.current = false;
       }
       setExpectedTrajectory(initialTrajectory ?? '');
