@@ -166,6 +166,12 @@ export interface GlobalSettings {
      * overridden per-thread.
      */
     omCavemanObservations: boolean | null;
+    /**
+     * Whether Observational Memory forwards image/file attachment parts to the
+     * Observer LLM. `null` ⇒ inherit built-in default (true). Turn off when
+     * using a text-only observer model.
+     */
+    omObserveAttachments: boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
     /** Default judge model for /goal. */
@@ -250,6 +256,7 @@ const DEFAULTS: GlobalSettings = {
     omObservationThreshold: null,
     omReflectionThreshold: null,
     omCavemanObservations: null,
+    omObserveAttachments: null,
     subagentModels: {},
     goalJudgeModel: null,
     goalMaxTurns: null,
