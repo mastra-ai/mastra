@@ -26,6 +26,7 @@ import {
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
 } from './ddl';
+import { isReplacingMergeTreeEngine } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -3083,7 +3084,18 @@ describe('ObservabilityStorageClickhouseVNext', () => {
               format: 'JSONEachRow',
             })
           ).json()) as Array<{ name: string; engine: string }>;
-          expect(after.map(r => r.engine)).toEqual(['ReplacingMergeTree', 'ReplacingMergeTree']);
+          // Use the same predicate that reconcileDiscoveryTables() uses to
+          // decide whether a table is already migrated, so this assertion
+          // passes on ClickHouse Cloud / replicated clusters where the
+          // engine is transparently rewritten to SharedReplacingMergeTree
+          // or ReplicatedReplacingMergeTree.
+          expect(after.map(r => r.name)).toEqual([TABLE_DISCOVERY_PAIRS, TABLE_DISCOVERY_VALUES]);
+          for (const row of after) {
+            expect(
+              isReplacingMergeTreeEngine(row.engine),
+              `expected ${row.name} engine to satisfy isReplacingMergeTreeEngine but got '${row.engine}'`,
+            ).toBe(true);
+          }
 
           const mvs = (await (
             await scopedClient.query({
