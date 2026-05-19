@@ -114,6 +114,18 @@ describe('AgentChannels', () => {
       expect(channels.channelConfig).toBe(originalConfig);
     });
 
+    it('preserves the streaming option', () => {
+      const adapter = createMockAdapter('test');
+      const streaming = new AgentChannels({
+        adapters: { test: adapter },
+        streaming: { updateIntervalMs: 250 },
+      } as any);
+      expect(streaming.channelConfig.streaming).toEqual({ updateIntervalMs: 250 });
+
+      const buffered = new AgentChannels({ adapters: { test: createMockAdapter('test') } });
+      expect(buffered.channelConfig.streaming).toBeUndefined();
+    });
+
     it('lets a provider rebuild AgentChannels while preserving existing adapters', () => {
       // Simulate the SlackProvider merge pattern: agent author configured Discord,
       // then a provider needs to inject Slack without losing Discord.
