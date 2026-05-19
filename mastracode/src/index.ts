@@ -74,6 +74,7 @@ import {
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
+import { resolveMastraCodeThreadLockConfig } from './utils/thread-lock-config.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
@@ -133,7 +134,7 @@ export interface MastraCodeConfig {
   memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: HarnessConfig['browser'];
-  /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
+  /** PubSub for signal routing. Required before crossProcessPubSub can disable file thread locks. */
   pubsub?: PubSub;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
@@ -234,6 +235,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   const signalsPubSub = config?.pubsub;
   const crossProcessPubSub = config?.crossProcessPubSub ?? false;
+  const threadLockConfig = resolveMastraCodeThreadLockConfig({
+    pubsub: signalsPubSub,
+    crossProcessPubSub,
+    acquireThreadLock,
+    releaseThreadLock,
+  });
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
@@ -532,7 +539,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     storage,
     observability,
     memory,
-    pubsub: signalsPubSub,
+    pubsub: threadLockConfig.pubsub,
     stateSchema,
     subagents,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
@@ -637,12 +644,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
       return customModels;
     },
-    threadLock: crossProcessPubSub
-      ? undefined
-      : {
-          acquire: acquireThreadLock,
-          release: releaseThreadLock,
-        },
+    threadLock: threadLockConfig.threadLock,
   });
 
   // Sync hookManager session ID on thread changes
