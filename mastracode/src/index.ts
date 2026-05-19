@@ -73,8 +73,8 @@ import {
   getResourceIdOverride,
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
-import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
+import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {

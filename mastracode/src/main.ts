@@ -42,7 +42,7 @@ async function tuiMain(pipedInput?: string | null) {
     return browserPromise;
   };
 
-  const result = await createMastraCode();
+  const result = await createMastraCode({ unixSocketPubSub: true });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
