@@ -16,11 +16,10 @@ export interface PromptAlignmentOptions {
   evaluationMode?: 'user' | 'system' | 'both';
 }
 
-// Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
 const analyzeOutputSchema = compileSchema(
   z.object({
     intentAlignment: z.object({
-      score: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+      score: z.number().min(0).max(1),
       primaryIntent: z.string(),
       isAddressed: z.boolean(),
       reasoning: z.string(),
@@ -33,15 +32,15 @@ const analyzeOutputSchema = compileSchema(
           reasoning: z.string(),
         }),
       ),
-      overallScore: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+      overallScore: z.number().min(0).max(1),
     }),
     completeness: z.object({
-      score: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+      score: z.number().min(0).max(1),
       missingElements: z.array(z.string()),
       reasoning: z.string(),
     }),
     responseAppropriateness: z.object({
-      score: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+      score: z.number().min(0).max(1),
       formatAlignment: z.boolean(),
       toneAlignment: z.boolean(),
       reasoning: z.string(),

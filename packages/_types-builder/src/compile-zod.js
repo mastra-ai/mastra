@@ -14,11 +14,12 @@ export function compileSchema(schema) {
 }
 
 const COMPILE_ZOD_MODULE = '@internal/types-builder/compile-zod';
+const ZOD_MODULE = 'zod/v4';
 const require = createRequire(import.meta.url);
 let zod;
 
 function getZod() {
-  zod ??= require('zod/v4');
+  zod ??= require(ZOD_MODULE);
   return zod;
 }
 
@@ -247,6 +248,77 @@ function findCompileSchemaImportEdits(sourceFile) {
 }
 
 /**
+ * @param {import('typescript').SourceFile} sourceFile
+ * @param {string} name
+ * @param {import('typescript').ImportDeclaration} importDeclaration
+ */
+function hasIdentifierUsage(sourceFile, name, importDeclaration) {
+  let found = false;
+
+  /** @param {import('typescript').Node} node */
+  function visit(node) {
+    if (found || node === importDeclaration) {
+      return;
+    }
+
+    if (ts.isIdentifier(node) && node.text === name) {
+      found = true;
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return found;
+}
+
+/**
+ * @param {import('typescript').SourceFile} sourceFile
+ */
+function findUnusedZodImportEdits(sourceFile) {
+  /** @type {{ start: number; end: number; replacement: string }[]} */
+  const replacements = [];
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) {
+      continue;
+    }
+
+    const moduleSpecifier = statement.moduleSpecifier;
+    if (!ts.isStringLiteral(moduleSpecifier) || moduleSpecifier.text !== ZOD_MODULE) {
+      continue;
+    }
+
+    const importClause = statement.importClause;
+    const namedBindings = importClause?.namedBindings;
+    const localNames = [
+      importClause?.name?.text,
+      ...(namedBindings && ts.isNamedImports(namedBindings)
+        ? namedBindings.elements.map(element => element.name.text)
+        : []),
+      namedBindings && ts.isNamespaceImport(namedBindings) ? namedBindings.name.text : undefined,
+    ].filter(Boolean);
+
+    if (localNames.length > 0 && localNames.every(name => !hasIdentifierUsage(sourceFile, name, statement))) {
+      replacements.push({ start: statement.getFullStart(), end: statement.getEnd(), replacement: '' });
+    }
+  }
+
+  return replacements;
+}
+
+/**
+ * @param {string} code
+ * @param {{ start: number; end: number; replacement: string }[]} replacements
+ */
+function applyReplacements(code, replacements) {
+  return replacements
+    .sort((a, b) => b.start - a.start)
+    .reduce((result, edit) => result.slice(0, edit.start) + edit.replacement + result.slice(edit.end), code);
+}
+
+/**
  * @param {string} code
  * @param {string} path
  */
@@ -254,18 +326,20 @@ function transform(code, path) {
   const scriptKind = path.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sourceFile = ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true, scriptKind);
   const importSpecifiers = findCompileSchemaImportSpecifiers(sourceFile);
-  const replacements = [
-    ...findCompileSchemaCalls(sourceFile, importSpecifiers),
-    ...findCompileSchemaImportEdits(sourceFile),
-  ];
+  const callReplacements = findCompileSchemaCalls(sourceFile, importSpecifiers);
 
-  if (!replacements.length) {
+  if (!callReplacements.length) {
     return code;
   }
 
-  return replacements
-    .sort((a, b) => b.start - a.start)
-    .reduce((result, edit) => result.slice(0, edit.start) + edit.replacement + result.slice(edit.end), code);
+  const codeWithSchemas = applyReplacements(code, callReplacements);
+  const schemaSourceFile = ts.createSourceFile(path, codeWithSchemas, ts.ScriptTarget.Latest, true, scriptKind);
+  const importReplacements = [
+    ...findCompileSchemaImportEdits(schemaSourceFile),
+    ...findUnusedZodImportEdits(schemaSourceFile),
+  ];
+
+  return applyReplacements(codeWithSchemas, importReplacements);
 }
 
 export default function esbuildCompileZod() {

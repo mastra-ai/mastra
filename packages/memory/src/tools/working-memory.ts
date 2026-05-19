@@ -1,9 +1,10 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
-import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod/v4';
 
 /**
  * Deep merges two objects, with special handling for null values (delete) and arrays (replace).
@@ -86,21 +87,55 @@ function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>)
   return value;
 }
 
+const defaultWorkingMemoryInputSchema = compileSchema(
+  z.object({
+    memory: z
+      .string()
+      .describe('The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.'),
+  }),
+);
+
+const updateWorkingMemoryVNextMarkdownInputSchema = compileSchema(
+  z.object({
+    newMemory: z.string().describe('The Markdown formatted working memory content to store'),
+    searchString: z
+      .string()
+      .describe(
+        "The working memory string to find. Will be replaced with the newMemory string. If this is omitted or doesn't exist, the newMemory string will be appended to the end of your working memory. Replacing single lines at a time is encouraged for greater accuracy. If updateReason is not 'append-new-memory', this search string must be provided or the tool call will be rejected.",
+      )
+      .optional(),
+    updateReason: z
+      .enum(['append-new-memory', 'clarify-existing-memory', 'replace-irrelevant-memory'])
+      .describe(
+        "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
+      )
+      .optional(),
+  }),
+);
+
+const updateWorkingMemoryVNextJsonInputSchema = compileSchema(
+  z.object({
+    newMemory: z.string().describe('The JSON formatted working memory content to store'),
+    searchString: z
+      .string()
+      .describe(
+        "The working memory string to find. Will be replaced with the newMemory string. If this is omitted or doesn't exist, the newMemory string will be appended to the end of your working memory. Replacing single lines at a time is encouraged for greater accuracy. If updateReason is not 'append-new-memory', this search string must be provided or the tool call will be rejected.",
+      )
+      .optional(),
+    updateReason: z
+      .enum(['append-new-memory', 'clarify-existing-memory', 'replace-irrelevant-memory'])
+      .describe(
+        "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
+      )
+      .optional(),
+  }),
+);
+
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => {
   const schema = memoryConfig?.workingMemory?.schema;
 
   // Default input schema for markdown-based working memory
-  let inputSchema: PublicSchema<{ memory: any }> = {
-    $schema: 'http://json-schema.org/draft-07/schema#',
-    type: 'object',
-    properties: {
-      memory: {
-        type: 'string',
-        description: `The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`,
-      },
-    },
-    required: ['memory'],
-  } satisfies JSONSchema7;
+  let inputSchema: PublicSchema<{ memory: any }> = defaultWorkingMemoryInputSchema;
 
   if (schema) {
     // Convert the schema to StandardSchemaWithJSON first
@@ -309,27 +344,9 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
   return createTool({
     id: 'update-working-memory',
     description: 'Update the working memory with new information.',
-    inputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        newMemory: {
-          type: 'string',
-          description: `The ${config.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store`,
-        },
-        searchString: {
-          type: 'string',
-          description:
-            "The working memory string to find. Will be replaced with the newMemory string. If this is omitted or doesn't exist, the newMemory string will be appended to the end of your working memory. Replacing single lines at a time is encouraged for greater accuracy. If updateReason is not 'append-new-memory', this search string must be provided or the tool call will be rejected.",
-        },
-        updateReason: {
-          type: 'string',
-          enum: ['append-new-memory', 'clarify-existing-memory', 'replace-irrelevant-memory'],
-          description:
-            "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
-        },
-      },
-    } satisfies JSONSchema7,
+    inputSchema: config.workingMemory?.schema
+      ? updateWorkingMemoryVNextJsonInputSchema
+      : updateWorkingMemoryVNextMarkdownInputSchema,
     execute: async (inputData, context) => {
       const workingMemoryInput = inputData as {
         newMemory?: string;

@@ -26,7 +26,6 @@ export interface NoiseSensitivityOptions {
   };
 }
 
-// Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
 const analyzeOutputSchema = compileSchema(
   z.object({
     dimensions: z.array(
@@ -39,7 +38,7 @@ const analyzeOutputSchema = compileSchema(
     ),
     overallAssessment: z.string(),
     majorIssues: z.array(z.string()).optional().default([]),
-    robustnessScore: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+    robustnessScore: z.number().min(0).max(1),
   }),
 );
 

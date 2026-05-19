@@ -1,8 +1,9 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
-import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
+import { z } from 'zod/v4';
 
 import {
   formatToolResultForObserver,
@@ -1144,6 +1145,165 @@ export async function recallThreadFromStart({
   };
 }
 
+const resourceRecallInputSchema = compileSchema(
+  z.object({
+    mode: z
+      .enum(['messages', 'threads', 'search'])
+      .describe(
+        'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
+      )
+      .optional(),
+    threadId: z
+      .string()
+      .min(1)
+      .describe(
+        'Browse a different thread, or "current" for the active thread. Use mode="threads" first to discover thread IDs.',
+      )
+      .optional(),
+    before: z
+      .string()
+      .describe(
+        'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
+      )
+      .optional(),
+    after: z
+      .string()
+      .describe(
+        'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
+      )
+      .optional(),
+    query: z
+      .string()
+      .min(1)
+      .describe('Search query for mode="search". Finds messages semantically similar to this text.')
+      .optional(),
+    cursor: z
+      .string()
+      .min(1)
+      .describe(
+        'A message ID to use as the pagination cursor. For mode="messages", omit both cursor and threadId to browse the current thread. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
+      )
+      .optional(),
+    anchor: z
+      .enum(['start', 'end'])
+      .describe(
+        'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first) of the thread. Defaults to "start".',
+      )
+      .optional(),
+    page: z
+      .number()
+      .int()
+      .min(-50)
+      .max(50)
+      .describe(
+        'Pagination offset. For messages: positive pages move forward from cursor, negative move backward. For threads: page number (0-indexed). 0 is treated as 1 for messages.',
+      )
+      .optional(),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .describe('Maximum number of items to return per page. Defaults to 20.')
+      .optional(),
+    detail: z
+      .enum(['low', 'high'])
+      .describe(
+        'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
+      )
+      .optional(),
+    partType: z
+      .enum(['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'])
+      .describe('Filter results to only include parts of this type. Only applies to mode="messages".')
+      .optional(),
+    toolName: z
+      .string()
+      .min(1)
+      .describe(
+        'Filter results to only include tool-call and tool-result parts matching this tool name. Only applies to mode="messages".',
+      )
+      .optional(),
+    partIndex: z
+      .number()
+      .int()
+      .min(0)
+      .describe(
+        'Fetch a single part from the cursor message by its positional index. When provided, returns only that part at high detail. Indices are shown as [p0], [p1], etc. in recall results.',
+      )
+      .optional(),
+  }),
+);
+
+const threadRecallInputSchema = compileSchema(
+  z.object({
+    mode: z
+      .enum(['messages', 'threads', 'search'])
+      .describe(
+        'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
+      )
+      .optional(),
+    query: z
+      .string()
+      .min(1)
+      .describe('Search query for mode="search". Finds messages semantically similar to this text.')
+      .optional(),
+    cursor: z
+      .string()
+      .min(1)
+      .describe(
+        'A message ID to use as the pagination cursor. For mode="messages", omit both cursor and threadId to browse the current thread. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
+      )
+      .optional(),
+    anchor: z
+      .enum(['start', 'end'])
+      .describe(
+        'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first) of the thread. Defaults to "start".',
+      )
+      .optional(),
+    page: z
+      .number()
+      .int()
+      .min(-50)
+      .max(50)
+      .describe(
+        'Pagination offset. For messages: positive pages move forward from cursor, negative move backward. For threads: page number (0-indexed). 0 is treated as 1 for messages.',
+      )
+      .optional(),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .describe('Maximum number of items to return per page. Defaults to 20.')
+      .optional(),
+    detail: z
+      .enum(['low', 'high'])
+      .describe(
+        'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
+      )
+      .optional(),
+    partType: z
+      .enum(['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'])
+      .describe('Filter results to only include parts of this type. Only applies to mode="messages".')
+      .optional(),
+    toolName: z
+      .string()
+      .min(1)
+      .describe(
+        'Filter results to only include tool-call and tool-result parts matching this tool name. Only applies to mode="messages".',
+      )
+      .optional(),
+    partIndex: z
+      .number()
+      .int()
+      .min(0)
+      .describe(
+        'Fetch a single part from the cursor message by its positional index. When provided, returns only that part at high detail. Indices are shown as [p0], [p1], etc. in recall results.',
+      )
+      .optional(),
+  }),
+);
+
 export const recallTool = (
   _memoryConfig?: MemoryConfigInternal,
   options?: { retrievalScope?: 'thread' | 'resource' },
@@ -1158,98 +1318,7 @@ export const recallTool = (
   return createTool({
     id: 'recall',
     description,
-    inputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        ...(isResourceScope
-          ? {
-              mode: {
-                type: 'string',
-                enum: ['messages', 'threads', 'search'],
-                description:
-                  'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
-              },
-              threadId: {
-                type: 'string',
-                minLength: 1,
-                description:
-                  'Browse a different thread, or "current" for the active thread. Use mode="threads" first to discover thread IDs.',
-              },
-              before: {
-                type: 'string',
-                description:
-                  'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
-              },
-              after: {
-                type: 'string',
-                description:
-                  'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
-              },
-            }
-          : {
-              mode: {
-                type: 'string',
-                enum: ['messages', 'threads', 'search'],
-                description:
-                  'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
-              },
-            }),
-        query: {
-          type: 'string',
-          minLength: 1,
-          description: 'Search query for mode="search". Finds messages semantically similar to this text.',
-        },
-        cursor: {
-          type: 'string',
-          minLength: 1,
-          description:
-            'A message ID to use as the pagination cursor. For mode="messages", omit both cursor and threadId to browse the current thread. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
-        },
-        anchor: {
-          type: 'string',
-          enum: ['start', 'end'],
-          description:
-            'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first) of the thread. Defaults to "start".',
-        },
-        page: {
-          type: 'integer',
-          minimum: -50,
-          maximum: 50,
-          description:
-            'Pagination offset. For messages: positive pages move forward from cursor, negative move backward. For threads: page number (0-indexed). 0 is treated as 1 for messages.',
-        },
-        limit: {
-          type: 'integer',
-          minimum: 1,
-          maximum: 20,
-          description: 'Maximum number of items to return per page. Defaults to 20.',
-        },
-        detail: {
-          type: 'string',
-          enum: ['low', 'high'],
-          description:
-            'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
-        },
-        partType: {
-          type: 'string',
-          enum: ['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'],
-          description: 'Filter results to only include parts of this type. Only applies to mode="messages".',
-        },
-        toolName: {
-          type: 'string',
-          minLength: 1,
-          description:
-            'Filter results to only include tool-call and tool-result parts matching this tool name. Only applies to mode="messages".',
-        },
-        partIndex: {
-          type: 'integer',
-          minimum: 0,
-          description:
-            'Fetch a single part from the cursor message by its positional index. When provided, returns only that part at high detail. Indices are shown as [p0], [p1], etc. in recall results.',
-        },
-      },
-    } satisfies JSONSchema7,
+    inputSchema: isResourceScope ? resourceRecallInputSchema : threadRecallInputSchema,
     execute: async (inputData, context) => {
       const {
         mode,
