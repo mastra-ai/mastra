@@ -54,7 +54,13 @@ export function resolveBackgroundConfig({
   const agentToolConfig = resolveAgentToolConfig(toolName, agentConfig);
 
   // --- enabled ---
-  const enabled = llmOverride?.enabled ?? agentToolConfig?.enabled ?? toolConfig?.enabled ?? false;
+  // The LLM `_background` override is a modifier on tools the developer has
+  // already opted in at the tool or agent layer — it is NOT a standalone
+  // opt-in. A foreground-only tool must stay foreground regardless of what
+  // the model emits, so `agent.generate()` / `agent.stream()` keep returning
+  // real tool results for deterministic tools. See issue #16783.
+  const baseEnabled = agentToolConfig?.enabled ?? toolConfig?.enabled ?? false;
+  const enabled = baseEnabled ? (llmOverride?.enabled ?? true) : false;
 
   // --- timeoutMs ---
   const timeoutMs =
