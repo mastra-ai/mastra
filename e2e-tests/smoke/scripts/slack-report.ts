@@ -231,7 +231,7 @@ function collectPlaywrightFailures(suites: PlaywrightSuite[], parentFile = ''): 
         source: 'UI',
         title: spec.title,
         file,
-        error: (failedResult.error?.message?.split('\n')[0] || 'Unknown error').replace(/\x1b\[[0-9;]*m/g, ''),
+        error: extractFailureSummary(failedResult.error?.message || 'Unknown error'),
         videoPath,
       });
     }
@@ -242,6 +242,40 @@ function collectPlaywrightFailures(suites: PlaywrightSuite[], parentFile = ''): 
   }
 
   return failures;
+}
+
+function extractFailureSummary(message: string): string {
+  // Strip ANSI color codes
+  const stripped = message.replace(/\x1b\[[0-9;]*m/g, '');
+  const lines = stripped.split('\n');
+
+  const kept: string[] = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const t = raw.trim();
+    if (!t) continue;
+
+    // Skip stack frames, code snippet lines, and file path pointers
+    if (/^at\s/.test(t)) continue;
+    if (/^\s*\d+\s*\|/.test(raw)) continue;
+    if (/^[\^~]+$/.test(t)) continue;
+    if (/^❯\s/.test(t)) continue;
+
+    const isInformative =
+      i === 0 ||
+      /^(Error:|AssertionError|Locator:|Expected|Received|Timeout|Call log|TimeoutError|expect\()/i.test(t);
+
+    if (!isInformative) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    kept.push(t);
+    if (kept.length >= 5) break;
+  }
+
+  const summary = kept.join(' · ');
+  return summary || stripped.split('\n')[0] || 'Unknown error';
 }
 
 function findVideo(_specTitle: string, testTitle: string): string | null {
@@ -271,13 +305,13 @@ function collectVitestFailures(report: VitestReport): FailedTest[] {
     for (const assertion of testResult.assertionResults) {
       if (assertion.status !== 'failed') continue;
 
-      const errorMsg = assertion.failureMessages?.[0]?.split('\n')[0] || 'Unknown error';
+      const errorMsg = assertion.failureMessages?.[0] || 'Unknown error';
 
       failures.push({
         source: 'API',
         title: assertion.fullName,
         file: testResult.name,
-        error: errorMsg.replace(/\x1b\[[0-9;]*m/g, ''),
+        error: extractFailureSummary(errorMsg),
         videoPath: null,
       });
     }
@@ -429,7 +463,7 @@ async function main() {
     let shown = 0;
 
     for (const f of allFailures) {
-      const error = f.error.length > 120 ? f.error.slice(0, 120) + '…' : f.error;
+      const error = f.error.length > 280 ? f.error.slice(0, 280) + '…' : f.error;
       // Escape chars that break Slack mrkdwn inside the error string
       const safeError = error.replace(/[*_~`<>]/g, c => `\\${c}`);
       const entry = `• [${f.source}] \`${f.file}\`\n   ${f.title}\n   _${safeError}_`;
