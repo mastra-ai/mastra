@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "d193ba3251eb3b82",
+      "hash": "94dd74e277d85b66",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -66,7 +66,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -489,7 +489,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -997,7 +997,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -1362,7 +1362,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -1870,7 +1870,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",

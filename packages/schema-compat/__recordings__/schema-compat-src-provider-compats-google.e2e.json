@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "6cfe65fc154e6243",
+      "hash": "73781c32f1e396ad",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
@@ -81,7 +81,7 @@
                   "type": "string"
                 },
                 "stringCuid": {
-                  "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                  "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                   "format": "cuid",
                   "type": "string"
                 },
@@ -421,7 +421,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },
@@ -937,7 +937,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },
@@ -1275,7 +1275,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },
@@ -1791,7 +1791,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },

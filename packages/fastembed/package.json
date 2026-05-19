@@ -45,9 +45,6 @@
     "progress": "^2.0.3",
     "tar": "^7.5.15"
   },
-  "peerDependencies": {
-    "zod": "^3.25.0 || ^4.0.0"
-  },
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
