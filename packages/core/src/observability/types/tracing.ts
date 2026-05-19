@@ -97,7 +97,19 @@ export { EntityType };
 /**
  * Base attributes that all spans can have
  */
-export interface AIBaseAttributes {}
+export interface AIBaseAttributes {
+  /**
+   * Token usage rolled up from internal descendant spans whose own
+   * MODEL_GENERATION spans are filtered from the exported trace (e.g.
+   * Mastra-owned processors that run with `tracingPolicy.internal`).
+   *
+   * Accumulated on the closest exported ancestor at descendant-end time,
+   * so cost / token attribution survives even when the descendant model
+   * spans themselves are hidden. Token-usage metrics auto-extract from
+   * this field on the ancestor when present.
+   */
+  internalUsage?: UsageStats;
+}
 
 /**
  * Agent Run attributes

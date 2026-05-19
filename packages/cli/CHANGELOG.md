@@ -1,5 +1,36 @@
 # mastra
 
+## 1.9.4-alpha.2
+
+### Patch Changes
+
+- Bumped the `@mastra/core` peer dependency floor from `>=1.32.0-0` to `>=1.34.0-0`. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+- Fixed several issues with the studio playground's browser-stream connection: ([#16668](https://github.com/mastra-ai/mastra/pull/16668))
+  - Studio no longer opens a browser-stream connection for agents that don't have any browser tools, so there are no more failed connection attempts or sidebar flicker on regular agent chats.
+  - Agents that do have browser tools now wait until a session actually exists before connecting, so opening a chat no longer triggers reconnect storms when no browser activity is happening yet.
+  - The screencast viewer no longer makes the rest of the chat UI re-render on every incoming frame, so scrolling, sidebars, and status indicators stay smooth while a browser session is live.
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`6b25032`](https://github.com/mastra-ai/mastra/commit/6b250329fa4795b4d085cba4077c7998893c1d59), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/deployer@1.36.0-alpha.2
+
+## 1.9.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25)]:
+  - @mastra/core@1.36.0-alpha.1
+  - @mastra/deployer@1.36.0-alpha.1
+
+## 1.9.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33)]:
+  - @mastra/core@1.36.0-alpha.0
+  - @mastra/deployer@1.36.0-alpha.0
+
 ## 1.9.3
 
 ### Patch Changes
