@@ -9,10 +9,6 @@ import {
   PropertyFilterCreator,
   SpanDataPanelView,
   Switch,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
@@ -292,26 +288,20 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             <Label htmlFor="show-subtraces">Show subtraces</Label>
           </>
         )}
-        <TooltipProvider delayDuration={0}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={() => setAutoRefetchTraces(!autoRefetchTraces)}
-                aria-label="Toggle auto-refetch"
-                aria-pressed={autoRefetchTraces}
-              >
-                {autoRefetchTraces ? (
-                  <RefreshCw className={`h-4 w-4 ${isRefetchingTraces ? 'animate-spin' : ''}`} />
-                ) : (
-                  <CircleSlash2 className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{autoRefetchTraces ? 'Auto-refetch ON' : 'Auto-refetch OFF'}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Button
+          variant="ghost"
+          size="md"
+          onClick={() => setAutoRefetchTraces(!autoRefetchTraces)}
+          aria-label="Toggle auto-refetch"
+          aria-pressed={autoRefetchTraces}
+          tooltip={autoRefetchTraces ? 'Auto-refetch ON' : 'Auto-refetch OFF'}
+        >
+          {autoRefetchTraces ? (
+            <RefreshCw className={`h-4 w-4 ${isRefetchingTraces ? 'animate-spin' : ''}`} />
+          ) : (
+            <CircleSlash2 className="h-4 w-4" />
+          )}
+        </Button>
       </div>
     </>
   );
