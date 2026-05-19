@@ -20,6 +20,7 @@ import type {
   Experiment,
   ExperimentResult,
 } from '../types';
+import type { AgentRun, AgentRunEvent } from './agent-runs';
 import type { AgentVersion } from './agents';
 import type { MCPClientVersion } from './mcp-clients';
 import type { MCPServerVersion } from './mcp-servers';
@@ -80,6 +81,8 @@ export class InMemoryDB {
    * within the same synchronous block.
    */
   readonly favorites = new Map<string, StorageFavoriteType>();
+  readonly agentRuns = new Map<string, AgentRun>();
+  readonly agentRunEvents = new Map<string, AgentRunEvent[]>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -136,6 +139,8 @@ export class InMemoryDB {
     this.skills.clear();
     this.skillVersions.clear();
     this.favorites.clear();
+    this.agentRuns.clear();
+    this.agentRunEvents.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();

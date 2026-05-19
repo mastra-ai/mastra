@@ -1,5 +1,6 @@
 import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
+import { InMemoryAgentRunsStorage } from './domains/agent-runs/inmemory';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { BackgroundTasksInMemory } from './domains/background-tasks/inmemory';
 import { InMemoryBlobStore } from './domains/blobs/inmemory';
@@ -76,6 +77,7 @@ export class InMemoryStore extends MastraCompositeStore {
       blobs: new InMemoryBlobStore(),
       backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
       schedules: new InMemorySchedulesStorage({ db: this.#db }),
+      agentRuns: new InMemoryAgentRunsStorage({ db: this.#db }),
     };
   }
 

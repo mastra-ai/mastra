@@ -1,5 +1,6 @@
 export * from './base';
 export * from './versioned';
+export * from './agent-runs';
 export * from './agents';
 export * from './channels';
 export * from './prompt-blocks';
@@ -20,5 +21,4 @@ export * from './shared';
 export * from './datasets';
 export * from './experiments';
 export * from './background-tasks';
-export * from './schedules';
 export * from './schedules';
