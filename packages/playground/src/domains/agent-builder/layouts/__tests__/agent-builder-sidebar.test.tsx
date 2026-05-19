@@ -10,6 +10,14 @@ globalThis.ResizeObserver ??= class ResizeObserver {
   unobserve() {}
   disconnect() {}
 } as unknown as typeof globalThis.ResizeObserver;
+
+// jsdom also lacks `Element.getAnimations`, which @base-ui's ScrollArea
+// viewport calls on a timer. Stub it to an empty list to avoid unhandled errors.
+if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !== 'function') {
+  Element.prototype.getAnimations = function getAnimations() {
+    return [] as Animation[];
+  };
+}
 import { AgentBuilderSidebar } from '../agent-builder-sidebar';
 import { LinkComponentProvider } from '@/lib/framework';
 
@@ -40,6 +48,23 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
 
 vi.mock('@/domains/auth/hooks', () => ({
   useAuthCapabilities: () => ({ data: undefined, isLoading: false }),
+}));
+
+// `usePermissions` imports `useAuthCapabilities` directly (not via the barrel),
+// so we also mock the direct path. Otherwise the hook hits `useQuery` without a
+// `QueryClientProvider` in the sidebar test harness.
+vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
+  useAuthCapabilities: () => ({ data: undefined, isLoading: false }),
+}));
+
+// `usePermissions` also calls `useRoleImpersonation`, which depends on a
+// react-query client. Stub it to a permissive default for the sidebar tests.
+vi.mock('@/domains/auth/hooks/use-role-impersonation', () => ({
+  useRoleImpersonation: () => ({
+    impersonatedRole: null,
+    setImpersonatedRole: () => {},
+    clearImpersonation: () => {},
+  }),
 }));
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -112,27 +137,22 @@ describe('AgentBuilderSidebar', () => {
     renderSidebar('/agent-builder/library');
 
     const libraryLink = await screen.findByRole('link', { name: /Library/i });
-    const libraryItem = libraryLink.closest('li');
-    expect(libraryItem?.className).toMatch(/before:absolute/);
+    expect(libraryLink.className).toMatch(/bg-sidebar-nav-active/);
 
     const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-    const agentsItem = agentsLink.closest('li');
-    expect(agentsItem?.className).not.toMatch(/before:absolute/);
+    expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
   });
 
   it('marks the Favorites link active when on /agent-builder/favorite', async () => {
     renderSidebar('/agent-builder/favorite');
 
     const favoritesLink = await screen.findByRole('link', { name: /Favorites/i });
-    const favoritesItem = favoritesLink.closest('li');
-    expect(favoritesItem?.className).toMatch(/before:absolute/);
+    expect(favoritesLink.className).toMatch(/bg-sidebar-nav-active/);
 
     const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-    const agentsItem = agentsLink.closest('li');
-    expect(agentsItem?.className).not.toMatch(/before:absolute/);
+    expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
 
     const libraryLink = await screen.findByRole('link', { name: /Library/i });
-    const libraryItem = libraryLink.closest('li');
-    expect(libraryItem?.className).not.toMatch(/before:absolute/);
+    expect(libraryLink.className).not.toMatch(/bg-sidebar-nav-active/);
   });
 });
