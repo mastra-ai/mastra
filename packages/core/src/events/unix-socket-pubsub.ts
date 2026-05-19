@@ -122,9 +122,17 @@ export class UnixSocketPubSub extends PubSub {
     callbacks.add(cb);
     this.#callbacks.set(topic, callbacks);
 
-    await this.#ensureStarted();
-    if (!this.#isBroker) {
-      await this.#sendSubscribeToBroker(topic);
+    try {
+      await this.#ensureStarted();
+      if (!this.#isBroker) {
+        await this.#sendSubscribeToBroker(topic);
+      }
+    } catch (error) {
+      callbacks.delete(cb);
+      if (callbacks.size === 0) {
+        this.#callbacks.delete(topic);
+      }
+      throw error;
     }
   }
 
@@ -373,8 +381,6 @@ export class UnixSocketPubSub extends PubSub {
     if (!activeSocket || activeSocket.destroyed) {
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
-    const write = writeFrame(activeSocket, frame);
-    this.#pendingWrites.push(write);
-    await write;
+    await writeFrame(activeSocket, frame);
   }
 }

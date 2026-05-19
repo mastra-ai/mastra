@@ -80,12 +80,16 @@ describe('UnixSocketPubSub', () => {
     });
     const pubsub = new UnixSocketPubSub(path);
     pubsubs.push(pubsub);
+    const cb = vi.fn();
 
     try {
-      await expect(pubsub.subscribe('topic-a', vi.fn())).rejects.toThrow('broker connection closed');
+      await expect(pubsub.subscribe('topic-a', cb)).rejects.toThrow('broker connection closed');
     } finally {
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
+
+    await pubsub.publish('topic-a', makeEvent({ type: 'after-failed-subscribe' }));
+    expect(cb).not.toHaveBeenCalled();
   });
 
   it('promotes another instance after the broker closes', async () => {
