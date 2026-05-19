@@ -101,6 +101,7 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleModelsPackCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleModelsPackCommand).toHaveBeenCalledWith(ctx);
     expect(mocks.trackCommand).toHaveBeenCalledWith('models', {
+      action: 'attempted',
       threadId: 'thread-1',
       resourceId: 'resource-1',
       mode: 'build',
@@ -124,6 +125,7 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleCustomProvidersCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleCustomProvidersCommand).toHaveBeenCalledWith(ctx);
     expect(mocks.trackCommand).toHaveBeenCalledWith('custom-providers', {
+      action: 'attempted',
       threadId: 'thread-1',
       resourceId: 'resource-1',
       mode: 'build',
@@ -351,6 +353,7 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleModelsPackCommand).not.toHaveBeenCalled();
     expect(mocks.processSlashCommand).not.toHaveBeenCalled();
     expect(mocks.trackCommand).toHaveBeenCalledWith('new', {
+      action: 'attempted',
       threadId: null,
       resourceId: 'resource-1',
       mode: 'build',

@@ -67,6 +67,7 @@ export async function dispatchSlashCommand(
   const trackCommand = (ctx: SlashCommandContext, command: string) => {
     if (!TRACKED_COMMANDS.has(command)) return;
     ctx.analytics?.trackCommand(command, {
+      action: 'attempted',
       threadId: state.harness.getCurrentThreadId(),
       resourceId: state.harness.getResourceId(),
       mode: state.harness.getCurrentModeId(),

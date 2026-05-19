@@ -21,7 +21,7 @@ let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
-let analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
+let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
@@ -82,6 +82,7 @@ async function tuiMain(pipedInput?: string | null) {
   }
   applyThemeMode(themeMode, detectedBgHex);
 
+  analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {
     mode: harness.getCurrentModeId(),
     resourceId: harness.getResourceId(),
@@ -118,7 +119,7 @@ async function tuiMain(pipedInput?: string | null) {
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), analytics.shutdown()]);
+  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), analytics?.shutdown()]);
 };
 
 process.on('beforeExit', () => {
