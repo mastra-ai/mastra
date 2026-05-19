@@ -846,6 +846,32 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
   ];
   readonly ambient: readonly ['moonshotai/kimi-k2.6', 'zai-org/GLM-5.1-FP8'];
+  readonly 'routing-run': readonly [
+    'route/deepseek-v3.2',
+    'route/deepseek-v4-flash',
+    'route/deepseek-v4-flash-6bit',
+    'route/deepseek-v4-pro',
+    'route/deepseek-v4-pro-6bit',
+    'route/gemma-4-31b-it',
+    'route/glm-5.1',
+    'route/glm-5.1-6bit',
+    'route/kimi-k2.5',
+    'route/kimi-k2.6',
+    'route/kimi-k2.6-6bit',
+    'route/mimo-v2.5-pro',
+    'route/mimo-v2.5-pro-6bit',
+    'route/minimax-m2.5',
+    'route/minimax-m2.5-highspeed',
+    'route/minimax-m2.7',
+    'route/minimax-m2.7-highspeed',
+    'route/mistral-large-3',
+    'route/mistral-medium-2505',
+    'route/mistral-small-2503',
+    'route/qwen3.6-27b',
+    'route/step-3.5-flash',
+    'route/step-3.5-flash-2603',
+    'route/stepfun-3.5-flash',
+  ];
   readonly 'the-grid-ai': readonly ['text-max', 'text-prime', 'text-standard'];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
@@ -948,7 +974,6 @@ export type ProviderModelsMap = {
     'llama-4-scout-17b-16e-instruct-fp8',
   ];
   readonly 'novita-ai': readonly [
-    'Sao10K/L3-8B-Stheno-v3.2',
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
     'baidu/ernie-4.5-21B-a3b-thinking',
@@ -1033,9 +1058,10 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-27b',
     'qwen/qwen3.5-35b-a3b',
     'qwen/qwen3.5-397b-a17b',
-    'sao10k/l3-70b-euryale-v2.1',
-    'sao10k/l3-8b-lunaris',
-    'sao10k/l31-70b-euryale-v2.2',
+    'sao10K/L3-8B-stheno-v3.2',
+    'sao10K/l3-70b-euryale-v2.1',
+    'sao10K/l3-8b-lunaris',
+    'sao10K/l31-70b-euryale-v2.2',
     'xiaomimimo/mimo-v2-flash',
     'zai-org/autoglm-phone-9b-multilingual',
     'zai-org/glm-4.5',
@@ -4269,6 +4295,7 @@ export type ProviderModelsMap = {
     'gemini/gemini-3.1-flash-lite-preview',
     'gemini/gemini-3.1-pro-preview',
     'gemini/gemini-3.1-pro-preview-customtools',
+    'gemini/gemini-3.5-flash',
     'gemini/gemini-flash-latest',
     'gemini/gemini-flash-lite-latest',
     'openai/chat-latest',

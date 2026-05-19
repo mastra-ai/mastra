@@ -1089,7 +1089,7 @@ This is a **Mastra** project written in TypeScript. Mastra is a framework for bu
 
 \`\`\`bash
 npm run dev # Start Mastra Studio at localhost:4111 (long-running, use a separate terminal)
-npm run build # Build a production-ready server
+npm run build # Build a production-ready server (use a separate terminal)
 \`\`\`
 
 ## Project Structure

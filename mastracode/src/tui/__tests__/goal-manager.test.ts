@@ -85,15 +85,45 @@ describe('GoalManager', () => {
     mocks.createWorkspaceTools.mockReset();
   });
 
-  it('preserves turn count when resuming a paused goal', () => {
+  it('preserves turn count and accumulated active duration when resuming a paused goal', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
     const manager = new GoalManager();
     const goal = manager.setGoal('finish the task', 'openai/gpt-5.5');
     goal.turnsUsed = 3;
+    vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
     manager.pause();
 
+    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
     manager.resume();
+    vi.setSystemTime(new Date('2026-05-15T12:02:00.000Z'));
+    manager.stopActiveTimer();
 
-    expect(manager.getGoal()).toMatchObject({ status: 'active', turnsUsed: 3 });
+    expect(manager.getGoal()).toMatchObject({ status: 'active', turnsUsed: 3, activeDurationMs: 7 * 60_000 });
+    vi.useRealTimers();
+  });
+
+  it('does not keep counting a persisted active timer after restart', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T15:00:00.000Z'));
+    const manager = new GoalManager();
+
+    manager.loadFromThreadMetadata({
+      goal: {
+        id: 'goal-1',
+        objective: 'finish the task',
+        status: 'active',
+        turnsUsed: 1,
+        maxTurns: 20,
+        judgeModelId: 'openai/gpt-5.5',
+        startedAt: '2026-05-15T10:00:00.000Z',
+        activeStartedAt: '2026-05-15T10:00:00.000Z',
+        activeDurationMs: 10 * 60_000,
+      },
+    });
+
+    expect(manager.getGoal()).toMatchObject({ activeDurationMs: 10 * 60_000, activeStartedAt: undefined });
+    vi.useRealTimers();
   });
 
   it('updates judge defaults on the current goal without resetting progress', () => {
@@ -334,6 +364,29 @@ describe('GoalManager', () => {
     ]);
   });
 
+  it('keeps active goal timing running when the judge says to continue', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+    mocks.stream.mockResolvedValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+      getFullOutput: vi.fn().mockResolvedValue({ object: { decision: 'continue', reason: 'Need one more step.' } }),
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.5');
+    vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
+
+    const result = await manager.evaluateAfterTurn(createState());
+
+    expect(result.continuation).toContain('Need one more step.');
+    expect(manager.getGoal()).toMatchObject({ status: 'active', turnsUsed: 1, activeDurationMs: 0 });
+    expect(manager.getGoal()?.activeStartedAt).toBe('2026-05-15T10:00:00.000Z');
+    vi.useRealTimers();
+  });
+
   it('does not auto-continue when the judge says the assistant is waiting on the user', async () => {
     mocks.stream.mockResolvedValue({
       consumeStream: vi.fn().mockResolvedValue(undefined),
@@ -360,6 +413,8 @@ describe('GoalManager', () => {
     });
     expect(manager.getGoal()?.status).toBe('active');
     expect(manager.getGoal()?.turnsUsed).toBe(0);
+    expect(manager.getGoal()?.activeStartedAt).toBeUndefined();
+    expect(manager.getGoal()?.activeDurationMs).toBeGreaterThanOrEqual(0);
   });
 
   it('tells the judge to keep waiting when the last waiting checkpoint gets a user question', async () => {
