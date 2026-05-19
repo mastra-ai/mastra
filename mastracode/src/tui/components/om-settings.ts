@@ -321,7 +321,7 @@ export class OMSettingsComponent extends Box implements Focusable {
       },
       {
         id: 'observe-attachments',
-        label: 'Observer attachments',
+        label: 'Observe attachments',
         description:
           'Forward image and file attachments to the Observer LLM. ' +
           'Turn off when using a text-only observer model — placeholder text is preserved either way',

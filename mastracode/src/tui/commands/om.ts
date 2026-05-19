@@ -129,7 +129,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         onObserveAttachmentsChange: async enabled => {
           await ctx.state.harness.setState({ observeAttachments: enabled } as any);
           persistOmObserveAttachments(enabled);
-          ctx.showInfo(`Observer attachments → ${enabled ? 'on' : 'off'}`);
+          ctx.showInfo(`Observe attachments → ${enabled ? 'on' : 'off'}`);
         },
         onClose: () => {
           ctx.state.ui.hideOverlay();
