@@ -49,7 +49,7 @@ describe('ChatBoundarySpacer', () => {
     insertChatComponentWithBoundarySpacing(container, quietTool('view'));
     insertChatComponentWithBoundarySpacing(container, assistant());
 
-    expect(container.render(100).filter(line => line === '')).toHaveLength(1);
+    expect(container.render(100).filter(line => line === '')).toHaveLength(3);
   });
 
   it('does not space singleton tool changes across empty streaming message placeholders', () => {
@@ -158,9 +158,14 @@ describe('ChatBoundarySpacer', () => {
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
-  it('renders one blank line between a same-tool quiet run and assistant text', () => {
+  it('renders extra blank lines between a same-tool quiet run and assistant text', () => {
     const lines = renderSequence([quietTool('view'), quietTool('view'), assistant()]);
-    expect(lines.filter(line => line === '')).toHaveLength(1);
+    expect(lines.filter(line => line === '')).toHaveLength(3);
+  });
+
+  it('renders extra blank lines between assistant text and a quiet tool', () => {
+    const lines = renderSequence([assistant(), quietTool('view')]);
+    expect(lines.filter(line => line === '')).toHaveLength(3);
   });
 
   it('renders one blank line between user message and assistant text', () => {
