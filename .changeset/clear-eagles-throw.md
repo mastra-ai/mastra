@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `ContextMenu` to the design system. Built on Base UI, exposes a namespaced API (`ContextMenu.Trigger`, `.Content`, `.Item`, `.CheckboxItem`, `.RadioItem`, `.Label`, `.Separator`, `.Shortcut`, `.Group`, `.Sub`/`.SubTrigger`/`.SubContent`, `.RadioGroup`, `.Portal`), supports a destructive variant on `Item`, and mirrors the visual style of `DropdownMenu`.
+Added `ContextMenu` for right-click interactions. Supports submenus, checkbox and radio items, keyboard shortcuts, and a `destructive` variant for dangerous actions like delete.
 
 ```tsx
 import { ContextMenu } from '@mastra/playground-ui';
