@@ -20,8 +20,8 @@ import type {
   Experiment,
   ExperimentResult,
 } from '../types';
-import type { AgentVersion } from './agents';
 import type { AgentRun, AgentRunEvent } from './agent-runs';
+import type { AgentVersion } from './agents';
 import type { MCPClientVersion } from './mcp-clients';
 import type { MCPServerVersion } from './mcp-servers';
 import type { TraceEntry } from './observability';
