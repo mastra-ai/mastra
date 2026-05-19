@@ -6,7 +6,7 @@ import { TABLE_LOG_EVENTS, TABLE_LOG_EVENTS_DELTA } from './ddl';
 import { buildLogsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, logRecordToRow, rowToLogRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingFeatureEnabled, validateCursorId } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreateLogsArgs): Promise<void> {
   if (args.logs.length === 0) return;
@@ -25,7 +25,7 @@ export async function listLogs(
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListLogsResponse> {
   const parsed = listLogsArgsSchema.parse(args);
-  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildLogsFilterConditions(parsed.filters, 'l');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'l');

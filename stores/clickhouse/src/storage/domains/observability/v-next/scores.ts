@@ -24,7 +24,7 @@ import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByC
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingFeatureEnabled, validateCursorId } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -184,7 +184,7 @@ export async function listScores(
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListScoresResponse> {
   const parsed = listScoresArgsSchema.parse(args);
-  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildScoresFilterConditions(parsed.filters, 's');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp', 'score'], parsed.orderBy, 's');

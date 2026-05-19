@@ -118,7 +118,7 @@ import * as logsOps from './logs';
 import * as metricsOps from './metrics';
 import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { deltaPollingFeatureEnabled } from './polling';
+import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
@@ -488,7 +488,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled() || this.#deltaCursorStrategy === null) {
+    if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
       return undefined;
     }
 

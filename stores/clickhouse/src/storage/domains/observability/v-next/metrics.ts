@@ -29,7 +29,7 @@ import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderBy
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingFeatureEnabled, validateCursorId } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -265,7 +265,7 @@ export async function listMetrics(
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListMetricsResponse> {
   const parsed = listMetricsArgsSchema.parse(args);
-  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildMetricsFilterConditions(parsed.filters, 'm');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'm');

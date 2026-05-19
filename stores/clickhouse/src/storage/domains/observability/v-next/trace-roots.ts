@@ -19,7 +19,7 @@ import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from '.
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
 import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingFeatureEnabled, validateCursorId } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -191,7 +191,7 @@ export async function listTraces(
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
 
   if (mode === 'delta') {
     assertDeltaPollingSupported(strategy);

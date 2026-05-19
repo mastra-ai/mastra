@@ -23,7 +23,7 @@ import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderB
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingFeatureEnabled, validateCursorId } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -188,7 +188,7 @@ export async function listFeedback(
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListFeedbackResponse> {
   const parsed = listFeedbackArgsSchema.parse(args);
-  const deltaCursorEnabled = deltaPollingFeatureEnabled() && strategy !== null;
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildFeedbackFilterConditions(parsed.filters, 'f');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'f');
