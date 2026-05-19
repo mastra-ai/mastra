@@ -88,11 +88,16 @@ function createRuntimeState(): AgentThreadRuntimeState {
 }
 
 export class AgentThreadStreamRuntime {
-  #id = randomUUID();
+  #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
 
   #getPubSub(pubsub?: PubSub): PubSub {
     return pubsub ?? defaultAgentThreadPubSub;
+  }
+
+  #getSourceId(): string {
+    this.#id ??= randomUUID();
+    return this.#id;
   }
 
   #getState(pubsub?: PubSub): AgentThreadRuntimeState {
@@ -143,7 +148,7 @@ export class AgentThreadStreamRuntime {
                   type: 'stream-part',
                   runId: output.runId,
                   part,
-                  sourceId: runtime.#id,
+                  sourceId: runtime.#getSourceId(),
                 });
                 controller.enqueue(part);
               },
@@ -157,7 +162,7 @@ export class AgentThreadStreamRuntime {
                     type: 'stream-part',
                     runId: output.runId,
                     part,
-                    sourceId: runtime.#id,
+                    sourceId: runtime.#getSourceId(),
                   });
                   controller.enqueue(part);
                 }
@@ -733,7 +738,7 @@ export class AgentThreadStreamRuntime {
             type: 'signal-enqueued',
             runId,
             signal: this.#serializeSignal(signal),
-            sourceId: this.#id,
+            sourceId: this.#getSourceId(),
           });
           this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
           return { accepted: true, runId, signal };
@@ -752,7 +757,7 @@ export class AgentThreadStreamRuntime {
           type: 'signal-enqueued',
           runId,
           signal: this.#serializeSignal(signal),
-          sourceId: this.#id,
+          sourceId: this.#getSourceId(),
         });
         return { accepted: true, runId, signal };
       }

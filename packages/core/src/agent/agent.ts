@@ -314,6 +314,7 @@ export class Agent<
   maxRetries?: number;
   #mastra?: Mastra;
   #pubsub?: PubSub;
+  #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
@@ -547,7 +548,7 @@ export class Agent<
   }
 
   getPubSub() {
-    return this.#pubsub ?? this.#mastra?.pubsub;
+    return this.#pubsub ?? this.#inheritedPubSub ?? this.#mastra?.pubsub;
   }
 
   hasOwnPubSub(): boolean {
@@ -2637,7 +2638,7 @@ export class Agent<
   }
 
   public __setPubSub(pubsub: PubSub) {
-    this.#pubsub = pubsub;
+    this.#inheritedPubSub = pubsub;
   }
 
   public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext>) {

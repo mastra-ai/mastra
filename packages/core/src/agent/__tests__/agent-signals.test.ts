@@ -955,6 +955,20 @@ describe('Agent signals', () => {
     await parent.listAgents();
 
     expect(child.getPubSub()).toBe(pubsub);
+
+    const secondPubSub = new EventEmitterPubSub();
+    const secondParent = new Agent({
+      id: 'second-standalone-parent-agent',
+      name: 'Second Standalone Parent Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('second parent response'),
+      pubsub: secondPubSub,
+      agents: { child },
+    });
+
+    await secondParent.listAgents();
+
+    expect(child.getPubSub()).toBe(secondPubSub);
   });
 
   it('isolates standalone agents that use different injected pubsubs', async () => {
