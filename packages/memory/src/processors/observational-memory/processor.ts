@@ -161,7 +161,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId ? { provider: model.provider, modelId: model.modelId } : undefined;
+    const actorModelContext = model?.modelId
+      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+      : undefined;
     state.__omActorModelContext = actorModelContext;
 
     return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
