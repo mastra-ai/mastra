@@ -95,6 +95,9 @@ const EditPageBody = () => {
 const EditTopBarSlot = () => {
   const { autosave, onModeToggle, canPublishToChannel, agentId, isOwner } = useEditPage();
   const isRunning = useStreamRunning();
+  const { data: capabilities } = useAuthCapabilities();
+  const { control } = useFormContext<AgentBuilderEditFormValues>();
+  const name = useWatch({ control, name: 'name' }) ?? '';
 
   return (
     <EditTopBar
@@ -108,30 +111,13 @@ const EditTopBarSlot = () => {
       modeAction={
         <div className="hidden lg:flex items-center gap-2">
           {canPublishToChannel && <PublishToChannelButton agentId={agentId} />}
-          <VisibilitySelectSlot />
-          {isOwner && <DeleteAgentSlot />}
+          {capabilities?.enabled && <VisibilitySelect agentId={agentId} />}
+          {isOwner && <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />}
         </div>
       }
       mobileExtra={<MobileMenuSlot />}
     />
   );
-};
-
-const VisibilitySelectSlot = () => {
-  const { agentId } = useEditPage();
-  const { data: capabilities } = useAuthCapabilities();
-  if (!capabilities?.enabled) return null;
-
-  return <VisibilitySelect agentId={agentId} />;
-};
-
-const DeleteAgentSlot = () => {
-  const { agentId } = useEditPage();
-  const isRunning = useStreamRunning();
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-  const name = useWatch({ control, name: 'name' }) ?? '';
-
-  return <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />;
 };
 
 const MobileMenuSlot = () => {

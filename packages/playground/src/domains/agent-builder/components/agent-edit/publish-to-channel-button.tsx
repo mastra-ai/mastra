@@ -11,7 +11,7 @@ import {
 import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
 export interface PublishToChannelButtonProps {
-  agentId: string | undefined;
+  agentId: string;
   disabled?: boolean;
 }
 
@@ -21,9 +21,8 @@ export function PublishToChannelButton({ agentId, disabled = false }: PublishToC
   const { data: platforms = [], isLoading } = useChannelPlatforms();
   const [active, setActive] = useState<ChannelTarget | null>(null);
 
-  if (!agentId || isLoading || platforms.length === 0) {
-    return null;
-  }
+  if (isLoading) return null;
+  if (platforms.length === 0) return null;
 
   return (
     <>

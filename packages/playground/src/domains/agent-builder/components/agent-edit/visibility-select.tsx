@@ -12,8 +12,10 @@ export interface VisibilitySelectProps {
 
 export function VisibilitySelect({ agentId }: VisibilitySelectProps) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const value = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
+  const watchValue = useWatch({ control: formMethods.control, name: 'visibility' });
   const { requestChange, dialog } = useVisibilityChange(agentId);
+
+  const value = watchValue ?? 'private';
 
   return (
     <>
