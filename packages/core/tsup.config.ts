@@ -91,7 +91,13 @@ export default defineConfig({
     await new Promise(resolve => setTimeout(resolve, 1000));
     await generateTypes(
       process.cwd(),
-      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types', '@internal/core']),
+      new Set([
+        '@internal/ai-sdk-v4',
+        '@internal/ai-sdk-v5',
+        '@internal/external-types',
+        '@internal/core',
+        '@internal/voice',
+      ]),
     );
 
     // Copy provider-registry.json to dist folder

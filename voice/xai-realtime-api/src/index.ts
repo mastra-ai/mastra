@@ -1,8 +1,6 @@
 import { PassThrough } from 'node:stream';
-import type { ToolsInput } from '@mastra/core/agent';
-import type { RequestContext } from '@mastra/core/request-context';
-import { MastraVoice } from '@mastra/core/voice';
-import type { VoiceConfig, VoiceEventType } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
+import type { RequestContext, ToolsInput, VoiceConfig, VoiceEventType } from '@internal/voice';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import type {

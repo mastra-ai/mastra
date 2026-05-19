@@ -4643,22 +4643,26 @@ export interface GetAgentsAgentIdVoiceSpeakers_RouteContract {
 // ============================================================================
 // Route: GET /agents/:agentId/speakers
 // ============================================================================
+/** @deprecated */
 export type GetAgentsAgentIdSpeakers_PathParams = {
   /** Unique identifier for the agent */
   agentId: string;
 };
 
+/** @deprecated */
 export type GetAgentsAgentIdSpeakers_Response = {
   voiceId: string;
   [x: string]: unknown;
 }[];
 
+/** @deprecated */
 export type GetAgentsAgentIdSpeakers_Request = Simplify<
   (GetAgentsAgentIdSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdSpeakers_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
+/** @deprecated */
 export interface GetAgentsAgentIdSpeakers_RouteContract {
   pathParams: GetAgentsAgentIdSpeakers_PathParams;
   queryParams: never;
@@ -7014,18 +7018,22 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
 // ============================================================================
 // Route: POST /agents/:agentId/speak
 // ============================================================================
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_PathParams = {
   /** Unique identifier for the agent */
   agentId: string;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_Body = {
   text: string;
   speakerId?: string | undefined;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_Response = any;
 
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_Request = Simplify<
   (PostAgentsAgentIdSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdSpeak_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
@@ -7036,6 +7044,7 @@ export type PostAgentsAgentIdSpeak_Request = Simplify<
         : { body: PostAgentsAgentIdSpeak_Body })
 >;
 
+/** @deprecated */
 export interface PostAgentsAgentIdSpeak_RouteContract {
   pathParams: PostAgentsAgentIdSpeak_PathParams;
   queryParams: never;
@@ -7088,11 +7097,13 @@ export interface PostAgentsAgentIdVoiceListen_RouteContract {
 // ============================================================================
 // Route: POST /agents/:agentId/listen
 // ============================================================================
+/** @deprecated */
 export type PostAgentsAgentIdListen_PathParams = {
   /** Unique identifier for the agent */
   agentId: string;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdListen_Body = {
   audio: any;
   options?:
@@ -7102,10 +7113,12 @@ export type PostAgentsAgentIdListen_Body = {
     | undefined;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdListen_Response = {
   text: string;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdListen_Request = Simplify<
   (PostAgentsAgentIdListen_PathParams extends never ? {} : { params: PostAgentsAgentIdListen_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
@@ -7116,6 +7129,7 @@ export type PostAgentsAgentIdListen_Request = Simplify<
         : { body: PostAgentsAgentIdListen_Body })
 >;
 
+/** @deprecated */
 export interface PostAgentsAgentIdListen_RouteContract {
   pathParams: PostAgentsAgentIdListen_PathParams;
   queryParams: never;

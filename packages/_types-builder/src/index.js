@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { builtinModules } from 'node:module';
 import { glob as globby } from 'tinyglobby';
 import fs from 'fs/promises';
 import path from 'path';
@@ -6,6 +7,9 @@ import { statSync } from 'fs';
 import { replaceTypes } from './replace-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
+const importSpecifierRegex =
+  /(?:import|export)\s+(?:type\s+)?(?:[^'\"]*?\s+from\s+)?['\"]([^'\"]+)['\"]|import\(\s*['\"]([^'\"]+)['\"]\s*\)/gm;
+const nodeBuiltinModules = new Set([...builtinModules, ...builtinModules.map(moduleName => `node:${moduleName}`)]);
 
 // pnpm-specific environment variables that npm doesn't recognize
 // These cause "Unknown env config" warnings when passed to npx/npm
@@ -25,15 +29,85 @@ function getFilteredEnv() {
   return Object.fromEntries(Object.entries(process.env).filter(([key]) => !pnpmSpecificEnvVars.has(key)));
 }
 
+function stripComments(code) {
+  return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+function getPackageName(moduleSpecifier) {
+  if (moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/') || nodeBuiltinModules.has(moduleSpecifier)) {
+    return null;
+  }
+
+  if (moduleSpecifier.startsWith('@')) {
+    return moduleSpecifier.split('/').slice(0, 2).join('/');
+  }
+
+  return moduleSpecifier.split('/')[0];
+}
+
+async function validateDeclarationRuntimeImports(rootDir) {
+  const packageJsonPath = path.join(rootDir, 'package.json');
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+  const runtimeDependencies = new Set([
+    ...Object.keys(packageJson.dependencies ?? {}),
+    ...Object.keys(packageJson.peerDependencies ?? {}),
+    ...Object.keys(packageJson.optionalDependencies ?? {}),
+    ...(packageJson.bundleDependencies ?? []),
+    ...(packageJson.bundledDependencies ?? []),
+  ]);
+  const devDependencies = new Set(Object.keys(packageJson.devDependencies ?? {}));
+  const packageName = packageJson.name;
+  const dtsFiles = await globby('dist/**/*.d.ts', {
+    cwd: rootDir,
+    onlyFiles: true,
+  });
+  const invalidImports = [];
+
+  for (const dtsFile of dtsFiles) {
+    const fullPath = path.join(rootDir, dtsFile);
+    const code = stripComments(await fs.readFile(fullPath, 'utf8'));
+
+    for (const match of code.matchAll(importSpecifierRegex)) {
+      const moduleSpecifier = match[1] ?? match[2];
+      const importedPackage = getPackageName(moduleSpecifier);
+
+      if (!importedPackage || importedPackage === packageName || runtimeDependencies.has(importedPackage)) {
+        continue;
+      }
+
+      invalidImports.push({
+        file: dtsFile,
+        moduleSpecifier,
+        importedPackage,
+        reason: devDependencies.has(importedPackage) ? 'devDependency' : 'undeclared dependency',
+      });
+    }
+  }
+
+  if (!invalidImports.length) {
+    return;
+  }
+
+  const details = invalidImports
+    .map(({ file, moduleSpecifier, reason }) => `  - ${file} imports '${moduleSpecifier}' (${reason})`)
+    .join('\n');
+
+  throw new Error(
+    `Generated declaration files reference packages that are not runtime dependencies. ` +
+      `Add the package to generateTypes(..., bundledPackages), move it to dependencies/peerDependencies, or remove it from the public types.\n${details}`,
+  );
+}
+
 // @see https://blog.devgenius.io/compiling-from-typescript-with-js-extension-e2b6de3e6baf
 /**
  * Generate types for the given root directory and bundled packages.
  *
  * @param {string} rootDir
  * @param {Set<string>} bundledPackages
+ * @param {{ validateRuntimeImports?: boolean }} options
  * @returns {Promise<void>}
  */
-export async function generateTypes(rootDir, bundledPackages = new Set()) {
+export async function generateTypes(rootDir, bundledPackages = new Set(), options = {}) {
   try {
     // Use spawn instead of exec to properly inherit stdio
     // Use shell: true for cross-platform compatibility
@@ -101,9 +175,17 @@ export async function generateTypes(rootDir, bundledPackages = new Set()) {
 
       await fs.writeFile(fullPath, code);
     }
+
+    if (options.validateRuntimeImports) {
+      await validateDeclarationRuntimeImports(rootDir);
+    }
   } catch (err) {
     // TypeScript errors are already printed to console via stdio: 'inherit'
-    // Just exit with the same code as tsc
+    if (typeof err.code !== 'number') {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
+
     process.exit(typeof err.code === 'number' ? err.code : 1);
   }
 }
