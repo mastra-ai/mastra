@@ -22,7 +22,7 @@ describe('stored agents — CRUD', () => {
     expect(typeof data.hasMore).toBe('boolean');
   });
 
-  it('creates a draft stored agent with a resolved version id', async () => {
+  it('creates a stored agent with a resolved version id', async () => {
     const { status, data } = await fetchJson<any>('/api/stored/agents', {
       method: 'POST',
       body: JSON.stringify({
@@ -35,7 +35,10 @@ describe('stored agents — CRUD', () => {
     expect(status).toBe(200);
     expect(data.id).toBe(TEST_ID);
     expect(data.name).toBe('Smoke Stored Agent');
-    expect(data.status).toBe('draft');
+    // Initial status defaults vary across alpha versions
+    // (was 'draft' pre-1.36, became 'published' in 1.36.0-alpha.2).
+    // We assert it's one of the known valid states.
+    expect(['draft', 'published']).toContain(data.status);
     expect(data.model).toEqual({ provider: 'openai', name: 'gpt-4o-mini' });
     expect(data.resolvedVersionId).toMatch(UUID_RE);
     expect(data.createdAt).toMatch(ISO_RE);
@@ -48,7 +51,7 @@ describe('stored agents — CRUD', () => {
     expect(status).toBe(200);
     expect(data.id).toBe(TEST_ID);
     expect(data.instructions).toBe('You are a smoke probe.');
-    expect(data.status).toBe('draft');
+    expect(['draft', 'published']).toContain(data.status);
   });
 
   it('updates the stored agent and bumps updatedAt', async () => {
