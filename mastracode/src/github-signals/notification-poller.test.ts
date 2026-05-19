@@ -306,6 +306,65 @@ describe('GithubNotificationPoller', () => {
     ).toHaveLength(1);
   });
 
+  it('refreshes stale mergeability for a subscribed cached PR row', async () => {
+    const store = createSharedStore();
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'n1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'Stale PR row',
+        subjectType: 'PullRequest',
+        reason: 'author',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        prMergeable: true,
+        prMergeableState: 'blocked',
+        prHeadSha: 'old-sha',
+        prMergeabilityCheckedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/123') {
+        return {
+          stdout: JSON.stringify({
+            state: 'open',
+            merged: false,
+            html_url: 'https://github.com/mastra-ai/mastra/pull/123',
+            mergeable: false,
+            mergeable_state: 'dirty',
+            head: { sha: 'new-sha' },
+          }),
+        };
+      }
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/commits/new-sha/check-runs') {
+        return { stdout: JSON.stringify({ check_runs: [] }) };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const poller = new GithubNotificationPoller({
+      store,
+      commandRunner,
+      accountKey: 'account-1',
+      now: () => new Date('2026-01-01T00:06:00.000Z'),
+    });
+
+    await expect(poller.refreshPullRequestNotifications('mastra-ai/mastra', 123)).resolves.toMatchObject([
+      { id: 'n1', prMergeable: false, prMergeableState: 'dirty', prHeadSha: 'new-sha' },
+    ]);
+
+    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
+      {
+        id: 'n1',
+        failedChecks: [],
+        prMergeable: false,
+        prMergeableState: 'dirty',
+        prHeadSha: 'new-sha',
+        prMergeabilityCheckedAt: '2026-01-01T00:06:00.000Z',
+      },
+    ]);
+  });
+
   it('does not send invalid empty ETags for conditional notification polling', async () => {
     const store = createSharedStore();
     await store.updateAccountState('account-1', { etag: 'W/""' });

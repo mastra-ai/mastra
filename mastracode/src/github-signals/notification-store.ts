@@ -51,6 +51,7 @@ export interface GithubInboxNotification {
   prMergeable?: boolean | null;
   prMergeableState?: string;
   prHeadSha?: string;
+  prMergeabilityCheckedAt?: string;
   updatedAt: string;
   payload?: unknown;
 }
@@ -80,6 +81,7 @@ interface GithubNotificationRow {
   pr_mergeable: number | null;
   pr_mergeable_state: string | null;
   pr_head_sha: string | null;
+  pr_mergeability_checked_at: string | null;
   updated_at: string;
   payload_json: string | null;
 }
@@ -247,8 +249,8 @@ export class GithubNotificationStore {
     for (const notification of notifications) {
       await this.#execute({
         sql: `INSERT INTO github_notifications
-          (account_key, notification_id, repo, pr_number, title, subject_type, reason, url, subject_url, latest_comment_url, comment_author, comment_body, comment_created_at, comment_html_url, failed_checks_json, pr_state, pr_merged, pr_closed_at, pr_merged_at, pr_html_url, pr_mergeable, pr_mergeable_state, pr_head_sha, updated_at, touched_at, payload_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (account_key, notification_id, repo, pr_number, title, subject_type, reason, url, subject_url, latest_comment_url, comment_author, comment_body, comment_created_at, comment_html_url, failed_checks_json, pr_state, pr_merged, pr_closed_at, pr_merged_at, pr_html_url, pr_mergeable, pr_mergeable_state, pr_head_sha, pr_mergeability_checked_at, updated_at, touched_at, payload_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(account_key, notification_id) DO UPDATE SET
             repo = excluded.repo,
             pr_number = excluded.pr_number,
@@ -271,6 +273,7 @@ export class GithubNotificationStore {
             pr_mergeable = excluded.pr_mergeable,
             pr_mergeable_state = excluded.pr_mergeable_state,
             pr_head_sha = excluded.pr_head_sha,
+            pr_mergeability_checked_at = excluded.pr_mergeability_checked_at,
             updated_at = excluded.updated_at,
             touched_at = excluded.touched_at,
             payload_json = excluded.payload_json`,
@@ -302,6 +305,7 @@ export class GithubNotificationStore {
               : 0,
           notification.prMergeableState ?? null,
           notification.prHeadSha ?? null,
+          notification.prMergeabilityCheckedAt ?? null,
           notification.updatedAt,
           now,
           JSON.stringify(notification.payload ?? notification),
@@ -337,6 +341,29 @@ export class GithubNotificationStore {
         ORDER BY updated_at DESC, notification_id DESC
         LIMIT ?`,
       args: [accountKey, minUpdatedAt, MAX_NOTIFICATIONS_PER_PR],
+    });
+    return (result.rows as unknown as GithubNotificationRow[]).map(rowToNotification).reverse();
+  }
+
+  async readPrNotificationsNeedingMergeabilityRefresh(
+    accountKey: string,
+    repo: string,
+    prNumber: number,
+    staleBefore: string,
+  ): Promise<GithubInboxNotification[]> {
+    await this.init();
+    const minUpdatedAt = new Date(this.#now().getTime() - MAX_NOTIFICATION_AGE_MS).toISOString();
+    const result = await this.#execute({
+      sql: `SELECT * FROM github_notifications
+        WHERE account_key = ?
+          AND repo = ?
+          AND pr_number = ?
+          AND lower(subject_type) = 'pullrequest'
+          AND updated_at >= ?
+          AND (pr_mergeability_checked_at IS NULL OR pr_mergeability_checked_at <= ?)
+        ORDER BY updated_at DESC, notification_id DESC
+        LIMIT ?`,
+      args: [accountKey, repo, prNumber, minUpdatedAt, staleBefore, MAX_NOTIFICATIONS_PER_PR],
     });
     return (result.rows as unknown as GithubNotificationRow[]).map(rowToNotification).reverse();
   }
@@ -433,6 +460,7 @@ export class GithubNotificationStore {
       pr_mergeable INTEGER,
       pr_mergeable_state TEXT,
       pr_head_sha TEXT,
+      pr_mergeability_checked_at TEXT,
       updated_at TEXT NOT NULL,
       touched_at TEXT NOT NULL,
       payload_json TEXT,
@@ -451,6 +479,7 @@ export class GithubNotificationStore {
     await this.#addColumnIfMissing('github_notifications', 'pr_mergeable', 'INTEGER');
     await this.#addColumnIfMissing('github_notifications', 'pr_mergeable_state', 'TEXT');
     await this.#addColumnIfMissing('github_notifications', 'pr_head_sha', 'TEXT');
+    await this.#addColumnIfMissing('github_notifications', 'pr_mergeability_checked_at', 'TEXT');
     await this.#execute(
       'CREATE INDEX IF NOT EXISTS idx_github_notifications_pr ON github_notifications(account_key, repo, pr_number, updated_at DESC)',
     );
@@ -549,6 +578,7 @@ function rowToNotification(row: GithubNotificationRow): GithubInboxNotification 
     prMergeable: row.pr_mergeable === null ? undefined : Number(row.pr_mergeable) === 1,
     prMergeableState: row.pr_mergeable_state ?? undefined,
     prHeadSha: row.pr_head_sha ?? undefined,
+    prMergeabilityCheckedAt: row.pr_mergeability_checked_at ?? undefined,
     updatedAt: row.updated_at,
     payload: parseJson(row.payload_json),
   };

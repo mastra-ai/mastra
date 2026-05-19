@@ -10,6 +10,7 @@ import type { GithubInboxNotification } from './notification-store.js';
 
 const MASTER_LEASE_MS = 45_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
+const MERGEABILITY_REFRESH_MS = 5 * 60_000;
 
 export interface GithubNotificationPollerOptions {
   store?: GithubNotificationStore;
@@ -105,19 +106,33 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
     }
   }
 
+  async refreshPullRequestNotifications(repo: string, prNumber: number): Promise<GithubInboxNotification[]> {
+    const isMaster = await this.store.acquireMasterLease(this.accountKey, MASTER_LEASE_MS);
+    if (!isMaster) return [];
+    const staleBefore = new Date(this.#now().getTime() - MERGEABILITY_REFRESH_MS).toISOString();
+    const notifications = await this.store.readPrNotificationsNeedingMergeabilityRefresh(
+      this.accountKey,
+      repo,
+      prNumber,
+      staleBefore,
+    );
+    if (notifications.length === 0) return [];
+    return this.#refreshNotifications(notifications);
+  }
+
   async #backfillMissingEnrichment(): Promise<GithubInboxNotification[]> {
     const notifications = await this.store.readPullRequestNotificationsMissingEnrichment(this.accountKey);
     if (notifications.length === 0) return [];
+    return this.#refreshNotifications(notifications);
+  }
+
+  async #refreshNotifications(notifications: GithubInboxNotification[]): Promise<GithubInboxNotification[]> {
     const before = new Map(
       notifications.map(notification => [notification.id, getEnrichmentFingerprint(notification)]),
     );
     await this.#enrichNotifications(notifications);
-    const enrichedNotifications = notifications.filter(
-      notification => before.get(notification.id) !== getEnrichmentFingerprint(notification),
-    );
-    if (enrichedNotifications.length === 0) return [];
-    await this.store.upsertNotifications(this.accountKey, enrichedNotifications);
-    return enrichedNotifications;
+    await this.store.upsertNotifications(this.accountKey, notifications);
+    return notifications.filter(notification => before.get(notification.id) !== getEnrichmentFingerprint(notification));
   }
 
   async #enrichNotifications(notifications: GithubInboxNotification[]): Promise<void> {
@@ -172,6 +187,7 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
             notification => notification.subjectUrl === pullRequestUrl,
           );
           const headSha = getString(pullRequest, ['head', 'sha']);
+          const checkedAt = this.#now().toISOString();
           for (const notification of matchingNotifications) {
             notification.prState = getString(pullRequest, ['state']);
             notification.prMerged = getBoolean(pullRequest, ['merged']);
@@ -181,6 +197,7 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
             notification.prMergeable = getNullableBoolean(pullRequest, ['mergeable']);
             notification.prMergeableState = getString(pullRequest, ['mergeable_state']);
             notification.prHeadSha = headSha;
+            notification.prMergeabilityCheckedAt = checkedAt;
           }
 
           const repoUrl = pullRequestUrl.replace(/\/pulls\/\d+(?:$|[?#].*)/, '');
