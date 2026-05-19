@@ -11,6 +11,7 @@ const allOff = {
   skills: false,
   model: false,
   favorites: false,
+  browser: false,
 };
 const allOn = { ...allOff, tools: true };
 
@@ -123,5 +124,36 @@ describe('buildAgentBuilderToolSchema', () => {
     expect(
       schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'unknown' } }).success,
     ).toBe(false);
+  });
+
+  it('uses a single object schema for model when exactly one model is available', () => {
+    const schema = buildAgentBuilderToolSchema(
+      { ...allOff, model: true },
+      [],
+      [],
+      [],
+      [{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' }],
+    );
+
+    expect(schema.shape.model).toBeDefined();
+    expect(
+      schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } }).success,
+    ).toBe(true);
+    expect(
+      schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'other' } }).success,
+    ).toBe(false);
+  });
+
+  it('exposes browserEnabled only when the browser feature is on', () => {
+    const offShape = buildAgentBuilderToolSchema(allOff, [], []).shape;
+    expect(offShape.browserEnabled).toBeUndefined();
+
+    const schema = buildAgentBuilderToolSchema({ ...allOff, browser: true }, [], []);
+    expect(schema.shape.browserEnabled).toBeDefined();
+
+    expect(schema.safeParse({ name: 'N', instructions: 'I', browserEnabled: true }).success).toBe(true);
+    expect(schema.safeParse({ name: 'N', instructions: 'I', browserEnabled: false }).success).toBe(true);
+    expect(schema.safeParse({ name: 'N', instructions: 'I' }).success).toBe(true);
+    expect(schema.safeParse({ name: 'N', instructions: 'I', browserEnabled: 'yes' }).success).toBe(false);
   });
 });

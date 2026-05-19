@@ -53,4 +53,40 @@ describe('storedAgentToAgentConfig', () => {
 
     expect(result.systemPrompt).toBe('');
   });
+
+  it('extracts avatarUrl from metadata when present', () => {
+    const result = storedAgentToAgentConfig(
+      { id: 'a', name: 'N', metadata: { avatarUrl: 'https://cdn.example/a.png' } } as never,
+      'fallback-id',
+    );
+
+    expect(result.avatarUrl).toBe('https://cdn.example/a.png');
+  });
+
+  it('leaves avatarUrl undefined when metadata is present but lacks avatarUrl', () => {
+    const result = storedAgentToAgentConfig(
+      { id: 'a', name: 'N', metadata: { other: 'value' } } as never,
+      'fallback-id',
+    );
+
+    expect(result.avatarUrl).toBeUndefined();
+  });
+
+  it('preserves visibility=public when set', () => {
+    const result = storedAgentToAgentConfig({ id: 'a', name: 'N', visibility: 'public' } as never, 'fallback-id');
+
+    expect(result.visibility).toBe('public');
+  });
+
+  it('preserves authorId when set to a string', () => {
+    const result = storedAgentToAgentConfig({ id: 'a', name: 'N', authorId: 'user-1' } as never, 'fallback-id');
+
+    expect(result.authorId).toBe('user-1');
+  });
+
+  it('preserves authorId when set to null', () => {
+    const result = storedAgentToAgentConfig({ id: 'a', name: 'N', authorId: null } as never, 'fallback-id');
+
+    expect(result.authorId).toBeNull();
+  });
 });

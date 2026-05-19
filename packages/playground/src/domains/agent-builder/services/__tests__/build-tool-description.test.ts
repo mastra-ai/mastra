@@ -11,6 +11,7 @@ const allOff = {
   avatarUpload: false,
   model: false,
   favorites: false,
+  browser: false,
 };
 
 describe('buildAgentBuilderToolDescription', () => {
@@ -107,6 +108,16 @@ describe('buildAgentBuilderToolDescription', () => {
     expect(description).toContain('Primary');
     expect(description).toContain('ws-2');
     expect(description).toContain('Secondary');
+  });
+
+  it('lists browserEnabled when browser feature is on', () => {
+    const description = buildAgentBuilderToolDescription({ ...allOff, browser: true }, [], []);
+    expect(description).toContain('browserEnabled');
+  });
+
+  it('does not list browserEnabled when browser feature is off', () => {
+    const description = buildAgentBuilderToolDescription(allOff, [], []);
+    expect(description).not.toContain('browserEnabled');
   });
 
   it('mentions model and lists available provider/model pairs when models are available', () => {

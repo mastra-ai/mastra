@@ -210,4 +210,56 @@ describe('buildFormSnapshotInstructions', () => {
     expect(result).toContain('- Name: "Customer Support Bot"');
     expect(result).toContain('- Description: "Helps users reset passwords"');
   });
+
+  it('renders "(none selected)" when the tools record is undefined', () => {
+    const values = {
+      ...baseValues,
+      tools: undefined,
+      agents: undefined,
+      workflows: undefined,
+    } as unknown as AgentBuilderEditFormValues;
+
+    const result = buildFormSnapshotInstructions(values, buildOptions({ features: allOn }));
+
+    expect(result).toContain('- Tools: (none selected)');
+  });
+
+  it('falls back to "(unknown)" when the workspaceId has no match in availableWorkspaces', () => {
+    const values: AgentBuilderEditFormValues = {
+      ...baseValues,
+      workspaceId: 'ws_unknown',
+    };
+
+    const result = buildFormSnapshotInstructions(values, buildOptions({ availableWorkspaces: [] }));
+
+    expect(result).toContain('- Workspace: "(unknown)" (id: ws_unknown)');
+  });
+
+  it('ignores tool ids that are mapped to false in the selection record', () => {
+    const tools: AgentTool[] = [
+      { id: 'web-search', name: 'Web Search', isChecked: false, type: 'tool' },
+      { id: 'http-fetch', name: 'HTTP Fetch', isChecked: false, type: 'tool' },
+    ];
+
+    const values: AgentBuilderEditFormValues = {
+      ...baseValues,
+      tools: { 'web-search': true, 'http-fetch': false },
+    };
+
+    const result = buildFormSnapshotInstructions(values, buildOptions({ features: allOn, availableAgentTools: tools }));
+
+    expect(result).toContain('- Tools (1): "Web Search" (web-search)');
+    expect(result).not.toContain('http-fetch');
+  });
+
+  it('renders browser enabled: true when feature is on and browserEnabled is true', () => {
+    const values: AgentBuilderEditFormValues = {
+      ...baseValues,
+      browserEnabled: true,
+    };
+
+    const result = buildFormSnapshotInstructions(values, buildOptions({ features: allOn }));
+
+    expect(result).toContain('- Browser enabled: true');
+  });
 });

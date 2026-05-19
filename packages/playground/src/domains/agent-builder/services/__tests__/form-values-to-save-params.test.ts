@@ -170,4 +170,54 @@ describe('formValuesToSaveParams', () => {
 
     expect(result.skills).toEqual({ 'skill-a': {} });
   });
+
+  it('returns metadata with avatarUrl when values.avatarUrl is set', () => {
+    const result = formValuesToSaveParams({ ...baseValues, avatarUrl: 'https://cdn.example/a.png' }, []);
+
+    expect(result.metadata).toEqual({ avatarUrl: 'https://cdn.example/a.png' });
+  });
+
+  it('returns undefined metadata when avatarUrl is missing', () => {
+    const result = formValuesToSaveParams(baseValues, []);
+
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it('returns browser=true when browserEnabled is true', () => {
+    const result = formValuesToSaveParams({ ...baseValues, browserEnabled: true }, []);
+
+    expect(result.browser).toBe(true);
+  });
+
+  it('returns browser=false when browserEnabled is false', () => {
+    const result = formValuesToSaveParams({ ...baseValues, browserEnabled: false }, []);
+
+    expect(result.browser).toBe(false);
+  });
+
+  it('returns browser=false when browserEnabled is undefined', () => {
+    const result = formValuesToSaveParams(baseValues, []);
+
+    expect(result.browser).toBe(false);
+  });
+
+  it('passes visibility through unchanged for private, public, and undefined', () => {
+    expect(formValuesToSaveParams({ ...baseValues, visibility: 'private' }, []).visibility).toBe('private');
+    expect(formValuesToSaveParams({ ...baseValues, visibility: 'public' }, []).visibility).toBe('public');
+    expect(formValuesToSaveParams(baseValues, []).visibility).toBeUndefined();
+  });
+
+  it('passes model through unchanged when set and undefined when unset', () => {
+    const result = formValuesToSaveParams({ ...baseValues, model: { provider: 'openai', name: 'gpt-4o' } }, []);
+
+    expect(result.model).toEqual({ provider: 'openai', name: 'gpt-4o' });
+    expect(formValuesToSaveParams(baseValues, []).model).toBeUndefined();
+  });
+
+  it('passes name and instructions through unchanged', () => {
+    const result = formValuesToSaveParams({ ...baseValues, name: 'My agent', instructions: 'Do things' }, []);
+
+    expect(result.name).toBe('My agent');
+    expect(result.instructions).toBe('Do things');
+  });
 });
