@@ -4,6 +4,7 @@ import { Check, LockIcon, TriangleAlertIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
+import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
 import { toProviders } from '@/domains/agent-builder/services/to-providers';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
 import { ProviderLogo, cleanProviderId, useAllModels, useLLMProviders } from '@/domains/llm';
@@ -40,9 +41,10 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const model = useWatch({ control, name: 'model' });
   const { data, isLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
-  const allProviders = toProviders(data?.providers || []);
+  const allProviders = toProviders((data?.providers as ListProvider[]) || []);
   const filteredProviders = useBuilderFilteredProviders(allProviders, policy);
   const allModels = useAllModels(filteredProviders);
+
   const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
   const [search, setSearch] = useState('');
 
@@ -56,7 +58,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const isSet = Boolean(provider && modelId);
   const isStale = isSet && policy.active && !isModelAllowed(policy.allowed, { provider, modelId });
 
-  const visibleEntries = filterProvidersModel(policyAllowedModels, provider);
+  const visibleEntries = filterProvidersModel(policyAllowedModels, provider, search);
 
   return (
     <div className="h-full">
@@ -203,15 +205,21 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
   </div>
 );
 
-function filterProvidersModel(modelInfo: ModelInfo[], selectedProvider: string) {
-  return modelInfo.sort((a, b) => {
-    const aSelectedProvider = cleanProviderId(a.provider) === selectedProvider ? 0 : 1;
-    const bSelectedProvider = cleanProviderId(b.provider) === selectedProvider ? 0 : 1;
-    if (aSelectedProvider !== bSelectedProvider) return aSelectedProvider - bSelectedProvider;
+function filterProvidersModel(modelInfo: ModelInfo[], selectedProvider: string, search: string) {
+  return modelInfo
+    .filter(m => {
+      if (m.provider.toLowerCase().includes(search.toLowerCase())) return true;
+      if (m.model.toLowerCase().includes(search.toLowerCase())) return true;
+      return false;
+    })
+    .sort((a, b) => {
+      const aSelectedProvider = cleanProviderId(a.provider) === selectedProvider ? 0 : 1;
+      const bSelectedProvider = cleanProviderId(b.provider) === selectedProvider ? 0 : 1;
+      if (aSelectedProvider !== bSelectedProvider) return aSelectedProvider - bSelectedProvider;
 
-    const providerCompare = a.providerName.localeCompare(b.providerName);
-    if (providerCompare !== 0) return providerCompare;
+      const providerCompare = a.providerName.localeCompare(b.providerName);
+      if (providerCompare !== 0) return providerCompare;
 
-    return a.model.localeCompare(b.model);
-  });
+      return a.model.localeCompare(b.model);
+    });
 }

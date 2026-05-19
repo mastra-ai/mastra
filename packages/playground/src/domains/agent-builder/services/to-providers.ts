@@ -1,6 +1,10 @@
 import type { ListAgentsModelProvidersResponse, Provider } from '@mastra/client-js';
 
-export function toProviders(providers: ListAgentsModelProvidersResponse['providers']): Provider[] {
+export type ListProvider = ListAgentsModelProvidersResponse['providers'][number] & {
+  models: string[];
+};
+
+export function toProviders(providers: ListProvider[]): Provider[] {
   return providers.map(provider => {
     return {
       id: provider.id,
@@ -9,7 +13,7 @@ export function toProviders(providers: ListAgentsModelProvidersResponse['provide
       description: provider.description,
       envVar: '',
       connected: false,
-      models: [],
+      models: provider.models || [],
     };
   });
 }
