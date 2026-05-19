@@ -20,6 +20,7 @@ import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
+import { WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
@@ -39,13 +40,17 @@ export default function AgentBuilderAgentEdit() {
 }
 
 const EditPageGate = () => {
-  const { agentId, storedAgent, isReady, isOwner, canWrite } = useAgentPrimitives();
+  const { agentId, storedAgent, isReady, isOwner, canWrite, initialUserMessage } = useAgentPrimitives();
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
   if (!storedAgent) return <Navigate to="/agent-builder/agents" replace />;
   if (!canWrite || !isOwner) return <Navigate to={`/agent-builder/agents/${agentId}/view`} replace />;
 
-  return <EditPageForm />;
+  return (
+    <WizardProvider initialStep={initialUserMessage ? 'initial' : 'end'}>
+      <EditPageForm />
+    </WizardProvider>
+  );
 };
 
 const EditPageForm = () => {
