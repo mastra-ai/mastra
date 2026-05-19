@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.9.4-alpha.5
+
+### Patch Changes
+
+- Show a chat warning when Studio agent streams reach maxSteps before pending tool calls finish. ([#16794](https://github.com/mastra-ai/mastra/pull/16794))
+
+- Updated dependencies [[`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0)]:
+  - @mastra/core@1.36.0-alpha.5
+  - @mastra/client-js@1.20.0-alpha.5
+  - @mastra/react@0.4.0-alpha.5
+  - @mastra/playground-ui@29.0.0-alpha.5
+
 ## 1.9.4-alpha.4
 
 ### Patch Changes
