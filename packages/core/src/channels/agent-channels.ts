@@ -675,6 +675,48 @@ export class AgentChannels {
             } catch (err) {
               this.log('debug', 'Failed to edit denied card', err);
             }
+
+            // Resume the suspended run with a denial so the agent can produce a follow-up
+            // message (e.g. acknowledging the rejection). Without this, the run stays
+            // suspended forever and the user gets no feedback from the model.
+            const { channelContext } = this.buildEventContext({
+              sdkThread,
+              platform,
+              eventType: 'action',
+              messageId,
+              actor: event.user,
+            });
+            const requestContext = new RequestContext();
+            requestContext.set('channel', channelContext);
+
+            this.ensureThreadSubscription({
+              mastraThreadId: mastraThread.id,
+              resourceId: mastraThread.resourceId,
+              sdkThread,
+              platform,
+            });
+
+            try {
+              const resumed = await this.agent.declineToolCall({
+                runId,
+                toolCallId,
+                requestContext,
+                memory: {
+                  thread: mastraThread.id,
+                  resource: mastraThread.resourceId,
+                },
+              });
+              void resumed.consumeStream().catch(err => {
+                this.log('error', 'Error consuming resumed decline stream', err);
+              });
+            } catch (err) {
+              const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
+              if (isStaleApproval) {
+                this.log('info', `Ignoring stale tool denial action (runId already consumed)`);
+              } else {
+                throw err;
+              }
+            }
             return;
           }
 
@@ -716,13 +758,22 @@ export class AgentChannels {
             });
           }
 
-          // Fire and let the subscription consumer render the result.
-          // approveToolCall's returned MastraModelOutput must still be awaited far enough to
-          // surface a "No snapshot found" error here; the consumer handles the actual chunks.
-          await this.agent.approveToolCall({
+          // approveToolCall returns a MastraModelOutput whose stream must be drained for
+          // the resumed run to actually execute. The chunks fan into the thread
+          // subscription via the pubsub keyed by resourceId+threadId, so the existing
+          // consumer renders the tool result and follow-up output; we just need to pump
+          // the stream forward here.
+          const resumed = await this.agent.approveToolCall({
             runId,
             toolCallId,
             requestContext,
+            memory: {
+              thread: mastraThread.id,
+              resource: mastraThread.resourceId,
+            },
+          });
+          void resumed.consumeStream().catch(err => {
+            this.log('error', 'Error consuming resumed approval stream', err);
           });
         } catch (err) {
           const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
@@ -1431,6 +1482,11 @@ export class AgentChannels {
       // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
       const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
       if (cleanedText) {
+        this.log('debug', `[${platform}] flushText posting`, {
+          sdkThreadId: sdkThread.id,
+          isDM: (sdkThread as any).isDM,
+          textLength: cleanedText.length,
+        });
         await sdkThread.post(cleanedText);
         textBuffer = '';
       }
