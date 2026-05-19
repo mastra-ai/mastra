@@ -385,6 +385,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
   if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
+  if (route.path.includes(':roleId')) params.roleId = 'test-role';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context
@@ -423,6 +424,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';
 
+  // Builder registry route params
+  if (route.path.includes(':registryId')) params.registryId = 'skills-sh';
+
   return params;
 }
 
@@ -432,6 +436,10 @@ export function getDefaultInvalidPathParams(route: ServerRoute): Array<Record<st
 
   if (route.path.includes(':agentId')) {
     invalid.push({ agentId: 123 });
+  }
+
+  if (route.path.includes(':registryId')) {
+    invalid.push({ registryId: 123 });
   }
 
   return invalid;
