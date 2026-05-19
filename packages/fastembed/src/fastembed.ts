@@ -471,10 +471,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
     return new SparseTextEmbedding(tokenizer, session);
   }
 
-  private static loadTokenizer(
-    modelDir: PathLike,
-    maxLength: number,
-  ): { tokenizer: Tokenizer } {
+  private static loadTokenizer(modelDir: PathLike, maxLength: number): { tokenizer: Tokenizer } {
     const tokenizer = loadTokenizerFromDir(modelDir, maxLength);
     return { tokenizer };
   }
@@ -551,11 +548,10 @@ export class SparseTextEmbedding extends SparseEmbedding {
         batchTexts.length,
         maxLength,
       ]);
-      const batchAttentionMask = new ort.Tensor(
-        'int64',
-        maskArray.flat().map(BigInt) as unknown as number[],
-        [batchTexts.length, maxLength],
-      );
+      const batchAttentionMask = new ort.Tensor('int64', maskArray.flat().map(BigInt) as unknown as number[], [
+        batchTexts.length,
+        maxLength,
+      ]);
       const batchTokenTypeId = new ort.Tensor('int64', typeIdsArray.flat() as unknown as number[], [
         batchTexts.length,
         maxLength,

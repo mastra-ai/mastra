@@ -9,7 +9,13 @@ import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { customProvider as customProviderV3 } from '@internal/ai-v6';
 import { FlagEmbedding, EmbeddingModel } from './fastembed.js';
 
-export { EmbeddingModel, FlagEmbedding, SparseTextEmbedding, SparseEmbeddingModel, ExecutionProvider } from './fastembed.js';
+export {
+  EmbeddingModel,
+  FlagEmbedding,
+  SparseTextEmbedding,
+  SparseEmbeddingModel,
+  ExecutionProvider,
+} from './fastembed.js';
 export type { SparseVector, InitOptions, InitSparseOptions } from './fastembed.js';
 
 export type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';

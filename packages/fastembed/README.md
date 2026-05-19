@@ -61,15 +61,15 @@ console.log(result.embedding); // number[]
 
 ## Supported Models
 
-| Model | Dimensions | Description |
-| --- | --- | --- |
-| `bge-small-en-v1.5` | 384 | Fast, default English model |
-| `bge-base-en-v1.5` | 768 | Base English model |
-| `bge-small-en` | 384 | Fast English model |
-| `bge-base-en` | 768 | Base English model |
-| `bge-small-zh-v1.5` | 512 | Fast Chinese model |
-| `all-MiniLM-L6-v2` | 384 | Sentence Transformer model |
-| `multilingual-e5-large` | 1024 | Multilingual model |
+| Model                   | Dimensions | Description                 |
+| ----------------------- | ---------- | --------------------------- |
+| `bge-small-en-v1.5`     | 384        | Fast, default English model |
+| `bge-base-en-v1.5`      | 768        | Base English model          |
+| `bge-small-en`          | 384        | Fast English model          |
+| `bge-base-en`           | 768        | Base English model          |
+| `bge-small-zh-v1.5`     | 512        | Fast Chinese model          |
+| `all-MiniLM-L6-v2`      | 384        | Sentence Transformer model  |
+| `multilingual-e5-large` | 1024       | Multilingual model          |
 
 ## Attribution
 
