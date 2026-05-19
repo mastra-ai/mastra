@@ -737,11 +737,14 @@ export class SlackProvider implements ChannelProvider {
 
   /**
    * Extract the AgentChannels fields the provider forwards. `adapters` and
-   * `userName` are applied separately by `#createAgentChannels`.
+   * `userName` are applied separately by `#createAgentChannels`. Undefined
+   * values are filtered out so the merge in `#createAgentChannels` does not
+   * clobber options preserved from an existing `AgentChannels`.
    */
   #forwardedChannelOptions() {
     const { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions } = this.#channelConfig;
-    return { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions };
+    const candidate = { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions };
+    return Object.fromEntries(Object.entries(candidate).filter(([, value]) => value !== undefined));
   }
 
   /**
