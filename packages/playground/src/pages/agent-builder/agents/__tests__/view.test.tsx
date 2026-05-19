@@ -39,6 +39,17 @@ vi.mock('@/domains/agent-builder', () => ({
   useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false, skills: false }),
 }));
 
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
+  useBuilderAgentFeatures: () => ({
+    tools: false,
+    memory: false,
+    workflows: false,
+    agents: false,
+    skills: false,
+    browser: false,
+  }),
+}));
+
 vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
   useStoredSkills: () => ({ data: { skills: [] }, isPending: false }),
 }));
@@ -81,21 +92,18 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'current-user' } }),
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/agent-chat-panel', () => ({
   AgentChatPanel: () => <div data-testid="stub-chat-panel" />,
   AgentChatPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   AgentChatPanelChat: () => <div data-testid="stub-chat-panel" />,
 }));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
   StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => false,
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
-}));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
-  AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,
 }));
 vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
@@ -112,7 +120,7 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
   }),
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/publish-to-channel-button', () => ({
   PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
     agentId ? (
       <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
@@ -121,7 +129,7 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channe
     ) : null,
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu', () => ({
   AgentBuilderMobileMenu: () => null,
 }));
 
@@ -201,75 +209,30 @@ describe('AgentBuilderAgentView', () => {
     expect(useStoredAgentMock).toHaveBeenCalledWith('agent-123', expect.objectContaining({ status: 'draft' }));
   });
 
-  it('re-syncs the form when the stored agent refetches with new data', () => {
-    storedAgent = {
-      id: 'agent-123',
-      name: 'My Agent',
-      instructions: 'Do things',
-      tools: { 'tool-a': {} },
-      agents: [],
-      workflows: [],
-      authorId: 'current-user',
-      visibility: 'public',
-    };
-
-    const { rerender } = renderAt();
-
-    const initialSelectedTools = useAvailableAgentToolsMock.mock.calls.at(-1)?.[0] as
-      | { selectedTools?: Record<string, boolean> }
-      | undefined;
-    expect(initialSelectedTools?.selectedTools).toEqual({ 'tool-a': true });
-
-    storedAgent = {
-      id: 'agent-123',
-      name: 'My Agent',
-      instructions: 'Do things',
-      tools: { 'tool-b': {} },
-      agents: [],
-      workflows: [],
-      visibility: 'public',
-      authorId: 'current-user',
-    };
-
-    rerender(
-      <TooltipProvider>
-        <MemoryRouter initialEntries={['/agent-builder/agents/agent-123/view']}>
-          <Routes>
-            <Route path="/agent-builder/agents/:id/view" element={<AgentBuilderAgentView />} />
-          </Routes>
-        </MemoryRouter>
-      </TooltipProvider>,
-    );
-
-    const refreshedSelectedTools = useAvailableAgentToolsMock.mock.calls.at(-1)?.[0] as
-      | { selectedTools?: Record<string, boolean> }
-      | undefined;
-    expect(refreshedSelectedTools?.selectedTools).toEqual({ 'tool-b': true });
+  it('never renders the configure panel or its tab strip in view mode, even for the owner', () => {
+    const { queryByTestId, queryByLabelText } = renderAt();
+    expect(queryByTestId('agent-builder-panel-configure')).toBeNull();
+    expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
+    expect(queryByTestId('agent-builder-tab-configure')).toBeNull();
+    expect(queryByLabelText('Show configuration')).toBeNull();
+    expect(queryByLabelText('Hide configuration')).toBeNull();
   });
 
-  it('renders Chat and Configuration tabs for the owner', () => {
-    const { getByTestId } = renderAt();
-    expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
-    expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
-  });
-
-  it('does not render tabs for non-owners', () => {
+  it('does not render the configure panel or tabs for non-owners either', () => {
     storedAgent = { ...storedAgent, authorId: 'someone-else' };
     const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-panel-configure')).toBeNull();
     expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
     expect(queryByTestId('agent-builder-tab-configure')).toBeNull();
   });
 
-  it('switching to the Configuration tab toggles which panel is active', () => {
+  it('renders the view top bar above the chat panel within the view layout', () => {
     const { getByTestId } = renderAt();
+    const topBar = getByTestId('agent-builder-view-top-bar');
     const chatPanel = getByTestId('agent-builder-panel-chat');
-    const configureTab = getByTestId('agent-builder-tab-configure');
-    expect(chatPanel.getAttribute('data-active-tab')).toBe('chat');
-    expect(configureTab.getAttribute('aria-selected')).toBe('false');
-
-    fireEvent.click(configureTab);
-
-    expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
-    expect(configureTab.getAttribute('aria-selected')).toBe('true');
+    expect(topBar).not.toBeNull();
+    expect(chatPanel).not.toBeNull();
+    const position = topBar.compareDocumentPosition(chatPanel);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

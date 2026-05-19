@@ -1,4 +1,7 @@
 import type { Provider } from '@mastra/client-js';
+import { useMemo } from 'react';
+import { toProviders } from '../services/to-providers';
+import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
 import { useAllModels, useLLMProviders } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
@@ -19,7 +22,7 @@ export interface AgentBuilderAllowedModels {
 export const useAgentBuilderAllowedModels = (): AgentBuilderAllowedModels => {
   const policy = useBuilderModelPolicy();
   const { data, isLoading } = useLLMProviders();
-  const allProviders = data?.providers ?? [];
+  const allProviders = useMemo(() => toProviders((data?.providers as ListProvider[]) ?? []), [data]);
   const providers = useBuilderFilteredProviders(allProviders, policy);
   const allModels = useAllModels(allProviders);
   const models = useBuilderFilteredModels(allModels, policy);

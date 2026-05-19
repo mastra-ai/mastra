@@ -186,7 +186,7 @@ describe('AgentBuilderAgentView MSW integration', () => {
     expect(await screen.findByTestId('agent-builder-visibility-remove')).toBeTruthy();
   });
 
-  it('shows Chat and Configuration tabs for the owner via real stored-agent data', async () => {
+  it('never renders the configure panel or its tab strip in view mode, regardless of ownership', async () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
@@ -194,66 +194,9 @@ describe('AgentBuilderAgentView MSW integration', () => {
 
     renderPage();
 
-    expect(await screen.findByTestId('agent-builder-tab-configure')).toBeTruthy();
-    expect(screen.getByTestId('agent-builder-tab-chat')).toBeTruthy();
-  });
-
-  it('hides Configuration tab for non-owners via real stored-agent data', async () => {
-    const otherAgent = { ...storedAgent, authorId: 'someone-else' };
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(otherAgent)),
-      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
-    );
-
-    renderPage();
-
     await screen.findByTestId('agent-builder-agent-chat-empty-state');
+    expect(screen.queryByTestId('agent-builder-panel-configure')).toBeNull();
     expect(screen.queryByTestId('agent-builder-tab-chat')).toBeNull();
     expect(screen.queryByTestId('agent-builder-tab-configure')).toBeNull();
-  });
-
-  it('shows the delete-agent button for the owner', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
-      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
-    );
-
-    renderPage();
-
-    expect(await screen.findByTestId('agent-builder-delete-agent')).toBeTruthy();
-  });
-
-  it('hides the delete-agent button for non-owners', async () => {
-    const otherAgent = { ...storedAgent, authorId: 'someone-else' };
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(otherAgent)),
-      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
-    );
-
-    renderPage();
-
-    await screen.findByTestId('agent-builder-agent-chat-empty-state');
-    expect(screen.queryByTestId('agent-builder-delete-agent')).toBeNull();
-  });
-
-  it('confirms delete from the view page, calls the API, and after the request resolves redirects to the agents list', async () => {
-    let deleteCalled = false;
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
-      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
-      http.delete(`${BASE_URL}/api/stored/agents/agent-123`, () => {
-        deleteCalled = true;
-        return HttpResponse.json({ success: true });
-      }),
-    );
-
-    renderPage();
-
-    fireEvent.click(await screen.findByTestId('agent-builder-delete-agent'));
-    fireEvent.click(await screen.findByTestId('agent-builder-delete-agent-confirm'));
-
-    await waitFor(() => {
-      expect(deleteCalled).toBe(true);
-    });
   });
 });

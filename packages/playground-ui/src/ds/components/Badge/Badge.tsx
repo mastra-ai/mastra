@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 export interface BadgeProps {
   icon?: React.ReactNode;
   variant?: 'default' | 'success' | 'error' | 'info' | 'warning';
+  size?: 'default' | 'sm';
   className?: string;
   children?: React.ReactNode;
 }
@@ -19,13 +20,27 @@ const variantClasses = {
   warning: 'text-notice-warning-fg bg-notice-warning/20 border-notice-warning/20',
 };
 
-export const Badge = ({ icon, variant = 'default', className, children, ...props }: BadgeProps) => {
+const sizeClasses = {
+  default: 'h-badge-default text-ui-sm',
+  sm: 'h-5 text-ui-xs',
+};
+
+export const Badge = ({ icon, variant = 'default', size = 'default', className, children, ...props }: BadgeProps) => {
+  const paddingClass = icon
+    ? size === 'sm'
+      ? 'pl-1.5 pr-2'
+      : 'pl-2 pr-2.5'
+    : size === 'sm'
+      ? 'px-2'
+      : 'px-2.5';
+
   return (
     <div
       className={cn(
-        'font-mono text-ui-sm gap-1 h-badge-default inline-flex items-center rounded-full border shrink-0',
+        'font-mono gap-1 inline-flex items-center rounded-full border shrink-0',
         transitions.colors,
-        icon ? 'pl-2 pr-2.5' : 'px-2.5',
+        paddingClass,
+        sizeClasses[size],
         variantClasses[variant],
         className,
       )}

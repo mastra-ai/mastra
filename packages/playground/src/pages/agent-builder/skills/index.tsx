@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import {
   SkillBuilderList,
   SkillBuilderListSkeleton,
-} from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
+} from '@/domains/agent-builder/components/skill-list/skill-builder-list';
 import { BuilderAddSkillDialog } from '@/domains/agents/components/agent-cms-pages/builder-add-skill-dialog';
 import { useBuilderRegistries } from '@/domains/agents/hooks/use-builder-registries';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';

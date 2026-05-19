@@ -103,58 +103,6 @@ th:has(header) {
   }
 
   /*
-   * The right-hand AgentConfigurePanel column is the same width, height
-   * and position in both routes, so giving it a shared view-transition
-   * name makes its captured snapshot sit perfectly still while the frame
-   * around it resizes — avoiding any visible re-layout of that column.
-   */
-  ::view-transition-group(agent-builder-configure-panel) {
-    animation-duration: 320ms;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  /*
-   * Intra-page expand/collapse of the Agent Builder right-side configure
-   * panel. Shares timing with the cross-route view-transition above so the
-   * two motions feel like the same system.
-   */
-  .agent-builder-panel-grid {
-    transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .agent-builder-workspace-grid {
-    transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .agent-builder-panel-slide {
-    transition:
-      transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
-      opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform, opacity;
-  }
-
-  .agent-builder-detail-pane {
-    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  @media (min-width: 1024px) {
-    .agent-builder-detail-pane {
-      transition:
-        width 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .agent-builder-panel-grid,
-    .agent-builder-workspace-grid,
-    .agent-builder-panel-slide,
-    .agent-builder-detail-pane {
-      transition: none;
-    }
-  }
-
-  /*
    * Agent builder starter page — editorial serif minimal motion.
    * A slow aurora-like gradient drifts behind the content, and the
    * headline / prompt / chips stagger in on mount. Low contrast on

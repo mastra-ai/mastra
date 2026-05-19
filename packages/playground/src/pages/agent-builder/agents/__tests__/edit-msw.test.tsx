@@ -52,19 +52,19 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
 }));
 
 // Stub heavy chat panels to keep this focused on the header.
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/conversation-panel', () => ({
+vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
   ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,
   ConversationPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 const useStreamRunningMock = vi.fn(() => false);
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => useStreamRunningMock(),
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));
 
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
   StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 

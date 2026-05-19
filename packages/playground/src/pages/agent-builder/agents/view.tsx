@@ -1,118 +1,126 @@
-import type { StoredSkillResponse } from '@mastra/client-js';
 import { Spinner } from '@mastra/playground-ui';
-import { useEffect, useMemo, useState } from 'react';
-import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router';
-import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
-import {
-  AgentChatPanelChat,
-  AgentChatPanelProvider,
-} from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
-import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
-import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
-import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
-import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
-import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
-import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
-import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
-import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
+import { useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
+import { Navigate, useParams } from 'react-router';
+import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
+import { AgentChatPanelChat } from '@/domains/agent-builder/components/agent-edit/agent-chat-panel';
+import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-edit/publish-to-channel-button';
+import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/visibility-select';
+import { ViewTopBar } from '@/domains/agent-builder/components/agent-view/view-top-bar';
+import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
+import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
+import { ViewPageProvider, useViewPage } from '@/domains/agent-builder/contexts/view-page-context';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
-import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
-import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
+import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
+import { AgentBuilderViewLayout } from '@/domains/agent-builder/layouts/agent-builder-view-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
-import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import type { CurrentUser } from '@/domains/auth/types';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-
-type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
-type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
-type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentView() {
-  const { id } = useParams<{ id: string }>();
-  useChannelConnectToast();
-  const features = useBuilderAgentFeatures();
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
-  const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
-  const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
-  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, {
-    enabled: features.skills,
-  });
+  const { id: agentId } = useParams<{ id: string }>();
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(agentId, { status: 'draft' });
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
-  const isReady =
-    Boolean(id) &&
-    !isStoredAgentLoading &&
-    !isCurrentUserLoading &&
-    (!features.tools || !isToolsPending) &&
-    (!features.skills || !isSkillsPending) &&
-    (!features.agents || !isAgentsPending) &&
-    (!features.workflows || !isWorkflowsPending);
+  const { canWrite } = useBuilderAgentAccess();
+  useChannelConnectToast();
 
-  if (!isReady) return <AgentBuilderAgentViewSkeleton />;
+  if (!agentId) return null; // dead branch, agentId is forced to exist in this specific oute
+
+  if (isStoredAgentLoading || isCurrentUserLoading) {
+    return <AgentBuilderAgentViewSkeleton />;
+  }
+  if (!storedAgent) {
+    return <Navigate to="/agent-builder/agents" replace />;
+  }
 
   return (
-    <AgentBuilderAgentViewPage
-      id={id}
-      storedAgent={storedAgent}
-      toolsData={toolsData}
-      agentsData={agentsData}
-      workflowsData={workflowsData}
-      storedSkillsResponse={storedSkillsResponse}
-      currentUser={currentUser ?? null}
-    />
+    <ViewPageProvider agentId={agentId} storedAgent={storedAgent} currentUserId={currentUser?.id} canWrite={canWrite}>
+      <ViewPageForm storedAgent={storedAgent} />
+    </ViewPageProvider>
   );
 }
 
-interface PageProps {
-  id: string | undefined;
-  storedAgent: StoredAgent | null | undefined;
-  toolsData: ToolsData | undefined;
-  agentsData: AgentsData | undefined;
-  workflowsData: WorkflowsData | undefined;
-  storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
-  currentUser: CurrentUser;
+interface ViewPageFormProps {
+  storedAgent: StoredAgent;
 }
 
-const AgentBuilderAgentViewPage = ({
-  id,
-  storedAgent,
-  toolsData,
-  agentsData,
-  workflowsData,
-  storedSkillsResponse,
-  currentUser,
-}: PageProps) => {
-  const defaultValues = useMemo(() => storedAgentToFormValues(storedAgent), [storedAgent]);
+const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
+  const { hasBrowser, agentId, threadId } = useViewPage();
+  const [defaultValues] = useState(() => storedAgentToFormValues(storedAgent));
   const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
 
-  useEffect(() => {
-    formMethods.reset(defaultValues);
-  }, [defaultValues, formMethods]);
+  const body = (
+    <AgentBuilderViewLayout
+      topBar={<ViewTopBarSlot />}
+      chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
+      browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
+    />
+  );
+
+  if (hasBrowser) {
+    return (
+      <FormProvider {...formMethods}>
+        <AgentColorProvider>
+          <BrowserToolCallsProvider>
+            <BrowserSessionProvider agentId={agentId} threadId={threadId}>
+              {body}
+            </BrowserSessionProvider>
+          </BrowserToolCallsProvider>
+        </AgentColorProvider>
+      </FormProvider>
+    );
+  }
 
   return (
     <FormProvider {...formMethods}>
-      <AgentBuilderAgentViewReady
-        id={id!}
-        storedAgent={storedAgent}
-        toolsData={toolsData ?? {}}
-        agentsData={agentsData ?? {}}
-        workflowsData={workflowsData ?? {}}
-        storedSkillsResponse={storedSkillsResponse}
-        currentUser={currentUser}
-      />
+      <AgentColorProvider>{body}</AgentColorProvider>
     </FormProvider>
+  );
+};
+
+const ViewTopBarSlot = () => {
+  const { canModify, onModeToggle, isOwner, isPublishable, agentId, agent } = useViewPage();
+  const { data: capabilities } = useAuthCapabilities();
+  const isRunning = useStreamRunning();
+
+  const showVisibilitySelect = Boolean(isOwner && capabilities?.enabled);
+
+  return (
+    <ViewTopBar
+      mode={canModify ? 'test' : undefined}
+      onModeToggle={onModeToggle}
+      modeToggleDisabled={isRunning}
+      ownerActions={
+        isOwner && (
+          <>
+            {isPublishable && <PublishToChannelButton agentId={agentId} />}
+            {showVisibilitySelect && (
+              <span style={{ viewTransitionName: 'agent-visibility-select' }}>
+                <VisibilitySelect agentId={agentId} />
+              </span>
+            )}
+          </>
+        )
+      }
+      mobileMenu={
+        isOwner && (
+          <AgentBuilderMobileMenu
+            agentId={agentId}
+            showSetVisibility={Boolean(capabilities?.enabled)}
+            showPublishToChannel={isPublishable}
+            showDelete
+            agentName={agent.name}
+            disabled={isRunning}
+          />
+        )
+      }
+    />
   );
 };
 
@@ -121,199 +129,3 @@ const AgentBuilderAgentViewSkeleton = () => (
     <Spinner />
   </div>
 );
-
-interface AgentBuilderAgentViewReadyProps {
-  id: string;
-  storedAgent: StoredAgent | null | undefined;
-  toolsData: ToolsData;
-  agentsData: AgentsData;
-  workflowsData: WorkflowsData;
-  storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
-  currentUser: CurrentUser;
-}
-
-const AgentBuilderAgentViewReady = ({
-  id,
-  storedAgent,
-  toolsData,
-  agentsData,
-  workflowsData,
-  storedSkillsResponse,
-  currentUser,
-}: AgentBuilderAgentViewReadyProps) => {
-  const navigate = useNavigate();
-  const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
-  const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
-  const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
-  const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
-  // Gate publishing on the *saved* visibility — never on unsaved form state.
-  const isPublishable = storedAgent?.visibility === 'public';
-  const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
-  const { canWrite } = useBuilderAgentAccess();
-  const canModify = canWrite && isOwner;
-  const threadId = currentUser?.id ? `${currentUser.id}-${id}` : id;
-
-  const availableAgentTools = useAvailableAgentTools({
-    toolsData,
-    agentsData,
-    workflowsData,
-    selectedTools,
-    selectedAgents,
-    selectedWorkflows,
-    excludeAgentId: id,
-  });
-
-  const agent = useMemo(() => storedAgentToAgentConfig(storedAgent, id ?? ''), [storedAgent, id]);
-
-  const availableSkills = useMemo<StoredSkillResponse[]>(
-    () => storedSkillsResponse?.skills ?? [],
-    [storedSkillsResponse],
-  );
-
-  const features = useBuilderAgentFeatures();
-  const hasBrowser = features.browser && storedAgent?.browser != null;
-
-  const onModeToggle = isOwner
-    ? () => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })
-    : undefined;
-
-  const content = (
-    <AgentChatPanelProvider
-      agentId={id}
-      agentName={storedAgent?.name}
-      agentDescription={storedAgent?.description}
-      agentAvatarUrl={agent?.avatarUrl}
-    >
-      <ViewWorkspaceConnected
-        agentId={id}
-        agentName={storedAgent?.name ?? ''}
-        agent={agent}
-        isOwner={canModify}
-        isPublishable={isPublishable}
-        hasBrowser={hasBrowser}
-        onModeToggle={onModeToggle}
-        availableAgentTools={availableAgentTools}
-        availableSkills={availableSkills}
-        activeDetail={activeDetail}
-        onActiveDetailChange={setActiveDetail}
-      />
-    </AgentChatPanelProvider>
-  );
-
-  if (!hasBrowser) return content;
-
-  return (
-    <BrowserToolCallsProvider>
-      <BrowserSessionProvider agentId={id} threadId={threadId}>
-        {content}
-      </BrowserSessionProvider>
-    </BrowserToolCallsProvider>
-  );
-};
-
-interface ViewWorkspaceConnectedProps {
-  agentId: string;
-  agentName: string;
-  agent: ReturnType<typeof storedAgentToAgentConfig>;
-  isOwner: boolean;
-  isPublishable: boolean;
-  hasBrowser: boolean;
-  onModeToggle: (() => void) | undefined;
-  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
-  availableSkills: StoredSkillResponse[];
-  activeDetail: ActiveDetail;
-  onActiveDetailChange: (next: ActiveDetail) => void;
-}
-
-const ViewWorkspaceConnected = ({
-  agentId,
-  agentName,
-  agent,
-  isOwner,
-  isPublishable,
-  hasBrowser,
-  onModeToggle,
-  availableAgentTools,
-  availableSkills,
-  activeDetail,
-  onActiveDetailChange,
-}: ViewWorkspaceConnectedProps) => {
-  const isRunning = useStreamRunning();
-  return (
-    <WorkspaceLayout
-      isLoading={false}
-      mode={isOwner ? 'test' : undefined}
-      defaultExpanded={false}
-      detailOpen={activeDetail !== null}
-      showConfigure={isOwner}
-      onModeToggle={onModeToggle}
-      modeToggleDisabled={isRunning}
-      modeAction={
-        <div className="hidden lg:flex items-center gap-2">
-          {isOwner && isPublishable && <PublishToChannelButton agentId={agentId} />}
-          {isOwner && <VisibilitySelectIfAuth agentId={agentId} />}
-        </div>
-      }
-      mobileExtra={
-        isOwner ? (
-          <AgentBuilderMobileMenuConnected
-            agentId={agentId}
-            agentName={agentName}
-            showPublishToChannel={isPublishable}
-          />
-        ) : undefined
-      }
-      chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
-      configure={
-        <ConfigurePanelConnected
-          editable={false}
-          agent={agent}
-          availableAgentTools={availableAgentTools}
-          availableSkills={availableSkills}
-          activeDetail={activeDetail}
-          onActiveDetailChange={onActiveDetailChange}
-          deleteAction={
-            isOwner ? <DeleteAgentPanelButtonConnected agentId={agentId} agentName={agentName} /> : undefined
-          }
-        />
-      }
-      browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
-    />
-  );
-};
-
-const DeleteAgentPanelButtonConnected = ({ agentId, agentName }: { agentId: string; agentName: string }) => {
-  const isRunning = useStreamRunning();
-  return <DeleteAgentPanelButton agentId={agentId} agentName={agentName} disabled={isRunning} />;
-};
-
-const VisibilitySelectIfAuth = ({ agentId }: { agentId: string }) => {
-  const { data: capabilities } = useAuthCapabilities();
-  if (!capabilities?.enabled) return null;
-  return <VisibilitySelect agentId={agentId} />;
-};
-
-const AgentBuilderMobileMenuConnected = ({
-  agentId,
-  agentName,
-  showPublishToChannel,
-}: {
-  agentId: string;
-  agentName: string;
-  showPublishToChannel: boolean;
-}) => {
-  const isRunning = useStreamRunning();
-  const { data: capabilities } = useAuthCapabilities();
-  const authEnabled = !!capabilities?.enabled;
-  return (
-    <AgentBuilderMobileMenu
-      agentId={agentId}
-      showSetVisibility={authEnabled}
-      showPublishToChannel={showPublishToChannel}
-      showDelete
-      agentName={agentName}
-      disabled={isRunning}
-    />
-  );
-};
