@@ -65,14 +65,14 @@ export const ConversationPanelProvider = ({
   // (preventing useChat from wiping streamed messages), but changes when agentId
   // changes (allowing useChat to reset when switching agents).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const emptyMessages = useMemo(() => [] as never[], [agentId]);
+  const emptyMessages = useMemo(() => [], [agentId]);
   const storedMessages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
   const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
-  const { models: filteredModels, isLoading: areLLMProvidersLoading } = useAgentBuilderAllowedModels();
-  const emptyModels = useMemo(() => [] as typeof filteredModels, []);
-  const availableModels = features.model ? filteredModels : emptyModels;
-  const initialMessageToolsReady = toolsReady && (!features.model || !areLLMProvidersLoading);
+  const { models, isLoading: isLoadingModels } = useAgentBuilderAllowedModels();
+
+  const availableModels = features.model ? models : [];
+  const initialMessageToolsReady = toolsReady && (!features.model || !isLoadingModels);
 
   const agentBuilderTool = useAgentBuilderTool({
     features,
@@ -84,17 +84,7 @@ export const ConversationPanelProvider = ({
 
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const formValues = useWatch({ control }) as AgentBuilderEditFormValues;
-  const extraInstructions = useMemo(
-    () =>
-      buildFormSnapshotInstructions(formValues, {
-        availableAgentTools,
-        availableSkills,
-        availableWorkspaces,
-        availableModels,
-        features,
-      }),
-    [formValues, availableAgentTools, availableSkills, availableWorkspaces, availableModels, features],
-  );
+
   const createSkillTool = useCreateSkillTool({ availableWorkspaces });
   const connectChannelTool = useConnectChannelTool();
   const clientTools = useMemo(
@@ -118,6 +108,14 @@ export const ConversationPanelProvider = ({
   // optimistic user message added by sendMessage.
   const starterMessageReady =
     initialMessageToolsReady && !isConversationLoading && !hasExistingConversation ? initialUserMessage : undefined;
+
+  const extraInstructions = buildFormSnapshotInstructions(formValues, {
+    availableAgentTools,
+    availableSkills,
+    availableWorkspaces,
+    availableModels,
+    features,
+  });
 
   return (
     <StreamChatProvider

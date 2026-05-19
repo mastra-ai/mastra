@@ -1,10 +1,10 @@
-import type { ListAgentsModelProvidersResponse, Provider } from '@mastra/client-js';
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Searchbar, Skeleton, Txt, cn } from '@mastra/playground-ui';
 import { Check, LockIcon, TriangleAlertIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
+import { toProviders } from '@/domains/agent-builder/services/to-providers';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
 import { ProviderLogo, cleanProviderId, useAllModels, useLLMProviders } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
@@ -202,20 +202,6 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     </Txt>
   </div>
 );
-
-function toProviders(providers: ListAgentsModelProvidersResponse['providers']): Provider[] {
-  return providers.map(provider => {
-    return {
-      id: provider.id,
-      name: provider.name,
-      label: provider.label,
-      description: provider.description,
-      envVar: '',
-      connected: false,
-      models: [],
-    };
-  });
-}
 
 function filterProvidersModel(modelInfo: ModelInfo[], selectedProvider: string) {
   return modelInfo.sort((a, b) => {
