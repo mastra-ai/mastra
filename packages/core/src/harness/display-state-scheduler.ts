@@ -94,6 +94,8 @@ function cloneDisplayState(state: HarnessDisplayState): HarnessDisplayState {
         id,
         {
           ...tool,
+          ...(tool.startedAt ? { startedAt: new Date(tool.startedAt.getTime()) } : {}),
+          ...(tool.completedAt ? { completedAt: new Date(tool.completedAt.getTime()) } : {}),
           args: cloneUnknown(tool.args),
           result: cloneUnknown(tool.result),
         },
@@ -122,6 +124,8 @@ function cloneDisplayState(state: HarnessDisplayState): HarnessDisplayState {
         id,
         {
           ...subagent,
+          ...(subagent.startedAt ? { startedAt: new Date(subagent.startedAt.getTime()) } : {}),
+          ...(subagent.completedAt ? { completedAt: new Date(subagent.completedAt.getTime()) } : {}),
           toolCalls: subagent.toolCalls.map(toolCall => cloneUnknown(toolCall)),
         },
       ]),

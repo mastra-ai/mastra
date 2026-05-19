@@ -39,6 +39,7 @@ import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
+  ActiveSubagentState,
   HeartbeatHandler,
   HarnessConfig,
   HarnessDisplayState,
@@ -3195,22 +3196,34 @@ export class Harness<TState = {}> {
         ds.pendingSuspension = null;
         break;
 
-      case 'agent_end':
+      case 'agent_end': {
         ds.isRunning = false;
         ds.pendingApproval = null;
-        if (event.reason !== 'suspended') {
-          ds.pendingSuspension = null;
-        }
         ds.pendingQuestion = null;
         ds.pendingPlanApproval = null;
-        // Mark any still-running tools as errored (handles abort mid-run)
-        for (const [, tool] of ds.activeTools) {
-          if (tool.status === 'running' || tool.status === 'streaming_input') {
-            tool.status = 'error';
+        if (event.reason !== 'suspended') {
+          ds.pendingSuspension = null;
+          const completedAt = new Date();
+          // Mark any still-running tools as errored (handles abort mid-run)
+          for (const [toolCallId, tool] of ds.activeTools) {
+            if (tool.status === 'running' || tool.status === 'streaming_input') {
+              tool.status = 'error';
+              tool.completedAt = completedAt;
+              ds.toolInputBuffers.delete(toolCallId);
+            }
           }
+          const forcedSubagents = new Map<string, ActiveSubagentState>();
+          for (const [toolCallId, subagent] of ds.activeSubagents) {
+            if (subagent.status === 'running') {
+              subagent.status = 'error';
+              subagent.completedAt = completedAt;
+              forcedSubagents.set(toolCallId, subagent);
+            }
+          }
+          ds.activeSubagents = forcedSubagents;
         }
-        ds.activeSubagents = new Map();
         break;
+      }
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
@@ -3230,12 +3243,29 @@ export class Harness<TState = {}> {
         ds.toolInputBuffers.set(event.toolCallId, { text: '', toolName: event.toolName });
         const existing = ds.activeTools.get(event.toolCallId);
         if (existing) {
+          if (existing.status === 'completed' || existing.status === 'error') {
+            existing.name = event.toolName;
+            existing.args = {};
+            existing.startedAt = new Date();
+          } else {
+            if (existing.status === 'streaming_input') {
+              existing.name = event.toolName;
+              existing.args = {};
+            }
+            existing.startedAt ??= new Date();
+          }
           existing.status = 'streaming_input';
+          delete existing.completedAt;
+          delete existing.partialResult;
+          delete existing.result;
+          delete existing.isError;
+          delete existing.shellOutput;
         } else {
           ds.activeTools.set(event.toolCallId, {
             name: event.toolName,
             args: {},
             status: 'streaming_input',
+            startedAt: new Date(),
           });
         }
         break;
@@ -3256,14 +3286,25 @@ export class Harness<TState = {}> {
       case 'tool_start': {
         const existingTool = ds.activeTools.get(event.toolCallId);
         if (existingTool) {
+          if (existingTool.status === 'completed' || existingTool.status === 'error') {
+            existingTool.startedAt = new Date();
+          } else {
+            existingTool.startedAt ??= new Date();
+          }
           existingTool.name = event.toolName;
           existingTool.args = event.args;
           existingTool.status = 'running';
+          delete existingTool.completedAt;
+          delete existingTool.partialResult;
+          delete existingTool.result;
+          delete existingTool.isError;
+          delete existingTool.shellOutput;
         } else {
           ds.activeTools.set(event.toolCallId, {
             name: event.toolName,
             args: event.args,
             status: 'running',
+            startedAt: new Date(),
           });
         }
         break;
@@ -3284,6 +3325,7 @@ export class Harness<TState = {}> {
           endedTool.status = event.isError ? 'error' : 'completed';
           endedTool.result = event.result;
           endedTool.isError = event.isError;
+          endedTool.completedAt = new Date();
         }
         // Track file modifications
         if (!event.isError) {
@@ -3368,6 +3410,7 @@ export class Harness<TState = {}> {
           toolCalls: [],
           textDelta: '',
           status: 'running',
+          startedAt: new Date(),
         });
         break;
       }
@@ -3405,6 +3448,7 @@ export class Harness<TState = {}> {
           endedSub.status = event.isError ? 'error' : 'completed';
           endedSub.durationMs = event.durationMs;
           endedSub.result = event.result;
+          endedSub.completedAt = new Date();
         }
         break;
       }
