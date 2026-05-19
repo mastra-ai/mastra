@@ -6,6 +6,7 @@ import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
 import {
@@ -614,6 +615,7 @@ export class ReflectorRunner {
     activationMetadata?: {
       triggeredBy: 'threshold' | 'ttl' | 'provider_change';
       lastActivityAt?: number;
+      activateAfterIdle?: number;
       ttlExpiredMs?: number;
       previousModel?: string;
       currentModel?: string;
@@ -748,7 +750,10 @@ export class ReflectorRunner {
         ttlExpiredMs: activationMetadata?.ttlExpiredMs,
         previousModel: activationMetadata?.previousModel,
         currentModel: activationMetadata?.currentModel,
-        config: this.getObservationMarkerConfig(freshRecord),
+        config: {
+          ...this.getObservationMarkerConfig(freshRecord),
+          activateAfterIdle: activationMetadata?.activateAfterIdle ?? this.reflectionConfig.activateAfterIdle,
+        },
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       void writer.custom({ ...activationMarker, transient: true }).catch(() => {});
@@ -830,7 +835,7 @@ export class ReflectorRunner {
       }
     }
 
-    const activateAfterIdle = this.reflectionConfig.activateAfterIdle;
+    const activateAfterIdle = resolveActivationTTL(this.reflectionConfig.activateAfterIdle, currentModel);
     const ttlExpiredMs =
       activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
     const ttlExpired =
@@ -853,6 +858,7 @@ export class ReflectorRunner {
     const activationMetadata = {
       triggeredBy: activationTriggeredBy,
       lastActivityAt: activationTriggeredBy === 'ttl' ? lastActivityAt : undefined,
+      activateAfterIdle: activationTriggeredBy === 'ttl' ? activateAfterIdle : undefined,
       ttlExpiredMs: activationTriggeredBy === 'ttl' ? ttlExpiredMs : undefined,
       previousModel: activationTriggeredBy === 'provider_change' ? lastModel : undefined,
       currentModel: activationTriggeredBy === 'provider_change' ? actorModel : undefined,

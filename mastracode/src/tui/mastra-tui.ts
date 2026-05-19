@@ -118,6 +118,7 @@ export function consumePendingImages(
 export class MastraTUI {
   private state: TUIState;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private idleCounterTimer: ReturnType<typeof setInterval> | null = null;
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
   private lastStreamError: string | null = null;
@@ -279,6 +280,7 @@ export class MastraTUI {
    * Errors are handled via harness events.
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
+    this.clearIdleCounter();
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
     this.state.harness.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
@@ -345,6 +347,7 @@ export class MastraTUI {
     optimisticMessageId: string,
   ): void {
     const send = () => {
+      this.clearIdleCounter();
       const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
@@ -369,6 +372,7 @@ export class MastraTUI {
     const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
 
     const send = () => {
+      this.clearIdleCounter();
       const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
 
       if (hasActiveRun) {
@@ -431,6 +435,11 @@ export class MastraTUI {
     if (this.updateCheckTimer) {
       clearInterval(this.updateCheckTimer);
       this.updateCheckTimer = null;
+    }
+
+    if (this.idleCounterTimer) {
+      clearInterval(this.idleCounterTimer);
+      this.idleCounterTimer = null;
     }
 
     if (this.state.unsubscribe) {
@@ -512,7 +521,7 @@ export class MastraTUI {
     // Set terminal title
     updateTerminalTitle(this.state);
     // Render existing messages
-    await renderExistingMessages(this.state);
+    await this.renderExistingMessagesAndSeedIdleCounter();
     // Render existing tasks if any
     await renderExistingTasks(this.state);
 
@@ -534,6 +543,47 @@ export class MastraTUI {
     updateStatusLine(this.state);
   }
 
+  private startIdleCounter(idleStartedAt = Date.now(), now = Date.now()): void {
+    this.state.idleStartedAt = idleStartedAt;
+    this.state.idleCounter?.setIdleStartedAt(idleStartedAt, now);
+    this.state.ui.requestRender?.();
+
+    if (this.idleCounterTimer) {
+      clearInterval(this.idleCounterTimer);
+    }
+
+    this.idleCounterTimer = setInterval(() => {
+      this.state.idleCounter?.update();
+      this.state.ui.requestRender?.();
+    }, 60_000);
+  }
+
+  private async renderExistingMessagesAndSeedIdleCounter(): Promise<void> {
+    await renderExistingMessages(this.state);
+
+    if (this.state.harness.isRunning()) {
+      this.clearIdleCounter();
+      return;
+    }
+
+    if (this.state.lastRenderedMessageAt === undefined) {
+      this.clearIdleCounter();
+      return;
+    }
+
+    this.startIdleCounter(this.state.lastRenderedMessageAt);
+  }
+
+  private clearIdleCounter(): void {
+    this.state.idleStartedAt = undefined;
+    this.state.idleCounter?.setIdleStartedAt(undefined);
+    if (this.idleCounterTimer) {
+      clearInterval(this.idleCounterTimer);
+      this.idleCounterTimer = null;
+    }
+    this.state.ui.requestRender?.();
+  }
+
   // ===========================================================================
   // Event Handling
   // ===========================================================================
@@ -550,6 +600,7 @@ export class MastraTUI {
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
     if (event.type === 'agent_start') {
+      this.clearIdleCounter();
       this.startCaffeinate();
       this.lastStreamError = null;
     }
@@ -574,6 +625,7 @@ export class MastraTUI {
 
       if (event.type === 'agent_end') {
         const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+        this.startIdleCounter();
         await this.runStopHook(stopReason);
 
         if (event.reason === 'error' && this.lastStreamError) {
@@ -869,7 +921,7 @@ export class MastraTUI {
       stop: () => this.stop(),
       getResolvedWorkspace: () => this.getResolvedWorkspace(),
       addUserMessage: msg => addUserMessage(this.state, msg),
-      renderExistingMessages: () => renderExistingMessages(this.state),
+      renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       showOnboarding: () => this.showOnboarding(),
     };
   }
@@ -889,7 +941,7 @@ export class MastraTUI {
       startGoal: (objective, cancelMessage, options) =>
         startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
-      renderExistingMessages: () => renderExistingMessages(this.state),
+      renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
         renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
