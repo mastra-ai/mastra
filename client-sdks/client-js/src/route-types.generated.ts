@@ -10369,10 +10369,13 @@ export type GetMemoryThreads_QueryParams = {
       }
     | undefined;
   orderBy?:
-    | {
-        field?: ('createdAt' | 'updatedAt') | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: ('createdAt' | 'updatedAt') | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
 };
 
@@ -10473,10 +10476,13 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
   agentId?: string | undefined;
   resourceId?: string | undefined;
   orderBy?:
-    | {
-        field?: 'createdAt' | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: 'createdAt' | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
   include?:
     | {
@@ -11035,10 +11041,13 @@ export type GetMemoryNetworkThreads_QueryParams = {
       }
     | undefined;
   orderBy?:
-    | {
-        field?: ('createdAt' | 'updatedAt') | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: ('createdAt' | 'updatedAt') | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
 };
 
@@ -11141,10 +11150,13 @@ export type GetMemoryNetworkThreadsThreadIdMessages_QueryParams = {
   agentId?: string | undefined;
   resourceId?: string | undefined;
   orderBy?:
-    | {
-        field?: 'createdAt' | undefined;
-        direction?: ('ASC' | 'DESC') | undefined;
-      }
+    | (
+        | {
+            field?: 'createdAt' | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
     | undefined;
   include?:
     | {

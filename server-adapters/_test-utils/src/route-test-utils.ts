@@ -114,6 +114,16 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     def = getZodDef(schema);
   }
 
+  // Unwrap z.preprocess / .transform pipes (Zod 4 represents these as ZodPipe
+  // with the validated schema at `def.out`). Without this the generator falls
+  // through to `undefined` for any query schema that uses a top-level
+  // preprocess (e.g. legacy-shape back-compat shims).
+  while (typeName === 'ZodPipe' && def?.out) {
+    schema = def.out;
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
+  }
+
   if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
     return generateValidDataFromSchema(def.innerType, fieldName);
   }
