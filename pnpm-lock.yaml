@@ -1013,6 +1013,9 @@ importers:
       fs-extra:
         specifier: ^11.3.4
         version: 11.3.4
+      rollup:
+        specifier: ^4.0.0
+        version: 4.60.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76

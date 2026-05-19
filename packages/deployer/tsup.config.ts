@@ -23,6 +23,6 @@ export default defineConfig({
   sourcemap: true,
   publicDir: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set());
+    await generateTypes(process.cwd());
   },
 });
