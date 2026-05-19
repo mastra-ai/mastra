@@ -24,6 +24,10 @@ import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
+function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
+  return ctx.state.harness.getCurrentMode?.()?.color;
+}
+
 export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
 }
@@ -31,6 +35,7 @@ export function isTaskMutationTool(toolName: string): boolean {
 function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
   if (!ctx.state.quietMode) return;
 
+  component.setCompactToolModeColor(getCurrentModeColor(ctx));
   component.setQuietModeDisplay('quiet');
   component.setQuietPreviewLineLimit(ctx.state.quietModeMaxToolPreviewLines);
 }

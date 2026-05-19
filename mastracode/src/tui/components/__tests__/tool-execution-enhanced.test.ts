@@ -1,5 +1,6 @@
+import chalk from 'chalk';
 import { describe, it, expect } from 'vitest';
-import { theme } from '../../theme.js';
+import { theme, tintHex } from '../../theme.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
 const ui = { requestRender() {} } as any;
@@ -279,6 +280,27 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
     complete.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
     expect(stripAnsi(complete.render(100).join('\n'))).toContain('▐view▌src/example.ts');
+  });
+
+  it('uses the active mode color for quiet compact tool badges', () => {
+    const modeColor = '#3366cc';
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'src/example.ts' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, compactToolModeColor: modeColor },
+      ui,
+    );
+
+    component.updateResult({
+      content: [{ type: 'text', text: '     1→const value = true;' }],
+      isError: false,
+    });
+
+    const output = component.render(100).join('\n');
+    expect(output).toContain(chalk.hex(modeColor)('▐'));
+    expect(output).toContain(chalk.bgHex(modeColor).hex('#000000').bold('view'));
+    expect(output).toContain(chalk.bgHex('#0f0f0f').hex(modeColor)('src/example.ts'));
+    expect(output).toContain(chalk.hex(tintHex(modeColor, 0.35))('│'));
   });
 
   it('renders quiet non-shell tool validation errors with actionable details', () => {

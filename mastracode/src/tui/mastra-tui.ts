@@ -1297,7 +1297,9 @@ export class MastraTUI {
     const tools = this.state.allToolComponents.filter(
       (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
     );
+    const modeColor = this.state.harness.getCurrentMode?.()?.color;
     for (const tool of tools) {
+      tool.setCompactToolModeColor?.(modeColor);
       tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
       tool.setQuietPreviewLineLimit?.(previewLineLimit);
     }
