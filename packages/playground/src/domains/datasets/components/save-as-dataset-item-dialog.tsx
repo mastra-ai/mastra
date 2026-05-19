@@ -58,18 +58,40 @@ export function SaveAsDatasetItemDialog({
 
   const prevOpenRef = useRef(false);
   const trajectorySeededRef = useRef(false);
+  const inputSeededRef = useRef(false);
+  const groundTruthSeededRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       setInput(initialInput);
       setGroundTruth(initialGroundTruth);
       setExpectedTrajectory(initialTrajectory ?? '');
       trajectorySeededRef.current = !!initialTrajectory;
+      inputSeededRef.current = initialInput !== '{}';
+      groundTruthSeededRef.current = !!initialGroundTruth;
     }
     prevOpenRef.current = isOpen;
     if (!isOpen) {
       trajectorySeededRef.current = false;
+      inputSeededRef.current = false;
+      groundTruthSeededRef.current = false;
     }
   }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
+
+  // Seed input when it arrives asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialInput !== '{}' && !inputSeededRef.current) {
+      setInput(initialInput);
+      inputSeededRef.current = true;
+    }
+  }, [isOpen, initialInput]);
+
+  // Seed groundTruth when it arrives asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialGroundTruth && !groundTruthSeededRef.current) {
+      setGroundTruth(initialGroundTruth);
+      groundTruthSeededRef.current = true;
+    }
+  }, [isOpen, initialGroundTruth]);
 
   // Seed trajectory when it arrives asynchronously after the dialog is already open
   useEffect(() => {
