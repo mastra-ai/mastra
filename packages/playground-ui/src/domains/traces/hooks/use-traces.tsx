@@ -258,9 +258,7 @@ export const useTraces = ({ filters, listMode = 'traces', polling = {} }: UseTra
   const queryClient = useQueryClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
-  const [deltaSupport, setDeltaSupport] = useState<DeltaSupport>(
-    () => deltaSupportByClient.get(client) ?? 'unknown',
-  );
+  const [deltaSupport, setDeltaSupport] = useState<DeltaSupport>(() => deltaSupportByClient.get(client) ?? 'unknown');
   const deltaUnsupported = deltaSupport === 'unsupported';
 
   // When false, all automatic polling stops: delta polls, status refresh,
@@ -317,8 +315,7 @@ export const useTraces = ({ filters, listMode = 'traces', polling = {} }: UseTra
   const deltaQuery = useQuery({
     queryKey: ['traces-delta', listMode, filters] as const,
     queryFn: () => {
-      const current = queryClient.getQueryData<InfiniteData<TracesPageResponse>>(tracesQueryKey)?.pages[0]
-        ?.deltaCursor;
+      const current = queryClient.getQueryData<InfiniteData<TracesPageResponse>>(tracesQueryKey)?.pages[0]?.deltaCursor;
       if (!current) return null;
       return fetchTracesFn({
         client,

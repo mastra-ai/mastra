@@ -227,9 +227,7 @@ describe('mergeDeltaIntoPage0', () => {
   });
 
   it('prepends delta branches into page 0 (branches mode)', () => {
-    const old = makeInfiniteData([
-      makeBranchesPage([{ traceId: 't1', spanId: 's1', name: 'agent-run' }], false, 'c1'),
-    ]);
+    const old = makeInfiniteData([makeBranchesPage([{ traceId: 't1', spanId: 's1', name: 'agent-run' }], false, 'c1')]);
     const delta = makeDeltaBranchesResponse([{ traceId: 't2', spanId: 's2', name: 'tool-call' }], 'c2');
     const merged = mergeDeltaIntoPage0(old, delta, 'branches');
     const firstPage = merged?.pages[0] as ListBranchesResponse;
@@ -258,11 +256,7 @@ describe('mergeDeltaIntoPage0', () => {
 
   it('sorts merged page 0 by startedAt DESC (delta rows are in cursor order, not startedAt)', () => {
     const old = makeInfiniteData([
-      makeTracesPage(
-        [{ traceId: 'aaa', name: 'Alpha', startedAt: '2026-05-01T12:00:00Z' } as never],
-        false,
-        'c1',
-      ),
+      makeTracesPage([{ traceId: 'aaa', name: 'Alpha', startedAt: '2026-05-01T12:00:00Z' } as never], false, 'c1'),
     ]);
     const delta = {
       delta: { limit: 100, hasMore: false },
@@ -367,9 +361,7 @@ describe('refreshPage0Rows', () => {
   });
 
   it('does not add new rows the refresh response contains but the cache does not', () => {
-    const old = makeInfiniteData([
-      makeTracesPage([{ traceId: 'aaa', spanId: 's1', name: 'Alpha' }], false, 'c1'),
-    ]);
+    const old = makeInfiniteData([makeTracesPage([{ traceId: 'aaa', spanId: 's1', name: 'Alpha' }], false, 'c1')]);
     const refreshed = makeTracesPage(
       [
         { traceId: 'aaa', spanId: 's1', name: 'Alpha' },

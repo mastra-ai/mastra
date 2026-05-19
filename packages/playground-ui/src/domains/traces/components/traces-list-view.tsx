@@ -150,10 +150,7 @@ export function TracesListView({
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
                 onClick={() => onTraceClick(trace)}
-                className={cn(
-                  isFeatured && 'bg-surface4',
-                  isRecentlyAdded && 'animate-row-highlight',
-                )}
+                className={cn(isFeatured && 'bg-surface4', isRecentlyAdded && 'animate-row-highlight')}
               >
                 <TracesDataList.DateCell timestamp={displayDate} />
                 <TracesDataList.TimeCell timestamp={displayDate} />

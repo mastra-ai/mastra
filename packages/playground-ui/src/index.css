@@ -469,11 +469,11 @@ html.light {
 }
 
 /* Temporary highlight for delta-arrived list rows.
-   Same color as the featured / hover state (var(--surface4)), starts fully
-   visible and immediately fades out to transparent over 1s. */
+   Same color as the featured / hover state (var(--surface5)), starts fully
+   visible and immediately fades out to transparent over 2s. */
 @keyframes fade-row-highlight {
   0% {
-    background-color: var(--surface6);
+    background-color: var(--surface5);
   }
 
   100% {
