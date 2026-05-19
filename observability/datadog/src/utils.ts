@@ -129,7 +129,7 @@ export function toDate(value: Date | string | number): Date {
  */
 export function safeStringify(data: unknown): string {
   try {
-    return JSON.stringify(data);
+    return JSON.stringify(data) ?? '';
   } catch {
     if (typeof data === 'object' && data !== null) {
       return `[Non-serializable ${data.constructor?.name || 'Object'}]`;
@@ -145,6 +145,12 @@ function isMessageArray(data: any): data is Array<{ role: string; content: any }
   return Array.isArray(data) && data.every(m => m?.role && m?.content !== undefined);
 }
 
+function isModelDataSpan(spanType: SpanType): boolean {
+  return (
+    spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP || spanType === SpanType.MODEL_INFERENCE
+  );
+}
+
 /**
  * Checks if data is in Gemini content array format ({role, parts}[]).
  */
@@ -152,15 +158,21 @@ function isGeminiContentArray(data: any): data is Array<{ role: string; parts: a
   return Array.isArray(data) && data.every(m => m?.role && Array.isArray(m?.parts));
 }
 
+function toMessageContent(content: any): string {
+  return typeof content === 'string' ? content : safeStringify(content);
+}
+
 /**
  * Maps a {role, content}[] message array into the Datadog message shape,
  * stringifying any non-string content (e.g. multimodal part arrays).
  */
 function toDatadogMessages(messages: Array<{ role: string; content: any }>): Array<{ role: string; content: string }> {
-  return messages.map(m => ({
-    role: m.role,
-    content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
-  }));
+  return messages
+    .map(m => ({
+      role: m.role,
+      content: toMessageContent(m.content),
+    }))
+    .filter(m => !(m.role === 'user' && m.content.trim().length === 0));
 }
 
 /**
@@ -182,18 +194,18 @@ function geminiContentToMessage(item: { role: string; parts: any[] }): { role: s
 
 /**
  * Formats input data for Datadog annotations.
- * LLM spans use message array format; others use raw or stringified data.
+ * Model spans use message array format; others use raw or stringified data.
  */
 export function formatInput(input: any, spanType: SpanType): any {
-  // LLM spans expect {role, content}[] format
-  if (spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP) {
+  // Model spans expect {role, content}[] format
+  if (isModelDataSpan(spanType)) {
     // Already in message format
     if (isMessageArray(input)) {
       return toDatadogMessages(input);
     }
     // Gemini format: {role, parts} → normalize to {role, content}
     if (isGeminiContentArray(input)) {
-      return input.map(geminiContentToMessage);
+      return toDatadogMessages(input.map(geminiContentToMessage));
     }
     // Mastra wraps MODEL_GENERATION input as { messages, schema? } and Gemini
     // request bodies use { contents }. Unwrap so we don't bury the message array
@@ -203,32 +215,32 @@ export function formatInput(input: any, spanType: SpanType): any {
         return toDatadogMessages((input as any).messages);
       }
       if (isGeminiContentArray((input as any).messages)) {
-        return (input as any).messages.map(geminiContentToMessage);
+        return toDatadogMessages((input as any).messages.map(geminiContentToMessage));
       }
       if (isGeminiContentArray((input as any).contents)) {
-        return (input as any).contents.map(geminiContentToMessage);
+        return toDatadogMessages((input as any).contents.map(geminiContentToMessage));
       }
     }
     // String input becomes user message
     if (typeof input === 'string') {
-      return [{ role: 'user', content: input }];
+      return toDatadogMessages([{ role: 'user', content: input }]);
     }
     // Object input gets stringified as user message
-    return [{ role: 'user', content: safeStringify(input) }];
+    return toDatadogMessages([{ role: 'user', content: safeStringify(input) }]);
   }
 
-  // Non-LLM spans: pass through strings/arrays, stringify objects
+  // Non-model spans: pass through strings/arrays, stringify objects
   if (typeof input === 'string' || Array.isArray(input)) return input;
   return safeStringify(input);
 }
 
 /**
  * Formats output data for Datadog annotations.
- * LLM spans use message array format; others use raw or stringified data.
+ * Model spans use message array format; others use raw or stringified data.
  */
 export function formatOutput(output: any, spanType: SpanType): any {
-  // LLM spans expect {role, content}[] format
-  if (spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP) {
+  // Model spans expect {role, content}[] format
+  if (isModelDataSpan(spanType)) {
     // Already in message format
     if (isMessageArray(output)) {
       return toDatadogMessages(output);
@@ -256,7 +268,7 @@ export function formatOutput(output: any, spanType: SpanType): any {
     return [{ role: 'assistant', content: safeStringify(output) }];
   }
 
-  // Non-LLM spans: pass through strings, stringify objects
+  // Non-model spans: pass through strings, stringify objects
   if (typeof output === 'string') return output;
   return safeStringify(output);
 }

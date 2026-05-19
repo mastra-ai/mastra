@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { IAgentBuilder } from '../agent-builder/ee';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -273,6 +274,63 @@ export interface IEditorSkillNamespace {
 }
 
 // ============================================================================
+// Favorites Namespace Interface
+// ============================================================================
+
+/** Entity kinds that can be favorited. Mirrors `STORAGE_FAVORITE_ENTITY_TYPES`. */
+export type EditorFavoriteEntityType = 'agent' | 'skill';
+
+export interface EditorFavoriteToggleResult {
+  /** Whether the entity is favorited by the caller after the operation. */
+  favorited: boolean;
+  /** Aggregate favorite count on the entity post-mutation. */
+  favoriteCount: number;
+}
+
+export interface EditorFavoriteTargetInput {
+  entityType: EditorFavoriteEntityType;
+  entityId: string;
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+export interface EditorListFavoritedIdsInput {
+  entityType: EditorFavoriteEntityType;
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+export interface EditorIsFavoritedBatchInput {
+  entityType: EditorFavoriteEntityType;
+  entityIds: string[];
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+/**
+ * Favorites namespace. Optional: only present on EE-enabled builds
+ * with `features.agent.favorites === true`.
+ *
+ * **Authorization layering**: the namespace verifies the target entity exists
+ * (404 if missing) and performs the storage mutation. Visibility / ownership
+ * checks (`assertReadAccess`) are performed by the route handler at the
+ * server boundary. Direct namespace callers must run their own visibility
+ * check before invoking these methods.
+ */
+export interface IEditorFavoritesNamespace {
+  favorite(input: EditorFavoriteTargetInput): Promise<EditorFavoriteToggleResult>;
+  unfavorite(input: EditorFavoriteTargetInput): Promise<EditorFavoriteToggleResult>;
+  isFavorited(input: EditorFavoriteTargetInput): Promise<boolean>;
+  /**
+   * Look up which entity IDs in the candidate set are favorited by the caller.
+   * Used for one-shot annotation of list responses (avoids N+1 queries).
+   * Returns a `Set<string>` of favorited entity IDs; order is irrelevant.
+   */
+  isFavoritedBatch(input: EditorIsFavoritedBatchInput): Promise<Set<string>>;
+  listFavoritedIds(input: EditorListFavoritedIdsInput): Promise<string[]>;
+}
+
+// ============================================================================
 // Main Editor Interface
 // ============================================================================
 
@@ -308,6 +366,13 @@ export interface IMastraEditor {
   /** Skill management namespace */
   readonly skill: IEditorSkillNamespace;
 
+  /**
+   * Favorites namespace. Present only when the EE favorites feature is
+   * enabled. Route handlers must hard-gate with `requireBuilderFeature`
+   * before calling this namespace.
+   */
+  readonly favorites?: IEditorFavoritesNamespace;
+
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;
   /** List all registered tool providers */
@@ -317,4 +382,19 @@ export interface IMastraEditor {
   getProcessorProvider(id: string): ProcessorProvider | undefined;
   /** List all registered processor providers */
   getProcessorProviders(): Record<string, ProcessorProvider>;
+
+  /**
+   * Check if the builder config is present and enabled.
+   * Sync. OSS-safe. Does NOT import @mastra/editor/ee.
+   * Optional for backwards compatibility.
+   */
+  hasEnabledBuilderConfig?(): boolean;
+
+  /**
+   * Resolve and return the Agent Builder instance.
+   * Dynamic-imports @mastra/editor/ee on first call.
+   * Returns undefined if builder is not configured or disabled.
+   * Optional for backwards compatibility.
+   */
+  resolveBuilder?(): Promise<IAgentBuilder | undefined>;
 }

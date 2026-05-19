@@ -21,8 +21,20 @@ const storageOrderBySchema = z.object({
 
 export const listStoredSkillsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional().describe('Filter skills by status'),
   authorId: z.string().optional().describe('Filter skills by author identifier'),
+  visibility: z.enum(['public']).optional().describe('Filter to only public skills'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter skills by metadata key-value pairs'),
+  favoritedOnly: z
+    .stringbool()
+    .optional()
+    .describe('When true, return only skills favorited by the caller (requires the `favorites` EE feature)'),
+  pinFavoritedFor: z
+    .string()
+    .optional()
+    .describe(
+      'When set, treat the given subject (user/role) as the favoriting principal for `favoritedOnly` instead of the caller',
+    ),
 });
 
 // ============================================================================
@@ -44,6 +56,70 @@ const sourceSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+export interface FileNode {
+  id?: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: FileNode[];
+}
+
+const fileNodeSchema: z.ZodType<FileNode> = z.object({
+  id: z.string().optional(),
+  name: z.string(),
+  type: z.enum(['file', 'folder']),
+  content: z.string().optional(),
+  children: z.lazy(() => z.array(fileNodeSchema)).optional(),
+});
+
+// ============================================================================
+// Origin Schema (metadata.origin)
+// ============================================================================
+
+/**
+ * Identifies where a stored skill came from.
+ * Persisted as `metadata.origin` on the stored skill so that registry-installed
+ * skills can be distinguished from skills authored directly in the Builder.
+ */
+export const skillOriginSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('skills-sh'),
+    owner: z.string().describe('Repository owner on skills.sh'),
+    repo: z.string().describe('Repository name on skills.sh'),
+    skillName: z.string().describe('Original skill name on skills.sh'),
+    installedAt: z.string().describe('ISO-8601 timestamp of the install'),
+  }),
+  z.object({
+    type: z.literal('library-copy'),
+    sourceSkillId: z.string().describe('ID of the public Library skill this was copied from'),
+    sourceSkillName: z.string().describe('Name of the source skill at copy time'),
+    sourceAuthorId: z.string().optional().describe('Author of the source skill at copy time, when known'),
+    copiedAt: z.string().describe('ISO-8601 timestamp of the copy'),
+  }),
+]);
+
+export type SkillOrigin = z.infer<typeof skillOriginSchema>;
+
+/** Metadata key under which origin information is persisted on a stored skill. */
+export const SKILL_ORIGIN_METADATA_KEY = 'origin';
+
+/**
+ * Read a typed origin off a stored skill's metadata blob, if present and valid.
+ * Returns null when the skill has no origin (i.e., authored directly in the Builder).
+ */
+export function readSkillOrigin(metadata: Record<string, unknown> | undefined): SkillOrigin | null {
+  if (!metadata) return null;
+  const raw = metadata[SKILL_ORIGIN_METADATA_KEY];
+  if (!raw) return null;
+  const parsed = skillOriginSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Build a metadata patch for an origin, suitable for spreading into the create body. */
+export function buildOriginMetadata(origin: SkillOrigin): Record<string, unknown> {
+  return { [SKILL_ORIGIN_METADATA_KEY]: origin };
+}
+
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the skill'),
   description: z.string().describe('Description of what the skill does and when to use it'),
@@ -54,6 +130,7 @@ const snapshotConfigSchema = z.object({
   references: z.array(z.string()).optional().describe('List of reference file paths'),
   scripts: z.array(z.string()).optional().describe('List of script file paths'),
   assets: z.array(z.string()).optional().describe('List of asset file paths'),
+  files: z.array(fileNodeSchema).optional().describe('Full file tree structure for the skill'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the skill'),
 });
 
@@ -61,12 +138,20 @@ export const createStoredSkillBodySchema = z
   .object({
     id: z.string().optional().describe('Unique identifier. If not provided, derived from name.'),
     authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
+    visibility: z
+      .enum(['private', 'public'])
+      .optional()
+      .describe('Skill visibility: private (owner/admin only) or public (any reader)'),
   })
   .merge(snapshotConfigSchema);
 
 export const updateStoredSkillBodySchema = z
   .object({
     authorId: z.string().optional(),
+    visibility: z
+      .enum(['private', 'public'])
+      .optional()
+      .describe('Skill visibility: private (owner/admin only) or public (any reader)'),
   })
   .partial()
   .merge(snapshotConfigSchema.partial());
@@ -80,6 +165,9 @@ export const storedSkillSchema = z.object({
   status: z.string().describe('Skill status: draft, published, or archived'),
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
+  visibility: z.enum(['private', 'public']).optional(),
+  favoriteCount: z.number().int().nonnegative().optional().describe('Number of users who have favorited this skill'),
+  isFavorited: z.boolean().optional().describe('Whether the requesting user has favorited this skill'),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   name: z.string().describe('Name of the skill'),
@@ -91,6 +179,7 @@ export const storedSkillSchema = z.object({
   references: z.array(z.string()).optional().describe('List of reference file paths'),
   scripts: z.array(z.string()).optional().describe('List of script file paths'),
   assets: z.array(z.string()).optional().describe('List of asset file paths'),
+  files: z.array(fileNodeSchema).optional().describe('Full file tree structure for the skill'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the skill'),
 });
 
@@ -107,6 +196,7 @@ export const updateStoredSkillResponseSchema = z.union([
     status: z.string(),
     activeVersionId: z.string().optional(),
     authorId: z.string().optional(),
+    visibility: z.enum(['private', 'public']).optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   }),

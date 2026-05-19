@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { InternalSpans } from '../observability';
 import type { SuspendOptions } from '../workflows';
 import { createStep, createWorkflow } from '../workflows/evented';
 import type { BackgroundTaskManager } from './manager';
@@ -276,6 +277,12 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // than widen every step's input schema.
       validateInputs: false,
       shouldPersistSnapshot: ({ workflowStatus }) => WORKFLOW_STATUS_TO_PERSIST.includes(workflowStatus),
+      // Internal scheduler plumbing — hide workflow spans from exported
+      // traces. The task body itself runs as user code and keeps its own
+      // spans.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .then(runAttemptStep)
@@ -289,6 +296,10 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
     steps: [attemptBodyWorkflow],
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => WORKFLOW_STATUS_TO_PERSIST.includes(workflowStatus),
+      // Internal scheduler plumbing — see the inner workflow comment.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .dountil(attemptBodyWorkflow, async ({ inputData }) => inputData?.done === true)
