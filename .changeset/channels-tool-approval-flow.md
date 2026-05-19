@@ -2,7 +2,8 @@
 '@mastra/core': patch
 ---
 
-Fix tool approval flow in `AgentChannels` so the resumed run actually renders to the chat platform:
+Fix tool approval flow in `AgentChannels` so the resumed agent run actually renders to the chat platform on Approve and Deny:
 
-- On Approve, the resumed `MastraModelOutput` stream is now drained so the run progresses. Chunks fan into the existing thread subscription, which edits the approval card with the tool result and posts any follow-up assistant text.
-- On Deny, the agent run is now resumed via `declineToolCall` so the model can produce a follow-up message acknowledging the denial. Previously the card was edited to "Denied" but the suspended run was left running forever with no feedback from the agent.
+- Approve: drain the resumed `MastraModelOutput` stream and fan its chunks to the existing thread subscription, so the approval card is updated with the tool result and any follow-up assistant text is posted.
+- Deny: resume the agent run via `declineToolCall` so the model can acknowledge the denial. Previously the card was edited to "Denied" but the suspended run was left running with no follow-up.
+- `agent.subscribeToThread()` consumers now receive chunks from resumed runs. The subscription used to deduplicate by run id, which silently dropped the second registration for a resumed run that kept its original `runId`.
