@@ -206,9 +206,8 @@ export interface ObservationConfig {
    *   for everything. An empty array drops everything.
    *
    * Use this when the Observer model is text-only (e.g. some DeepSeek
-   * endpoints) while the main agent uses a multimodal model. Tool-result
-   * attachments hoisted into observer attachments are filtered with the
-   * same rule.
+   * endpoints) while the main agent uses a multimodal model. The same
+   * filter applies to tool results that contain image or file parts.
    *
    * @default true
    */
