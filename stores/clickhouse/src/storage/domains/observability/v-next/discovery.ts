@@ -44,13 +44,14 @@ async function queryJson<T>(
 
 // -- Entity discovery ---------------------------------------------------------
 
+/** Return entity types that have appeared in observability signal rows. */
 export async function getEntityTypes(
   client: ClickHouseClient,
   _args: GetEntityTypesArgs,
 ): Promise<GetEntityTypesResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'entityType' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'entityType' ORDER BY value`,
   );
 
   const validTypes = new Set(Object.values(EntityType));
@@ -63,6 +64,7 @@ export async function getEntityTypes(
   return { entityTypes };
 }
 
+/** Return entity names, optionally scoped to a single entity type. */
 export async function getEntityNames(
   client: ClickHouseClient,
   args: GetEntityNamesArgs,
@@ -77,7 +79,7 @@ export async function getEntityNames(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value`,
     params,
   );
   return { names: rows.map(r => r.value) };
@@ -85,30 +87,33 @@ export async function getEntityNames(
 
 // -- Service & environment discovery ------------------------------------------
 
+/** Return service names recorded across observability signal rows. */
 export async function getServiceNames(
   client: ClickHouseClient,
   _args: GetServiceNamesArgs,
 ): Promise<GetServiceNamesResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'serviceName' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'serviceName' ORDER BY value`,
   );
   return { serviceNames: rows.map(r => r.value) };
 }
 
+/** Return environment names recorded across observability signal rows. */
 export async function getEnvironments(
   client: ClickHouseClient,
   _args: GetEnvironmentsArgs,
 ): Promise<GetEnvironmentsResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'environment' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'environment' ORDER BY value`,
   );
   return { environments: rows.map(r => r.value) };
 }
 
 // -- Tag discovery ------------------------------------------------------------
 
+/** Return tags, optionally scoped to the entity type they were recorded with. */
 export async function getTags(client: ClickHouseClient, args: GetTagsArgs): Promise<GetTagsResponse> {
   const conditions = [`kind = 'tag'`];
   const params: Record<string, unknown> = {};
@@ -120,7 +125,7 @@ export async function getTags(client: ClickHouseClient, args: GetTagsArgs): Prom
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value`,
     params,
   );
   return { tags: rows.map(r => r.value) };
