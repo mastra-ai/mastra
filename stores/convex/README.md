@@ -2,7 +2,7 @@
 
 Convex adapters for Mastra:
 
-- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources).
+- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, schedules).
 - `ConvexVector` stores embeddings inside Convex and performs development-scale cosine similarity search.
 - `ConvexNativeVector` uses Convex native vector search for production workloads.
 - `ConvexServerCache` stores Mastra server cache entries in Convex for durable stream replay and response caching.
@@ -28,6 +28,8 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraSchedulesTable,
+  mastraScheduleTriggersTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraCacheTable,
@@ -41,6 +43,8 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_schedules: mastraSchedulesTable,
+  mastra_schedule_triggers: mastraScheduleTriggersTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_cache: mastraCacheTable,
@@ -167,6 +171,8 @@ This adapter uses **typed Convex tables** for each Mastra domain:
 | Resources      | `mastra_resources`          | User working memory  |
 | Workflows      | `mastra_workflow_snapshots` | Workflow state       |
 | Scorers        | `mastra_scorers`            | Evaluation data      |
+| Schedules      | `mastra_schedules`          | Workflow schedules   |
+| Triggers       | `mastra_schedule_triggers`  | Schedule history     |
 | Vector Indexes | `mastra_vector_indexes`     | Index metadata       |
 | Vectors        | `mastra_vectors`            | Embeddings           |
 | Cache          | `mastra_cache`              | Cache metadata       |
@@ -177,6 +183,8 @@ All typed tables include:
 
 - An `id` field for Mastra's record ID (distinct from Convex's auto-generated `_id`)
 - A `by_record_id` index for efficient lookups by Mastra ID
+
+Schedule due reads and trigger-history reads use bounded Convex queries to avoid deployment read limits. When no explicit trigger-history limit is provided, the adapter returns the newest 100 rows. Schedule listing is capped at 8,000 rows per call. Schedule rows also store a normalized `workflow_id` alongside the serialized target so workflow filters can run inside Convex before the listing cap is applied.
 
 ## Testing
 

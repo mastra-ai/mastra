@@ -15,6 +15,8 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -132,6 +134,56 @@ export const mastraScoresTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[
   .index('by_entity', ['entityId', 'entityType'])
   .index('by_run', ['runId'])
   .index('by_created', ['createdAt']);
+
+/**
+ * Schedules table - stores workflow scheduler state.
+ *
+ * Schedule times are represented as JavaScript millisecond timestamps. Target
+ * and metadata payloads are serialized JSON strings because user-provided JSON
+ * can contain Convex-reserved field names such as `$schema`.
+ */
+export const mastraSchedulesTable = defineTable({
+  id: v.string(),
+  target: v.string(),
+  cron: v.string(),
+  timezone: v.optional(v.union(v.string(), v.null())),
+  status: v.string(),
+  next_fire_at: v.number(),
+  last_fire_at: v.optional(v.union(v.number(), v.null())),
+  last_run_id: v.optional(v.union(v.string(), v.null())),
+  created_at: v.number(),
+  updated_at: v.number(),
+  metadata: v.optional(v.union(v.string(), v.null())),
+  owner_type: v.optional(v.union(v.string(), v.null())),
+  owner_id: v.optional(v.union(v.string(), v.null())),
+  workflow_id: v.optional(v.union(v.string(), v.null())),
+})
+  .index('by_record_id', ['id'])
+  .index('by_status_next_fire_at', ['status', 'next_fire_at'])
+  .index('by_workflow_status', ['workflow_id', 'status'])
+  .index('by_workflow_id', ['workflow_id'])
+  .index('by_owner', ['owner_type', 'owner_id'])
+  .index('by_owner_id', ['owner_id'])
+  .index('by_created', ['created_at']);
+
+/**
+ * Schedule trigger table - stores scheduler trigger history.
+ */
+export const mastraScheduleTriggersTable = defineTable({
+  id: v.string(),
+  schedule_id: v.string(),
+  run_id: v.optional(v.union(v.string(), v.null())),
+  scheduled_fire_at: v.number(),
+  actual_fire_at: v.number(),
+  outcome: v.string(),
+  error: v.optional(v.union(v.string(), v.null())),
+  trigger_kind: v.string(),
+  parent_trigger_id: v.optional(v.union(v.string(), v.null())),
+  metadata: v.optional(v.union(v.string(), v.null())),
+})
+  .index('by_record_id', ['id'])
+  .index('by_schedule_actual', ['schedule_id', 'actual_fire_at'])
+  .index('by_parent_trigger', ['parent_trigger_id']);
 
 // ============================================================================
 // Vector Tables - Not in core schemas (vector-specific)
@@ -269,7 +321,15 @@ export const mastraDocumentsTable = defineTable({
 // Re-export table name constants for convenience
 // ============================================================================
 
-export { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_RESOURCES, TABLE_SCORERS };
+export {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_RESOURCES,
+  TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+};
 
 // Additional table name constants for vector tables (not in core)
 export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';

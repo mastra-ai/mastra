@@ -8,7 +8,9 @@ import dotenv from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ConvexAdminClient } from './client';
+import { ConvexDB } from './db';
 import { MemoryConvex } from './domains/memory';
+import { SchedulesConvex } from './domains/schedules';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
 import { ConvexStore } from './index';
@@ -168,6 +170,67 @@ describe('Convex Schema Sync', () => {
     expect(convexFields).toContain('id');
   });
 
+  it('mastraSchedulesTable should include scheduler state fields', async () => {
+    const { mastraSchedulesTable } = await import('../schema');
+
+    const convexValidator = (mastraSchedulesTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'target',
+        'cron',
+        'status',
+        'next_fire_at',
+        'last_fire_at',
+        'last_run_id',
+        'created_at',
+        'updated_at',
+        'workflow_id',
+      ]),
+    );
+
+    const indexes = ((mastraSchedulesTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        ['by_workflow_status', ['workflow_id', 'status']],
+        ['by_workflow_id', ['workflow_id']],
+        ['by_owner_id', ['owner_id']],
+      ]),
+    );
+  });
+
+  it('mastraScheduleTriggersTable should include trigger history fields', async () => {
+    const { mastraScheduleTriggersTable } = await import('../schema');
+
+    const convexValidator = (mastraScheduleTriggersTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'schedule_id',
+        'run_id',
+        'scheduled_fire_at',
+        'actual_fire_at',
+        'outcome',
+        'trigger_kind',
+      ]),
+    );
+  });
+
+  it('server entrypoint should re-export scheduler schema helpers', async () => {
+    const serverExports = await import('../server');
+
+    expect(serverExports.mastraSchedulesTable).toBeDefined();
+    expect(serverExports.mastraScheduleTriggersTable).toBeDefined();
+    expect(serverExports.TABLE_SCHEDULES).toBe('mastra_schedules');
+    expect(serverExports.TABLE_SCHEDULE_TRIGGERS).toBe('mastra_schedule_triggers');
+  });
+
   it('cache tables should include indexes used by ConvexServerCache', async () => {
     const { mastraCacheTable, mastraCacheListItemsTable } = await import('../schema');
     const normalizeIndexes = (indexes: any[]) =>
@@ -190,6 +253,40 @@ describe('Convex Schema Sync', () => {
         ['by_key_index', ['key', 'index']],
       ]),
     );
+  });
+});
+
+describe('ConvexStore domains', () => {
+  it('exposes schedules storage for workflow scheduler support', async () => {
+    const store = new ConvexStore({
+      id: 'convex-domain-test',
+      deploymentUrl: 'https://test.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+
+    expect(store.stores.schedules).toBeInstanceOf(SchedulesConvex);
+  });
+});
+
+describe('ConvexDB schedule operations', () => {
+  it('requires schedule ids before normalizing records', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.createSchedule({ cron: '* * * * *' })).rejects.toThrow('Schedule is missing an id');
+
+    expect(callStorage).not.toHaveBeenCalled();
+  });
+
+  it('requires schedule trigger ids before normalizing records', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.recordScheduleTrigger({ schedule_id: 'schedule-1' })).rejects.toThrow(
+      'Schedule trigger is missing an id',
+    );
+
+    expect(callStorage).not.toHaveBeenCalled();
   });
 });
 

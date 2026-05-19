@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 import { MastraBase } from '@mastra/core/base';
-import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 
 import { ConvexAdminClient } from '../client';
@@ -132,12 +132,18 @@ export class ConvexDB extends MastraBase {
     return result;
   }
 
-  public async queryTable<R>(tableName: TABLE_NAMES, filters?: EqualityFilter[], indexHint?: IndexHint): Promise<R[]> {
+  public async queryTable<R>(
+    tableName: TABLE_NAMES,
+    filters?: EqualityFilter[],
+    indexHint?: IndexHint,
+    limit?: number,
+  ): Promise<R[]> {
     return this.client.callStorage<R[]>({
       op: 'queryTable',
       tableName,
       filters,
       indexHint,
+      limit,
     });
   }
 
@@ -148,6 +154,105 @@ export class ConvexDB extends MastraBase {
       tableName,
       ids,
     });
+  }
+
+  public async createSchedule(record: Record<string, any>): Promise<void> {
+    if (!record.id) {
+      throw new Error(`Schedule is missing an id`);
+    }
+
+    await this.client.callStorage({
+      op: 'createSchedule',
+      tableName: TABLE_SCHEDULES,
+      record: this.normalizeRecord(TABLE_SCHEDULES, record),
+    });
+  }
+
+  public async recordScheduleTrigger(record: Record<string, any>): Promise<void> {
+    if (!record.id) {
+      throw new Error(`Schedule trigger is missing an id`);
+    }
+
+    await this.client.callStorage({
+      op: 'recordScheduleTrigger',
+      tableName: TABLE_SCHEDULE_TRIGGERS,
+      record: this.normalizeRecord(TABLE_SCHEDULE_TRIGGERS, record),
+    });
+  }
+
+  public async listDueSchedules<R>(now: number, limit?: number): Promise<R[]> {
+    return this.client.callStorage<R[]>({
+      op: 'listDueSchedules',
+      tableName: TABLE_SCHEDULES,
+      now,
+      limit,
+    });
+  }
+
+  public async updateScheduleNextFire({
+    id,
+    expectedNextFireAt,
+    newNextFireAt,
+    lastFireAt,
+    lastRunId,
+  }: {
+    id: string;
+    expectedNextFireAt: number;
+    newNextFireAt: number;
+    lastFireAt: number;
+    lastRunId: string;
+  }): Promise<boolean> {
+    return this.client.callStorage<boolean>({
+      op: 'updateScheduleNextFire',
+      tableName: TABLE_SCHEDULES,
+      id,
+      expectedNextFireAt,
+      newNextFireAt,
+      lastFireAt,
+      lastRunId,
+    });
+  }
+
+  public async updateSchedule<R>({ id, patch }: { id: string; patch: Record<string, any> }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'updateSchedule',
+      tableName: TABLE_SCHEDULES,
+      id,
+      patch,
+    });
+  }
+
+  public async listScheduleTriggers<R>({
+    scheduleId,
+    fromActualFireAt,
+    toActualFireAt,
+    limit,
+  }: {
+    scheduleId: string;
+    fromActualFireAt?: number;
+    toActualFireAt?: number;
+    limit?: number;
+  }): Promise<R[]> {
+    return this.client.callStorage<R[]>({
+      op: 'listScheduleTriggers',
+      tableName: TABLE_SCHEDULE_TRIGGERS,
+      scheduleId,
+      fromActualFireAt,
+      toActualFireAt,
+      limit,
+    });
+  }
+
+  public async deleteScheduleTriggers(scheduleId: string): Promise<void> {
+    let hasMore = true;
+    while (hasMore) {
+      const response = await this.client.callStorageRaw({
+        op: 'deleteScheduleTriggers',
+        tableName: TABLE_SCHEDULE_TRIGGERS,
+        scheduleId,
+      });
+      hasMore = response.hasMore ?? false;
+    }
   }
 
   private normalizeRecord(tableName: TABLE_NAMES, record: Record<string, any>): Record<string, any> {

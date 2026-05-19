@@ -5,11 +5,12 @@ import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
 import { BackgroundTasksConvex } from './domains/background-tasks';
 import { MemoryConvex } from './domains/memory';
+import { SchedulesConvex } from './domains/schedules';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { BackgroundTasksConvex, MemoryConvex, ScoresConvex, WorkflowsConvex };
+export { BackgroundTasksConvex, MemoryConvex, SchedulesConvex, ScoresConvex, WorkflowsConvex };
 export type { ConvexDomainConfig } from './db';
 
 /**
@@ -110,6 +111,7 @@ export class ConvexStore extends MastraCompositeStore {
       workflows,
       scores,
       backgroundTasks: new BackgroundTasksConvex(domainConfig),
+      schedules: new SchedulesConvex(domainConfig),
     };
   }
 }

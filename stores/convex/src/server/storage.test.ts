@@ -1,4 +1,4 @@
-import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage/constants';
+import { TABLE_SCHEDULES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage/constants';
 import type { GenericId } from 'convex/values';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -11,7 +11,10 @@ type StorageHandlerForTest = typeof mastraStorage & {
 };
 type TestDoc = { _id: GenericId<string>; id?: string };
 type TestQueryBuilder = {
-  eq: (field: string, value: string) => TestQueryBuilder;
+  eq: (field: string, value: unknown) => TestQueryBuilder;
+  lte?: (field: string, value: number) => TestQueryBuilder;
+  gte?: (field: string, value: number) => TestQueryBuilder;
+  lt?: (field: string, value: number) => TestQueryBuilder;
 };
 
 const asConvexId = (id: string) => id as GenericId<string>;
@@ -52,6 +55,407 @@ describe('mastraStorage typed load', () => {
     expect(builder.eq).toHaveBeenNthCalledWith(2, 'run_id', 'run-1');
     expect(unique).toHaveBeenCalledTimes(1);
     expect(take).not.toHaveBeenCalled();
+  });
+});
+
+describe('mastraStorage schedules', () => {
+  function createScheduleClaimCtx(schedule: Record<string, unknown> | null) {
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const unique = vi.fn(async () => schedule);
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { unique };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const patch = vi.fn(async () => undefined);
+    const ctx = { db: { query, patch } } as unknown as TypedOperationCtx;
+
+    return { ctx, builder, withIndex, query, patch };
+  }
+
+  it('creates schedules without upserting existing ids', async () => {
+    const existing = { _id: asConvexId('schedule-doc'), id: 'schedule-1' };
+    const createCtx = createScheduleClaimCtx(null);
+    const insert = vi.fn(async () => undefined);
+    (createCtx.ctx as any).db.insert = insert;
+
+    const result = await handleTypedOperation(createCtx.ctx, 'mastra_schedules', {
+      op: 'createSchedule',
+      tableName: TABLE_SCHEDULES,
+      record: { id: 'schedule-1', cron: '* * * * *' },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(insert).toHaveBeenCalledWith('mastra_schedules', { id: 'schedule-1', cron: '* * * * *' });
+
+    const duplicateCtx = createScheduleClaimCtx(existing);
+    await expect(
+      handleTypedOperation(duplicateCtx.ctx, 'mastra_schedules', {
+        op: 'createSchedule',
+        tableName: TABLE_SCHEDULES,
+        record: { id: 'schedule-1', cron: '* * * * *' },
+      }),
+    ).rejects.toThrow(/already exists/);
+  });
+
+  it('records schedule triggers without upserting existing ids', async () => {
+    const existing = { _id: asConvexId('trigger-doc'), id: 'trigger-1' };
+    const createCtx = createScheduleClaimCtx(null);
+    const insert = vi.fn(async () => undefined);
+    (createCtx.ctx as any).db.insert = insert;
+
+    const result = await handleTypedOperation(createCtx.ctx, 'mastra_schedule_triggers', {
+      op: 'recordScheduleTrigger',
+      tableName: 'mastra_schedule_triggers',
+      record: { id: 'trigger-1', schedule_id: 'schedule-1' },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(insert).toHaveBeenCalledWith('mastra_schedule_triggers', {
+      id: 'trigger-1',
+      schedule_id: 'schedule-1',
+    });
+
+    const duplicateCtx = createScheduleClaimCtx(existing);
+    await expect(
+      handleTypedOperation(duplicateCtx.ctx, 'mastra_schedule_triggers', {
+        op: 'recordScheduleTrigger',
+        tableName: 'mastra_schedule_triggers',
+        record: { id: 'trigger-1', schedule_id: 'schedule-1' },
+      }),
+    ).rejects.toThrow(/already exists/);
+  });
+
+  it('atomically claims a due schedule when nextFireAt matches', async () => {
+    const claimCtx = createScheduleClaimCtx({
+      _id: asConvexId('schedule-doc'),
+      id: 'schedule-1',
+      status: 'active',
+      next_fire_at: 100,
+    });
+
+    const result = await handleTypedOperation(claimCtx.ctx, 'mastra_schedules', {
+      op: 'updateScheduleNextFire',
+      tableName: TABLE_SCHEDULES,
+      id: 'schedule-1',
+      expectedNextFireAt: 100,
+      newNextFireAt: 200,
+      lastFireAt: 150,
+      lastRunId: 'run-1',
+    });
+
+    expect(result).toEqual({ ok: true, result: true });
+    expect(claimCtx.query).toHaveBeenCalledWith('mastra_schedules');
+    expect(claimCtx.withIndex).toHaveBeenCalledWith('by_record_id', expect.any(Function));
+    expect(claimCtx.builder.eq).toHaveBeenCalledWith('id', 'schedule-1');
+    expect(claimCtx.patch).toHaveBeenCalledWith(asConvexId('schedule-doc'), {
+      next_fire_at: 200,
+      last_fire_at: 150,
+      last_run_id: 'run-1',
+      updated_at: expect.any(Number),
+    });
+  });
+
+  it('does not claim a schedule when nextFireAt changed', async () => {
+    const claimCtx = createScheduleClaimCtx({
+      _id: asConvexId('schedule-doc'),
+      id: 'schedule-1',
+      status: 'active',
+      next_fire_at: 101,
+    });
+
+    const result = await handleTypedOperation(claimCtx.ctx, 'mastra_schedules', {
+      op: 'updateScheduleNextFire',
+      tableName: TABLE_SCHEDULES,
+      id: 'schedule-1',
+      expectedNextFireAt: 100,
+      newNextFireAt: 200,
+      lastFireAt: 150,
+      lastRunId: 'run-1',
+    });
+
+    expect(result).toEqual({ ok: true, result: false });
+    expect(claimCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('patches only requested schedule fields without stale CAS fields', async () => {
+    const existing = {
+      _id: asConvexId('schedule-doc'),
+      id: 'schedule-1',
+      status: 'active',
+      next_fire_at: 200,
+      last_fire_at: 150,
+      last_run_id: 'run-1',
+    };
+    const claimCtx = createScheduleClaimCtx(existing);
+
+    const result = await handleTypedOperation(claimCtx.ctx, 'mastra_schedules', {
+      op: 'updateSchedule',
+      tableName: TABLE_SCHEDULES,
+      id: 'schedule-1',
+      patch: {
+        metadata: null,
+        updated_at: 250,
+      },
+    });
+
+    expect(result).toEqual({ ok: true, result: { ...existing, metadata: null, updated_at: 250 } });
+    expect(claimCtx.patch).toHaveBeenCalledWith(asConvexId('schedule-doc'), {
+      metadata: null,
+      updated_at: 250,
+    });
+  });
+
+  it('lists due active schedules through the status and next-fire index', async () => {
+    const docs = [{ _id: asConvexId('schedule-1'), id: 'schedule-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+      lte: vi.fn((_field: string, _value: number) => builder),
+    };
+    const take = vi.fn(async () => docs);
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { take };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_schedules', {
+      op: 'listDueSchedules',
+      tableName: TABLE_SCHEDULES,
+      now: 500,
+      limit: 10,
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(withIndex).toHaveBeenCalledWith('by_status_next_fire_at', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('status', 'active');
+    expect(builder.lte).toHaveBeenCalledWith('next_fire_at', 500);
+    expect(take).toHaveBeenCalledWith(10);
+  });
+
+  it('uses a bounded default for due schedules when no limit is provided', async () => {
+    const docs = [{ _id: asConvexId('schedule-1'), id: 'schedule-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+      lte: vi.fn((_field: string, _value: number) => builder),
+    };
+    const take = vi.fn(async () => docs);
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { take };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_schedules', {
+      op: 'listDueSchedules',
+      tableName: TABLE_SCHEDULES,
+      now: 500,
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(take).toHaveBeenCalledWith(100);
+  });
+
+  it('applies remaining schedule query filters inside Convex before taking rows', async () => {
+    const docs = [{ _id: asConvexId('schedule-1'), id: 'schedule-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: unknown) => builder),
+    };
+    const filterQuery = { take: vi.fn(async () => docs) };
+    const queryFilter = vi.fn((predicate: (q: any) => unknown) => {
+      const q = {
+        field: vi.fn((field: string) => ({ field })),
+        eq: vi.fn((field: unknown, value: unknown) => ({ field, value })),
+        and: vi.fn((...predicates: unknown[]) => predicates),
+      };
+      predicate(q);
+      expect(q.field).toHaveBeenCalledWith('status');
+      expect(q.eq).toHaveBeenCalledWith({ field: 'status' }, 'active');
+      return filterQuery;
+    });
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { filter: queryFilter, take: vi.fn(async () => docs) };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_schedules', {
+      op: 'queryTable',
+      tableName: TABLE_SCHEDULES,
+      filters: [
+        { field: 'owner_id', value: null },
+        { field: 'status', value: 'active' },
+      ],
+      limit: 8_000,
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(withIndex).toHaveBeenCalledWith('by_owner_id', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('owner_id', null);
+    expect(queryFilter).toHaveBeenCalledTimes(1);
+    expect(filterQuery.take).toHaveBeenCalledWith(10_000);
+  });
+
+  it('uses the composite workflow/status index for filtered schedule lists', async () => {
+    const docs = [{ _id: asConvexId('schedule-1'), id: 'schedule-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: unknown) => builder),
+    };
+    const take = vi.fn(async () => docs);
+    const filter = vi.fn();
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { filter, take };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_schedules', {
+      op: 'queryTable',
+      tableName: TABLE_SCHEDULES,
+      filters: [
+        { field: 'status', value: 'active' },
+        { field: 'workflow_id', value: 'workflow-1' },
+      ],
+      limit: 8_000,
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(withIndex).toHaveBeenCalledWith('by_workflow_status', expect.any(Function));
+    expect(builder.eq).toHaveBeenNthCalledWith(1, 'workflow_id', 'workflow-1');
+    expect(builder.eq).toHaveBeenNthCalledWith(2, 'status', 'active');
+    expect(filter).not.toHaveBeenCalled();
+    expect(take).toHaveBeenCalledWith(10_000);
+  });
+
+  it('applies explicit filters even when an index hint uses the same fields', async () => {
+    const docs = [{ _id: asConvexId('snapshot-1'), id: 'snapshot-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: unknown) => builder),
+    };
+    const filterQuery = { take: vi.fn(async () => docs) };
+    const queryFilter = vi.fn((predicate: (q: any) => unknown) => {
+      const q = {
+        field: vi.fn((field: string) => ({ field })),
+        eq: vi.fn((field: unknown, value: unknown) => ({ field, value })),
+        and: vi.fn((...predicates: unknown[]) => predicates),
+      };
+      predicate(q);
+      expect(q.field).toHaveBeenCalledWith('workflow_name');
+      expect(q.eq).toHaveBeenCalledWith({ field: 'workflow_name' }, 'workflow-b');
+      return filterQuery;
+    });
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { filter: queryFilter, take: vi.fn(async () => docs) };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_workflow_snapshots', {
+      op: 'queryTable',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      filters: [{ field: 'workflow_name', value: 'workflow-b' }],
+      indexHint: { index: 'by_workflow', workflowName: 'workflow-a' },
+      limit: 10,
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(withIndex).toHaveBeenCalledWith('by_workflow', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('workflow_name', 'workflow-a');
+    expect(queryFilter).toHaveBeenCalledTimes(1);
+    expect(filterQuery.take).toHaveBeenCalledWith(20);
+  });
+
+  it('lists trigger history through the schedule and actual-fire index newest first', async () => {
+    const docs = [{ _id: asConvexId('trigger-1'), id: 'trigger-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+      gte: vi.fn((_field: string, _value: number) => builder),
+      lt: vi.fn((_field: string, _value: number) => builder),
+    };
+    const take = vi.fn(async () => docs);
+    const order = vi.fn((_direction: 'asc' | 'desc') => ({ take }));
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { order };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_schedule_triggers', {
+      op: 'listScheduleTriggers',
+      tableName: 'mastra_schedule_triggers',
+      scheduleId: 'schedule-1',
+      fromActualFireAt: 100,
+      toActualFireAt: 500,
+      limit: 1_500,
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(withIndex).toHaveBeenCalledWith('by_schedule_actual', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('schedule_id', 'schedule-1');
+    expect(builder.gte).toHaveBeenCalledWith('actual_fire_at', 100);
+    expect(builder.lt).toHaveBeenCalledWith('actual_fire_at', 500);
+    expect(order).toHaveBeenCalledWith('desc');
+    expect(take).toHaveBeenCalledWith(1_500);
+  });
+
+  it('uses a bounded default for trigger history when no limit is provided', async () => {
+    const docs = [{ _id: asConvexId('trigger-1'), id: 'trigger-1' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const take = vi.fn(async () => docs);
+    const order = vi.fn((_direction: 'asc' | 'desc') => ({ take }));
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { order };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_schedule_triggers', {
+      op: 'listScheduleTriggers',
+      tableName: 'mastra_schedule_triggers',
+      scheduleId: 'schedule-1',
+    });
+
+    expect(result).toEqual({ ok: true, result: docs });
+    expect(order).toHaveBeenCalledWith('desc');
+    expect(take).toHaveBeenCalledWith(100);
+  });
+
+  it('deletes one trigger-history batch by schedule id', async () => {
+    const docs = Array.from({ length: 26 }, (_, index) => ({ _id: asConvexId(`trigger-${index}`) }));
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const take = vi.fn(async () => docs);
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { take };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const deleteDoc = vi.fn(async () => undefined);
+    const ctx = { db: { query, delete: deleteDoc } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_schedule_triggers', {
+      op: 'deleteScheduleTriggers',
+      tableName: 'mastra_schedule_triggers',
+      scheduleId: 'schedule-1',
+    });
+
+    expect(result).toEqual({ ok: true, hasMore: true });
+    expect(withIndex).toHaveBeenCalledWith('by_schedule_actual', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('schedule_id', 'schedule-1');
+    expect(take).toHaveBeenCalledWith(26);
+    expect(deleteDoc).toHaveBeenCalledTimes(25);
   });
 });
 
