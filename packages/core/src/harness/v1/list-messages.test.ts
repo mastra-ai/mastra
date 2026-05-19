@@ -167,6 +167,20 @@ describe('Session.listMessages', () => {
     expect(messages.map(m => m.id)).toEqual(['m3', 'm4']);
   });
 
+  it('filters messages by the session resource when thread ids overlap', async () => {
+    const { harness } = setupHarness();
+    await harness.threads.create({ resourceId: 'r1', threadId: 'thread-shared', title: 't' });
+    await seedMessages(harness, [
+      makeUserMessage('m-r1', 'thread-shared', 'r1', 'visible', new Date('2026-05-10T00:00:00Z')),
+      makeUserMessage('m-r2', 'thread-shared', 'r2', 'hidden', new Date('2026-05-10T00:00:10Z')),
+    ]);
+
+    const session = await harness.session({ resourceId: 'r1', threadId: 'thread-shared' });
+
+    expect((await session.listMessages()).map(m => m.id)).toEqual(['m-r1']);
+    expect((await session.listMessages({ limit: 2 })).map(m => m.id)).toEqual(['m-r1']);
+  });
+
   it('limit === 0 returns []', async () => {
     const { harness } = setupHarness();
     await harness.threads.create({ resourceId: 'r1', threadId: 'thread-zero', title: 't' });

@@ -77540,6 +77540,424 @@ export interface PostSchedulesScheduleIdResume_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /harness/:name/sessions
+// ============================================================================
+export type GetHarnessNameSessions_PathParams = {
+  /** Harness registration name */
+  name: string;
+};
+
+export type GetHarnessNameSessions_QueryParams = {
+  cursor?: string | undefined;
+  limit?: number | undefined;
+  includeClosed?: boolean | undefined;
+};
+
+export type GetHarnessNameSessions_Response = {
+  items: {
+    sessionId: string;
+    harnessName: string;
+    resourceId: string;
+    threadId: string;
+    parentSessionId?: string | undefined;
+    lifecycle: 'active' | 'closing' | 'closed';
+    createdAt: number;
+    lastActivityAt: number;
+    closingAt?: number | undefined;
+    closeDeadlineAt?: number | undefined;
+    closedAt?: number | undefined;
+    modeId: string;
+    modelId: string;
+    busy: boolean;
+    queueDepth: number;
+    pendingInbox: {
+      count: number;
+      kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval')[];
+      sessionOwnedOnly: true;
+    };
+    durableWork: {
+      activeCount: number;
+      waitingCount: number;
+      retryingCount: number;
+      failedCount: number;
+      latest?:
+        | {
+            kind: string;
+            status: string;
+            sourceDurability: 'durable' | 'best-effort' | 'live-only';
+            proof: {
+              kind: string;
+              id: string;
+            };
+            updatedAt?: number | undefined;
+            lastError?:
+              | {
+                  code: string;
+                  retryable?: boolean | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      sessionOwnedOnly: true;
+    };
+    goal?:
+      | {
+          id: string;
+          status: 'active' | 'paused' | 'done';
+          turnsUsed: number;
+          maxTurns: number;
+          lastDecision?:
+            | {
+                decision: 'done' | 'continue' | 'waiting';
+                judgedAt: number;
+              }
+            | undefined;
+        }
+      | undefined;
+  }[];
+  nextCursor?: string | undefined;
+  truncated: boolean;
+};
+
+export type GetHarnessNameSessions_Request = Simplify<
+  (GetHarnessNameSessions_PathParams extends never ? {} : { params: GetHarnessNameSessions_PathParams }) &
+    (GetHarnessNameSessions_QueryParams extends never
+      ? {}
+      : {} extends GetHarnessNameSessions_QueryParams
+        ? { query?: GetHarnessNameSessions_QueryParams }
+        : { query: GetHarnessNameSessions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessions_RouteContract {
+  pathParams: GetHarnessNameSessions_PathParams;
+  queryParams: GetHarnessNameSessions_QueryParams;
+  body: never;
+  request: GetHarnessNameSessions_Request;
+  response: GetHarnessNameSessions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:name/sessions
+// ============================================================================
+export type PostHarnessNameSessions_PathParams = {
+  /** Harness registration name */
+  name: string;
+};
+
+export type PostHarnessNameSessions_Body = {
+  sessionId?: string | undefined;
+  threadId?:
+    | (
+        | string
+        | {
+            fresh: true;
+            [x: string]: never;
+          }
+      )
+    | undefined;
+  parentSessionId?: string | undefined;
+  origin?: 'top-level' | undefined;
+  modeId?: string | undefined;
+  modelId?: string | undefined;
+  [x: string]: never;
+};
+
+type PostHarnessNameSessions_Response_Auxiliary_10 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostHarnessNameSessions_Response_Auxiliary_10[]
+  | {
+      [key: string]: PostHarnessNameSessions_Response_Auxiliary_10;
+    };
+
+export type PostHarnessNameSessions_Response = {
+  session: {
+    summary: {
+      sessionId: string;
+      harnessName: string;
+      resourceId: string;
+      threadId: string;
+      parentSessionId?: string | undefined;
+      lifecycle: 'active' | 'closing' | 'closed';
+      createdAt: number;
+      lastActivityAt: number;
+      closingAt?: number | undefined;
+      closeDeadlineAt?: number | undefined;
+      closedAt?: number | undefined;
+      modeId: string;
+      modelId: string;
+      busy: boolean;
+      queueDepth: number;
+      pendingInbox: {
+        count: number;
+        kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval')[];
+        sessionOwnedOnly: true;
+      };
+      durableWork: {
+        activeCount: number;
+        waitingCount: number;
+        retryingCount: number;
+        failedCount: number;
+        latest?:
+          | {
+              kind: string;
+              status: string;
+              sourceDurability: 'durable' | 'best-effort' | 'live-only';
+              proof: {
+                kind: string;
+                id: string;
+              };
+              updatedAt?: number | undefined;
+              lastError?:
+                | {
+                    code: string;
+                    retryable?: boolean | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        sessionOwnedOnly: true;
+      };
+      goal?:
+        | {
+            id: string;
+            status: 'active' | 'paused' | 'done';
+            turnsUsed: number;
+            maxTurns: number;
+            lastDecision?:
+              | {
+                  decision: 'done' | 'continue' | 'waiting';
+                  judgedAt: number;
+                }
+              | undefined;
+          }
+        | undefined;
+    };
+    state: PostHarnessNameSessions_Response_Auxiliary_10;
+    queue: {
+      depth: number;
+      queuedItemIds: string[];
+    };
+    pendingInbox: unknown[];
+    durableWork: {
+      active: unknown[];
+      recentTerminal: unknown[];
+      truncated: boolean;
+      nextCursor?: string | undefined;
+      sessionOwnedOnly: true;
+    };
+    displayState?: unknown | undefined;
+    goal?: (unknown | null) | undefined;
+    channelBindings: unknown[];
+    tokenUsage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    };
+    messages: {
+      cursor: {
+        threadId: string;
+        route: 'thread-messages';
+        cursor?: string | undefined;
+      };
+      recent?:
+        | {
+            messages: unknown[];
+            nextCursor?: string | undefined;
+            truncated: boolean;
+          }
+        | undefined;
+    };
+  };
+};
+
+export type PostHarnessNameSessions_Request = Simplify<
+  (PostHarnessNameSessions_PathParams extends never ? {} : { params: PostHarnessNameSessions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessNameSessions_Body extends never
+      ? {}
+      : {} extends PostHarnessNameSessions_Body
+        ? { body?: PostHarnessNameSessions_Body }
+        : { body: PostHarnessNameSessions_Body })
+>;
+
+export interface PostHarnessNameSessions_RouteContract {
+  pathParams: PostHarnessNameSessions_PathParams;
+  queryParams: never;
+  body: PostHarnessNameSessions_Body;
+  request: PostHarnessNameSessions_Request;
+  response: PostHarnessNameSessions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:name/sessions/:sessionId
+// ============================================================================
+export type GetHarnessNameSessionsSessionId_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+type GetHarnessNameSessionsSessionId_Response_Auxiliary_9 =
+  | string
+  | number
+  | boolean
+  | null
+  | GetHarnessNameSessionsSessionId_Response_Auxiliary_9[]
+  | {
+      [key: string]: GetHarnessNameSessionsSessionId_Response_Auxiliary_9;
+    };
+
+export type GetHarnessNameSessionsSessionId_Response = {
+  summary: {
+    sessionId: string;
+    harnessName: string;
+    resourceId: string;
+    threadId: string;
+    parentSessionId?: string | undefined;
+    lifecycle: 'active' | 'closing' | 'closed';
+    createdAt: number;
+    lastActivityAt: number;
+    closingAt?: number | undefined;
+    closeDeadlineAt?: number | undefined;
+    closedAt?: number | undefined;
+    modeId: string;
+    modelId: string;
+    busy: boolean;
+    queueDepth: number;
+    pendingInbox: {
+      count: number;
+      kinds: ('tool-approval' | 'tool-suspension' | 'question' | 'plan-approval')[];
+      sessionOwnedOnly: true;
+    };
+    durableWork: {
+      activeCount: number;
+      waitingCount: number;
+      retryingCount: number;
+      failedCount: number;
+      latest?:
+        | {
+            kind: string;
+            status: string;
+            sourceDurability: 'durable' | 'best-effort' | 'live-only';
+            proof: {
+              kind: string;
+              id: string;
+            };
+            updatedAt?: number | undefined;
+            lastError?:
+              | {
+                  code: string;
+                  retryable?: boolean | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      sessionOwnedOnly: true;
+    };
+    goal?:
+      | {
+          id: string;
+          status: 'active' | 'paused' | 'done';
+          turnsUsed: number;
+          maxTurns: number;
+          lastDecision?:
+            | {
+                decision: 'done' | 'continue' | 'waiting';
+                judgedAt: number;
+              }
+            | undefined;
+        }
+      | undefined;
+  };
+  state: GetHarnessNameSessionsSessionId_Response_Auxiliary_9;
+  queue: {
+    depth: number;
+    queuedItemIds: string[];
+  };
+  pendingInbox: unknown[];
+  durableWork: {
+    active: unknown[];
+    recentTerminal: unknown[];
+    truncated: boolean;
+    nextCursor?: string | undefined;
+    sessionOwnedOnly: true;
+  };
+  displayState?: unknown | undefined;
+  goal?: (unknown | null) | undefined;
+  channelBindings: unknown[];
+  tokenUsage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  messages: {
+    cursor: {
+      threadId: string;
+      route: 'thread-messages';
+      cursor?: string | undefined;
+    };
+    recent?:
+      | {
+          messages: unknown[];
+          nextCursor?: string | undefined;
+          truncated: boolean;
+        }
+      | undefined;
+  };
+};
+
+export type GetHarnessNameSessionsSessionId_Request = Simplify<
+  (GetHarnessNameSessionsSessionId_PathParams extends never
+    ? {}
+    : { params: GetHarnessNameSessionsSessionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessNameSessionsSessionId_RouteContract {
+  pathParams: GetHarnessNameSessionsSessionId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessNameSessionsSessionId_Request;
+  response: GetHarnessNameSessionsSessionId_Response;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
+// Route: DELETE /harness/:name/sessions/:sessionId
+// ============================================================================
+export type DeleteHarnessNameSessionsSessionId_PathParams = {
+  /** Harness registration name */
+  name: string;
+  /** Harness session id */
+  sessionId: string;
+};
+
+export type DeleteHarnessNameSessionsSessionId_Request = Simplify<
+  (DeleteHarnessNameSessionsSessionId_PathParams extends never
+    ? {}
+    : { params: DeleteHarnessNameSessionsSessionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteHarnessNameSessionsSessionId_RouteContract {
+  pathParams: DeleteHarnessNameSessionsSessionId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteHarnessNameSessionsSessionId_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
 // Route: GET /channels/platforms
 // ============================================================================
 export type GetChannelsPlatforms_Response = {
@@ -78007,6 +78425,10 @@ export interface RouteTypes {
   'GET /schedules/:scheduleId/triggers': GetSchedulesScheduleIdTriggers_RouteContract;
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
+  'GET /harness/:name/sessions': GetHarnessNameSessions_RouteContract;
+  'POST /harness/:name/sessions': PostHarnessNameSessions_RouteContract;
+  'GET /harness/:name/sessions/:sessionId': GetHarnessNameSessionsSessionId_RouteContract;
+  'DELETE /harness/:name/sessions/:sessionId': DeleteHarnessNameSessionsSessionId_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
@@ -78260,6 +78682,14 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/harness/:name/sessions': {
+    GET: GetHarnessNameSessions_RouteContract;
+    POST: PostHarnessNameSessions_RouteContract;
+  };
+  '/harness/:name/sessions/:sessionId': {
+    DELETE: DeleteHarnessNameSessionsSessionId_RouteContract;
+    GET: GetHarnessNameSessionsSessionId_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

@@ -16,6 +16,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { HARNESS_ROUTES } from './harness';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -195,6 +196,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
   ...SCHEDULES_ROUTES,
+  ...HARNESS_ROUTES,
   ...CHANNELS_ROUTES,
 ];
 
@@ -220,6 +222,7 @@ export type ServerRoutes = readonly [
   ...typeof WORKSPACE_ROUTES,
   ...typeof LEGACY_ROUTES,
   ...typeof MCP_ROUTES,
+  ...typeof HARNESS_ROUTES,
   ...StoredAgentRoutes,
   ...typeof STORED_MCP_CLIENTS_ROUTES,
   ...typeof STORED_PROMPT_BLOCKS_ROUTES,

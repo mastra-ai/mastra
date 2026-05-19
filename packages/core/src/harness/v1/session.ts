@@ -3470,6 +3470,7 @@ export class Session {
     if (limit !== undefined) {
       const result = await memory.listMessages({
         threadId: this.threadId,
+        resourceId: this.resourceId,
         perPage: limit,
         page: 0,
         orderBy: { field: 'createdAt', direction: 'DESC' },
@@ -3480,7 +3481,7 @@ export class Session {
         .map(msg => convertStoredMessageToHarnessMessage(msg as unknown as StoredMessageRow));
     }
 
-    const result = await memory.listMessages({ threadId: this.threadId, perPage: false });
+    const result = await memory.listMessages({ threadId: this.threadId, resourceId: this.resourceId, perPage: false });
     return result.messages.map(msg => convertStoredMessageToHarnessMessage(msg as unknown as StoredMessageRow));
   }
 

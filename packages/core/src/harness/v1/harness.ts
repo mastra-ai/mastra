@@ -1311,18 +1311,24 @@ export class Harness {
    * each close deadline, terminalize descendants bottom-up, set closedAt,
    * release leases, and drop live instances. Idempotent. See §5.5.
    */
-  async closeSession(opts: { sessionId: string }): Promise<void> {
+  async closeSession(opts: { sessionId: string; resourceId?: string }): Promise<void> {
     if (this._shutdown) return;
     const storage = this._requireStorage('closeSession()');
     const live = this._liveSessions.get(opts.sessionId);
     if (live) {
+      if (opts.resourceId !== undefined && live.resourceId !== opts.resourceId) {
+        throw new HarnessSessionNotFoundError(opts.sessionId);
+      }
       await this._closeSession(live);
       return;
     }
     const stored = await storage.loadSession({ harnessName: this._harnessName, sessionId: opts.sessionId });
     if (!stored) throw new HarnessSessionNotFoundError(opts.sessionId);
+    if (opts.resourceId !== undefined && stored.resourceId !== opts.resourceId) {
+      throw new HarnessSessionNotFoundError(opts.sessionId);
+    }
     if (stored.closedAt !== undefined) return; // already closed → idempotent.
-    await this._closeSessionRecord(storage, stored);
+    await this._closeSessionRecord(storage, stored, undefined, { resourceId: opts.resourceId });
   }
 
   /**
@@ -1368,6 +1374,7 @@ export class Harness {
     storage: HarnessStorage,
     rootRecord: SessionRecord,
     closedLiveSessions?: Map<string, Session>,
+    scope: { resourceId?: string } = {},
   ): Promise<void> {
     const existing = this._closePromises.get(rootRecord.id);
     if (existing) return existing;
@@ -1385,6 +1392,7 @@ export class Harness {
           persistedCloseIds,
           closePromise,
           closedLiveSessions,
+          scope,
         ),
       )
       .catch(err => {
@@ -1413,10 +1421,15 @@ export class Harness {
     persistedCloseIds: Set<string>,
     closePromise: Promise<void>,
     closedLiveSessions?: Map<string, Session>,
+    scope: { resourceId?: string } = {},
   ): Promise<void> {
     const tree: CloseTreeNode[] = [];
     try {
-      const root = await this._prepareCloseNode(storage, rootRecord, 0);
+      const root = await this._prepareCloseNode(storage, rootRecord, 0, scope);
+      if (root.record.closedAt !== undefined) {
+        await this._releaseCloseTreeLeases(storage, [root]);
+        return;
+      }
       tree.push(root);
       tree[0] = await this._markCloseNodeClosing(storage, root, persistedCloseIds);
 
@@ -1438,7 +1451,17 @@ export class Harness {
           }
           closeIds.add(stored.id);
           this._closePromises.set(stored.id, closePromise);
-          const childNode = await this._prepareCloseNode(storage, stored, node.depth + 1);
+          const childNode = await this._prepareCloseNode(storage, stored, node.depth + 1, {
+            resourceId: root.record.resourceId,
+          });
+          if (childNode.record.closedAt !== undefined) {
+            closeIds.delete(stored.id);
+            if (this._closePromises.get(stored.id) === closePromise) {
+              this._closePromises.delete(stored.id);
+            }
+            await this._releaseCloseTreeLeases(storage, [childNode]);
+            continue;
+          }
           childNode.live?._beginClosing();
           tree.push(childNode);
           tree[tree.length - 1] = await this._markCloseNodeClosing(storage, childNode, persistedCloseIds);
@@ -1457,9 +1480,13 @@ export class Harness {
     storage: HarnessStorage,
     record: SessionRecord,
     depth: number,
+    scope: { resourceId?: string } = {},
   ): Promise<CloseTreeNode> {
     const live = this._liveSessions.get(record.id);
     if (live) {
+      if (scope.resourceId !== undefined && live.resourceId !== scope.resourceId) {
+        throw new HarnessSessionNotFoundError(record.id);
+      }
       return {
         record: live.getRecord(),
         depth,
@@ -1469,8 +1496,28 @@ export class Harness {
     }
 
     const lease = await this._acquireLease(storage, record.harnessName, record.id);
+    let latest: SessionRecord | null;
+    try {
+      latest = await storage.loadSession({ harnessName: record.harnessName, sessionId: record.id });
+      if (!latest) throw new HarnessSessionNotFoundError(record.id);
+      if (scope.resourceId !== undefined && latest.resourceId !== scope.resourceId) {
+        throw new HarnessSessionNotFoundError(record.id);
+      }
+    } catch (err) {
+      try {
+        await storage.releaseSessionLease({
+          harnessName: record.harnessName,
+          sessionId: record.id,
+          ownerId: this.ownerId,
+        });
+      } catch {
+        // Preserve the original close failure. The lease release is best-effort
+        // because the row may have disappeared or another owner may have won.
+      }
+      throw err;
+    }
     const leasedRecord = {
-      ...record,
+      ...latest,
       ownerId: this.ownerId,
       leaseExpiresAt: lease.expiresAt,
       version: lease.version,
@@ -1686,7 +1733,7 @@ export class Harness {
       if (live) liveDeleteHandles.set(node.record.id, live);
     }
     if (latest.closedAt === undefined) {
-      await this._closeSessionRecord(storage, latest, liveDeleteHandles);
+      await this._closeSessionRecord(storage, latest, liveDeleteHandles, scope);
       if (!shouldContinue()) return [];
     }
     const closed = await storage.loadSession({ harnessName: rootRecord.harnessName, sessionId: rootRecord.id });

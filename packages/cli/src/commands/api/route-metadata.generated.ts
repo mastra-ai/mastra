@@ -4772,6 +4772,46 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /harness/:name/sessions": {
+    "method": "GET",
+    "path": "/harness/:name/sessions",
+    "pathParams": [
+      "name"
+    ],
+    "queryParams": [
+      "cursor",
+      "includeClosed",
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "items"
+    }
+  },
+  "POST /harness/:name/sessions": {
+    "method": "POST",
+    "path": "/harness/:name/sessions",
+    "pathParams": [
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "modeId",
+      "modelId",
+      "origin",
+      "parentSessionId",
+      "sessionId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /channels/platforms": {
     "method": "GET",
     "path": "/channels/platforms",

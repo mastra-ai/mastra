@@ -52,6 +52,32 @@ function makeStorage() {
   return storage;
 }
 
+class CloseAfterLeaseStorage extends InMemoryHarness {
+  readonly closeAfterLeaseSessionIds = new Set<string>();
+
+  override async acquireSessionLease(
+    input: Parameters<InMemoryHarness['acquireSessionLease']>[0],
+  ): ReturnType<InMemoryHarness['acquireSessionLease']> {
+    const lease = await super.acquireSessionLease(input);
+    if (!this.closeAfterLeaseSessionIds.delete(input.sessionId)) return lease;
+
+    const latest = await super.loadSession({ harnessName: input.harnessName, sessionId: input.sessionId });
+    if (latest && latest.closedAt === undefined) {
+      const closedAt = Date.now();
+      await super.saveSession(
+        {
+          ...latest,
+          closedAt,
+          lastActivityAt: closedAt,
+        },
+        { harnessName: latest.harnessName, ownerId: input.ownerId, ifVersion: lease.version },
+      );
+    }
+
+    return lease;
+  }
+}
+
 function makeChannelProvider(id = 'slack'): ChannelProvider {
   return {
     id,
@@ -1379,6 +1405,77 @@ describe('Harness v1 — lifecycle', () => {
 
     const stored = await harness2.loadSession({ sessionId: id, includeClosed: true });
     expect(stored?.closedAt).toBeDefined();
+  });
+
+  it('treats a stored session closed after lease acquisition as an idempotent root close', async () => {
+    const db = new InMemoryDB();
+    const storage = new CloseAfterLeaseStorage({ db });
+    const harness = makeHarness({ sessions: { storage } });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    await harness.shutdown();
+
+    storage.closeAfterLeaseSessionIds.add(s.id);
+    const harness2 = makeHarness({ sessions: { storage } });
+    const events: Array<{ type: string; sessionId?: string }> = [];
+    harness2.subscribe((event, context) => {
+      events.push({ type: event.type, sessionId: context.sessionId });
+    });
+
+    await harness2.closeSession({ sessionId: s.id });
+
+    const stored = await harness2.loadSession({ sessionId: s.id, includeClosed: true });
+    expect(stored?.closedAt).toBeDefined();
+    expect(stored?.closingAt).toBeUndefined();
+    expect(events.filter(event => event.sessionId === s.id)).toEqual([]);
+  });
+
+  it('skips a cascade child that closes after lease acquisition', async () => {
+    const db = new InMemoryDB();
+    const storage = new CloseAfterLeaseStorage({ db });
+    const harness = makeHarness({ sessions: { storage } });
+    const parent = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+    await harness.shutdown();
+
+    storage.closeAfterLeaseSessionIds.add(child.id);
+    const harness2 = makeHarness({ sessions: { storage } });
+    const events: Array<{ type: string; sessionId?: string }> = [];
+    harness2.subscribe((event, context) => {
+      events.push({ type: event.type, sessionId: context.sessionId });
+    });
+
+    await harness2.closeSession({ sessionId: parent.id });
+
+    const storedParent = await harness2.loadSession({ sessionId: parent.id, includeClosed: true });
+    const storedChild = await harness2.loadSession({ sessionId: child.id, includeClosed: true });
+    expect(storedParent?.closedAt).toBeDefined();
+    expect(storedChild?.closedAt).toBeDefined();
+    expect(storedChild?.closingAt).toBeUndefined();
+    expect(events.filter(event => event.sessionId === child.id)).toEqual([]);
+  });
+
+  it('rejects resource-scoped close for a stored session owned by another resource', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const id = s.id;
+    await harness.shutdown();
+
+    const harness2 = makeHarness({ sessions: { storage } });
+    await expect(harness2.closeSession({ sessionId: id, resourceId: 'r2' })).rejects.toBeInstanceOf(
+      HarnessSessionNotFoundError,
+    );
+
+    const stillOpen = await harness2.loadSession({ sessionId: id, includeClosed: true });
+    expect(stillOpen?.closedAt).toBeUndefined();
+
+    await expect(harness2.closeSession({ sessionId: id, resourceId: 'r1' })).resolves.toBeUndefined();
+    const closed = await harness2.loadSession({ sessionId: id, includeClosed: true });
+    expect(closed?.closedAt).toBeDefined();
   });
 
   it('cascades close to direct child sessions', async () => {
