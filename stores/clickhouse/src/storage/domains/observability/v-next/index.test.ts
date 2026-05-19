@@ -5457,23 +5457,33 @@ async function injectDuplicateDiscoveryRows(): Promise<void> {
       { table: TABLE_DISCOVERY_PAIRS, keys: 'kind, key1, key2, value' },
     ];
     for (const { table, keys } of tables) {
-      await client.command({ query: `INSERT INTO ${table} SELECT * FROM ${table}` });
-      const partsResult = await client.query({
-        query: `SELECT sum(rows) AS rowsInParts FROM system.parts WHERE database = currentDatabase() AND table = '${table}' AND active`,
-        format: 'JSONEachRow',
-      });
-      const rowsInParts = Number(((await partsResult.json()) as Array<{ rowsInParts: string }>)[0]?.rowsInParts ?? 0);
-      const distinctResult = await client.query({
-        query: `SELECT countDistinct(${keys}) AS distinctRows FROM ${table}`,
-        format: 'JSONEachRow',
-      });
-      const distinctRows = Number(
-        ((await distinctResult.json()) as Array<{ distinctRows: string }>)[0]?.distinctRows ?? 0,
-      );
-      expect(
-        rowsInParts,
-        `expected duplicates in ${table} but got rowsInParts=${rowsInParts}, distinctRows=${distinctRows}`,
-      ).toBeGreaterThan(distinctRows);
+      // Pause background merges around the duplicate-seed + check so a fast
+      // server can't collapse the inserted parts before the assertion runs.
+      // Without this, the test would intermittently observe rowsInParts ==
+      // distinctRows on hot servers and fail for reasons unrelated to the
+      // read-side DISTINCT behavior we're trying to exercise.
+      await client.command({ query: `SYSTEM STOP MERGES ${table}` });
+      try {
+        await client.command({ query: `INSERT INTO ${table} SELECT * FROM ${table}` });
+        const partsResult = await client.query({
+          query: `SELECT sum(rows) AS rowsInParts FROM system.parts WHERE database = currentDatabase() AND table = '${table}' AND active`,
+          format: 'JSONEachRow',
+        });
+        const rowsInParts = Number(((await partsResult.json()) as Array<{ rowsInParts: string }>)[0]?.rowsInParts ?? 0);
+        const distinctResult = await client.query({
+          query: `SELECT countDistinct(${keys}) AS distinctRows FROM ${table}`,
+          format: 'JSONEachRow',
+        });
+        const distinctRows = Number(
+          ((await distinctResult.json()) as Array<{ distinctRows: string }>)[0]?.distinctRows ?? 0,
+        );
+        expect(
+          rowsInParts,
+          `expected duplicates in ${table} but got rowsInParts=${rowsInParts}, distinctRows=${distinctRows}`,
+        ).toBeGreaterThan(distinctRows);
+      } finally {
+        await client.command({ query: `SYSTEM START MERGES ${table}` });
+      }
     }
   } finally {
     await client.close();
