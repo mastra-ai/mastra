@@ -593,7 +593,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
     'Triggers a new experiment on the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, ...params }) => {
+  handler: async ({ mastra, datasetId, requestContext: serverRequestContext, ...params }) => {
     assertDatasetsAvailable();
     try {
       const {
@@ -603,7 +603,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version,
         agentVersion,
         maxConcurrency,
-        requestContext: rawRequestContext,
+        requestContext: bodyRequestContext,
+        bodyRequestContext: rawBodyRequestContext,
         versions,
       } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
@@ -612,12 +613,16 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version?: number;
         agentVersion?: string;
         maxConcurrency?: number;
-        requestContext?: Record<string, unknown> | RequestContext;
+        requestContext?: Record<string, unknown>;
+        bodyRequestContext?: Record<string, unknown>;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
-      // The adapter middleware merges body + query requestContext into a RequestContext instance.
-      // startExperimentAsync expects a plain Record, so convert it.
-      const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
+      const authRequestContext =
+        serverRequestContext instanceof RequestContext ? serverRequestContext.all : serverRequestContext;
+      const requestContext = {
+        ...authRequestContext,
+        ...(rawBodyRequestContext ?? bodyRequestContext),
+      };
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.startExperimentAsync({
         targetType,

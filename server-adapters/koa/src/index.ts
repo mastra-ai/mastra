@@ -451,10 +451,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
     }
 
+    const body = typeof params.body === 'object' && params.body !== null ? params.body : {};
     const handlerParams = {
       ...params.urlParams,
       ...params.queryParams,
-      ...(typeof params.body === 'object' ? params.body : {}),
+      ...body,
+      bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
       requestContext: ctx.state.requestContext,
       mastra: this.mastra,
       tools: ctx.state.tools,
