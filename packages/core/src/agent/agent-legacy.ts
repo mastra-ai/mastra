@@ -16,6 +16,7 @@ import type {
   StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
 } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraModelConfig, TripwireProperties } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -137,6 +138,7 @@ export interface AgentLegacyCapabilities {
       outputWriter?: OutputWriter;
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
+      providerOptions?: ProviderOptions;
     },
   ): Promise<{
     messageList: MessageList;
@@ -243,6 +245,7 @@ export class AgentLegacyHandler {
     methodType,
     tracingOptions,
     inputProcessors,
+    providerOptions,
     ...rest
   }: {
     instructions: AgentInstructions;
@@ -259,6 +262,7 @@ export class AgentLegacyHandler {
     methodType: 'generate' | 'stream';
     tracingOptions?: TracingOptions;
     inputProcessors?: InputProcessorOrWorkflow[];
+    providerOptions?: ProviderOptions;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     return {
@@ -339,6 +343,7 @@ export class AgentLegacyHandler {
               stepNumber: 0,
               inputProcessorOverrides: inputProcessors,
               tools: convertedTools,
+              providerOptions,
               runId,
               threadId,
               resourceId,
@@ -445,6 +450,7 @@ export class AgentLegacyHandler {
             stepNumber: 0,
             inputProcessorOverrides: inputProcessors,
             tools: convertedTools,
+            providerOptions,
             runId,
             threadId,
             resourceId,
@@ -823,6 +829,7 @@ export class AgentLegacyHandler {
       methodType,
       tracingOptions,
       inputProcessors,
+      providerOptions: args.providerOptions,
       ...resolveObservabilityContext(args as Partial<ObservabilityContext>),
     });
 
