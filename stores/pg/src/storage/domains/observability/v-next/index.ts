@@ -571,12 +571,17 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       // Iterate ALL_SIGNAL_TABLES so a future signal added to the constant
       // is truncated automatically. Tracing has its own helper that runs the
       // span TRUNCATE; we skip it here to avoid running it twice.
+      //
+      // `RESTART IDENTITY` resets every owned sequence (notably `cursorId`
+      // bigserials) so tests that clear between cases and then exercise
+      // delta polling don't see surprising high-water-mark cursors. Without
+      // it, sequences continue from where they left off across clears.
       await tracingOps.dangerouslyClearTracing(this.#client, this.#schema);
       for (const t of ALL_SIGNAL_TABLES) {
         if (t === TABLE_SPAN_EVENTS) continue;
-        await this.#client.none(`TRUNCATE TABLE ${qualifiedTable(this.#schema, t)}`);
+        await this.#client.none(`TRUNCATE TABLE ${qualifiedTable(this.#schema, t)} RESTART IDENTITY`);
       }
-      await this.#client.none(`TRUNCATE TABLE ${qualifiedTable(this.#schema, TABLE_DISCOVERY)}`);
+      await this.#client.none(`TRUNCATE TABLE ${qualifiedTable(this.#schema, TABLE_DISCOVERY)} RESTART IDENTITY`);
     } catch (error) {
       wrapError('DANGEROUSLY_CLEAR_ALL', error);
     }

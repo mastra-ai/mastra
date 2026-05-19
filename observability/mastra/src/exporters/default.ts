@@ -34,8 +34,8 @@ import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffe
  * future major version.
  */
 interface DefaultExporterConfig extends BaseExporterConfig {
-  maxBatchSize?: number; // Default: 250 events
-  maxBufferSize?: number; // Default: 10000 events
+  maxBatchSize?: number; // Default: 1000 spans
+  maxBufferSize?: number; // Default: 10000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 4
   retryDelayMs?: number; // Default: 500ms (base delay for exponential backoff)
@@ -103,7 +103,7 @@ export class DefaultExporter extends BaseExporter {
     // Set default configuration
     this.#config = {
       ...config,
-      maxBatchSize: config.maxBatchSize ?? 250,
+      maxBatchSize: config.maxBatchSize ?? 1000,
       maxBufferSize: config.maxBufferSize ?? 10000,
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 4,

@@ -212,15 +212,30 @@ export async function ensurePartmanHypertables(client: DbClient, schema: string)
     );
     if (exists?.exists) continue;
 
-    await client.none(
-      `SELECT partman.create_parent(
-         p_parent_table := format('%I.%I', $1::text, $2::text),
-         p_control := $3,
-         p_type := 'native',
-         p_interval := '1 day'
-       )`,
-      [schema, table, SIGNAL_TIME_COLUMN[table]],
-    );
+    // Race: between the EXISTS check above and the `create_parent` call
+    // below, a concurrent init in another process can register the parent
+    // first. pg_partman doesn't have an `IF NOT EXISTS`-style guard, so
+    // catch the resulting duplicate error and treat it as success. Any
+    // other failure rethrows.
+    try {
+      await client.none(
+        `SELECT partman.create_parent(
+           p_parent_table := format('%I.%I', $1::text, $2::text),
+           p_control := $3,
+           p_type := 'native',
+           p_interval := '1 day'
+         )`,
+        [schema, table, SIGNAL_TIME_COLUMN[table]],
+      );
+    } catch (error) {
+      const message = (error as { message?: string } | undefined)?.message ?? '';
+      // pg_partman 4.x error text on duplicate registration includes the
+      // phrase "already managed by pg_partman"; the unique constraint
+      // violation surfaces as Postgres SQLSTATE 23505.
+      const code = (error as { code?: string } | undefined)?.code;
+      const isDuplicate = code === '23505' || /already managed by pg_partman/i.test(message);
+      if (!isDuplicate) throw error;
+    }
   }
 }
 

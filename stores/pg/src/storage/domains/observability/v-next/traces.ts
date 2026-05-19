@@ -174,7 +174,17 @@ function buildListTracesFilters(
   return { conditions, params, nextParamIdx: i };
 }
 
-/** Project the standard span columns with the `r.` alias prefix. */
+/**
+ * Project the standard span columns with the `r.` alias prefix.
+ *
+ * Built by string-munging `SPAN_SELECT_COLUMNS` (a constant in sql.ts) at
+ * module load. This works because every entry in that list is a bare
+ * column name like `"traceId"` — no expressions, no functions. If anyone
+ * ever adds something like `COALESCE(...)` to `SPAN_SELECT_COLUMNS`, the
+ * naive split-on-comma breaks. Keep both lists shaped as plain column
+ * names; if you need computed columns, switch to a structured
+ * array-of-strings representation here.
+ */
 const SPAN_SELECT_COLUMNS_ALIASED = SPAN_SELECT_COLUMNS.replace(/\n/g, ' ')
   .split(',')
   .map(c => `r.${c.trim()}`)

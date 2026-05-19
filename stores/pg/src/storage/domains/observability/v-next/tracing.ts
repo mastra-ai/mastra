@@ -104,5 +104,7 @@ export async function batchDeleteTraces(client: DbClient, schema: string, args: 
 /** Truncate the span_events table. */
 export async function dangerouslyClearTracing(client: DbClient, schema: string): Promise<void> {
   const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-  await client.none(`TRUNCATE TABLE ${span}`);
+  // RESTART IDENTITY resets the owned `cursorId` bigserial sequence so tests
+  // that clear and then exercise delta polling start from a known cursor.
+  await client.none(`TRUNCATE TABLE ${span} RESTART IDENTITY`);
 }

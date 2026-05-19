@@ -34,6 +34,8 @@ import type {
   GetTagsResponse,
 } from '@mastra/core/storage';
 
+import { parseSqlIdentifier } from '@mastra/core/utils';
+
 import type { DbClient } from '../../../client';
 import {
   qualifiedTable,
@@ -187,12 +189,16 @@ async function distinctAcrossTables(
   filterSql: string = '',
   filterParams: unknown[] = [],
 ): Promise<string[]> {
+  // Defense-in-depth: every current caller passes a hardcoded column name,
+  // but validating the identifier here makes the helper injection-safe by
+  // construction in case a future caller takes it from user input.
+  const safeColumn = parseSqlIdentifier(column, 'column name');
   // Each subquery references the same $N placeholders; pg parameters are
   // positional, so we pass `filterParams` exactly once.
   const unions = tables
     .map(
       t =>
-        `SELECT DISTINCT "${column}" AS v FROM ${qualifiedTable(schema, t)} WHERE "${column}" IS NOT NULL AND "${column}" <> '' ${filterSql}`,
+        `SELECT DISTINCT "${safeColumn}" AS v FROM ${qualifiedTable(schema, t)} WHERE "${safeColumn}" IS NOT NULL AND "${safeColumn}" <> '' ${filterSql}`,
     )
     .join(' UNION ');
   const rows = await client.manyOrNone<{ v: string }>(`SELECT v FROM (${unions}) sub ORDER BY v`, filterParams);

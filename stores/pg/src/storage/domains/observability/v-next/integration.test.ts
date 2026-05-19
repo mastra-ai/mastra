@@ -144,4 +144,63 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
     it.todo('cursor advances monotonically across daily partitions');
     it.todo('every inserted span surfaces exactly once across delta polls');
   });
+
+  // ---------------------------------------------------------------------
+  // Partition routing
+  // ---------------------------------------------------------------------
+
+  describe('partition routing', () => {
+    // Query `tableoid::regclass` on the inserted row to verify it landed
+    // in the expected daily partition child.
+    it.todo("today's row lands in mastra_span_events_p<YYYYMMDD>");
+
+    // Install timescaledb, then override with mode: 'native'. partitionMode
+    // should be 'native' and the tables should NOT show up in
+    // timescaledb_information.hypertables.
+    it.todo("partitioning.mode: 'native' overrides auto-detected Timescale");
+  });
+
+  // ---------------------------------------------------------------------
+  // Insert retry idempotency
+  // ---------------------------------------------------------------------
+
+  describe('ON CONFLICT DO NOTHING — retry idempotency', () => {
+    it.todo('createSpan twice with same (traceId, spanId, endedAt) inserts exactly one row');
+    it.todo('batchCreateSpans with a duplicated record dedupes');
+    it.todo('batchCreateLogs / Metrics / Scores / Feedback dedupe on their own primary keys');
+  });
+
+  // ---------------------------------------------------------------------
+  // Feedback value round-trip
+  // ---------------------------------------------------------------------
+
+  describe('feedback — value round-trip', () => {
+    // helpers.ts branches on `typeof value === 'string'` vs 'number';
+    // both routes need coverage.
+    it.todo("string value round-trips via valueString (e.g. 'thumbs-up')");
+    it.todo('numeric value round-trips via valueNumber (e.g. 4.5)');
+  });
+
+  // ---------------------------------------------------------------------
+  // cursorId reset on dangerouslyClearAll
+  // ---------------------------------------------------------------------
+
+  describe('dangerouslyClearAll — cursorId sequence resets', () => {
+    // TRUNCATE … RESTART IDENTITY should rewind the bigserial. Without it,
+    // the next insert's cursorId would jump to wherever the sequence was
+    // left.
+    it.todo('after clearAll, the next inserted row has cursorId === 1');
+  });
+
+  // ---------------------------------------------------------------------
+  // pg_partman concurrent init
+  // ---------------------------------------------------------------------
+
+  describeIntegration('pg_partman — concurrent init', () => {
+    // The TOCTOU between EXISTS check and create_parent is now caught by
+    // swallowing the duplicate-registration error. Verify two parallel
+    // inits both succeed and don't leave duplicate part_config rows.
+    it.todo('two concurrent init() calls both resolve without throwing');
+    it.todo('part_config ends up with exactly one row per signal table');
+  });
 });

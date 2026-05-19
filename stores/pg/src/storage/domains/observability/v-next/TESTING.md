@@ -63,6 +63,13 @@ extra Postgres images. Set the env var locally to flip the blocks on.
 | `listBranches` — branch-type narrowing | When the user passes a non-branch spanType, the short-circuit returns empty.                                                                                    | Insert spans of branch + non-branch types; query `listBranches({ filters: { spanType: 'MODEL_GENERATION' }})` and assert empty.                                                       |
 | Delta polling — bigserial monotonicity | Sanity check that the cursor advances across partitions and chunks (Timescale) without gaps that delta polling would skip.                                      | Insert spans across two day boundaries (forcing two partitions on the native path); paginate by delta cursor; assert every row appears exactly once.                                  |
 
+| Partition routing — today's row lands in today's partition (native) | The DDL declares partitions but nothing currently asserts a write actually hits the right child. | Insert one span; query `tableoid::regclass` for that row; assert it matches today's `mastra_span_events_pYYYYMMDD` child. |
+| `partitioning.mode: 'native'` overrides auto-detected Timescale | The override exists but isn't covered. Important for staged rollouts where Timescale is installed but the operator wants to verify native partitioning first. | Install timescaledb; construct with `observability: { partitioning: { mode: 'native' } }`; assert `partitionMode === 'native'` and the tables are NOT hypertables. |
+| Insert retry idempotency | `ON CONFLICT ("traceId", "spanId", "endedAt") DO NOTHING` is the contract retries rely on. | `createSpan(spanA)`; `createSpan(spanA)` again; assert `SELECT count(*) WHERE "spanId" = spanA.spanId` is exactly 1. Same shape for batchCreateSpans + the other signals' primary keys. |
+| Feedback — string-valued round-trip | `valueString` vs `valueNumber` branching in `helpers.ts` is untested. | `createFeedback({ value: 'thumbs-up' })`; read back via `listFeedback`; assert `feedback[0].value === 'thumbs-up'`. Mirror with a numeric value and assert it flows through `valueNumber`. |
+| `dangerouslyClearAll` resets `cursorId` sequence | The `RESTART IDENTITY` we added needs a regression guard. | Insert one row; clear; insert another; assert the new row's `cursorId === 1`. |
+| pg_partman init concurrency | The TOCTOU between EXISTS check and `create_parent` is now caught via duplicate-error swallow; verify two concurrent inits both succeed. | Run two `init()` calls in parallel against the same pg_partman DB; assert both resolve and `part_config` has exactly one row per signal. |
+
 ## Out of scope here, worth noting
 
 - **High-concurrency stress** — the `bigserial` concurrency caveat in

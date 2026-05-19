@@ -413,11 +413,15 @@ export class PostgresStoreVNext extends PostgresStore {
     this.#observabilityPool = built.pool;
     this.#ownsObservabilityPool = built.owned;
 
+    // NOTE: `skipDefaultIndexes` / `indexes` from the primary config are
+    // intentionally NOT forwarded. The vNext observability domain manages
+    // its own index set (see `allIndexDDL` in `ddl.ts`) — pretending to
+    // honor primary-store index config here would mislead callers. If the
+    // need for custom observability indexes shows up, plumb them through
+    // `observability.indexes` as a dedicated field.
     const observability = new ObservabilityStoragePostgresVNext({
       client: observabilityClient,
       schemaName: obsConfig.schemaName ?? config.schemaName,
-      skipDefaultIndexes: config.skipDefaultIndexes,
-      indexes: config.indexes,
       partitioning: obsConfig.partitioning,
       discovery: obsConfig.discovery,
     });
