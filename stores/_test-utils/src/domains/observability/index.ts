@@ -7,6 +7,13 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
   // Skip tests if storage doesn't have observability domain
   const describeObservability = storage.stores?.observability ? describe : describe.skip;
 
+  // Adapters that only support the `insert-only` tracing strategy cannot
+  // satisfy updateSpan / batchUpdateSpans by contract — every span is
+  // persisted as a single immutable row. Skip those describe blocks so the
+  // rest of the suite still runs.
+  const isInsertOnly = storage.stores?.observability?.runtimeTracingStrategy === 'insert-only';
+  const describeUpdate = isInsertOnly ? describe.skip : describe;
+
   let observabilityStorage: ObservabilityStorage;
 
   describeObservability('Observability Storage', () => {
@@ -417,7 +424,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
     });
 
-    describe('updateSpan', () => {
+    describeUpdate('updateSpan', () => {
       it('should update span fields', async () => {
         const span = createSpan({ traceId: 'trace-1', spanId: 'span-1' });
         await observabilityStorage.createSpan({ span });
@@ -475,7 +482,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
     });
 
-    describe('batchUpdateSpans', () => {
+    describeUpdate('batchUpdateSpans', () => {
       it('should update multiple spans in batch', async () => {
         await observabilityStorage.batchCreateSpans({
           records: [

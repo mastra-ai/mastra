@@ -385,7 +385,8 @@ function tableIndexes(): IndexSpec[] {
       columns: '("parentSpanId", "endedAt" DESC)',
     },
     { name: 'mastra_span_events_name_idx', table: TABLE_SPAN_EVENTS, columns: '("name")' },
-    { name: 'mastra_span_events_spantype_idx', table: TABLE_SPAN_EVENTS, columns: '("spanType", "endedAt" DESC)' },
+    // Used by listBranches page mode (filter by spanType, order by startedAt).
+    { name: 'mastra_span_events_spantype_idx', table: TABLE_SPAN_EVENTS, columns: '("spanType", "startedAt" DESC)' },
     { name: 'mastra_span_events_entity_idx', table: TABLE_SPAN_EVENTS, columns: '("entityType", "entityId")' },
     {
       name: 'mastra_span_events_orgid_userid_idx',
@@ -434,12 +435,13 @@ function tableIndexes(): IndexSpec[] {
       columns: '("traceId")',
       where: ROOT_SPAN_WHERE,
     },
-    // Delta polling: cursor ordering for the root-span projection used by listTraces.
+    // Delta polling: cursor ordering. Full-table coverage so the same index
+    // serves both listTraces (combined with the `parentSpanId IS NULL`
+    // predicate) and listBranches (combined with `spanType IN (...)`).
     {
-      name: 'mastra_span_events_root_cursor_idx',
+      name: 'mastra_span_events_cursor_idx',
       table: TABLE_SPAN_EVENTS,
       columns: '("cursorId")',
-      where: ROOT_SPAN_WHERE,
     },
 
     // metric_events
@@ -511,6 +513,26 @@ function indexDDL(schema: string, spec: IndexSpec): string {
 // ---------------------------------------------------------------------------
 // Public DDL accessors
 // ---------------------------------------------------------------------------
+
+/**
+ * `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements for columns that were
+ * added after the initial schema landed. Lets a deployment that came up on an
+ * older version of the adapter pick up new columns at the next `init()`
+ * without needing a separate migration step.
+ *
+ * Only list columns that arrived AFTER the initial CREATE TABLE. The CREATE
+ * TABLE statement (idempotent via `IF NOT EXISTS`) handles fresh deploys; the
+ * ALTERs handle in-place upgrades.
+ */
+export function migrationDDL(schema: string): string[] {
+  return ALL_SIGNAL_TABLES.map(table => {
+    const tbl = qualifiedTable(schema, table);
+    // `cursorId` was added when delta polling landed. `bigserial` desugars to
+    // a sequence + default + NOT NULL — adding it to an existing table
+    // backfills via the sequence and applies the NOT NULL constraint.
+    return `ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS "cursorId" bigserial NOT NULL`;
+  });
+}
 
 /** All table CREATEs in dependency-safe order. */
 export function allTableDDL(schema: string, mode: TableDDLMode): string[] {

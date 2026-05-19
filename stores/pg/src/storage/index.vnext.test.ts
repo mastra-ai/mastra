@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { createObservabilityTests } from '@internal/storage-test-utils';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ObservabilityPG } from './domains/observability';
 import { ObservabilityStoragePostgresVNext } from './domains/observability/v-next';
@@ -73,4 +74,23 @@ describe('PostgresStoreVNext', () => {
       }
     });
   });
+});
+
+// Run the shared observability test suite against the vNext adapter so
+// updateSpan/batchUpdateSpans get skipped via the insert-only gate while
+// every other listTraces/listLogs/listMetrics/listScores/listFeedback path
+// (including the delta-polling and feedback userId tests) runs end-to-end.
+const sharedSuiteStore = new PostgresStoreVNext({ ...TEST_CONFIG, id: 'pgvnext-shared-suite' });
+
+describe('PostgresStoreVNext / shared observability suite', () => {
+  beforeAll(async () => {
+    await sharedSuiteStore.init();
+  });
+  afterAll(async () => {
+    await sharedSuiteStore.close();
+  });
+
+  // Only run the observability tests here so we don't double-run the suite
+  // that index.test.ts already covers for the legacy PostgresStore.
+  createObservabilityTests({ storage: sharedSuiteStore });
 });

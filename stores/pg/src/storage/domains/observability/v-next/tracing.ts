@@ -15,12 +15,11 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
-  LightSpanRecord,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
-import { rowToSpanRecord, spanRecordToRow } from './helpers';
+import { rowToLightSpanRecord, rowToSpanRecord, spanRecordToRow } from './helpers';
 import { buildInsert, SPAN_LIGHT_SELECT_COLUMNS, SPAN_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
@@ -87,7 +86,7 @@ export async function getTraceLight(
   if (!rows.length) return null;
   return {
     traceId: args.traceId,
-    spans: rows.map(row => rowToSpanRecord(row) as unknown as LightSpanRecord),
+    spans: rows.map(rowToLightSpanRecord),
   };
 }
 

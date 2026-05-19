@@ -15,6 +15,7 @@ import type {
   CreateScoreRecord,
   CreateSpanRecord,
   FeedbackRecord,
+  LightSpanRecord,
   LogRecord,
   MetricRecord,
   ScoreRecord,
@@ -291,6 +292,37 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     output: parsedJson(row.output) ?? undefined,
     error: error ?? undefined,
     requestContext: (parsedJson(row.requestContext) as Record<string, unknown> | null) ?? undefined,
+    createdAt: startedAt,
+    updatedAt: null,
+  };
+}
+
+/**
+ * Build a {@link LightSpanRecord} from a row that projected only the light
+ * column set (see `SPAN_LIGHT_SELECT_COLUMNS` in sql.ts). Used by
+ * `getTraceLight` — the timeline view doesn't need the full span payload.
+ */
+export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord {
+  const startedAt = toDate(row.startedAt);
+  const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
+  return {
+    traceId: row.traceId,
+    spanId: row.spanId,
+    parentSpanId: row.parentSpanId == null || row.parentSpanId === '' ? null : String(row.parentSpanId),
+    name: row.name,
+    spanType: row.spanType,
+    isEvent: Boolean(row.isEvent),
+    startedAt,
+    endedAt,
+    entityType:
+      row.entityType == null || row.entityType === ''
+        ? null
+        : Object.values(EntityType).includes(row.entityType as EntityType)
+          ? (row.entityType as EntityType)
+          : null,
+    entityId: row.entityId == null || row.entityId === '' ? null : String(row.entityId),
+    entityName: row.entityName == null || row.entityName === '' ? null : String(row.entityName),
+    error: (parsedJson(row.error) as Record<string, unknown> | null) ?? undefined,
     createdAt: startedAt,
     updatedAt: null,
   };

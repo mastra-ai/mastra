@@ -82,6 +82,8 @@ import type {
   GetTraceArgs,
   GetTraceLightResponse,
   GetTraceResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListFeedbackArgs,
   ListFeedbackResponse,
   ListLogsArgs,
@@ -98,7 +100,7 @@ import type {
 import type { DbClient } from '../../../client';
 import { resolvePgConfig } from '../../../db';
 import type { PgDomainConfig } from '../../../db';
-import { allIndexDDL, allTableDDL, qualifiedTable, TABLE_DISCOVERY } from './ddl';
+import { allIndexDDL, allTableDDL, migrationDDL, qualifiedTable, TABLE_DISCOVERY } from './ddl';
 import * as discoveryOps from './discovery';
 import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
@@ -108,7 +110,7 @@ import { detectPartman, detectTimescale, setupPartitioning } from './partitionin
 import type { PartitioningOptions, PartitionMode } from './partitioning';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoresOps from './scores';
-import * as traceRootsOps from './trace-roots';
+import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
@@ -172,6 +174,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
+        await this.#client.none(ddl);
+      }
+      // ALTER TABLE ADD COLUMN IF NOT EXISTS for columns introduced after the
+      // initial schema. Idempotent — no-ops on fresh deploys that already
+      // have the columns from the CREATE TABLE above.
+      for (const ddl of migrationDDL(this.#schema)) {
         await this.#client.none(ddl);
       }
       for (const ddl of allIndexDDL(this.#schema)) {
@@ -238,7 +246,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     try {
-      return await traceRootsOps.getRootSpan(this.#client, this.#schema, args);
+      return await tracesOps.getRootSpan(this.#client, this.#schema, args);
     } catch (error) {
       wrapError('GET_ROOT_SPAN', error, { traceId: args.traceId });
     }
@@ -262,9 +270,17 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     try {
-      return await traceRootsOps.listTraces(this.#client, this.#schema, args);
+      return await tracesOps.listTraces(this.#client, this.#schema, args);
     } catch (error) {
       wrapError('LIST_TRACES', error);
+    }
+  }
+
+  override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    try {
+      return await tracesOps.listBranches(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('LIST_BRANCHES', error);
     }
   }
 
