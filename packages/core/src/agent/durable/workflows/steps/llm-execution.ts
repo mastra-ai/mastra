@@ -74,6 +74,7 @@ const durableLLMOutputSchema = z.object({
       toolName: z.string(),
       args: z.record(z.string(), z.any()),
       providerMetadata: z.record(z.string(), z.any()).optional(),
+      activeTools: z.array(z.string()).nullable().optional(),
     }),
   ),
   stepResult: z.object({
@@ -191,6 +192,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentModel = model;
             let currentTools = tools as unknown as ToolSet;
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
+            let currentActiveTools = execOptions.activeTools;
             let currentModelSettings = { temperature: execOptions.temperature };
 
             // 6. Rebuild MODEL_GENERATION span from passed data
@@ -256,6 +258,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 },
                 tools: currentTools,
                 toolChoice: currentToolChoice,
+                activeTools: currentActiveTools,
                 modelSettings: currentModelSettings,
                 structuredOutput: structuredOutput as any,
                 retryCount: (inputData as any).processorRetryCount ?? 0,
@@ -266,6 +269,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
               currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
               currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
+              currentActiveTools = processInputStepResult.activeTools;
               currentModelSettings = {
                 ...currentModelSettings,
                 ...(processInputStepResult.modelSettings ?? {}),
@@ -301,7 +305,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // structuring step instead of asking the model for json_schema.
             modelSpanTracker?.setInferenceContext?.({
               parameters: currentModelSettings as Record<string, unknown> | undefined,
-              availableTools: getStepAvailableToolNames(currentTools as Record<string, unknown> | undefined),
+              availableTools: getStepAvailableToolNames(
+                currentTools as Record<string, unknown> | undefined,
+                currentActiveTools,
+              ),
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
@@ -314,6 +321,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               inputMessages,
               tools: currentTools,
               toolChoice: currentToolChoice,
+              activeTools: currentActiveTools,
               options: { abortSignal: executionAbortSignal },
               modelSettings: {
                 ...currentModelSettings,
@@ -417,6 +425,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         (payload.providerMetadata as Record<string, unknown> | undefined) ?? pendingProviderMetadata,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
+                      activeTools: currentActiveTools ?? null,
                     });
                     break;
                   }

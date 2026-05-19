@@ -1,5 +1,30 @@
 # @mastra/hono
 
+## 1.4.18-alpha.2
+
+### Patch Changes
+
+- Updated the adapter permission check to read user permissions from the new namespaced request-context key `mastra__userPermissions` (was `userPermissions`). This matches the namespaced keys that `@mastra/server`'s core auth middleware now writes and avoids collisions with caller-supplied context entries. ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  No action needed for typical users — install the matching `@mastra/server` release and the adapter will continue to enforce route permissions exactly as before.
+
+- Bumped the `@mastra/core` peer dependency floor from `>=1.32.0-0` to `>=1.34.0-0`. ([#16666](https://github.com/mastra-ai/mastra/pull/16666))
+
+- Added `GET /agents/:agentId/browser/session` endpoint (under the configured `apiPrefix`, default `/api`) that reports whether a screencast WebSocket should be opened for an agent and thread. Clients can probe this before upgrading to a WebSocket to avoid idle connections and reconnect storms. ([#16668](https://github.com/mastra-ai/mastra/pull/16668))
+
+  ```bash
+  curl "http://localhost:4111/api/agents/my-agent/browser/session?threadId=thread-1"
+  # {"hasSession":true,"screencastAvailable":true}
+  ```
+
+  The response shape is `{ hasSession: boolean, screencastAvailable: true }`. `screencastAvailable` is always `true` when this route is registered; the deployer registers a fallback that returns `{ hasSession: false, screencastAvailable: false }` when browser streaming packages aren't installed, so clients can use the same probe in both cases.
+
+  `setupBrowserStream` now accepts an optional `apiPrefix` so the probe and existing `POST /agents/:agentId/browser/close` routes are mounted under the same prefix as the rest of the server. The deployer wires this from `mastra.getServer().apiPrefix` automatically.
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a), [`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/server@1.36.0-alpha.2
+
 ## 1.4.18-alpha.1
 
 ### Patch Changes

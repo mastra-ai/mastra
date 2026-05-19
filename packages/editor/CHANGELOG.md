@@ -1,5 +1,27 @@
 # @mastra/editor
 
+## 0.9.0-alpha.1
+
+### Minor Changes
+
+- `EditorWorkspaceNamespace` can now snapshot a live `Workspace` for persistence — the reverse of `hydrateSnapshotToWorkspace()`: ([#16673](https://github.com/mastra-ai/mastra/pull/16673))
+
+  ```ts
+  const snapshot = await editor.workspace.snapshotFromWorkspace(runtimeWorkspace);
+  await editor.workspace.create({ id: 'my-workspace', ...snapshot });
+  ```
+
+  `snapshotFromWorkspace()` is `async` and awaits `sandbox.getInfo()` and `filesystem.getInfo()` so async providers like `CompositeFilesystem` keep their mount metadata in the stored config.
+
+  Also includes two smaller behavioral fixes:
+  - `EditorSkillNamespace.publishSkillFromSource()` stores the new `files` field on the published skill version and strips `undefined` keys before calling `update()` (libsql/pg adapters reject `undefined` bind arguments).
+  - `CrudEditorNamespace.clearCache(id)` always calls `onCacheEvict(id)`, even when the entity wasn't cached, so subclasses can clean up runtime registries for version-specific lookups that bypass the editor cache.
+
+### Patch Changes
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+
 ## 0.8.2-alpha.0
 
 ### Patch Changes
