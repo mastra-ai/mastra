@@ -850,6 +850,24 @@ describe('Agent signals', () => {
     );
     await waitForCondition(() => senderSubscription.activeRunId() === 'remote-run-1');
 
+    let waitResolved = false;
+    const waitForRemoteRun = senderRuntime
+      .waitForCrossAgentThreadRun(
+        new Agent({
+          id: 'remote-other-agent',
+          name: 'Remote Other Agent',
+          instructions: 'Test',
+          model: createTextStreamModel('other response'),
+        }),
+        { memory: { resource: 'remote-resource', thread: 'remote-thread' } },
+        pubsub,
+      )
+      .then(() => {
+        waitResolved = true;
+      });
+    await nextTick();
+    expect(waitResolved).toBe(false);
+
     const result = senderRuntime.sendSignal(
       sender,
       { type: 'user-message', contents: [{ role: 'user', content: 'remote follow-up' }] },
@@ -861,6 +879,7 @@ describe('Agent signals', () => {
     await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
 
     finishRun();
+    await waitForRemoteRun;
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
   });
@@ -916,6 +935,28 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('propagates standalone parent pubsub to child agents without their own pubsub', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const child = new Agent({
+      id: 'standalone-child-agent',
+      name: 'Standalone Child Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('child response'),
+    });
+    const parent = new Agent({
+      id: 'standalone-parent-agent',
+      name: 'Standalone Parent Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('parent response'),
+      pubsub,
+      agents: { child },
+    });
+
+    await parent.listAgents();
+
+    expect(child.getPubSub()).toBe(pubsub);
+  });
+
   it('isolates standalone agents that use different injected pubsubs', async () => {
     const runner = new Agent({
       id: 'standalone-isolated-agent',
@@ -943,9 +984,10 @@ describe('Agent signals', () => {
       memory: { thread: 'standalone-isolated-thread', resource: 'standalone-isolated-user' },
     });
 
+    await runner.getPubSub()?.flush?.();
     const result = await Promise.race([
       nextRunPromise.then(() => 'delivered'),
-      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 20)),
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 100)),
     ]);
     expect(result).toBe('timeout');
 

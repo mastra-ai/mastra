@@ -436,12 +436,17 @@ export class AgentThreadStreamRuntime {
     const key = this.#threadKey(resourceId, threadId);
     while (true) {
       const activeRunId = state.activeThreadRunIds.get(key);
-      const activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
-      if (!activeRunId || activeRecord?.agent.id === agent.id || activeRecord?.output.status !== 'running') return;
+      if (!activeRunId) return;
+
+      const activeRecord = state.threadRunsById.get(activeRunId);
       if (activeRecord) {
+        if (activeRecord.agent.id === agent.id || activeRecord.output.status !== 'running') return;
         await activeRecord.output._waitUntilFinished().catch(() => {});
         continue;
       }
+
+      if (state.threadKeysByRunId.get(activeRunId) === key) return;
+
       await this.#waitForRemoteRunToFinish(pubsub, key, activeRunId);
     }
   }
@@ -476,7 +481,13 @@ export class AgentThreadStreamRuntime {
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
       string,
-      { parts: unknown[]; waiters: Array<() => void>; done: boolean; stream: ReadableStream<unknown> }
+      {
+        parts: unknown[];
+        waiters: Array<() => void>;
+        finishWaiters: Array<() => void>;
+        done: boolean;
+        stream: ReadableStream<unknown>;
+      }
     >();
     let done = false;
 
@@ -503,6 +514,7 @@ export class AgentThreadStreamRuntime {
       const remoteRun = {
         parts: [] as unknown[],
         waiters: [] as Array<() => void>,
+        finishWaiters: [] as Array<() => void>,
         done: false,
         stream: undefined as unknown as ReadableStream<unknown>,
         closed: false,
@@ -528,6 +540,7 @@ export class AgentThreadStreamRuntime {
           remoteRun.done = true;
           remoteRun.closed = true;
           remoteRun.waiters.length = 0;
+          while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
         },
       });
       remoteRuns.set(runId, remoteRun);
@@ -537,7 +550,10 @@ export class AgentThreadStreamRuntime {
           runId,
           status: 'running',
           fullStream: remoteRun.stream,
-          _waitUntilFinished: async () => {},
+          _waitUntilFinished: async () => {
+            if (remoteRun.done) return;
+            await new Promise<void>(resolve => remoteRun.finishWaiters.push(resolve));
+          },
         } as MastraModelOutput<any>,
         runId,
         threadId: options.threadId,
@@ -579,6 +595,7 @@ export class AgentThreadStreamRuntime {
         if (remoteRun) {
           remoteRun.done = true;
           while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
+          while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
           remoteRuns.delete(data.runId);
         }
         void this.#drainPendingIdleSignals(state, resolvedPubSub, key);

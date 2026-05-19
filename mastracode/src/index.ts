@@ -234,6 +234,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   const signalsPubSub = config?.pubsub;
   const crossProcessPubSub = config?.crossProcessPubSub ?? false;
+  if (crossProcessPubSub && !signalsPubSub) {
+    throw new Error('crossProcessPubSub requires a pubsub instance');
+  }
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);

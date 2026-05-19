@@ -557,6 +557,7 @@ export class Harness<TState = {}> {
     }
 
     this.emit({ type: 'mode_changed', modeId, previousModeId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   /**
@@ -931,8 +932,8 @@ export class Harness<TState = {}> {
     }
 
     this.tokenUsage = createEmptyTokenUsage();
-    await this.ensureCurrentAgentThreadSubscription();
     this.emit({ type: 'thread_created', thread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return thread;
   }
@@ -1047,8 +1048,8 @@ export class Harness<TState = {}> {
     this.currentThreadId = clonedThread.id;
     await this.loadThreadMetadata();
     this.tokenUsage = createEmptyTokenUsage();
-    await this.ensureCurrentAgentThreadSubscription();
     this.emit({ type: 'thread_created', thread: clonedThread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return clonedThread;
   }
@@ -1077,9 +1078,9 @@ export class Harness<TState = {}> {
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
-    await this.ensureCurrentAgentThreadSubscription();
 
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   async listThreads(options?: {
