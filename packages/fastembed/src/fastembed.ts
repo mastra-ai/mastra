@@ -15,7 +15,7 @@ import https from 'node:https';
 import path from 'node:path';
 import * as ort from 'onnxruntime-node';
 import Progress from 'progress';
-import tar from 'tar';
+import * as tar from 'tar';
 import { downloadFileToCacheDir } from '@huggingface/hub';
 
 export enum ExecutionProvider {
