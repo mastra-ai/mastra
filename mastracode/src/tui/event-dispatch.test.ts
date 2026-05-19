@@ -159,6 +159,20 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(state.taskToolInsertIndex).toBe(-1);
   });
 
+  it('clears stale GitHub PR subscriptions when changed thread metadata is unavailable', async () => {
+    state.activeGithubPrSubscriptions = [{ repo: 'mastra-ai/mastra', prNumber: 16515 }];
+
+    await dispatchEvent(
+      { type: 'thread_changed', threadId: 'missing-thread', previousThreadId: 'old-thread' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.activeGithubPrSubscriptions).toEqual([]);
+    expect(state.goalManager?.loadFromThreadMetadata).toHaveBeenCalledWith(undefined);
+    expect(ectx.updateStatusLine).toHaveBeenCalled();
+  });
+
   it('clears taskProgress UI component on thread_changed', async () => {
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,

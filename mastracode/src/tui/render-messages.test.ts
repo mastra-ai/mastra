@@ -1,5 +1,6 @@
 import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
+import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
@@ -157,7 +158,7 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children).toHaveLength(1);
     expect(state.chatContainer.children[0]).toBeInstanceOf(SystemReminderComponent);
-    const rendered = (state.chatContainer.children[0] as SystemReminderComponent).render(100).join('\n');
+    const rendered = stripAnsi((state.chatContainer.children[0] as SystemReminderComponent).render(100).join('\n'));
     expect(rendered).toContain('GitHub review');
     expect(rendered).toContain('mastra-ai/mastra #16515');
     expect(rendered).toContain('user: TylerBarnes');

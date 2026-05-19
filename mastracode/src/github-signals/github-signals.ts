@@ -31,7 +31,7 @@ const GITHUB_PR_CONFLICT_SIGNAL = 'github-pr-conflict';
 const GITHUB_COMMAND_ERROR_SIGNAL = 'github-command-error';
 const GITHUB_SUBSCRIPTION_HINT_SIGNAL = 'github-subscription-hint';
 const GITHUB_PENDING_NOTIFICATIONS_SIGNAL = 'github-pending-notifications';
-const DEFAULT_POLL_INTERVAL_MS = 20_000;
+const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const DEFAULT_PENDING_FLUSH_MS = 5 * 60_000;
 const RATE_LIMIT_BACKOFF_MS = 60 * 60_000;
 const MAX_PROCESSED_SIGNAL_IDS = 200;
@@ -358,6 +358,12 @@ function isGithubRateLimitError(message: string) {
   return /API rate limit exceeded|rate limit exceeded|HTTP 403/i.test(message);
 }
 
+function isGithubTransientNetworkError(message: string) {
+  return /connection reset by peer|ECONNRESET|socket hang up|TLS handshake timeout|i\/o timeout|network is unreachable/i.test(
+    message,
+  );
+}
+
 function isSqliteBusyError(error: unknown): boolean {
   const message = getCommandErrorMessage(error);
   return /SQLITE_BUSY|database is locked|database table is locked/i.test(message);
@@ -440,7 +446,7 @@ function getCachedPrConflictDeliveryKey(notification: GithubInboxNotification) {
 }
 
 function hasNewFailedCheckFingerprint(notification: GithubInboxNotification, subscription: ActiveSubscription) {
-  if (!notification.failedChecks?.length) return false;
+  if (!notification.failedChecks) return false;
   return getFailedChecksFingerprint(notification.failedChecks) !== subscription.lastCheckFingerprint;
 }
 
@@ -836,7 +842,7 @@ export class GithubSignals {
 
     let queuedDelivery = false;
     for (const notification of unseen) {
-      if (notification.failedChecks?.length) {
+      if (notification.failedChecks) {
         const delivery = await this.#emitCachedCheckNotification(registeredAgent, subscription, notification);
         if (delivery === 'queued') queuedDelivery = true;
       }
@@ -961,7 +967,7 @@ export class GithubSignals {
   ): Promise<'sent' | 'queued' | 'skipped'> {
     const sortedChecks = [...(notification.failedChecks ?? [])].sort((a, b) => a.name.localeCompare(b.name));
     const checkFingerprint = getFailedChecksFingerprint(sortedChecks);
-    if (sortedChecks.length === 0 || checkFingerprint === subscription.lastCheckFingerprint) return 'skipped';
+    if (checkFingerprint === subscription.lastCheckFingerprint) return 'skipped';
 
     const acknowledgedSubscription: ActiveSubscription = {
       ...subscription,
@@ -969,6 +975,13 @@ export class GithubSignals {
       lastErrorFingerprint: undefined,
       updatedAt: this.#options.now().toISOString(),
     };
+
+    if (sortedChecks.length === 0) {
+      Object.assign(subscription, acknowledgedSubscription);
+      this.#activeSubscriptions.set(subscription.key, acknowledgedSubscription);
+      await subscription.persistence?.update(acknowledgedSubscription);
+      return 'skipped';
+    }
 
     if (!this.#activeThreads.has(activeThreadKey(subscription))) {
       const claimed = await this.#notificationPoller?.store.claimNotificationDelivery({
@@ -1012,7 +1025,7 @@ export class GithubSignals {
   ) {
     const sortedChecks = failedChecks.sort((a, b) => a.name.localeCompare(b.name));
     const checkFingerprint = getFailedChecksFingerprint(sortedChecks);
-    if (sortedChecks.length === 0 || checkFingerprint === subscription.lastCheckFingerprint) return 'skipped';
+    if (checkFingerprint === subscription.lastCheckFingerprint) return 'skipped';
 
     const acknowledgedSubscription: ActiveSubscription = {
       ...subscription,
@@ -1020,6 +1033,14 @@ export class GithubSignals {
       lastErrorFingerprint: undefined,
       updatedAt: this.#options.now().toISOString(),
     };
+
+    if (sortedChecks.length === 0) {
+      Object.assign(subscription, acknowledgedSubscription);
+      this.#activeSubscriptions.set(subscription.key, acknowledgedSubscription);
+      await subscription.persistence?.update(acknowledgedSubscription);
+      return 'skipped';
+    }
+
     const delivery = await this.#handleNotification(
       registeredAgent,
       subscription,
@@ -1090,6 +1111,8 @@ export class GithubSignals {
 
   async #emitCommandError(registeredAgent: RegisteredGithubAgent, subscription: ActiveSubscription, error: unknown) {
     const message = getCommandErrorMessage(error);
+    if (isGithubTransientNetworkError(message)) return;
+
     const fingerprint = getCommandErrorFingerprint(message);
     const isRateLimit = isGithubRateLimitError(message);
     if (isRateLimit) {

@@ -332,7 +332,7 @@ export class GithubNotificationStore {
       sql: `SELECT * FROM github_notifications
         WHERE account_key = ?
           AND lower(subject_type) = 'pullrequest'
-          AND (failed_checks_json IS NULL OR pr_mergeable IS NULL OR pr_mergeable_state IS NULL OR pr_head_sha IS NULL)
+          AND (failed_checks_json IS NULL OR pr_mergeable_state IS NULL OR pr_head_sha IS NULL)
           AND updated_at >= ?
         ORDER BY updated_at DESC, notification_id DESC
         LIMIT ?`,
@@ -584,7 +584,7 @@ function parseFailedChecks(value: string | null): Array<{ name: string; status: 
       typeof (check as Record<string, unknown>).status === 'string'
     );
   });
-  return checks.length > 0 ? checks : undefined;
+  return checks;
 }
 
 function parseJson(value: string | null): unknown {

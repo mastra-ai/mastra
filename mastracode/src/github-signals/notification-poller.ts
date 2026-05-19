@@ -195,7 +195,6 @@ export class GithubNotificationPoller extends EventEmitter<GithubNotificationPol
             .filter((check): check is { name: string; status: string; url?: string } => {
               return !!check && isFailedCheckStatus(check.status);
             });
-          if (checks.length === 0) return;
 
           for (const notification of notifications.filter(notification => notification.subjectUrl === pullRequestUrl)) {
             notification.failedChecks = checks;

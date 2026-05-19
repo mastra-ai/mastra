@@ -255,6 +255,57 @@ describe('GithubNotificationPoller', () => {
     ]);
   });
 
+  it('persists empty failed checks and nullable mergeability so backfill does not refetch every poll', async () => {
+    const store = createSharedStore();
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'n1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'New PR comment',
+        subjectType: 'PullRequest',
+        reason: 'author',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    await store.updateAccountState('account-1', { etag: '"etag-1"' });
+    const commandRunner = vi.fn(async (args: string[]) => {
+      if (args.includes('/notifications'))
+        throw new Error('Command failed: gh api --method GET /notifications\ngh: HTTP 304');
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/123') {
+        return {
+          stdout: JSON.stringify({
+            mergeable: null,
+            mergeable_state: 'unknown',
+            head: { sha: 'sha-1' },
+          }),
+        };
+      }
+      if (args[1] === 'https://api.github.com/repos/mastra-ai/mastra/commits/sha-1/check-runs') {
+        return { stdout: JSON.stringify({ check_runs: [] }) };
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+    const poller = new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1' });
+
+    await expect(poller.poll()).resolves.toMatchObject({ role: 'master', updated: true });
+    await expect(store.readPrNotifications('account-1', 'mastra-ai/mastra', 123)).resolves.toMatchObject([
+      { id: 'n1', failedChecks: [], prMergeable: undefined, prMergeableState: 'unknown', prHeadSha: 'sha-1' },
+    ]);
+
+    await store.releaseMasterLease('account-1');
+    await expect(poller.poll()).resolves.toMatchObject({ role: 'master', updated: false });
+    expect(
+      commandRunner.mock.calls.filter(call => call[0][1] === 'https://api.github.com/repos/mastra-ai/mastra/pulls/123'),
+    ).toHaveLength(1);
+    expect(
+      commandRunner.mock.calls.filter(
+        call => call[0][1] === 'https://api.github.com/repos/mastra-ai/mastra/commits/sha-1/check-runs',
+      ),
+    ).toHaveLength(1);
+  });
+
   it('does not send invalid empty ETags for conditional notification polling', async () => {
     const store = createSharedStore();
     await store.updateAccountState('account-1', { etag: 'W/""' });

@@ -487,6 +487,7 @@ export class MastraTUI {
     // Sync current thread metadata — the thread_changed event from
     // promptForThreadSelection fired before we subscribed above.
     await syncInitialThreadState(this.state);
+    updateStatusLine(this.state);
 
     await this.state.harness.ensureCurrentThreadSubscription();
     await this.state.options.initGithubSignals?.();

@@ -547,7 +547,7 @@ describe('MCPServer', () => {
     let notificationTestServer: MCPServer;
     let notificationTestInternalClient: InternalMastraMCPClient;
     let notificationHttpServer: http.Server;
-    const NOTIFICATION_PORT = 9400 + Math.floor(Math.random() * 1000);
+    let notificationPort: number;
 
     const mockInitialResources: Resource[] = [
       {
@@ -599,7 +599,7 @@ describe('MCPServer', () => {
       notificationTestServer = new MCPServer(serverOptions);
 
       notificationHttpServer = http.createServer(async (req, res) => {
-        const url = new URL(req.url || '', `http://localhost:${NOTIFICATION_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${notificationPort}`);
         await notificationTestServer.startSSE({
           url,
           ssePath: '/sse',
@@ -608,12 +608,15 @@ describe('MCPServer', () => {
           res,
         });
       });
-      await new Promise<void>(resolve => notificationHttpServer.listen(NOTIFICATION_PORT, resolve));
+      await new Promise<void>(resolve => notificationHttpServer.listen(0, '127.0.0.1', resolve));
+      const address = notificationHttpServer.address();
+      if (!address || typeof address === 'string') throw new Error('Failed to bind notification test server');
+      notificationPort = address.port;
 
       notificationTestInternalClient = new InternalMastraMCPClient({
         name: 'notification-internal-client',
         server: {
-          url: new URL(`http://localhost:${NOTIFICATION_PORT}/sse`),
+          url: new URL(`http://127.0.0.1:${notificationPort}/sse`),
           logger: logMessage =>
             console.log(
               `[${logMessage.serverName} - ${logMessage.level.toUpperCase()}]: ${logMessage.message}`,

@@ -146,6 +146,9 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(currentThread.metadata);
         // Load goal state from thread metadata
         state.goalManager?.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
+      } else {
+        state.activeGithubPrSubscriptions = [];
+        state.goalManager?.loadFromThreadMetadata(undefined);
       }
       ectx.updateStatusLine();
       break;

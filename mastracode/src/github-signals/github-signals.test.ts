@@ -772,6 +772,60 @@ describe('GithubSignals', () => {
     github.destroy();
   });
 
+  it('updates cached CI fingerprint when failed checks clear', async () => {
+    const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
+    const now = () => new Date('2026-01-02T00:00:01.000Z');
+    const store = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    const blockerStore = new GithubNotificationStore({ client: createClient({ url: dbUrl }), now });
+    await store.upsertNotifications('account-1', [
+      {
+        id: 'thread-1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        title: 'CI updated',
+        subjectType: 'PullRequest',
+        reason: 'author',
+        subjectUrl: 'https://api.github.com/repos/mastra-ai/mastra/pulls/123',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        failedChecks: [],
+      },
+    ]);
+    await blockerStore.acquireMasterLease('account-1', 45_000);
+    const commandRunner = vi.fn(async () => {
+      throw new Error('non-master should not call GitHub');
+    });
+    const github = new GithubSignals({
+      pollIntervalMs: 1_000,
+      repo: 'mastra-ai/mastra',
+      notificationPoller: new GithubNotificationPoller({ store, commandRunner, accountKey: 'account-1', now }),
+      commandRunner,
+      now,
+    });
+    const sendSignal = createSendSignalMock();
+    const persistence = { update: vi.fn().mockResolvedValue(undefined) };
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription(
+      {
+        agentId: 'agent-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        lastNotificationUpdatedAt: '2026-01-02T00:00:00.000Z',
+        lastCheckFingerprint: JSON.stringify([['lint', 'failure']]),
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      persistence,
+    );
+
+    await github.poll();
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(persistence.update).toHaveBeenCalledWith(expect.objectContaining({ lastCheckFingerprint: '[]' }));
+    github.destroy();
+  });
+
   it('claims cached notification delivery so concurrent instances do not duplicate a thread signal', async () => {
     const dbUrl = `file:${join(mkdtempSync(join(tmpdir(), 'github-signals-cache-')), 'cache.db')}`;
     const now = () => new Date('2026-01-02T00:00:01.000Z');
@@ -2079,6 +2133,39 @@ describe('GithubSignals', () => {
         nextPollAt: '2026-01-01T02:00:01.000Z',
       }),
     );
+    github.destroy();
+  });
+
+  it('suppresses transient GitHub network resets from shared inbox polling', async () => {
+    const poller = {
+      poll: vi.fn(async () => {
+        throw new Error(
+          'Command failed: gh api --method GET /notifications -i -F participating=true -F all=false -F per_page=100\nGet "https://api.github.com/notifications?all=false&participating=true&per_page=100": read tcp 192.168.8.181:56625->140.82.112.5:443: read: connection reset by peer',
+        );
+      }),
+    } as unknown as GithubNotificationPoller;
+    const persistence = { update: vi.fn() };
+    const github = new GithubSignals({ repo: 'mastra-ai/mastra', notificationPoller: poller });
+    const sendSignal = createSendSignalMock();
+    github.addAgent({ id: 'agent-1', sendSignal } as any);
+    github.addSubscription(
+      {
+        agentId: 'agent-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        repo: 'mastra-ai/mastra',
+        prNumber: 123,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      persistence,
+    );
+
+    await github.poll();
+
+    expect(poller.poll).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(persistence.update).not.toHaveBeenCalled();
     github.destroy();
   });
 
