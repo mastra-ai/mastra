@@ -188,7 +188,7 @@ constraints: multiple of 2",
     },
     "stringCuid": {
       "description": "a valid sample cuid
-constraints: input must match this regex ^[cC][^\\s-]{8,}$",
+constraints: input must match this regex ^[cC][0-9a-z]{6,}$",
       "format": "cuid",
       "type": "string",
     },
