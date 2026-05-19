@@ -15,7 +15,87 @@ const promptMocks = vi.hoisted(() => ({
   cyclesSubmitHandler: undefined as ((value: number) => void) | undefined,
 }));
 
+const overlayMocks = vi.hoisted(() => ({
+  showModalOverlay: vi.fn(),
+}));
+
 vi.mock('../../../onboarding/settings.js', () => settingsMock);
+
+vi.mock('@mariozechner/pi-tui', () => ({
+  Box: class {
+    children: unknown[] = [];
+    constructor() {}
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
+  },
+  SelectList: class {
+    onSelect?: (item: { value: string; label: string }) => void;
+    onCancel?: () => void;
+    constructor(
+      public items: Array<{ value: string; label: string }>,
+      public visibleItems: number,
+      public theme: unknown,
+    ) {}
+    handleInput() {}
+  },
+  Spacer: class {
+    constructor(public size: number) {}
+  },
+  Text: class {
+    constructor(
+      public text: string,
+      public x?: number,
+      public y?: number,
+    ) {}
+  },
+}));
+
+vi.mock('../../overlay.js', () => ({
+  showModalOverlay: overlayMocks.showModalOverlay,
+}));
+
+vi.mock('@mastra/core/agent', () => ({
+  Agent: vi.fn(),
+}));
+
+vi.mock('@mastra/core/processors', () => ({
+  PrefillErrorHandler: class {},
+  ProviderHistoryCompat: class {},
+  StreamErrorRetryProcessor: class {},
+}));
+
+vi.mock('../../../agents/model.js', () => ({
+  getModel: vi.fn(() => ({ modelId: 'mock-model' })),
+}));
+
+vi.mock('@mastra/core/workspace', () => ({
+  createWorkspaceTools: vi.fn(),
+  WORKSPACE_TOOLS: {
+    FILESYSTEM: {
+      READ_FILE: 'filesystem.read_file',
+      WRITE_FILE: 'filesystem.write_file',
+      EDIT_FILE: 'filesystem.edit_file',
+      DELETE_FILE: 'filesystem.delete_file',
+      LIST_FILES: 'filesystem.list_files',
+      CREATE_DIRECTORY: 'filesystem.create_directory',
+      GET_FILE_INFO: 'filesystem.get_file_info',
+      SEARCH_FILES: 'filesystem.search_files',
+      AST_EDIT: 'filesystem.ast_edit',
+    },
+    SANDBOX: {
+      EXECUTE_COMMAND: 'sandbox.execute_command',
+      GET_PROCESS_OUTPUT: 'sandbox.get_process_output',
+      KILL_PROCESS: 'sandbox.kill_process',
+    },
+    LSP: { INSPECT: 'lsp.inspect' },
+    SKILLS: {
+      ACTIVATE: 'skills.activate',
+      SEARCH: 'skills.search',
+      READ: 'skills.read',
+    },
+  },
+}));
 
 vi.mock('../../components/model-selector.js', () => ({
   ModelSelectorComponent: class {
@@ -66,6 +146,25 @@ describe('createGoalReminderMessage', () => {
 });
 
 describe('handleGoalCommand', () => {
+  it('opens an action modal for /goal with no arguments', async () => {
+    overlayMocks.showModalOverlay.mockClear();
+    const ctx = {
+      state: {
+        goalManager: { getGoal: vi.fn(() => null) },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+    } as any;
+
+    const result = handleGoalCommand(ctx, []);
+
+    expect(overlayMocks.showModalOverlay).toHaveBeenCalledTimes(1);
+    expect(ctx.showInfo).not.toHaveBeenCalledWith('No goal set. Use /goal <text> to set one.');
+    const modal = overlayMocks.showModalOverlay.mock.calls[0]?.[1] as { handleInput?: (data: string) => void };
+    expect(modal.handleInput).toEqual(expect.any(Function));
+    void result;
+  });
+
   it('resumes a paused goal without resetting the turn counter', async () => {
     const goal = {
       id: 'goal-1',
@@ -275,6 +374,8 @@ describe('handleGoalCommand', () => {
   });
 
   it('can activate goal mode without sending a trigger so plan approval can inject through the TUI', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
     const goalManager = new GoalManager();
     const sendMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -293,9 +394,12 @@ describe('handleGoalCommand', () => {
     } as any;
 
     await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', { trigger: 'none' });
+    vi.setSystemTime(new Date('2026-05-15T15:00:00.000Z'));
 
     expect(goalManager.isActive()).toBe(true);
+    expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
     expect(sendMessage).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('updates the current goal when judge defaults change', async () => {

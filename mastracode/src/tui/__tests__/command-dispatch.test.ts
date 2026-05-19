@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
+  handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
@@ -24,6 +25,7 @@ vi.mock('../commands/index.js', () => ({
   handleHooksCommand: vi.fn(),
   handleMcpCommand: vi.fn(),
   handleModeCommand: vi.fn(),
+  handleSkillCommand: mocks.handleSkillCommand,
   handleSkillsCommand: vi.fn(),
   handleNewCommand: vi.fn(),
   handleResourceCommand: vi.fn(),
@@ -72,6 +74,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleModelsPackCommand.mockClear();
     mocks.handleCustomProvidersCommand.mockClear();
     mocks.handleGoalCommand.mockClear();
+    mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
@@ -120,6 +123,18 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
+  });
+
+  it('routes /skill/name to handleSkillCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/skill/github-triage focus tests', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleSkillCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleSkillCommand).toHaveBeenCalledWith(ctx, 'github-triage', ['focus', 'tests']);
+    expect(mocks.showError).not.toHaveBeenCalled();
   });
 
   it('routes multiline /goal objectives as a single goal argument', async () => {

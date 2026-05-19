@@ -161,9 +161,9 @@ Sends a signal to an active run or memory thread.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user-message'; contents: MessageListInput } | { type: string; contents: string }",
+    type: "{ type: 'user-message' | string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
-      '`user-message` signals are treated as user input. Other signal types are converted to XML context before the next model call.',
+      '`user-message` signals are treated as user input. Other signal types are wrapped in XML context (with any `attributes`) before the next model call. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
   },
   {
     name: 'options.runId',
@@ -275,6 +275,13 @@ Returns an `AgentThreadSubscription` object with these members:
     type: 'string',
     isOptional: true,
     description: "Optional description of the agent's purpose and capabilities.",
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown> | ({ requestContext: RequestContext }) => Record<string, unknown> | Promise<Record<string, unknown>>',
+    isOptional: true,
+    description:
+      'Optional metadata for classifying or filtering the agent in clients. Can be a static record or a function that resolves the metadata from the request context.',
   },
   {
     name: 'instructions',

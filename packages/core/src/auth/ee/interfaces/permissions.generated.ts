@@ -13,7 +13,6 @@
  */
 export const RESOURCES = [
   'a2a',
-  'agent-builder',
   'agents',
   'background-tasks',
   'channels',
@@ -28,8 +27,12 @@ export const RESOURCES = [
   'processors',
   'schedules',
   'scores',
-  'stored',
   'stored-agents',
+  'stored-mcp-clients',
+  'stored-prompt-blocks',
+  'stored-scorers',
+  'stored-skills',
+  'stored-workspaces',
   'system',
   'tool-providers',
   'tools',
@@ -53,7 +56,7 @@ export type Resource = (typeof RESOURCES)[number];
  * - DELETE → delete
  * - Additional actions from explicit requiresPermission overrides
  */
-export const ACTIONS = ['create', 'delete', 'execute', 'read', 'write'] as const;
+export const ACTIONS = ['create', 'delete', 'execute', 'publish', 'read', 'share', 'write'] as const;
 
 /**
  * Action type union.
@@ -73,14 +76,16 @@ export const PERMISSION_PATTERNS = {
   '*:delete': '*:delete',
   /** Execute all resources */
   '*:execute': '*:execute',
+  /** Publish, activate, or restore all resources */
+  '*:publish': '*:publish',
   /** View all resources */
   '*:read': '*:read',
+  /** Change visibility/audience all resources */
+  '*:share': '*:share',
   /** Create and modify all resources */
   '*:write': '*:write',
   /** Full access to agent-to-agent communication */
   'a2a:*': 'a2a:*',
-  /** Full access to agent builder */
-  'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
   /** Full access to background tasks */
@@ -109,10 +114,18 @@ export const PERMISSION_PATTERNS = {
   'schedules:*': 'schedules:*',
   /** Full access to evaluation scores */
   'scores:*': 'scores:*',
-  /** Full access to stored */
-  'stored:*': 'stored:*',
   /** Full access to stored agents */
   'stored-agents:*': 'stored-agents:*',
+  /** Full access to stored MCP clients */
+  'stored-mcp-clients:*': 'stored-mcp-clients:*',
+  /** Full access to stored prompt blocks */
+  'stored-prompt-blocks:*': 'stored-prompt-blocks:*',
+  /** Full access to stored scorers */
+  'stored-scorers:*': 'stored-scorers:*',
+  /** Full access to stored skills */
+  'stored-skills:*': 'stored-skills:*',
+  /** Full access to stored workspaces */
+  'stored-workspaces:*': 'stored-workspaces:*',
   /** Full access to system info */
   'system:*': 'system:*',
   /** Full access to tool-providers */
@@ -131,12 +144,6 @@ export const PERMISSION_PATTERNS = {
   'a2a:read': 'a2a:read',
   /** Create and modify agent-to-agent communication */
   'a2a:write': 'a2a:write',
-  /** Execute agent builder */
-  'agent-builder:execute': 'agent-builder:execute',
-  /** View agent builder */
-  'agent-builder:read': 'agent-builder:read',
-  /** Create and modify agent builder */
-  'agent-builder:write': 'agent-builder:write',
   /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
@@ -203,16 +210,50 @@ export const PERMISSION_PATTERNS = {
   'scores:write': 'scores:write',
   /** Delete stored agents */
   'stored-agents:delete': 'stored-agents:delete',
+  /** Publish, activate, or restore stored agents */
+  'stored-agents:publish': 'stored-agents:publish',
   /** View stored agents */
   'stored-agents:read': 'stored-agents:read',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
-  /** Delete stored */
-  'stored:delete': 'stored:delete',
-  /** View stored */
-  'stored:read': 'stored:read',
-  /** Create and modify stored */
-  'stored:write': 'stored:write',
+  /** Delete stored MCP clients */
+  'stored-mcp-clients:delete': 'stored-mcp-clients:delete',
+  /** Publish, activate, or restore stored MCP clients */
+  'stored-mcp-clients:publish': 'stored-mcp-clients:publish',
+  /** View stored MCP clients */
+  'stored-mcp-clients:read': 'stored-mcp-clients:read',
+  /** Create and modify stored MCP clients */
+  'stored-mcp-clients:write': 'stored-mcp-clients:write',
+  /** Delete stored prompt blocks */
+  'stored-prompt-blocks:delete': 'stored-prompt-blocks:delete',
+  /** Publish, activate, or restore stored prompt blocks */
+  'stored-prompt-blocks:publish': 'stored-prompt-blocks:publish',
+  /** View stored prompt blocks */
+  'stored-prompt-blocks:read': 'stored-prompt-blocks:read',
+  /** Create and modify stored prompt blocks */
+  'stored-prompt-blocks:write': 'stored-prompt-blocks:write',
+  /** Delete stored scorers */
+  'stored-scorers:delete': 'stored-scorers:delete',
+  /** Publish, activate, or restore stored scorers */
+  'stored-scorers:publish': 'stored-scorers:publish',
+  /** View stored scorers */
+  'stored-scorers:read': 'stored-scorers:read',
+  /** Create and modify stored scorers */
+  'stored-scorers:write': 'stored-scorers:write',
+  /** Delete stored skills */
+  'stored-skills:delete': 'stored-skills:delete',
+  /** Publish, activate, or restore stored skills */
+  'stored-skills:publish': 'stored-skills:publish',
+  /** View stored skills */
+  'stored-skills:read': 'stored-skills:read',
+  /** Create and modify stored skills */
+  'stored-skills:write': 'stored-skills:write',
+  /** Delete stored workspaces */
+  'stored-workspaces:delete': 'stored-workspaces:delete',
+  /** View stored workspaces */
+  'stored-workspaces:read': 'stored-workspaces:read',
+  /** Create and modify stored workspaces */
+  'stored-workspaces:write': 'stored-workspaces:write',
   /** View system info */
   'system:read': 'system:read',
   /** View tool-providers */
@@ -245,6 +286,18 @@ export const PERMISSION_PATTERNS = {
   'workspaces:read': 'workspaces:read',
   /** Create and modify workspaces */
   'workspaces:write': 'workspaces:write',
+  /** Full access to all stored resource families */
+  'stored:*': 'stored:*',
+  /** View all stored resource families */
+  'stored:read': 'stored:read',
+  /** Create and modify all stored resource families */
+  'stored:write': 'stored:write',
+  /** Delete all stored resource families */
+  'stored:delete': 'stored:delete',
+  /** Change visibility/audience stored agents */
+  'stored-agents:share': 'stored-agents:share',
+  /** Change visibility/audience stored skills */
+  'stored-skills:share': 'stored-skills:share',
 } as const;
 
 /**
@@ -263,9 +316,6 @@ export type PermissionPattern = keyof typeof PERMISSION_PATTERNS;
 export const PERMISSIONS = [
   'a2a:read',
   'a2a:write',
-  'agent-builder:execute',
-  'agent-builder:read',
-  'agent-builder:write',
   'agents:create',
   'agents:delete',
   'agents:execute',
@@ -299,11 +349,28 @@ export const PERMISSIONS = [
   'scores:read',
   'scores:write',
   'stored-agents:delete',
+  'stored-agents:publish',
   'stored-agents:read',
   'stored-agents:write',
-  'stored:delete',
-  'stored:read',
-  'stored:write',
+  'stored-mcp-clients:delete',
+  'stored-mcp-clients:publish',
+  'stored-mcp-clients:read',
+  'stored-mcp-clients:write',
+  'stored-prompt-blocks:delete',
+  'stored-prompt-blocks:publish',
+  'stored-prompt-blocks:read',
+  'stored-prompt-blocks:write',
+  'stored-scorers:delete',
+  'stored-scorers:publish',
+  'stored-scorers:read',
+  'stored-scorers:write',
+  'stored-skills:delete',
+  'stored-skills:publish',
+  'stored-skills:read',
+  'stored-skills:write',
+  'stored-workspaces:delete',
+  'stored-workspaces:read',
+  'stored-workspaces:write',
   'system:read',
   'tool-providers:read',
   'tools:execute',
@@ -338,12 +405,6 @@ export const MastraFGAPermissions = {
   A2A_READ: 'a2a:read',
   /** Create and modify agent-to-agent communication */
   A2A_WRITE: 'a2a:write',
-  /** Execute agent builder */
-  AGENT_BUILDER_EXECUTE: 'agent-builder:execute',
-  /** View agent builder */
-  AGENT_BUILDER_READ: 'agent-builder:read',
-  /** Create and modify agent builder */
-  AGENT_BUILDER_WRITE: 'agent-builder:write',
   /** Create agents */
   AGENTS_CREATE: 'agents:create',
   /** Delete agents */
@@ -410,16 +471,50 @@ export const MastraFGAPermissions = {
   SCORES_WRITE: 'scores:write',
   /** Delete stored agents */
   STORED_AGENTS_DELETE: 'stored-agents:delete',
+  /** Publish, activate, or restore stored agents */
+  STORED_AGENTS_PUBLISH: 'stored-agents:publish',
   /** View stored agents */
   STORED_AGENTS_READ: 'stored-agents:read',
   /** Create and modify stored agents */
   STORED_AGENTS_WRITE: 'stored-agents:write',
-  /** Delete stored */
-  STORED_DELETE: 'stored:delete',
-  /** View stored */
-  STORED_READ: 'stored:read',
-  /** Create and modify stored */
-  STORED_WRITE: 'stored:write',
+  /** Delete stored MCP clients */
+  STORED_MCP_CLIENTS_DELETE: 'stored-mcp-clients:delete',
+  /** Publish, activate, or restore stored MCP clients */
+  STORED_MCP_CLIENTS_PUBLISH: 'stored-mcp-clients:publish',
+  /** View stored MCP clients */
+  STORED_MCP_CLIENTS_READ: 'stored-mcp-clients:read',
+  /** Create and modify stored MCP clients */
+  STORED_MCP_CLIENTS_WRITE: 'stored-mcp-clients:write',
+  /** Delete stored prompt blocks */
+  STORED_PROMPT_BLOCKS_DELETE: 'stored-prompt-blocks:delete',
+  /** Publish, activate, or restore stored prompt blocks */
+  STORED_PROMPT_BLOCKS_PUBLISH: 'stored-prompt-blocks:publish',
+  /** View stored prompt blocks */
+  STORED_PROMPT_BLOCKS_READ: 'stored-prompt-blocks:read',
+  /** Create and modify stored prompt blocks */
+  STORED_PROMPT_BLOCKS_WRITE: 'stored-prompt-blocks:write',
+  /** Delete stored scorers */
+  STORED_SCORERS_DELETE: 'stored-scorers:delete',
+  /** Publish, activate, or restore stored scorers */
+  STORED_SCORERS_PUBLISH: 'stored-scorers:publish',
+  /** View stored scorers */
+  STORED_SCORERS_READ: 'stored-scorers:read',
+  /** Create and modify stored scorers */
+  STORED_SCORERS_WRITE: 'stored-scorers:write',
+  /** Delete stored skills */
+  STORED_SKILLS_DELETE: 'stored-skills:delete',
+  /** Publish, activate, or restore stored skills */
+  STORED_SKILLS_PUBLISH: 'stored-skills:publish',
+  /** View stored skills */
+  STORED_SKILLS_READ: 'stored-skills:read',
+  /** Create and modify stored skills */
+  STORED_SKILLS_WRITE: 'stored-skills:write',
+  /** Delete stored workspaces */
+  STORED_WORKSPACES_DELETE: 'stored-workspaces:delete',
+  /** View stored workspaces */
+  STORED_WORKSPACES_READ: 'stored-workspaces:read',
+  /** Create and modify stored workspaces */
+  STORED_WORKSPACES_WRITE: 'stored-workspaces:write',
   /** View system info */
   SYSTEM_READ: 'system:read',
   /** View tool-providers */

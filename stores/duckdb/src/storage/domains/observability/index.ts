@@ -14,6 +14,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -81,6 +82,7 @@ import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
 import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
 import * as tracingOps from './tracing';
 
@@ -197,6 +199,14 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     };
   }
 
+  override getFeatures() {
+    if (!deltaPollingFeatureEnabled()) {
+      return undefined;
+    }
+
+    return ['delta-polling'] as const;
+  }
+
   // Tracing
   async createSpan(args: CreateSpanArgs): Promise<void> {
     return tracingOps.createSpan(this.db, args);
@@ -224,6 +234,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
+  }
+  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    return tracingOps.listTracesLight(this.db, args);
   }
   async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
     return tracingOps.listBranches(this.db, args);

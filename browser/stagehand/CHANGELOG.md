@@ -1,5 +1,11 @@
 # @mastra/stagehand
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- Silence Stagehand console logging by default and route logs through a logger hook to avoid corrupting host TUIs. ([#16677](https://github.com/mastra-ai/mastra/pull/16677))
+
 ## 0.2.2
 
 ### Patch Changes

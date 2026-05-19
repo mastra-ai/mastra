@@ -7,7 +7,7 @@ import { DataListSpacer } from '../data-list-spacer';
 import { DataListSubheader } from '../data-list-subheader';
 import { DataListSubHeading } from '../data-list-subheading';
 import { DataListTop } from '../data-list-top';
-import { DataListTopCell } from '../data-list-top-cell';
+import { DataListTopCell, DataListTopCellWithTooltip } from '../data-list-top-cell';
 import {
   TracesDataListIdCell,
   TracesDataListDateCell,
@@ -25,6 +25,7 @@ function TracesDataListRoot(props: ComponentProps<typeof DataListRoot>) {
 export const TracesDataList = Object.assign(TracesDataListRoot, {
   Top: DataListTop,
   TopCell: DataListTopCell,
+  TopCellWithTooltip: DataListTopCellWithTooltip,
   RowButton: DataListRowButton,
   NoMatch: DataListNoMatch,
   Subheader: DataListSubheader,

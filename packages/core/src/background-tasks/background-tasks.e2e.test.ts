@@ -79,7 +79,7 @@ describeE2E('Background Tasks E2E', () => {
     });
     // Default engine is 'workflow' — the workflow event processor needs to
     // be subscribed to the pubsub so workflow.start events get processed.
-    await mastra.startEventEngine();
+    await mastra.startWorkers();
   });
 
   afterEach(async () => {
@@ -87,7 +87,7 @@ describeE2E('Background Tasks E2E', () => {
     if (manager) {
       await manager.shutdown();
     }
-    await mastra.stopEventEngine();
+    await mastra.stopWorkers();
     const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
     await backgroundTasksStore?.dangerouslyClearAll();
   });
@@ -216,7 +216,7 @@ describeE2E('Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       // --- First prompt: triggers background task ---
@@ -299,7 +299,7 @@ describeE2E('Background Tasks E2E', () => {
       expect(allContent).toContain('bob');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 60_000);
 
@@ -330,7 +330,7 @@ describeE2E('Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       const result = await memoryAgent.streamUntilIdle('Please research "quantum computing" for me', {
@@ -377,7 +377,7 @@ describeE2E('Background Tasks E2E', () => {
       expect(assembledText).toContain('quantum computing');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 60_000);
 
@@ -438,7 +438,7 @@ describeE2E('Background Tasks E2E', () => {
       backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       // --- Initial turn: dispatches bg task, which suspends ---
@@ -504,7 +504,7 @@ describeE2E('Background Tasks E2E', () => {
       expect(text).toContain('promising');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 60_000);
 
@@ -567,7 +567,7 @@ describeE2E('Background Tasks E2E', () => {
       backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       // --- Initial turn: tool calls suspend({ ask, name }); agent run suspends ---
@@ -646,7 +646,7 @@ describeE2E('Background Tasks E2E', () => {
       expect((tasks.tasks[0]!.result as { summary: string }).summary).toContain('machine learning');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 90_000);
 
@@ -690,7 +690,7 @@ describeE2E('Background Tasks E2E', () => {
       backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       // --- Initial turn: requires approval on approveLookup; agent run
@@ -764,7 +764,7 @@ describeE2E('Background Tasks E2E', () => {
       expect((tasks.tasks[0]!.result as { summary: string }).summary).toContain('machine learning');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 90_000);
 
@@ -793,7 +793,7 @@ describeE2E('Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       const result = await memoryAgent.streamUntilIdle('Greet someone named Carol', {
@@ -828,7 +828,7 @@ describeE2E('Background Tasks E2E', () => {
       expect(assembledText).toContain('carol');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 30_000);
 });

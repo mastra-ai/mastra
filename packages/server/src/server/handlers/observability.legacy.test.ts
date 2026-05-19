@@ -14,6 +14,7 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraStorage } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import { LIST_TRACES_ROUTE } from './observability';
 import { createTestServerContext } from './test-utils';
@@ -314,6 +315,32 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         pagination: {},
         orderBy: { field: 'endedAt', direction: 'ASC' },
       });
+    });
+  });
+
+  describe('Delta capability gating', () => {
+    it('should reject delta mode when the store does not advertise trace delta support', async () => {
+      await expect(
+        LIST_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          mode: 'delta',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await LIST_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          mode: 'delta',
+        });
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(501);
+        expect((error as HTTPException).message).toBe(
+          'Delta polling is not supported by the configured observability store for traces',
+        );
+      }
+
+      expect(mockObservabilityStore.listTraces).not.toHaveBeenCalled();
     });
   });
 });
