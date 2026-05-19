@@ -230,6 +230,30 @@ describe('Convex Schema Sync', () => {
     expect(serverExports.TABLE_SCHEDULES).toBe('mastra_schedules');
     expect(serverExports.TABLE_SCHEDULE_TRIGGERS).toBe('mastra_schedule_triggers');
   });
+
+  it('cache tables should include indexes used by ConvexServerCache', async () => {
+    const { mastraCacheTable, mastraCacheListItemsTable } = await import('../schema');
+    const normalizeIndexes = (indexes: any[]) =>
+      indexes.map(index =>
+        Array.isArray(index) ? index : [index.indexDescriptor ?? index.name, index.fields ?? index.indexFields],
+      );
+
+    const cacheIndexes = normalizeIndexes((mastraCacheTable as any).indexes ?? []);
+    expect(cacheIndexes).toEqual(
+      expect.arrayContaining([
+        ['by_key', ['key']],
+        ['by_key_prefix', ['keyPrefix']],
+      ]),
+    );
+
+    const listIndexes = normalizeIndexes((mastraCacheListItemsTable as any).indexes ?? []);
+    expect(listIndexes).toEqual(
+      expect.arrayContaining([
+        ['by_key_prefix', ['keyPrefix']],
+        ['by_key_index', ['key', 'index']],
+      ]),
+    );
+  });
 });
 
 describe('ConvexStore domains', () => {
