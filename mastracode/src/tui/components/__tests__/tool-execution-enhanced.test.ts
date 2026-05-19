@@ -223,7 +223,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     const rendered = component.render(100).join('\n');
     const output = stripAnsi(rendered);
-    expect(output).toContain('list  src (5 results)');
+    expect(output).toContain('▐list▌src (5 results)');
     expect(output).not.toContain('│ .');
     expect(rendered).toContain(theme.fg('toolOutput', 'src/a.ts'));
     expect(rendered).toContain(theme.fg('toolOutput', 'src/b.ts'));
@@ -255,7 +255,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     });
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('web  "muted cli-highlight theme"');
+    expect(output).toContain('▐web▌"muted cli-highlight theme"');
     expect(output).toContain('│ cli-highlight README');
     expect(output).toContain('│ https://github.com/felixfbecker/cli-highlight');
     expect(output).not.toContain('highlight.js Themes');
@@ -269,7 +269,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       { quietDisplayMode: 'quiet', collapsedByDefault: true },
       ui,
     );
-    expect(active.render(100).join('\n')).toContain('\u001b[30m\u001b[1m view ');
+    expect(stripAnsi(active.render(100).join('\n'))).toContain('▐view▌src/example.ts');
 
     const complete = new ToolExecutionComponentEnhanced(
       'view',
@@ -278,7 +278,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ui,
     );
     complete.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
-    expect(complete.render(100).join('\n')).toContain('\u001b[30m\u001b[1m view ');
+    expect(stripAnsi(complete.render(100).join('\n'))).toContain('▐view▌src/example.ts');
   });
 
   it('renders quiet non-shell tool validation errors with actionable details', () => {
@@ -426,7 +426,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     const lines = component.render(100).map(stripAnsi);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('write  /tmp/example.ts');
+    expect(lines[0]).toContain('▐write▌/tmp/example.ts');
     expect(lines.join('\n')).not.toContain('first line');
     expect(component.hasQuietStreamingPreview()).toBe(false);
   });
@@ -511,6 +511,22 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines[0]).not.toContain('●─');
   });
 
+  it('does not use orange dot continuation markers when preview lines are disabled', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: '/tmp/a.ts', content: 'const first = 1;' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+
+    component.setCompactToolContinuation(true, '/tmp/previous.ts');
+    component.setCompactToolHasFollowingContinuation(true);
+    const lines = component.render(100).map(stripAnsi);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('├─');
+    expect(lines[0]).not.toContain('●─');
+  });
+
   it('uses an open continuation header when the continuation has preview lines', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
@@ -522,9 +538,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.setCompactToolHasFollowingContinuation(true);
     component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
     const lines = component.render(100).map(stripAnsi);
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4);
     expect(lines[1]).toContain('│ const first = 1;');
     expect(lines[2]).toContain('│ const second = 2;');
+    expect(lines[3]).toContain('│');
     expect(lines.join('\n')).not.toContain('╰─');
   });
 
