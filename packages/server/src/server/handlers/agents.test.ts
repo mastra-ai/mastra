@@ -1091,17 +1091,12 @@ describe('Agent Routes Authorization', () => {
         signal: {
           type: 'user-message',
           contents: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'describe these files' },
-                { type: 'image', image: 'data:image/png;base64,image-data', mediaType: 'image/png' },
-                { type: 'file', data: 'file-data', mimeType: 'application/pdf', filename: 'brief.pdf' },
-              ],
-              metadata: { source: 'studio' },
-            },
+            { type: 'text', text: 'describe these files' },
+            { type: 'file', data: 'data:image/png;base64,image-data', mediaType: 'image/png' },
+            { type: 'file', data: 'file-data', mediaType: 'application/pdf', filename: 'brief.pdf' },
           ],
           attributes: { intent: 'follow-up', count: 1, urgent: false, empty: null },
+          metadata: { source: 'studio' },
         },
         resourceId: 'user-a',
         threadId: 'signal-thread-from-context',
@@ -1110,7 +1105,7 @@ describe('Agent Routes Authorization', () => {
       expect(sendAgentSignalBodySchema.safeParse(body).success).toBe(true);
     });
 
-    it('should validate string and string-array user-message signal contents', () => {
+    it('should validate string user-message signal contents and reject legacy array wrappers', () => {
       expect(
         sendAgentSignalBodySchema.safeParse({
           signal: { type: 'user-message', contents: 'hello' },
@@ -1125,10 +1120,10 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'thread-a',
         }).success,
-      ).toBe(true);
+      ).toBe(false);
     });
 
-    it('should validate Mastra DB message shaped user-message signal contents', () => {
+    it('should reject Mastra DB message shaped user-message signal contents', () => {
       expect(
         sendAgentSignalBodySchema.safeParse({
           signal: {
@@ -1152,7 +1147,7 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'thread-a',
         }).success,
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it('should reject malformed user-message content parts', () => {

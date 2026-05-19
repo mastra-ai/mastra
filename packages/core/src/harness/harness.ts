@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
-import { createSignal } from '../agent/signals';
+import type { MastraDBMessage } from '../agent/message-list/state/types';
+import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -103,38 +104,25 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
+function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
-  if (!contents || typeof contents !== 'object') return [];
-
-  const content = (contents as { content?: unknown }).content;
-  if (typeof content === 'string') return [{ type: 'text', text: content }];
-  if (Array.isArray(content)) {
-    return content.flatMap((part): HarnessMessageContent[] => {
-      const record = getRecordValue(part);
-      if (!record) return [];
-      if (record.type === 'text' && typeof record.text === 'string') {
-        return [{ type: 'text', text: record.text }];
-      }
-      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
-        if (record.mediaType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
-        }
-        return [
-          {
-            type: 'file',
-            data: record.data,
-            mediaType: record.mediaType,
-            filename: typeof record.filename === 'string' ? record.filename : undefined,
-          },
-        ];
-      }
-      return [];
-    });
-  }
-
-  return [];
+  return contents.flatMap((part): HarnessMessageContent[] => {
+    if (part.type === 'text') {
+      return [{ type: 'text', text: part.text }];
+    }
+    if (typeof part.data !== 'string') return [];
+    if (part.mediaType.startsWith('image/')) {
+      return [{ type: 'image', data: part.data, mimeType: part.mediaType }];
+    }
+    return [
+      {
+        type: 'file',
+        data: part.data,
+        mediaType: part.mediaType,
+        filename: part.filename,
+      },
+    ];
+  });
 }
 
 function toSystemReminderContent(
@@ -142,7 +130,7 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  const message = getStringValue(payload.contents);
   if (message === undefined) return undefined;
 
   return {
@@ -172,17 +160,23 @@ function toSystemReminderContent(
 
 function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
   const id = getStringValue(payload.id);
-  const contents = payload.contents ?? payload.message;
-  if (!id || contents === undefined) return undefined;
+  const rawContents = payload.contents;
+  if (!id || rawContents === undefined) return undefined;
 
-  const content = signalContentsToHarnessContent(contents);
+  const signal = createSignal({
+    id,
+    type: 'user-message',
+    contents: rawContents as AgentSignalContents,
+    createdAt: getStringValue(payload.createdAt),
+  });
+  const content = signalContentsToHarnessContent(signal.contents);
   if (content.length === 0) return undefined;
 
   return {
-    id,
+    id: signal.id,
     role: 'user',
     content,
-    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
+    createdAt: signal.createdAt,
   };
 }
 
@@ -1803,13 +1797,10 @@ export class Harness<TState = {}> {
           type: 'file' as const,
           data: f.data,
           mediaType: f.mediaType,
-          filename: f.filename,
+          ...(f.filename ? { filename: f.filename } : {}),
         };
       });
-      messageInput = {
-        role: 'user',
-        content: [{ type: 'text', text: content }, ...fileParts],
-      } as AgentSignalContents;
+      messageInput = [{ type: 'text', text: content }, ...fileParts];
     }
 
     const wasActive = this.isCurrentThreadStreamActive();
@@ -1977,36 +1968,45 @@ export class Harness<TState = {}> {
       };
     }
 
-    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
-    if (signalMetadata?.type === 'user-message') {
-      const signalContent = signalContentsToHarnessContent(signalMetadata.contents ?? msg.content.content);
-      if (signalContent.length > 0) {
+    if (msg.role === 'signal') {
+      const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
+
+      if (signal.type === 'user-message') {
+        const signalContent = signalContentsToHarnessContent(signal.contents);
+        if (signalContent.length > 0) {
+          return {
+            id: msg.id,
+            role: 'user',
+            content: signalContent,
+            createdAt: msg.createdAt,
+          };
+        }
+      }
+
+      if (signal.type === 'system-reminder') {
+        const reminder = toSystemReminderContent({
+          type: signal.type,
+          contents:
+            typeof signal.contents === 'string'
+              ? signal.contents
+              : signal.contents
+                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                  .map(p => p.text)
+                  .join('\n'),
+          attributes: signal.attributes ?? msg.content.metadata,
+          metadata: signal.metadata,
+        });
+        if (reminder) {
+          content.push(reminder);
+        }
+
         return {
           id: msg.id,
           role: 'user',
-          content: signalContent,
+          content,
           createdAt: msg.createdAt,
         };
       }
-    }
-
-    if (signalMetadata?.type === 'system-reminder') {
-      const reminder = toSystemReminderContent({
-        type: signalMetadata.type,
-        contents: signalMetadata.contents ?? msg.content.content,
-        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
-        metadata: getRecordValue(signalMetadata.metadata),
-      });
-      if (reminder) {
-        content.push(reminder);
-      }
-
-      return {
-        id: msg.id,
-        role: 'user',
-        content,
-        createdAt: msg.createdAt,
-      };
     }
 
     for (const part of msg.content.parts) {

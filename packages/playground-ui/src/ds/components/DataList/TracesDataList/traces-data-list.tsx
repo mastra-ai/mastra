@@ -10,7 +10,6 @@ import { DataListTop } from '../data-list-top';
 import { DataListTopCell, DataListTopCellWithTooltip } from '../data-list-top-cell';
 import {
   TracesDataListIdCell,
-  TracesDataListKindCell,
   TracesDataListDateCell,
   TracesDataListTimeCell,
   TracesDataListNameCell,
@@ -33,7 +32,6 @@ export const TracesDataList = Object.assign(TracesDataListRoot, {
   SubHeading: DataListSubHeading,
   Spacer: DataListSpacer,
   IdCell: TracesDataListIdCell,
-  KindCell: TracesDataListKindCell,
   DateCell: TracesDataListDateCell,
   TimeCell: TracesDataListTimeCell,
   NameCell: TracesDataListNameCell,

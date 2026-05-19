@@ -36,4 +36,4 @@
  * ```
  */
 // Add feature flags here as new features are introduced
-export const observabilityFeatures: ReadonlySet<string> = new Set(['model-inference-span']);
+export const observabilityFeatures: ReadonlySet<string> = new Set(['model-inference-span', 'internal-usage-rollup']);

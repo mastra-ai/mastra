@@ -117,6 +117,28 @@ describe('AgentChannels', () => {
       }
     });
 
+    it('adds adapter CORS config to generated webhook routes', () => {
+      const channels = new AgentChannels({
+        adapters: {
+          web: {
+            adapter: createMockAdapter('web'),
+            cors: {
+              origin: ['https://customer-saas.example'],
+              credentials: true,
+            },
+          },
+        },
+      });
+      channels.__setAgent(mockAgent);
+
+      const route = channels.getWebhookRoutes()[0];
+
+      expect(route?.cors).toEqual({
+        origin: ['https://customer-saas.example'],
+        credentials: true,
+      });
+    });
+
     it('handles Hono contexts without ExecutionContext without throwing', async () => {
       const webhookFn = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
       (agentChannels as any).initPromise = Promise.resolve();
