@@ -145,4 +145,46 @@ describe('startWorkspaceSpan', () => {
       }),
     );
   });
+
+  it('preserves repeated non-cyclic object references', () => {
+    const { createChildSpan, context, workspace } = makeContext();
+
+    const shared = { value: 'kept' };
+
+    startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'executeCommand',
+      input: { first: shared, second: shared },
+    });
+
+    expect(createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          first: { value: 'kept' },
+          second: { value: 'kept' },
+        },
+      }),
+    );
+  });
+
+  it('preserves repeated non-cyclic array references', () => {
+    const { createChildSpan, context, workspace } = makeContext();
+
+    const shared = ['kept'];
+
+    startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'executeCommand',
+      input: { first: shared, second: shared },
+    });
+
+    expect(createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          first: ['kept'],
+          second: ['kept'],
+        },
+      }),
+    );
+  });
 });

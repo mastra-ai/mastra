@@ -62,33 +62,42 @@ function redactEnv(value: unknown) {
 }
 
 function sanitizeWorkspaceTraceData(value: unknown, seen = new WeakSet<object>()): unknown {
-  if (value !== null && typeof value === 'object') {
-    if (seen.has(value as object)) {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
       return '[redacted:circular]';
     }
-    seen.add(value as object);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(item => sanitizeWorkspaceTraceData(item, seen));
+    seen.add(value);
+    try {
+      return value.map(item => sanitizeWorkspaceTraceData(item, seen));
+    } finally {
+      seen.delete(value);
+    }
   }
 
   if (!isPlainObject(value)) {
     return value;
   }
 
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => {
-      const normalized = normalizeFieldName(key);
-      if (ENV_FIELD_NAMES.has(normalized)) {
-        return [key, redactEnv(entry)];
-      }
-      if (SECRET_FIELD_PATTERN.test(normalized)) {
-        return [key, '[redacted]'];
-      }
-      return [key, sanitizeWorkspaceTraceData(entry, seen)];
-    }),
-  );
+  if (seen.has(value)) {
+    return '[redacted:circular]';
+  }
+  seen.add(value);
+  try {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => {
+        const normalized = normalizeFieldName(key);
+        if (ENV_FIELD_NAMES.has(normalized)) {
+          return [key, redactEnv(entry)];
+        }
+        if (SECRET_FIELD_PATTERN.test(normalized)) {
+          return [key, '[redacted]'];
+        }
+        return [key, sanitizeWorkspaceTraceData(entry, seen)];
+      }),
+    );
+  } finally {
+    seen.delete(value);
+  }
 }
 
 /**
