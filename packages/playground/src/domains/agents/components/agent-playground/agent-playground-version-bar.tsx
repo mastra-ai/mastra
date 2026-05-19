@@ -200,7 +200,7 @@ export function AgentPlaygroundVersionBar({
           </ButtonsGroup>
 
           <Button
-            variant="cta"
+            variant="primary"
             size="md"
             onClick={onPublish}
             disabled={
