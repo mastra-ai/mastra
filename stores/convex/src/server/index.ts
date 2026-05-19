@@ -11,6 +11,7 @@ export {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraBackgroundTasksTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   defineMastraNativeVectorTable,
@@ -24,4 +25,5 @@ export {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_BACKGROUND_TASKS,
 } from '../schema';
