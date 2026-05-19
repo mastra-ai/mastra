@@ -10,11 +10,11 @@ import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
-import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
-import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
-import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
-import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
-import { useMastraClient } from '@/mastra-client-context';
+import { finishStreamingAssistantMessage, toUIMessage } from '../lib/ai-sdk';
+import { resolveInitialMessages } from '../lib/ai-sdk/memory/resolveInitialMessages';
+import { AISdkNetworkTransformer } from '../lib/ai-sdk/transformers/AISdkNetworkTransformer';
+import { fromCoreUserMessageToUIMessage } from '../lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import { useMastraClient } from '../mastra-client-context';
 
 export interface MastraChatProps {
   agentId: string;

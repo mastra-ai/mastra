@@ -18,6 +18,6 @@ export default defineConfig({
     const studioPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
 
     await copy(join(studioPath, 'dist'), join('dist', 'studio'));
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set());
   },
 });
