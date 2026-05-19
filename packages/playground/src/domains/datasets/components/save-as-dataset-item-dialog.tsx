@@ -25,6 +25,8 @@ type SaveAsDatasetItemDialogProps = {
   initialGroundTruth: string;
   /** JSON string of the expected trajectory */
   initialTrajectory?: string;
+  /** Whether the input/groundTruth are still being fetched */
+  inputLoading?: boolean;
   /** Whether the trajectory is still being fetched */
   trajectoryLoading?: boolean;
   breadcrumb: ReactNode;
@@ -38,6 +40,7 @@ export function SaveAsDatasetItemDialog({
   initialInput,
   initialGroundTruth,
   initialTrajectory,
+  inputLoading,
   trajectoryLoading,
   breadcrumb,
   isOpen,
@@ -57,19 +60,37 @@ export function SaveAsDatasetItemDialog({
   const datasets = data?.datasets ?? [];
 
   const prevOpenRef = useRef(false);
+  const inputSeededRef = useRef(false);
   const trajectorySeededRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
-      setInput(initialInput);
-      setGroundTruth(initialGroundTruth);
+      // Defer seeding input/groundTruth when the source data is still loading; the
+      // effect below re-seeds once it arrives so the form isn't stuck with the empty defaults.
+      if (!inputLoading) {
+        setInput(initialInput);
+        setGroundTruth(initialGroundTruth);
+        inputSeededRef.current = true;
+      } else {
+        inputSeededRef.current = false;
+      }
       setExpectedTrajectory(initialTrajectory ?? '');
       trajectorySeededRef.current = !!initialTrajectory;
     }
     prevOpenRef.current = isOpen;
     if (!isOpen) {
+      inputSeededRef.current = false;
       trajectorySeededRef.current = false;
     }
-  }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
+  }, [isOpen, initialInput, initialGroundTruth, initialTrajectory, inputLoading]);
+
+  // Seed input/groundTruth when they arrive asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && !inputLoading && !inputSeededRef.current) {
+      setInput(initialInput);
+      setGroundTruth(initialGroundTruth);
+      inputSeededRef.current = true;
+    }
+  }, [isOpen, inputLoading, initialInput, initialGroundTruth]);
 
   // Seed trajectory when it arrives asynchronously after the dialog is already open
   useEffect(() => {
@@ -216,9 +237,17 @@ export function SaveAsDatasetItemDialog({
             <Button
               type="submit"
               variant="default"
-              disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
+              disabled={
+                addItem.isPending || inputLoading || trajectoryLoading || !selectedDatasetId || datasets.length === 0
+              }
             >
-              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading trajectory...' : 'Save Item'}
+              {addItem.isPending
+                ? 'Saving...'
+                : inputLoading
+                  ? 'Loading input...'
+                  : trajectoryLoading
+                    ? 'Loading trajectory...'
+                    : 'Save Item'}
             </Button>
           </div>
         </form>

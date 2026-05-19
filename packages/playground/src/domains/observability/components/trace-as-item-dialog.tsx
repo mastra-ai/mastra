@@ -46,12 +46,15 @@ export function TraceAsItemDialog({
   const client = useMastraClient();
 
   // Lazy-load the root span details when dialog opens and no traceDetails provided
-  const { data: lazySpanDetail } = useSpanDetail(
+  const { data: lazySpanDetail, isLoading: isLazySpanDetailLoading } = useSpanDetail(
     !externalTraceDetails && isOpen ? traceId : null,
     !externalTraceDetails && isOpen ? rootSpanId : null,
   );
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
+  // True while the dialog is opened against a not-yet-fetched root span; prevents the form
+  // from seeding with the '{}' fallback before the real input/output arrive.
+  const inputLoading = !externalTraceDetails && isOpen && !!traceId && !!rootSpanId && isLazySpanDetailLoading;
 
   const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
     queryKey: ['trace-trajectory', traceId],
@@ -86,6 +89,7 @@ export function TraceAsItemDialog({
       initialInput={getInitialInput(traceDetails)}
       initialGroundTruth={traceDetails?.output != null ? JSON.stringify(traceDetails.output, null, 2) : ''}
       initialTrajectory={initialTrajectory}
+      inputLoading={inputLoading}
       trajectoryLoading={isTrajectoryLoading}
       breadcrumb={
         <TextAndIcon>
