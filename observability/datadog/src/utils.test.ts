@@ -179,6 +179,31 @@ describe('formatInput', () => {
       expect(result).toEqual(messages);
     });
 
+    it('drops empty user messages from message arrays', () => {
+      const result = formatInput(
+        [
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: '' },
+          { role: 'user', content: '   ' },
+          { role: 'assistant', content: 'What do you need?' },
+          { role: 'user', content: 'Hello' },
+        ],
+        SpanType.MODEL_GENERATION,
+      );
+
+      expect(result).toEqual([
+        { role: 'system', content: 'You are helpful' },
+        { role: 'assistant', content: 'What do you need?' },
+        { role: 'user', content: 'Hello' },
+      ]);
+    });
+
+    it('drops blank string input instead of creating an empty user message', () => {
+      const result = formatInput('   ', SpanType.MODEL_GENERATION);
+
+      expect(result).toEqual([]);
+    });
+
     it('stringifies object input as user message', () => {
       const result = formatInput({ query: 'search term', filters: { date: '2024' } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'user', content: '{"query":"search term","filters":{"date":"2024"}}' }]);
@@ -217,6 +242,22 @@ describe('formatInput', () => {
       };
       const result = formatInput(input, SpanType.MODEL_STEP);
       expect(result).toEqual([{ role: 'user', content: 'Hi' }]);
+    });
+
+    it('cleans unwrapped message arrays for MODEL_INFERENCE spans', () => {
+      const input = {
+        messages: [
+          { role: 'user', content: '' },
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: 'Hi' },
+        ],
+      };
+      const result = formatInput(input, SpanType.MODEL_INFERENCE);
+
+      expect(result).toEqual([
+        { role: 'system', content: 'You are helpful' },
+        { role: 'user', content: 'Hi' },
+      ]);
     });
 
     it('unwraps Gemini { contents } request body shape', () => {
@@ -313,6 +354,11 @@ describe('formatOutput', () => {
     it('uses object payload when text is empty and an object result is present', () => {
       const result = formatOutput({ text: '', object: { ok: true } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'assistant', content: '{"ok":true}' }]);
+    });
+
+    it('formats MODEL_INFERENCE output as assistant messages', () => {
+      const result = formatOutput('Hi there!', SpanType.MODEL_INFERENCE);
+      expect(result).toEqual([{ role: 'assistant', content: 'Hi there!' }]);
     });
   });
 
