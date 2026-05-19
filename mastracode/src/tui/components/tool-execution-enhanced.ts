@@ -9,15 +9,41 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
+import type { Theme as HighlightTheme } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
-import type { CompactToolLabelColor, IToolExecutionComponent, QuietToolDisplayMode, ToolResult } from './tool-execution-interface.js';
+import type {
+  CompactToolLabelColor,
+  IToolExecutionComponent,
+  QuietToolDisplayMode,
+  ToolResult,
+} from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 
 export type { ToolResult };
+
+const CODE_HIGHLIGHT_THEME: HighlightTheme = {
+  default: text => theme.fg('toolArgs', text),
+  keyword: chalk.hex('#c084fc'),
+  built_in: chalk.hex('#93c5fd'),
+  type: chalk.hex('#93c5fd'),
+  literal: chalk.hex('#fca5a5'),
+  number: chalk.hex('#fbbf24'),
+  string: chalk.hex('#86efac'),
+  regexp: chalk.hex('#fca5a5'),
+  title: chalk.hex('#93c5fd'),
+  function: chalk.hex('#93c5fd'),
+  params: chalk.hex('#d4d4d8'),
+  comment: chalk.hex('#71717a'),
+  meta: chalk.hex('#a1a1aa'),
+  attr: chalk.hex('#fbbf24'),
+  variable: chalk.hex('#d4d4d8'),
+  tag: chalk.hex('#c084fc'),
+  name: chalk.hex('#c084fc'),
+};
 
 export interface ToolExecutionOptions {
   showImages?: boolean;
@@ -339,18 +365,24 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     for (const line of lines) {
       this.contentBox.addChild(new Text(truncateAnsi(line, maxLineWidth), 0, 0));
     }
-
   }
 
   private getQuietPreviewLines(maxLineWidth: number): string[] {
-    if (this.quietDisplayMode !== 'quiet' || this.toolName === MC_TOOLS.EXECUTE_COMMAND || this.quietPreviewLineLimit <= 0) return [];
+    if (
+      this.quietDisplayMode !== 'quiet' ||
+      this.toolName === MC_TOOLS.EXECUTE_COMMAND ||
+      this.quietPreviewLineLimit <= 0
+    )
+      return [];
 
     const preview = this.getQuietActivePreview();
     if (!preview) return [];
 
     const firstLineWidth = Math.max(10, maxLineWidth - 4);
     const continuationWidth = Math.max(10, maxLineWidth - 4);
-    const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.quietPreviewLineLimit);
+    const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
+      -this.quietPreviewLineLimit,
+    );
 
     return wrapped.map(line => {
       const linePrefix = `  ${theme.bold(theme.fg('toolBorderSuccess', '│'))} `;
@@ -371,6 +403,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       return this.highlightQuietCodePreview(preview);
     }
 
+    if (this.toolName === MC_TOOLS.FIND_FILES || this.toolName === MC_TOOLS.SEARCH_CONTENT) {
+      return theme.fg('toolArgs', preview);
+    }
+
     return theme.fg('text', preview);
   }
 
@@ -380,9 +416,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       return highlight(preview, {
         language: getLanguageFromPath(path),
         ignoreIllegals: true,
+        theme: CODE_HIGHLIGHT_THEME,
       });
     } catch {
-      return theme.fg('text', preview);
+      return theme.fg('toolArgs', preview);
     }
   }
 
@@ -417,7 +454,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const summary = this.compactToolContinuation ? this.getCompactContinuationSummary() : this.getCompactToolSummary();
     const firstLine = this.compactToolContinuation
       ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
-      : `${theme.bold(theme.fg(toolLabelColor, toolLabel))}${summary ? ` ${theme.fg('toolArgs', summary)}` : ''}${status}`;
+      : `${theme.bold(theme.fg(toolLabelColor, toolLabel))}${summary ? ` ${theme.fg('text', summary)}` : ''}${status}`;
 
     const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
     if (detailLines.length === 0) return [firstLine];
@@ -470,14 +507,19 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       case MC_TOOLS.LSP_INSPECT:
         return this.getFirstLineArg('match', 80);
       default: {
-        const preview = this.formatArgsPreview(1, 120).join(' ').replace(/\s+/g, ' ').trim() || this.stripAnsi(this.formatArgsSummary()).trim();
+        const preview =
+          this.formatArgsPreview(1, 120).join(' ').replace(/\s+/g, ' ').trim() ||
+          this.stripAnsi(this.formatArgsSummary()).trim();
         return preview === this.getCompactToolSummary() ? '' : preview;
       }
     }
   }
 
   private formatQuietEditPreview(): string {
-    return this.getMultilinePreview('new_str', Number.POSITIVE_INFINITY, false) || this.getMultilinePreview('new_string', Number.POSITIVE_INFINITY, false);
+    return (
+      this.getMultilinePreview('new_str', Number.POSITIVE_INFINITY, false) ||
+      this.getMultilinePreview('new_string', Number.POSITIVE_INFINITY, false)
+    );
   }
 
   private formatQuietViewPreview(): string {
@@ -519,7 +561,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const lines = value.split('\n');
     const previewText = includeLineCount ? (lines[0] ?? '') : value.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
-    const truncated = Number.isFinite(maxLength) && previewText.length > maxLength ? `${previewText.slice(0, maxLength)}…` : previewText;
+    const truncated =
+      Number.isFinite(maxLength) && previewText.length > maxLength
+        ? `${previewText.slice(0, maxLength)}…`
+        : previewText;
     return includeLineCount && lines.length > 1 ? `${truncated} (${lines.length} lines)` : truncated;
   }
 
@@ -537,7 +582,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const separator = linePrefix ? '' : ' ';
     const connector = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview() ? '├' : '╰';
     const branch = `${connector}─${separator}${linePrefix}`;
-    return `${theme.bold(theme.fg('toolBorderSuccess', branch))}${theme.fg('toolArgs', summary.slice(linePrefix.length))}`;
+    return `${theme.bold(theme.fg('toolBorderSuccess', branch))}${theme.fg('text', summary.slice(linePrefix.length))}`;
   }
 
   private getCompactContinuationSummary(): string {
@@ -2142,6 +2187,7 @@ function highlightCode(content: string, path: string, startLine?: number): strin
     return highlight(codeLines.join('\n'), {
       language: getLanguageFromPath(path),
       ignoreIllegals: true,
+      theme: CODE_HIGHLIGHT_THEME,
     });
   } catch {
     return codeLines.join('\n');
