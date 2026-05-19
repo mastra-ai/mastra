@@ -4191,6 +4191,7 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
+                console.dir({ resumeData, suspendedToolRunId, agentId }, { depth: null });
                 const streamResult = resumeData
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
@@ -6564,6 +6565,7 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    console.log(`calling resume stream for agentId: ${this.id}, resumeData: ${JSON.stringify(resumeData, null, 2)}`);
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -6605,6 +6607,10 @@ export class Agent<
     );
     const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+    );
+
+    console.log(
+      `resuming stream for runId: ${runId}, agentId: ${this.id}, resumeData: ${JSON.stringify(resumeData, null, 2)}`,
     );
 
     const result = await this.#execute({

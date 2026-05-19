@@ -180,6 +180,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
           };
           lastAssistantMessage.content.metadata = metadata;
+          console.dir({ lastAssistantMessage, agentId, type }, { depth: null });
         }
       };
 
@@ -399,6 +400,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (toolRequiresApproval) {
           if (!resumeData) {
+            console.log('about to suspend tool for approval');
             const approvalChunk = await transformChunk(
               {
                 type: 'tool-call-approval',
@@ -442,6 +444,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
             );
           } else {
+            console.dir({ resumeData }, { depth: null });
             // Remove approval metadata since we're resuming (either approved or declined)
             await removeToolMetadata(inputData.toolName, 'approval');
 
@@ -463,6 +466,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
             ? undefined
             : resumeData;
+
+        console.dir({ resumeDataToPassToToolOptions, resumeData, isAgentTool, agentId }, { depth: null });
 
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
@@ -487,6 +492,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : undefined,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
+              console.log('about to suspend parent agent for approval');
               const approvalChunk = await transformChunk(
                 {
                   type: 'tool-call-approval',
@@ -513,6 +519,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
                 'approval',
               );
+              console.dir({ approvalChunk }, { depth: null });
               safeEnqueue(controller, approvalChunk);
 
               // Add approval metadata to message before persisting
@@ -608,17 +615,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
         // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
         const needsRunIdLookup = resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool);
+        console.log('needsRunIdLookup', needsRunIdLookup);
         if (needsRunIdLookup) {
           let suspendedToolRunId = '';
           const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-
+          console.dir({ assistantMessages }, { depth: null });
           for (const message of assistantMessages) {
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;
+            console.dir({ pendingOrSuspendedTools }, { depth: null });
             if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
               suspendedToolRunId = pendingOrSuspendedTools[inputData.toolName].runId;
+              console.log('suspendedToolRunId', suspendedToolRunId);
               break;
             }
 
@@ -630,8 +640,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               );
               if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
                 const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
+                console.dir({ foundTool }, { depth: null });
                 if (foundTool) {
                   suspendedToolRunId = (foundTool as any).data.runId;
+                  console.log('suspendedToolRunId', suspendedToolRunId);
                   break;
                 }
               }
@@ -1101,6 +1113,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
           }
         }
+
+        console.dir({ args }, { depth: null });
 
         const rawResult = await tool.execute(args, toolOptions);
         const result = ensureSerializable(rawResult);

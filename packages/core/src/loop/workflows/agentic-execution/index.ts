@@ -98,6 +98,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+        console.dir({ toolCalls: typedInputData.output.toolCalls }, { depth: null });
         return typedInputData.output.toolCalls || [];
       },
       { id: 'map-tool-calls' },

@@ -241,6 +241,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         requestContext.set('__mastra_requireToolApproval', true);
       }
 
+      console.dir({ resumeData: resumeContext?.resumeData, runId, agentId }, { depth: null });
+
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
