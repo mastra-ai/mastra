@@ -131,6 +131,39 @@ export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
+  /**
+   * Local client-tool definitions. When a subscribed run finishes with client
+   * tool calls, `subscribeToThread` runs matching tools locally, emits synthetic
+   * `tool-result` chunks to the consumer's `onChunk`, and POSTs a continuation
+   * with the assistant response plus tool results. Kept fully inside client-js
+   * so callers (React, etc.) never see the loop.
+   */
+  clientTools?: ToolsInput;
+  /**
+   * Persistent request context forwarded to each client-tool `execute()` and
+   * to the continuation POST.
+   */
+  requestContext?: RequestContext;
+  /**
+   * Stream options re-sent on the continuation POST so the run resumes with
+   * the same configuration as the original `sendSignal` ifIdle.streamOptions.
+   */
+  continuationOptions?: {
+    maxSteps?: number;
+    modelSettings?: {
+      frequencyPenalty?: number;
+      presencePenalty?: number;
+      maxRetries?: number;
+      maxOutputTokens?: number;
+      temperature?: number;
+      topK?: number;
+      topP?: number;
+    };
+    instructions?: AgentInstructions;
+    providerOptions?: AgentStreamOptions['providerOptions'];
+    requireToolApproval?: boolean;
+    tracingOptions?: TracingOptions;
+  };
 }
 
 export interface RequestOptions {

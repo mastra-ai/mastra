@@ -168,6 +168,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return stream(
       res,
       async stream => {
+        if (streamFormat === 'sse') {
+          await stream.write(': connected\n\n');
+        }
+
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 

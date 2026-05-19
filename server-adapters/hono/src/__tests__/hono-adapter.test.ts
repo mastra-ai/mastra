@@ -124,6 +124,49 @@ describe('Hono Server Adapter', () => {
     },
   });
 
+  describe('SSE stream handshake', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('writes an initial SSE comment before waiting for stream chunks', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/waiting-stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => new ReadableStream(),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/waiting-stream'));
+      const reader = response.body!.getReader();
+
+      try {
+        const firstChunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for SSE handshake')), 100),
+          ),
+        ]);
+
+        expect(new TextDecoder().decode(firstChunk.value)).toBe(': connected\n\n');
+      } finally {
+        await reader.cancel();
+      }
+    });
+  });
+
   describe('Stream Data Redaction', () => {
     let context: AdapterTestContext;
 

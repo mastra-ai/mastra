@@ -23,6 +23,12 @@ export interface MastraChatProps {
   initialMessages?: MastraUIMessage[];
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
+  /**
+   * Client-side tool definitions. Forwarded once to `subscribeToThread` so
+   * the client-js subscription drives the full client-tool execution loop
+   * (execute, emit tool-result, continuation) without any logic in React.
+   */
+  clientTools?: Record<string, unknown>;
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
@@ -77,6 +83,7 @@ export const useChat = ({
   threadId,
   initialMessages,
   requestContext: propsRequestContext,
+  clientTools,
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
@@ -237,7 +244,16 @@ export const useChat = ({
       const subscriptionAgent = clientWithAbort.getAgent(agentId);
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({ resourceId, threadId })
+        .subscribeToThread({
+          resourceId,
+          threadId,
+          // client-js subscribeToThread owns the full client-tool loop:
+          // run execute(), emit a synthetic tool-result chunk, and POST a
+          // streamUntilIdle continuation. React contributes nothing beyond
+          // forwarding these as hook props.
+          clientTools: clientTools as any,
+          requestContext: _requestContext.current,
+        })
         .then(response => {
           void response
             .processDataStream({
@@ -277,7 +293,7 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, markThreadSignalsUnsupported, processStreamChunk],
+    [agentId, baseClient, clientTools, markThreadSignalsUnsupported, processStreamChunk],
   );
 
   useEffect(() => {
@@ -298,6 +314,8 @@ export const useChat = ({
     });
   }, [agentId, closeThreadSubscription, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
+  // Patch local UI messages so each tool-invocation part becomes a result.
+  // Used as the onToolResult sink for the client-js client-tool handler.
   const generate = async ({
     coreUserMessages,
     requestContext,
@@ -464,6 +482,10 @@ export const useChat = ({
         providerOptions: providerOptions as any,
         requireToolApproval,
         tracingOptions,
+        // Forward hook-prop client tools so the legacy in-stream tool loop
+        // (processStreamResponse) can execute them when no thread
+        // subscription is available.
+        clientTools: clientTools as any,
       });
 
       _onChunk.current = onChunk;
@@ -522,6 +544,7 @@ export const useChat = ({
             providerOptions: providerOptions as any,
             requireToolApproval,
             tracingOptions,
+            clientTools: clientTools as any,
           },
         },
       });

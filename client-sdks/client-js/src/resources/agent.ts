@@ -311,9 +311,23 @@ export class Agent extends BaseResource {
    * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    const body = params.ifIdle?.streamOptions
+      ? {
+          ...params,
+          ifIdle: {
+            ...params.ifIdle,
+            streamOptions: {
+              ...params.ifIdle.streamOptions,
+              requestContext: parseClientRequestContext(params.ifIdle.streamOptions.requestContext),
+              clientTools: processClientTools(params.ifIdle.streamOptions.clientTools),
+            },
+          },
+        }
+      : params;
+
     return this.request(`/agents/${this.agentId}/signals`, {
       method: 'POST',
-      body: params,
+      body,
     });
   }
 
@@ -329,9 +343,13 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { clientTools, requestContext, continuationOptions, ...subscribeBody } = params;
+    const processedClientTools = clientTools ? processClientTools(clientTools) : undefined;
+    const processedRequestContext = parseClientRequestContext(requestContext);
+
     const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
       method: 'POST',
-      body: params,
+      body: subscribeBody,
       stream: true,
     })) as Response & {
       processDataStream: ({
@@ -345,14 +363,126 @@ export class Agent extends BaseResource {
       throw new Error('No response body');
     }
 
+    const agent = this;
+    const { threadId, resourceId } = params;
+
     streamResponse.processDataStream = async ({
       onChunk,
     }: {
       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
     }) => {
+      const pendingToolCallsByRunId = new Map<
+        string,
+        Array<{ toolCallId: string; toolName: string; args?: unknown }>
+      >();
+
+      const wrappedOnChunk: typeof onChunk = async chunk => {
+        await onChunk(chunk);
+
+        if (!clientTools) return;
+
+        if (chunk.type === 'tool-call') {
+          const payload = (chunk as { payload?: { toolCallId?: string; toolName?: string; args?: unknown } }).payload;
+          const toolCallId = payload?.toolCallId;
+          const toolName = payload?.toolName;
+          const runId = (chunk as { runId?: string }).runId;
+          if (!toolCallId || !toolName || !runId) return;
+
+          const clientTool = clientTools[toolName] as Tool | undefined;
+          if (!clientTool || typeof clientTool.execute !== 'function') return;
+
+          const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
+          pendingToolCalls.push({ toolCallId, toolName, args: payload.args });
+          pendingToolCallsByRunId.set(runId, pendingToolCalls);
+          return;
+        }
+
+        if (chunk.type !== 'finish') return;
+
+        const runId = (chunk as { runId?: string }).runId;
+        const finishPayload = chunk as {
+          payload?: {
+            stepResult?: { reason?: string };
+            messages?: { nonUser?: CoreMessage[] };
+          };
+        };
+        if (!runId || finishPayload.payload?.stepResult?.reason !== 'tool-calls') return;
+
+        const pendingToolCalls = pendingToolCallsByRunId.get(runId);
+        pendingToolCallsByRunId.delete(runId);
+        if (!pendingToolCalls?.length) return;
+
+        const toolResultMessages: CoreMessage[] = [];
+        for (const toolCall of pendingToolCalls) {
+          const clientTool = clientTools[toolCall.toolName] as Tool | undefined;
+          if (!clientTool || typeof clientTool.execute !== 'function') continue;
+
+          let result: unknown;
+          try {
+            result = await clientTool.execute(
+              toolCall.args as never,
+              {
+                requestContext: requestContext as RequestContext,
+                tracingContext: { currentSpan: undefined },
+                agent: {
+                  agentId: agent.agentId,
+                  messages: finishPayload.payload?.messages?.nonUser ?? [],
+                  toolCallId: toolCall.toolCallId,
+                  suspend: async () => {},
+                  threadId,
+                  resourceId,
+                },
+              } as never,
+            );
+          } catch (error) {
+            result = { error: String(error) };
+          }
+
+          await onChunk({
+            type: 'tool-result',
+            runId,
+            payload: { toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, result },
+          } as never);
+
+          toolResultMessages.push({
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                result,
+              },
+            ],
+          } as CoreMessage);
+        }
+
+        if (toolResultMessages.length === 0) return;
+
+        try {
+          const continuation = await agent.streamUntilIdle(
+            [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
+            {
+              runId: uuid(),
+              ...(continuationOptions ?? {}),
+              requestContext: processedRequestContext,
+              memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+              clientTools: processedClientTools,
+            } as never,
+          );
+          try {
+            void continuation.body?.cancel?.();
+          } catch {
+            // ignore
+          }
+        } catch (error) {
+          console.error('Error running client-tool continuation:', error);
+        }
+      };
+
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
+        onChunk: wrappedOnChunk,
         signal: this.options.abortSignal,
       });
     };
