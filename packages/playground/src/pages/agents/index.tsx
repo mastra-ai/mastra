@@ -1,6 +1,7 @@
 import {
   AgentIcon,
   ErrorState,
+  IconButton,
   ListSearch,
   NoDataPageLayout,
   PageHeader,
@@ -23,7 +24,7 @@ function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
   const [search, setSearch] = useState('');
   const { canCreateAgent, createRoute } = useCanCreateAgent();
-  const { Link: FrameworkLink } = useLinkComponent();
+  const { navigate } = useLinkComponent();
   const showCreateCta = canCreateAgent && Boolean(createRoute);
 
   if (error && is401UnauthorizedError(error)) {
@@ -72,19 +73,16 @@ function Agents() {
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
             {showCreateCta && (
-              <ButtonWithTooltip as={FrameworkLink} to={createRoute} tooltipContent="Create an agent">
+              <IconButton onClick={() => navigate(createRoute)} tooltip="Create an agent">
                 <Plus />
-              </ButtonWithTooltip>
+              </IconButton>
             )}
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/agents/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Agents documentation"
+            <IconButton
+              onClick={() => window.open('https://mastra.ai/en/docs/agents/overview', '_blank')}
+              tooltip="Go to Agents documentation"
             >
               <BookIcon />
-            </ButtonWithTooltip>
+            </IconButton>
           </PageLayout.Column>
         </PageLayout.Row>
         <div className="max-w-120">

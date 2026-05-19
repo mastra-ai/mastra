@@ -30,6 +30,7 @@ export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsPro
         disabled={disabled}
         data-testid="agent-configure-name"
         className="w-full max-w-sm rounded-lg bg-transparent px-3 py-1.5 text-ui-lg font-semibold text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ viewTransitionName: 'agent-name' }}
       />
       <textarea
         value={draftDescription}
@@ -40,6 +41,7 @@ export const AgentProfileDetails = ({ disabled = false }: AgentProfileDetailsPro
         data-testid="agent-configure-description"
         rows={2}
         className="w-full resize-none rounded-lg bg-transparent px-3 py-2 text-ui-md text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ viewTransitionName: 'agent-description' }}
       />
     </div>
   );

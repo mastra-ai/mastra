@@ -54,7 +54,7 @@ export const ChatComposer = ({
       <div
         className={cn(
           'rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors',
-          agentColor && 'focus-within:border-[var(--agent-color-fg)]',
+          agentColor && 'focus-within:border-[var(--agent-color-bg)]',
         )}
         style={containerStyle}
         data-testid={containerTestId}

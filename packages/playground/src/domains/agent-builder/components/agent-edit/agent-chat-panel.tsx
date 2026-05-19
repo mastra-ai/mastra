@@ -170,17 +170,21 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
           data-testid="agent-builder-agent-chat-empty-state"
         >
           <div className="flex flex-col items-center gap-3">
-            <div className="starter-chip" style={{ animationDelay: '0ms' }}>
+            <div className="starter-chip" style={{ animationDelay: '0ms', viewTransitionName: 'agent-avatar' }}>
               <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
-              <Txt variant="ui-lg" className="text-neutral6 font-semibold">
+              <Txt variant="ui-lg" className="text-neutral6 font-semibold" style={{ viewTransitionName: 'agent-name' }}>
                 {agentName ?? 'your agent'}
               </Txt>
             </div>
             {agentDescription ? (
               <div className="starter-chip" style={{ animationDelay: '220ms' }}>
-                <Txt variant="ui-sm" className="text-neutral4 max-w-[40ch]">
+                <Txt
+                  variant="ui-sm"
+                  className="text-neutral4 max-w-[40ch]"
+                  style={{ viewTransitionName: 'agent-description' }}
+                >
                   {agentDescription}
                 </Txt>
               </div>
