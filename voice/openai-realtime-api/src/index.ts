@@ -75,6 +75,10 @@ type RealtimeClientServerEventMap = {
   ['conversation.item.input_audio_transcription.completed']: [
     { transcript: string; item_id: string; content_index: number; usage?: unknown },
   ];
+  ['response.output_audio.delta']: [{ delta: string; response_id: string }];
+  ['response.output_audio.done']: [{ response_id: string }];
+  ['response.output_audio_transcript.delta']: [{ delta: string; response_id: string }];
+  ['response.output_audio_transcript.done']: [{ response_id: string }];
 };
 
 /**
@@ -596,25 +600,33 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       userTranscriptionDeltaItems.delete(ev.item_id);
       this.emit('writing', { text: '\n', response_id: ev.item_id, role: 'user' });
     });
-    this.client.on('response.audio.delta', ev => {
+    const handleAudioDelta = (ev: { delta: string; response_id: string }) => {
       const audio = Buffer.from(ev.delta, 'base64');
       this.emit('speaking', { audio, response_id: ev.response_id });
 
       const stream = speakerStreams.get(ev.response_id);
       stream?.write(audio);
-    });
-    this.client.on('response.audio.done', ev => {
+    };
+    const handleAudioDone = (ev: { response_id: string }) => {
       this.emit('speaking.done', { response_id: ev.response_id });
 
       const stream = speakerStreams.get(ev.response_id);
       stream?.end();
-    });
-    this.client.on('response.audio_transcript.delta', ev => {
+    };
+    const handleAudioTranscriptDelta = (ev: { delta: string; response_id: string }) => {
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
-    });
-    this.client.on('response.audio_transcript.done', ev => {
+    };
+    const handleAudioTranscriptDone = (ev: { response_id: string }) => {
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
-    });
+    };
+    this.client.on('response.audio.delta', handleAudioDelta);
+    this.client.on('response.output_audio.delta', handleAudioDelta);
+    this.client.on('response.audio.done', handleAudioDone);
+    this.client.on('response.output_audio.done', handleAudioDone);
+    this.client.on('response.audio_transcript.delta', handleAudioTranscriptDelta);
+    this.client.on('response.output_audio_transcript.delta', handleAudioTranscriptDelta);
+    this.client.on('response.audio_transcript.done', handleAudioTranscriptDone);
+    this.client.on('response.output_audio_transcript.done', handleAudioTranscriptDone);
     this.client.on('response.text.delta', ev => {
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
     });
