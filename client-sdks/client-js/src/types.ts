@@ -9,8 +9,9 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
-import type { CoreMessage } from '@mastra/core/llm';
+import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
 import type { LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
@@ -530,16 +531,25 @@ export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
   messages: MessageListInput;
 } & (OUTPUT extends undefined ? { structuredOutput?: never } : { structuredOutput: StructuredOutputOptions<OUTPUT> });
 
+/**
+ * Provider id widened to accept admin-configured custom gateway providers.
+ * Closed unions over the five hard-coded providers are removed in favor of the
+ * generated `ModelProviderId` union plus a `(string & {})` escape hatch — this
+ * preserves IDE autocomplete on known providers while letting custom gateway
+ * ids flow through (see Phase 1 of the admin model configuration plan).
+ */
+export type AdminProviderId = ModelProviderId | (string & {});
+
 export type UpdateModelParams = {
   modelId: string;
-  provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  provider: AdminProviderId;
 };
 
 export type UpdateModelInModelListParams = {
   modelConfigId: string;
   model?: {
     modelId: string;
-    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+    provider: AdminProviderId;
   };
   maxRetries?: number;
   enabled?: boolean;
@@ -1123,6 +1133,22 @@ export type StoredWorkspaceRef =
   | { type: 'id'; workspaceId: string }
   | { type: 'inline'; config: Record<string, unknown> };
 
+export interface StoredBrowserConfig {
+  provider: string;
+  headless?: boolean;
+  viewport?: { width: number; height: number };
+  timeout?: number;
+  screencast?: {
+    format?: 'jpeg' | 'png';
+    quality?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    everyNthFrame?: number;
+  };
+}
+
+export type StoredBrowserRef = { type: 'inline'; config: StoredBrowserConfig };
+
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
 // Re-exported from @mastra/core/storage for convenience
@@ -1142,6 +1168,7 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1166,7 +1193,11 @@ export interface StoredAgentResponse {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  // Favorites (EE feature, present when `favorites` feature is enabled)
+  isFavorited?: boolean;
+  favoriteCount?: number;
 }
 
 /**
@@ -1179,8 +1210,27 @@ export interface ListStoredAgentsParams {
     field?: 'createdAt' | 'updatedAt';
     direction?: 'ASC' | 'DESC';
   };
+  status?: 'draft' | 'published' | 'archived';
   authorId?: string;
+  /**
+   * Restrict the list to public records. Only `'public'` is accepted by the
+   * server filter; private records are surfaced via the default scope-aware
+   * filter (caller's own rows + legacy unowned).
+   */
+  visibility?: 'public';
   metadata?: Record<string, unknown>;
+  /** When true, only return agents favorited by the caller (or by `pinFavoritedFor`). */
+  favoritedOnly?: boolean;
+  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
+  pinFavoritedFor?: string;
+}
+
+/**
+ * Response from favorite / unfavorite mutations.
+ */
+export interface FavoriteToggleResponse {
+  favorited: boolean;
+  favoriteCount: number;
 }
 
 /**
@@ -1206,6 +1256,8 @@ export interface CloneAgentParams {
   metadata?: Record<string, unknown>;
   /** Author identifier for the cloned agent. */
   authorId?: string;
+  /** Visibility of the cloned agent. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
   requestContext?: RequestContext | Record<string, any>;
 }
@@ -1218,6 +1270,8 @@ export interface CreateStoredAgentParams {
   /** Unique identifier for the agent. If not provided, derived from name via slugify. */
   id?: string;
   authorId?: string;
+  /** Visibility of the agent. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
@@ -1239,6 +1293,8 @@ export interface CreateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -1247,6 +1303,8 @@ export interface CreateStoredAgentParams {
  */
 export interface UpdateStoredAgentParams {
   authorId?: string;
+  /** Visibility of the agent. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
@@ -1268,6 +1326,8 @@ export interface UpdateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
@@ -1911,6 +1971,7 @@ export interface StoredSkillResponse {
   id: string;
   status: string;
   authorId?: string;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1919,6 +1980,9 @@ export interface StoredSkillResponse {
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
+  // Favorites (EE feature, present when `favorites` feature is enabled)
+  isFavorited?: boolean;
+  favoriteCount?: number;
 }
 
 /**
@@ -1932,7 +1996,17 @@ export interface ListStoredSkillsParams {
     direction?: 'ASC' | 'DESC';
   };
   authorId?: string;
+  /**
+   * Restrict the list to public records. Only `'public'` is accepted by the
+   * server filter; private records are surfaced via the default scope-aware
+   * filter (caller's own rows + legacy unowned).
+   */
+  visibility?: 'public';
   metadata?: Record<string, unknown>;
+  /** When true, only return skills favorited by the caller (or by `pinFavoritedFor`). */
+  favoritedOnly?: boolean;
+  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
+  pinFavoritedFor?: string;
 }
 
 /**
@@ -1952,6 +2026,8 @@ export interface ListStoredSkillsResponse {
 export interface CreateStoredSkillParams {
   id?: string;
   authorId?: string;
+  /** Visibility of the skill. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name: string;
   /** Required by the server: description of what the skill does and when to use it. */
@@ -1966,6 +2042,8 @@ export interface CreateStoredSkillParams {
  */
 export interface UpdateStoredSkillParams {
   authorId?: string;
+  /** Visibility of the skill. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
@@ -1980,6 +2058,80 @@ export interface UpdateStoredSkillParams {
 export interface DeleteStoredSkillResponse {
   success: boolean;
   message: string;
+}
+
+// ============================================================================
+// Stored Workspace Types
+// ============================================================================
+
+/**
+ * Filesystem configuration in a stored workspace
+ */
+export interface StoredFilesystemConfig {
+  provider: string;
+  config: Record<string, unknown>;
+  readOnly?: boolean;
+}
+
+/**
+ * Sandbox configuration in a stored workspace
+ */
+export interface StoredSandboxConfig {
+  provider: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Stored workspace data returned from API
+ */
+export interface StoredWorkspaceResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  filesystem?: StoredFilesystemConfig;
+  sandbox?: StoredSandboxConfig;
+  mounts?: Record<string, StoredFilesystemConfig>;
+  skills?: string[];
+  tools?: {
+    enabled?: boolean;
+    requireApproval?: boolean;
+    tools?: Record<string, { enabled?: boolean; requireApproval?: boolean }>;
+  };
+  autoSync?: boolean;
+  operationTimeout?: number;
+  /** Whether this workspace is registered at runtime (only present in list responses) */
+  runtimeRegistered?: boolean;
+}
+
+/**
+ * Parameters for listing stored workspaces
+ */
+export interface ListStoredWorkspacesParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored workspaces
+ */
+export interface ListStoredWorkspacesResponse {
+  workspaces: StoredWorkspaceResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
 }
 
 // ============================================================================
@@ -2697,4 +2849,204 @@ export interface ExperimentReviewCounts {
   needsReview: number;
   reviewed: number;
   complete: number;
+}
+
+/**
+ * Agent feature flags for the builder.
+ *
+ * The `GET /editor/builder/settings` response always carries a fully-resolved
+ * object. On admin input, omitted keys default to `true` (default-on / allowlist
+ * model — admins opt out by setting a key to `false`). Special case: `browser`
+ * is only `true` when `configuration.agent.browser` is provided.
+ *
+ * Clients should still use strict `=== true` checks.
+ */
+export interface BuilderAgentFeatures {
+  tools?: boolean;
+  agents?: boolean;
+  workflows?: boolean;
+  scorers?: boolean;
+  skills?: boolean;
+  memory?: boolean;
+  variables?: boolean;
+  favorites?: boolean;
+  avatarUpload?: boolean;
+  browser?: boolean;
+  /**
+   * Whether the model picker is visible in the Agent Builder.
+   * Omitted/`false` ⇒ picker hidden (locked mode); admin's `models.default` is applied.
+   */
+  model?: boolean;
+}
+
+/**
+ * Re-exported from `@mastra/core/agent-builder/ee` so SDK consumers don't need
+ * a second import for admin model configuration types. Owned by core.
+ */
+export type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry, ModelProviderId };
+
+/**
+ * Response from GET /editor/builder/settings
+ */
+export interface BuilderSettingsResponse {
+  enabled: boolean;
+  features?: {
+    agent?: BuilderAgentFeatures;
+  };
+  configuration?: {
+    agent?: Record<string, unknown>;
+  };
+  /**
+   * Server-derived model policy. Always present; `{ active: false }` when no
+   * builder is configured. UI consumers should read this directly rather than
+   * re-deriving from `features` / `configuration`.
+   */
+  modelPolicy?: BuilderModelPolicy;
+  /**
+   * Resolved picker visibility for tools, agents, and workflows. Present when
+   * the builder is enabled. Each `visible*` field is `null` when unrestricted
+   * (show all registered entries) and `string[]` otherwise — making the
+   * empty-vs-unrestricted distinction explicit so the UI never has to
+   * disambiguate.
+   */
+  picker?: BuilderPickerResponse;
+  /**
+   * Non-fatal warnings produced by builder config validation (e.g. allowlist
+   * entries with unknown providers that aren't tagged `kind: 'custom'`, or
+   * picker allowlist entries that don't match a registered ID).
+   * Only present when there is at least one warning.
+   */
+  modelPolicyWarnings?: string[];
+}
+
+/**
+ * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.
+ *
+ * Per kind:
+ * - `null` ⇒ unrestricted (show all registered entries).
+ * - `string[]` ⇒ explicit allowlist (may be empty to show none).
+ */
+export interface BuilderPickerResponse {
+  visibleTools: string[] | null;
+  visibleAgents: string[] | null;
+  visibleWorkflows: string[] | null;
+}
+
+/**
+ * Response from GET /editor/builder/infrastructure
+ *
+ * Agent Builder infrastructure configuration plus lightweight runtime resolution state.
+ */
+export interface InfrastructureStatusResponse {
+  channels: {
+    providers: Array<{
+      id: string;
+      name: string;
+      isConfigured: boolean;
+      routeCount: number;
+    }>;
+  };
+  browser: {
+    type: string | null;
+    provider: string | null;
+    env: string | null;
+    registered: boolean;
+    availableProviders: string[];
+    config: Array<{ key: string; value: string }>;
+  };
+  workspace: {
+    type: string | null;
+    workspaceId: string | null;
+    name: string | null;
+    source: string | null;
+    registered: boolean;
+    hasFilesystem: boolean;
+    hasSandbox: boolean;
+    filesystemProvider: string | null;
+    sandboxProvider: string | null;
+    config: Array<{ key: string; value: string }>;
+  };
+  registries: {
+    skillsSh: {
+      enabled: boolean;
+    };
+  };
+}
+
+// ============================================================================
+// Builder registries (skills.sh and other external skill catalogs)
+// ============================================================================
+
+/**
+ * One known skill registry surfaced from the Agent Builder config.
+ */
+export interface BuilderRegistryDescriptor {
+  id: string;
+  enabled: boolean;
+  label: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries`.
+ */
+export interface ListBuilderRegistriesResponse {
+  registries: BuilderRegistryDescriptor[];
+}
+
+/**
+ * Single skill summary returned from a registry search/popular endpoint.
+ * Wire shape matches the upstream skills.sh proxy.
+ */
+export interface BuilderRegistrySkillSummary {
+  id: string;
+  name: string;
+  installs: number;
+  /** Repository identifier in `owner/repo` or `owner/repo/path` form. */
+  topSource: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/search`.
+ */
+export interface BuilderRegistrySearchResponse {
+  query: string;
+  searchType: string;
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/popular`.
+ */
+export interface BuilderRegistryPopularResponse {
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/preview`.
+ */
+export interface BuilderRegistryPreviewResponse {
+  content: string;
+}
+
+/**
+ * Body for `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallBody {
+  owner: string;
+  repo: string;
+  skillName: string;
+  visibility?: 'private' | 'public';
+}
+
+/**
+ * Response from `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallResponse {
+  storedSkillId: string;
+  name: string;
+  filesWritten: number;
 }
