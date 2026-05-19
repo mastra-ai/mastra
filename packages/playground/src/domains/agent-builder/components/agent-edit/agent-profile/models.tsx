@@ -41,6 +41,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const model = useWatch({ control, name: 'model' });
   const { data, isLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
+
   const allProviders = toProviders((data?.providers as ListProvider[]) || []);
   const filteredProviders = useBuilderFilteredProviders(allProviders, policy);
   const allModels = useAllModels(filteredProviders);
