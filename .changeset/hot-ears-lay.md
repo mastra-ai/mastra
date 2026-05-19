@@ -2,4 +2,25 @@
 '@mastra/core': patch
 ---
 
-Channels now route messages through the new agent signals API. Each Mastra thread shares a single `agent.subscribeToThread()` subscription, and incoming platform messages are sent as `user-message` signals via `agent.sendSignal()`. Messages that arrive while the agent is busy are delivered into the running loop instead of starting a new run, which prevents conflicting concurrent streams on the same channel thread. A new `AgentChannels.close()` method tears down all cached subscriptions for graceful shutdown.
+Channels now serialize messages per thread to keep conversations in order:
+
+- Messages arriving while the agent is busy are delivered into the running agent loop instead of starting a new, conflicting stream on the same channel thread.
+- Each Mastra thread shares one subscription, reducing per-message resource overhead in channel-heavy deployments.
+- Channel/author facts (platform, message id, author name) are surfaced on the stored message under `providerMetadata.mastra.channels.<platform>` so UI and queries can read them without unpacking signal envelopes.
+- New `AgentChannels.close()` lets you tear down all subscriptions for graceful shutdown.
+
+```ts
+import { Mastra } from '@mastra/core/mastra';
+import { SlackProvider } from '@mastra/slack';
+
+const mastra = new Mastra({
+  agents: { support: supportAgent },
+  channels: {
+    slack: new SlackProvider({ /* … */ }),
+  },
+});
+
+// On shutdown, close all channel subscriptions:
+const channels = mastra.getChannels();
+await Promise.all(Object.values(channels).map(c => c.close()));
+```
