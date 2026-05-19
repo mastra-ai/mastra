@@ -1,6 +1,7 @@
 import { MastraBase } from '../base';
 
 import type {
+  AgentRunsStorage,
   AgentsStorage,
   PromptBlocksStorage,
   ScorerDefinitionsStorage,
@@ -41,6 +42,7 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  agentRuns?: AgentRunsStorage;
 };
 
 /**
@@ -298,6 +300,7 @@ export class MastraCompositeStore extends MastraBase {
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
         channels: resolve('channels'),
+        agentRuns: resolve('agentRuns'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -404,6 +407,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.channels) {
       initTasks.push(this.stores.channels.init());
+    }
+
+    if (this.stores?.agentRuns) {
+      initTasks.push(this.stores.agentRuns.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);
