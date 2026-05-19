@@ -639,6 +639,7 @@ describe('MastraTUI queueing', () => {
       isActive: vi.fn(() => true),
       pause: vi.fn(),
       saveToThread: vi.fn(),
+      stopActiveTimer: vi.fn(),
     };
     const state = createQueueState({
       userInitiatedAbort: true,
@@ -648,6 +649,7 @@ describe('MastraTUI queueing', () => {
 
     handleAgentAborted(ctx);
 
+    expect(goalManager.stopActiveTimer).toHaveBeenCalled();
     expect(goalManager.pause).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);
