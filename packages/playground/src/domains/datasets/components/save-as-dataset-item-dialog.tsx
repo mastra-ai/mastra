@@ -77,6 +77,17 @@ export function SaveAsDatasetItemDialog({
     }
   }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
 
+  // Mark field as user-edited so async seeding won't overwrite
+  const handleInputChange = (value: string) => {
+    inputSeededRef.current = true;
+    setInput(value);
+  };
+
+  const handleGroundTruthChange = (value: string) => {
+    groundTruthSeededRef.current = true;
+    setGroundTruth(value);
+  };
+
   // Seed input when it arrives asynchronously after the dialog is already open
   useEffect(() => {
     if (isOpen && initialInput !== '{}' && !inputSeededRef.current) {
@@ -213,12 +224,17 @@ export function SaveAsDatasetItemDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="item-input">Input (JSON) *</Label>
-            <CodeEditor value={input} onChange={setInput} showCopyButton={false} className="min-h-[120px]" />
+            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[120px]" />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
-            <CodeEditor value={groundTruth} onChange={setGroundTruth} showCopyButton={false} className="min-h-[80px]" />
+            <CodeEditor
+              value={groundTruth}
+              onChange={handleGroundTruthChange}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
           </div>
 
           <div className="grid gap-2">
