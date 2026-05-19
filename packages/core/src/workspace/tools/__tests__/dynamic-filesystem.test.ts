@@ -190,4 +190,22 @@ describe('dynamic filesystem tools', () => {
 
     expect(resolverCalls).toBe(1);
   });
+
+  it('should allow getInfo callers to opt out of resolving dynamic filesystems', async () => {
+    let filesystemResolverCalls = 0;
+    const workspace = new Workspace({
+      filesystem: () => {
+        filesystemResolverCalls++;
+        return new LocalFilesystem({ basePath: tempDir });
+      },
+    });
+
+    const unresolvedInfo = await workspace.getInfo({ resolveDynamicProviders: false });
+    expect(unresolvedInfo.filesystem?.provider).toBe('dynamic');
+    expect(filesystemResolverCalls).toBe(0);
+
+    const resolvedInfo = await workspace.getInfo();
+    expect(resolvedInfo.filesystem?.provider).toBe('local');
+    expect(filesystemResolverCalls).toBe(1);
+  });
 });

@@ -21,6 +21,22 @@ describe('dynamic sandbox tools', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
+  // A sandbox that runs commands but exposes no process manager.
+  const makeCommandOnlySandbox = () => ({
+    id: 'minimal-sandbox',
+    name: 'MinimalSandbox',
+    provider: 'minimal',
+    status: 'running' as const,
+    executeCommand: async () => ({
+      command: 'echo ok',
+      stdout: 'ok',
+      stderr: '',
+      exitCode: 0,
+      success: true,
+      executionTimeMs: 1,
+    }),
+  });
+
   it('should register sandbox tools when workspace has a sandbox resolver', async () => {
     const resolver = () => new LocalSandbox({ workingDirectory: tempDir });
     const workspace = new Workspace({ sandbox: resolver });
@@ -143,20 +159,7 @@ describe('dynamic sandbox tools', () => {
   });
 
   it('should throw a clear error when the resolved sandbox lacks process support', async () => {
-    const sandbox = {
-      id: 'minimal-sandbox',
-      name: 'MinimalSandbox',
-      provider: 'minimal',
-      status: 'running' as const,
-      executeCommand: async () => ({
-        command: 'echo ok',
-        stdout: 'ok',
-        stderr: '',
-        exitCode: 0,
-        success: true,
-        executionTimeMs: 1,
-      }),
-    };
+    const sandbox = makeCommandOnlySandbox();
     const workspace = new Workspace({ sandbox: () => sandbox });
     const tools = await createWorkspaceTools(workspace);
 
@@ -169,20 +172,7 @@ describe('dynamic sandbox tools', () => {
   });
 
   it('should throw a clear error when background execution is requested without process support', async () => {
-    const sandbox = {
-      id: 'minimal-sandbox',
-      name: 'MinimalSandbox',
-      provider: 'minimal',
-      status: 'running' as const,
-      executeCommand: async () => ({
-        command: 'echo ok',
-        stdout: 'ok',
-        stderr: '',
-        exitCode: 0,
-        success: true,
-        executionTimeMs: 1,
-      }),
-    };
+    const sandbox = makeCommandOnlySandbox();
     const workspace = new Workspace({ sandbox: () => sandbox });
     const tools = await createWorkspaceTools(workspace);
 
@@ -255,24 +245,6 @@ describe('dynamic sandbox tools', () => {
     );
 
     expect(filesystemResolverCalls).toBe(0);
-  });
-
-  it('should allow getInfo callers to opt out of resolving dynamic filesystems', async () => {
-    let filesystemResolverCalls = 0;
-    const workspace = new Workspace({
-      filesystem: () => {
-        filesystemResolverCalls++;
-        return new LocalFilesystem({ basePath: tempDir });
-      },
-    });
-
-    const unresolvedInfo = await workspace.getInfo({ resolveDynamicProviders: false });
-    expect(unresolvedInfo.filesystem?.provider).toBe('dynamic');
-    expect(filesystemResolverCalls).toBe(0);
-
-    const resolvedInfo = await workspace.getInfo();
-    expect(resolvedInfo.filesystem?.provider).toBe('local');
-    expect(filesystemResolverCalls).toBe(1);
   });
 
   it('should call the resolver exactly once per request across instructions and tool calls', async () => {
