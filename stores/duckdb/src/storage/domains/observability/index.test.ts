@@ -128,7 +128,8 @@ describe('ObservabilityStorageDuckDB', () => {
 
     expect(db.executeBatch).toHaveBeenCalledTimes(1);
     expect(db.executeBatch).toHaveBeenCalledWith([...ALL_DDL, ...ALL_MIGRATIONS]);
-    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(db.execute).toHaveBeenCalledWith('CHECKPOINT');
   });
 
   // ==========================================================================

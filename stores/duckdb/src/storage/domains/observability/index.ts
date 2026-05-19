@@ -148,6 +148,11 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     }
 
     await this.db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
+
+    // Flush the WAL to the main database file so that incomplete WAL entries
+    // from schema migrations (especially ALTER COLUMN SET DEFAULT nextval(...))
+    // don't cause corruption on abrupt process termination (e.g. dev server restart).
+    await this.db.execute('CHECKPOINT');
   }
 
   /**
@@ -173,6 +178,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     }
 
     await migrateSignalTables(this.db, this.logger);
+
+    // Flush the WAL after heavy schema migration to avoid corrupt WAL replay on abrupt shutdown.
+    await this.db.execute('CHECKPOINT');
 
     return {
       success: true,
