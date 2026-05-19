@@ -19,12 +19,12 @@ type FinishChunkLike = {
 
 const MAX_STEPS_FINISH_REASON = 'tool-calls';
 
-export const getMaxStepsErrorText = (maxSteps?: number) => {
+const getMaxStepsErrorText = (maxSteps?: number) => {
   const limit = typeof maxSteps === 'number' ? ` (${maxSteps})` : '';
   return `Agent stopped because it reached maxSteps${limit} while tool calls were still pending. Increase maxSteps in advanced settings and try again.`;
 };
 
-export const getFinishReason = (chunk: FinishChunkLike) => {
+const getFinishReason = (chunk: FinishChunkLike) => {
   if (chunk.type !== 'finish') return undefined;
 
   const reason = chunk.payload?.stepResult?.reason;

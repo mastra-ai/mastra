@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
-  refreshThreadList: vi.fn(),
   runtimeProps: undefined as any,
   sendMessage: vi.fn(),
 }));
@@ -120,7 +119,6 @@ import { MastraRuntimeProvider } from '../mastra-runtime-provider';
 describe('MastraRuntimeProvider', () => {
   beforeEach(() => {
     mocks.cancelRun.mockReset();
-    mocks.refreshThreadList.mockReset();
     mocks.runtimeProps = undefined;
     mocks.sendMessage.mockReset();
     (window as any).MASTRA_AGENT_SIGNALS = 'false';
@@ -145,7 +143,6 @@ describe('MastraRuntimeProvider', () => {
         threadId="thread-1"
         initialMessages={[]}
         modelVersion="v2"
-        refreshThreadList={mocks.refreshThreadList}
         settings={{ modelSettings: { maxSteps: 3 } } as any}
       >
         <div />
@@ -172,6 +169,5 @@ describe('MastraRuntimeProvider', () => {
       ],
       metadata: { status: 'error' },
     });
-    expect(mocks.refreshThreadList).toHaveBeenCalled();
   });
 });
