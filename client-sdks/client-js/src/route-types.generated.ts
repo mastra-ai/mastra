@@ -11901,7 +11901,28 @@ export type GetObservabilityTraces_QueryParams = {
       )
     | undefined;
   traceId?: (string | undefined) | undefined;
-  entityType?: (string | undefined) | undefined;
+  entityType?:
+    | (
+        | (
+            | (
+                | 'agent'
+                | 'scorer'
+                | 'rag_ingestion'
+                | 'trajectory'
+                | 'input_processor'
+                | 'input_step_processor'
+                | 'output_processor'
+                | 'output_step_processor'
+                | 'workflow_step'
+                | 'tool'
+                | 'workflow_run'
+                | 'memory'
+              )
+            | null
+          )
+        | undefined
+      )
+    | undefined;
   entityId?: ((string | null) | undefined) | undefined;
   entityName?: ((string | null) | undefined) | undefined;
   parentEntityType?:
@@ -11991,10 +12012,6 @@ export type GetObservabilityTraces_QueryParams = {
   tags?: (((string[] | null) | undefined) | undefined) | any;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   hasChildError?: (boolean | undefined) | undefined;
-  page?: (number | undefined) | undefined;
-  perPage?: (number | undefined) | undefined;
-  field?: ('startedAt' | 'endedAt') | undefined;
-  direction?: ('ASC' | 'DESC') | undefined;
   dateRange?:
     | (
         | (
@@ -12014,19 +12031,37 @@ export type GetObservabilityTraces_QueryParams = {
       )
     | any;
   name?: (string | undefined) | undefined;
+  page?: (number | undefined) | undefined;
+  perPage?: (number | undefined) | undefined;
+  field?: ('startedAt' | 'endedAt') | undefined;
+  direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityTraces_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   spans: {
     /** Unique trace identifier */
     traceId: string;
@@ -12679,19 +12714,33 @@ export type GetObservabilityBranches_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: ('startedAt' | 'endedAt') | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityBranches_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   branches: {
     /** Unique trace identifier */
     traceId: string;
@@ -13728,6 +13777,293 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /observability/metrics
+// ============================================================================
+export type GetObservabilityMetrics_QueryParams = {
+  timestamp?:
+    | (
+        | (
+            | {
+                /** Start of date range (inclusive by default) */
+                start?: Date | undefined;
+                /** End of date range (inclusive by default) */
+                end?: Date | undefined;
+                /** When true, excludes the start date from results (uses > instead of >=) */
+                startExclusive?: boolean | undefined;
+                /** When true, excludes the end date from results (uses < instead of <=) */
+                endExclusive?: boolean | undefined;
+              }
+            | undefined
+          )
+        | undefined
+      )
+    | any;
+  traceId?: (string | undefined) | undefined;
+  spanId?: (string | undefined) | undefined;
+  entityType?:
+    | (
+        | (
+            | 'agent'
+            | 'scorer'
+            | 'rag_ingestion'
+            | 'trajectory'
+            | 'input_processor'
+            | 'input_step_processor'
+            | 'output_processor'
+            | 'output_step_processor'
+            | 'workflow_step'
+            | 'tool'
+            | 'workflow_run'
+            | 'memory'
+          )
+        | undefined
+      )
+    | undefined;
+  entityName?: (string | undefined) | undefined;
+  entityVersionId?: (string | undefined) | undefined;
+  parentEntityVersionId?: (string | undefined) | undefined;
+  rootEntityVersionId?: (string | undefined) | undefined;
+  userId?: (string | undefined) | undefined;
+  organizationId?: (string | undefined) | undefined;
+  experimentId?: (string | undefined) | undefined;
+  serviceName?: (string | undefined) | undefined;
+  environment?: (string | undefined) | undefined;
+  parentEntityType?:
+    | (
+        | (
+            | 'agent'
+            | 'scorer'
+            | 'rag_ingestion'
+            | 'trajectory'
+            | 'input_processor'
+            | 'input_step_processor'
+            | 'output_processor'
+            | 'output_step_processor'
+            | 'workflow_step'
+            | 'tool'
+            | 'workflow_run'
+            | 'memory'
+          )
+        | undefined
+      )
+    | undefined;
+  parentEntityName?: (string | undefined) | undefined;
+  rootEntityType?:
+    | (
+        | (
+            | 'agent'
+            | 'scorer'
+            | 'rag_ingestion'
+            | 'trajectory'
+            | 'input_processor'
+            | 'input_step_processor'
+            | 'output_processor'
+            | 'output_step_processor'
+            | 'workflow_step'
+            | 'tool'
+            | 'workflow_run'
+            | 'memory'
+          )
+        | undefined
+      )
+    | undefined;
+  rootEntityName?: (string | undefined) | undefined;
+  resourceId?: (string | undefined) | undefined;
+  runId?: (string | undefined) | undefined;
+  sessionId?: (string | undefined) | undefined;
+  threadId?: (string | undefined) | undefined;
+  requestId?: (string | undefined) | undefined;
+  executionSource?: (string | undefined) | undefined;
+  tags?: ((string[] | undefined) | undefined) | any;
+  name?: ((string[] | undefined) | undefined) | any;
+  source?: (string | undefined) | undefined;
+  provider?: (string | undefined) | undefined;
+  model?: (string | undefined) | undefined;
+  costUnit?: (string | undefined) | undefined;
+  labels?:
+    | (
+        | (
+            | {
+                [key: string]: string;
+              }
+            | undefined
+          )
+        | undefined
+      )
+    | any;
+  page?: (number | undefined) | undefined;
+  perPage?: (number | undefined) | undefined;
+  field?: 'timestamp' | undefined;
+  direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
+};
+
+export type GetObservabilityMetrics_Response = {
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
+  metrics: {
+    /** Unique id for this metric event */
+    metricId?: (string | null) | undefined;
+    /** When the metric was recorded */
+    timestamp: Date;
+    /** Metric name (e.g., mastra_agent_duration_ms) */
+    name: string;
+    /** Metric value */
+    value: number;
+    traceId?: (string | null) | undefined;
+    spanId?: (string | null) | undefined;
+    entityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    entityId?: (string | null) | undefined;
+    entityName?: (string | null) | undefined;
+    parentEntityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    parentEntityId?: (string | null) | undefined;
+    parentEntityName?: (string | null) | undefined;
+    rootEntityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    rootEntityId?: (string | null) | undefined;
+    rootEntityName?: (string | null) | undefined;
+    userId?: (string | null) | undefined;
+    organizationId?: (string | null) | undefined;
+    resourceId?: (string | null) | undefined;
+    runId?: (string | null) | undefined;
+    sessionId?: (string | null) | undefined;
+    threadId?: (string | null) | undefined;
+    requestId?: (string | null) | undefined;
+    environment?: (string | null) | undefined;
+    serviceName?: (string | null) | undefined;
+    scope?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    entityVersionId?: (string | null) | undefined;
+    parentEntityVersionId?: (string | null) | undefined;
+    rootEntityVersionId?: (string | null) | undefined;
+    experimentId?: (string | null) | undefined;
+    executionSource?: (string | null) | undefined;
+    tags?: (string[] | null) | undefined;
+    /** Execution source */
+    source?: (string | null) | undefined;
+    provider?: (string | null) | undefined;
+    model?: (string | null) | undefined;
+    estimatedCost?: (number | null) | undefined;
+    costUnit?: (string | null) | undefined;
+    costMetadata?:
+      | (
+          | (
+              | ({
+                  [key: string]: unknown;
+                } | null)
+              | undefined
+            )
+          | null
+        )
+      | undefined;
+    labels: {
+      [key: string]: string;
+    };
+    metadata?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+  }[];
+};
+
+export type GetObservabilityMetrics_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityMetrics_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityMetrics_QueryParams
+        ? { query?: GetObservabilityMetrics_QueryParams }
+        : { query: GetObservabilityMetrics_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityMetrics_RouteContract {
+  pathParams: never;
+  queryParams: GetObservabilityMetrics_QueryParams;
+  body: never;
+  request: GetObservabilityMetrics_Request;
+  response: GetObservabilityMetrics_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /observability/logs
 // ============================================================================
 export type GetObservabilityLogs_QueryParams = {
@@ -13837,19 +14173,33 @@ export type GetObservabilityLogs_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: 'timestamp' | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityLogs_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   logs: {
     /** Unique id for this log event */
     logId?: (string | null) | undefined;
@@ -14084,19 +14434,33 @@ export type GetObservabilityScores_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: ('timestamp' | 'score') | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityScores_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   scores: {
     /** Unique id for this score event */
     scoreId?: (string | null) | undefined;
@@ -15157,19 +15521,33 @@ export type GetObservabilityFeedback_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: 'timestamp' | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityFeedback_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   feedback: {
     /** Unique id for this feedback event */
     feedbackId?: (string | null) | undefined;
@@ -76869,6 +77247,7 @@ export interface RouteTypes {
   'GET /observability/traces/:traceId/trajectory': GetObservabilityTracesTraceIdTrajectory_RouteContract;
   'POST /observability/traces/score': PostObservabilityTracesScore_RouteContract;
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
+  'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
   'POST /observability/scores': PostObservabilityScores_RouteContract;
@@ -77478,6 +77857,9 @@ export interface Client {
   };
   '/observability/logs': {
     GET: GetObservabilityLogs_RouteContract;
+  };
+  '/observability/metrics': {
+    GET: GetObservabilityMetrics_RouteContract;
   };
   '/observability/metrics/aggregate': {
     POST: PostObservabilityMetricsAggregate_RouteContract;
