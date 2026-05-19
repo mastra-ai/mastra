@@ -6,7 +6,8 @@ import { useFormState } from 'react-hook-form';
 
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { BrowserSessionProvider } from '../../context/browser-session-context';
+import { BrowserSessionProvider } from '../../context/browser-session-provider';
+import { useAgent } from '../../hooks/use-agent';
 import { AgentChat } from '../agent-chat';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
@@ -62,10 +63,11 @@ export function AgentPlaygroundTestChat({
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
+  const { data: agent } = useAgent(agentId);
 
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
-      <BrowserSessionProvider agentId={agentId} threadId={testThreadId}>
+      <BrowserSessionProvider agentId={agentId} threadId={testThreadId} enabled={Boolean(agent?.browserTools?.length)}>
         <DatasetSaveProvider
           enabled
           threadId={testThreadId}

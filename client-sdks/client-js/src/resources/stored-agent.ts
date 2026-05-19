@@ -12,6 +12,7 @@ import type {
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
+  FavoriteToggleResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -71,6 +72,40 @@ export class StoredAgent extends BaseResource {
   delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredAgentResponse> {
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  // ==========================================================================
+  // Favorite Methods (EE feature)
+  // ==========================================================================
+
+  /**
+   * Favorites this agent for the calling user. Idempotent.
+   * Requires the `agent.favorites` builder feature flag to be enabled on the server.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the new favorited state and updated favorite count
+   */
+  favorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/favorite${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+      },
+    );
+  }
+
+  /**
+   * Unfavorites this agent for the calling user. Idempotent.
+   * Requires the `agent.favorites` builder feature flag to be enabled on the server.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the new favorited state and updated favorite count
+   */
+  unfavorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/favorite${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },
