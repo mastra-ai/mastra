@@ -1508,10 +1508,6 @@ importers:
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
 
   integrations/brightdata:
-    dependencies:
-      '@brightdata/sdk':
-        specifier: ^1.1.0
-        version: 1.1.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9777,10 +9773,6 @@ packages:
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
 
-  '@brightdata/sdk@1.1.0':
-    resolution: {integrity: sha512-KTMxst7OAp/gUpUsl2ixWGSKLn8lTZx8W9UqmMeC04/36v9l5A9hJF+41iqvvTcvYJsiGzc1XfQFCtJAZeb0fQ==}
-    engines: {node: '>=20.0.0'}
-
   '@browserbasehq/sdk@2.10.0':
     resolution: {integrity: sha512-pOL4yW8P8AI2+N5y6zEP6XXKqIXtYyKunr1JXppqQDOyKLxxvZEDqQCHJXWUzqgx3R1tGWpn7m9AjXN7MeYInA==}
 
@@ -17129,10 +17121,6 @@ packages:
   '@supabase/supabase-js@2.105.4':
     resolution: {integrity: sha512-cEnx+k49knU+qdIP7rXwR6fqEXPHZs+74xFK1R0S8MgQ7v9tbePVdGxvO03n3bPympMdJWVLadARBfU4TgNHCQ==}
     engines: {node: '>=20.0.0'}
-
-  '@supercharge/promise-pool@3.3.0':
-    resolution: {integrity: sha512-qGzCltMN05ohRRQAXB8TPWt+0Coz9Va266gr9nYN1qc/f/EIaup3VRg7b59mtRaeKTRcxreF20l/udCM/gOqNg==}
-    engines: {node: '>=8'}
 
   '@svgr/babel-plugin-add-jsx-attribute@8.0.0':
     resolution: {integrity: sha512-b9MIk7yhdS1pMCZM8VeNfUlSKVRhsHZNMl5O9SfaX0l0t5wjdgu4IDzGB8bpnGBBOjGST3rRFVsaaEtI4W6f7g==}
@@ -32072,12 +32060,6 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
-  '@brightdata/sdk@1.1.0':
-    dependencies:
-      '@supercharge/promise-pool': 3.3.0
-      undici: 7.25.0
-      zod: 4.3.6
-
   '@browserbasehq/sdk@2.10.0(encoding@0.1.13)':
     dependencies:
       '@types/node': 22.19.15
@@ -41623,8 +41605,6 @@ snapshots:
       '@supabase/postgrest-js': 2.105.4
       '@supabase/realtime-js': 2.105.4
       '@supabase/storage-js': 2.105.4
-
-  '@supercharge/promise-pool@3.3.0': {}
 
   '@svgr/babel-plugin-add-jsx-attribute@8.0.0(@babel/core@7.29.0)':
     dependencies:

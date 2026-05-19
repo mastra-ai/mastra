@@ -1,16 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mockScrapeUrl = vi.fn();
-const mockClose = vi.fn().mockResolvedValue(undefined);
+const fetchMock = vi.fn();
 
-vi.mock('@brightdata/sdk', () => ({
-  bdclient: vi.fn(function () {
-    return {
-      search: { google: vi.fn(), bing: vi.fn(), yandex: vi.fn() },
-      scrapeUrl: mockScrapeUrl,
-      close: mockClose,
-    };
-  }),
+vi.mock('@mastra/core/tools', () => ({
+  createTool: vi.fn(config => config),
 }));
 
 import { createBrightDataFetchTool } from '../fetch.js';
@@ -18,7 +11,12 @@ import { createBrightDataFetchTool } from '../fetch.js';
 describe('createBrightDataFetchTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockScrapeUrl.mockResolvedValue('# Example Page\n\nHello world.');
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockResolvedValue(new Response('# Example Page\n\nHello world.'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should create a tool with id brightdata-fetch', () => {
@@ -39,8 +37,14 @@ describe('createBrightDataFetchTool', () => {
 
     const result = await tool.execute!({ url: 'https://example.com' }, {} as any);
 
-    expect(mockScrapeUrl).toHaveBeenCalledWith('https://example.com', {
-      dataFormat: 'markdown',
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+
+    expect(requestBody).toEqual({
+      data_format: 'markdown',
+      format: 'raw',
+      method: 'GET',
+      url: 'https://example.com',
+      zone: 'sdk_unlocker',
     });
 
     expect(result).toEqual({
@@ -50,7 +54,7 @@ describe('createBrightDataFetchTool', () => {
   });
 
   it('should let errors propagate', async () => {
-    mockScrapeUrl.mockRejectedValue(new Error('Network unreachable'));
+    fetchMock.mockRejectedValue(new Error('Network unreachable'));
 
     const tool = createBrightDataFetchTool({ apiKey: 'test-key' });
 
@@ -59,20 +63,18 @@ describe('createBrightDataFetchTool', () => {
     );
   });
 
-  it('should close the client after a successful execute', async () => {
+  it('should make one Bright Data request after a successful execute', async () => {
     const tool = createBrightDataFetchTool({ apiKey: 'test-key' });
 
     await tool.execute!({ url: 'https://example.com' }, {} as any);
 
-    expect(mockClose).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('should close the client even when execute throws', async () => {
-    mockScrapeUrl.mockRejectedValue(new Error('boom'));
+  it('should preserve the primary error when execute throws', async () => {
+    fetchMock.mockRejectedValue(new Error('boom'));
     const tool = createBrightDataFetchTool({ apiKey: 'test-key' });
 
     await expect(tool.execute!({ url: 'https://example.com' }, {} as any)).rejects.toThrow('boom');
-
-    expect(mockClose).toHaveBeenCalledTimes(1);
   });
 });
