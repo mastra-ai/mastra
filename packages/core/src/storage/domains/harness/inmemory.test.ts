@@ -12,9 +12,18 @@ import {
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
+  HarnessStorageWakeupClaimConflictError,
+  HarnessStorageWakeupTransitionError,
 } from './base';
 import { InMemoryHarness } from './inmemory';
-import type { ChannelActionReceipt, ChannelActionToken, ChannelInboxItem, ChannelOutboxItem, SessionRecord } from './types';
+import type {
+  ChannelActionReceipt,
+  ChannelActionToken,
+  ChannelInboxItem,
+  ChannelOutboxItem,
+  HarnessWakeupItem,
+  SessionRecord,
+} from './types';
 
 describe('InMemoryHarness admission storage contract', () => {
   it('creates or returns one active session for a namespace/resource/thread key', async () => {
@@ -910,6 +919,365 @@ describe('InMemoryHarness channel inbox ledger', () => {
   });
 });
 
+describe('InMemoryHarness wakeup ledger', () => {
+  it('dedupes exact wakeups and reports source-fire key conflicts', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+
+    await expect(storage.createOrLoadHarnessWakeupItem(sampleWakeup())).resolves.toMatchObject({
+      duplicate: false,
+      conflict: false,
+      claimed: false,
+    });
+    await expect(storage.createOrLoadHarnessWakeupItem(sampleWakeup({ id: 'wakeup-retry' }))).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      item: { id: 'wakeup-1', payloadHash: 'payload-hash-1' },
+    });
+    await expect(
+      storage.createOrLoadHarnessWakeupItem(sampleWakeup({ id: 'wakeup-source-retry', idempotencyKey: 'wake-key-2' })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      item: { id: 'wakeup-1', fireId: 'fire-1' },
+    });
+  });
+
+  it('flags same idempotency key with a different payload as a conflict', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.createOrLoadHarnessWakeupItem(sampleWakeup());
+
+    await expect(
+      storage.createOrLoadHarnessWakeupItem(sampleWakeup({ id: 'wakeup-2', payloadHash: 'payload-hash-2' })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      item: { id: 'wakeup-1', payloadHash: 'payload-hash-1' },
+    });
+    await expect(
+      storage.createOrLoadHarnessWakeupItem(sampleWakeup({ id: 'wakeup-3', mode: 'review', model: 'model-2' })),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: true,
+      item: { id: 'wakeup-1', mode: 'build', model: 'model-1' },
+    });
+  });
+
+  it('claims due and retryable failed wakeups while respecting backoff', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.createOrLoadHarnessWakeupItem(sampleWakeup({ dueAt: 5000, nextAttemptAt: 7000 }));
+
+    await expect(
+      storage.claimHarnessWakeupItems({
+        harnessName: 'default',
+        statuses: ['due'],
+        claimId: 'early',
+        limit: 10,
+        now: 6500,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      storage.claimHarnessWakeupItems({
+        harnessName: 'default',
+        statuses: ['due'],
+        claimId: 'claim-1',
+        limit: 10,
+        now: 7000,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'wakeup-1',
+        status: 'claimed',
+        attempts: 1,
+        claimId: 'claim-1',
+        claimExpiresAt: 8000,
+        nextAttemptAt: undefined,
+      }),
+    ]);
+  });
+
+  it('does not initial-claim future wakeups before they are due', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+
+    const result = await storage.createOrLoadHarnessWakeupItem(sampleWakeup({ dueAt: 5000 }), {
+      initialClaim: { claimId: 'early', now: 4000, claimTtlMs: 1000 },
+    });
+    expect(result).toMatchObject({
+      duplicate: false,
+      conflict: false,
+      claimed: false,
+      item: { status: 'due', attempts: 0 },
+    });
+    expect(result.item.claimId).toBeUndefined();
+  });
+
+  it('initial-claims due wakeups without carrying stale attempt identifiers', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+
+    await expect(
+      storage.createOrLoadHarnessWakeupItem(sampleWakeup({ runId: 'stale-run', signalId: 'stale-signal' }), {
+        initialClaim: { claimId: 'claim-1', now: 2000, claimTtlMs: 1000 },
+      }),
+    ).resolves.toMatchObject({
+      claimed: true,
+      item: { status: 'claimed', runId: undefined, signalId: undefined },
+    });
+  });
+
+  it('reclaims expired claimed wakeups', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.createOrLoadHarnessWakeupItem(sampleWakeup(), {
+      initialClaim: { claimId: 'stale', now: 10_000, claimTtlMs: 1000 },
+    });
+
+    await expect(
+      storage.claimHarnessWakeupItems({
+        harnessName: 'default',
+        statuses: ['claimed'],
+        claimId: 'retry',
+        limit: 10,
+        now: 10_500,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      storage.claimHarnessWakeupItems({
+        harnessName: 'default',
+        statuses: ['claimed'],
+        claimId: 'retry',
+        limit: 10,
+        now: 11_000,
+        claimTtlMs: 1000,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'wakeup-1',
+        status: 'claimed',
+        attempts: 2,
+        claimId: 'retry',
+        claimExpiresAt: 12_000,
+        claimedAt: 11_000,
+      }),
+    ]);
+  });
+
+  it('reclaims expired claimed duplicate wakeups on create', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    await storage.createOrLoadHarnessWakeupItem(sampleWakeup(), {
+      initialClaim: { claimId: 'stale', now: 10_000, claimTtlMs: 1000 },
+    });
+
+    await expect(
+      storage.createOrLoadHarnessWakeupItem(sampleWakeup({ id: 'wakeup-retry' }), {
+        initialClaim: { claimId: 'retry', now: 11_000, claimTtlMs: 1000 },
+      }),
+    ).resolves.toMatchObject({
+      duplicate: true,
+      conflict: false,
+      claimed: true,
+      item: { id: 'wakeup-1', status: 'claimed', attempts: 2, claimId: 'retry' },
+    });
+  });
+
+  it('guards renewal and terminal updates by owner claim', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const now = 10_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now + 100);
+    try {
+      await storage.createOrLoadHarnessWakeupItem(sampleWakeup(), {
+        initialClaim: { claimId: 'claim-1', now, claimTtlMs: 5000 },
+      });
+
+      await expect(
+        storage.renewHarnessWakeupClaim({
+          wakeupItemId: 'wakeup-1',
+          claimId: 'other',
+          now: now + 50,
+          claimTtlMs: 5000,
+        }),
+      ).rejects.toBeInstanceOf(HarnessStorageWakeupClaimConflictError);
+      await expect(
+        storage.renewHarnessWakeupClaim({
+          wakeupItemId: 'wakeup-1',
+          claimId: 'claim-1',
+          now: now + 50,
+          claimTtlMs: 5000,
+        }),
+      ).resolves.toEqual({ claimExpiresAt: now + 5050, storageNow: now + 50 });
+
+      await expect(
+        storage.updateHarnessWakeupItem(
+          sampleWakeup({
+            status: 'failed',
+            attempts: 1,
+            failedAt: now + 100,
+            nextAttemptAt: now + 200,
+            claimId: undefined,
+            claimExpiresAt: undefined,
+            claimedAt: now,
+            updatedAt: now + 100,
+            lastError: { code: 'worker_unavailable', message: 'temporary failure', retryable: true },
+          }),
+          { claimId: 'claim-1' },
+        ),
+      ).rejects.toBeInstanceOf(HarnessStorageWakeupTransitionError);
+
+      await storage.updateHarnessWakeupItem(
+        sampleWakeup({
+          status: 'queued',
+          attempts: 1,
+          queuedItemId: 'queued-1',
+          queuedAt: now + 100,
+          claimId: undefined,
+          claimExpiresAt: undefined,
+          updatedAt: now + 100,
+        }),
+        { claimId: 'claim-1' },
+      );
+      await expect(
+        storage.renewHarnessWakeupClaim({
+          wakeupItemId: 'wakeup-1',
+          claimId: 'claim-1',
+          now: now + 200,
+          claimTtlMs: 5000,
+        }),
+      ).rejects.toBeInstanceOf(HarnessStorageWakeupClaimConflictError);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('rejects payload mutation while a wakeup claim is held', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const now = 10_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now + 100);
+    try {
+      await storage.createOrLoadHarnessWakeupItem(sampleWakeup(), {
+        initialClaim: { claimId: 'claim-1', now, claimTtlMs: 5000 },
+      });
+
+      await expect(
+        storage.updateHarnessWakeupItem(
+          sampleWakeup({
+            status: 'queued',
+            content: 'mutated work',
+            attempts: 1,
+            queuedItemId: 'queued-1',
+            queuedAt: now + 100,
+            claimId: undefined,
+            claimExpiresAt: undefined,
+            updatedAt: now + 100,
+          }),
+          { claimId: 'claim-1' },
+        ),
+      ).rejects.toBeInstanceOf(HarnessStorageWakeupTransitionError);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('reclaims retryable failures and clears stale failure metadata', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const now = 10_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now + 50);
+    try {
+      await storage.createOrLoadHarnessWakeupItem(sampleWakeup(), {
+        initialClaim: { claimId: 'claim-1', now, claimTtlMs: 5000 },
+      });
+      await storage.updateHarnessWakeupItem(
+        sampleWakeup({
+          status: 'failed',
+          attempts: 1,
+          failedAt: now + 50,
+          nextAttemptAt: now + 100,
+          runId: 'stale-run',
+          signalId: 'stale-signal',
+          claimId: undefined,
+          claimExpiresAt: undefined,
+          updatedAt: now + 50,
+          lastError: { code: 'session_locked', message: 'locked', retryable: true },
+        }),
+        { claimId: 'claim-1' },
+      );
+
+      await expect(
+        storage.claimHarnessWakeupItems({
+          harnessName: 'default',
+          statuses: ['failed'],
+          claimId: 'retry',
+          limit: 10,
+          now: now + 100,
+          claimTtlMs: 1000,
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          status: 'claimed',
+          attempts: 2,
+          failedAt: undefined,
+          nextAttemptAt: undefined,
+          runId: undefined,
+          signalId: undefined,
+          lastError: undefined,
+        }),
+      ]);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('validates wakeup state transitions', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+
+    await expect(storage.createOrLoadHarnessWakeupItem(sampleWakeup({ status: 'queued' }))).rejects.toBeInstanceOf(
+      HarnessStorageWakeupTransitionError,
+    );
+    await expect(
+      storage.createOrLoadHarnessWakeupItem(
+        sampleWakeup({
+          status: 'completed',
+          completedAt: 2000,
+          result: { ok: true },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(HarnessStorageWakeupTransitionError);
+
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(2100);
+    try {
+      await storage.createOrLoadHarnessWakeupItem(sampleWakeup(), {
+        initialClaim: { claimId: 'claim-1', now: 2000, claimTtlMs: 1000 },
+      });
+      await expect(
+        storage.updateHarnessWakeupItem(
+          sampleWakeup({
+            status: 'completed',
+            completedAt: 2100,
+            result: { ok: true },
+            queuedItemId: 'stale-queue',
+            queuedAt: 2050,
+            updatedAt: 2100,
+          }),
+          { claimId: 'claim-1' },
+        ),
+      ).rejects.toBeInstanceOf(HarnessStorageWakeupTransitionError);
+      await expect(
+        storage.updateHarnessWakeupItem(
+          sampleWakeup({
+            status: 'queued',
+            queuedItemId: 'queue-1',
+            queuedAt: 2100,
+            lastError: { code: 'stale', message: 'stale' },
+            updatedAt: 2100,
+          }),
+          { claimId: 'claim-1' },
+        ),
+      ).rejects.toBeInstanceOf(HarnessStorageWakeupTransitionError);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+});
+
 describe('InMemoryHarness channel action ledger', () => {
   it('dedupes exact action tokens and flags immutable token mismatches', async () => {
     const storage = new InMemoryHarness({ db: new InMemoryDB() });
@@ -1470,6 +1838,33 @@ function sampleChannelInbox(overrides: Partial<ChannelInboxItem> = {}): ChannelI
     },
     content: 'hello',
     attachments: [],
+    ...overrides,
+  };
+}
+
+function sampleWakeup(overrides: Partial<HarnessWakeupItem> = {}): HarnessWakeupItem {
+  return {
+    id: 'wakeup-1',
+    harnessName: 'default',
+    source: 'schedule',
+    sourceId: 'schedule-1',
+    fireId: 'fire-1',
+    idempotencyKey: 'wake-key-1',
+    payloadHash: 'payload-hash-1',
+    admissionId: 'wake-admission-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    sessionId: 'session-1',
+    dueAt: 1000,
+    createdAt: 1000,
+    updatedAt: 1000,
+    status: 'due',
+    mode: 'build',
+    model: 'model-1',
+    attempts: 0,
+    content: 'scheduled work',
+    attachments: [],
+    requestContext: { metadata: { source: 'schedule' } },
     ...overrides,
   };
 }

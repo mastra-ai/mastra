@@ -722,6 +722,62 @@ export interface EnqueueChannelOutboxResult {
   conflict: boolean;
 }
 
+export type HarnessWakeupSource = 'schedule' | 'proactive';
+
+export interface HarnessWakeupItem {
+  id: string;
+  harnessName: string;
+  source: HarnessWakeupSource;
+  sourceId: string;
+  fireId: string;
+  idempotencyKey: string;
+  payloadHash: string;
+  admissionId: string;
+  admissionHash?: string;
+  resourceId?: string;
+  threadId?: string;
+  sessionId?: string;
+  queuedItemId?: string;
+  runId?: string;
+  signalId?: string;
+  dueAt: number;
+  createdAt: number;
+  updatedAt: number;
+  claimedAt?: number;
+  queuedAt?: number;
+  completedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  status: 'due' | 'claimed' | 'queued' | 'completed' | 'failed' | 'dead';
+  mode?: string;
+  model?: string;
+  attempts: number;
+  missedCount?: number;
+  claimId?: string;
+  claimExpiresAt?: number;
+  nextAttemptAt?: number;
+  requestContext?: PersistedRequestContextInput;
+  content: string;
+  attachments: PersistedAttachment[];
+  result?: JsonValue;
+  lastError?: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
+}
+
+export type HarnessWakeupClaimStatus = Extract<HarnessWakeupItem['status'], 'due' | 'claimed' | 'failed'>;
+
+export interface HarnessWakeupInitialClaim {
+  claimId: string;
+  now: number;
+  claimTtlMs: number;
+}
+
+export interface CreateOrLoadHarnessWakeupItemResult {
+  item: HarnessWakeupItem;
+  duplicate: boolean;
+  conflict: boolean;
+  claimed: boolean;
+}
+
 export interface OperationAdmissionTombstone {
   kind: HarnessOperationKind;
   harnessName: string;

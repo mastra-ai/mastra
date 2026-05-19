@@ -19,6 +19,8 @@ import {
   HarnessStorageSessionNotFoundError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
+  HarnessStorageWakeupClaimConflictError,
+  HarnessStorageWakeupTransitionError,
 } from './base';
 import type { WriteMessageResultEvidenceResult } from './base';
 import type {
@@ -37,8 +39,11 @@ import type {
   CreateOrLoadChannelActionReceiptResult,
   CreateOrLoadChannelActionTokenResult,
   CreateOrLoadChannelInboxItemResult,
+  CreateOrLoadHarnessWakeupItemResult,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
+  HarnessWakeupClaimStatus,
+  HarnessWakeupItem,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -1575,6 +1580,185 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessChannelOutbox.set(channelOutboxKey(next.harnessName, next.id), cloneJson(next));
   }
 
+  // -------------------------------------------------------------------------
+  // Wakeup ledger
+  // -------------------------------------------------------------------------
+
+  async createOrLoadHarnessWakeupItem(
+    record: HarnessWakeupItem,
+    opts?: { initialClaim?: { claimId: string; now: number; claimTtlMs: number } },
+  ): Promise<CreateOrLoadHarnessWakeupItemResult> {
+    const namespace = resolveHarnessName(record.harnessName, this.harnessName);
+    const incoming: HarnessWakeupItem = { ...record, harnessName: namespace };
+    if (incoming.status !== 'due') {
+      throw new HarnessStorageWakeupTransitionError(
+        incoming.id,
+        undefined,
+        incoming.status,
+        'new wakeups must start as due',
+      );
+    }
+    assertValidHarnessWakeupState(incoming);
+    const existing = this.findHarnessWakeupByIdempotencyKey({
+      harnessName: namespace,
+      idempotencyKey: incoming.idempotencyKey,
+    });
+    if (existing) {
+      const conflict = !harnessWakeupItemsEquivalentForCreate(existing, incoming);
+      let claimed = false;
+      let item = existing;
+      if (!conflict && opts?.initialClaim && isHarnessWakeupClaimable(existing, opts.initialClaim.now)) {
+        item = claimHarnessWakeupItem(
+          existing,
+          opts.initialClaim.claimId,
+          opts.initialClaim.now,
+          opts.initialClaim.claimTtlMs,
+        );
+        this.db.harnessWakeupItems.set(harnessWakeupKey(namespace, item.id), cloneJson(item));
+        claimed = true;
+      }
+      return { item: cloneJson(item), duplicate: true, conflict, claimed };
+    }
+    const existingBySourceFire = this.findHarnessWakeupBySourceFire({
+      harnessName: namespace,
+      source: incoming.source,
+      sourceId: incoming.sourceId,
+      fireId: incoming.fireId,
+    });
+    if (existingBySourceFire) {
+      return {
+        item: cloneJson(existingBySourceFire),
+        duplicate: true,
+        conflict: !harnessWakeupItemsEquivalentForCreate(existingBySourceFire, incoming),
+        claimed: false,
+      };
+    }
+    const existingById = this.findHarnessWakeupById(incoming.id);
+    if (existingById) {
+      throw new HarnessStorageWakeupTransitionError(
+        incoming.id,
+        existingById.status,
+        incoming.status,
+        'id is already owned by another wakeup item',
+      );
+    }
+    const canInitialClaim =
+      opts?.initialClaim !== undefined && isHarnessWakeupClaimable(incoming, opts.initialClaim.now);
+    const item = canInitialClaim
+      ? claimHarnessWakeupItem(
+          incoming,
+          opts.initialClaim!.claimId,
+          opts.initialClaim!.now,
+          opts.initialClaim!.claimTtlMs,
+        )
+      : incoming;
+    assertValidHarnessWakeupState(item);
+    this.db.harnessWakeupItems.set(harnessWakeupKey(namespace, item.id), cloneJson(item));
+    return { item: cloneJson(item), duplicate: false, conflict: false, claimed: canInitialClaim };
+  }
+
+  async loadHarnessWakeupItemByIdempotencyKey(opts: {
+    harnessName: string;
+    idempotencyKey: string;
+  }): Promise<HarnessWakeupItem | null> {
+    const item = this.findHarnessWakeupByIdempotencyKey({
+      harnessName: resolveHarnessName(opts.harnessName, this.harnessName),
+      idempotencyKey: opts.idempotencyKey,
+    });
+    return item ? cloneJson(item) : null;
+  }
+
+  async loadHarnessWakeupItemBySourceFire(opts: {
+    harnessName: string;
+    source: HarnessWakeupItem['source'];
+    sourceId: string;
+    fireId: string;
+  }): Promise<HarnessWakeupItem | null> {
+    const item = this.findHarnessWakeupBySourceFire({
+      ...opts,
+      harnessName: resolveHarnessName(opts.harnessName, this.harnessName),
+    });
+    return item ? cloneJson(item) : null;
+  }
+
+  async claimHarnessWakeupItems({
+    harnessName,
+    source,
+    statuses,
+    claimId,
+    limit,
+    now,
+    claimTtlMs,
+  }: {
+    harnessName: string;
+    source?: HarnessWakeupItem['source'];
+    statuses: HarnessWakeupClaimStatus[];
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<HarnessWakeupItem[]> {
+    const namespace = resolveHarnessName(harnessName, this.harnessName);
+    const claimed: HarnessWakeupItem[] = [];
+    const sorted = Array.from(this.db.harnessWakeupItems.values()).sort(compareHarnessWakeupOrder);
+    for (const item of sorted) {
+      if (claimed.length >= limit) break;
+      if (item.harnessName !== namespace) continue;
+      if (source !== undefined && item.source !== source) continue;
+      if (!statuses.includes(item.status as HarnessWakeupClaimStatus)) continue;
+      if (!isHarnessWakeupClaimable(item, now)) continue;
+      const next = claimHarnessWakeupItem(item, claimId, now, claimTtlMs);
+      this.db.harnessWakeupItems.set(harnessWakeupKey(namespace, next.id), cloneJson(next));
+      claimed.push(cloneJson(next));
+    }
+    return claimed;
+  }
+
+  async renewHarnessWakeupClaim({
+    wakeupItemId,
+    claimId,
+    now,
+    claimTtlMs,
+  }: {
+    wakeupItemId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    const current = this.findHarnessWakeupById(wakeupItemId);
+    if (
+      !current ||
+      current.claimId !== claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= now ||
+      current.status !== 'claimed'
+    ) {
+      throw new HarnessStorageWakeupClaimConflictError(wakeupItemId, claimId);
+    }
+    const claimExpiresAt = now + claimTtlMs;
+    const next = { ...current, claimExpiresAt, updatedAt: now };
+    this.db.harnessWakeupItems.set(harnessWakeupKey(next.harnessName, next.id), cloneJson(next));
+    return { claimExpiresAt, storageNow: now };
+  }
+
+  async updateHarnessWakeupItem(record: HarnessWakeupItem, opts: { claimId: string }): Promise<void> {
+    const namespace = resolveHarnessName(record.harnessName, this.harnessName);
+    const current = this.db.harnessWakeupItems.get(harnessWakeupKey(namespace, record.id));
+    const storageNow = Date.now();
+    if (
+      !current ||
+      current.claimId !== opts.claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= storageNow ||
+      current.status !== 'claimed'
+    ) {
+      throw new HarnessStorageWakeupClaimConflictError(record.id, opts.claimId);
+    }
+    const next = { ...record, harnessName: namespace };
+    assertLegalHarnessWakeupUpdate(current, next);
+    this.db.harnessWakeupItems.set(harnessWakeupKey(namespace, record.id), cloneJson(next));
+  }
+
   private findChannelInboxByIdempotencyKey({
     harnessName,
     channelId,
@@ -1737,6 +1921,50 @@ export class InMemoryHarness extends HarnessStorage {
     return current;
   }
 
+  private findHarnessWakeupByIdempotencyKey({
+    harnessName,
+    idempotencyKey,
+  }: {
+    harnessName: string;
+    idempotencyKey: string;
+  }): HarnessWakeupItem | null {
+    for (const item of this.db.harnessWakeupItems.values()) {
+      if (item.harnessName === harnessName && item.idempotencyKey === idempotencyKey) return cloneJson(item);
+    }
+    return null;
+  }
+
+  private findHarnessWakeupBySourceFire({
+    harnessName,
+    source,
+    sourceId,
+    fireId,
+  }: {
+    harnessName: string;
+    source: HarnessWakeupItem['source'];
+    sourceId: string;
+    fireId: string;
+  }): HarnessWakeupItem | null {
+    for (const item of this.db.harnessWakeupItems.values()) {
+      if (
+        item.harnessName === harnessName &&
+        item.source === source &&
+        item.sourceId === sourceId &&
+        item.fireId === fireId
+      ) {
+        return cloneJson(item);
+      }
+    }
+    return null;
+  }
+
+  private findHarnessWakeupById(wakeupItemId: string): HarnessWakeupItem | null {
+    for (const item of this.db.harnessWakeupItems.values()) {
+      if (item.id === wakeupItemId) return cloneJson(item);
+    }
+    return null;
+  }
+
   private findTombstone(
     predicate: (tombstone: OperationAdmissionTombstone) => boolean,
   ): OperationAdmissionTombstone | null {
@@ -1780,6 +2008,7 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessChannelActionTokens.clear();
     this.db.harnessChannelActionReceipts.clear();
     this.db.harnessChannelOutbox.clear();
+    this.db.harnessWakeupItems.clear();
     this.db.harnessThreadDeleteFences.clear();
   }
 }
@@ -1833,6 +2062,10 @@ function channelActionReceiptKey(_harnessName: string, receiptId: string): strin
 
 function channelOutboxKey(_harnessName: string, outboxItemId: string): string {
   return outboxItemId;
+}
+
+function harnessWakeupKey(_harnessName: string, wakeupItemId: string): string {
+  return wakeupItemId;
 }
 
 function resolveHarnessName(input: string | undefined, fallback: string): string {
@@ -1894,6 +2127,10 @@ function isTerminalChannelOutboxStatus(status: ChannelOutboxItem['status']): boo
   return status === 'sent' || status === 'dead';
 }
 
+function isTerminalHarnessWakeupStatus(status: HarnessWakeupItem['status']): boolean {
+  return status === 'queued' || status === 'completed' || status === 'dead';
+}
+
 function isChannelInboxClaimable(item: ChannelInboxItem, now: number): boolean {
   if (isTerminalChannelInboxStatus(item.status)) return false;
   if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
@@ -1910,6 +2147,44 @@ function isChannelOutboxClaimable(item: ChannelOutboxItem, now: number): boolean
   if (item.status !== 'pending' && item.status !== 'failed' && item.status !== 'claimed') return false;
   if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
   return item.claimId === undefined || item.claimExpiresAt === undefined || item.claimExpiresAt <= now;
+}
+
+function isHarnessWakeupClaimable(item: HarnessWakeupItem, now: number): boolean {
+  if (isTerminalHarnessWakeupStatus(item.status)) return false;
+  if (item.dueAt > now) return false;
+  if (item.nextAttemptAt !== undefined && item.nextAttemptAt > now) return false;
+  return item.claimId === undefined || item.claimExpiresAt === undefined || item.claimExpiresAt <= now;
+}
+
+function claimHarnessWakeupItem(
+  item: HarnessWakeupItem,
+  claimId: string,
+  now: number,
+  claimTtlMs: number,
+): HarnessWakeupItem {
+  return {
+    ...item,
+    status: 'claimed',
+    attempts: item.attempts + 1,
+    claimId,
+    claimExpiresAt: now + claimTtlMs,
+    claimedAt: now,
+    queuedItemId: undefined,
+    queuedAt: undefined,
+    completedAt: undefined,
+    deadAt: undefined,
+    runId: undefined,
+    signalId: undefined,
+    result: undefined,
+    nextAttemptAt: undefined,
+    failedAt: undefined,
+    lastError: undefined,
+    updatedAt: now,
+  };
+}
+
+function compareHarnessWakeupOrder(a: HarnessWakeupItem, b: HarnessWakeupItem): number {
+  return a.dueAt - b.dueAt || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
 }
 
 function assertLegalChannelInboxUpdate(current: ChannelInboxItem, next: ChannelInboxItem): void {
@@ -1998,6 +2273,207 @@ function channelInboxItemsEqual(a: ChannelInboxItem, b: ChannelInboxItem): boole
   const aValues = channelInboxComparableValues(a);
   const bValues = channelInboxComparableValues(b);
   return aValues.length === bValues.length && aValues.every((value, index) => Object.is(value, bValues[index]));
+}
+
+function assertLegalHarnessWakeupUpdate(current: HarnessWakeupItem, next: HarnessWakeupItem): void {
+  const immutableMismatch =
+    current.id !== next.id ||
+    current.harnessName !== next.harnessName ||
+    current.source !== next.source ||
+    current.sourceId !== next.sourceId ||
+    current.fireId !== next.fireId ||
+    current.idempotencyKey !== next.idempotencyKey ||
+    current.payloadHash !== next.payloadHash ||
+    current.admissionId !== next.admissionId ||
+    current.admissionHash !== next.admissionHash ||
+    current.resourceId !== next.resourceId ||
+    current.threadId !== next.threadId ||
+    current.sessionId !== next.sessionId ||
+    current.dueAt !== next.dueAt ||
+    current.createdAt !== next.createdAt ||
+    current.mode !== next.mode ||
+    current.model !== next.model ||
+    current.content !== next.content ||
+    stableJsonString(current.requestContext) !== stableJsonString(next.requestContext) ||
+    stableJsonString(current.attachments) !== stableJsonString(next.attachments);
+  if (immutableMismatch) {
+    throw new HarnessStorageWakeupTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'immutable wakeup identity fields cannot change',
+    );
+  }
+  const allowed =
+    current.status === next.status ||
+    (current.status === 'due' && (next.status === 'claimed' || next.status === 'failed' || next.status === 'dead')) ||
+    (current.status === 'claimed' &&
+      (next.status === 'queued' ||
+        next.status === 'completed' ||
+        next.status === 'failed' ||
+        next.status === 'dead')) ||
+    (current.status === 'failed' && (next.status === 'claimed' || next.status === 'failed' || next.status === 'dead'));
+  if (!allowed || isTerminalHarnessWakeupStatus(current.status)) {
+    throw new HarnessStorageWakeupTransitionError(
+      current.id,
+      current.status,
+      next.status,
+      'transition is not legal for wakeup state machine',
+    );
+  }
+  assertValidHarnessWakeupState(next, current.status);
+}
+
+function assertValidHarnessWakeupState(record: HarnessWakeupItem, currentStatus?: HarnessWakeupItem['status']): void {
+  const hasClaimMetadata =
+    record.claimId != null || record.claimExpiresAt != null || record.claimedAt != null;
+  const hasQueueMetadata = record.queuedItemId != null || record.queuedAt != null;
+  const hasCompletedMetadata = record.completedAt != null || record.result !== undefined;
+  const hasFailedMetadata = record.failedAt != null || record.lastError != null;
+  const hasDeadMetadata = record.deadAt != null;
+
+  if (record.source !== 'schedule' && record.source !== 'proactive') {
+    throw new HarnessStorageWakeupTransitionError(record.id, currentStatus, record.status, 'source is not supported');
+  }
+  if (
+    record.status !== 'due' &&
+    record.status !== 'claimed' &&
+    record.status !== 'queued' &&
+    record.status !== 'completed' &&
+    record.status !== 'failed' &&
+    record.status !== 'dead'
+  ) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'status is not a known wakeup state',
+    );
+  }
+  if (
+    record.status === 'due' &&
+    (hasClaimMetadata || hasQueueMetadata || hasCompletedMetadata || hasFailedMetadata || hasDeadMetadata)
+  ) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'due wakeups must not include claim, queue, terminal, or error metadata',
+    );
+  }
+  if (
+    record.status === 'claimed' &&
+    (record.claimId == null || record.claimExpiresAt == null || record.claimedAt == null)
+  ) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'claimed wakeups require claimId, claimExpiresAt, and claimedAt',
+    );
+  }
+  if (record.status === 'claimed' && (hasQueueMetadata || hasCompletedMetadata || hasFailedMetadata || hasDeadMetadata)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'claimed wakeups must not include queue, terminal, or error metadata',
+    );
+  }
+  if (record.status !== 'claimed' && hasClaimMetadata) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'only claimed wakeups may carry claim metadata',
+    );
+  }
+  if (record.status === 'queued' && (record.queuedItemId == null || record.queuedAt == null)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'queued wakeups require queuedItemId and queuedAt',
+    );
+  }
+  if (record.status === 'queued' && (hasCompletedMetadata || hasFailedMetadata || hasDeadMetadata)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'queued wakeups must not include terminal or error metadata',
+    );
+  }
+  if (record.status === 'completed' && (record.completedAt == null || record.result === undefined)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'completed wakeups require completedAt and result',
+    );
+  }
+  if (record.status === 'completed' && (hasQueueMetadata || hasFailedMetadata || hasDeadMetadata)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'completed wakeups must not include queue, error, or dead metadata',
+    );
+  }
+  if (record.status === 'failed' && (record.failedAt == null || record.lastError == null)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'failed wakeups require failedAt and lastError',
+    );
+  }
+  if (record.status === 'failed' && (hasQueueMetadata || hasCompletedMetadata || hasDeadMetadata)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'failed wakeups must not include queue, completed, or dead metadata',
+    );
+  }
+  if (record.status === 'dead' && (record.deadAt == null || record.lastError == null)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'dead wakeups require deadAt and lastError',
+    );
+  }
+  if (record.status === 'dead' && (hasQueueMetadata || hasCompletedMetadata || record.failedAt != null)) {
+    throw new HarnessStorageWakeupTransitionError(
+      record.id,
+      currentStatus,
+      record.status,
+      'dead wakeups must not include queue, completed, or failed metadata',
+    );
+  }
+}
+
+function harnessWakeupItemsEquivalentForCreate(a: HarnessWakeupItem, b: HarnessWakeupItem): boolean {
+  return (
+    a.harnessName === b.harnessName &&
+    a.source === b.source &&
+    a.sourceId === b.sourceId &&
+    a.fireId === b.fireId &&
+    a.idempotencyKey === b.idempotencyKey &&
+    a.payloadHash === b.payloadHash &&
+    a.admissionId === b.admissionId &&
+    a.admissionHash === b.admissionHash &&
+    a.resourceId === b.resourceId &&
+    a.threadId === b.threadId &&
+    a.sessionId === b.sessionId &&
+    a.dueAt === b.dueAt &&
+    a.mode === b.mode &&
+    a.model === b.model &&
+    stableJsonString(a.requestContext) === stableJsonString(b.requestContext) &&
+    a.content === b.content &&
+    stableJsonString(a.attachments) === stableJsonString(b.attachments)
+  );
 }
 
 function assertLegalChannelActionReceiptUpdate(current: ChannelActionReceipt, next: ChannelActionReceipt): void {

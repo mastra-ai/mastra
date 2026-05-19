@@ -15,11 +15,15 @@ import type {
   CreateOrLoadChannelActionReceiptResult,
   CreateOrLoadChannelActionTokenResult,
   CreateOrLoadChannelInboxItemResult,
+  CreateOrLoadHarnessWakeupItemResult,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
   DeleteSessionOptions,
   EnqueueChannelOutboxResult,
   HarnessRowErrorCode,
+  HarnessWakeupClaimStatus,
+  HarnessWakeupInitialClaim,
+  HarnessWakeupItem,
   ListActiveSessionsByThreadInput,
   ListSessionsByThreadInput,
   ListSessionsInput,
@@ -270,6 +274,32 @@ export class HarnessStorageChannelOutboxTransitionError extends Error {
   ) {
     super(
       `Channel outbox item "${outboxItemId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
+    );
+  }
+}
+
+export class HarnessStorageWakeupClaimConflictError extends Error {
+  readonly name = 'HarnessStorageWakeupClaimConflictError';
+  readonly code = 'harness.storage.wakeup_claim_conflict' as const;
+  constructor(
+    public readonly wakeupItemId: string,
+    public readonly claimId?: string,
+  ) {
+    super(`Harness wakeup item "${wakeupItemId}" is not held by claim "${claimId ?? '<none>'}"`);
+  }
+}
+
+export class HarnessStorageWakeupTransitionError extends Error {
+  readonly name = 'HarnessStorageWakeupTransitionError';
+  readonly code = 'harness.storage.wakeup_transition_invalid' as const;
+  constructor(
+    public readonly wakeupItemId: string,
+    public readonly fromStatus: HarnessWakeupItem['status'] | undefined,
+    public readonly toStatus: HarnessWakeupItem['status'],
+    reason: string,
+  ) {
+    super(
+      `Harness wakeup item "${wakeupItemId}" cannot transition from "${fromStatus ?? '<missing>'}" to "${toStatus}": ${reason}`,
     );
   }
 }
@@ -792,6 +822,46 @@ export abstract class HarnessStorage extends StorageDomain {
     dead?: boolean;
     error: { code: HarnessRowErrorCode; message: string; retryable?: boolean };
   }): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // Wakeup ledger
+  // -------------------------------------------------------------------------
+
+  abstract createOrLoadHarnessWakeupItem(
+    record: HarnessWakeupItem,
+    opts?: { initialClaim?: HarnessWakeupInitialClaim },
+  ): Promise<CreateOrLoadHarnessWakeupItemResult>;
+
+  abstract loadHarnessWakeupItemByIdempotencyKey(opts: {
+    harnessName: string;
+    idempotencyKey: string;
+  }): Promise<HarnessWakeupItem | null>;
+
+  abstract loadHarnessWakeupItemBySourceFire(opts: {
+    harnessName: string;
+    source: HarnessWakeupItem['source'];
+    sourceId: string;
+    fireId: string;
+  }): Promise<HarnessWakeupItem | null>;
+
+  abstract claimHarnessWakeupItems(opts: {
+    harnessName: string;
+    source?: HarnessWakeupItem['source'];
+    statuses: HarnessWakeupClaimStatus[];
+    claimId: string;
+    limit: number;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<HarnessWakeupItem[]>;
+
+  abstract renewHarnessWakeupClaim(opts: {
+    wakeupItemId: string;
+    claimId: string;
+    now: number;
+    claimTtlMs: number;
+  }): Promise<{ claimExpiresAt: number; storageNow: number }>;
+
+  abstract updateHarnessWakeupItem(record: HarnessWakeupItem, opts: { claimId: string }): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Test-only
