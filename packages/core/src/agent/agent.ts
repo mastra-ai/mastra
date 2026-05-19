@@ -4230,7 +4230,14 @@ export class Agent<
                         resumeSchema = chunk.data.resumeSchema;
                       }
                     } else {
-                      await context.writer.write(chunk);
+                      const forwarded =
+                        typeof chunk === 'object' &&
+                        chunk !== null &&
+                        'from' in chunk &&
+                        (chunk as { from?: unknown }).from
+                          ? chunk
+                          : { ...chunk, from: ChunkFrom.AGENT };
+                      await context.writer.write(forwarded as any);
                       if (chunk.type === 'tool-call-approval') {
                         suspendedPayload = {};
                         requireToolApproval = true;
@@ -4334,7 +4341,14 @@ export class Agent<
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
                     } else {
-                      await context.writer.write(chunk);
+                      const forwarded =
+                        typeof chunk === 'object' &&
+                        chunk !== null &&
+                        'from' in chunk &&
+                        (chunk as { from?: unknown }).from
+                          ? chunk
+                          : { ...chunk, from: ChunkFrom.AGENT };
+                      await context.writer.write(forwarded as any);
                     }
                   }
 
@@ -4695,7 +4709,25 @@ export class Agent<
                 });
 
                 if (context?.writer) {
-                  await streamResult.stream.pipeTo(context.writer);
+                  for await (const chunk of streamResult.stream) {
+                    if (
+                      typeof chunk === 'object' &&
+                      chunk !== null &&
+                      'type' in chunk &&
+                      String((chunk as any).type).startsWith('data-')
+                    ) {
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      const forwarded =
+                        typeof chunk === 'object' &&
+                        chunk !== null &&
+                        'from' in chunk &&
+                        (chunk as { from?: unknown }).from
+                          ? chunk
+                          : { ...chunk, from: ChunkFrom.WORKFLOW };
+                      await context.writer.write(forwarded as any);
+                    }
+                  }
                 } else {
                   for await (const _chunk of streamResult.stream) {
                     // complete the stream
@@ -4718,7 +4750,25 @@ export class Agent<
                     });
 
                 if (context?.writer) {
-                  await streamResult.fullStream.pipeTo(context.writer);
+                  for await (const chunk of streamResult.fullStream) {
+                    if (
+                      typeof chunk === 'object' &&
+                      chunk !== null &&
+                      'type' in chunk &&
+                      String((chunk as any).type).startsWith('data-')
+                    ) {
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      const forwarded =
+                        typeof chunk === 'object' &&
+                        chunk !== null &&
+                        'from' in chunk &&
+                        (chunk as { from?: unknown }).from
+                          ? chunk
+                          : { ...chunk, from: ChunkFrom.WORKFLOW };
+                      await context.writer.write(forwarded as any);
+                    }
+                  }
                 }
 
                 result = await streamResult.result;
