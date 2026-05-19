@@ -423,7 +423,7 @@ const instructions = workspace.getInstructions({ requestContext })
 
 #### `getInstructionsAsync(opts?)`
 
-Returns combined instructions from static or dynamic filesystem and sandbox providers. Use this when the workspace uses resolver-backed providers.
+Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A dynamic filesystem is resolved per request; a dynamic sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
 
 ```typescript
 const instructions = await workspace.getInstructionsAsync({ requestContext })
@@ -437,7 +437,7 @@ const instructions = await workspace.getInstructionsAsync({ requestContext })
     name: 'opts.requestContext',
     type: 'RequestContext',
     description:
-      'Passed to dynamic filesystem or sandbox resolvers, and forwarded to provider `instructions` functions.',
+      "Passed to the dynamic filesystem resolver, and to the dynamic sandbox resolver when `instructions.dynamicSandbox` is `'resolve'`.",
     isOptional: true,
   },
 ]}

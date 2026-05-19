@@ -84,7 +84,7 @@ const agent = new Agent({
 })
 ```
 
-Each request resolves its own sandbox for workspace tools and workspace instructions:
+Each request resolves its own sandbox at tool execution time:
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'
@@ -98,7 +98,7 @@ const bobCtx = new RequestContext([['user-id', 'bob']])
 await agent.generate('List files in cwd', { requestContext: bobCtx })
 ```
 
-Workspace instructions use the same `requestContext`, so the agent sees the execution context for the resolved sandbox.
+By default, workspace instructions describe the dynamic sandbox with stable placeholder text. See [Workspace instructions](#workspace-instructions) to include concrete per-request details.
 
 The resolver can also be asynchronous — for example to look up tenant configuration from a database:
 
@@ -142,7 +142,7 @@ Without a `sandboxCacheKey`, the resolver must return the same sandbox itself fo
 
 ### Workspace instructions
 
-Workspace instructions describe the environment in the agent's system message. With a resolver, the workspace does not call the resolver to build these instructions. It emits stable placeholder text, so constructing the prompt never provisions a caller-owned sandbox and the system message stays consistent across requests, which keeps prompt caching effective.
+Workspace instructions describe the environment in the agent's system message. With a sandbox resolver, the workspace does not call the resolver to build these instructions. It emits stable placeholder text, so constructing the prompt never provisions a caller-owned sandbox and the system message stays consistent across requests, which keeps prompt caching effective.
 
 To include concrete per-request sandbox details, set `instructions.dynamicSandbox` to `'resolve'`:
 
