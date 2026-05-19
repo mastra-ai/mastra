@@ -10,6 +10,16 @@ const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
 const importSpecifierRegex = /(?:import|export)\s+(?:type\s+)?(?:[^'\"]*?\s+from\s+)?['\"]([^'\"]+)['\"]|import\(\s*['\"]([^'\"]+)['\"]\s*\)/gm;
 const nodeBuiltinModules = new Set([...builtinModules, ...builtinModules.map(moduleName => `node:${moduleName}`)]);
 
+function isNodeBuiltinModuleSpecifier(moduleSpecifier) {
+  for (const moduleName of nodeBuiltinModules) {
+    if (moduleSpecifier === moduleName || moduleSpecifier.startsWith(`${moduleName}/`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // pnpm-specific environment variables that npm doesn't recognize
 // These cause "Unknown env config" warnings when passed to npx/npm
 const pnpmSpecificEnvVars = new Set([
@@ -33,7 +43,7 @@ function stripComments(code) {
 }
 
 function getPackageName(moduleSpecifier) {
-  if (moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/') || nodeBuiltinModules.has(moduleSpecifier)) {
+  if (moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/') || isNodeBuiltinModuleSpecifier(moduleSpecifier)) {
     return null;
   }
 
