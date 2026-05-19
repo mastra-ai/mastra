@@ -15,6 +15,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { EDITOR_BUILDER_ROUTES } from './editor-builder';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -134,11 +135,15 @@ export type ServerRoute<
    * If set, the user must have this permission to access the route.
    * Uses the format: `resource:action` or `resource:action:resourceId`
    *
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (logical OR). This is useful for routes that serve multiple resource types,
+   * e.g. a streaming endpoint used by both runtime and stored agents.
+   *
    * @example
    * requiresPermission: MastraFGAPermissions.AGENTS_READ
    * requiresPermission: MastraFGAPermissions.WORKFLOWS_EXECUTE
    */
-  requiresPermission?: MastraFGAPermissionInput;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /**
    * FGA authorization config for this route (EE feature).
    * If set, the user must have the specified permission on the resource.
@@ -180,6 +185,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
+  ...EDITOR_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
 ];
@@ -216,6 +222,7 @@ export type ServerRoutes = readonly [
   ...typeof PROCESSOR_PROVIDER_ROUTES,
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
+  ...typeof EDITOR_BUILDER_ROUTES,
   ...typeof CHANNELS_ROUTES,
 ];
 

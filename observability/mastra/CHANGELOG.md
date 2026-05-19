@@ -1,5 +1,20 @@
 # @mastra/observability
 
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Roll up token usage from internal MODEL_GENERATION spans onto the closest exported ancestor span. When `tracingPolicy.internal` filters a model call out of exported traces, its tokens used to disappear from both the trace UI and metrics. Now: ([#16434](https://github.com/mastra-ai/mastra/pull/16434))
+  - The visible ancestor (e.g. `PROCESSOR_RUN`, `AGENT_RUN`) gets an `internalUsage` attribute summing the tokens consumed by its hidden descendants — so a Mastra-owned processor that runs an internal agent (moderation, PII detector, structured output, etc.) shows its aggregate cost on the visible `PROCESSOR_RUN` span.
+  - Token / cost metrics still emit, but are attributed via labels to the visible ancestor instead of the hidden agent.
+
+  No action required — the rollup applies automatically whenever an internal `MODEL_GENERATION` ends inside a non-internal ancestor.
+
+### Patch Changes
+
+- Updated dependencies [[`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25)]:
+  - @mastra/core@1.36.0-alpha.1
+
 ## 1.12.0
 
 ### Minor Changes

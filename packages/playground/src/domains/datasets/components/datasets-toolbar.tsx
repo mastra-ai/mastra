@@ -1,4 +1,4 @@
-import { Button, ButtonsGroup, ButtonWithTooltip, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
 import { Plus, XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS, DATASET_TARGET_OPTIONS } from './datasets-list/helpers';
 
@@ -40,12 +40,14 @@ export function DatasetsToolbar({
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ListSearch
-        label="Search datasets"
-        placeholder="Filter by dataset name"
-        value={search}
-        onSearch={onSearchChange}
-      />
+      <div className="min-w-64 max-w-120 flex-1">
+        <ListSearch
+          label="Search datasets"
+          placeholder="Filter by dataset name"
+          value={search}
+          onSearch={onSearchChange}
+        />
+      </div>
       <ButtonsGroup>
         <SelectFieldBlock
           label="Target"
@@ -83,9 +85,9 @@ export function DatasetsToolbar({
         )}
       </ButtonsGroup>
       {onCreateClick && (
-        <ButtonWithTooltip onClick={onCreateClick} tooltipContent={createTooltip} className="ml-auto">
+        <Button onClick={onCreateClick} tooltip={createTooltip} variant="primary" className="ml-auto shrink-0">
           <Plus />
-        </ButtonWithTooltip>
+        </Button>
       )}
     </div>
   );

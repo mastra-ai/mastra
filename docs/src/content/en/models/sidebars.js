@@ -348,6 +348,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
@@ -525,6 +530,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
+        },
+        {
+          type: 'doc',
+          id: 'providers/routing-run',
+          label: 'routing.run',
         },
         {
           type: 'doc',

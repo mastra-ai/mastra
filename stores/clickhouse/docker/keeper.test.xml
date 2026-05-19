@@ -1,0 +1,19 @@
+<clickhouse>
+  <keeper_server>
+    <tcp_port>9181</tcp_port>
+    <server_id>1</server_id>
+    <!-- Test-only embedded Keeper state. Coordination data is ephemeral here:
+         restarting the container can discard state, and force_sync=false is not durable. -->
+    <storage_path>/var/lib/clickhouse/coordination</storage_path>
+    <coordination_settings>
+      <force_sync>false</force_sync>
+    </coordination_settings>
+    <raft_configuration>
+      <server>
+        <id>1</id>
+        <hostname>localhost</hostname>
+        <port>9444</port>
+      </server>
+    </raft_configuration>
+  </keeper_server>
+</clickhouse>
